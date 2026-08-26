@@ -53,6 +53,7 @@ from world.justice.models import (
     GuardEncounter,
     JusticeCase,
     PersonaHeat,
+    SentenceLadderRung,
 )
 from world.justice.sentences import (
     end_captivity,
@@ -267,8 +268,17 @@ def _mint_breach_heat(encounter: GuardEncounter) -> int:
 
 def _take_into_custody(encounter: GuardEncounter, society):
     """Brig the captive via the existing captivity machinery. Best-effort:
-    a bodiless persona (no character) stays uncaptured but the case opens."""
+    a bodiless persona (no character) stays uncaptured but the case opens.
+
+    Routes to the area's Brig room feature when one exists with capacity
+    (#2378 Task 4, mirrors the CAPTURE consequence-effect's #1862 routing) —
+    falls back to the instanced-cell default (``holding_room=None``) otherwise.
+    """
     from world.captivity.services import capture_character  # noqa: PLC0415
+    from world.room_features.brig_services import (  # noqa: PLC0415
+        brig_has_capacity,
+        find_brig_for_area,
+    )
     from world.societies.models import Organization  # noqa: PLC0415
 
     sheet = encounter.persona.character_sheet
@@ -277,8 +287,13 @@ def _take_into_custody(encounter: GuardEncounter, society):
     captor = Organization.objects.filter(society=society).first()
     from world.captivity.services import AlreadyCapturedError  # noqa: PLC0415
 
+    brig_room = find_brig_for_area(encounter.area)
+    holding_room = brig_room if brig_room is not None and brig_has_capacity(brig_room) else None
+
     try:
-        return capture_character(captive=sheet, captor_organization=captor)
+        return capture_character(
+            captive=sheet, captor_organization=captor, holding_room=holding_room
+        )
     except AlreadyCapturedError:
         return None
 
@@ -453,8 +468,9 @@ def _apply_sentence(case: JusticeCase) -> None:
         _collect_fine(case)
         return
 
-    # Full verdict.
-    case.sentence_kind, case.sentence_amount = _default_kind_and_amount(case, weight)
+    # Full verdict — ladder rung (Task 4) overrides the default kind, subject to
+    # the lethal wall; see _ladder_kind_and_amount's docstring.
+    case.sentence_kind, case.sentence_amount = _ladder_kind_and_amount(case, weight)
     _collect_fine(case)
 
 
@@ -475,6 +491,81 @@ def _default_kind_and_amount(case: JusticeCase, weight: int) -> tuple[str, int]:
             return SentenceKind.EXILE, term
         return SentenceKind.BRIG_TERM, max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
     return SentenceKind.FINE, weight * FINE_COPPERS_PER_WEIGHT * 2
+
+
+def _amount_for_kind(weight: int, kind: str) -> int:
+    """Per-kind amount formula, mirroring :func:`_default_kind_and_amount`'s bands.
+
+    Task 4's ladder consult: once a rung has decided the FINAL kind, the amount
+    still comes from the same magnitude a default sentence of that kind would
+    carry — never a fresh formula per rung. HUMILIATION/EXECUTION/BANISHMENT/
+    CONFISCATION carry no numeric term (0); ARENA_TRIAL is never passed in here
+    (the caller substitutes it for BRIG_TERM first).
+    """
+    if kind == SentenceKind.EXILE:
+        return max(EXILE_TERM_DAYS_MIN, weight // EXILE_TERM_DAYS_PER_WEIGHT_DIV)
+    if kind == SentenceKind.BRIG_TERM:
+        return max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
+    if kind == SentenceKind.FINE:
+        return weight * FINE_COPPERS_PER_WEIGHT * 2
+    return 0
+
+
+def _ladder_kind(case: JusticeCase) -> str | None:
+    """The society's highest sentence-ladder rung at/under the case's failed-outs.
+
+    ``level`` is matched against ``failed_outs - 1`` (SentenceLadderRung's own
+    convention): each additional failed-out climbs toward the next authored
+    rung. Returns ``None`` when the society has no matching rung — the default
+    band stands untouched.
+    """
+    rung = (
+        SentenceLadderRung.objects.filter(
+            society=case.society,
+            level__lte=max(0, case.failed_outs - 1),
+        )
+        .order_by("-level")
+        .first()
+    )
+    return rung.sentence_kind if rung else None
+
+
+def _ladder_kind_and_amount(case: JusticeCase, weight: int) -> tuple[str, int]:
+    """FULL-verdict kind/amount: the default band, overridden by a ladder rung.
+
+    A matching rung overrides the default sentence kind EXCEPT the lethal wall
+    (ADR-0023) — a rung can NEVER produce EXECUTION/BANISHMENT unless the
+    Task 2 terminal conditions independently hold (``weight >= MAX_VALUE_FLOOR``
+    AND ``failed_outs >= EXECUTION_MIN_FAILED_OUTS``); when they don't, the rung
+    is ignored outright and the default band stands. When they DO hold, a rung
+    naming EXECUTION still runs through :func:`terminal_kind_for` — a PC who
+    hasn't opted into lethal consequences gets BANISHMENT instead, same as the
+    Task 2 default path; a rung naming BANISHMENT needs no opt-in and applies
+    directly. ARENA_TRIAL rungs are INERT — a schema stub pending the combat
+    substrate (spec §8) — and are substituted with BRIG_TERM unconditionally
+    (not gated behind the wall; it's not lethal). Amounts come from
+    :func:`_amount_for_kind` so an overridden kind lands the same magnitude a
+    default sentence of that kind would.
+    """
+    default_kind, default_amount = _default_kind_and_amount(case, weight)
+    ladder_kind = _ladder_kind(case)
+    if ladder_kind is None:
+        return default_kind, default_amount
+
+    if ladder_kind == SentenceKind.ARENA_TRIAL:
+        # ARENA_TRIAL is a schema stub pending the combat substrate (spec §8).
+        ladder_kind = SentenceKind.BRIG_TERM
+
+    if ladder_kind in (SentenceKind.EXECUTION, SentenceKind.BANISHMENT):
+        terminal_reachable = (
+            weight >= MAX_VALUE_FLOOR and case.failed_outs >= EXECUTION_MIN_FAILED_OUTS
+        )
+        if not terminal_reachable:
+            return default_kind, default_amount
+        if ladder_kind == SentenceKind.EXECUTION:
+            ladder_kind = terminal_kind_for(case)  # opt-in check may downgrade to BANISHMENT
+
+    return ladder_kind, _amount_for_kind(weight, ladder_kind)
 
 
 def _execution_reachable(case: JusticeCase) -> bool:

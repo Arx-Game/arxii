@@ -5,25 +5,32 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.captivity.constants import CaptivityStatus
 from world.captivity.factories import CaptivityFactory
 from world.captivity.services import resolve_captivity
 from world.character_sheets.types import LifecycleState
+from world.currency.services import get_or_create_purse
 from world.justice.constants import (
     BRIG_DAYS_PER_WEIGHT,
     EXECUTION_MIN_FAILED_OUTS,
     EXILE_PIN_VALUE,
     EXILE_TERM_DAYS_MIN,
     EXILE_TERM_DAYS_PER_WEIGHT_DIV,
+    FINE_COPPERS_PER_WEIGHT,
     HUNTED_VALUE_FLOOR,
     MAX_VALUE_FLOOR,
     RESCUE_WINDOW_DAYS,
+    GuardTrigger,
     SentenceKind,
 )
-from world.justice.models import ExileDecree, JusticeCase, PersonaHeat
-from world.justice.pipeline import initiate_trial
-from world.justice.sentences import sentence_sweep_tick
+from world.justice.models import ExileDecree, GuardEncounter, JusticeCase, PersonaHeat
+from world.justice.pipeline import _take_into_custody, initiate_trial
+from world.justice.sentences import apply_confiscation, sentence_sweep_tick
 from world.justice.tests.test_services import JusticeFixtureMixin
+from world.room_features.constants import BRIG_CAPACITY_PER_LEVEL, RoomFeatureServiceStrategy
+from world.room_features.factories import RoomFeatureKindFactory
+from world.room_features.models import BrigDetails, RoomFeatureInstance
 from world.roster.factories import RosterTenureFactory
 
 
@@ -51,6 +58,17 @@ class _SentenceCaseMixin(JusticeFixtureMixin):
         player_data.lethal_consequences_opt_in = opt_in
         player_data.save(update_fields=["lethal_consequences_opt_in"])
         return tenure.roster_entry.character_sheet.primary_persona
+
+    def _brig_room(self, area):
+        """Build an active Brig room feature in ``area`` (mirrors mechanics' capture tests)."""
+        brig_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        brig_profile = RoomProfileFactory(objectdb=brig_room, area=area)
+        kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.BRIG)
+        instance = RoomFeatureInstance.objects.create(
+            room_profile=brig_profile, feature_kind=kind, level=1
+        )
+        BrigDetails.objects.create(feature_instance=instance, max_prisoners=BRIG_CAPACITY_PER_LEVEL)
+        return brig_room
 
 
 class BrigTermTests(_SentenceCaseMixin, TestCase):
@@ -277,3 +295,66 @@ class ExileSentenceTests(_SentenceCaseMixin, TestCase):
         sheet = case.persona.character_sheet
         sheet.refresh_from_db()
         self.assertEqual(sheet.character.location, destination.objectdb)
+
+
+class ConfiscationSentenceTests(_SentenceCaseMixin, TestCase):
+    """apply_confiscation (#2378 Task 4) — seize into the brig, or double-fine fallback."""
+
+    def test_confiscation_moves_carried_items_into_brig(self):
+        brig_room = self._brig_room(self.kingdom)
+        case = self._case(weight=HUNTED_VALUE_FLOOR)
+        self._hold(case)
+        character = case.persona.character_sheet.character
+        item = ObjectDBFactory(db_typeclass_path="typeclasses.objects.Object", location=character)
+
+        apply_confiscation(case)
+
+        item.refresh_from_db()
+        self.assertEqual(item.location, brig_room)
+        case.captivity.refresh_from_db()
+        self.assertEqual(case.captivity.status, CaptivityStatus.RELEASED)
+
+    def test_confiscation_falls_back_to_double_fine_without_brig(self):
+        # self.kingdom has no Brig — falls back to the double-rate fine.
+        case = self._case(weight=HUNTED_VALUE_FLOOR)
+        self._hold(case)
+        sheet = case.persona.character_sheet
+        purse = get_or_create_purse(sheet)
+        purse.balance = 100_000
+        purse.save(update_fields=["balance"])
+
+        apply_confiscation(case)
+
+        purse.refresh_from_db()
+        expected_debit = HUNTED_VALUE_FLOOR * FINE_COPPERS_PER_WEIGHT * 2
+        self.assertEqual(purse.balance, 100_000 - expected_debit)
+        case.captivity.refresh_from_db()
+        self.assertEqual(case.captivity.status, CaptivityStatus.RELEASED)
+
+
+class CustodyBrigRoutingTests(_SentenceCaseMixin, TestCase):
+    """pipeline._take_into_custody routes arrests to the area's Brig (#2378 Task 4)."""
+
+    def test_custody_routes_to_brig_when_available(self):
+        brig_room = self._brig_room(self.kingdom)
+        encounter = GuardEncounter.objects.create(
+            persona=self.persona, area=self.kingdom, trigger=GuardTrigger.ROOM_ARRIVAL
+        )
+
+        captivity = _take_into_custody(encounter, self.crown)
+
+        self.assertIsNotNone(captivity)
+        self.assertEqual(captivity.holding_room, brig_room.room_profile)
+        self.assertIsNone(captivity.cell)
+
+    def test_custody_falls_back_to_instanced_cell_without_brig(self):
+        # self.kingdom has no Brig — falls back to the instanced-cell default.
+        encounter = GuardEncounter.objects.create(
+            persona=self.persona, area=self.kingdom, trigger=GuardTrigger.ROOM_ARRIVAL
+        )
+
+        captivity = _take_into_custody(encounter, self.crown)
+
+        self.assertIsNotNone(captivity)
+        self.assertIsNone(captivity.holding_room)
+        self.assertIsNotNone(captivity.cell)

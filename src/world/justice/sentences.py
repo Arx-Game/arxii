@@ -20,6 +20,7 @@ from world.character_sheets.types import LifecycleState
 from world.justice.constants import (
     EXILE_PIN_DAYS,
     EXILE_PIN_VALUE,
+    FINE_COPPERS_PER_WEIGHT,
     RESCUE_WINDOW_DAYS,
     CaseStatus,
     SentenceKind,
@@ -141,11 +142,49 @@ def apply_exile(case: JusticeCase) -> ExileDecree:
 
 
 def apply_confiscation(case: JusticeCase) -> None:
-    """STUB — Task 4 completes CONFISCATION sentencing (property/asset seizure).
+    """CONFISCATION sentencing (#2378 Task 4): seize carried goods into the area's brig.
 
-    For now this only releases captivity; nothing is seized (#2378 Task 4).
+    Recoverable, not destroyed (spec #2378 §8): items move into the area's Brig
+    room's inventory rather than being deleted, so a later pardon or rescue can
+    hand them back. PLACEHOLDER rule: seizes the accused's WHOLE carried
+    inventory wholesale — no worn/equipped filtering (a later content pass can
+    split "seizable" from "kept on the body"). Falls back to a double-rate fine
+    (:func:`_collect_fine_double`) when the area has no Brig to hold the goods,
+    or the accused has no body to search (a bodiless persona / NPC with no
+    character).
     """
+    from world.room_features.brig_services import find_brig_for_area  # noqa: PLC0415
+
+    storage = find_brig_for_area(case.area)
+    sheet = case.persona.character_sheet
+    character = sheet.character if sheet is not None else None
+    if storage is None or character is None:
+        _collect_fine_double(case)
+        end_captivity(case)
+        return
+    for obj in list(character.contents):
+        obj.move_to(storage.objectdb, quiet=True)
     end_captivity(case)
+
+
+def _collect_fine_double(case: JusticeCase) -> None:
+    """Fallback fine for confiscation when there's nowhere to put seized goods.
+
+    Mirrors :func:`world.justice.pipeline._collect_fine`'s debit shape, but at
+    double the base coppers-per-weight rate (spec #2378 §8) — losing your goods
+    outright costs more than the coin they'd have fetched. Independent of
+    ``case.sentence_amount`` (CONFISCATION carries no numeric term of its own).
+    """
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+
+    sheet = case.persona.character_sheet
+    if sheet is None:
+        return
+    purse = get_or_create_purse(sheet)
+    amount = case.prosecution_weight * FINE_COPPERS_PER_WEIGHT * 2
+    debit = min(purse.balance, amount)
+    purse.balance -= debit
+    purse.save(update_fields=["balance"])
 
 
 def schedule_sentence(case: JusticeCase) -> None:
