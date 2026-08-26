@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.items.models import MaterialCategory
 
 
 @dataclass(frozen=True)
@@ -21,9 +25,12 @@ class CollectionResult:
     graft_leak: int
     success_level: int
     catastrophe: bool = False
-    # Gems ride the same dispatch (Build 0b): net common value landed in the house's
+    # Materials ride the same dispatch (Build 0b): net common value landed in the house's
     # OrgMaterialStock, plus the Rare-Find stones delivered to / lost by the collector.
-    gem_value_landed: int = 0
+    material_value_landed: int = 0
+    # Per-category breakdown of ``material_value_landed`` (sums to it exactly); empty on
+    # catastrophe.
+    landed_by_category: list[tuple[MaterialCategory, int]] = field(default_factory=list)
     stones_delivered: int = 0
     stones_lost: int = 0
 

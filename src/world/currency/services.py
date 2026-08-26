@@ -599,15 +599,15 @@ def collect_org_income(
         ):
             stream.uncollected_pool -= stream.uncollected_pool * LIE_LOW_CRIME_MALUS_PCT // 100
     gathered = sum(stream.uncollected_pool for stream in streams)
-    # Gems ride the same dispatch (Build 0b): a mine may have accrued gems but no coin,
-    # so the empty-gate must consider the org's pending gem pools too.
+    # Materials ride the same dispatch (Build 0b): a mine may have accrued materials but no
+    # coin, so the empty-gate must consider the org's pending material pools too.
     from world.items.gems.collection import (  # noqa: PLC0415
-        collect_org_gems,
-        org_has_pending_gems,
+        collect_org_materials,
+        org_has_pending_materials,
     )
 
-    has_gems = org_has_pending_gems(organization)
-    if gathered <= 0 and not has_gems:
+    has_pending_materials = org_has_pending_materials(organization)
+    if gathered <= 0 and not has_pending_materials:
         msg = "There is nothing waiting to be collected."
         raise ValidationError(msg)
     shares = {stream.pk: stream.uncollected_pool for stream in streams}
@@ -633,8 +633,8 @@ def collect_org_income(
     economics = get_or_create_economics(organization)
     pct = _collection_band_pct(success_level)
     if pct is None:
-        # Catastrophe: the collector never made it back — coin and gems alike are gone.
-        gems = collect_org_gems(
+        # Catastrophe: the collector never made it back — coin and materials alike are gone.
+        materials = collect_org_materials(
             organization=organization,
             collector_sheet=collector_sheet,
             band_pct=None,
@@ -646,7 +646,7 @@ def collect_org_income(
             graft_leak=0,
             success_level=success_level,
             catastrophe=True,
-            stones_lost=gems.stones_lost,
+            stones_lost=materials.stones_lost,
         )
 
     collected = gathered * pct // 100
@@ -664,8 +664,8 @@ def collect_org_income(
         landed_total += share
         process_income_stream(stream, share)
 
-    # Gems ride the same band + graft into the house stock / the collector's hands.
-    gems = collect_org_gems(
+    # Materials ride the same band + graft into the house stock / the collector's hands.
+    materials = collect_org_materials(
         organization=organization,
         collector_sheet=collector_sheet,
         band_pct=pct,
@@ -676,9 +676,10 @@ def collect_org_income(
         landed=net,
         graft_leak=graft_leak,
         success_level=success_level,
-        gem_value_landed=gems.common_value_landed,
-        stones_delivered=gems.stones_delivered,
-        stones_lost=gems.stones_lost,
+        material_value_landed=materials.common_value_landed,
+        landed_by_category=materials.landed_by_category,
+        stones_delivered=materials.stones_delivered,
+        stones_lost=materials.stones_lost,
     )
 
 

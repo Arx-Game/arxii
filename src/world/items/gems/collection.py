@@ -1,9 +1,9 @@
-"""Gem-side of the org income collection dispatch (Build 0b, domain-cron collection).
+"""Materials-side of the org income collection dispatch (Build 0b, domain-cron collection).
 
 Mining accrues a mine's haul into *uncollected* pools on the holding's income stream
 (``StreamMaterialPool`` for common value, ``PendingRareFind`` for the stones). Per
-Apostate's design, gems are **lumped with tax collection**: the same active
-``collect_org_income`` dispatch that gathers coin also gathers gems, and the *same*
+Apostate's design, materials are **lumped with tax collection**: the same active
+``collect_org_income`` dispatch that gathers coin also gathers materials, and the *same*
 outcome band + graft + catastrophe decide what survives. This module is the items-side
 seam that dispatch calls (a lazy import from ``currency.services``, keeping the FK
 direction — currency stays free of an items dependency at module load).
@@ -15,7 +15,7 @@ some.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from world.items.gems.models import PendingRareFind
@@ -28,17 +28,20 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class GemCollectionResult:
-    """What one collection dispatch did to an org's pending gems.
+class MaterialCollectionResult:
+    """What one collection dispatch did to an org's pending materials.
 
     ``common_value_landed`` is the net common value that reached the house stock (after
-    the same band + graft the coin rode); ``stones_delivered`` / ``stones_lost`` count the
+    the same band + graft the coin rode); ``landed_by_category`` is that same net broken
+    down per ``MaterialCategory`` (only categories with a positive net appear — it sums
+    exactly to ``common_value_landed``); ``stones_delivered`` / ``stones_lost`` count the
     Rare-Find instances that made it to the collector versus those a bad collection ate.
     """
 
     common_value_landed: int
     stones_delivered: int
     stones_lost: int
+    landed_by_category: list[tuple[MaterialCategory, int]] = field(default_factory=list)
 
 
 def credit_org_materials(
@@ -56,11 +59,11 @@ def credit_org_materials(
     return stock
 
 
-def org_has_pending_gems(organization: Organization) -> bool:
-    """Cheap existence gate: does the org have any uncollected gems on an active stream.
+def org_has_pending_materials(organization: Organization) -> bool:
+    """Cheap existence gate: does the org have any uncollected materials on an active stream.
 
-    Lets ``collect_org_income`` proceed for a mine that has accrued gems but no coin — its
-    stream's ``uncollected_pool`` is zero yet the gem pools are not.
+    Lets ``collect_org_income`` proceed for a mine that has accrued materials but no coin —
+    its stream's ``uncollected_pool`` is zero yet the material pools are not.
     """
     return (
         StreamMaterialPool.objects.filter(
@@ -75,20 +78,21 @@ def org_has_pending_gems(organization: Organization) -> bool:
     )
 
 
-def collect_org_gems(
+def collect_org_materials(
     *,
     organization: Organization,
     collector_sheet: CharacterSheet,
     band_pct: int | None,
     graft_pct: int,
-) -> GemCollectionResult:
-    """Gather + zero the org's pending gems and land what the band/graft/catastrophe allow.
+) -> MaterialCollectionResult:
+    """Gather + zero the org's pending materials, landing what band/graft/catastrophe allow.
 
     Called inside ``collect_org_income``'s atomic block. The pools zero the moment the
-    attempt happens (the gems left with the collector), exactly like the coin. ``band_pct``
-    is ``None`` on catastrophe — everything is lost. Otherwise net common value is credited
-    to ``OrgMaterialStock`` per category, and ``floor(count × band × (1 − graft))`` of the
-    stones survive into ``collector_sheet``'s hands (the rest are destroyed).
+    attempt happens (the materials left with the collector), exactly like the coin.
+    ``band_pct`` is ``None`` on catastrophe — everything is lost. Otherwise net common
+    value is credited to ``OrgMaterialStock`` per category, and ``floor(count × band ×
+    (1 − graft))`` of the stones survive into ``collector_sheet``'s hands (the rest are
+    destroyed).
     """
     # Gather + zero the material pools, aggregating per category.
     pools = list(
@@ -119,11 +123,15 @@ def collect_org_gems(
         # Catastrophe: the collector never made it back — common value and stones alike lost.
         for stone in stones:
             stone.delete()
-        return GemCollectionResult(
-            common_value_landed=0, stones_delivered=0, stones_lost=len(stones)
+        return MaterialCollectionResult(
+            common_value_landed=0,
+            stones_delivered=0,
+            stones_lost=len(stones),
+            landed_by_category=[],
         )
 
     common_landed = 0
+    landed_by_category: list[tuple[MaterialCategory, int]] = []
     for material_category, gathered in per_category.values():
         collected = gathered * band_pct // 100
         net = collected - collected * graft_pct // 100
@@ -132,6 +140,7 @@ def collect_org_gems(
                 organization=organization, material_category=material_category, value=net
             )
             common_landed += net
+            landed_by_category.append((material_category, net))
 
     # Stones ride the same net rate as coin: band scales, graft eats its cut.
     surviving = len(stones) * band_pct * (100 - graft_pct) // 10000
@@ -152,8 +161,9 @@ def collect_org_gems(
             )
     for stone in losers:
         stone.delete()
-    return GemCollectionResult(
+    return MaterialCollectionResult(
         common_value_landed=common_landed,
         stones_delivered=len(survivors),
         stones_lost=len(losers),
+        landed_by_category=landed_by_category,
     )
