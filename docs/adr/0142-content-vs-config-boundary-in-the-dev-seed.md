@@ -1,5 +1,13 @@
 # The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables
 
+**The authoring direction here is SUPERSEDED (2026-08-19, recorded 2026-08-26) by
+[ADR-0236](0236-content-repo-retired-database-is-the-authoring-surface.md):** the
+content repo is retired, authoring happens in the database, and a content load is
+never run against a populated database again. What survives unchanged is this
+ADR's content-versus-config boundary and the rule that arxii seeders never author
+catalog content; the load path itself remains wired for empty-database bootstrap
+and E2E only.
+
 Before #2474, the CG magic starter catalog (`Gift`/`Technique`/`PathGiftGrant`/`TraditionGiftGrant`,
 including the "Unbound" `Tradition`) was synthetic in-repo seed data authored by
 `seed_starter_gift_catalog()` — the same shape real lore content would eventually need to replace,

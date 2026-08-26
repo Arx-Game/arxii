@@ -48,9 +48,11 @@ strategy. **Do NOT drop or flush the database** and do not fake-zero
 time-consuming to reconstruct.
 
 **IMPORTANT: Do NOT drop or flush the database.** The dev database contains fixture data
-and test state that is time-consuming to reconstruct. Use `--fake` and `--fake-initial`
-to reset migration state without destroying data. Only drop the database in dire
-circumstances where the schema is irrecoverably broken.
+and test state that is time-consuming to reconstruct; the production database holds the
+only copy of our authored content (ADR-0235/ADR-0236) and is never dropped, full stop.
+Use `--fake` and `--fake-initial` to reset migration state without destroying data. A
+dev database whose schema is genuinely irrecoverable is rebuilt with `just pull-prod`
+(read-only backup fetch, restores into dev), not by dropping and re-seeding.
 
 ## ViewSets and API Design
 
@@ -459,7 +461,7 @@ These standards apply across all Django (and broader Python) work in this repo.
 - **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
 - **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
 - **Migrations**: When model changes require migrations, use `arx manage makemigrations <app>` to generate them. Always use the `arx manage` commands for migrations to ensure correct Django settings are loaded. After generating, apply with `arx manage migrate`
-- **No data migrations pre-production**: We have no production data and the dev DB is recreated periodically. Write **schema** migrations only; do NOT add `RunPython` **data** migrations to backfill/transform existing rows — there are no meaningful rows to migrate. (Revisit once shipped to production.)
+- **Data migrations are REQUIRED where authored content is at risk** (ADR-0235, superseding ADR-0013): as of alpha the production database holds authored content — codex entries, lore prose, techniques, traditions, conditions, check types, catalogs, grid rooms — that exists nowhere else. Any migration that drops or renames a column, model or row holding authored content **must** carry a `RunPython` backfill in the same migration. Deploy applies `migrate --noinput` unattended on every converge, so the merged migration is itself the destructive act; PR review is the only gate. Play-state tables (characters, sheets, XP, scenes, encounters) are alpha-resettable and still need no backfill.
 - **Line Length**: Respect 100-character line limit even with indentation - break long lines appropriately
 - **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
 - **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
@@ -472,8 +474,8 @@ These standards apply across all Django (and broader Python) work in this repo.
 - **TextChoices in constants.py**: Place Django TextChoices/IntegerChoices in a separate `constants.py` file rather than as nested classes inside models. This avoids circular import issues when serializers or other modules need to reference the choices, and makes it clearer these are shared constants.
 - **No Queries in Loops**: Never execute database queries inside loops, serializer methods that recurse, or while loops that traverse relationships. Use annotations, prefetch_related with bounded depth, or restructure to batch queries. Recursive serializers are acceptable only when paired with bounded prefetch_related in the view (e.g., `prefetch_related("children__children__children")` limits depth to 4 levels).
 - **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
-- **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. Accept only the current format. This avoids unnecessary code complexity and maintenance burden.
-- **Preserve the Dev Database**: The dev database contains fixture data and test state that is time-consuming to reconstruct. Do NOT drop, flush, or destroy the database except in dire circumstances. For migration work: use `arx manage migrate app_name zero` to fake-migrate down, then regenerate — this preserves the database while resetting an app's migration state. Never delete the database as a shortcut to fix migration issues.
+- **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. Accept only the current format. This avoids unnecessary code complexity and maintenance burden. **Scope: code, wire formats and APIs — never persisted data.** Deleting an authored-content column instead of migrating it is not "no backwards compat," it is data loss (ADR-0235).
+- **Preserve Every Database**: Production holds the only copy of our authored content (ADR-0235/ADR-0236) and is never a candidate for destruction under any circumstances; the sanctioned destructive tools (`infra/scripts/restore.sh`, `just pull-prod`) each demand an explicit overwrite flag and a human. The dev database contains fixture data and test state that is time-consuming to reconstruct. Do NOT drop, flush, or destroy either database. For migration work: use `arx manage migrate app_name zero` to fake-migrate down, then regenerate — this preserves the database while resetting an app's migration state. Never delete the database as a shortcut to fix migration issues.
 - **PostgreSQL Only (production)**: This project uses PostgreSQL exclusively in production. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Don't write database-agnostic workarounds in production code; use the Postgres feature directly.
 
   **For tests, see the two-tier model in the `running-tests` skill.** The SQLite inner-loop tier is a developer convenience that exposes PG-specific features as `@tag("postgres")` skips; the Postgres parity tier (every CI run, `just test-parity` locally) always runs the full chain. New tests should pass on both tiers unless they exercise PG-specific code, in which case `@tag("postgres")` is the correct decoration.

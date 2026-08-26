@@ -242,6 +242,39 @@ that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail
 
 ## Database & Code Quality Invariants
 
+**The production database is durable and holds the only copy of our content.** As of
+alpha (2026-08-26) it is not a dev convenience, not reconstructible from the repo, and
+not disposable — see ADR-0235 and ADR-0236. Durability is two-tier:
+
+- **Authored content is irreplaceable.** Codex entries, lore prose, techniques,
+  traditions, conditions, check types, catalogs, grid rooms — everything staff writes
+  lives *only* in the database. Fixtures are gitignored, the content repo is retired,
+  and repo seed data is clone-bootstrap/E2E scaffolding, not a copy of the corpus.
+  There is nothing to reload from. Dropping an authored column loses the text.
+- **Alpha play state is resettable** (characters, sheets, XP, scenes, encounters) —
+  declared so to players, and the only reason this is a two-tier rule.
+
+What that requires of you:
+
+- **A migration that drops or renames an authored-content column, model or row MUST
+  carry a `RunPython` backfill in the same migration.** Deploy runs
+  `migrate --noinput` unattended on every converge, so the merged migration *is* the
+  destructive act — PR review is the only gate between it and production data. No
+  escape hatch: if the old column genuinely can't be backfilled, the content gets
+  re-authored first or Tehom rules on the PR.
+- **Never run a content load against a populated database** —
+  `build_content_fixtures.py --load`, the admin's "Load private content repo", or the
+  Big Button's content phase. They are for empty databases only; a load silently
+  overwrites every authored row whose `written_by` is unset (ADR-0201 freezes only
+  credited rows).
+- **Never drop, flush, or destroy any database** — dev or production. The dev database
+  holds fixture and test state that is expensive to rebuild; production holds the
+  corpus. `restore.sh` and `pull-prod` are the sanctioned destructive tools and both
+  demand an explicit overwrite flag.
+- **Anything you do with production access is real.** Prod SSH (`arxops`) is
+  deliberately Postgres-less (`docs/operations/ops-access.md`); if you find yourself
+  reaching past that scope, stop and hand it to a human.
+
 Database design:
 
 - **No JSON fields** (see ADR-0007). Each setting/configuration is a proper column
@@ -289,9 +322,11 @@ Code quality (always-on; full list in `django_notes.md`):
   as impossible same-locked-rev-different-bytes failures (admin.E038 incident,
   2026-07-17: an admin sweep added `autocomplete_fields` to Evennia's own admin).
 - **No Django signals** — explicit, testable service-function calls instead (see ADR-0009).
-- **No data migrations pre-production** — schema migrations only; no `RunPython`
-  backfills (no meaningful rows yet) (see ADR-0013).
-- **Preserve the dev database** — never drop/flush/destroy it except in dire need.
+- **Data migrations are required where authored content is at risk** — a `RunPython`
+  backfill accompanies any migration that drops or renames an authored-content column
+  (see ADR-0235, which supersedes ADR-0013). Play-state tables still need none.
+- **Preserve every database** — never drop/flush/destroy dev or production (see the
+  durability invariant at the top of this section).
 - **PostgreSQL only (production)** — use PG features directly (CTEs, materialized
   views, `DISTINCT ON`, JSONB); no DB-agnostic workarounds (see ADR-0012).
 - **100-char line limit.** Use `.env` for configurable settings.
@@ -323,12 +358,14 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
   `evennia.utils.idmapper.models`, **never** `evennia.utils.models`). It's the
   identity-map cache: trust it; don't reinvent `resolve_*`/`batch_fetch_*` helpers
   or cache-flushing. See the `sharedmemory-model` skill.
-- **Fixtures are NOT in version control** (gitignored via `**/fixtures/*.json`).
+- **Fixtures are NOT in version control** (gitignored via `**/fixtures/**/*.json`).
   Never `git add -f` a fixture; don't write management commands to seed data — use
   Django's fixture system. Seed data is managed separately (admin, shared storage, docs).
-  **`loaddata` inserts; it does NOT update idmapper rows** — for re-seeding edited
-  data use an upsert path (`load_entries` / `update_or_create`); see
-  `docs/evennia-quirks.md` (#946).
+  This is *why* the database is the master copy (ADR-0236): no fixture in the repo is a
+  backup of authored content, and a fixture you generate locally is a stale snapshot the
+  moment staff edits the row. **`loaddata` inserts; it does NOT update idmapper rows** —
+  for re-seeding edited data use an upsert path (`load_entries` / `update_or_create`);
+  see `docs/evennia-quirks.md` (#946).
 
 ## Testing
 
