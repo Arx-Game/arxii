@@ -2,8 +2,9 @@
 
 Gems are *lumped with tax collection*: ``collect_org_income`` gathers the org's uncollected
 gem pools + Rare-Find stones alongside coin, and the same outcome band + graft + catastrophe
-decide what lands. Net common value → the house's ``OrgGemStock``; surviving stones → the
-collector's hands; a bad collection loses some. Outcome bands are forced via the checks helper.
+decide what lands. Net common value → the house's ``OrgMaterialStock``; surviving stones →
+the collector's hands; a bad collection loses some. Outcome bands are forced via the checks
+helper.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ from world.currency.services import (
     get_or_create_economics,
 )
 from world.items.factories import ItemInstanceFactory, MaterialCategoryFactory
-from world.items.gems.models import OrgGemStock, PendingRareFind, StreamCommonGemPool
+from world.items.gems.models import PendingRareFind
+from world.items.materials_models import OrgMaterialStock, StreamMaterialPool
 from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckOutcomeFactory
 
@@ -41,8 +43,8 @@ class GemCollectionTests(TestCase):
         self.stream = OrgIncomeStream.objects.create(
             organization=self.org, name="Gem Mine", kind="domain_tax", gross_amount=100
         )
-        StreamCommonGemPool.objects.create(
-            income_stream=self.stream, tier=self.tier, uncollected_value=1000
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=self.tier, uncollected_value=1000
         )
         self.stones = [ItemInstanceFactory() for _ in range(4)]
         for stone in self.stones:
@@ -54,14 +56,17 @@ class GemCollectionTests(TestCase):
             return collect_org_income(organization=self.org, character=self.character)
 
     def _stock_value(self) -> int:
-        stock = OrgGemStock.objects.filter(organization=self.org, tier=self.tier).first()
+        stock = OrgMaterialStock.objects.filter(
+            organization=self.org, material_category=self.tier
+        ).first()
         return stock.value if stock is not None else 0
 
     def test_clean_collection_lands_net_common_and_surviving_stones(self) -> None:
         # No coin accrued: the mine's stream has only gems — the dispatch still runs.
         result = self._collect(1)  # 100% band, 10% graft
         # Common: 1000 → collected 1000 → net 900 into the house stock.
-        self.assertEqual(result.gem_value_landed, 900)
+        self.assertEqual(result.material_value_landed, 900)
+        self.assertEqual(result.landed_by_category, [(self.tier, 900)])
         self.assertEqual(self._stock_value(), 900)
         # Stones ride the same net rate: 4 × 100% × 90% = 3 survive, 1 lost.
         self.assertEqual(result.stones_delivered, 3)
@@ -73,18 +78,23 @@ class GemCollectionTests(TestCase):
         # Pools zero and pendings resolve regardless of what survived.
         self.assertFalse(PendingRareFind.objects.filter(income_stream=self.stream).exists())
         self.stream.refresh_from_db()
-        pool = StreamCommonGemPool.objects.get(income_stream=self.stream, tier=self.tier)
+        pool = StreamMaterialPool.objects.get(
+            income_stream=self.stream, material_category=self.tier
+        )
         self.assertEqual(pool.uncollected_value, 0)
 
     def test_catastrophe_loses_all_common_and_all_stones(self) -> None:
         result = self._collect(-2)
         self.assertTrue(result.catastrophe)
-        self.assertEqual(result.gem_value_landed, 0)
+        self.assertEqual(result.material_value_landed, 0)
+        self.assertEqual(result.landed_by_category, [])
         self.assertEqual(result.stones_delivered, 0)
         self.assertEqual(result.stones_lost, 4)
         self.assertEqual(self._stock_value(), 0)
         self.assertEqual(sum(1 for s in self.stones if _reloaded(s) is not None), 0)
-        pool = StreamCommonGemPool.objects.get(income_stream=self.stream, tier=self.tier)
+        pool = StreamMaterialPool.objects.get(
+            income_stream=self.stream, material_category=self.tier
+        )
         self.assertEqual(pool.uncollected_value, 0)  # the gems are simply gone
 
     def test_coin_and_gems_ride_the_same_dispatch(self) -> None:
@@ -93,7 +103,8 @@ class GemCollectionTests(TestCase):
         result = self._collect(1)
         self.assertEqual(result.gathered, 100)  # coin
         self.assertEqual(result.landed, 90)  # coin net of graft
-        self.assertEqual(result.gem_value_landed, 900)  # gems net of graft
+        self.assertEqual(result.material_value_landed, 900)  # materials net of graft
+        self.assertEqual(result.landed_by_category, [(self.tier, 900)])
         self.assertEqual(self._stock_value(), 900)
 
     def test_delivered_stones_are_minted_as_vault_transit(self) -> None:
@@ -113,11 +124,91 @@ class GemCollectionTests(TestCase):
         self._collect(1)
         # A second cycle accrues more common value (mutate-then-save, as accrual does — an
         # .update() would bypass the SharedMemoryModel cache), then a second collection stacks it.
-        pool = StreamCommonGemPool.objects.get(income_stream=self.stream, tier=self.tier)
+        pool = StreamMaterialPool.objects.get(
+            income_stream=self.stream, material_category=self.tier
+        )
         pool.uncollected_value = 1000
         pool.save(update_fields=["uncollected_value"])
         self._collect(1)
         self.assertEqual(self._stock_value(), 1800)  # 900 + 900
+
+
+class MaterialCollectionBreakdownTests(TestCase):
+    """Per-category breakdown of the collected common material value (#2540 slice 2).
+
+    ``landed_by_category`` is captured straight from the per-tier loop that already
+    computes each category's net (band + graft) — this class checks it against
+    hand-computed floor arithmetic, including a boundary where a small category
+    rounds to zero net and drops out of the breakdown entirely.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.org = OrganizationFactory(name="House Multivein")
+        cls.tier_a = MaterialCategoryFactory(name="Semiprecious Ore")
+        cls.tier_b = MaterialCategoryFactory(name="Precious Ore")
+        cls.character = CharacterSheetFactory().character
+        CheckTypeFactory(name="Tax Collection")
+        economics = get_or_create_economics(cls.org)
+        economics.graft_pct = 7
+        economics.save(update_fields=["graft_pct"])
+
+    def setUp(self) -> None:
+        self.stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Multivein Mine", kind="domain_tax", gross_amount=0
+        )
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=self.tier_a, uncollected_value=1000
+        )
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=self.tier_b, uncollected_value=500
+        )
+
+    def _collect(self, success_level: int):
+        outcome = CheckOutcomeFactory(name=f"multi_{success_level}", success_level=success_level)
+        with force_check_outcome(outcome):
+            return collect_org_income(organization=self.org, character=self.character)
+
+    def _stock_value(self, tier) -> int:
+        stock = OrgMaterialStock.objects.filter(
+            organization=self.org, material_category=tier
+        ).first()
+        return stock.value if stock is not None else 0
+
+    def test_breakdown_sums_to_total_with_band_graft_rounding(self) -> None:
+        # 85% band (success_level 0), 7% graft: neither tier's floor division is clean,
+        # exercising the same rounding boundary the coin leg rides.
+        # tier_a: 1000 -> collected 850 -> net 850 - (850*7//100=59) = 791
+        # tier_b: 500 -> collected 425 -> net 425 - (425*7//100=29) = 396
+        result = self._collect(0)
+        breakdown = dict(result.landed_by_category)
+        self.assertEqual(breakdown[self.tier_a], 791)
+        self.assertEqual(breakdown[self.tier_b], 396)
+        self.assertEqual(sum(breakdown.values()), result.material_value_landed)
+        self.assertEqual(result.material_value_landed, 1187)
+        self.assertEqual(self._stock_value(self.tier_a), 791)
+        self.assertEqual(self._stock_value(self.tier_b), 396)
+
+    def test_zero_net_category_excluded_from_breakdown(self) -> None:
+        # A third, tiny category floors to a zero net under the same band and drops out
+        # of the breakdown (it was never credited) while still summing correctly.
+        tier_c = MaterialCategoryFactory(name="Trace Dust")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=tier_c, uncollected_value=1
+        )
+        result = self._collect(0)  # 85% band: 1 -> collected 0 -> net 0
+        breakdown = dict(result.landed_by_category)
+        self.assertNotIn(tier_c, breakdown)
+        self.assertEqual(self._stock_value(tier_c), 0)
+        self.assertEqual(sum(breakdown.values()), result.material_value_landed)
+
+    def test_catastrophe_breakdown_is_empty_and_stock_untouched(self) -> None:
+        result = self._collect(-2)  # below every band floor -> catastrophe
+        self.assertTrue(result.catastrophe)
+        self.assertEqual(result.landed_by_category, [])
+        self.assertEqual(result.material_value_landed, 0)
+        self.assertEqual(self._stock_value(self.tier_a), 0)
+        self.assertEqual(self._stock_value(self.tier_b), 0)
 
 
 def _reloaded(instance):

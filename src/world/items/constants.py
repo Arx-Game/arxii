@@ -333,3 +333,21 @@ class VaultTransitResolution(models.TextChoices):
 
     DEPOSITED = "deposited", "Deposited"
     KEPT = "kept", "Kept"  # embezzled — consent-double-gated; staff-side record only
+
+
+class MaterialSourceKind(models.TextChoices):
+    """How a ``HoldingMaterialSource`` produces value (#2540 slice 2).
+
+    A gem mine rolls rare finds (individuated stones) alongside flat common bulk
+    value; every other bulk yield (farms, quarries, etc.) produces flat value only.
+    """
+
+    BULK = "bulk", "Bulk Yield"
+    GEM_MINE = "gem_mine", "Gem Mine"
+
+
+# Common-bulk value produced per point of quality per weekly cycle for a BULK
+# ``HoldingMaterialSource`` (#2540 slice 2). PLACEHOLDER magnitude, admin/caller-tunable
+# — mirrors ``COMMON_VALUE_PER_QUALITY`` (`world.items.gems.constants`), the GEM_MINE
+# analogue.
+BULK_YIELD_PER_QUALITY = 100

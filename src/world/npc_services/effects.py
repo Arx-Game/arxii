@@ -397,11 +397,12 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     """COLLECTION effect handler (#930): dispatch a collector across the org's pools.
 
     The graded outcome (Tax Collection check + band table + graft) lives in
-    ``currency.collect_org_income``; the debt-first + member-allowance legs ride
-    along via ``currency.collect_and_distribute`` (#2540) so a collection also
-    services the org's debt principal and pays its active members before the
-    remainder settles in the treasury. This handler resolves the org, runs the
-    dispatch, and phrases the toast. Copy approved by Apostate (2026-07-03).
+    ``currency.collect_org_income``; the debt-first + member-allowance +
+    materials-allowance legs ride along via ``currency.collect_and_distribute``
+    (#2540) so a collection also services the org's debt principal and pays its
+    active members coin and (per category) raw materials before the remainders
+    settle in the treasury / ``OrgMaterialStock``. This handler resolves the org,
+    runs the dispatch, and phrases the toast. Copy approved by Apostate (2026-07-03).
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
@@ -451,6 +452,15 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         message += (
             f" PLACEHOLDER: allowances went out to {dispatch.allowance.member_count} members."
         )
+    if dispatch.material_allowance.total_by_category:
+        message += (
+            " PLACEHOLDER: raw materials were shared out to "
+            f"{dispatch.material_allowance.member_count} members."
+        )
+    if dispatch.auto_sold > 0:
+        message += (
+            f" PLACEHOLDER: surplus stores were sold off for {format_coppers(dispatch.auto_sold)}."
+        )
     return EffectResult(
         kind=OfferKind.COLLECTION.value,
         object_label=f"Collection for {organization.name}",
@@ -462,6 +472,8 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             "catastrophe": result.catastrophe,
             "debt_principal_paid": dispatch.debt_principal_paid,
             "allowance_member_count": dispatch.allowance.member_count,
+            "material_allowance_member_count": dispatch.material_allowance.member_count,
+            "auto_sold": dispatch.auto_sold,
         },
     )
 

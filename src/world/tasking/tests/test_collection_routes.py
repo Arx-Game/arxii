@@ -11,6 +11,9 @@ from world.checks.test_helpers import force_check_outcome
 from world.currency.constants import IncomeStreamKind
 from world.currency.models import DebtInstrument, OrgIncomeStream
 from world.currency.services import get_or_create_purse, get_or_create_treasury
+from world.items.factories import MaterialCategoryFactory
+from world.items.gems.buckets import material_value
+from world.items.materials_models import StreamMaterialPool
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.tasking.factories import (
     OrgTaskFactory,
@@ -85,6 +88,7 @@ class CollectionRouteTests(CollectionRouteTestBase):
         self.assertGreater(self._treasury_balance(), 0)
         self.assertEqual(OrgIncomeStream.objects.get(organization=self.org).uncollected_pool, 0)
         self.assertIn("coppers home", fulfillment.report)
+        self.assertNotIn("surplus stores", fulfillment.report)
 
     def test_route_without_level_lands_nothing(self):
         self._stream(1000)
@@ -123,6 +127,44 @@ class CollectionRouteTests(CollectionRouteTestBase):
         purse = get_or_create_purse(self.handler.character_sheet)
         purse.refresh_from_db()
         self.assertGreater(purse.balance, 0)
+
+    def test_route_landing_shares_out_materials_and_reports_it(self):
+        """#2540 slice 2: a route-graded landing also shares out any materials collected
+        alongside the coin, with one PLACEHOLDER line only when materials went out."""
+        stream = self._stream(1000)
+        category = MaterialCategoryFactory(name="Semiprecious")
+        StreamMaterialPool.objects.create(
+            income_stream=stream, material_category=category, uncollected_value=1000
+        )
+        _pilot(self.handler)
+        template = TaskTemplateFactory(duration=timedelta(days=1))
+        _route, task = self._assign(template, collection_success_level=3)
+        with (
+            patch("world.checks.services.perform_check_with_modifiers"),
+            force_check_outcome(self.win),
+        ):
+            fulfillment = resolve_task(task)
+        self.assertIn("raw materials were shared out to 1 members", fulfillment.report)
+        self.assertGreater(material_value(self.handler.character_sheet, category), 0)
+
+    def test_route_landing_auto_sells_excess_materials_and_reports_it(self):
+        """#2540 slice 2: an unpiloted org's landed materials pile into OrgMaterialStock
+        (nothing drawn by the allowance leg) and the excess above threshold auto-sells
+        into the treasury, reported once — only when something actually sold."""
+        stream = self._stream(0)
+        category = MaterialCategoryFactory(name="Cordwood")
+        StreamMaterialPool.objects.create(
+            income_stream=stream, material_category=category, uncollected_value=10_000
+        )
+        template = TaskTemplateFactory(duration=timedelta(days=1))
+        _route, task = self._assign(template, collection_success_level=3)
+        with (
+            patch("world.checks.services.perform_check_with_modifiers"),
+            force_check_outcome(self.win),
+        ):
+            fulfillment = resolve_task(task)
+        self.assertIn("surplus stores were sold off for", fulfillment.report)
+        self.assertGreater(self._treasury_balance(), 0)
 
     def test_catastrophe_route_pays_nothing_and_message_unchanged(self):
         self._stream(1000)

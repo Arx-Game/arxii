@@ -239,6 +239,7 @@ treat those names as hints to confirm, not gospel.
 - [0231 - Org appeals are a distinct IC surface from the OOC staff-contact Petition](0231-org-appeals-are-distinct-from-ooc-petitions.md) (#3293)
 - [0232 - The Arx I archive is gated on Arx II accounts, not a shared password](0232-arx1-archive-gated-on-arx-ii-accounts.md) (#3320)
 - [0233 - Sentences are enforced by a daily sweep, and exile rides the existing heat ladder](0233-sentences-are-swept-and-exile-rides-the-heat-ladder.md) (#2378; amends ADR-0023's scope note)
+- [0234 - Material economy renames stocks over duplicating them, keeps per-category stock, drives crafting via allowance, and sells only at collection time](0234-material-economy-generalizes-stocks-allowance-driven-draw-and-selling.md) (#2540 slice 2; extends ADR-0081, ADR-0150; related ADR-0008)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

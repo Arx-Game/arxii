@@ -435,6 +435,7 @@ class ActionRegistryTests(TestCase):
             "fund_room_ward",
             "market_buy_stock",
             "market_sell_fence",
+            "sell_materials",
             "start_gang_turf",
             "gm_apply_shade",
             "market_buy_ware",

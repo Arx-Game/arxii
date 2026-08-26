@@ -3809,7 +3809,18 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `distribute_allowance(*, organization, surplus)` (#2540 — the non-discretionary allowance rail:
   a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
   piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
-  cannot withhold it),
+  cannot withhold it; the active-piloted member scan itself lives in the shared
+  `_active_allowance_sheets(organization, cutoff)` helper, reused below),
+  `distribute_material_allowance(*, organization, landed_by_category)` (#2540 slice 2, "the
+  crafting draw" — the materials analogue of `distribute_allowance`: for each
+  `(MaterialCategory, landed)` in `landed_by_category`, a PLACEHOLDER `MATERIALS_ALLOWANCE_PCT`
+  share splits evenly across `_active_allowance_sheets`'s population into each member's
+  `MaterialBucket` via `items.gems.buckets.credit_materials`; `OrgMaterialStock` [`select_for_update`]
+  is debited by exactly the total actually credited [`per_member * member_count`, floor
+  remainder stays in stock], capped at the stock's current value so a concurrent spend can
+  never drive it negative — the cap recomputes `per_member` down rather than over-crediting. A
+  category with nothing landed, or a missing stock row [shouldn't happen], is skipped. Returns
+  `MaterialAllowanceResult(total_by_category, member_count)`),
   `collect_and_distribute(*, organization, character, success_level_override=None)` (#2540,
   ruled 2026-07-20 — THE distribution dispatch, both live call sites now wired: the active
   piloted collection (`npc_services.effects.run_collection`) and the route-graded mission
@@ -3818,9 +3829,26 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `DEBT_PRINCIPAL_GROSS_PCT` of GROSS toward debt principal, oldest first, diverting debts
   skipped, capped by treasury; a catastrophe funds no debt service; complements the weekly
   at-source ARREARS/interest withholding #927] → `distribute_allowance` on the post-debt
-  remainder of what landed; each phase independently atomic; the rest stays in the
-  treasury. `success_level_override` passes straight through to `collect_org_income` for a
-  caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`)
+  remainder of what landed → `distribute_material_allowance` (#2540 slice 2) on
+  `collection.landed_by_category` → `auto_sell_excess_materials` (#2540 slice 2, ALWAYS LAST —
+  liquidates whatever `OrgMaterialStock` the allowance leg didn't already draw down) — each
+  phase independently atomic; the coin remainder stays in the treasury, the materials remainder
+  stays in `OrgMaterialStock`.
+  `success_level_override` passes straight through to `collect_org_income` for a
+  caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`, which
+  carries `material_allowance: MaterialAllowanceResult` alongside `allowance` and `auto_sold:
+  int` (coppers minted to the treasury from the auto-sell leg, 0 when nothing sold)). Both entry
+  points append one PLACEHOLDER report line ("raw materials were shared out to N members")
+  only when `material_allowance.total_by_category` is non-empty.
+  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2) — the
+  org-level analogue of `market.sell_materials`: for each `OrgMaterialStock` row over the
+  PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells `excess = value - threshold` at the market's
+  `MATERIAL_SALE_RATE_PCT` (imported from its market home, one rate constant, no duplicate) into
+  the treasury; rows read/debited under `select_for_update`, same locking discipline as the
+  allowance leg since both debit the same stock table. A category whose excess rounds to zero
+  coppers is left alone; each category liquidates independently. Called ONLY from the end of
+  `collect_and_distribute` — never the weekly cron directly (ADR-0081/ADR-0234: automatic gain
+  is not automatic).
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
@@ -5226,39 +5254,71 @@ holder is never notified a claim exists.
     `ItemInstance`s (born uncut, loose). Mine quality + minister bonus both raise the Rare-Find
     chance (base 1%) and shift every axis roll up; a find rolls 1d4 stones with `size`/`purity`
     floored above common (type not floored), top-heavy grade distribution (`_grade_index`, roll²).
-    Does **not** schedule or wire domains — the weekly cron, the per-holding `mine_quality` field,
-    and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
+    Does **not** schedule or wire domains — the weekly cron, the per-holding
+    `HoldingMaterialSource` row (#2540 slice 2; was the `mine_quality` field), and the
+    schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
     Build-1 wiring that *calls* this; where common value accrues is handled by
-    `accrue_mine_cycle` (below). All magnitudes PLACEHOLDER.
-  - **Common-gem value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5)
-    — `CommonGemBucket` (a crafter's common-gem value per tier — a `MaterialCategory` — never
-    instanced; the type-blind bulk source). `credit_common_gems` / `spend_common_gems` /
-    `common_gem_value` (canonical mutate-then-save, not `F()`; `InsufficientCommonGems`).
+    `accrue_holding_materials` (below). All magnitudes PLACEHOLDER.
+  - **Material value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5,
+    generalized #2540 slice 2) — `MaterialBucket` (`world.items.materials_models`; a crafter's
+    material value per category — a `MaterialCategory` — never instanced; the type-blind bulk
+    source, originally gem-only). `credit_materials` / `spend_materials` / `material_value`
+    (canonical mutate-then-save, not `F()`; `InsufficientMaterialStock` — kept distinct from the
+    pre-existing instance-consumption `InsufficientMaterials`).
     `CraftingMaterialRequirement.required_value` (nullable, category-only, DB-constrained) is a
-    "N value of {tier}" **bulk** requirement: `stage_and_assert_affordable` splits value reqs from
-    instance reqs — instance reqs go through `gather_consumable_pks` (0a, unchanged), value reqs are
-    aggregated per tier and checked against the crafter's buckets (via `StagedCost.bucket_spends`);
-    `consume_cost` spends them. Named Rare-Find stones are never auto-consumed — only this fungible
-    bulk source is. This is the "gem-covered table, don't care which" path; the primary use is still
-    adornment. Common value crediting from mining is the Build-1 cron's job.
-  - **Mine accrual** (`world.items.gems.mining.accrue_mine_cycle`, Build 0b slice 7) — the weekly
-    cycle for a mine holding. `DomainHolding` gains `mine_quality` + `common_gem_tier`; the cycle
-    calls `roll_gem_haul` and accrues the haul into **uncollected** pools on the holding's
-    `OrgIncomeStream` — common value into `StreamCommonGemPool` (per stream/tier; the gem analogue
-    of `OrgIncomeStream.uncollected_pool`), each Rare Find into a `PendingRareFind` (a loose stone
-    awaiting collection). "Lumped with tax collection": both ride the **same** active
+    "N value of {category}" **bulk** requirement: `stage_and_assert_affordable` splits value reqs
+    from instance reqs — instance reqs go through `gather_consumable_pks` (0a, unchanged), value
+    reqs are aggregated per category and checked against the crafter's buckets (via
+    `StagedCost.bucket_spends`); `consume_cost` spends them. Named Rare-Find stones are never
+    auto-consumed — only this fungible bulk source is. This is the "gem-covered table, don't care
+    which" path; the primary use is still adornment. Common value crediting from mining is the
+    Build-1 cron's job.
+  - **Holding material accrual** (`world.items.materials_production.accrue_holding_materials`,
+    #2540 slice 2 Task 2 — replaces the deleted, gem-mine-only `accrue_mine_cycle`) — the weekly
+    cycle for a holding, iterating *every* `HoldingMaterialSource` row it carries (not just one).
+    A `GEM_MINE` source (`quality` + `material_category`) still calls `roll_gem_haul` (`gems.mining`,
+    unchanged; `minister_bonus` passthrough kept for the #2239 seam); a `BULK` source produces flat
+    `quality * BULK_YIELD_PER_QUALITY` (new constant, PLACEHOLDER 100, `world.items.constants`) with
+    no rare finds. Both credit **uncollected** pools on the holding's `OrgIncomeStream` — common
+    value into `StreamMaterialPool` (`world.items.materials_models`, per stream/category; the gem
+    analogue of `OrgIncomeStream.uncollected_pool`), GEM_MINE Rare Finds into `PendingRareFind` (a
+    loose stone awaiting collection). Returns `MaterialHaul` (`common_value_by_category:
+    list[tuple[MaterialCategory, int]]`, `rare_finds: list[ItemInstance]`) — the multi-source
+    generalization of `GemHaul`. "Lumped with tax collection": both ride the **same** active
     `collect_org_income` dispatch (same band/graft/catastrophe loss) into the house's stock — see
-    Mine collection (below). A holding with no `common_gem_tier`/stream accrues nothing.
+    Mine collection (below). A holding with no income stream accrues nothing. Lives in a new
+    top-level `world.items.materials_production` module, not `gems.mining` — it is no longer
+    gem-specific, and only imports the gem roller as one of its two source-kind branches.
   - **Mine collection** (`world.items.gems.collection`, Build 0b domain-cron collection) —
     `collect_org_income` gathers the org's pending gems alongside coin and applies the *same* Tax
-    Collection band + graft + catastrophe. `collect_org_gems` zeros the pools, credits net common
-    value to the shared **`OrgGemStock`** (`organization`+`tier`; `credit_org_gems`, the stock
-    members craft from), delivers `floor(count × band × (1−graft))` of the stones to the collector,
-    and destroys the rest (catastrophe loses all). `org_has_pending_gems` widens the empty-gate so a
-    gems-but-no-coin mine still collects. `CollectionResult` grew `gem_value_landed` /
-    `stones_delivered` / `stones_lost`. Currency reaches this via a lazy import (FK direction
-    preserved — currency stays free of an items dependency at load). Remaining sub-slices: the
-    crafting draw off `OrgGemStock`, the `game_clock` scheduling, and the minister seam (#2239).
+    Collection band + graft + catastrophe. `collect_org_materials` (renamed from
+    `collect_org_gems`, #2540 slice 2) zeros the pools, credits net common value to the shared
+    **`OrgMaterialStock`** (`world.items.materials_models`; `organization`+`material_category`;
+    `credit_org_materials`, the stock members craft from), delivers
+    `floor(count × band × (1−graft))` of the stones to the collector, and destroys the rest
+    (catastrophe loses all). `org_has_pending_materials` (renamed from `org_has_pending_gems`)
+    widens the empty-gate so a gems-but-no-coin mine still collects. `CollectionResult`
+    (`world.currency.types`) grew `material_value_landed` (renamed from `gem_value_landed`) /
+    `landed_by_category` / `stones_delivered` / `stones_lost`. Currency reaches this via a lazy
+    import (FK direction preserved — currency stays free of an items dependency at load).
+    Remaining sub-slices: only the minister seam
+    (#2239) — the `game_clock` scheduling shipped (#2610) and the crafting draw itself shipped
+    (see the currency section's `distribute_material_allowance`).
+  - **Personal material sale** (`world.items.market.services.sell_materials`,
+    `@transaction.atomic`, #2540 slice 2) — sells `amount` of a `CharacterSheet`'s
+    `MaterialBucket` value for one category at the market's PLACEHOLDER
+    `MATERIAL_SALE_RATE_PCT` (40%), coppers minted straight to the seller's purse
+    (`sell_to_fence`'s mint-to-purse convention). Apostate's frictionless ruling (ADR-0234):
+    unlike the fence (#2862), needs no stall, no NPC, no location gate — bulk material is
+    abstract bucket value, not a physical good to haggle over. The coin computation happens
+    BEFORE the bucket is touched, so a sale too small to round up to a single copper is refused
+    outright rather than debiting the bucket for nothing; raises `MarketServiceError` (wrapping
+    `InsufficientMaterialStock`) when the bucket falls short — nothing moves in that case.
+    Surfaced via `SellMaterialsAction` (`actions.definitions.market`, key `sell_materials`,
+    kwargs `material_category_id`/`amount`). Both this and `sell_to_fence` are
+    `@transaction.atomic` (fix commit `32b1a8d37` — a mid-sale exception previously left a
+    spent-but-unpaid seller). The org-level auto-sell sibling
+    (`currency.services.auto_sell_excess_materials`) is documented in the currency section.
 - **Org vault (#2540 Layer 4, `org_vault_models.py` + `services/org_vault.py`):** logical org
   custody of items — the ratified "model B with model D's access surface". `OrganizationVault`
   (OneToOne org, get-or-create; `withdraw_rank_max`, the `spend_rank_max` twin),
@@ -5295,10 +5355,10 @@ holder is never notified a claim exists.
   owner-installed bank-access decor feature — the ratified access surface; reachability-only
   handler in `room_features`, COMMAND_CENTER's shape; seeded via `ensure_bank_kind()`,
   `world/room_features/seeds.py`). Distinct from the physical room-feature
-  VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is wired**:
-  `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one `accrue_mine_cycle`
-  per configured holding (`common_gem_tier` set) — haul amasses uncollected per ADR-0081; only
-  an active collection delivers it.
+  VAULT (#2179), which secures loose items in a room. **Weekly material accrual is wired**:
+  `run_weekly_economy`'s `materials` phase (`_weekly_mine_accrual`, renamed key #2540 Task 2) runs
+  one `accrue_holding_materials` per holding with a `HoldingMaterialSource` row (#2540 slice 2) —
+  haul amasses uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
