@@ -29,6 +29,7 @@ from world.scenes.action_models import (
     SceneActionTarget,
 )
 from world.scenes.action_resolvers import get_resolver
+from world.scenes.boon_services import BOON_ACTION_KEY
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
@@ -374,6 +375,14 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
         from world.scenes.boon_services import validate_boon_ask  # noqa: PLC0415
 
         validate_boon_ask(ask=boon, target_persona=target_persona)
+    elif action_key == BOON_ACTION_KEY:
+        # #2540 fold-in: a boon request with no payload has nothing to ask for —
+        # reject at the single dispatch orchestrator so every entry path (API,
+        # telnet) is covered, not just the ones that remember to pass boon=....
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        msg = "This ask needs a boon payload."
+        raise ValidationError(msg)
 
     # Validate only the EXPLICIT override here — the template default is
     # resolved at resolution time (the template FK is attached later in the

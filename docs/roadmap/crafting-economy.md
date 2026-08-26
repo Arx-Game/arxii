@@ -184,8 +184,8 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   gains `required_value` — a "N value of {tier}" bulk requirement drawing fungibly from the buckets
   ("gem-covered table, don't care which"), while named Rare-Find stones are never auto-consumed.
   The crafting cost path splits value reqs from 0a instance reqs. Remaining 0b work: risky
-  prying/re-set, hard cut skill-cap + consequence-pool narration, and the **domain-cron wiring**
-  (Build-1 track).
+  prying/re-set and hard cut skill-cap + consequence-pool narration. (The domain-cron wiring
+  shipped — see #2610.)
 
 - **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
   mine holding: `DomainHolding` gains `mine_quality` + `common_gem_tier`, and the cycle accrues the
@@ -204,8 +204,8 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   `stones_lost`. The gem side lives in `world.items.gems.collection` (a lazy import from the
   currency dispatch, keeping currency free of an items dependency at load).
   **Remaining domain-cron sub-slices:** the **crafting draw** (house members craft from the
-  collected `OrgGemStock`), the `game_clock` **scheduling**, and the minister seam (#2239).
-  Plus: the **cut recipe** (slice 3 PR) + refinements.
+  collected `OrgGemStock`) and the minister seam (#2239). (The `game_clock` scheduling
+  shipped — see #2610.) Plus: the **cut recipe** (slice 3 PR) + refinements.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +

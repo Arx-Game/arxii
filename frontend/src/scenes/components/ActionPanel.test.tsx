@@ -111,8 +111,12 @@ vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
 }));
 
 const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
 vi.mock('sonner', () => ({
-  toast: { success: (...args: unknown[]) => toastSuccessMock(...args), error: vi.fn() },
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
 }));
 
 const mockNavigate = vi.fn();
@@ -1111,6 +1115,70 @@ describe('ActionPanel', () => {
     // Multi-target form must NOT be sent for a single-target confirm
     const call = vi.mocked(createActionRequest).mock.calls[0][1];
     expect(call).not.toHaveProperty('target_persona_ids');
+  });
+
+  // -------------------------------------------------------------------------
+  // Boon multi-select bypass guard (#2540 fold-in)
+  // -------------------------------------------------------------------------
+
+  it('blocks dispatch with a toast when a boon target confirm selects more than one', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Boon',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'area',
+            filters: {
+              in_same_scene: true,
+              exclude_self: false,
+              must_be_conscious: false,
+            },
+          },
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'boon',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Boon')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /^boon$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('checkbox', { name: /alice/i }));
+    await user.click(screen.getByRole('checkbox', { name: /bob/i }));
+
+    await user.click(screen.getByRole('button', { name: /confirm/i }));
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        'A boon can only be asked of one target at a time.'
+      );
+    });
+    // Neither the payload-less dispatch nor the boon ask form should ever fire —
+    // the picker stays open so the player can narrow the selection to one.
+    expect(createActionRequest).not.toHaveBeenCalled();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

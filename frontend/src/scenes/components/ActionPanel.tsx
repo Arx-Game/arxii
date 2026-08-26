@@ -382,7 +382,16 @@ export function ActionPanel({ sceneId }: Props) {
     if (!targetingAction || ids.length === 0) return;
     // #2540: a boon needs its structured ask specified before dispatch — hold the
     // action and open the ask form instead of committing on target pick.
-    if ((targetingAction.ref.registry_key ?? '') === 'boon' && ids.length === 1) {
+    if ((targetingAction.ref.registry_key ?? '') === 'boon') {
+      if (ids.length !== 1) {
+        // A boon asks exactly one target for a specific thing — a multi-select
+        // has no single ask form to open, so block instead of falling through
+        // to a payload-less dispatch (the server-side guard would reject it
+        // anyway, but this avoids a round trip for a request that can never
+        // succeed).
+        toast.error('A boon can only be asked of one target at a time.');
+        return;
+      }
       setBoonAskState({ action: targetingAction, targetId: ids[0] });
       setTargetingAction(null);
       return;

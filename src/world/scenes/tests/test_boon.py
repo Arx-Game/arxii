@@ -166,6 +166,19 @@ class BoonAskValidationTests(TestCase):
                 boon=BoonAsk(kind=BoonKind.DEED, deed_text="x"),
             )
 
+    def test_payload_less_boon_request_is_rejected(self) -> None:
+        """#2540 fold-in: a boon request with no boon payload has nothing to ask
+        for — every entry path (API, telnet) converges on create_action_request,
+        so the guard belongs there, not duplicated per caller."""
+        with self.assertRaises(ValidationError):
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.target,
+                action_key="boon",
+            )
+        self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+
 
 class NpcBoonBandTests(TestCase):
     """Dial 2 — the mandatory NPC-side relative-cost band; piloted targets unshifted."""
@@ -249,6 +262,16 @@ class BoonResolverE2ETests(TestCase):
         self.assertEqual(
             shift.relationship.source_id, self.npc_target.character_sheet_id
         )  # the granter's regard for the asker is what drops
+
+    def test_deleting_granted_boon_cascades_the_affection_shift(self) -> None:
+        """#2540 fold-in: AffectionShift.boon was SET_NULL, but
+        affection_shift_has_provenance requires effect-or-boon non-null — deleting
+        a granted Boon's SceneActionRequest used to IntegrityError. CASCADE means
+        the shift's provenance dies with the boon, matching the constraint."""
+        request = self._dispatch(success=True)
+        shift = AffectionShift.objects.get(boon=request.boon)
+        request.delete()  # cascades: SceneActionRequest -> Boon -> AffectionShift
+        self.assertFalse(AffectionShift.objects.filter(pk=shift.pk).exists())
 
     def test_failed_roll_moves_nothing(self) -> None:
         request = self._dispatch(success=False)
