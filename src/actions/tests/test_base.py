@@ -256,6 +256,7 @@ class ActionRegistryTests(TestCase):
             "boon",
             "vault_deposit",
             "vault_withdraw",
+            "treasury_withdraw",
             "coerce",
             "mint_accusation",
             "reveal_secret",

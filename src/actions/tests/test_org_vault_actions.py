@@ -1,16 +1,22 @@
-"""Bank actions (#2540 Layer 4): the WHERE gate on org-vault deposit/withdraw.
+"""Bank actions (#2540 Layer 4): the WHERE gate on org-vault deposit/withdraw/treasury.
 
-REST-shape dispatches (plain int kwargs) against the audited vault services; the only
-new logic under test is the BANK room-feature gate.
+REST-shape dispatches (plain int kwargs) against the audited vault/treasury services;
+the only new logic under test is the BANK room-feature gate (and, for the treasury
+action, the amount-kwarg coercion).
 """
 
 from __future__ import annotations
 
 from django.test import TestCase
 
-from actions.definitions.org_vault import VaultDepositAction, VaultWithdrawAction
+from actions.definitions.org_vault import (
+    TreasuryWithdrawAction,
+    VaultDepositAction,
+    VaultWithdrawAction,
+)
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.currency.services import get_or_create_purse, get_or_create_treasury
 from world.items.factories import ItemInstanceFactory
 from world.items.org_vault_models import VaultHolding
 from world.room_features.constants import RoomFeatureServiceStrategy
@@ -65,3 +71,83 @@ class BankActionTests(TestCase):
             actor=self.character, organization_id=self.org.pk, item_instance_id=stranger_item.pk
         )
         self.assertFalse(result.success)
+
+
+class TreasuryWithdrawActionTests(TestCase):
+    def setUp(self) -> None:
+        self.org = OrganizationFactory(name="House Coffers")
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        OrganizationMembershipFactory(
+            organization=self.org, persona=self.sheet.primary_persona, rank=1
+        )
+        self.room_profile = RoomProfileFactory()
+        self.character.location = self.room_profile.objectdb
+        self.treasury = get_or_create_treasury(self.org)
+        self.treasury.balance = 1000
+        self.treasury.save(update_fields=["balance"])
+
+    def _install_bank(self) -> None:
+        kind = RoomFeatureKindFactory(
+            name="Bank Access", service_strategy=RoomFeatureServiceStrategy.BANK
+        )
+        RoomFeatureInstanceFactory(room_profile=self.room_profile, feature_kind=kind, level=1)
+
+    def test_withdraw_refused_without_bank_access(self) -> None:
+        result = TreasuryWithdrawAction().run(
+            actor=self.character, organization_id=self.org.pk, amount=300
+        )
+        self.assertFalse(result.success)
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.treasury.balance, 1000)
+
+    def test_rank_gated_success_moves_coppers_treasury_to_purse(self) -> None:
+        self._install_bank()
+        result = TreasuryWithdrawAction().run(
+            actor=self.character, organization_id=self.org.pk, amount=300
+        )
+        self.assertTrue(result.success, result.message)
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.treasury.balance, 700)
+        purse = get_or_create_purse(self.sheet)
+        self.assertEqual(purse.balance, 300)
+
+    def test_below_rank_member_cannot_withdraw(self) -> None:
+        self._install_bank()
+        grunt_sheet = CharacterSheetFactory()
+        grunt = grunt_sheet.character
+        grunt.location = self.room_profile.objectdb
+        OrganizationMembershipFactory(
+            organization=self.org, persona=grunt_sheet.primary_persona, rank=5
+        )
+        result = TreasuryWithdrawAction().run(actor=grunt, organization_id=self.org.pk, amount=100)
+        self.assertFalse(result.success)
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.treasury.balance, 1000)
+
+    def test_amount_exceeding_treasury_fails_cleanly(self) -> None:
+        self._install_bank()
+        result = TreasuryWithdrawAction().run(
+            actor=self.character, organization_id=self.org.pk, amount=5000
+        )
+        self.assertFalse(result.success)
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.treasury.balance, 1000)
+
+    def test_invalid_amounts_fail_without_touching_the_treasury(self) -> None:
+        self._install_bank()
+        for bad_amount in (0, -5, "abc"):
+            with self.subTest(bad_amount=bad_amount):
+                result = TreasuryWithdrawAction().run(
+                    actor=self.character, organization_id=self.org.pk, amount=bad_amount
+                )
+                self.assertFalse(result.success)
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.treasury.balance, 1000)
+
+    def test_missing_amount_fails_without_touching_the_treasury(self) -> None:
+        self._install_bank()
+        result = TreasuryWithdrawAction().run(actor=self.character, organization_id=self.org.pk)
+        self.assertFalse(result.success)
+        self.treasury.refresh_from_db()
+        self.assertEqual(self.treasury.balance, 1000)

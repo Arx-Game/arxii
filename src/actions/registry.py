@@ -321,7 +321,7 @@ from actions.definitions.org_appeals import (
     org_appeal_signon_action,
     org_appeal_withdraw_action,
 )
-from actions.definitions.org_vault import vault_deposit, vault_withdraw
+from actions.definitions.org_vault import treasury_withdraw, vault_deposit, vault_withdraw
 from actions.definitions.organizations import (
     org_apply_action,
     org_demote_action,
@@ -844,6 +844,7 @@ _ALL_ACTIONS: list[Action] = [
     boon,
     vault_deposit,
     vault_withdraw,
+    treasury_withdraw,
     coerce,
     reveal_secret,
     CharmAssetAction(),
