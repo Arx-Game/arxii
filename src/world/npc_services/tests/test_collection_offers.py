@@ -1,11 +1,19 @@
 """COLLECTION / IMPROVEMENT offer kinds (#930): the domain-running summon loop."""
 
-from django.test import TestCase
+from datetime import timedelta
 
+from django.test import TestCase
+from django.utils import timezone
+
+from evennia_extensions.factories import AccountFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.currency.models import OrgIncomeStream
-from world.currency.services import accrue_income_stream, get_or_create_treasury
+from world.currency.models import DebtInstrument, OrgIncomeStream
+from world.currency.services import (
+    accrue_income_stream,
+    get_or_create_purse,
+    get_or_create_treasury,
+)
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import (
     OFFER_EFFECT_HANDLERS,
@@ -16,6 +24,16 @@ from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.traits.factories import CheckOutcomeFactory
+
+
+def _pilot(persona, *, days_ago: int = 1) -> None:
+    """Give ``persona``'s character an account active within the allowance lookback."""
+    account = AccountFactory()
+    account.last_login = timezone.now() - timedelta(days=days_ago)
+    account.save(update_fields=["last_login"])
+    character = persona.character_sheet.character
+    character.db_account = account
+    character.save(update_fields=["db_account"])
 
 
 class CollectionOfferTests(TestCase):
@@ -56,6 +74,44 @@ class CollectionOfferTests(TestCase):
         treasury = get_or_create_treasury(self.family)
         treasury.refresh_from_db()
         self.assertEqual(treasury.balance, 0)
+
+    def test_collection_pays_debt_and_allowance_and_reports_both(self) -> None:
+        """#2540: a collection routes through collect_and_distribute, so debt principal
+        and the member allowance both land alongside the base collection."""
+        creditor = OrganizationFactory(name="House Creditly")
+        debt = DebtInstrument.objects.create(
+            debtor_organization=self.family, creditor_organization=creditor, principal=500
+        )
+        _pilot(self.persona)
+        outcome = CheckOutcomeFactory(name="offer_collect_debt", success_level=1)
+        with force_check_outcome(outcome):
+            result = run_collection(self.offer, self.persona)
+        debt.refresh_from_db()
+        self.assertLess(debt.principal, 500)
+        self.assertGreater(result.payload["debt_principal_paid"], 0)
+        self.assertEqual(result.payload["allowance_member_count"], 1)
+        self.assertIn("went to the house's creditors", result.message)
+        self.assertIn("allowances went out to 1 members", result.message)
+        purse = get_or_create_purse(self.persona.character_sheet)
+        purse.refresh_from_db()
+        self.assertGreater(purse.balance, 0)
+
+    def test_catastrophe_pays_no_debt_or_allowance(self) -> None:
+        """A catastrophe lands nothing to distribute, so no distribution lines appear."""
+        creditor = OrganizationFactory(name="House Creditly")
+        debt = DebtInstrument.objects.create(
+            debtor_organization=self.family, creditor_organization=creditor, principal=500
+        )
+        _pilot(self.persona)
+        outcome = CheckOutcomeFactory(name="offer_collect_cata_debt", success_level=-2)
+        with force_check_outcome(outcome):
+            result = run_collection(self.offer, self.persona)
+        debt.refresh_from_db()
+        self.assertEqual(debt.principal, 500)
+        self.assertEqual(result.payload["debt_principal_paid"], 0)
+        self.assertEqual(result.payload["allowance_member_count"], 0)
+        self.assertNotIn("creditors", result.message)
+        self.assertNotIn("allowances", result.message)
 
     def test_empty_pool_soft_refuses(self) -> None:
         self.stream.uncollected_pool = 0
