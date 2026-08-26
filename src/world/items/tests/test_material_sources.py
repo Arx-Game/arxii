@@ -2,7 +2,7 @@
 
 Replaces ``DomainHolding.mine_quality``/``common_gem_tier`` with a proper per-category
 row so a holding can carry more than one production source. Full mining/collection
-integration is covered in ``world.items.tests.test_gem_mine_accrual`` and
+integration is covered in ``world.items.tests.test_materials_production`` and
 ``world.currency.tests.test_weekly_mine_accrual``; this file is just the model shape.
 """
 

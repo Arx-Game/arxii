@@ -5291,14 +5291,17 @@ holder is never notified a claim exists.
     gem-specific, and only imports the gem roller as one of its two source-kind branches.
   - **Mine collection** (`world.items.gems.collection`, Build 0b domain-cron collection) —
     `collect_org_income` gathers the org's pending gems alongside coin and applies the *same* Tax
-    Collection band + graft + catastrophe. `collect_org_gems` zeros the pools, credits net common
-    value to the shared **`OrgMaterialStock`** (`world.items.materials_models`; `organization`+
-    `material_category`; `credit_org_materials`, the stock members craft from), delivers
+    Collection band + graft + catastrophe. `collect_org_materials` (renamed from
+    `collect_org_gems`, #2540 slice 2) zeros the pools, credits net common value to the shared
+    **`OrgMaterialStock`** (`world.items.materials_models`; `organization`+`material_category`;
+    `credit_org_materials`, the stock members craft from), delivers
     `floor(count × band × (1−graft))` of the stones to the collector, and destroys the rest
-    (catastrophe loses all). `org_has_pending_gems` widens the empty-gate so a gems-but-no-coin
-    mine still collects. `CollectionResult` grew `gem_value_landed` / `stones_delivered` /
-    `stones_lost`. Currency reaches this via a lazy import (FK direction preserved — currency
-    stays free of an items dependency at load). Remaining sub-slices: only the minister seam
+    (catastrophe loses all). `org_has_pending_materials` (renamed from `org_has_pending_gems`)
+    widens the empty-gate so a gems-but-no-coin mine still collects. `CollectionResult`
+    (`world.currency.types`) grew `material_value_landed` (renamed from `gem_value_landed`) /
+    `landed_by_category` / `stones_delivered` / `stones_lost`. Currency reaches this via a lazy
+    import (FK direction preserved — currency stays free of an items dependency at load).
+    Remaining sub-slices: only the minister seam
     (#2239) — the `game_clock` scheduling shipped (#2610) and the crafting draw itself shipped
     (see the currency section's `distribute_material_allowance`).
   - **Personal material sale** (`world.items.market.services.sell_materials`,
