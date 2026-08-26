@@ -150,7 +150,7 @@ import * as combatQueries from '@/combat/queries';
 import * as inventoryHooks from '@/inventory/hooks/useInventory';
 import { YourTurn } from '../sections/YourTurn';
 import type { YourTurnProps } from '../sections/YourTurn';
-import type { AvailableCombo, EncounterDetail, Participant } from '../types';
+import type { AvailableCombo, EncounterDetail, Opponent, Participant } from '../types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -1975,7 +1975,7 @@ describe('YourTurn — round-advance clash reset (#2423 finding 4)', () => {
 // #3381 — rally/succor pickers, use item, revert combo, mounted maneuvers
 // ---------------------------------------------------------------------------
 
-function makeOpponentFixture(overrides: Partial<Record<string, unknown>> = {}) {
+function makeOpponentFixture(overrides: Partial<Opponent> = {}): Opponent {
   return {
     id: 20,
     objectdb_id: null,
@@ -1992,7 +1992,7 @@ function makeOpponentFixture(overrides: Partial<Record<string, unknown>> = {}) {
     mirrors_participant_id: null,
     status: 'active',
     ...overrides,
-  };
+  } as Opponent;
 }
 
 describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
