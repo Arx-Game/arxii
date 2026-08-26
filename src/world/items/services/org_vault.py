@@ -184,13 +184,13 @@ def resolve_vault_transit(
     ``keep_item_ids`` resolve KEPT (embezzled — requires the consent double-gate; the
     stone stays in the carrier's hands and NO vault event is booked), the rest resolve
     DEPOSITED (custody converts to a ``VaultHolding`` + audited DEPOSIT event).
-    Raises ``ValidationError`` when a keep is requested but the double-gate fails.
+    Raises ``ValidationError`` when a keep is requested but the double-gate fails, or
+    when ``keep_item_ids`` names anything outside the carrier's own open transits for
+    this org (#2540 review: a bogus id must never silently no-op into a full honest
+    deposit, nor spuriously block one) — either way, nothing resolves.
     """
     vault = get_or_create_org_vault(organization)
     keep_ids = set(keep_item_ids)
-    if keep_ids and not can_embezzle_from(organization, carrier_persona):
-        msg = "Skimming this house's collection is not on the table."
-        raise ValidationError(msg)
     transits = list(
         VaultTransit.objects.filter(
             vault=vault,
@@ -198,6 +198,13 @@ def resolve_vault_transit(
             resolved_at__isnull=True,
         ).select_related("item_instance")
     )
+    open_item_ids = {transit.item_instance_id for transit in transits}
+    if keep_ids - open_item_ids:
+        msg = "PLACEHOLDER: you cannot keep what you are not carrying for this house."
+        raise ValidationError(msg)
+    if keep_ids and not can_embezzle_from(organization, carrier_persona):
+        msg = "Skimming this house's collection is not on the table."
+        raise ValidationError(msg)
     now = timezone.now()
     for transit in transits:
         item = ItemInstance.objects.select_for_update().get(pk=transit.item_instance_id)

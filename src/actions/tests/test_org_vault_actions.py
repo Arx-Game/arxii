@@ -241,3 +241,18 @@ class DeliverCollectionActionTests(TestCase):
         other_stone.refresh_from_db()
         self.assertIsNone(other_stone.holder_character_sheet)  # honestly deposited
         self.assertEqual(VaultHolding.objects.filter(vault=self.vault).count(), 1)
+
+    def test_keep_item_ids_naming_a_foreign_item_fails_cleanly(self) -> None:
+        self._install_bank()
+        stone = self._open_transit()
+        foreign_item = ItemInstanceFactory()  # not an open transit for this carrier/org
+        result = DeliverCollectionAction().run(
+            actor=self.character,
+            organization_id=self.org.pk,
+            keep_item_ids=[foreign_item.pk],
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(VaultHolding.objects.exists())
+        self.assertTrue(
+            VaultTransit.objects.filter(item_instance=stone, resolved_at__isnull=True).exists()
+        )

@@ -222,6 +222,28 @@ class VaultTransitTests(TestCase):
         resolved = self._resolve(keep=[self.stones[0].pk])
         self.assertEqual(len(resolved), 3)
 
+    def test_bogus_keep_id_with_permissive_authority_rejected(self) -> None:
+        # The carrier is the org's sole active member -> the topmost piloted
+        # stakeholder -> self-dealing would otherwise be allowed unconditionally.
+        self._pilot(self.carrier)
+        bogus_id = self.stones[0].pk + 100_000
+        with self.assertRaises(ValidationError):
+            self._resolve(keep=[bogus_id])
+        # Nothing resolved: no partial deposit, no holdings, every transit still open.
+        self.assertEqual(VaultHolding.objects.count(), 0)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=False).exists())
+
+    def test_bogus_keep_id_mixed_with_valid_keep_rejected_without_partial_effects(self) -> None:
+        self._pilot(self.carrier)
+        bogus_id = self.stones[0].pk + 100_000
+        with self.assertRaises(ValidationError):
+            self._resolve(keep=[self.stones[0].pk, bogus_id])
+        self.assertEqual(VaultHolding.objects.count(), 0)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=False).exists())
+        for stone in self.stones:
+            stone.refresh_from_db()
+            self.assertEqual(stone.holder_character_sheet, self.carrier.character_sheet)
+
     def test_keep_resolves_kept_with_no_vault_event(self) -> None:
         self._pilot(self.carrier)
         self._pilot(self.head)
