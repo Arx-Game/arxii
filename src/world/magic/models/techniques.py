@@ -1293,6 +1293,15 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
             "stack is decremented (the condition persists with stacks - 1)."
         ),
     )
+    cure_power_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text=(
+            "Multiplied by eff_intensity and added as extra_modifiers to the opposed "
+            "cure check (0 = power has no effect on the roll, today's behavior)."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

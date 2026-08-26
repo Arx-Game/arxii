@@ -84,6 +84,16 @@ changes):
   damage-shaped quantity; a separate `WoundDetails.damage_taken` keeps the mend math anchored to
   the actual debit that caused the wound, independent of how severity gets tuned.
 
+## Addendum (#3391, 2026-08-26)
+
+Cast power now feeds a third input into the mend amount: `TreatmentTemplate
+.mend_intensity_multiplier` (default 0) scales the outcome-tier mend by the caster's effective
+intensity, added to `amount` strictly before `mend_wound()` is called. This does not reverse or
+supersede this ADR — the two bounds above (once-per-healer-per-wound, and the never-to-full
+fraction clamp inside `mend_wound()`) are unchanged and remain authoritative over whatever
+`amount` is offered, however that amount was computed. Power scaling composes with the
+double-bound; it cannot bypass either half of it.
+
 > Status: accepted · Source: issue #2644 (lore repo `design/covenant-vows-consolidated.md` §3.1)
 > · Related: ADR-0010 (FK direction specific→general), ADR-0007 (no JSON fields), ADR-0013 (no
 > data migrations pre-production)

@@ -86,6 +86,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
         results = apply_technique_treatments(
             technique=empty_technique,
             success_level=3,
+            eff_intensity=5,
             targets_by_kind={},
             source_character=self.caster,
             scene=self.scene,
@@ -101,6 +102,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
         results = apply_technique_treatments(
             technique=self.technique,
             success_level=2,
+            eff_intensity=5,
             targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
             source_character=self.caster,
             scene=self.scene,
@@ -113,6 +115,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
         results = apply_technique_treatments(
             technique=self.technique,
             success_level=3,
+            eff_intensity=5,
             targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
             source_character=self.caster,
             scene=self.scene,
@@ -132,6 +135,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
         results = apply_technique_treatments(
             technique=self.technique,
             success_level=3,
+            eff_intensity=5,
             targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
             source_character=self.caster,
             scene=self.scene,
@@ -165,6 +169,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
             results = apply_technique_treatments(
                 technique=self.technique,
                 success_level=3,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
                 source_character=self.caster,
                 scene=self.scene,
@@ -189,6 +194,7 @@ class ApplyTechniqueTreatmentsTest(TestCase):
             apply_technique_treatments(
                 technique=self.technique,
                 success_level=3,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
                 source_character=self.caster,
                 scene=self.scene,

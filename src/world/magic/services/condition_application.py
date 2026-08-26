@@ -222,6 +222,7 @@ def remove_technique_conditions(
     *,
     technique: Technique,
     success_level: int,
+    eff_intensity: int,
     targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
 ) -> list[RemovedConditionResult]:
@@ -252,6 +253,10 @@ def remove_technique_conditions(
     Args:
         technique: The ``Technique`` whose ``removed_conditions`` rows are iterated.
         success_level: The cast technique's check success level (SL).
+        eff_intensity: The effective intensity (injected power + pull bumps). Multiplied
+            by ``row.cure_power_multiplier`` and added as ``extra_modifiers`` to the
+            opposed cure check (Gate 3). Zero effect when the row's multiplier is 0
+            (the default for every existing row) — exact back-compat.
         targets_by_kind: Mapping from ``ConditionTargetKind`` value (str) to resolved
             ``ObjectDB`` targets. Callers build this before calling.
         source_character: The caster's ``ObjectDB``, used as the opposed-cure-check
@@ -280,18 +285,22 @@ def remove_technique_conditions(
                 condition=condition,
                 remove_all_stacks=row.remove_all_stacks,
                 source_character=source_character,
+                cure_power_multiplier=row.cure_power_multiplier,
+                eff_intensity=eff_intensity,
             )
             for target in targets
         )
     return out
 
 
-def _attempt_removal(
+def _attempt_removal(  # noqa: PLR0913 - cohesive removal-attempt params
     *,
     target: ObjectDB,  # noqa: OBJECTDB_PARAM
     condition: Any,
     remove_all_stacks: bool,
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    cure_power_multiplier: Any,
+    eff_intensity: int,
 ) -> RemovedConditionResult:
     """Resolve gates 2-4 for one (target, condition) and perform the removal."""
     # Gate 2: can_be_dispelled hard gate.
@@ -306,13 +315,17 @@ def _attempt_removal(
             target=target, condition=condition, success=False, skipped_reason="not_present"
         )
 
-    # Gate 3: opposed cure check (only when the condition defines one).
+    # Gate 3: opposed cure check (only when the condition defines one). Power scaling
+    # (#3391) only ever helps here — cure_power_multiplier=0 (every row's default)
+    # yields power_bonus=0, extra_modifiers=0, byte-identical to pre-#3391 behavior.
     cure_check_type = condition.cure_check_type
     if cure_check_type is not None:
+        power_bonus = int(cure_power_multiplier * eff_intensity)
         check_result = perform_check_with_modifiers(
             source_character,
             cure_check_type,
             condition.cure_difficulty,
+            extra_modifiers=power_bonus,
         )
         if check_result.success_level <= 0:
             return RemovedConditionResult(
@@ -328,10 +341,11 @@ def _attempt_removal(
     )
 
 
-def apply_technique_treatments(
+def apply_technique_treatments(  # noqa: PLR0913 - cohesive condition-application params
     *,
     technique: Technique,
     success_level: int,
+    eff_intensity: int,
     targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
     scene: Scene,
@@ -358,6 +372,9 @@ def apply_technique_treatments(
     Args:
         technique: The ``Technique`` whose ``treatments`` rows are iterated.
         success_level: The cast technique's check success level (SL).
+        eff_intensity: The effective intensity (injected power + pull bumps). Forwarded
+            to ``perform_treatment`` as ``power_intensity``, scaling the mend amount via
+            ``treatment.mend_intensity_multiplier`` (0 by default — no effect).
         targets_by_kind: Mapping from ``ConditionTargetKind`` value (str) to
             resolved ``ObjectDB`` targets. Callers build this before calling.
         source_character: The caster's ``ObjectDB``, used as the treatment helper.
@@ -407,6 +424,7 @@ def apply_technique_treatments(
                 scene=scene,
                 target_effect=target_effect,
                 bond_thread=bond_thread,
+                power_intensity=eff_intensity,
             )
             if outcome is not None:
                 results.append(outcome)
@@ -498,6 +516,7 @@ def _perform_treatment_for_target(  # noqa: PLR0913
     scene: Scene | None,
     target_effect: Any,
     bond_thread: Any,
+    power_intensity: int = 0,
 ) -> Any:
     """Perform a single treatment on a target, catching ``TreatmentError``.
 
@@ -509,6 +528,9 @@ def _perform_treatment_for_target(  # noqa: PLR0913
         scene: The active ``Scene``.
         target_effect: The matched ``ConditionInstance`` or ``PendingAlteration``.
         bond_thread: The resolved bond ``Thread``, or ``None`` if not required.
+        power_intensity: The caster's effective intensity, forwarded to
+            ``perform_treatment`` to scale the mend amount via
+            ``treatment.mend_intensity_multiplier`` (default 0 — no effect).
 
     Returns:
         The ``TreatmentOutcome`` on success, or ``None`` if the treatment
@@ -526,6 +548,7 @@ def _perform_treatment_for_target(  # noqa: PLR0913
             target_effect=target_effect,
             bond_thread=bond_thread,
             skip_engagement_gate=True,
+            power_intensity=power_intensity,
         )
     except TreatmentError as exc:
         logger.warning(

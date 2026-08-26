@@ -899,6 +899,7 @@ class CombatTechniqueResolver:
         apply_technique_treatments(
             technique=technique,
             success_level=check_result.success_level,
+            eff_intensity=eff_intensity,
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
             scene=self.participant.encounter.scene,
@@ -909,6 +910,7 @@ class CombatTechniqueResolver:
         removed = remove_technique_conditions(
             technique=technique,
             success_level=check_result.success_level,
+            eff_intensity=eff_intensity,
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
         )
