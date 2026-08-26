@@ -328,6 +328,16 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 The `_set_the_stage_actions(character)` helper in `src/actions/player_interface.py` surfaces one quick-action using the room's `default_blueprint` for any actor who passes `MinimumGMLevelPrerequisite(GMLevel.STARTING)` (STARTING-tier GM trust or higher, staff bypass preserved, #2117) — the same gate `SetTheStageAction` itself enforces, so a caller who can see the quick action can always execute it.
 
+**`_gm_place_in_position_actions(character)` (#3385)** — the analogous adapter for
+`GMPlaceInPositionAction`, wired into `get_player_actions()` alongside
+`_set_the_stage_actions`. Returns `[]` when `character.location is None` or
+`_actor_may_gm_place(character)` (imported directly from `actions.definitions.positioning`)
+is `False`; otherwise emits one `PlayerAction` per `Position` in the room, each
+`ActionRef(registry_key="gm_place_in_position", position_id=<pk>)` — deliberately no
+`target_object_id` on the ref, since `_dispatch_registry` merges caller-supplied `kwargs`
+(including `target_object_id`) before overlaying `ref.position_id`, so the web UI supplies
+the target at dispatch time.
+
 ### Telnet [BUILT & WIRED]
 
 **`src/commands/positions.py`** — `CmdPosition` (`position`, #2005), the telnet face of the
@@ -342,8 +352,19 @@ position graph, mirroring `CmdPlaces`' shape:
   (`position_of(caller) is None`), else `MoveToPositionAction().run(caller, position_id=...)`.
   Ineligible-kind, non-adjacent, and gated/immobile failures surface the action's own
   `ActionResult.message` verbatim (no separate telnet error copy).
+- `position/place <target>=<position name>` (#3385) — dispatches `GMPlaceInPositionAction`.
+  `<target>` resolves via `self.caller.search(target_name, location=self.caller.location)`
+  (co-located search only); `<position name>` resolves via the same `_resolve_position`
+  helper as bare `position <name>`. No gate in the command itself — the Action re-checks
+  `_actor_may_gm_place` server-side regardless of what a forged dispatch claims.
 
 Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
+
+**`src/commands/encounter.py`** — `CmdEncounter add <name> <tier> [pool [position]]` (#3385)
+gained an optional 4th token: a position name, resolved against `Position.objects.filter(room=
+self.caller.location)` via a small helper mirroring `CmdPosition._resolve_position`, forwarded
+as `position_id` to `AddOpponentAction` — closing telnet's gap with the web `AddOpponentDialog`,
+which has taken a position since #2005.
 
 ### Shared Serializers [BUILT & WIRED]
 
@@ -382,9 +403,9 @@ Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 
 ### Frontend [BUILT & WIRED]
 
-- `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006. `PositionMapNode` also renders a rampart ring overlay when a node carries `rampart_element` (#2209): solid border when INTACT, dashed when CRACKED, faint pulsing dashed when CRUMBLING, colored by element (stone=slate, wind=sky, fire=orange, thorn=green, neutral fallback for unrecognized elements), with a `title` tooltip (`"Stone Rampart 18/24"`).
-- `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006).
-- `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Mounted as a "Map" tab in `CombatRail`'s right rail, alongside the existing "Your Turn" tab (`CombatTurnPanel`) — tab defaults to "Your Turn" (#2006). `CombatRail` renders in-scene on `/scenes/:id`, not a dedicated route (#2197).
+- `TacticalMap` (`frontend/src/areas/components/TacticalMap.tsx`) — shared read-only `@xyflow/react` canvas rendering a Position graph: occupant avatars per node (`PositionMapNode.tsx`), edges styled by passability/gating (`edgeStyle`), click-to-move via the caller-supplied `moveActions`/`onDispatchMove`. Auto-layout (`tacticalLayout.ts`'s `computeTacticalLayout`, a pure BFS-ring placement) is used per-node when `layout_x`/`layout_y` are both null; explicit cosmetic coordinates take precedence. Dragging is disabled — coordinate authoring is out of scope for #2006. `PositionMapNode` also renders a rampart ring overlay when a node carries `rampart_element` (#2209): solid border when INTACT, dashed when CRACKED, faint pulsing dashed when CRUMBLING, colored by element (stone=slate, wind=sky, fire=orange, thorn=green, neutral fallback for unrecognized elements), with a `title` tooltip (`"Stone Rampart 18/24"`). Optional `onGMPlace?: (positionId) => boolean` prop (#3385) — consumed in `handleClick` right after the #2206 `onPickPosition` cast-targeting hook and before move-dispatch; a `true` return consumes the click.
+- `SceneTacticalMap` (`frontend/src/scenes/components/SceneTacticalMap.tsx`) — non-combat wrapper; builds `occupantsByPosition` from the scene's `persona_positions`, renders nothing when the room has no positions. Replaced the old `RoomPositionsPanel` text-list UI (#2006). GM-place picker (#3385): when `gm_place_in_position` `PlayerAction`s are present in the scene's available actions (the same "am I GM" signal `setTheStageAction` already uses — no separate prop), a "Place" toggle + target `<select>` appear above the map; targets are built from `persona_positions`' co-located personas via `character_sheet` (the persona's character ObjectDB pk); selecting a target and clicking a node dispatches `gm_place_in_position` with `target_object_id` in the kwargs.
+- `CombatTacticalMap` (`frontend/src/combat/components/CombatTacticalMap.tsx`) — combat wrapper; builds `occupantsByPosition` from `Participant.current_position`/`Opponent.current_position` instead of `persona_positions`. Mounted as a "Map" tab in `CombatRail`'s right rail, alongside the existing "Your Turn" tab (`CombatTurnPanel`) — tab defaults to "Your Turn" (#2006). `CombatRail` renders in-scene on `/scenes/:id`, not a dedicated route (#2197). Same GM-place picker as `SceneTacticalMap` (#3385); targets are built from `encounter.participants` (`character_sheet_id`) and `encounter.opponents` (`objectdb_id`), both already on `EncounterDetail`.
 - `MovementActions` — shared component (extracted from combat; lives in `frontend/src/combat/components/`); renders adjacent-position move buttons (a non-map fallback list still used elsewhere).
 
 ### Rampart — Living Barriers [BUILT & WIRED] (#2209, epic #2040 decision 3)

@@ -112,7 +112,7 @@ actions, backends, and service functions.
   open session at that Place. Every subverb dispatches the matching REGISTRY action
   (`tavern_game_open`/`_join`/`_roll`/`_leave`, `actions/definitions/tavern_games.py`)
   -- the same seam the web Place-bar game widget uses.
-- **`positions.py`**: `CmdPosition` (`position`, #2005) — the telnet face of the tactical
+- **`positions.py`**: `CmdPosition` (`position`, #2005/#3385) — the telnet face of the tactical
   position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
   room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or
   `"This room has no positions staged."`); `position <name>` resolves a `Position` by name
@@ -120,6 +120,12 @@ actions, backends, and service functions.
   `TakePositionAction` when the caller is unplaced, else `MoveToPositionAction`
   (`actions/definitions/positioning.py`) — the same seam the web position panel uses.
   Ineligible/gated/non-adjacent failures surface the action's own error text verbatim.
+  `position/place <target>=<position name>` (#3385) dispatches `GMPlaceInPositionAction` —
+  `<target>` resolves via a co-located `self.caller.search(...)`, `<position name>` via the
+  same `_resolve_position` helper; no gate in the command, the Action re-checks
+  `_actor_may_gm_place` server-side. Lives here rather than `CmdEncounter` because the gate
+  is "staff, or the active *scene's* GM" — nothing to do with a live `CombatEncounter`
+  existing, unlike every `CmdEncounter` subverb.
 - **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
   implementation (replacing the former stubs) dispatching to `LockAction`/
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
@@ -152,6 +158,10 @@ actions, backends, and service functions.
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
   `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
+  `add <name> <tier> [pool [position]]` (#3385) gained an optional trailing position token —
+  resolved against the caller's room via a small `_resolve_position` helper (mirrors
+  `CmdPosition`'s) and forwarded as `position_id` to `AddOpponentAction`, closing telnet's gap
+  with the web `AddOpponentDialog`'s position picker (#2005).
   `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
   `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
   GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own

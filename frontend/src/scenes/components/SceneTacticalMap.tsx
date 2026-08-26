@@ -9,7 +9,7 @@
  * If the scene has no positions, renders nothing.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppSelector } from '@/store/hooks';
@@ -22,6 +22,14 @@ import { fetchScene, sceneKeys } from '../queries';
 import { useAvailableActionsQuery } from '../actionQueries';
 import type { SceneDetail } from '../types';
 import type { PlayerAction } from '../actionTypes';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface Props {
   sceneId: string;
@@ -66,11 +74,20 @@ export function SceneTacticalMap({ sceneId }: Props) {
       (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'set_the_stage'
     ) ?? null;
 
+  // GM-place (#3385): a non-empty list is itself the "am I GM" signal —
+  // mirrors setTheStageAction above; no separate "can GM" prop.
+  const gmPlaceActions = availableActions.filter(
+    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'gm_place_in_position'
+  );
+
   // ---------------------------------------------------------------------------
   // Dispatch
   // ---------------------------------------------------------------------------
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
   const queryClient = useQueryClient();
+
+  const [isPlacing, setIsPlacing] = useState(false);
+  const [placeTargetId, setPlaceTargetId] = useState<number | null>(null);
 
   // ---------------------------------------------------------------------------
   // Derived data — build memos before any conditional return (rules of hooks)
@@ -78,9 +95,12 @@ export function SceneTacticalMap({ sceneId }: Props) {
   const positionNodes = scene?.position_nodes ?? [];
   const positionEdges = scene?.position_edges ?? [];
 
-  const personaNameById = useMemo(() => {
+  // Extended to carry the character's ObjectDB pk (CharacterSheet/ObjectDB
+  // share a pk, see root CLAUDE.md) alongside the name (#3385) — the GM-place
+  // target picker needs it as `target_object_id`.
+  const personaById = useMemo(() => {
     const personas = scene?.personas ?? [];
-    return new Map(personas.map((p) => [p.id, p.name]));
+    return new Map(personas.map((p) => [p.id, { name: p.name, characterId: p.character_sheet }]));
   }, [scene?.personas]);
 
   const occupantsByPosition = useMemo(() => {
@@ -89,13 +109,28 @@ export function SceneTacticalMap({ sceneId }: Props) {
     for (const pp of personaPositions) {
       if (pp.position !== null) {
         const occupants = map.get(pp.position.id) ?? [];
-        const name = personaNameById.get(pp.persona_id);
-        if (name) occupants.push({ name });
+        const persona = personaById.get(pp.persona_id);
+        if (persona) occupants.push({ name: persona.name });
         map.set(pp.position.id, occupants);
       }
     }
     return map;
-  }, [scene?.persona_positions, personaNameById]);
+  }, [scene?.persona_positions, personaById]);
+
+  // GM-place target picker (#3385): every persona co-located on the graph
+  // with a resolvable character ObjectDB pk.
+  const placeTargets = useMemo(() => {
+    const personaPositions = scene?.persona_positions ?? [];
+    const targets: { id: number; name: string }[] = [];
+    for (const pp of personaPositions) {
+      if (pp.position === null) continue;
+      const persona = personaById.get(pp.persona_id);
+      if (persona?.characterId != null) {
+        targets.push({ id: persona.characterId, name: persona.name });
+      }
+    }
+    return targets;
+  }, [scene?.persona_positions, personaById]);
 
   // ---------------------------------------------------------------------------
   // Early exit — no positions defined for this room
@@ -116,6 +151,29 @@ export function SceneTacticalMap({ sceneId }: Props) {
       });
   };
 
+  const handleGMPlace = (positionId: number): boolean => {
+    if (placeTargetId == null) {
+      return false;
+    }
+    const action = gmPlaceActions.find((a) => a.ref.position_id === positionId);
+    if (!action) {
+      return false;
+    }
+    dispatchAction({ ref: action.ref, kwargs: { target_object_id: placeTargetId } })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Placement rejected.');
+          return;
+        }
+        setPlaceTargetId(null);
+        queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Placement failed.');
+      });
+    return true;
+  };
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -124,6 +182,39 @@ export function SceneTacticalMap({ sceneId }: Props) {
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Positions
       </p>
+      {gmPlaceActions.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant={isPlacing ? 'default' : 'outline'}
+            size="sm"
+            data-testid="gm-place-toggle"
+            onClick={() => {
+              setIsPlacing((prev) => !prev);
+              setPlaceTargetId(null);
+            }}
+          >
+            Place
+          </Button>
+          {isPlacing && (
+            <Select
+              value={placeTargetId !== null ? String(placeTargetId) : ''}
+              onValueChange={(v) => setPlaceTargetId(v === '' ? null : Number(v))}
+            >
+              <SelectTrigger className="h-8 w-48 text-xs" data-testid="gm-place-target-select">
+                <SelectValue placeholder="Select a target…" />
+              </SelectTrigger>
+              <SelectContent>
+                {placeTargets.map((target) => (
+                  <SelectItem key={target.id} value={String(target.id)}>
+                    {target.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
       <div className="h-[320px] rounded-md border border-border">
         <TacticalMap
           nodes={positionNodes}
@@ -131,6 +222,7 @@ export function SceneTacticalMap({ sceneId }: Props) {
           occupantsByPosition={occupantsByPosition}
           moveActions={moveActions}
           onDispatchMove={handleDispatchMove}
+          onGMPlace={isPlacing && placeTargetId != null ? handleGMPlace : undefined}
         />
       </div>
 

@@ -16,12 +16,14 @@ import django.test
 from actions.constants import ActionBackend
 from actions.definitions.positioning import SetTheStageAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
-from world.areas.positioning.factories import PositionBlueprintFactory
+from world.areas.positioning.constants import PositionKind
+from world.areas.positioning.factories import PositionBlueprintFactory, PositionFactory
 from world.areas.positioning.models import Position
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
 def _make_staff_character(key: str, room) -> object:
@@ -55,6 +57,24 @@ def _make_player_character(key: str, room) -> object:
     account.save()
     char.db_account = account
     char.save()
+    return char
+
+
+def _make_actor_with_account(db_key: str, room: object, account: object) -> object:
+    """Create a PC in *room* whose ``active_account`` is *account*.
+
+    Mirrors ``test_gm_place_in_position_action.py``'s helper of the same name --
+    ``_actor_may_gm_place`` reads ``active_account`` (via ``resolve_account_or_none``),
+    which requires a real ``RosterTenure``, not just ``char.db_account``.
+    """
+    char = CharacterFactory(db_key=db_key, location=room)
+    CharacterSheetFactory(character=char)
+    entry = RosterEntryFactory(character_sheet__character=char)
+    RosterTenureFactory(
+        roster_entry=entry,
+        player_data__account=account,
+        end_date=None,
+    )
     return char
 
 
@@ -234,3 +254,90 @@ class TestSetTheStageActionsPlayerInterface(django.test.TestCase):
             1,
             f"Expected exactly 1 set_the_stage action, got: {set_stage_actions}",
         )
+
+
+class TestGMPlaceInPositionActionsPlayerInterface(django.test.TestCase):
+    """_gm_place_in_position_actions (#3385): staff/scene-GM see one PlayerAction per Position.
+
+    Mirrors ``_set_the_stage_actions``'s coverage shape (mostly copy of the
+    ``GMPlaceInPositionActionTests`` gate setup in
+    ``test_gm_place_in_position_action.py``, at the adapter layer instead of the
+    Action's own ``.run()``).
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="GMPlaceInterfaceRoom", nohome=True)
+        self.throne = PositionFactory(room=self.room, name="throne", kind=PositionKind.PRIMARY)
+        self.sky = PositionFactory(room=self.room, name="sky", kind=PositionKind.ELEVATED)
+
+        self.staff_account = AccountFactory(username="gmplaceadapter_staff", is_staff=True)
+        self.staff_char = _make_actor_with_account(
+            "gmplaceadapter_staff_actor", self.room, self.staff_account
+        )
+
+        self.gm_account = AccountFactory(username="gmplaceadapter_gm")
+        self.gm_char = _make_actor_with_account(
+            "gmplaceadapter_gm_actor", self.room, self.gm_account
+        )
+
+        self.player_account = AccountFactory(username="gmplaceadapter_player")
+        self.player_char = _make_actor_with_account(
+            "gmplaceadapter_player_actor", self.room, self.player_account
+        )
+
+        self.scene = SceneFactory(location=self.room)
+        SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
+        SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)
+
+    def _gm_place_refs(self, character: object) -> list:
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(character)
+        return [
+            a
+            for a in actions
+            if a.backend == ActionBackend.REGISTRY and a.ref.registry_key == "gm_place_in_position"
+        ]
+
+    def test_staff_sees_one_action_per_position(self) -> None:
+        gm_place_actions = self._gm_place_refs(self.staff_char)
+        self.assertEqual(
+            len(gm_place_actions),
+            2,
+            f"Expected one gm_place_in_position action per Position, got: {gm_place_actions}",
+        )
+        position_ids = {a.ref.position_id for a in gm_place_actions}
+        self.assertEqual(position_ids, {self.throne.pk, self.sky.pk})
+
+    def test_scene_gm_sees_actions(self) -> None:
+        gm_place_actions = self._gm_place_refs(self.gm_char)
+        self.assertEqual(len(gm_place_actions), 2)
+
+    def test_plain_player_sees_no_actions(self) -> None:
+        gm_place_actions = self._gm_place_refs(self.player_char)
+        self.assertEqual(
+            len(gm_place_actions), 0, "Non-GM should not see gm_place_in_position actions"
+        )
+
+    def test_no_active_scene_staff_only(self) -> None:
+        from evennia import create_object
+
+        bare_room = create_object(
+            "typeclasses.rooms.Room", key="GMPlaceBareInterfaceRoom", nohome=True
+        )
+        PositionFactory(room=bare_room, name="bare", kind=PositionKind.PRIMARY)
+
+        bare_staff_account = AccountFactory(username="gmplaceadapter_bare_staff", is_staff=True)
+        bare_staff = _make_actor_with_account(
+            "gmplaceadapter_bare_staff_actor", bare_room, bare_staff_account
+        )
+        bare_gm_account = AccountFactory(username="gmplaceadapter_bare_gm")
+        bare_gm = _make_actor_with_account(
+            "gmplaceadapter_bare_gm_actor", bare_room, bare_gm_account
+        )
+
+        # No active Scene in bare_room, so even a would-be GM sees nothing.
+        self.assertEqual(len(self._gm_place_refs(bare_gm)), 0)
+        self.assertEqual(len(self._gm_place_refs(bare_staff)), 1)
