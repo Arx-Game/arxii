@@ -257,6 +257,7 @@ class ActionRegistryTests(TestCase):
             "vault_deposit",
             "vault_withdraw",
             "treasury_withdraw",
+            "deliver_collection",
             "coerce",
             "mint_accusation",
             "reveal_secret",

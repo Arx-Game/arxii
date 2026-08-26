@@ -222,7 +222,70 @@ class TreasuryWithdrawAction(_BankAction):
         )
 
 
+@dataclass
+class DeliverCollectionAction(_BankAction):
+    """Deliver everything owed to an org's vault from a collection haul (#2540 ruling).
+
+    Resolves ALL of the actor's open ``VaultTransit`` rows for the named org in one
+    act via ``resolve_vault_transit`` — the collection mission's return leg. Both live
+    collection paths are PC-driven (verified 2026-08-26, #2540), so there is no
+    NPC-actor auto-deposit branch to build here; the "NPC collectors never skim"
+    ruling is enforced inside ``can_embezzle_from``'s piloted-carrier gate, not by
+    this action.
+
+    ``keep_item_ids`` is the carrier's explicit opt-in half of the embezzlement
+    double-gate — ``can_embezzle_from``'s consent-authority check is the other half.
+    The service call is one atomic transaction that validates the keep request BEFORE
+    resolving any transit, so a refusal (surfaced here as a failure ``ActionResult``)
+    leaves every transit open rather than partially deposited. Success copy stays
+    neutral: a deposited count, and — only when something was kept — a matter-of-fact
+    note that some of the take never reached the vault. Discovery of a skim is the
+    audit rail's job, not this action's.
+    """
+
+    key: str = "deliver_collection"
+    name: str = "Deliver the Take"
+    icon: str = "vault"
+    description: str = "Deliver everything you're carrying back to your organization's vault."
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.items.constants import VaultTransitResolution  # noqa: PLC0415
+        from world.items.org_vault_models import VaultTransit  # noqa: PLC0415
+        from world.items.services.org_vault import resolve_vault_transit  # noqa: PLC0415
+
+        persona, organization = _bank_org_context(actor, kwargs)
+        if isinstance(persona, ActionResult):
+            return persona
+        keep_item_ids = kwargs.get("keep_item_ids") or []
+        open_transits = VaultTransit.objects.filter(
+            vault__organization=organization,
+            carrier_character_sheet=persona.character_sheet,
+            resolved_at__isnull=True,
+        )
+        if not open_transits.exists():
+            return ActionResult(
+                success=False, message=f"You carry nothing owed to {organization.name}."
+            )
+        try:
+            transits = resolve_vault_transit(
+                organization=organization,
+                carrier_persona=persona,
+                keep_item_ids=keep_item_ids,
+            )
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        kept = sum(1 for transit in transits if transit.resolution == VaultTransitResolution.KEPT)
+        deposited = len(transits) - kept
+        message = f"You deliver {deposited} item(s) to {organization.name}'s vault."
+        if kept:
+            message += " PLACEHOLDER: some of the take never reached the vault."
+        return ActionResult(success=True, message=message)
+
+
 # Module-level singletons — registered in actions/registry.py
 vault_deposit = VaultDepositAction()
 vault_withdraw = VaultWithdrawAction()
 treasury_withdraw = TreasuryWithdrawAction()
+deliver_collection = DeliverCollectionAction()
