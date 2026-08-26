@@ -31,9 +31,10 @@ from world.justice.constants import (
     RESCUE_WINDOW_DAYS,
     CaseStatus,
     SentenceKind,
+    VerdictNotifyReason,
 )
 from world.justice.models import ExileDecree, JusticeCase, PersonaHeat
-from world.justice.notifications import notify_brig_visitation, notify_verdict
+from world.justice.notifications import notify_brig_visitation, notify_verdict_safely
 from world.justice.types import PublicMark
 
 logger = logging.getLogger(__name__)
@@ -331,19 +332,6 @@ def _notify_brig_visitation(case: JusticeCase) -> None:
         logger.exception("justice.notify_brig_visitation failed for case %s", case.pk)
 
 
-def _notify_verdict(case: JusticeCase) -> None:
-    """Best-effort verdict re-notification for the sweep's carried-out/voided paths.
-
-    Mirrors :func:`world.societies.renown.fire_renown_award`'s notify guard (#2378
-    Task 6): the notification is a UX nicety, the terminal-sentence write is the
-    source of truth.
-    """
-    try:
-        notify_verdict(case)
-    except Exception:  # best-effort notify; never break the sweep
-        logger.exception("justice.notify_verdict failed for case %s", case.pk)
-
-
 # ---------------------------------------------------------------------------
 # Daily sweep — the cron body
 # ---------------------------------------------------------------------------
@@ -384,7 +372,7 @@ def _carry_out_execution(case: JusticeCase, now) -> None:
         sheet.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
     case.terminal_carried_out_at = now
     case.save(update_fields=["terminal_carried_out_at"])
-    _notify_verdict(case)
+    notify_verdict_safely(case, reason=VerdictNotifyReason.CARRIED_OUT)
 
 
 def _carry_out_banishment(case: JusticeCase, now) -> None:
@@ -410,7 +398,7 @@ def _carry_out_banishment(case: JusticeCase, now) -> None:
 
     case.terminal_carried_out_at = now
     case.save(update_fields=["terminal_carried_out_at"])
-    _notify_verdict(case)
+    notify_verdict_safely(case, reason=VerdictNotifyReason.CARRIED_OUT)
 
 
 def _sweep_terminals(now) -> int:
@@ -432,7 +420,7 @@ def _sweep_terminals(now) -> int:
         if rescued:
             case.terminal_due_at = None
             case.save(update_fields=["terminal_due_at"])
-            _notify_verdict(case)
+            notify_verdict_safely(case, reason=VerdictNotifyReason.VOIDED)
             continue
         if case.sentence_kind == SentenceKind.EXECUTION:
             _carry_out_execution(case, now)

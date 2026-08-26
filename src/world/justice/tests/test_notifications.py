@@ -4,15 +4,17 @@ from unittest import mock
 
 from django.test import TestCase
 
+from world.captivity.constants import CaptivityStatus
 from world.captivity.factories import CaptivityFactory
-from world.justice.constants import Verdict
+from world.captivity.services import resolve_captivity
+from world.justice.constants import SentenceKind, Verdict
 from world.justice.models import ExculpatoryEvidence, JusticeCase
 from world.justice.notifications import notify_brig_visitation, notify_verdict
 from world.justice.pipeline import initiate_trial
 from world.justice.sentences import sentence_sweep_tick
 from world.justice.tests.test_services import JusticeFixtureMixin
 from world.narrative.constants import NarrativeCategory
-from world.narrative.models import NarrativeMessageDelivery
+from world.narrative.models import NarrativeMessage, NarrativeMessageDelivery
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.scenes.friend_services import add_friend
@@ -100,6 +102,53 @@ class VerdictNotificationTests(_CaseMixin, TestCase):
         self.assertEqual(count, 1)
 
 
+class VerdictReasonBodyTests(_CaseMixin, TestCase):
+    """Fix round 1 (#2378 Task 6 review): the three ``reason`` values must produce
+    distinct, non-reaffirming body text — a voided/rescued terminal must never
+    re-send the earlier sentence-affirming copy."""
+
+    def test_three_reasons_produce_three_distinct_bodies(self):
+        case = self._case(weight=200)
+        case.verdict = Verdict.FULL
+        case.sentence_kind = SentenceKind.EXECUTION
+        case.save(update_fields=["verdict", "sentence_kind"])
+
+        notify_verdict(case, reason="verdict")
+        notify_verdict(case, reason="carried_out")
+        notify_verdict(case, reason="voided")
+
+        bodies = list(
+            NarrativeMessage.objects.filter(category=NarrativeCategory.JUSTICE)
+            .order_by("id")
+            .values_list("body", flat=True)
+        )
+        self.assertEqual(len(bodies), 3)
+        self.assertEqual(len(set(bodies)), 3)  # all three distinct
+
+        verdict_body, carried_out_body, voided_body = bodies
+        self.assertIn("Guilty", verdict_body)
+        self.assertIn("Execution", verdict_body)
+
+        self.assertIn("has been carried out", carried_out_body)
+        self.assertNotIn("Guilty", carried_out_body)
+        self.assertNotIn("Execution", carried_out_body)
+
+        self.assertIn("was not carried out", voided_body)
+        self.assertNotIn("Guilty", voided_body)
+        self.assertNotIn("Execution", voided_body)
+        # The voided body must not reaffirm the sentence in any way, including
+        # by echoing the "carried out" copy.
+        self.assertNotIn("has been carried out", voided_body)
+
+    def test_unknown_reason_raises(self):
+        case = self._case(weight=0)
+        case.verdict = Verdict.ACQUITTED
+        case.save(update_fields=["verdict"])
+
+        with self.assertRaises(ValueError):
+            notify_verdict(case, reason="bogus")
+
+
 class BrigVisitationTests(_CaseMixin, TestCase):
     def _pc_persona(self):
         tenure = RosterTenureFactory()
@@ -156,20 +205,24 @@ class BrigVisitationTests(_CaseMixin, TestCase):
 
 
 class SweepReNotifyTests(_CaseMixin, TestCase):
-    def test_sweep_carrying_out_a_terminal_sentence_renotifies(self):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
+    def _catastrophic_case(self):
         from world.justice.constants import EXECUTION_MIN_FAILED_OUTS, MAX_VALUE_FLOOR
 
         persona = self.persona
         case = self._case(
             weight=MAX_VALUE_FLOOR, failed_outs=EXECUTION_MIN_FAILED_OUTS - 1, persona=persona
         )
-        self._hold(case)
+        captivity = self._hold(case)
         initiate_trial(case, persona, check_levels=[-3])
         case.refresh_from_db()
+        return case, captivity
+
+    def test_sweep_carrying_out_a_terminal_sentence_renotifies_with_carried_out_copy(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        case, _captivity = self._catastrophic_case()
 
         deliveries_before = NarrativeMessageDelivery.objects.filter(
             message__category=NarrativeCategory.JUSTICE
@@ -185,3 +238,49 @@ class SweepReNotifyTests(_CaseMixin, TestCase):
             message__category=NarrativeCategory.JUSTICE
         ).count()
         self.assertGreater(deliveries_after, deliveries_before)
+
+        latest_body = (
+            NarrativeMessage.objects.filter(category=NarrativeCategory.JUSTICE)
+            .order_by("-id")
+            .values_list("body", flat=True)
+            .first()
+        )
+        self.assertIn("has been carried out", latest_body)
+        self.assertNotIn("ruled:", latest_body)
+
+    def test_sweep_voiding_a_rescued_terminal_sentence_does_not_reaffirm_the_sentence(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        case, captivity = self._catastrophic_case()
+
+        deliveries_before = NarrativeMessageDelivery.objects.filter(
+            message__category=NarrativeCategory.JUSTICE
+        ).count()
+
+        case.terminal_due_at = timezone.now() - timedelta(days=1)
+        case.save(update_fields=["terminal_due_at"])
+
+        # Escaped before the sweep ran — rescue succeeded, sentence voided.
+        resolve_captivity(captivity, status=CaptivityStatus.ESCAPED)
+
+        sentence_sweep_tick()
+
+        deliveries_after = NarrativeMessageDelivery.objects.filter(
+            message__category=NarrativeCategory.JUSTICE
+        ).count()
+        self.assertGreater(deliveries_after, deliveries_before)
+
+        latest_body = (
+            NarrativeMessage.objects.filter(category=NarrativeCategory.JUSTICE)
+            .order_by("-id")
+            .values_list("body", flat=True)
+            .first()
+        )
+        self.assertIn("was not carried out", latest_body)
+        # The reviewer's exact failure mode: must not re-send the earlier
+        # sentence-affirming "ruled: guilty - sentence: execution" copy.
+        self.assertNotIn("ruled:", latest_body)
+        self.assertNotIn("sentence:", latest_body)
+        self.assertNotIn("has been carried out", latest_body)

@@ -9,7 +9,6 @@ execution needs the target's OOC opt-in AND an exhausted case — never one roll
 
 from __future__ import annotations
 
-import logging
 import random
 from typing import TYPE_CHECKING
 
@@ -56,7 +55,7 @@ from world.justice.models import (
     PersonaHeat,
     SentenceLadderRung,
 )
-from world.justice.notifications import notify_verdict
+from world.justice.notifications import notify_verdict_safely
 from world.justice.sentences import (
     end_captivity,
     is_magically_concealed,
@@ -68,8 +67,6 @@ from world.justice.services import enforcing_society_for
 # Import shim: relocated to sentences.py (#2378) — kept so `_release` and existing
 # tests that reach into `pipeline._end_captivity` keep working.
 _end_captivity = end_captivity
-
-logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from world.areas.models import Area
@@ -415,7 +412,7 @@ def initiate_trial(
     if case.verdict == Verdict.ACQUITTED:
         case.save(update_fields=["status", "verdict", "resolved_at"])
         _end_captivity(case)
-        _notify_verdict(case)
+        notify_verdict_safely(case)
         return case
 
     case.failed_outs += 1
@@ -431,20 +428,8 @@ def initiate_trial(
         ]
     )
     schedule_sentence(case)
-    _notify_verdict(case)
+    notify_verdict_safely(case)
     return case
-
-
-def _notify_verdict(case: JusticeCase) -> None:
-    """Best-effort verdict notification — never breaks the trial path.
-
-    Mirrors :func:`world.societies.renown.fire_renown_award`'s notify guard: the
-    notification is a UX nicety, the verdict/sentence write is the source of truth.
-    """
-    try:
-        notify_verdict(case)
-    except Exception:  # best-effort notify; never break the trial path
-        logger.exception("justice.notify_verdict failed for case %s", case.pk)
 
 
 def _argument_levels(participants: list[Persona]) -> list[int]:

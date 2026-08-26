@@ -169,6 +169,21 @@ class SentenceKind(models.TextChoices):
     ARENA_TRIAL = "arena_trial", "Trial by Combat"
 
 
+class VerdictNotifyReason(models.TextChoices):
+    """Which outcome :func:`world.justice.notifications.notify_verdict` is announcing.
+
+    Not a model field — a plain-value parameter enum (fix round 1, #2378 Task 6
+    review) so the three call-site reasons stay one source of truth instead of bare
+    string literals: VERDICT is the trial-time default; CARRIED_OUT/VOIDED are the
+    sentence sweep's two terminal-sentence outcomes, each with its own non-reaffirming
+    body text.
+    """
+
+    VERDICT = "verdict", "Verdict"
+    CARRIED_OUT = "carried_out", "Sentence Carried Out"
+    VOIDED = "voided", "Sentence Voided"
+
+
 # --- Sentence enforcement (#2378) — PLACEHOLDER magnitudes ---
 # Exile pin: heat is held (decay-exempt) at its current value for this many
 # days after an ExileDecree is issued, then resumes normal decay.

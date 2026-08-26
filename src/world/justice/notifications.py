@@ -2,10 +2,15 @@
 
 :func:`notify_verdict` fans out a NarrativeMessage (category ``justice``) to the case's
 reachable audience: every :class:`~world.justice.models.ExculpatoryEvidence` submitter's
-sheet on the case, plus the accused's own sheet. Called from the end of both
-:func:`world.justice.pipeline.initiate_trial` paths (acquittal and sentence) and from
-:func:`world.justice.sentences.sentence_sweep_tick` when a terminal sentence is carried
-out or voided.
+sheet on the case, plus the accused's own sheet. Called (via the best-effort
+:func:`notify_verdict_safely` wrapper) from the end of both
+:func:`world.justice.pipeline.initiate_trial` paths (acquittal and sentence, ``reason``
+defaults to ``"verdict"``) and from :func:`world.justice.sentences.sentence_sweep_tick`
+when a terminal sentence is carried out (``reason="carried_out"``) or voided
+(``reason="voided"``). The three reasons produce DISTINCT body text (fix round 1,
+#2378 Task 6 review) — a voided/rescued terminal must never re-send sentence-affirming
+copy ("ruled: guilty - sentence: execution") to a recipient whose sentence was in fact
+NOT carried out.
 
 NOTE — accuser routing gap: ``AccusationCrimeClaim`` keys on ``Secret``, not
 ``JusticeCase`` — there is no queryable path from a case back to the claim(s) that
@@ -21,25 +26,48 @@ active friends via their account (OOC), mirroring
 enumeration. Called from :func:`world.justice.sentences.schedule_sentence`'s BRIG_TERM
 branch.
 
-Both functions are called directly (never deferred to ``transaction.on_commit``); their
-call sites wrap them in a best-effort try/except that logs and swallows, mirroring
-``world.societies.renown.fire_renown_award``'s notify guard — a notification failure
-must never break the trial/sentence path.
+``notify_verdict``/``notify_brig_visitation`` are called directly (never deferred to
+``transaction.on_commit``). :func:`notify_verdict_safely` is the ONE shared best-effort
+wrapper for ``notify_verdict`` — pipeline.py and sentences.py both call it rather than
+each defining their own (fix round 1: they previously duplicated an identical
+``_notify_verdict`` wrapper) — logging and swallowing any failure, mirroring
+``world.societies.renown.fire_renown_award``'s notify guard: a notification failure
+must never break the trial/sentence path. ``notify_brig_visitation`` keeps its own
+best-effort wrapper in ``sentences.py`` (``_notify_brig_visitation``) since it has
+exactly one call site.
 """
 
 from __future__ import annotations
 
-from world.justice.constants import SentenceKind, Verdict
+import logging
+
+from world.justice.constants import SentenceKind, Verdict, VerdictNotifyReason
 from world.justice.models import JusticeCase
 
+logger = logging.getLogger(__name__)
 
-def notify_verdict(case: JusticeCase) -> int:
-    """Deliver the verdict to the case's reachable audience (#2378 Task 6).
+
+def notify_verdict(case: JusticeCase, *, reason: str = VerdictNotifyReason.VERDICT) -> int:
+    """Deliver a verdict/sentence-outcome notice to the case's reachable audience (#2378).
 
     Recipients (CharacterSheets, deduped by pk): every ExculpatoryEvidence submitter's
     sheet on this case, plus the accused's own sheet. See the module docstring for why
     accusers are out of scope. Returns the recipient count.
+
+    ``reason`` selects DISTINCT, non-reaffirming body text (fix round 1):
+
+    - ``"verdict"`` (default, trial-time): announces the verdict, plus the sentence kind
+      when one was handed down.
+    - ``"carried_out"`` (terminal sentence served by the sweep): announces only that the
+      sentence has been carried out — no verdict/sentence-kind repeat.
+    - ``"voided"`` (terminal sentence rescued/pardoned before the sweep could act):
+      announces only that the sentence was NOT carried out — never repeats the earlier
+      sentence-affirming text.
     """
+    if reason not in VerdictNotifyReason.values:
+        msg = f"unknown notify_verdict reason: {reason!r}"
+        raise ValueError(msg)
+
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
@@ -57,10 +85,7 @@ def notify_verdict(case: JusticeCase) -> int:
     if not sheets_by_pk:
         return 0
 
-    verdict_label = Verdict(case.verdict).label
-    body = f"PLACEHOLDER: The magistrates of {case.area.name} have ruled: {verdict_label}"
-    if case.sentence_kind:
-        body += f" - sentence: {SentenceKind(case.sentence_kind).label}"
+    body = _verdict_body(case, reason)
 
     send_narrative_message(
         recipients=list(sheets_by_pk.values()),
@@ -68,6 +93,41 @@ def notify_verdict(case: JusticeCase) -> int:
         category=NarrativeCategory.JUSTICE,
     )
     return len(sheets_by_pk)
+
+
+def _verdict_body(case: JusticeCase, reason: str) -> str:
+    """The reason-specific PLACEHOLDER body — never reaffirms a voided sentence."""
+    if reason == VerdictNotifyReason.CARRIED_OUT:
+        return (
+            f"PLACEHOLDER: The magistrates of {case.area.name} report the sentence "
+            "has been carried out."
+        )
+    if reason == VerdictNotifyReason.VOIDED:
+        return (
+            f"PLACEHOLDER: The magistrates of {case.area.name} report the sentence "
+            "was not carried out."
+        )
+
+    verdict_label = Verdict(case.verdict).label
+    body = f"PLACEHOLDER: The magistrates of {case.area.name} have ruled: {verdict_label}"
+    if case.sentence_kind:
+        body += f" - sentence: {SentenceKind(case.sentence_kind).label}"
+    return body
+
+
+def notify_verdict_safely(case: JusticeCase, *, reason: str = VerdictNotifyReason.VERDICT) -> None:
+    """Best-effort ``notify_verdict`` — never breaks the trial/sentence-sweep path.
+
+    Shared by :func:`world.justice.pipeline.initiate_trial` (default ``reason``) and
+    :func:`world.justice.sentences._sweep_terminals`'s carry-out/void branches (fix
+    round 1: the two apps previously duplicated this wrapper). Mirrors
+    ``world.societies.renown.fire_renown_award``'s notify guard: the notification is a
+    UX nicety, the verdict/sentence write is the source of truth.
+    """
+    try:
+        notify_verdict(case, reason=reason)
+    except Exception:  # best-effort notify; never break the trial/sweep path
+        logger.exception("justice.notify_verdict failed for case %s (reason=%s)", case.pk, reason)
 
 
 def notify_brig_visitation(case: JusticeCase) -> int:
