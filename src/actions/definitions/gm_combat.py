@@ -417,6 +417,85 @@ class PauseEncounterAction(Action):
         return ActionResult(success=True, message="Encounter resumed.")
 
 
+def _validate_encounter_settings_kwargs(
+    kwargs: dict[str, Any],
+) -> dict[str, Any] | ActionResult:
+    """Validate + coerce ``UpdateEncounterSettingsAction`` kwargs.
+
+    Returns the validated kwargs dict (``stakes_level``/``risk_level``/
+    ``pace_mode``/parsed-int ``pace_timer_minutes``) on success, or the
+    failure ``ActionResult`` to return immediately. Extracted from
+    ``execute()`` to keep its own argument/return-statement counts low
+    (PLR0913/PLR0911), mirroring ``_resolve_add_opponent_inputs``.
+    """
+    from world.combat.constants import PaceMode, RiskLevel, StakesLevel  # noqa: PLC0415
+
+    stakes_level = kwargs.get("stakes_level")
+    risk_level = kwargs.get("risk_level")
+    pace_mode = kwargs.get("pace_mode")
+    pace_timer_minutes = kwargs.get("pace_timer_minutes")
+
+    if stakes_level is not None and stakes_level not in StakesLevel.values:
+        return ActionResult(success=False, message="Invalid stakes level.")
+    if risk_level is not None and risk_level not in RiskLevel.values:
+        return ActionResult(success=False, message="Invalid risk level.")
+    if pace_mode is not None and pace_mode not in PaceMode.values:
+        return ActionResult(success=False, message="Invalid pace mode.")
+
+    parsed_timer: int | None = None
+    if pace_timer_minutes is not None:
+        try:
+            parsed_timer = int(pace_timer_minutes)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Timer minutes must be a whole number.")
+        if parsed_timer < 1:
+            return ActionResult(success=False, message="Timer minutes must be at least 1.")
+
+    return {
+        "stakes_level": stakes_level,
+        "risk_level": risk_level,
+        "pace_mode": pace_mode,
+        "pace_timer_minutes": parsed_timer,
+    }
+
+
+@dataclass
+class UpdateEncounterSettingsAction(Action):
+    """GM: change stakes/risk/pace/timer on a live encounter (#3383).
+
+    Mirrors ``PauseEncounterAction``'s shape: resolve the active encounter via
+    ``_active_encounter_for_gm``, then call ``update_encounter_settings`` with
+    whichever of the four kwargs was supplied. Telnet's four subverbs
+    (``stakes``/``risk``/``pace``/``timer``) each supply exactly one.
+    """
+
+    key: str = "update_encounter_settings"
+    name: str = "Update Encounter Settings"
+    icon: str = "sliders"
+    category: str = "combat"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import update_encounter_settings  # noqa: PLC0415
+
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
+
+        validated = _validate_encounter_settings_kwargs(kwargs)
+        if isinstance(validated, ActionResult):
+            return validated
+
+        update_encounter_settings(encounter, **validated)
+        return ActionResult(success=True, message="Encounter settings updated.")
+
+
 @dataclass
 class EndEncounterAction(Action):
     """Force-end the active encounter as ABANDONED."""

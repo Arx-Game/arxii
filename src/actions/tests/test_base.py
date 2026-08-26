@@ -310,6 +310,7 @@ class ActionRegistryTests(TestCase):
             "begin_encounter_round",
             "end_encounter",
             "pause_encounter",
+            "update_encounter_settings",
             "preview_opponent_defaults",
             "stage_prop",
             "stage_property",

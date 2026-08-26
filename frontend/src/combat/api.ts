@@ -93,6 +93,8 @@ export async function fetchEncountersForScene(sceneId: number): Promise<Encounte
 export type PaceMode = components['schemas']['PaceModeEnum'];
 export type EncounterType = components['schemas']['EncounterTypeEnum'];
 export type OpponentTier = components['schemas']['Tier756Enum'];
+export type StakesLevel = components['schemas']['StakesLevelEnum'];
+export type RiskLevel = components['schemas']['RiskLevelEnum'];
 
 /**
  * Create a combat encounter for a scene (GM only) — the "Start encounter"
@@ -267,6 +269,43 @@ export async function postPause(encounterId: number): Promise<EncounterDetail> {
     headers: { 'Content-Type': 'application/json' },
   });
   if (!res.ok) await throwApiError(res, 'Failed to toggle pause');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+// ---------------------------------------------------------------------------
+// Encounter settings (GM only, #3383) — stakes/risk/pace/timer, changeable
+// mid-encounter. Any subset of fields may be given; omitted fields are left
+// unchanged server-side (update_encounter_settings).
+// ---------------------------------------------------------------------------
+
+export interface EncounterSettingsPayload {
+  stakesLevel?: StakesLevel;
+  riskLevel?: RiskLevel;
+  paceMode?: PaceMode;
+  paceTimerMinutes?: number;
+}
+
+/**
+ * Change stakes/risk/pace/timer on a live encounter (GM only, #3383).
+ * PATCH /api/combat/{encounterId}/settings/
+ */
+export async function patchEncounterSettings(
+  encounterId: number,
+  payload: EncounterSettingsPayload
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/settings/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...(payload.stakesLevel !== undefined ? { stakes_level: payload.stakesLevel } : {}),
+      ...(payload.riskLevel !== undefined ? { risk_level: payload.riskLevel } : {}),
+      ...(payload.paceMode !== undefined ? { pace_mode: payload.paceMode } : {}),
+      ...(payload.paceTimerMinutes !== undefined
+        ? { pace_timer_minutes: payload.paceTimerMinutes }
+        : {}),
+    }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to update encounter settings');
   return res.json() as Promise<EncounterDetail>;
 }
 

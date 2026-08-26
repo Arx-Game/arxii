@@ -1,8 +1,10 @@
 """Tests for combat encounter lifecycle service functions."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 import pytest
 
 from actions.errors import ActionDispatchError
@@ -20,7 +22,10 @@ from world.combat.constants import (
     EncounterType,
     OpponentStatus,
     OpponentTier,
+    PaceMode,
     ParticipantStatus,
+    RiskLevel,
+    StakesLevel,
     TargetingMode,
     TargetSelection,
 )
@@ -32,8 +37,10 @@ from world.combat.factories import (
     ThreatPoolFactory,
 )
 from world.combat.models import (
+    CombatEncounter,
     CombatOpponentAction,
     CombatParticipant,
+    CombatRoundAction,
     FleeConfig,
     FleeTierModifier,
 )
@@ -49,6 +56,7 @@ from world.combat.services import (
     leave_encounter,
     resolve_round,
     select_npc_actions,
+    update_encounter_settings,
 )
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.services import get_active_conditions
@@ -980,3 +988,146 @@ class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
         # select_related would instead cost 1 + 12 (one per participant) + 2.
         with self.assertNumQueries(3):
             _block_if_participant_mid_audere_majora_crossing(encounter)
+
+
+class UpdateEncounterSettingsTests(TestCase):
+    """Tests for update_encounter_settings (#3383)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.BETWEEN_ROUNDS,
+            pace_mode=PaceMode.MANUAL,
+            risk_level=RiskLevel.MODERATE,
+            stakes_level=StakesLevel.LOCAL,
+            round_number=1,
+        )
+
+    def test_updates_each_field_in_isolation(self) -> None:
+        update_encounter_settings(self.encounter, stakes_level=StakesLevel.WORLD)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.stakes_level, StakesLevel.WORLD)
+        self.assertEqual(self.encounter.risk_level, RiskLevel.MODERATE)
+
+        update_encounter_settings(self.encounter, risk_level=RiskLevel.LETHAL)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.risk_level, RiskLevel.LETHAL)
+        self.assertEqual(self.encounter.stakes_level, StakesLevel.WORLD)
+
+        update_encounter_settings(self.encounter, pace_timer_minutes=25)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_timer_minutes, 25)
+        # pace_mode untouched (still MANUAL) — no side effects from unrelated fields.
+        self.assertEqual(self.encounter.pace_mode, PaceMode.MANUAL)
+
+    def test_updates_all_fields_combined(self) -> None:
+        update_encounter_settings(
+            self.encounter,
+            stakes_level=StakesLevel.NATIONAL,
+            risk_level=RiskLevel.HIGH,
+            pace_mode=PaceMode.READY,
+            pace_timer_minutes=30,
+        )
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.stakes_level, StakesLevel.NATIONAL)
+        self.assertEqual(self.encounter.risk_level, RiskLevel.HIGH)
+        self.assertEqual(self.encounter.pace_mode, PaceMode.READY)
+        self.assertEqual(self.encounter.pace_timer_minutes, 30)
+
+    def test_omitted_fields_are_left_unchanged(self) -> None:
+        update_encounter_settings(self.encounter)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.MANUAL)
+        self.assertEqual(self.encounter.risk_level, RiskLevel.MODERATE)
+        self.assertEqual(self.encounter.stakes_level, StakesLevel.LOCAL)
+
+    def test_entering_timed_while_declaring_resets_round_started_at(self) -> None:
+        """Decision 5: TIMED-entry resets round_started_at only while DECLARING."""
+        self.encounter.status = RoundStatus.DECLARING
+        self.encounter.round_started_at = timezone.now() - timedelta(hours=1)
+        self.encounter.save(update_fields=["status", "round_started_at"])
+        stale_started_at = self.encounter.round_started_at
+
+        update_encounter_settings(self.encounter, pace_mode=PaceMode.TIMED)
+
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.TIMED)
+        self.assertGreater(self.encounter.round_started_at, stale_started_at)
+
+    def test_entering_timed_while_between_rounds_leaves_round_started_at_alone(self) -> None:
+        """Decision 5: no reset outside DECLARING (encounter stays BETWEEN_ROUNDS)."""
+        self.assertEqual(self.encounter.status, RoundStatus.BETWEEN_ROUNDS)
+        self.assertIsNone(self.encounter.round_started_at)
+
+        update_encounter_settings(self.encounter, pace_mode=PaceMode.TIMED)
+
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.TIMED)
+        self.assertIsNone(self.encounter.round_started_at)
+
+    def test_flipping_timed_to_manual_drops_out_of_the_timed_sweep(self) -> None:
+        """Decision 4: no explicit teardown needed — the sweep query just stops
+        matching once pace_mode leaves TIMED."""
+        self.encounter.pace_mode = PaceMode.TIMED
+        self.encounter.status = RoundStatus.DECLARING
+        self.encounter.round_started_at = timezone.now() - timedelta(hours=1)
+        self.encounter.save(update_fields=["pace_mode", "status", "round_started_at"])
+
+        update_encounter_settings(self.encounter, pace_mode=PaceMode.MANUAL)
+
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.MANUAL)
+        candidate_ids = list(
+            CombatEncounter.objects.filter(
+                status=RoundStatus.DECLARING,
+                pace_mode=PaceMode.TIMED,
+                round_started_at__isnull=False,
+            ).values_list("pk", flat=True)
+        )
+        self.assertNotIn(self.encounter.pk, candidate_ids)
+
+    def test_flipping_to_ready_resolves_when_everyone_is_already_ready(self) -> None:
+        """Decision 6: maybe_resolve_on_ready fires in the same call."""
+        self.encounter.status = RoundStatus.DECLARING
+        self.encounter.save(update_fields=["status"])
+        first = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
+        second = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
+        for participant in (first, second):
+            CharacterVitals.objects.create(
+                character_sheet=participant.character_sheet, health=100, max_health=100
+            )
+            CombatRoundAction.objects.create(
+                participant=participant,
+                round_number=self.encounter.round_number,
+                is_ready=True,
+            )
+
+        update_encounter_settings(self.encounter, pace_mode=PaceMode.READY)
+
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.READY)
+        self.assertNotEqual(self.encounter.status, RoundStatus.DECLARING)
+
+    def test_flipping_to_ready_does_not_resolve_when_someone_is_not_ready(self) -> None:
+        self.encounter.status = RoundStatus.DECLARING
+        self.encounter.save(update_fields=["status"])
+        first = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
+        second = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.ACTIVE)
+        CharacterVitals.objects.create(
+            character_sheet=first.character_sheet, health=100, max_health=100
+        )
+        CharacterVitals.objects.create(
+            character_sheet=second.character_sheet, health=100, max_health=100
+        )
+        CombatRoundAction.objects.create(
+            participant=first, round_number=self.encounter.round_number, is_ready=True
+        )
+        CombatRoundAction.objects.create(
+            participant=second, round_number=self.encounter.round_number, is_ready=False
+        )
+
+        update_encounter_settings(self.encounter, pace_mode=PaceMode.READY)
+
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.READY)
+        self.assertEqual(self.encounter.status, RoundStatus.DECLARING)

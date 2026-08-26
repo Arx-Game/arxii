@@ -24,7 +24,10 @@ from world.combat.constants import (
     ClashStatus,
     EncounterOutcome,
     OpponentTier,
+    PaceMode,
     ParticipantStatus,
+    RiskLevel,
+    StakesLevel,
 )
 from world.combat.models import (
     Clash,
@@ -1461,6 +1464,20 @@ class AddOpponentSerializer(serializers.Serializer):
                     {"position_id": "That position is not in this encounter's room."}
                 )
         return attrs
+
+
+class EncounterSettingsSerializer(serializers.Serializer):
+    """Write serializer for the GM-driven settings update (#3383).
+
+    Every field is optional so a PATCH may change any subset of
+    ``stakes_level``/``risk_level``/``pace_mode``/``pace_timer_minutes`` —
+    mirrors ``update_encounter_settings``'s all-optional-kwargs shape.
+    """
+
+    stakes_level = serializers.ChoiceField(choices=StakesLevel.choices, required=False)
+    risk_level = serializers.ChoiceField(choices=RiskLevel.choices, required=False)
+    pace_mode = serializers.ChoiceField(choices=PaceMode.choices, required=False)
+    pace_timer_minutes = serializers.IntegerField(min_value=1, required=False)
 
 
 class DeclareClashContributionSerializer(serializers.Serializer):

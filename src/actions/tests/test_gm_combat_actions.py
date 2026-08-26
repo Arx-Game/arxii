@@ -13,6 +13,7 @@ from actions.definitions.gm_combat import (
     PreviewOpponentDefaultsAction,
     RemoveEncounterParticipantAction,
     ResolveEncounterRoundAction,
+    UpdateEncounterSettingsAction,
 )
 from actions.registry import get_action
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
@@ -20,6 +21,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     EncounterOutcome,
     OpponentTier,
+    PaceMode,
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
@@ -362,6 +364,56 @@ class PauseEncounterActionTests(GMCombatActionTestBase):
 
     def test_non_gm_denied(self) -> None:
         result = PauseEncounterAction().run(self.player_actor)
+        self.assertFalse(result.success)
+
+
+class UpdateEncounterSettingsActionTests(GMCombatActionTestBase):
+    """UpdateEncounterSettingsAction changes stakes/risk/pace/timer (#3383)."""
+
+    def test_gm_can_change_stakes_level(self) -> None:
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, stakes_level=StakesLevel.WORLD)
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.stakes_level, StakesLevel.WORLD)
+
+    def test_gm_can_change_risk_level(self) -> None:
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, risk_level=RiskLevel.LETHAL)
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.risk_level, RiskLevel.LETHAL)
+
+    def test_gm_can_change_pace_mode(self) -> None:
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, pace_mode=PaceMode.MANUAL)
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_mode, PaceMode.MANUAL)
+
+    def test_gm_can_change_timer(self) -> None:
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, pace_timer_minutes="20")
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.pace_timer_minutes, 20)
+
+    def test_invalid_stakes_level_rejected(self) -> None:
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, stakes_level="not_a_level")
+        self.assertFalse(result.success)
+
+    def test_invalid_timer_rejected(self) -> None:
+        result = UpdateEncounterSettingsAction().run(
+            self.gm_actor, pace_timer_minutes="not_a_number"
+        )
+        self.assertFalse(result.success)
+
+    def test_non_gm_denied(self) -> None:
+        result = UpdateEncounterSettingsAction().run(
+            self.player_actor, stakes_level=StakesLevel.WORLD
+        )
+        self.assertFalse(result.success)
+
+    def test_no_active_encounter_denied(self) -> None:
+        self.encounter.status = RoundStatus.COMPLETED
+        self.encounter.save(update_fields=["status"])
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, stakes_level=StakesLevel.WORLD)
         self.assertFalse(result.success)
 
 

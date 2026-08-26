@@ -147,11 +147,19 @@ actions, backends, and service functions.
   same generic available-actions dispatcher. See "Scene Administration" in
   `docs/systems/scenes.md`. No business logic in the command.
 - **`encounter.py`**: `CmdEncounter` (`encounter`, #1494) — the GM combat-encounter lifecycle
-  namespace, thin over the eight Actions in `actions/definitions/gm_combat.py` (`begin`/
-  `resolve`/`add`/`default`/`addpc`/`removepc`/`pause`/`end`). Every subverb is gated by
+  namespace, thin over the Actions in `actions/definitions/gm_combat.py` (`begin`/
+  `resolve`/`add`/`default`/`addpc`/`removepc`/`pause`/`end`/`stakes`/`risk`/`pace`/`timer`).
+  Every subverb is gated by
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
   `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
+  `encounter stakes|risk|pace|timer <value>` (#3383) all dispatch the single
+  `UpdateEncounterSettingsAction` (key `update_encounter_settings`), each supplying exactly
+  one of `stakes_level`/`risk_level`/`pace_mode`/`pace_timer_minutes` — the telnet face of the
+  web `CombatEncounterViewSet.update_settings` PATCH action (`PATCH
+  /api/combat/{id}/settings/`); both converge on
+  `world.combat.services.update_encounter_settings`. Four small subverbs rather than one
+  combined settings grammar, matching every other subverb here taking one positional value.
   `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
   `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
   GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own

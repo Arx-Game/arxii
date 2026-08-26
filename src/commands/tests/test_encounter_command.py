@@ -185,6 +185,60 @@ class CmdEncounterSubverbTests(TestCase):
         self.assertEqual(mock_run.call_args.kwargs["actor"], self.caller)
         self.assertIn("Encounter ended.", messages)
 
+    @patch("actions.definitions.gm_combat.UpdateEncounterSettingsAction.run")
+    def test_stakes_dispatches_stakes_level(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Encounter settings updated.")
+        messages = self._run("stakes world")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["stakes_level"], "world")
+        self.assertIn("Encounter settings updated.", messages)
+
+    def test_stakes_requires_a_level(self) -> None:
+        messages = self._run("stakes")
+        self.assertTrue(
+            any("Usage" in m for m in messages),
+            f"Expected usage error; got {messages}",
+        )
+
+    @patch("actions.definitions.gm_combat.UpdateEncounterSettingsAction.run")
+    def test_risk_dispatches_risk_level(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Encounter settings updated.")
+        messages = self._run("risk lethal")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["risk_level"], "lethal")
+        self.assertIn("Encounter settings updated.", messages)
+
+    @patch("actions.definitions.gm_combat.UpdateEncounterSettingsAction.run")
+    def test_pace_dispatches_pace_mode(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Encounter settings updated.")
+        messages = self._run("pace manual")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["pace_mode"], "manual")
+        self.assertIn("Encounter settings updated.", messages)
+
+    @patch("actions.definitions.gm_combat.UpdateEncounterSettingsAction.run")
+    def test_timer_dispatches_pace_timer_minutes(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Encounter settings updated.")
+        messages = self._run("timer 20")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["pace_timer_minutes"], "20")
+        self.assertIn("Encounter settings updated.", messages)
+
+    def test_timer_requires_a_value(self) -> None:
+        messages = self._run("timer")
+        self.assertTrue(
+            any("Usage" in m for m in messages),
+            f"Expected usage error; got {messages}",
+        )
+
 
 class CmdEncounterPermissionDenialTests(TestCase):
     """Permission-denial results from the action surface to the caller."""

@@ -1746,6 +1746,53 @@ def maybe_resolve_on_ready(encounter: CombatEncounter) -> RoundResolutionResult 
     return resolve_round(encounter)
 
 
+def update_encounter_settings(
+    encounter: CombatEncounter,
+    *,
+    stakes_level: str | None = None,
+    risk_level: str | None = None,
+    pace_mode: str | None = None,
+    pace_timer_minutes: int | None = None,
+) -> CombatEncounter:
+    """GM-driven mid-encounter settings change (#3383).
+
+    Any subset of the four fields may be given; omitted fields are left
+    unchanged. Applies decisions 5-6: entering TIMED while DECLARING resets
+    round_started_at; every call ends with a maybe_resolve_on_ready check
+    (a no-op unless pace_mode is now READY and status is DECLARING).
+
+    Stakes/risk changes gate only future opponent spawns and read-live
+    call sites (EncounterAftermathRule lookup at completion,
+    StakesEscalationModifier per-tick) — already-spawned CombatOpponent stat
+    blocks are never retroactively rescaled (decision 1).
+    """
+    update_fields = []
+    entering_timed = (
+        pace_mode == PaceMode.TIMED
+        and encounter.pace_mode != PaceMode.TIMED
+        and encounter.status == RoundStatus.DECLARING
+    )
+    if stakes_level is not None:
+        encounter.stakes_level = stakes_level
+        update_fields.append("stakes_level")
+    if risk_level is not None:
+        encounter.risk_level = risk_level
+        update_fields.append("risk_level")
+    if pace_mode is not None:
+        encounter.pace_mode = pace_mode
+        update_fields.append("pace_mode")
+    if pace_timer_minutes is not None:
+        encounter.pace_timer_minutes = pace_timer_minutes
+        update_fields.append("pace_timer_minutes")
+    if entering_timed:
+        encounter.round_started_at = timezone.now()
+        update_fields.append("round_started_at")
+    if update_fields:
+        encounter.save(update_fields=update_fields)
+    maybe_resolve_on_ready(encounter)
+    return encounter
+
+
 def declare_cover(
     participant: CombatParticipant,
     ally: CombatParticipant,

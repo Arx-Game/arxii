@@ -26,6 +26,7 @@ vi.mock('../queries', () => ({
   useBeginRound: vi.fn(),
   useResolveRound: vi.fn(),
   usePauseEncounter: vi.fn(),
+  useUpdateEncounterSettings: vi.fn(),
   useRemoveParticipant: vi.fn(),
   useProposeLethalDuel: vi.fn(),
 }));
@@ -66,6 +67,9 @@ function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetai
     id: 1,
     is_gm: true,
     pace_mode: 'timed',
+    stakes_level: 'local',
+    risk_level: 'moderate',
+    pace_timer_minutes: 10,
     status: 'between_rounds',
     is_paused: false,
     participants: [],
@@ -90,6 +94,9 @@ const mockedUseAddParticipant = combatQueries.useAddParticipant as ReturnType<ty
 const mockedUseBeginRound = combatQueries.useBeginRound as ReturnType<typeof vi.fn>;
 const mockedUseResolveRound = combatQueries.useResolveRound as ReturnType<typeof vi.fn>;
 const mockedUsePauseEncounter = combatQueries.usePauseEncounter as ReturnType<typeof vi.fn>;
+const mockedUseUpdateEncounterSettings = combatQueries.useUpdateEncounterSettings as ReturnType<
+  typeof vi.fn
+>;
 const mockedUseRemoveParticipant = combatQueries.useRemoveParticipant as ReturnType<typeof vi.fn>;
 const mockedUseProposeLethalDuel = combatQueries.useProposeLethalDuel as ReturnType<typeof vi.fn>;
 const mockedUsePersonaSearch = usePersonaSearch as unknown as ReturnType<typeof vi.fn>;
@@ -114,6 +121,17 @@ const mockAddParticipantMutate = vi.fn(
 const mockBeginRoundMutate = vi.fn((_vars: undefined, _opts?: MutateOpts) => {});
 const mockResolveRoundMutate = vi.fn((_vars: undefined, _opts?: MutateOpts) => {});
 const mockPauseMutate = vi.fn((_vars: undefined, _opts?: MutateOpts) => {});
+const mockUpdateSettingsMutate = vi.fn(
+  (
+    _vars: {
+      stakesLevel?: string;
+      riskLevel?: string;
+      paceMode?: string;
+      paceTimerMinutes?: number;
+    },
+    _opts?: MutateOpts
+  ) => {}
+);
 const mockRemoveParticipantMutate = vi.fn((_vars: number, _opts?: MutateOpts) => {});
 const mockProposeLethalDuelMutate = vi.fn(
   (
@@ -152,6 +170,10 @@ beforeEach(() => {
   mockedUseBeginRound.mockReturnValue({ mutate: mockBeginRoundMutate, isPending: false });
   mockedUseResolveRound.mockReturnValue({ mutate: mockResolveRoundMutate, isPending: false });
   mockedUsePauseEncounter.mockReturnValue({ mutate: mockPauseMutate, isPending: false });
+  mockedUseUpdateEncounterSettings.mockReturnValue({
+    mutate: mockUpdateSettingsMutate,
+    isPending: false,
+  });
   mockedUseRemoveParticipant.mockReturnValue({
     mutate: mockRemoveParticipantMutate,
     isPending: false,
@@ -644,5 +666,115 @@ describe('GMEncounterControls — pause toggle', () => {
     );
 
     expect(screen.getByTestId('pause-toggle-btn')).toHaveTextContent('Unpause');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Settings row (#3383) — stakes/risk/pace/timer
+// ---------------------------------------------------------------------------
+
+describe('GMEncounterControls — settings row', () => {
+  it('renders the current stakes/risk/pace values', () => {
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({
+          stakes_level: 'regional',
+          risk_level: 'high',
+          pace_mode: 'manual',
+        })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('encounter-stakes-select')).toHaveTextContent('Regional');
+    expect(screen.getByTestId('encounter-risk-select')).toHaveTextContent('High');
+    expect(screen.getByTestId('encounter-pace-select')).toHaveTextContent('Manual');
+  });
+
+  it('fires the settings mutation when stakes changes', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={makeEncounter()} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('encounter-stakes-select'));
+    await user.click(await screen.findByRole('option', { name: 'World' }));
+
+    expect(mockUpdateSettingsMutate).toHaveBeenCalledWith(
+      { stakesLevel: 'world' },
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+
+  it('fires the settings mutation when risk changes', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={makeEncounter()} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('encounter-risk-select'));
+    await user.click(await screen.findByRole('option', { name: 'Lethal' }));
+
+    expect(mockUpdateSettingsMutate).toHaveBeenCalledWith(
+      { riskLevel: 'lethal' },
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+
+  it('fires the settings mutation when pace changes', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ pace_mode: 'manual' })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByTestId('encounter-pace-select'));
+    await user.click(await screen.findByRole('option', { name: /^Ready/ }));
+
+    expect(mockUpdateSettingsMutate).toHaveBeenCalledWith(
+      { paceMode: 'ready' },
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+
+  it('shows the timer input only in timed pace, and commits on blur', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ pace_mode: 'timed', pace_timer_minutes: 10 })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const timerInput = screen.getByTestId('encounter-timer-input');
+    await user.clear(timerInput);
+    await user.type(timerInput, '20');
+    await user.tab();
+
+    expect(mockUpdateSettingsMutate).toHaveBeenCalledWith(
+      { paceTimerMinutes: 20 },
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+
+  it('hides the timer input outside timed pace', () => {
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ pace_mode: 'manual' })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('encounter-timer-input')).not.toBeInTheDocument();
   });
 });

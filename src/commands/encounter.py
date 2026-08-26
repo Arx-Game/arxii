@@ -1,6 +1,6 @@
 """GM combat-encounter lifecycle telnet namespace (#1494).
 
-A thin command face for the eight encounter actions in
+A thin command face for the encounter actions in
 ``actions.definitions.gm_combat``. Each subverb delegates directly to
 ``Action().run(actor=self.caller, **kwargs)``. No business logic lives here.
 """
@@ -20,6 +20,12 @@ _USAGE = (
     "  encounter removepc <participant>        - remove a PC from the encounter\n"
     "  encounter pause                         - pause/resume the encounter\n"
     "  encounter end                           - force-end the encounter\n"
+    "  encounter stakes <local|regional|national|continental|world>\n"
+    "                                           - change stakes level (#3383)\n"
+    "  encounter risk <low|moderate|high|extreme|lethal>\n"
+    "                                           - change risk level (#3383)\n"
+    "  encounter pace <timed|ready|manual>     - change pace mode (#3383)\n"
+    "  encounter timer <minutes>               - change the TIMED round timer (#3383)\n"
     "  encounter duel <character> <name> <tier> <pool>\n"
     "                                           - propose a lethal duel (#3068)"
 )
@@ -29,6 +35,10 @@ _DEFAULT_USAGE = "Usage: encounter default <tier>"
 _ADDPC_USAGE = "Usage: encounter addpc <character>"
 _REMOVEPC_USAGE = "Usage: encounter removepc <participant>"
 _DUEL_USAGE = "Usage: encounter duel <character> <name> <tier> <pool>"
+_STAKES_USAGE = "Usage: encounter stakes <local|regional|national|continental|world>"
+_RISK_USAGE = "Usage: encounter risk <low|moderate|high|extreme|lethal>"
+_PACE_USAGE = "Usage: encounter pace <timed|ready|manual>"
+_TIMER_USAGE = "Usage: encounter timer <minutes>"
 
 # Token-count thresholds for argument parsing.
 _MIN_ADD_TOKENS = 2
@@ -44,6 +54,10 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "removepc": "_handle_removepc",
     "pause": "_handle_pause",
     "end": "_handle_end",
+    "stakes": "_handle_stakes",
+    "risk": "_handle_risk",
+    "pace": "_handle_pace",
+    "timer": "_handle_timer",
     "duel": "_handle_duel",
 }
 
@@ -131,6 +145,34 @@ class CmdEncounter(ArxNamespaceCommand):
         from actions.definitions.gm_combat import EndEncounterAction  # noqa: PLC0415
 
         self._run_action(EndEncounterAction)
+
+    def _handle_stakes(self, rest: str) -> None:
+        """Parse ``stakes <level>`` and dispatch UpdateEncounterSettingsAction (#3383)."""
+        from actions.definitions.gm_combat import UpdateEncounterSettingsAction  # noqa: PLC0415
+
+        level = self._require_arg(rest, _STAKES_USAGE)
+        self._run_action(UpdateEncounterSettingsAction, stakes_level=level.split()[0])
+
+    def _handle_risk(self, rest: str) -> None:
+        """Parse ``risk <level>`` and dispatch UpdateEncounterSettingsAction (#3383)."""
+        from actions.definitions.gm_combat import UpdateEncounterSettingsAction  # noqa: PLC0415
+
+        level = self._require_arg(rest, _RISK_USAGE)
+        self._run_action(UpdateEncounterSettingsAction, risk_level=level.split()[0])
+
+    def _handle_pace(self, rest: str) -> None:
+        """Parse ``pace <mode>`` and dispatch UpdateEncounterSettingsAction (#3383)."""
+        from actions.definitions.gm_combat import UpdateEncounterSettingsAction  # noqa: PLC0415
+
+        mode = self._require_arg(rest, _PACE_USAGE)
+        self._run_action(UpdateEncounterSettingsAction, pace_mode=mode.split()[0])
+
+    def _handle_timer(self, rest: str) -> None:
+        """Parse ``timer <minutes>`` and dispatch UpdateEncounterSettingsAction (#3383)."""
+        from actions.definitions.gm_combat import UpdateEncounterSettingsAction  # noqa: PLC0415
+
+        minutes = self._require_arg(rest, _TIMER_USAGE)
+        self._run_action(UpdateEncounterSettingsAction, pace_timer_minutes=minutes.split()[0])
 
     def _handle_duel(self, rest: str) -> None:
         """Parse ``duel <character> <name> <tier> <pool>`` and propose a lethal duel (#3068).

@@ -4749,6 +4749,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description GM: change stakes/risk/pace/timer on a live encounter (#3383). */
+    patch: operations['combat_settings_partial_update'];
+    trace?: never;
+  };
   '/api/combat/{id}/taunt/': {
     parameters: {
       query?: never;
@@ -49208,6 +49225,32 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedEncounterDetailRequest'];
       };
     };
     responses: {

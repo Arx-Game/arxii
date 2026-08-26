@@ -199,6 +199,57 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         self.encounter.refresh_from_db()
         self.assertTrue(self.encounter.is_paused)
 
+    def test_settings_as_gm(self) -> None:
+        """GM can change stakes/risk/pace/timer (#3383)."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.patch(
+            f"/api/combat/{self.encounter.pk}/settings/",
+            {"stakes_level": "world", "risk_level": "lethal"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.stakes_level, "world")
+        self.assertEqual(self.encounter.risk_level, "lethal")
+
+    def test_settings_partial_payload_only_updates_given_fields(self) -> None:
+        """Omitted fields are left unchanged."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        original_risk = self.encounter.risk_level
+        response = client.patch(
+            f"/api/combat/{self.encounter.pk}/settings/",
+            {"stakes_level": "national"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.stakes_level, "national")
+        self.assertEqual(self.encounter.risk_level, original_risk)
+
+    def test_settings_non_gm_denied(self) -> None:
+        """Non-GM participant cannot change encounter settings."""
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.patch(
+            f"/api/combat/{self.encounter.pk}/settings/",
+            {"stakes_level": "world"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_settings_invalid_choice_returns_400(self) -> None:
+        """An invalid choice value is rejected."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.patch(
+            f"/api/combat/{self.encounter.pk}/settings/",
+            {"risk_level": "not_a_real_level"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+
     def test_remove_participant_as_gm(self) -> None:
         """GM can remove a participant."""
         client = APIClient()
