@@ -415,6 +415,7 @@ CONTRABAND_CRIME_SLUG = "contraband"
 SMUGGLING_CRIME_SLUG = "smuggling"
 
 
+@transaction.atomic
 def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -> int:
     """Sell *instance* to the fence at *stall*; returns the coppers paid.
 
@@ -498,6 +499,7 @@ def _accrue_fence_heat(seller: Persona, stall: MarketStall, crime_slug: str) -> 
 MATERIAL_SALE_RATE_PCT = 40  # PLACEHOLDER — the market's rate for bulk material value.
 
 
+@transaction.atomic
 def sell_materials(
     *, seller_sheet: CharacterSheet, material_category: MaterialCategory, amount: int
 ) -> int:

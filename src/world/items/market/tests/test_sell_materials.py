@@ -7,6 +7,8 @@ for bulk material bucket value, mirroring the fence's mint-to-purse convention
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -15,6 +17,7 @@ from world.items.exceptions import InsufficientMaterialStock
 from world.items.factories import MaterialBucketFactory, MaterialCategoryFactory
 from world.items.gems.buckets import material_value
 from world.items.market.services import MATERIAL_SALE_RATE_PCT, MarketServiceError, sell_materials
+from world.items.materials_models import MaterialBucket
 
 
 class SellMaterialsTests(TestCase):
@@ -55,6 +58,25 @@ class SellMaterialsTests(TestCase):
         with self.assertRaises(MarketServiceError):
             sell_materials(seller_sheet=self.sheet, material_category=self.category, amount=1)
         self.assertEqual(material_value(self.sheet, self.category), 10)  # bucket untouched
+
+    def test_transfer_failure_rolls_back_the_bucket_debit(self) -> None:
+        """A crash between the spend and the mint must not leave a spent-but-unpaid seller
+        (the atomicity bug the review round flagged: sell_materials had no
+        @transaction.atomic, so spend_materials and transfer each committed independently)."""
+        MaterialBucketFactory(
+            character_sheet=self.sheet, material_category=self.category, value=1000
+        )
+        with (
+            patch("world.currency.services.transfer", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
+            sell_materials(seller_sheet=self.sheet, material_category=self.category, amount=500)
+        # SharedMemoryModel keeps object identity across queries (ADR-0008) — the in-process
+        # bucket instance was mutated before the raise, so a fresh read must bypass that
+        # cache to see the true post-rollback DB row (see the sharedmemory-model skill).
+        MaterialBucket.flush_instance_cache()
+        self.assertEqual(material_value(self.sheet, self.category), 1000)  # rolled back
+        self.assertEqual(get_or_create_purse(self.sheet).balance, 0)
 
     def test_multiple_categories_sell_independently(self) -> None:
         other_category = MaterialCategoryFactory(name="Iron Ore")
