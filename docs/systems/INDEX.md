@@ -7461,24 +7461,34 @@ Production-callable seed layer for populating sane defaults on a fresh dev insta
 ### Game Tuning & Game Ops Dashboards (#1220 / #1221)
 Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation and live-game analytics.
 
-- **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — five HTMX-fragment panels: checks
+- **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — six HTMX-fragment panels: checks
   probability distributions (`web/admin/tuning/checks_analytics.py` —
   `compute_chart_distributions`, `compute_matchup`), consequence-pool inspector
   (`consequence_analytics.py` — `inspect_pool`, `list_pools`), condition danger ranking
-  (`condition_analytics.py` — `compute_condition_danger`), a Monte Carlo
+  plus a DE column (`condition_analytics.py` — `compute_condition_danger`;
+  `condition_power_analytics.py` — `build_condition_power_panel`, #3390), a Monte Carlo
   party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`),
-  and a technique combat-power league table (#3279: `technique_analytics.py` —
+  a technique combat-power league table (#3279: `technique_analytics.py` —
   `build_technique_panel`, over
   `world.magic.services.technique_power_eval.evaluate_all_with_reference(EvalContext) ->
   (list[TechniquePowerReport], ReferenceFrame)`; types in
-  `world/magic/types/technique_power.py`). The evaluator prices every technique payload
-  family in expected damage-equivalent per cast (ADR-0223) with per-valuation provenance
+  `world/magic/types/technique_power.py`), and a capability DE-per-point league table
+  (#3390: `capability_power_analytics.py` — `build_capability_power_panel`, over
+  `world.magic.services.capability_power_eval.evaluate_all_capabilities_with_reference`).
+  The evaluator prices every technique payload family in expected damage-equivalent per
+  cast (ADR-0223) with per-valuation provenance
   (FORMULA/PARSED/ESTIMATE/UNPRICED_DISPEL/UNPRICEABLE/INERT_PAYLOAD), a baseline vs
   matched-anchor covenant-role band via the shared pure helpers
   `blend_power_contribution`/`specialty_power_contribution`
   (`world/magic/services/power_terms.py`), and mitigation magnitudes parsed from
   MODIFY_PAYLOAD reactive triggers via `protective_magnitude`
-  (`world/magic/services/targeting.py`).
+  (`world/magic/services/targeting.py`). #3390 (ADR-0233) extracted the row-independent
+  DE formula core into `world/magic/services/de_valuation.py` and its shared
+  `compute_reference_frame(EvalContext) -> ReferenceFrame` median-baseline-attack
+  bootstrap, so the standalone condition (`world/magic/services/condition_power_eval.py`
+  — `evaluate_condition`) and capability
+  (`world/magic/services/capability_power_eval.py` — `evaluate_capability`) evaluators
+  price against the exact same currency — never a second, drifting implementation.
 - **Simulator:** `world.combat.simulation.run_party_vs_boss_simulation(SimulationParams) -> SimulationReport`
   drives the real `world.combat.services.resolve_round` pipeline through synthetic,
   locationless encounters inside nested transaction savepoints that are always rolled

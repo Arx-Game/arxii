@@ -238,6 +238,7 @@ treat those names as hints to confirm, not gospel.
 - [0230 - Board posts are authored by Persona, not by account or CharacterSheet](0230-board-posts-are-authored-by-persona.md) (#3286)
 - [0231 - Org appeals are a distinct IC surface from the OOC staff-contact Petition](0231-org-appeals-are-distinct-from-ooc-petitions.md) (#3293)
 - [0232 - The Arx I archive is gated on Arx II accounts, not a shared password](0232-arx1-archive-gated-on-arx-ii-accounts.md) (#3320)
+- [0233 - One shared DE currency and reference frame across techniques, conditions, and capabilities](0233-shared-de-currency-across-techniques-conditions-capabilities.md) (#3390; extends ADR-0223)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
