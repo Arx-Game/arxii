@@ -1028,6 +1028,26 @@ by the `Situation.CHAMPION_DUEL` situational-perk evaluator
 .is_champion_duel` off the subject's `CombatRoundContext` resolution) — see
 `docs/systems/covenants.md`'s "Layer 4: Situational Perks" for the perk side.
 
+**Web affordance (#3389).** `ChampionDuelSection` (`frontend/src/battles/components/
+PlaceDetailPanel.tsx`) is the map-side counterpart to telnet's `battle duel <front>
+vs <name>` (`src/commands/battle.py`) — a per-place form, not part of
+`BattleActionPanel`, matching the "View encounter" link's own placement. It renders
+when the selected place has no open `combat_encounter` and the viewer's own
+`BattleParticipant` row (matched via `character_sheet_id`) reads `is_champion: true`
+— `BattleParticipantSerializer.is_champion` (#3389 Phase 1) mirrors
+`open_champion_duel`'s `CharacterCovenantRole` gate verbatim as a read-only
+visibility hint; the server-side `NotAChampionError` check is unchanged and remains
+the actual authority. The form takes a boss name plus an optional `ThreatPool`
+picker (`useThreatPools`, the same hook `GMEncounterControls` uses) and dispatches
+`challenge_champion_duel` with `{battle_place_id, opponent_kwargs: {name,
+max_health: 300, threat_pool}}` — `max_health` matches `CmdBattle`'s own hardcoded
+value, so the web form stays telnet-parity-minimal rather than inventing a richer
+boss-authoring UI the action doesn't ask for. `ChallengeChampionDuelAction`'s result
+only carries `encounter_id`, not a scene id, so a successful dispatch invalidates
+`battleKeys.detail`/`battleKeys.forScene` and an effect watches for the refetched
+place's `encounter_scene_id` to populate before navigating to `/scenes/<id>` — the
+same destination the "View encounter" link uses.
+
 ## Sieges (#1713)
 
 Siege warfare is a battle variety built on two new pieces: the `Fortification`

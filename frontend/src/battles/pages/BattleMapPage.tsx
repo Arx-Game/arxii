@@ -135,6 +135,8 @@ export function BattleMapPage() {
             sides={detail.sides}
             units={detail.units}
             participants={detail.participants}
+            sceneId={sceneId}
+            battleId={battle.id}
           />
         </div>
       </div>
