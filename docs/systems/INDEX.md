@@ -3762,12 +3762,17 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
   piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
   cannot withhold it),
-  `collect_and_distribute(*, organization, character)` (#2540, ruled 2026-07-20 — THE distribution
-  dispatch: collect → `service_debt_principal` [a mandatory PLACEHOLDER `DEBT_PRINCIPAL_GROSS_PCT`
-  of GROSS toward debt principal, oldest first, diverting debts skipped, capped by treasury; a
-  catastrophe funds no debt service; complements the weekly at-source ARREARS/interest withholding
-  #927] → `distribute_allowance` on the post-debt remainder of what landed; each phase
-  independently atomic; the rest stays in the treasury. Returns `DistributionResult`)
+  `collect_and_distribute(*, organization, character, success_level_override=None)` (#2540,
+  ruled 2026-07-20 — THE distribution dispatch, both live call sites now wired: the active
+  piloted collection (`npc_services.effects.run_collection`) and the route-graded mission
+  landing (`tasking._land_route_collection`, which passes its own
+  `success_level_override`) — collect → `service_debt_principal` [a mandatory PLACEHOLDER
+  `DEBT_PRINCIPAL_GROSS_PCT` of GROSS toward debt principal, oldest first, diverting debts
+  skipped, capped by treasury; a catastrophe funds no debt service; complements the weekly
+  at-source ARREARS/interest withholding #927] → `distribute_allowance` on the post-debt
+  remainder of what landed; each phase independently atomic; the rest stays in the
+  treasury. `success_level_override` passes straight through to `collect_org_income` for a
+  caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`)
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
@@ -5230,10 +5235,18 @@ holder is never notified a claim exists.
   hook. In-transit loss deliberately not built (loss lives in the collection roll). **The
   WHERE gate is now wired** (#2540 economy wiring — supersedes the earlier follow-up note):
   `VaultDepositAction`/`VaultWithdrawAction` (`actions/definitions/org_vault.py`, keys
-  `vault_deposit`/`vault_withdraw`, REST int kwargs) are performable only where an active
+  `vault_deposit`/`vault_withdraw`, REST int kwargs), **`TreasuryWithdrawAction`** (key
+  `treasury_withdraw` — draws coppers from the org treasury via
+  `currency.withdraw_from_treasury`; the CONTROLLER RULING extending the same access
+  surface to coin, not just items, cites the Layer 4 access-surface ruling on #2540), and
+  **`DeliverCollectionAction`** (key `deliver_collection`, "Deliver the Take" — the
+  collection mission's return leg over `resolve_vault_transit`; `keep_item_ids` is the
+  carrier's embezzlement opt-in, subset-validated against the actor's own open
+  `VaultTransit` rows and resolved atomically) are ALL performable only where an active
   **BANK** `RoomFeatureServiceStrategy` feature stands (a bank room on grid or an
   owner-installed bank-access decor feature — the ratified access surface; reachability-only
-  handler in `room_features`, COMMAND_CENTER's shape). Distinct from the physical room-feature
+  handler in `room_features`, COMMAND_CENTER's shape; seeded via `ensure_bank_kind()`,
+  `world/room_features/seeds.py`). Distinct from the physical room-feature
   VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is wired**:
   `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one `accrue_mine_cycle`
   per configured holding (`common_gem_tier` set) — haul amasses uncollected per ADR-0081; only

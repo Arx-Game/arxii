@@ -6574,6 +6574,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/{id}/vault-events/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /org-books/{org_id}/vault-events/ — the item-vault audit trail (#2540).
+     *
+     *     Same membership gate as the books themselves (#930's posture: visible to any
+     *     active member, not just withdraw-authorized ones — the audit trail is how
+     *     embezzlement gets discovered, so it can't be gated behind the same authority
+     *     it exists to catch). Newest first (the model's own ``Meta.ordering``), capped
+     *     at ``_RECENT_ROWS`` like the currency ledger.
+     */
+    get: operations['currency_org_books_vault_events_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/currency/purse/{character_id}/': {
     parameters: {
       query?: never;
@@ -31777,6 +31802,28 @@ export interface components {
      * @enum {string}
      */
     OrgTaskStatusEnum: 'open' | 'assigned' | 'resolving' | 'completed' | 'failed' | 'expired';
+    /**
+     * @description One append-only item-vault audit row (#2540) — the ``LedgerRowSerializer`` analogue
+     *     for the item vault. Read-only; how embezzlement gets discovered later.
+     *
+     *     ``item_instance`` and ``actor_persona`` are SET_NULL on delete, so both display
+     *     fields fall back to None rather than raising — a deleted item or persona still
+     *     leaves a legible (if anonymized) audit row.
+     */
+    OrgVaultEvent: {
+      readonly id: number;
+      readonly kind: components['schemas']['OrgVaultEventKindEnum'];
+      readonly item_name: string | null;
+      readonly actor_persona_name: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `deposit` - Deposit
+     *     * `withdraw` - Withdraw
+     * @enum {string}
+     */
+    OrgVaultEventKindEnum: 'deposit' | 'withdraw';
     Organization: {
       readonly id: number;
       /** @description The organization's name */
@@ -51431,6 +51478,41 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrgBooks'];
+        };
+      };
+      /** @description Not a member of the organization. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such organization. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  currency_org_books_vault_events_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgVaultEvent'][];
         };
       };
       /** @description Not a member of the organization. */

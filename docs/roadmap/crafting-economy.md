@@ -1,5 +1,38 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-26, #2540 — distribution wiring slice)
+
+House distribution goes live end-to-end (spec ratified 2026-07-20 on #2540); this
+activates machinery the earlier #930/#2540 slices built but left half-wired:
+
+- **`collect_and_distribute` dispatched everywhere collection lands** — both live
+  call sites (the active piloted collection, `npc_services.effects.run_collection`,
+  and the route-graded mission landing, `tasking._land_route_collection`) now run
+  debt-first principal service (`service_debt_principal`) and the active-piloted
+  allowance split (`distribute_allowance`) on every collection, not just a bare
+  `collect_org_income`. `success_level_override` threads through for the
+  already-graded mission path.
+- **`TreasuryWithdrawAction`** (key `treasury_withdraw`) — the discretionary
+  treasury→purse draw #930 never built, now player-reachable and bank-gated (the
+  Layer 4 access-surface ruling extends to coin, not just vault items).
+- **BANK `RoomFeatureKind` seeded** (`ensure_bank_kind`,
+  `world/room_features/seeds.py`) — the WHERE gate the vault and treasury actions
+  share (a bank room on grid, or an owner-installed bank-access decor feature).
+- **`DeliverCollectionAction`** (key `deliver_collection`, "Deliver the Take") —
+  the collection mission's return leg over `resolve_vault_transit`; embezzlement
+  goes live via `keep_item_ids` (subset-validated against the carrier's own open
+  `VaultTransit` rows, resolved atomically, double-gated by `can_embezzle_from`'s
+  piloted-consent check).
+- **Vault audit reader** (`GET /api/currency/org-books/{id}/vault-events/`,
+  `OrgVaultEventSerializer`) — member-gated, capped at 50, newest first. Kept
+  deliberately invisible in the UI beyond the raw feed: the tally-vs-deposits gap
+  is the in-world discovery hook for a skim, per `OrgVaultEvent`'s own docstring.
+
+See [INDEX.md](../systems/INDEX.md) (Org vault + currency sections) and
+[tasking.md](../systems/tasking.md) (Domain collection) for the wired detail.
+The **crafting-draw** off `OrgGemStock` and the **minister seam** (#2239) remain
+unbuilt — this slice is distribution, not the crafting-draw follow-on.
+
 ## Built (2026-08-22, #3292 - tavern games)
 
 Coin-stakes dice gambling at a scene Place (spec on #3292): `game open

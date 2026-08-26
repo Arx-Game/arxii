@@ -9634,6 +9634,40 @@ paths:
           description: Not a member of the organization.
         '404':
           description: No such organization.
+  /api/currency/org-books/{id}/vault-events/:
+    get:
+      operationId: currency_org_books_vault_events_list
+      description: |-
+        GET /org-books/{org_id}/vault-events/ — the item-vault audit trail (#2540).
+
+        Same membership gate as the books themselves (#930's posture: visible to any
+        active member, not just withdraw-authorized ones — the audit trail is how
+        embezzlement gets discovered, so it can't be gated behind the same authority
+        it exists to catch). Newest first (the model's own ``Meta.ordering``), capped
+        at ``_RECENT_ROWS`` like the currency ledger.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrgVaultEvent'
+          description: ''
+        '403':
+          description: Not a member of the organization.
+        '404':
+          description: No such organization.
   /api/currency/purse/{character_id}/:
     get:
       operationId: currency_purse_retrieve
@@ -55880,6 +55914,49 @@ components:
         * `completed` - Completed
         * `failed` - Failed
         * `expired` - Expired
+    OrgVaultEvent:
+      type: object
+      description: |-
+        One append-only item-vault audit row (#2540) — the ``LedgerRowSerializer`` analogue
+        for the item vault. Read-only; how embezzlement gets discovered later.
+
+        ``item_instance`` and ``actor_persona`` are SET_NULL on delete, so both display
+        fields fall back to None rather than raising — a deleted item or persona still
+        leaves a legible (if anonymized) audit row.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/OrgVaultEventKindEnum'
+          readOnly: true
+        item_name:
+          type: string
+          nullable: true
+          readOnly: true
+        actor_persona_name:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actor_persona_name
+      - created_at
+      - id
+      - item_name
+      - kind
+    OrgVaultEventKindEnum:
+      enum:
+      - deposit
+      - withdraw
+      type: string
+      description: |-
+        * `deposit` - Deposit
+        * `withdraw` - Withdraw
     Organization:
       type: object
       properties:
