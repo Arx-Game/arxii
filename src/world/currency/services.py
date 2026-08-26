@@ -1470,7 +1470,7 @@ def run_weekly_economy() -> dict[str, int]:
     return {
         "interest": _weekly_interest_accrual(),
         "income": _weekly_income_streams(),
-        "gem_mines": _weekly_mine_accrual(),
+        "materials": _weekly_mine_accrual(),
         "assets": _weekly_asset_income(),
         "debt_service": _weekly_debt_service(),
         "contracts": _weekly_contract_settlement(),
@@ -1480,23 +1480,24 @@ def run_weekly_economy() -> dict[str, int]:
 
 
 def _weekly_mine_accrual() -> int:
-    """One weekly gem cycle per configured mine holding (#2540, Build 0b wiring).
+    """One weekly material-production cycle per configured holding (#2540 slice 2).
 
-    Rides the same rollover as the coin pools: haul amasses UNCOLLECTED
+    Rides the same rollover as the coin pools: each holding's haul (across every
+    BULK/GEM_MINE ``HoldingMaterialSource`` it carries) amasses UNCOLLECTED
     (``StreamMaterialPool`` / ``PendingRareFind``) and only an active collection
     dispatch delivers it (ADR-0081 — automatic loss is fine, automatic gain is not).
     Lazy import keeps currency free of an items dependency at load (FK direction).
     """
-    from world.items.gems.mining import accrue_mine_cycle  # noqa: PLC0415
+    from world.items.materials_production import accrue_holding_materials  # noqa: PLC0415
     from world.societies.houses.models import DomainHolding  # noqa: PLC0415
 
     count = 0
     for holding in DomainHolding.objects.filter(material_sources__isnull=False).distinct():
         try:
-            accrue_mine_cycle(holding=holding)
+            accrue_holding_materials(holding=holding)
             count += 1
         except Exception:
-            logger.exception("weekly economy: mine accrual failed for holding %s", holding.pk)
+            logger.exception("weekly economy: material accrual failed for holding %s", holding.pk)
     return count
 
 

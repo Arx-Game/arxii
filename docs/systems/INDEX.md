@@ -5230,7 +5230,7 @@ holder is never notified a claim exists.
     `HoldingMaterialSource` row (#2540 slice 2; was the `mine_quality` field), and the
     schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
     Build-1 wiring that *calls* this; where common value accrues is handled by
-    `accrue_mine_cycle` (below). All magnitudes PLACEHOLDER.
+    `accrue_holding_materials` (below). All magnitudes PLACEHOLDER.
   - **Material value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5,
     generalized #2540 slice 2) — `MaterialBucket` (`world.items.materials_models`; a crafter's
     material value per category — a `MaterialCategory` — never instanced; the type-blind bulk
@@ -5245,17 +5245,22 @@ holder is never notified a claim exists.
     auto-consumed — only this fungible bulk source is. This is the "gem-covered table, don't care
     which" path; the primary use is still adornment. Common value crediting from mining is the
     Build-1 cron's job.
-  - **Mine accrual** (`world.items.gems.mining.accrue_mine_cycle`, Build 0b slice 7) — the weekly
-    cycle for a mine holding. A holding's `HoldingMaterialSource` row (#2540 slice 2; replaces the
-    dropped `mine_quality`/`common_gem_tier` fields) with `source_kind=GEM_MINE` carries `quality`
-    + `material_category`; the cycle calls `roll_gem_haul` and accrues the haul into
-    **uncollected** pools on the holding's `OrgIncomeStream` — common value into
-    `StreamMaterialPool` (`world.items.materials_models`, per stream/category; the gem analogue of
-    `OrgIncomeStream.uncollected_pool`), each Rare Find into a `PendingRareFind` (a loose stone
-    awaiting collection). "Lumped with tax collection": both ride the **same** active
+  - **Holding material accrual** (`world.items.materials_production.accrue_holding_materials`,
+    #2540 slice 2 Task 2 — replaces the deleted, gem-mine-only `accrue_mine_cycle`) — the weekly
+    cycle for a holding, iterating *every* `HoldingMaterialSource` row it carries (not just one).
+    A `GEM_MINE` source (`quality` + `material_category`) still calls `roll_gem_haul` (`gems.mining`,
+    unchanged; `minister_bonus` passthrough kept for the #2239 seam); a `BULK` source produces flat
+    `quality * BULK_YIELD_PER_QUALITY` (new constant, PLACEHOLDER 100, `world.items.constants`) with
+    no rare finds. Both credit **uncollected** pools on the holding's `OrgIncomeStream` — common
+    value into `StreamMaterialPool` (`world.items.materials_models`, per stream/category; the gem
+    analogue of `OrgIncomeStream.uncollected_pool`), GEM_MINE Rare Finds into `PendingRareFind` (a
+    loose stone awaiting collection). Returns `MaterialHaul` (`common_value_by_category:
+    list[tuple[MaterialCategory, int]]`, `rare_finds: list[ItemInstance]`) — the multi-source
+    generalization of `GemHaul`. "Lumped with tax collection": both ride the **same** active
     `collect_org_income` dispatch (same band/graft/catastrophe loss) into the house's stock — see
-    Mine collection (below). A holding with no GEM_MINE material source/stream accrues nothing.
-    (Task 1 interim edit only — Task 2 rewires this function wholesale.)
+    Mine collection (below). A holding with no income stream accrues nothing. Lives in a new
+    top-level `world.items.materials_production` module, not `gems.mining` — it is no longer
+    gem-specific, and only imports the gem roller as one of its two source-kind branches.
   - **Mine collection** (`world.items.gems.collection`, Build 0b domain-cron collection) —
     `collect_org_income` gathers the org's pending gems alongside coin and applies the *same* Tax
     Collection band + graft + catastrophe. `collect_org_gems` zeros the pools, credits net common
@@ -5303,10 +5308,10 @@ holder is never notified a claim exists.
   owner-installed bank-access decor feature — the ratified access surface; reachability-only
   handler in `room_features`, COMMAND_CENTER's shape; seeded via `ensure_bank_kind()`,
   `world/room_features/seeds.py`). Distinct from the physical room-feature
-  VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is wired**:
-  `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one `accrue_mine_cycle`
-  per holding with a `HoldingMaterialSource` row (#2540 slice 2) — haul amasses uncollected per
-  ADR-0081; only an active collection delivers it.
+  VAULT (#2179), which secures loose items in a room. **Weekly material accrual is wired**:
+  `run_weekly_economy`'s `materials` phase (`_weekly_mine_accrual`, renamed key #2540 Task 2) runs
+  one `accrue_holding_materials` per holding with a `HoldingMaterialSource` row (#2540 slice 2) —
+  haul amasses uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)

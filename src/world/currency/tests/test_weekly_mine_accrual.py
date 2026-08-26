@@ -30,10 +30,10 @@ class WeeklyMineAccrualTests(TestCase):
             source_kind=MaterialSourceKind.GEM_MINE,
         )
 
-    def test_only_configured_mines_accrue(self) -> None:
-        with patch("world.items.gems.mining.accrue_mine_cycle") as mock_accrue:
+    def test_only_configured_holdings_accrue(self) -> None:
+        with patch("world.items.materials_production.accrue_holding_materials") as mock_accrue:
             count = _weekly_mine_accrual()
-        self.assertEqual(count, 1)  # the farm (no material source) is not a mine
+        self.assertEqual(count, 1)  # the farm (no material source) doesn't accrue
         mock_accrue.assert_called_once_with(holding=self.mine)
 
     def test_one_broken_holding_never_wedges_the_rollover(self) -> None:
@@ -43,7 +43,8 @@ class WeeklyMineAccrualTests(TestCase):
             source_kind=MaterialSourceKind.GEM_MINE,
         )
         with patch(
-            "world.items.gems.mining.accrue_mine_cycle", side_effect=[RuntimeError("boom"), None]
+            "world.items.materials_production.accrue_holding_materials",
+            side_effect=[RuntimeError("boom"), None],
         ) as mock_accrue:
             count = _weekly_mine_accrual()
         self.assertEqual(count, 1)  # the healthy one still ran

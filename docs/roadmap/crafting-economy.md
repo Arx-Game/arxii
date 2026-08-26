@@ -1,5 +1,28 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-26, #2540 slice 2 — generalized material production, Task 2)
+
+Rewires the weekly cron off the gem-mine-only interim shape from Task 1 onto every
+material source a holding carries:
+
+- **`accrue_holding_materials`** (`world.items.materials_production`, new module —
+  the general orchestration doesn't belong in the gem-specific `gems.mining`, which
+  keeps just the pure `roll_gem_haul` engine) replaces the deleted `accrue_mine_cycle`.
+  Iterates `holding.material_sources`: a `GEM_MINE` source still rolls
+  `roll_gem_haul(mine_quality=source.quality, minister_bonus=...)` (rare finds +
+  common value, `minister_bonus` passthrough kept for the schema-only #2239 seam); a
+  `BULK` source produces flat `quality * BULK_YIELD_PER_QUALITY` (new constant,
+  PLACEHOLDER 100, `world.items.constants`) with no rare finds. Both credit the
+  stream's per-category `StreamMaterialPool`; a holding may carry any mix of sources
+  and both kinds accrue in one call. Returns `MaterialHaul`
+  (`common_value_by_category: list[tuple[MaterialCategory, int]]`, `rare_finds:
+  list[ItemInstance]`) — the multi-source generalization of `GemHaul`. A holding with
+  no income stream accrues nothing (mirrors the old guard).
+- **`_weekly_mine_accrual`** (`world.currency.services`) now calls
+  `accrue_holding_materials(holding=holding)` instead of the deleted
+  `accrue_mine_cycle`; the `run_weekly_economy` registry key renamed
+  `"gem_mines"` → `"materials"`.
+
 ## Built (2026-08-26, #2540 slice 2 — material economy schema, Task 1)
 
 Rename-and-widen schema pass generalizing the Build 0b gem-only stock models to any
@@ -249,10 +272,12 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   work: risky prying/re-set and hard cut skill-cap + consequence-pool narration. (The domain-cron
   wiring shipped — see #2610.)
 
-- **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
-  mine holding: the holding's `HoldingMaterialSource` row (#2540 slice 2; replaces the earlier
-  `mine_quality` + `common_gem_tier` fields dropped from `DomainHolding`) carries `quality` +
-  `material_category`, and the cycle accrues the haul into **uncollected** pools on the holding's
+- **Mine accrual (Build 0b, slice 7) — DONE; superseded by Task 2 above.**
+  `accrue_mine_cycle()` (deleted, #2540 Task 2 — see `accrue_holding_materials` above) ran one
+  weekly cycle for a mine holding: the holding's `HoldingMaterialSource` row (#2540 slice 2;
+  replaces the earlier `mine_quality` + `common_gem_tier` fields dropped from `DomainHolding`)
+  carried `quality` + `material_category`, and the cycle accrued the haul into **uncollected**
+  pools on the holding's
   income stream (`StreamMaterialPool` for common value, `PendingRareFind` for the stones) — the
   gem analogue of `OrgIncomeStream.uncollected_pool`. **Design (Apostate):** gems are *lumped
   with tax collection* — they ride the same active `collect_org_income` dispatch (same band +

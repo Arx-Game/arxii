@@ -344,3 +344,10 @@ class MaterialSourceKind(models.TextChoices):
 
     BULK = "bulk", "Bulk Yield"
     GEM_MINE = "gem_mine", "Gem Mine"
+
+
+# Common-bulk value produced per point of quality per weekly cycle for a BULK
+# ``HoldingMaterialSource`` (#2540 slice 2). PLACEHOLDER magnitude, admin/caller-tunable
+# — mirrors ``COMMON_VALUE_PER_QUALITY`` (`world.items.gems.constants`), the GEM_MINE
+# analogue.
+BULK_YIELD_PER_QUALITY = 100
