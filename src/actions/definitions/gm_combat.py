@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.base import Action
+from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
 from commands.utils.gm_resolution import (
@@ -20,6 +21,7 @@ from commands.utils.gm_resolution import (
     resolve_model_by_pk_or_name,
 )
 from world.combat.constants import OpponentTier
+from world.gm.constants import GMLevel
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -704,6 +706,122 @@ class PreviewOpponentDefaultsAction(Action):
 
         message = self._format_preview(tier, block, stakes_ok, stakes_message)
         return ActionResult(success=True, message=message)
+
+
+def _resolve_dramatic_beat_target(kwargs: dict[str, Any]) -> ObjectDB | None:
+    """Resolve the ``target`` kwarg to an ``ObjectDB`` character (#3387).
+
+    Mirrors ``gm_adjudication._resolve_gm_target``: telnet always passes an
+    already-resolved ``ObjectDB``; the web REST dispatch path does no ObjectDB
+    resolution of its own, so a plain int pk must be resolved here too.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    target = kwargs.get("target")
+    if target is None or isinstance(target, ObjectDB):
+        return target
+    return ObjectDB.objects.filter(pk=target).first()
+
+
+@dataclass
+class GMTriggerDramaticBeatAction(Action):
+    """SENIOR-gated manual trigger for ``apply_dramatic_surge`` on a named character (#3387).
+
+    Ruled (2026-08-26, #3387): a GM cannot manually spotlight a dramatic beat the
+    automatic detectors miss (``escalation.py``'s ally-peril/hated-foe/high-stakes/
+    interference legs, ``engagement_locks.py``'s duel-interference leg) — every
+    existing caller of ``apply_dramatic_surge`` is automatic. This is the ruled
+    stopgap: gated at the same top trust tier as ``InvokeCatalogCheckAction``
+    (SENIOR, staff bypass preserved) — "a staff stopgap, not a routine GM tool."
+
+    Resolves the encounter via ``_active_encounter_for_gm`` (staff-or-scene-GM,
+    same as every other action in this module), then the target
+    ``CombatParticipant`` by ``character_sheet_id=target.pk`` — the
+    ObjectDB/CharacterSheet shared-pk O2O. Deliberately does **not** reuse
+    ``_resolve_participant_in_encounter``: that helper's ``value.isdigit()``
+    branch treats a numeric string as a *participant* pk, not a character/
+    ObjectDB pk, and would misresolve the id the web panel sends (the same trap
+    ``gm_adjudication._resolve_gm_target``'s docstring documents for the sibling
+    ``gm_apply_condition`` action).
+
+    ``reason`` is required (fails loud like ``GMApplyConditionAction``'s
+    ``condition_ref`` check) and is persisted onto the created
+    ``DramaticSurgeRecord`` — staff-facing provenance, never broadcast to the
+    room (the room only ever sees the existing generic surge narration
+    template). The surge amount reuses the encounter's own authored
+    ``escalation_curve.spike_intensity_amount`` when set, else the same
+    fallback constant (``2``) that field itself defaults to.
+
+    A repeat trigger on the same character in the same encounter is a dedup
+    no-op at the ``DramaticSurgeRecord`` layer (matching ``HIGH_STAKES``'s
+    existing one-shot behavior) — surfaced as a distinct refusal message, not a
+    silently-reported success.
+    """
+
+    key: str = "gm_trigger_dramatic_beat"
+    name: str = "Trigger Dramatic Beat"
+    icon: str = "sparkles"
+    category: str = "combat"
+    target_type: TargetType = TargetType.SINGLE
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    _DEFAULT_SURGE_AMOUNT = 2
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.SENIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.constants import SurgeTriggerKind  # noqa: PLC0415
+        from world.combat.escalation import apply_dramatic_surge  # noqa: PLC0415
+        from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
+
+        target = _resolve_dramatic_beat_target(kwargs)
+        if target is None:
+            return ActionResult(success=False, message="A target character is required.")
+
+        reason = str(kwargs.get("reason") or "").strip()
+        if not reason:
+            return ActionResult(success=False, message="A reason is required.")
+
+        participant = CombatParticipant.objects.filter(
+            encounter=encounter, character_sheet_id=target.pk
+        ).first()
+        if participant is None:
+            return ActionResult(
+                success=False,
+                message=f"{target.key} is not a participant in this encounter.",
+            )
+
+        curve = encounter.escalation_curve
+        amount = curve.spike_intensity_amount if curve is not None else self._DEFAULT_SURGE_AMOUNT
+
+        beat = apply_dramatic_surge(
+            encounter=encounter,
+            participant=participant,
+            amount=amount,
+            trigger_kind=SurgeTriggerKind.GM_MANUAL,
+            subject_sheet=None,
+            reason=reason,
+        )
+        if beat is None:
+            return ActionResult(
+                success=False,
+                message=f"{target.key} has already been spotlighted in this encounter.",
+            )
+
+        return ActionResult(
+            success=True,
+            message=f"The dramatic spotlight turns to {target.key}.",
+        )
 
 
 @dataclass

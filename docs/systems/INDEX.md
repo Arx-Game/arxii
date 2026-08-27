@@ -2372,6 +2372,33 @@ GM at a given level may author (#2000, ADR-0097).
   a Summon tab reusing the existing `ParticipantPicker` (scene participants only — an
   arbitrary off-scene target needs a global character-search affordance the panel doesn't
   have yet; telnet's `gm summon <character>` has no such limit).
+- **GM fiat levers mid-combat (#3387):** three adjacent gaps flagged in the 2026-08-26
+  combat audit, ruled the same session. (1) **Edge/Setback** — two curated
+  `ConditionTemplate` rows (`world/conditions/gm_edge_content.py`,
+  `ensure_gm_edge_content()`, wired into `ensure_conditions_content()`) applied through
+  the existing `gm_apply_condition` lever, no new mechanism: `default_duration_type=ROUNDS`,
+  `default_duration_value=1` (expires at that round's own end-of-round tick, so it covers
+  every check made in the round it's applied to), one `ConditionCheckModifier` each scoped
+  to `check_category=Combat` (±10, `scales_with_severity=True`). `GMAdjudicationPanel`'s
+  Condition tab gained "Quick Edge"/"Quick Setback" buttons dispatching `gm_apply_condition`
+  with only `target`/`condition_ref` set, falling back to the template's authored defaults.
+  (2) **Manual dramatic beat** — `GMTriggerDramaticBeatAction` (key
+  `gm_trigger_dramatic_beat`, `actions/definitions/gm_combat.py`), gated
+  `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` (staff bypass) alongside the encounter's
+  scene-GM/staff check (`_active_encounter_for_gm`) — the first `gm_combat.py` action to
+  combine both. Resolves the target `CombatParticipant` by `character_sheet_id=target.pk`
+  (the ObjectDB/CharacterSheet shared-pk O2O) — deliberately NOT
+  `_resolve_participant_in_encounter`'s string lookup, whose digit branch treats a numeric
+  string as a participant pk, not a character pk. Requires a non-empty `reason`, calls
+  `apply_dramatic_surge(..., trigger_kind=SurgeTriggerKind.GM_MANUAL, subject_sheet=None,
+  reason=reason)` with `amount=encounter.escalation_curve.spike_intensity_amount` (fallback
+  `2`); a repeat trigger on the same character is `DramaticSurgeRecord`'s existing dedup
+  no-op, surfaced as a distinct refusal rather than a silent success. Telnet: `gm dramatic
+  <character> reason=<text>` (`commands/gm_ops.py`'s `CmdGMDashboard`). Web:
+  `GMAdjudicationPanel` gained a Dramatic Beat tab (reason `Input` + submit; server-side
+  Prerequisite is the only gate, no client-side trust check). (3) **Situation declaration —
+  no override, by design:** recorded as ADR-0240 rather than built; GM tooling investment
+  goes toward making state genuinely true (positioning #3385, encounter settings #3383).
 - **Pool opacity is documented as deliberate (#3071):** `CharacterVitalsView._can_view`
   (`world/vitals/views.py`) and `CharacterAnimaViewSet.get_queryset`
   (`world/magic/views.py`) are staff-or-own-tenure only — no `viewer_can_gm` carve-out.
@@ -6283,9 +6310,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
-  trigger_kind, subject_sheet=None)` (`world/combat/escalation.py`) — the one write path for
-  every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row; `SurgeTriggerKind`:
-  ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES). Three new trigger legs alongside the
+  trigger_kind, subject_sheet=None, reason="")` (`world/combat/escalation.py`) — the one write
+  path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
+  `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
+  GM_MANUAL). `reason` (#3387) persists onto the record as GM-stated provenance for a manual
+  trigger only — every automatic leg leaves it blank; never broadcast to the room. Three new
+  trigger legs alongside the
   existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
   `CONDITION_APPLIED`, filtered via `world.vitals.peril_resolution
   .acute_peril_condition_names()`), hated-foe (checked on encounter join and NPC opponent add,

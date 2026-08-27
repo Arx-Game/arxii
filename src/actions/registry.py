@@ -203,6 +203,7 @@ from actions.definitions.gm_combat import (
     BeginEncounterRoundAction,
     CreateEncounterAction,
     EndEncounterAction,
+    GMTriggerDramaticBeatAction,
     PauseEncounterAction,
     PreviewOpponentDefaultsAction,
     RemoveEncounterParticipantAction,
@@ -779,6 +780,8 @@ _ALL_ACTIONS: list[Action] = [
     UpdateEncounterSettingsAction(),
     EndEncounterAction(),
     PreviewOpponentDefaultsAction(),
+    # #3387 — SENIOR-gated manual dramatic-beat trigger (GM fiat stopgap).
+    GMTriggerDramaticBeatAction(),
     StagePropAction(),
     StagePropertyAction(),
     CompleteStoryAction(),

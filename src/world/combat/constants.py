@@ -77,6 +77,7 @@ class SurgeTriggerKind(models.TextChoices):
     HATED_FOE = "hated_foe", "Hated Foe"
     HIGH_STAKES = "high_stakes", "High Stakes"
     INTERFERENCE = "interference", "Interference"
+    GM_MANUAL = "gm_manual", "GM Manual"
 
 
 class PaceMode(models.TextChoices):

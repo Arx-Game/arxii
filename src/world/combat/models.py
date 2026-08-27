@@ -3446,6 +3446,15 @@ class DramaticSurgeRecord(SharedMemoryModel):
     )
     amount = models.PositiveIntegerField()
     round_number = models.PositiveIntegerField()
+    reason = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "GM-stated provenance for a GM_MANUAL surge (#3387) — mirrors "
+            "ConditionInstance.source_description / FavorToken.provenance_note. Blank "
+            "for every automatic trigger_kind; no backfill needed (ADR-0013)."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

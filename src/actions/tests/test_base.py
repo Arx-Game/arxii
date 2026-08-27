@@ -319,6 +319,7 @@ class ActionRegistryTests(TestCase):
             "pause_encounter",
             "update_encounter_settings",
             "preview_opponent_defaults",
+            "gm_trigger_dramatic_beat",
             "stage_prop",
             "stage_property",
             "remove_encounter_participant",

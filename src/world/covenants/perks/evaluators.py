@@ -26,6 +26,13 @@ Import direction (ADR-0010): this module is part of ``world.covenants`` and
 reaches into ``world.combat`` / ``world.conditions`` / ``world.magic`` /
 ``world.npc_services`` / ``world.scenes`` — always at FUNCTION level
 (``# noqa: PLC0415``), never at module level, so those apps never import back.
+
+**No GM override exists here, deliberately (ADR-0240, #3387).** Every
+evaluator above is a pure function of live state with no narration-only
+bypass — a GM cannot force a Situation true by fiat. Before proposing one,
+read ADR-0240: GMs are responsible for making the situation genuinely true
+(positioning, encounter settings, an authored flag), not for asserting it
+past these evaluators.
 """
 
 from __future__ import annotations

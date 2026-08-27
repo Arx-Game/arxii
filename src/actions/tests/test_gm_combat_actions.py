@@ -10,6 +10,7 @@ from actions.definitions.gm_combat import (
     BeginEncounterRoundAction,
     CreateEncounterAction,
     EndEncounterAction,
+    GMTriggerDramaticBeatAction,
     PauseEncounterAction,
     PreviewOpponentDefaultsAction,
     RemoveEncounterParticipantAction,
@@ -26,15 +27,26 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
+    SurgeTriggerKind,
 )
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    EscalationCurveFactory,
     ThreatPoolFactory,
     seed_scaling_defaults,
 )
-from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
+from world.combat.models import (
+    CombatEncounter,
+    CombatOpponent,
+    CombatParticipant,
+    DramaticSurgeRecord,
+)
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
+from world.mechanics.constants import EngagementType
+from world.mechanics.services import begin_engagement
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
@@ -474,6 +486,122 @@ class PreviewOpponentDefaultsActionTests(GMCombatActionTestBase):
         self.assertFalse(result.success)
 
 
+class GMTriggerDramaticBeatActionTests(GMCombatActionTestBase):
+    """GMTriggerDramaticBeatAction (#3387): SENIOR-gated manual dramatic-surge trigger."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # is_staff_observer's staff bypass walks .account (the puppeting-account
+        # attribute), not the roster-tenure-derived active_account _make_actor_with_account
+        # wires up — set it explicitly, mirroring test_gm_adjudication_actions.py's
+        # staff_actor fixture.
+        self.gm_actor.db_account = self.gm_account
+        self.gm_actor.save()
+
+        self.encounter.escalation_curve = EscalationCurveFactory(spike_intensity_amount=4)
+        self.encounter.save(update_fields=["escalation_curve"])
+        self.participant = self._add_participant()
+        begin_engagement(self.player_actor, EngagementType.COMBAT, source=self.encounter)
+
+        self.senior_account = AccountFactory(username="senior_gm")
+        GMProfileFactory(account=self.senior_account, level=GMLevel.SENIOR)
+        self.senior_actor, _senior_sheet = _make_actor_with_account(
+            "senior_gm_actor", self.room, self.senior_account
+        )
+        SceneParticipationFactory(scene=self.scene, account=self.senior_account, is_gm=True)
+
+        self.junior_account = AccountFactory(username="junior_gm")
+        GMProfileFactory(account=self.junior_account, level=GMLevel.JUNIOR)
+        self.junior_actor, _junior_sheet = _make_actor_with_account(
+            "junior_gm_actor", self.room, self.junior_account
+        )
+        SceneParticipationFactory(scene=self.scene, account=self.junior_account, is_gm=True)
+
+    def test_senior_gm_triggers_a_surge(self) -> None:
+        result = GMTriggerDramaticBeatAction().run(
+            self.senior_actor, target=self.player_actor, reason="a costly misstep"
+        )
+        self.assertTrue(result.success, result.message)
+        record = DramaticSurgeRecord.objects.get(
+            encounter=self.encounter,
+            participant=self.participant,
+            trigger_kind=SurgeTriggerKind.GM_MANUAL,
+        )
+        self.assertEqual(record.reason, "a costly misstep")
+        self.assertEqual(record.amount, 4)
+
+    def test_staff_bypasses_the_senior_gate(self) -> None:
+        """The GMCombatActionTestBase gm_actor is staff, no GMProfile at all."""
+        result = GMTriggerDramaticBeatAction().run(
+            self.gm_actor, target=self.player_actor, reason="staff override"
+        )
+        self.assertTrue(result.success, result.message)
+
+    def test_junior_gm_is_refused(self) -> None:
+        result = GMTriggerDramaticBeatAction().run(
+            self.junior_actor, target=self.player_actor, reason="not senior enough"
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(
+            DramaticSurgeRecord.objects.filter(
+                encounter=self.encounter, trigger_kind=SurgeTriggerKind.GM_MANUAL
+            ).exists()
+        )
+
+    def test_non_gm_is_refused(self) -> None:
+        result = GMTriggerDramaticBeatAction().run(
+            self.player_actor, target=self.player_actor, reason="self-serving"
+        )
+        self.assertFalse(result.success)
+
+    def test_missing_reason_is_refused(self) -> None:
+        result = GMTriggerDramaticBeatAction().run(self.senior_actor, target=self.player_actor)
+        self.assertFalse(result.success)
+        self.assertIn("reason", result.message.lower())
+
+    def test_missing_target_is_refused(self) -> None:
+        result = GMTriggerDramaticBeatAction().run(self.senior_actor, reason="no target given")
+        self.assertFalse(result.success)
+
+    def test_target_not_a_participant_is_refused(self) -> None:
+        bystander_account = AccountFactory(username="bystander")
+        bystander_actor, _bystander_sheet = _make_actor_with_account(
+            "bystander_actor", self.room, bystander_account
+        )
+        result = GMTriggerDramaticBeatAction().run(
+            self.senior_actor, target=bystander_actor, reason="not in the fight"
+        )
+        self.assertFalse(result.success)
+
+    def test_repeat_trigger_on_same_character_is_a_distinct_refusal(self) -> None:
+        first = GMTriggerDramaticBeatAction().run(
+            self.senior_actor, target=self.player_actor, reason="first spotlight"
+        )
+        self.assertTrue(first.success, first.message)
+        second = GMTriggerDramaticBeatAction().run(
+            self.senior_actor, target=self.player_actor, reason="second spotlight"
+        )
+        self.assertFalse(second.success)
+        self.assertIn("already", second.message.lower())
+        self.assertEqual(
+            DramaticSurgeRecord.objects.filter(
+                encounter=self.encounter, trigger_kind=SurgeTriggerKind.GM_MANUAL
+            ).count(),
+            1,
+        )
+
+    def test_resolves_target_by_character_sheet_shared_pk_not_participant_pk(self) -> None:
+        """The spec's explicit trap: character_sheet_id=target.pk, never a participant pk lookup."""
+        result = GMTriggerDramaticBeatAction().run(
+            self.senior_actor, target=self.player_sheet.character, reason="shared-pk resolution"
+        )
+        self.assertTrue(result.success, result.message)
+        record = DramaticSurgeRecord.objects.get(
+            encounter=self.encounter, trigger_kind=SurgeTriggerKind.GM_MANUAL
+        )
+        self.assertEqual(record.participant_id, self.participant.pk)
+
+
 class CreateEncounterActionTests(TestCase):
     """CreateEncounterAction starts a new encounter in the actor's active scene (#3388)."""
 
@@ -551,6 +679,7 @@ class RegistryCompletenessSmokeTest(TestCase):
             "pause_encounter",
             "end_encounter",
             "preview_opponent_defaults",
+            "gm_trigger_dramatic_beat",
         ):
             with self.subTest(key=key):
                 self.assertIsNotNone(get_action(key), f"{key} not registered")
