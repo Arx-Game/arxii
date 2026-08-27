@@ -17,7 +17,7 @@ import {
   useMyCase,
   usePersonaHeat,
 } from '../queries';
-import type { PersonaHeatRow } from '../api';
+import type { MyCase, PersonaHeatRow } from '../api';
 import { Button } from '@/components/ui/button';
 
 interface Props {
@@ -31,6 +31,48 @@ const TIER_STYLES: Record<string, string> = {
   heat_is_on: 'bg-red-500/15 text-red-600 dark:text-red-400',
   extreme_heat: 'bg-red-600/25 text-red-700 dark:text-red-300',
 };
+
+/** Whole days remaining until `iso`, floored at zero (never negative). */
+function daysRemaining(iso: string): number {
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString();
+}
+
+/**
+ * SentenceStatus (#2378 Task 8) — the captive's active sentence + countdown,
+ * once a verdict has been reached. `sentence_kind` is blank pre-verdict, so
+ * the whole block is gated on it being set.
+ *
+ * PLACEHOLDER copy pending a design pass (spec #2378 §5/§9) — neutral,
+ * procedural wording only; nothing mocking or gory.
+ */
+function SentenceStatus({ myCase }: { myCase: MyCase }) {
+  if (!myCase.sentence_kind) return null;
+
+  return (
+    <>
+      {myCase.sentence_kind === 'brig_term' && myCase.sentence_ends_at && (
+        <p className="mt-1 text-sm font-medium" data-testid="sentence-countdown">
+          Serving: {daysRemaining(myCase.sentence_ends_at)} days remain
+        </p>
+      )}
+      {myCase.sentence_kind === 'exile' && myCase.sentence_ends_at && (
+        <p className="mt-1 text-sm font-medium" data-testid="sentence-countdown">
+          Exiled until {formatDate(myCase.sentence_ends_at)}
+        </p>
+      )}
+      {myCase.terminal_due_at && (
+        <p className="mt-1 text-sm font-medium text-destructive" data-testid="terminal-countdown">
+          Sentence carried out in {daysRemaining(myCase.terminal_due_at)} days unless overturned.
+        </p>
+      )}
+    </>
+  );
+}
 
 function TierBadge({ row }: { row: PersonaHeatRow }) {
   const style = TIER_STYLES[row.tier] ?? 'bg-muted text-muted-foreground';
@@ -69,6 +111,7 @@ function MyCaseCard({ viewerEntryId }: { viewerEntryId: number }) {
         release without trial.
         {myCase.failed_outs > 0 && ` Failed escapes counted against you: ${myCase.failed_outs}.`}
       </p>
+      <SentenceStatus myCase={myCase} />
       {trial.data ? (
         <p className="mt-2 text-sm font-medium" data-testid="trial-verdict">
           Verdict: {trial.data.verdict}
@@ -76,17 +119,19 @@ function MyCaseCard({ viewerEntryId }: { viewerEntryId: number }) {
             `: ${trial.data.sentence_kind}${trial.data.sentence_amount ? ` (${trial.data.sentence_amount})` : ''}`}
         </p>
       ) : (
-        <div className="mt-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={trial.isPending}
-            onClick={() => trial.mutate({ caseId: myCase.id })}
-            title="Call your moment before the magistrates. Friends' evidence and advocacy weigh in your favor; nobody argues against you but the record."
-          >
-            Stand trial now
-          </Button>
-        </div>
+        !myCase.sentence_kind && (
+          <div className="mt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={trial.isPending}
+              onClick={() => trial.mutate({ caseId: myCase.id })}
+              title="Call your moment before the magistrates. Friends' evidence and advocacy weigh in your favor; nobody argues against you but the record."
+            >
+              Stand trial now
+            </Button>
+          </div>
+        )
       )}
       {trial.isError && trial.error instanceof Error && (
         <p className="mt-1 text-sm text-destructive">{trial.error.message}</p>

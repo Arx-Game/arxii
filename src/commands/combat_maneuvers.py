@@ -42,11 +42,13 @@ _SUBVERBS: dict[str, str] = {
     "parley": "combat_parley",
     "charge": "combat_charge",
     "joust": "combat_joust",
+    "engage": "combat_engage",
+    "disengage": "combat_disengage",
 }
 
 # subverbs that take a single name argument.
 _ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
-_OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley"}
+_OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley", "engage"}
 
 # Trailing-clause separator for ``interpose [ally] with <technique>`` (#2207) —
 # mirrors ``CmdClashCommit``'s ``" with "`` split in ``commands/combat.py``.
@@ -87,6 +89,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat parley <opp>          - talk a wavering foe down mid-fight
         combat charge <opp> with <technique> - mounted charge: close distance, then attack
         combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
+        combat engage <opp>          - challenge an opponent to a foil duel (engagement lock)
+        combat disengage             - break your active engagement lock
         combat join                 - join the fight in your room
         combat leave                - leave an open encounter between rounds
         combat ready                - toggle your declared action as ready
@@ -466,6 +470,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "use <item> [on <target>], "
             "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, "
             "charge <opp> with <technique>, joust with <technique>, "
+            "engage <opp>, disengage, "
             "join, leave, ready, "
             "combo <name>, revert, yield"
         ]

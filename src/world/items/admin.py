@@ -8,7 +8,6 @@ from world.items.models import (
     AccentLevel,
     Adornment,
     AudacityTuning,
-    CommonGemBucket,
     DisguiseKitEffect,
     EquippedItem,
     FashionStyle,
@@ -22,14 +21,15 @@ from world.items.models import (
     ItemStyle,
     ItemTemplate,
     ItemTemplateAppearanceEffect,
+    MaterialBucket,
     MaterialCategory,
-    OrgGemStock,
+    OrgMaterialStock,
     OwnershipEvent,
     PendingRareFind,
     QualityTier,
     RecycleRequest,
     Silhouette,
-    StreamCommonGemPool,
+    StreamMaterialPool,
     Style,
     TemplateInteraction,
     TemplateSlot,
@@ -70,17 +70,17 @@ class AdornmentAdmin(admin.ModelAdmin):
     raw_id_fields = ["host_instance", "gem_instance", "set_by_account"]
 
 
-@admin.register(CommonGemBucket)
-class CommonGemBucketAdmin(admin.ModelAdmin):
-    list_display = ["character_sheet", "tier", "value"]
-    list_filter = ["tier"]
+@admin.register(MaterialBucket)
+class MaterialBucketAdmin(admin.ModelAdmin):
+    list_display = ["character_sheet", "material_category", "value"]
+    list_filter = ["material_category"]
     raw_id_fields = ["character_sheet"]  # large CharacterSheet table
 
 
-@admin.register(StreamCommonGemPool)
-class StreamCommonGemPoolAdmin(admin.ModelAdmin):
-    list_display = ["income_stream", "tier", "uncollected_value"]
-    list_filter = ["tier"]
+@admin.register(StreamMaterialPool)
+class StreamMaterialPoolAdmin(admin.ModelAdmin):
+    list_display = ["income_stream", "material_category", "uncollected_value"]
+    list_filter = ["material_category"]
     raw_id_fields = ["income_stream"]  # large OrgIncomeStream table
 
 
@@ -90,10 +90,10 @@ class PendingRareFindAdmin(admin.ModelAdmin):
     raw_id_fields = ["income_stream", "gem_instance"]  # large tables
 
 
-@admin.register(OrgGemStock)
-class OrgGemStockAdmin(admin.ModelAdmin):
-    list_display = ["organization", "tier", "value"]
-    list_filter = ["tier"]
+@admin.register(OrgMaterialStock)
+class OrgMaterialStockAdmin(admin.ModelAdmin):
+    list_display = ["organization", "material_category", "value"]
+    list_filter = ["material_category"]
     raw_id_fields = ["organization"]  # large Organization table
 
 

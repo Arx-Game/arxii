@@ -111,6 +111,14 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
         db_index=True,
         help_text="Who authored this area — only AUTHORED areas export (#2448).",
     )
+    exile_destination = models.ForeignKey(
+        "arxii.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Room the banished are ejected to (outside the walls). Unset = no physical move.",
+    )
 
     objects = NaturalKeyManager()
 

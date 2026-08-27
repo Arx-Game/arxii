@@ -265,6 +265,36 @@ class BoonAction(_SocialTemplateAction):
 
 
 @dataclass
+class ConBoonAction(BoonAction):
+    """#2540 slice 3 — ask flavor: talk someone into a boon via a curated pitch."""
+
+    key: str = "boon_con"
+    name: str = "Con a Boon"
+    template_name: str = "Con a Boon"
+    description: str = "Talk someone into granting a boon through a curated, manipulative pitch."
+
+
+@dataclass
+class CharmBoonAction(BoonAction):
+    """#2540 slice 3 — ask flavor: charm someone into a boon."""
+
+    key: str = "boon_charm"
+    name: str = "Charm a Boon"
+    template_name: str = "Charm a Boon"
+    description: str = "Charm someone into granting a boon through allure and warmth."
+
+
+@dataclass
+class MenaceBoonAction(BoonAction):
+    """#2540 slice 3 — ask flavor: press someone into a boon through intimidation."""
+
+    key: str = "boon_menace"
+    name: str = "Menace a Boon"
+    template_name: str = "Menace a Boon"
+    description: str = "Press someone to grant a boon through threat and intimidation."
+
+
+@dataclass
 class PerformAction(_SocialTemplateAction):
     key: str = "perform"
     name: str = "Perform"
@@ -868,6 +898,9 @@ flirt = FlirtAction()
 seduce = SeduceAction()
 blackmail = BlackmailAction()
 boon = BoonAction()
+boon_con = ConBoonAction()
+boon_charm = CharmBoonAction()
+boon_menace = MenaceBoonAction()
 perform = PerformAction()
 entrance = EntranceAction()
 restore_sense = RestoreSenseAction()

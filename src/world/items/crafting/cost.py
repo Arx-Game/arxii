@@ -44,8 +44,8 @@ class StagedCost:
         action_points: AP required by the recipe.
         anima: Anima required by the recipe.
         material_allocations: ``(ItemInstance, amount)`` tuples to consume.
-        bucket_spends: ``(tier, value)`` common-gem bulk spends (Build 0b).
-        crafter_character_sheet: The sheet whose common-gem buckets ``bucket_spends`` draw from.
+        bucket_spends: ``(material_category, value)`` bulk material spends (#2540 slice 2).
+        crafter_character_sheet: The sheet whose material buckets ``bucket_spends`` draw from.
     """
 
     action_points: int
@@ -135,8 +135,8 @@ def stage_and_assert_affordable(
         msg = "You do not have the required materials."
         raise CraftingCostUnaffordable(msg) from exc
 
-    # Bulk value requirements: aggregate per tier and assert the buckets can cover them.
-    bucket_spends = _stage_bucket_spends(value_reqs, crafter_character_sheet)
+    # Bulk value requirements: aggregate per category and assert the buckets can cover them.
+    bucket_spends = _stage_material_bucket_spends(value_reqs, crafter_character_sheet)
 
     return StagedCost(
         action_points=ap_cost,
@@ -147,28 +147,28 @@ def stage_and_assert_affordable(
     )
 
 
-def _stage_bucket_spends(
+def _stage_material_bucket_spends(
     value_reqs: list, crafter_character_sheet: CharacterSheet
 ) -> list[tuple[MaterialCategory, int]]:
-    """Aggregate common-gem value requirements per tier and assert affordability.
+    """Aggregate bulk material value requirements per category and assert affordability.
 
-    Returns ``(tier, value)`` spends to apply at consume time. Raises
-    ``CraftingCostUnaffordable`` if any tier's bucket holds less than required.
+    Returns ``(material_category, value)`` spends to apply at consume time. Raises
+    ``CraftingCostUnaffordable`` if any category's bucket holds less than required.
     """
-    from world.items.gems.buckets import common_gem_value  # noqa: PLC0415
+    from world.items.gems.buckets import material_value  # noqa: PLC0415
 
     needed: dict[int, tuple[MaterialCategory, int]] = {}
     for req in value_reqs:
-        tier = req.material_category
-        _, running = needed.get(tier.pk, (tier, 0))
-        needed[tier.pk] = (tier, running + req.required_value)
+        material_category = req.material_category
+        _, running = needed.get(material_category.pk, (material_category, 0))
+        needed[material_category.pk] = (material_category, running + req.required_value)
 
     spends: list[tuple[MaterialCategory, int]] = []
-    for tier, value in needed.values():
-        if common_gem_value(crafter_character_sheet, tier) < value:
-            msg = "You do not have enough common gems for this."
+    for material_category, value in needed.values():
+        if material_value(crafter_character_sheet, material_category) < value:
+            msg = "You do not have enough of that material for this."
             raise CraftingCostUnaffordable(msg)
-        spends.append((tier, value))
+        spends.append((material_category, value))
     return spends
 
 
@@ -197,7 +197,7 @@ def consume_cost(
     """
 
     if consumption == CostConsumption.NONE:
-        return {"action_points": 0, "anima": 0, "materials": 0, "common_gem_value": 0}
+        return {"action_points": 0, "anima": 0, "materials": 0, "material_value": 0}
 
     if consumption == CostConsumption.PARTIAL:
         ap_to_spend = math.ceil(staged.action_points * PARTIAL_FRACTION)
@@ -213,14 +213,14 @@ def consume_cost(
     materials_consumed = len(staged.material_allocations)
     consume_materials(staged.material_allocations)
 
-    # Spend common-gem bulk value (PARTIAL and FULL both spend it in full, like materials).
-    bucket_value_spent = _spend_common_gem_buckets(staged)
+    # Spend bulk material value (PARTIAL and FULL both spend it in full, like materials).
+    bucket_value_spent = _spend_material_buckets(staged)
 
     return {
         "action_points": ap_to_spend,
         "anima": anima_to_spend,
         "materials": materials_consumed,
-        "common_gem_value": bucket_value_spent,
+        "material_value": bucket_value_spent,
     }
 
 
@@ -258,24 +258,24 @@ def _deduct_anima(crafter_character: ObjectDB, anima_to_spend: int) -> None:
     deduct_anima(crafter_character, anima_to_spend, lethal=False)
 
 
-def _spend_common_gem_buckets(staged: StagedCost) -> int:
-    """Spend common-gem bulk value for each tier in ``staged.bucket_spends``.
+def _spend_material_buckets(staged: StagedCost) -> int:
+    """Spend bulk material value for each category in ``staged.bucket_spends``.
 
-    Returns the total gem value spent. Raises ``CraftingCostUnaffordable`` if a
-    concurrent spend left a tier short.
+    Returns the total material value spent. Raises ``CraftingCostUnaffordable`` if a
+    concurrent spend left a category short.
     """
     sheet = staged.crafter_character_sheet
     if not staged.bucket_spends or sheet is None:
         return 0
-    from world.items.exceptions import InsufficientCommonGems  # noqa: PLC0415
-    from world.items.gems.buckets import spend_common_gems  # noqa: PLC0415
+    from world.items.exceptions import InsufficientMaterialStock  # noqa: PLC0415
+    from world.items.gems.buckets import spend_materials  # noqa: PLC0415
 
     bucket_value_spent = 0
-    for tier, value in staged.bucket_spends:
+    for material_category, value in staged.bucket_spends:
         try:
-            spend_common_gems(sheet, tier, value)
-        except InsufficientCommonGems as exc:
-            msg = "Common gems were spent elsewhere before crafting completed."
+            spend_materials(sheet, material_category, value)
+        except InsufficientMaterialStock as exc:
+            msg = "Materials were spent elsewhere before crafting completed."
             raise CraftingCostUnaffordable(msg) from exc
         bucket_value_spent += value
     return bucket_value_spent

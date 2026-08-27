@@ -5,8 +5,10 @@
 surface in #3067, closing the last "server-only" gap in the party-combat REST API; the authored
 effect palette shipped (#1584, combat-wired for battlefield shaping by #2206); the frontier is
 embodied combat (companions, mounts, war) and *proving* the WIRED-UNPROVEN paths — not the round
-engine. Champion-duel challenge issuance and Battle staging (`CmdBattle`) remain telnet-first — no
-web GM surface for those two yet. **Lethal NPC duels are reachable (#3068):**
+engine. Champion-duel challenge issuance and Battle round PLAY remain telnet-first: staging
+(create/stage/spawn/enlist) got its web `StagingPanel` in #2010, but round-action declaration
+(all 12 `BattleActionKind`s), the begin/resolve/conclude round lifecycle, and `battle duel` have
+no web surface (verified 2026-08-26 audit; filed as #3389). **Lethal NPC duels are reachable (#3068):**
 `world.combat.duels.create_lethal_duel` — previously a zero-caller service, flagged unreachable by
 the 2026-08-08 combat audit — now has a real GM-initiated caller: a GM proposes a climactic
 PC-vs-significant-NPC duel (web `GMEncounterControls` "Start Lethal Duel" dialog / telnet `encounter
@@ -338,7 +340,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.
-- **Roles grant techniques** via the one specialization engine (ADR-0055; reverses bonuses-only).
+- **Roles grant techniques** — SHIPPED (#2022 via #2106/#2109, 2026-07-09): `CovenantRoleGiftGrant`
+  + `_grant_role_gifts_and_techniques` on engage, revoked on disengage (`role_source`-stamped rows
+  only); granted techniques resolve through the ordinary cast pipeline. Stale "MVP gap" listing
+  corrected 2026-08-26.
 - **War / battle system** — spine landed (#1592): `Battle` (1:1 Scene extension),
   abstract unit attrition + VP accumulation, `BattleRoundContext` seam, GM + player REGISTRY
   actions, `CmdBattle` telnet namespace, E2E `test_battle_telnet_e2e.py`. Peril/rescue +

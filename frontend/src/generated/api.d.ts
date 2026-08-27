@@ -168,7 +168,7 @@ export interface paths {
     /** @description ViewSet for scene action requests with consent flow. */
     get: operations['action_requests_list'];
     put?: never;
-    /** @description Create a new action request. */
+    /** @description Normally returns 201 with the created action request. A well-formed MATERIAL boon ask naming a category the target's bucket is empty of is instead honestly refused with 200 `{boon_refused: true, detail: ...}` — no row is created, no error occurred (#2540 slice 3). */
     post: operations['action_requests_create'];
     delete?: never;
     options?: never;
@@ -228,13 +228,27 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Boon money-sum options against a prospective target (#2540 ruling display seam).
+     * @description Boon ask options against a prospective target (#2540 ruling display seam).
      *
-     *     Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
-     *     target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+     *     ``sum_tiers``: each ``BoonSumTier`` with the concrete coppers it means against
+     *     THIS target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
      *     An empty list means the target presents no money-boon option at all (a
      *     penniless target — the option never shows, so 'no because I can't' never
      *     happens). The OOC reveal of these values is accepted per the ruling.
+     *
+     *     ``material_categories`` (#2540 slice 3): the STATIC public ``MaterialCategory``
+     *     list, ``[{id, name}]`` — deliberately NEVER filtered by this target's actual
+     *     holdings (that would leak wealth OOC); an ask against an empty bucket is
+     *     instead honestly refused at request-creation time (``BoonUnavailable``). No
+     *     computed value accompanies these — material asks show tier LABELS only.
+     *
+     *     ``pointer_items`` (#2540 slice 3, 2026-08-27 exact-pointer ruling): the
+     *     CALLER's (``initiator_persona``'s) pointer-known items relevant to THIS
+     *     target — held by them, or sitting in a vault they can withdraw from —
+     *     ``[{item_instance_id, name, source: "held"|"vault"}]``. Computed from the
+     *     caller's own pointers only; requires ``initiator_persona`` to be one of the
+     *     requesting account's own personas (mirrors ``castable_techniques``'
+     *     ownership gate — this reveals what a character privately knows).
      */
     get: operations['action_requests_boon_options_retrieve'];
     put?: never;
@@ -6601,6 +6615,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/currency/org-books/{id}/vault-events/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /org-books/{org_id}/vault-events/ — the item-vault audit trail (#2540).
+     *
+     *     Same membership gate as the books themselves (#930's posture: visible to any
+     *     active member, not just withdraw-authorized ones — the audit trail is how
+     *     embezzlement gets discovered, so it can't be gated behind the same authority
+     *     it exists to catch). Newest first (the model's own ``Meta.ordering``), capped
+     *     at ``_RECENT_ROWS`` like the currency ledger.
+     */
+    get: operations['currency_org_books_vault_events_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/currency/purse/{character_id}/': {
     parameters: {
       query?: never;
@@ -10842,7 +10881,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378). */
+    /**
+     * @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378).
+     *
+     *     Surfaces the open case, or — once tried — the case behind a still-active
+     *     sentence, so the Task 8 frontend can render a countdown from
+     *     ``sentence_ends_at``/``terminal_due_at`` (#2378 Task 5).
+     */
     get: operations['justice_my_case_retrieve'];
     put?: never;
     post?: never;
@@ -10885,6 +10930,9 @@ export interface paths {
      *     ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
      *     ``held`` list of awaiting-trial captives here (being held for trial is a
      *     public record — the discovery seam for the help-the-accused loop, #2378).
+     *     ``records`` (#2378 Task 5) adds the derived public record for the area —
+     *     active humiliation marks, exile/banishment decrees, and pending terminal
+     *     sentences (the visible countdown).
      */
     get: operations['justice_wanted_retrieve'];
     put?: never;
@@ -23930,17 +23978,20 @@ export interface components {
      *     * `held_item` - A held item
      *     * `vault_item` - A vault item
      *     * `deed` - A deed
+     *     * `material` - Material
      * @enum {string}
      */
-    BoonAskKindEnum: 'money' | 'held_item' | 'vault_item' | 'deed';
+    BoonAskKindEnum: 'money' | 'held_item' | 'vault_item' | 'deed' | 'material';
     /**
      * @description The structured-ask payload on a `boon` dispatch (#2540).
      *
      *     MONEY asks carry a ``sum_tier`` (never a raw amount — the concrete coppers derive
      *     from the target's purse server-side); item asks name an ``item_instance_id``; DEED
-     *     asks carry the deed text. Eligibility itself is validated by
-     *     ``validate_boon_ask`` inside ``create_action_request`` — this serializer only
-     *     shapes the payload.
+     *     asks carry the deed text; MATERIAL asks (#2540 slice 3) carry both a
+     *     ``material_category_id`` and a ``sum_tier`` (reusing money's MINOR/FAIR/GREAT
+     *     labels — no computed value is ever shown, unlike money's frozen coppers).
+     *     Eligibility itself is validated by ``validate_boon_ask`` inside
+     *     ``create_action_request`` — this serializer only shapes the payload.
      */
     BoonAskRequest: {
       kind: components['schemas']['BoonAskKindEnum'];
@@ -23949,10 +24000,46 @@ export interface components {
       item_instance_id?: number | null;
       /** @default  */
       deed_text: string;
+      material_category_id?: number | null;
     };
-    /** @description Schema shape for the boon-options read (empty list = no money option shown). */
+    /**
+     * @description One entry of the STATIC public material-category picker (#2540 slice 3).
+     *
+     *     Deliberately NEVER filtered by the target's actual holdings (that would leak
+     *     wealth OOC — the controller ruling accepts the honest-refusal reveal at ask time
+     *     instead, see ``BoonUnavailable``).
+     */
+    BoonMaterialCategory: {
+      id: number;
+      name: string;
+    };
+    /** @description Schema shape for the boon-options read (empty ``sum_tiers`` = no money option shown). */
     BoonOptions: {
       sum_tiers: components['schemas']['BoonSumOption'][];
+      material_categories: components['schemas']['BoonMaterialCategory'][];
+      pointer_items: components['schemas']['BoonPointerItem'][];
+    };
+    /**
+     * @description One of the asker's pointer-known items relevant to a target (#2540 slice 3).
+     *
+     *     Computed server-side from the asker's OWN pointers (clues/codex/secrets) — NEVER
+     *     a browse of the target's actual holdings; ``source`` distinguishes an item the
+     *     target physically holds from one sitting in a vault the target can withdraw from.
+     */
+    BoonPointerItem: {
+      item_instance_id: number;
+      name: string;
+      source: components['schemas']['BoonPointerItemSourceEnum'];
+    };
+    /**
+     * @description * `held` - held
+     *     * `vault` - vault
+     * @enum {string}
+     */
+    BoonPointerItemSourceEnum: 'held' | 'vault';
+    BoonRefusalResponse: {
+      boon_refused: boolean;
+      detail: string;
     };
     /** @description One money-sum option against a specific target (#2540 — 'Fair (200g)'). */
     BoonSumOption: {
@@ -26991,20 +27078,7 @@ export interface components {
       /** @description Check whether the requesting user is GM of the linked scene. */
       readonly is_gm: boolean;
       readonly clashes: components['schemas']['ClashState'][];
-      /**
-       * @description Return active EngagementLock records for this encounter (#2020).
-       *
-       *     Exposes foil pairings (who is dueling whom) to the frontend combat UI.
-       *     Returns only ACTIVE locks so resolved ones don't appear after breaking.
-       *
-       *     Uses the ``engagement_locks_cached`` prefetch-to-attr set on the
-       *     viewset's ``_base_queryset`` so no extra query fires during detail
-       *     serialization. Falls back to a direct filter for callers that don't
-       *     use the viewset (e.g. unit tests that call the serializer directly).
-       */
-      readonly engagement_locks: {
-        [key: string]: unknown;
-      }[];
+      readonly engagement_locks: components['schemas']['EngagementLock'][];
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
@@ -27081,6 +27155,22 @@ export interface components {
      * @enum {string}
      */
     EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
+    /**
+     * @description Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
+     *
+     *     Never instantiated for serialization — exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown}, mirroring
+     *     ClashContributorSerializer above. Field shape matches the dict
+     *     ``get_engagement_locks`` builds verbatim.
+     */
+    EngagementLock: {
+      id: number;
+      opponent_id: number;
+      participant_id: number;
+      status: string;
+      initiated_by: string;
+      started_round: number;
+    };
     /**
      * @description Request shape for the player's entry-flourish resonance pick.
      *
@@ -28907,6 +28997,22 @@ export interface components {
       /** @description Vacant slot set aside for the Phase D house creator. */
       is_claimable?: boolean;
     };
+    /**
+     * @description The fading half of a #2378-follow-up humiliation, for examine/profile display.
+     *
+     *     Serializes :func:`world.justice.sentences.active_humiliation_mark`'s
+     *     :class:`~world.justice.types.PublicMark` (or None) — ``persona_name``/
+     *     ``area_name`` are implied by whichever persona this is attached to, so only
+     *     ``kind``, ``until``, and the neutral ``explanation`` copy
+     *     (``constants.HUMILIATION_MARK_EXPLANATION``) are exposed. Consumed by
+     *     ``PersonaSerializer.humiliation_mark`` (``world/scenes/serializers.py``).
+     */
+    HumiliationMark: {
+      kind: string;
+      /** Format: date-time */
+      until: string;
+      explanation: string;
+    };
     /** @description Serializer for HybridRelationshipType with nested requirements. */
     HybridRelationshipType: {
       readonly id: number;
@@ -29080,7 +29186,17 @@ export interface components {
       readonly attributed_companion: {
         [key: string]: unknown;
       } | null;
-      readonly endorsee_sheet_id: number;
+      /**
+       * @description The endorsee's character_sheet id — ONLY when the viewer may know their identity.
+       *
+       *     A disguised persona (``Persona.is_fake_name=True``) unconditionally exposing its
+       *     ``character_sheet_id`` let any client correlate a masked persona with the same
+       *     character's barefaced personas (both personas share one sheet id), bypassing the
+       *     per-viewer name-masking in ``get_persona`` entirely (#2378). Reuses the same batched
+       *     ``reveal_allowed`` predicate from ``_persona_display_map`` (own face, staff, discovered
+       *     via ``PersonaDiscovery``, or a barefaced persona) — never a per-row query.
+       */
+      readonly endorsee_sheet_id: number | null;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
       readonly reactions: {
@@ -29101,6 +29217,18 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      /**
+       * @description Dramatic-moment badges: label always public, ``character_sheet_id`` gated (#2378).
+       *
+       *     ``DramaticMomentTag.character_sheet`` is a real-identity FK — unlike
+       *     ``endorsee_sheet_id`` (gated by the tagged pose's OWN persona), a tag's sheet can
+       *     belong to any participant, not necessarily this pose's author, so it can't reuse
+       *     that per-row flag. Exposed iff the viewer is staff, the sheet is one of the
+       *     viewer's own, or the sheet has at least one persona on this page whose identity is
+       *     already revealed (``_revealed_sheet_ids``, batched off the shared display map) —
+       *     otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
+       *     still renders, since the moment itself is public.
+       */
       readonly dramatic_moment_tags: {
         [key: string]: unknown;
       }[];
@@ -29241,7 +29369,17 @@ export interface components {
       readonly attributed_companion: {
         [key: string]: unknown;
       } | null;
-      readonly endorsee_sheet_id: number;
+      /**
+       * @description The endorsee's character_sheet id — ONLY when the viewer may know their identity.
+       *
+       *     A disguised persona (``Persona.is_fake_name=True``) unconditionally exposing its
+       *     ``character_sheet_id`` let any client correlate a masked persona with the same
+       *     character's barefaced personas (both personas share one sheet id), bypassing the
+       *     per-viewer name-masking in ``get_persona`` entirely (#2378). Reuses the same batched
+       *     ``reveal_allowed`` predicate from ``_persona_display_map`` (own face, staff, discovered
+       *     via ``PersonaDiscovery``, or a barefaced persona) — never a per-row query.
+       */
+      readonly endorsee_sheet_id: number | null;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
       readonly reactions: {
@@ -29262,6 +29400,18 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      /**
+       * @description Dramatic-moment badges: label always public, ``character_sheet_id`` gated (#2378).
+       *
+       *     ``DramaticMomentTag.character_sheet`` is a real-identity FK — unlike
+       *     ``endorsee_sheet_id`` (gated by the tagged pose's OWN persona), a tag's sheet can
+       *     belong to any participant, not necessarily this pose's author, so it can't reuse
+       *     that per-row flag. Exposed iff the viewer is staff, the sheet is one of the
+       *     viewer's own, or the sheet has at least one persona on this page whose identity is
+       *     already revealed (``_revealed_sheet_ids``, batched off the shared display map) —
+       *     otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
+       *     still renders, since the moment itself is public.
+       */
       readonly dramatic_moment_tags: {
         [key: string]: unknown;
       }[];
@@ -31321,6 +31471,7 @@ export interface components {
      *     * `renown` - Renown
      *     * `weather` - Weather
      *     * `ability` - Ability access
+     *     * `justice` - Justice
      * @enum {string}
      */
     NarrativeCategoryEnum:
@@ -31332,7 +31483,8 @@ export interface components {
       | 'covenant'
       | 'renown'
       | 'weather'
-      | 'ability';
+      | 'ability'
+      | 'justice';
     /** @description Player-facing message representation. Excludes ooc_note. */
     NarrativeMessage: {
       readonly id: number;
@@ -31804,6 +31956,28 @@ export interface components {
      * @enum {string}
      */
     OrgTaskStatusEnum: 'open' | 'assigned' | 'resolving' | 'completed' | 'failed' | 'expired';
+    /**
+     * @description One append-only item-vault audit row (#2540) — the ``LedgerRowSerializer`` analogue
+     *     for the item vault. Read-only; how embezzlement gets discovered later.
+     *
+     *     ``item_instance`` and ``actor_persona`` are SET_NULL on delete, so both display
+     *     fields fall back to None rather than raising — a deleted item or persona still
+     *     leaves a legible (if anonymized) audit row.
+     */
+    OrgVaultEvent: {
+      readonly id: number;
+      readonly kind: components['schemas']['OrgVaultEventKindEnum'];
+      readonly item_name: string | null;
+      readonly actor_persona_name: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `deposit` - Deposit
+     *     * `withdraw` - Withdraw
+     * @enum {string}
+     */
+    OrgVaultEventKindEnum: 'deposit' | 'withdraw';
     Organization: {
       readonly id: number;
       /** @description The organization's name */
@@ -37139,6 +37313,7 @@ export interface components {
       readonly guise_quote: string;
       readonly guise_personality: string;
       readonly guise_background: string;
+      readonly humiliation_mark: components['schemas']['HumiliationMark'] | null;
     };
     /**
      * @description One warrant row on the viewer's own crime tab — tiers only, never the raw number.
@@ -37971,6 +38146,7 @@ export interface components {
      *     * `birthday` - Birthday
      *     * `stature` - Stature
      *     * `menace` - Menace
+     *     * `verdict` - Verdict
      * @enum {string}
      */
     PublicFeedItemKindEnum:
@@ -37981,7 +38157,8 @@ export interface components {
       | 'proclamation'
       | 'birthday'
       | 'stature'
-      | 'menace';
+      | 'menace'
+      | 'verdict';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
@@ -38496,7 +38673,7 @@ export interface components {
        *     * `PENANCE` - Atonement resonance conversion
        *     * `FALL_CONVERSION` - Fall/Redemption conversion
        */
-      readonly source: components['schemas']['SourceEnum'];
+      readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
       readonly granted_at: string;
       readonly source_room_profile: number | null;
@@ -38504,6 +38681,50 @@ export interface components {
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
     };
+    /**
+     * @description * `POSE_ENDORSEMENT` - Pose endorsement
+     *     * `SCENE_ENTRY` - Scene entry endorsement
+     *     * `ROOM_RESIDENCE` - Room residence trickle
+     *     * `OUTFIT_TRICKLE` - Outfit trickle
+     *     * `STAFF_GRANT` - Staff grant
+     *     * `SANCTUM_WEAVING` - Sanctum weaving payout
+     *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
+     *     * `PROJECT_CONTRIBUTION` - Project contribution payout
+     *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+     *     * `ENTRY_FLOURISH` - Entry flourishing
+     *     * `DRAMATIC_MOMENT` - Dramatic moment
+     *     * `STYLE_PRESENTATION` - Style presentation
+     *     * `MISSION_REWARD` - Mission reward
+     *     * `MISSION_REPORT` - Mission report style
+     *     * `STAKE_REWARD` - Stake reward
+     *     * `DISTINCTION` - Distinction
+     *     * `COMBO_DISCOVERY` - Combo discovery
+     *     * `COMPROMISE` - Moral compromise
+     *     * `PENANCE` - Atonement resonance conversion
+     *     * `FALL_CONVERSION` - Fall/Redemption conversion
+     * @enum {string}
+     */
+    ResonanceGrantSourceEnum:
+      | 'POSE_ENDORSEMENT'
+      | 'SCENE_ENTRY'
+      | 'ROOM_RESIDENCE'
+      | 'OUTFIT_TRICKLE'
+      | 'STAFF_GRANT'
+      | 'SANCTUM_WEAVING'
+      | 'SANCTUM_OWNER_BONUS'
+      | 'PROJECT_CONTRIBUTION'
+      | 'SANCTUM_DISSOLUTION_RECOVERY'
+      | 'ENTRY_FLOURISH'
+      | 'DRAMATIC_MOMENT'
+      | 'STYLE_PRESENTATION'
+      | 'MISSION_REWARD'
+      | 'MISSION_REPORT'
+      | 'STAKE_REWARD'
+      | 'DISTINCTION'
+      | 'COMBO_DISCOVERY'
+      | 'COMPROMISE'
+      | 'PENANCE'
+      | 'FALL_CONVERSION';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -39115,7 +39336,9 @@ export interface components {
        *
        *     The specified-up-front payload is what lets a piloted target gauge whether it's
        *     an easy "just no": kind, the sum tier + frozen coppers for money, the item's
-       *     display name, or the deed text.
+       *     display name, the deed text, or (MATERIAL, #2540 slice 3) the category name +
+       *     tier — ``amount`` stays 0 for MATERIAL, same as the other non-money kinds; no
+       *     computed value is ever shown for it (deliberate money asymmetry).
        */
       readonly boon: {
         [key: string]: unknown;
@@ -39912,50 +40135,6 @@ export interface components {
       readonly stage_description: string;
       readonly has_death_risk: boolean;
     };
-    /**
-     * @description * `POSE_ENDORSEMENT` - Pose endorsement
-     *     * `SCENE_ENTRY` - Scene entry endorsement
-     *     * `ROOM_RESIDENCE` - Room residence trickle
-     *     * `OUTFIT_TRICKLE` - Outfit trickle
-     *     * `STAFF_GRANT` - Staff grant
-     *     * `SANCTUM_WEAVING` - Sanctum weaving payout
-     *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
-     *     * `PROJECT_CONTRIBUTION` - Project contribution payout
-     *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
-     *     * `ENTRY_FLOURISH` - Entry flourishing
-     *     * `DRAMATIC_MOMENT` - Dramatic moment
-     *     * `STYLE_PRESENTATION` - Style presentation
-     *     * `MISSION_REWARD` - Mission reward
-     *     * `MISSION_REPORT` - Mission report style
-     *     * `STAKE_REWARD` - Stake reward
-     *     * `DISTINCTION` - Distinction
-     *     * `COMBO_DISCOVERY` - Combo discovery
-     *     * `COMPROMISE` - Moral compromise
-     *     * `PENANCE` - Atonement resonance conversion
-     *     * `FALL_CONVERSION` - Fall/Redemption conversion
-     * @enum {string}
-     */
-    SourceEnum:
-      | 'POSE_ENDORSEMENT'
-      | 'SCENE_ENTRY'
-      | 'ROOM_RESIDENCE'
-      | 'OUTFIT_TRICKLE'
-      | 'STAFF_GRANT'
-      | 'SANCTUM_WEAVING'
-      | 'SANCTUM_OWNER_BONUS'
-      | 'PROJECT_CONTRIBUTION'
-      | 'SANCTUM_DISSOLUTION_RECOVERY'
-      | 'ENTRY_FLOURISH'
-      | 'DRAMATIC_MOMENT'
-      | 'STYLE_PRESENTATION'
-      | 'MISSION_REWARD'
-      | 'MISSION_REPORT'
-      | 'STAKE_REWARD'
-      | 'DISTINCTION'
-      | 'COMBO_DISCOVERY'
-      | 'COMPROMISE'
-      | 'PENANCE'
-      | 'FALL_CONVERSION';
     SpeakerQueue: {
       readonly id: number;
       /** @description Room the queue belongs to. */
@@ -43674,6 +43853,14 @@ export interface operations {
       };
     };
     responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoonRefusalResponse'];
+        };
+      };
       201: {
         headers: {
           [name: string]: unknown;
@@ -43735,6 +43922,7 @@ export interface operations {
   action_requests_boon_options_retrieve: {
     parameters: {
       query: {
+        initiator_persona: number;
         target_persona: number;
       };
       header?: never;
@@ -51484,6 +51672,41 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrgBooks'];
+        };
+      };
+      /** @description Not a member of the organization. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such organization. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  currency_org_books_vault_events_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgVaultEvent'][];
         };
       };
       /** @description Not a member of the organization. */

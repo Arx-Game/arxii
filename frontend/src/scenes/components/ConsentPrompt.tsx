@@ -96,6 +96,8 @@ function ConsentCard({
             {boon.kind === 'deed' && `They ask a deed of you: "${boon.deed_text}"`}
             {(boon.kind === 'held_item' || boon.kind === 'vault_item') &&
               `They ask for ${boon.item_name ?? 'an item'}${boon.kind === 'vault_item' ? ' from your vault' : ''}.`}
+            {boon.kind === 'material' &&
+              `They ask for ${boon.sum_tier ? `a ${boon.sum_tier} amount of ` : ''}${boon.material_category_name ?? 'a crafting material'}.`}
           </p>
         )}
         {strainCommitment > 0 && (

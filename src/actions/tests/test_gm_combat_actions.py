@@ -8,6 +8,7 @@ from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
     BeginEncounterRoundAction,
+    CreateEncounterAction,
     EndEncounterAction,
     PauseEncounterAction,
     PreviewOpponentDefaultsAction,
@@ -33,7 +34,7 @@ from world.combat.factories import (
     ThreatPoolFactory,
     seed_scaling_defaults,
 )
-from world.combat.models import CombatOpponent, CombatParticipant
+from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
@@ -473,11 +474,75 @@ class PreviewOpponentDefaultsActionTests(GMCombatActionTestBase):
         self.assertFalse(result.success)
 
 
+class CreateEncounterActionTests(TestCase):
+    """CreateEncounterAction starts a new encounter in the actor's active scene (#3388)."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("CreateEncounterRoom")
+
+        self.gm_account = AccountFactory(username="createtestgm", is_staff=True)
+        self.gm_actor, _ = _make_actor_with_account("create_gm_actor", self.room, self.gm_account)
+
+        self.player_account = AccountFactory(username="createtestplayer")
+        self.player_actor, _ = _make_actor_with_account(
+            "create_player_actor",
+            self.room,
+            self.player_account,
+        )
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
+        SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)
+
+    def test_gm_can_create_encounter(self) -> None:
+        result = CreateEncounterAction().run(self.gm_actor)
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertEqual(encounter.room_id, self.room.pk)
+        self.assertEqual(encounter.pace_mode, PaceMode.TIMED)
+
+    def test_scene_owner_without_gm_flag_allowed(self) -> None:
+        """Matches the web create gate: a co-owner may start combat even without is_gm."""
+        owner_account = AccountFactory(username="createtestowner")
+        SceneParticipationFactory(
+            scene=self.scene, account=owner_account, is_owner=True, is_gm=False
+        )
+        owner_actor, _ = _make_actor_with_account("create_owner_actor", self.room, owner_account)
+
+        result = CreateEncounterAction().run(owner_actor)
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(CombatEncounter.objects.filter(scene=self.scene).exists())
+
+    def test_non_gm_non_owner_denied(self) -> None:
+        result = CreateEncounterAction().run(self.player_actor)
+        self.assertFalse(result.success)
+        self.assertFalse(CombatEncounter.objects.filter(scene=self.scene).exists())
+
+    def test_no_active_scene_in_room(self) -> None:
+        other_room = _make_room("NoSceneRoom")
+        self.gm_actor.location = other_room
+        result = CreateEncounterAction().run(self.gm_actor)
+        self.assertFalse(result.success)
+        self.assertIn("no active scene", result.message.lower())
+
+    def test_invalid_pace_mode_creates_nothing(self) -> None:
+        result = CreateEncounterAction().run(self.gm_actor, pace_mode="nope")
+        self.assertFalse(result.success)
+        self.assertFalse(CombatEncounter.objects.filter(scene=self.scene).exists())
+
+    def test_valid_pace_mode_is_set(self) -> None:
+        result = CreateEncounterAction().run(self.gm_actor, pace_mode=PaceMode.READY)
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertEqual(encounter.pace_mode, PaceMode.READY)
+
+
 class RegistryCompletenessSmokeTest(TestCase):
     """New keys are discoverable through the registry."""
 
     def test_keys_registered(self) -> None:
         for key in (
+            "create_encounter",
             "begin_encounter_round",
             "resolve_encounter_round",
             "add_opponent",

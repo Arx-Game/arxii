@@ -10,7 +10,8 @@ heat, and IC scope resolves through ``active_persona_for_sheet`` (never
 
 from typing import TYPE_CHECKING
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -20,11 +21,12 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from world.justice.constants import CaseStatus
 from world.justice.models import PersonaHeat
-from world.justice.serializers import PersonaHeatSerializer
+from world.justice.serializers import MyCaseSerializer, PersonaHeatSerializer
 from world.roster.models import RosterEntry
 
 if TYPE_CHECKING:
     from world.areas.models import Area
+    from world.justice.models import JusticeCase
 
 
 class JusticePagination(PageNumberPagination):
@@ -185,11 +187,16 @@ class WantedListView(_ViewerActionView):
     ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
     ``held`` list of awaiting-trial captives here (being held for trial is a
     public record — the discovery seam for the help-the-accused loop, #2378).
+    ``records`` (#2378 Task 5) adds the derived public record for the area —
+    active humiliation marks, exile/banishment decrees, and pending terminal
+    sentences (the visible countdown).
     """
 
     def get(self, request):
         from world.justice.lifecycle import can_pardon, wanted_rows_for_area  # noqa: PLC0415
         from world.justice.models import JusticeCase  # noqa: PLC0415
+        from world.justice.sentences import active_public_marks  # noqa: PLC0415
+        from world.justice.serializers import PublicMarkSerializer  # noqa: PLC0415
 
         area = self._area(request.query_params.get("area"))  # noqa: USE_FILTERSET — single lookup param
         if area is None:
@@ -206,43 +213,60 @@ class WantedListView(_ViewerActionView):
                 "wanted": wanted_rows_for_area(area),
                 "held": held,
                 "viewer_can_pardon": viewer is not None and can_pardon(viewer, area),
+                "records": PublicMarkSerializer(active_public_marks(area=area), many=True).data,
             }
         )
+
+
+def _current_case_for(persona) -> "JusticeCase | None":
+    """The captive's own live case (#2378 Task 5): awaiting trial, or still serving.
+
+    Prefers the open (``AWAITING_TRIAL``) case. Once tried, a case only stays
+    "current" while it has something left to count down to — a brig/exile
+    term not yet matured (``sentence_ends_at`` in the future) or a terminal
+    sentence still inside its rescue window (``terminal_due_at`` in the future,
+    not carried out). A served or carried-out sentence has nothing left to show
+    and falls out of scope (``case: None``) — the daily sweep clears the field
+    that would otherwise keep it matching.
+    """
+    from world.justice.models import JusticeCase  # noqa: PLC0415
+
+    case = (
+        JusticeCase.objects.filter(persona=persona, status=CaseStatus.AWAITING_TRIAL)
+        .select_related("area", "society")
+        .first()
+    )
+    if case is not None:
+        return case
+    now = timezone.now()
+    return (
+        JusticeCase.objects.filter(persona=persona, status=CaseStatus.TRIED)
+        .filter(
+            Q(sentence_ends_at__gt=now)
+            | Q(terminal_due_at__gt=now, terminal_carried_out_at__isnull=True)
+        )
+        .select_related("area", "society")
+        .order_by("-resolved_at")
+        .first()
+    )
 
 
 class MyCaseView(_ViewerActionView):
-    """GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378)."""
+    """GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378).
+
+    Surfaces the open case, or — once tried — the case behind a still-active
+    sentence, so the Task 8 frontend can render a countdown from
+    ``sentence_ends_at``/``terminal_due_at`` (#2378 Task 5).
+    """
 
     def get(self, request):
-        from world.justice.models import JusticeCase  # noqa: PLC0415
-        from world.justice.pipeline import (  # noqa: PLC0415
-            exculpatory_total,
-            release_threshold,
-        )
-
         persona = self._viewer_persona(request)
         if persona is None:
             return Response({"detail": "Unknown viewer."}, status=400)
-        case = (
-            JusticeCase.objects.filter(persona=persona, status="awaiting_trial")
-            .select_related("area", "society")
-            .first()
-        )
+        case = _current_case_for(persona)
         if case is None:
             return Response({"case": None})
-        return Response(
-            {
-                "case": {
-                    "id": case.pk,
-                    "area_name": case.area.name,
-                    "society_name": case.society.name,
-                    "opened_at": case.opened_at,
-                    "evidence_total": exculpatory_total(case),
-                    "release_threshold": release_threshold(case),
-                    "failed_outs": case.failed_outs,
-                }
-            }
-        )
+        return Response({"case": MyCaseSerializer(case).data})
 
 
 class SubmitEvidenceView(_ViewerActionView):

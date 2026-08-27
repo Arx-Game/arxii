@@ -25,9 +25,10 @@ from world.items.market.models import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.currency.models import CharacterPurse
     from world.items.crafting.services import CraftRunResult
-    from world.items.models import ItemInstance, ItemTemplate
+    from world.items.models import ItemInstance, ItemTemplate, MaterialCategory
     from world.scenes.models import Persona
 
 
@@ -414,6 +415,7 @@ CONTRABAND_CRIME_SLUG = "contraband"
 SMUGGLING_CRIME_SLUG = "smuggling"
 
 
+@transaction.atomic
 def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -> int:
     """Sell *instance* to the fence at *stall*; returns the coppers paid.
 
@@ -487,3 +489,46 @@ def _accrue_fence_heat(seller: Persona, stall: MarketStall, crime_slug: str) -> 
     if crime is None:
         return
     accrue_heat(persona=seller, crime_kind=crime, area=stall.square.area)
+
+
+# --- Material sales (#2540 slice 2) --------------------------------------------
+# The personal-sell face of the material buckets Task 1 built: mint-to-purse for bulk
+# material value, mirroring the fence's mint-to-purse convention above (no PC buyer —
+# these sink into the market itself, not another player's ledger).
+
+MATERIAL_SALE_RATE_PCT = 40  # PLACEHOLDER — the market's rate for bulk material value.
+
+
+@transaction.atomic
+def sell_materials(
+    *, seller_sheet: CharacterSheet, material_category: MaterialCategory, amount: int
+) -> int:
+    """Sell ``amount`` of ``seller_sheet``'s ``material_category`` bucket value; returns coppers.
+
+    Coppers are minted straight to the seller's purse (``coins = amount *
+    MATERIAL_SALE_RATE_PCT // 100``) — the same mint-to-purse convention ``sell_to_fence``
+    uses. The coin computation happens BEFORE the bucket is touched: a sale that would pay
+    nothing (``amount`` too small for the rate to round up to a single copper) is refused
+    outright, exactly like the fence refusing a worthless template, so a player never loses
+    real material value for zero coppers. Raises ``MarketServiceError`` (wrapping
+    ``InsufficientMaterialStock``'s player-safe message) when the bucket falls short of
+    ``amount`` — nothing moves in that case.
+    """
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+    from world.items.exceptions import InsufficientMaterialStock  # noqa: PLC0415
+    from world.items.gems.buckets import spend_materials  # noqa: PLC0415
+
+    coins = amount * MATERIAL_SALE_RATE_PCT // 100
+    if coins <= 0:
+        msg = "sale would pay nothing"
+        raise MarketServiceError(msg, user_message="That's not worth selling.")
+    try:
+        spend_materials(seller_sheet, material_category, amount)
+    except InsufficientMaterialStock as exc:
+        raise MarketServiceError(str(exc), user_message=exc.user_message) from exc
+    transfer(
+        amount=coins,
+        reason=f"material sale: {material_category.name}",
+        to_purse=get_or_create_purse(seller_sheet),
+    )
+    return coins

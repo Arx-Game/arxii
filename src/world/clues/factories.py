@@ -13,6 +13,10 @@ class ClueFactory(DjangoModelFactory):
 
     target_kind = ClueTargetKind.CODEX
     target_codex_entry = factory.SubFactory("world.codex.factories.CodexEntryFactory")
+    # ITEM target (#2540): override target_kind=ITEM, target_codex_entry=None, and pass
+    # target_item_template (required) / target_item_instance (optional) explicitly.
+    target_item_template = None
+    target_item_instance = None
     name = factory.Sequence(lambda n: f"Clue {n}")
     slug = factory.Sequence(lambda n: f"clue-{n}")
     description = "A mysterious clue."

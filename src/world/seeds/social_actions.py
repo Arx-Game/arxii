@@ -32,8 +32,18 @@ _SOCIAL_ACTION_TEMPLATES = [
     # Boon (#2540): the structured social ask — a named payload (money / held item / vault
     # item / deed) riding the request, gated by the `boon` consent category; fulfillment
     # fires via the `boon` action resolver on a successful roll. Reuses the Persuasion
-    # check; the con/seduce/intimidate ask flavors are a follow-up slice.
+    # check.
     ("Boon", "Persuasion", "single", "gift", 0),
+    # #2540 slice 3 — the ask flavors: sibling templates over the same Boon payload,
+    # each rolling its own check type. "Manipulation"/"Seduction"/"Intimidation" are
+    # specializations, not CheckTypes (see seeds/social_checks.py) — Con a Boon rolls
+    # the "Con" CheckType (charm + Persuasion + Manipulation spec), which is the real
+    # seeded name for that composition. Menace a Boon carries +1 like Seduce's
+    # harder-than-Flirt precedent (Intimidate's own row stays 0 — Menace is the edgier
+    # ask, not a mirror of Intimidate's modifier).
+    ("Con a Boon", "Con", "single", "gift", 0),
+    ("Charm a Boon", "Seduction", "single", "gift", 0),
+    ("Menace a Boon", "Intimidation", "single", "gift", 1),
     ("Deceive", "Deceive", "single", "mask", 0),
     ("Flirt", "Seduction", "single", "heart", 0),
     # #2853 — the feeding skins; one tier harder like Seduce (PLACEHOLDER check reuse:
@@ -69,6 +79,23 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Success", "Target fully persuaded", 1),
     ],
     "Boon": [
+        ("Failure", "The ask lands badly", 1),
+        ("Partial Success", "They hesitate, unmoved", 2),
+        ("Success", "They grant the boon", 1),
+    ],
+    # #2540 slice 3 — the ask flavors reuse the Boon triple verbatim (flavor-neutral
+    # labels; the check type carries the flavor, not the outcome text).
+    "Con a Boon": [
+        ("Failure", "The ask lands badly", 1),
+        ("Partial Success", "They hesitate, unmoved", 2),
+        ("Success", "They grant the boon", 1),
+    ],
+    "Charm a Boon": [
+        ("Failure", "The ask lands badly", 1),
+        ("Partial Success", "They hesitate, unmoved", 2),
+        ("Success", "They grant the boon", 1),
+    ],
+    "Menace a Boon": [
         ("Failure", "The ask lands badly", 1),
         ("Partial Success", "They hesitate, unmoved", 2),
         ("Success", "They grant the boon", 1),

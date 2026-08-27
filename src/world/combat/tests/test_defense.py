@@ -1,6 +1,6 @@
 """Tests for defensive check integration in combat."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -8,7 +8,9 @@ from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX
 from world.checks.factories import CheckTypeFactory
+from world.checks.models import CheckType
 from world.checks.test_helpers import force_check_outcome
+from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -26,6 +28,11 @@ from world.combat.services import (
     _damage_multiplier_for_success,
     resolve_npc_attack,
 )
+from world.conditions.factories import (
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -36,6 +43,7 @@ from world.covenants.factories import (
 from world.covenants.perks.constants import PerkBeneficiary, PerkEffectKind, Situation
 from world.magic.types.aura import AffinityType
 from world.scenes.constants import RoundStatus
+from world.seeds.checks import seed_check_resolution_tables
 from world.traits.factories import (
     CheckOutcomeFactory,
     ResultChartFactory,
@@ -508,3 +516,81 @@ class ResolveNpcAttackSituationalPerkTests(TestCase):
                 non_abyssal_action, self.participant, self.check_type
             )
         self.assertEqual(unbound_result.success_level, -1)
+
+
+class ResolveNpcAttackConditionJourneyTests(TestCase):
+    """#3384: a condition on the ATTACKING opponent lowers the difficulty its
+    attack presents to the defending PC's roll -- the NPC "attacks worse."
+
+    Drives the real ``perform_check`` (no ``perform_check_fn`` override) through
+    ``resolve_npc_attack``, the same seam ``ResolveNpcAttackLevelOppositionTests``
+    exercises for the level-only term. Not ``setUpTestData`` for the same
+    DbHolder/CombatNPC-ObjectDB reason as ``ResolveNpcAttackTests`` above.
+    """
+
+    def setUp(self) -> None:
+        seed_check_resolution_tables()
+        self.check_type = CheckTypeFactory(name="NPC Defense Condition Journey")
+        self.character_class = CharacterClassFactory()
+        CheckType.flush_instance_cache()
+        ResultChart.clear_cache()
+
+    def _defense_success_level(self, *, roll: int, opponent_condition=None) -> int:
+        """Resolve one NPC attack (level 15) against a fresh PC (also level 15);
+        return the defender's CheckResult.success_level. ``opponent_condition``
+        (#3384), when given, is applied to the attacking opponent's ObjectDB
+        before the attack resolves."""
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(pool=pool, base_damage=100)
+        opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool, level=15)
+        if opponent_condition is not None:
+            ConditionInstanceFactory(target=opponent.objectdb, condition=opponent_condition)
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(
+            character=sheet,
+            character_class=self.character_class,
+            level=15,
+            is_primary=True,
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        CharacterVitals.objects.create(character_sheet=sheet, health=200, max_health=200)
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent, round_number=1, threat_entry=entry
+        )
+        npc_action.targets.add(participant)
+
+        with patch("world.checks.services.random.randint", return_value=roll):
+            result = resolve_npc_attack(npc_action, participant, self.check_type)
+        return result.success_level
+
+    def test_a_condition_on_the_attacking_opponent_makes_the_pc_defend_more_easily(self) -> None:
+        """The debuffed NPC 'attacks worse': across a spread of rolls, the PC's
+        defense success_level is strictly higher with the condition than without
+        it -- the defense-side mirror of the offense journey's
+        ``test_a_condition_on_the_opponent_makes_it_easier_to_hit``.
+
+        The condition's penalty (-70) is sized to exactly reproduce a level-1
+        attacker's target_difficulty against a level-15 one
+        (``LEVEL_POINTS_PER_LEVEL * (15 - 1) == 70``; the ephemeral opponent has
+        no CharacterPathHistory row, so the aspect bonus is 0 either way).
+        """
+        staggered = ConditionTemplateFactory(name="JourneyDefenseStaggered")
+        ConditionCheckModifierFactory(
+            condition=staggered,
+            check_type=self.check_type,
+            modifier_value=-70,
+        )
+        rolls = [20, 50, 85]
+
+        control = [self._defense_success_level(roll=roll) for roll in rolls]
+        conditioned = [
+            self._defense_success_level(roll=roll, opponent_condition=staggered) for roll in rolls
+        ]
+
+        for hit_conditioned, hit_control in zip(conditioned, control, strict=True):
+            self.assertGreater(hit_conditioned, hit_control)
+        self.assertTrue(
+            any(c - h >= 2 for c, h in zip(conditioned, control, strict=True)),
+            "expected at least one roll to clear a full outcome tier, not a hair's difference",
+        )

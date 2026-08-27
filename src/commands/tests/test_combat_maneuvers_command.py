@@ -63,6 +63,20 @@ class CmdCombatRoutingTests(TestCase):
         self.assertEqual(ref.backend, ActionBackend.REGISTRY)
         self.assertEqual(ref.registry_key, "combat_joust")
 
+    def test_engage_builds_registry_ref(self) -> None:
+        cmd = _make_cmd("engage Orc")
+        cmd._subverb = "engage"
+        ref = cmd.resolve_action_ref()
+        self.assertEqual(ref.backend, ActionBackend.REGISTRY)
+        self.assertEqual(ref.registry_key, "combat_engage")
+
+    def test_disengage_builds_registry_ref(self) -> None:
+        cmd = _make_cmd("disengage")
+        cmd._subverb = "disengage"
+        ref = cmd.resolve_action_ref()
+        self.assertEqual(ref.backend, ActionBackend.REGISTRY)
+        self.assertEqual(ref.registry_key, "combat_disengage")
+
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
         cmd = _make_cmd("frobnicate")
         with patch(_DISPATCH) as dispatch:
@@ -196,3 +210,22 @@ class CmdCombatArgResolutionTests(TestCase):
         cmd._subverb, cmd._rest = "joust", ""
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()
+
+    def test_engage_resolves_opponent_kwarg(self) -> None:
+        cmd = _make_cmd("engage Orc")
+        cmd._subverb, cmd._rest = "engage", "Orc"
+        with patch.object(cmd, "_resolve_opponent_pk", return_value=9) as resolve_opp:
+            kwargs = cmd.resolve_action_args()
+        resolve_opp.assert_called_once_with("Orc")
+        self.assertEqual(kwargs, {"opponent_id": 9})
+
+    def test_engage_without_opponent_raises(self) -> None:
+        cmd = _make_cmd("engage")
+        cmd._subverb, cmd._rest = "engage", ""
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_disengage_takes_no_args(self) -> None:
+        cmd = _make_cmd("disengage")
+        cmd._subverb, cmd._rest = "disengage", ""
+        self.assertEqual(cmd.resolve_action_args(), {})

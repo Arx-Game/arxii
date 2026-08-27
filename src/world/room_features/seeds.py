@@ -405,6 +405,36 @@ VAULT_KIND_NAME = "Vault"
 VAULT_MAX_LEVEL = 5
 
 
+BANK_KIND_NAME = "Bank"
+BANK_MAX_LEVEL = 1
+
+
+def ensure_bank_kind() -> RoomFeatureKind:
+    """Get-or-create the Bank ``RoomFeatureKind`` (#2540 Layer 4).
+
+    The WHERE gate for org-vault deposit/withdraw, treasury withdrawal, and the
+    collection return leg (``DeliverCollectionAction``) — a bank room on grid or an
+    owner-installed bank-access decor feature. Reachability-only (COMMAND_CENTER's
+    shape): custody itself never lives in the room, only in ``world.items``'
+    ``OrganizationVault``. Installs/levels via the plain ROOM_FEATURE_PROGRESSION
+    project (``install_mechanism`` defaults to PROJECT).
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.BANK,
+        defaults={
+            "name": BANK_KIND_NAME,
+            "max_level": BANK_MAX_LEVEL,
+            "description": (
+                "PLACEHOLDER — Bank kind: a bank room or owner-installed bank-access "
+                "decor feature. Reachability-only — where one stands, org-vault "
+                "deposit/withdraw, treasury withdrawal, and delivering a collection "
+                "haul may be performed."
+            ),
+        },
+    )
+    return kind
+
+
 BRIG_KIND_NAME = "Brig"
 
 

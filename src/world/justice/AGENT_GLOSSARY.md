@@ -60,3 +60,51 @@
 - **Case file** — where OFF_GRID frame evidence lives (not a model — the state
   plus its `AccusationCrimeClaim`). Produced back out by local authority
   (`has_local_authority`, PLACEHOLDER predicate pending #2378), then examined.
+- **Exile Decree** — an `ExileDecree` row: one persona's standing banishment from one
+  area under one society, minted by an EXILE or terminal BANISHMENT sentence.
+  `ends_at` null means permanent (a banishment); set means a term (an exile).
+  `lifted_at` records an early pardon. `ExileDecree.active_for(persona, area)` is the
+  one read seam every enforcement caller uses.
+- **Sentence Ladder Rung** — a `SentenceLadderRung` row: one society's escalation step,
+  keyed on `(society, level)`. `level` is matched against `failed_outs - 1` at the next
+  trial, so each additional failed-out climbs one rung. Data per society, not a
+  hardcoded table (ADR-0233) — `ARENA_TRIAL` is a seeded-but-inert rung, substituted
+  for `BRIG_TERM` until the combat substrate exists to resolve it.
+- **Breach of exile** — the `CrimeKind` (slug `breach-of-exile`) minted when a persona
+  under an active Exile Decree is captured back inside the decreed area. Its own crime,
+  scored on top of ordinary prosecution weight (`BREACH_WEIGHT_BONUS`) — never folded
+  into the original sentence — and it forces a near-auto-botch evasion roll (mundane
+  evasion can't beat a pinned warrant) unless the persona is magically concealed.
+- **Rescue window** — the interval between a terminal sentence (EXECUTION/BANISHMENT)
+  being handed down and the daily sweep carrying it out, held on
+  `JusticeCase.terminal_due_at`. A rescue or an escape voids it the next time the sweep
+  runs (captivity no longer HELD); a pardon voids it immediately at grant time instead
+  (`lifecycle.pardon_persona` clears `terminal_due_at` and fires the VOIDED notice
+  itself — the sweep never sees that case). Either way `notify_verdict` fires the
+  VOIDED, never CARRIED_OUT, copy; the window is a duration, not a location — nothing
+  about it is "the brig."
+- **Public mark** — one row of `active_public_marks`' derived public record: a
+  `PublicMark` dataclass built fresh on every read from three live sources (a
+  still-term-limited humiliation, an active Exile Decree, or a pending terminal
+  countdown). Never a stored, expiring row — there is no "current consequence" model.
+- **Pin (heat)** — `PersonaHeat.pinned_until`: floors a persona's heat at
+  `EXILE_PIN_VALUE` and holds it there, decay-exempt, through the pin window
+  (`pin_heat_for_decree`). Shared by EXILE sentencing and terminal BANISHMENT — one
+  pin implementation, not two. _Avoid_: "lock" — pin is the term used in code and
+  docstrings throughout `sentences.py`.
+- **Humiliation Brand** — the PERMANENT half of a HUMILIATION sentence (#2378
+  follow-up, ADR-0235, 2026-08-27 design call): a physical, provenance-free mark
+  that outlives the sentence's TEMPORARY reputational layer (the prestige hit +
+  the examine/profile explanation, both faded by `HUMILIATION_TERM_DAYS`). The
+  brand itself is scar substrate — TehomCD's domain — so `mint_humiliation_brand`
+  is a documented no-op seam, not a real minting call, until his scar system
+  exposes an API. _Avoid_: conflating the brand with the humiliation mark
+  (`active_humiliation_mark`/`PersonaSerializer.humiliation_mark`) — the mark
+  fades; the brand does not.
+- **Humiliation mark** — the fading half of a HUMILIATION sentence, distinct from
+  the permanent brand above: `active_humiliation_mark(persona)`'s persona-scoped
+  `PublicMark`, surfaced on `PersonaSerializer.humiliation_mark` for
+  examine/profile with neutral PLACEHOLDER copy
+  (`constants.HUMILIATION_MARK_EXPLANATION`). Disappears at
+  `HUMILIATION_TERM_DAYS`, the same tick `_sweep_humiliation_restores` restores
+  the prestige hit.

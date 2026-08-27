@@ -146,13 +146,22 @@ actions, backends, and service functions.
   action). Web reaches `StartSceneAction`/`FinishSceneAction`/`GrantSceneGMAction` through the
   same generic available-actions dispatcher. See "Scene Administration" in
   `docs/systems/scenes.md`. No business logic in the command.
-- **`encounter.py`**: `CmdEncounter` (`encounter`, #1494) — the GM combat-encounter lifecycle
-  namespace, thin over the Actions in `actions/definitions/gm_combat.py` (`begin`/
-  `resolve`/`add`/`default`/`addpc`/`removepc`/`pause`/`end`/`stakes`/`risk`/`pace`/`timer`).
-  Every subverb is gated by
+- **`encounter.py`**: `CmdEncounter` (`encounter`, #1494, create #3388) — the GM
+  combat-encounter lifecycle namespace, thin over the Actions in
+  `actions/definitions/gm_combat.py` (`create`/alias `start`/`begin`/`resolve`/`add`/`default`/
+  `addpc`/`removepc`/`pause`/`end`/`stakes`/`risk`/`pace`/`timer`).
+  `encounter create [pace]` (#3388, alias `start`) dispatches
+  `CreateEncounterAction` — the telnet parity gap this closed (every other lifecycle verb already
+  had a telnet face; only starting the fight didn't). It resolves the actor's room's active
+  scene via `get_active_scene()` and is gated by the shared
+  `world.combat.permissions.can_create_encounter_for_scene` (staff/scene-GM/scene-co-owner) —
+  deliberately **broader** than every other subverb below, which are gated by
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
-  `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
+  `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113), since those act on an
+  *existing* encounter's established GM while creation mirrors the web "Start encounter"
+  button's broader "may administer this scene" gate. `pace` is an optional token
+  (`timed`/`ready`/`manual`, default `timed`). No business logic in the command.
   `encounter stakes|risk|pace|timer <value>` (#3383) all dispatch the single
   `UpdateEncounterSettingsAction` (key `update_encounter_settings`), each supplying exactly
   one of `stakes_level`/`risk_level`/`pace_mode`/`pace_timer_minutes` — the telnet face of the

@@ -88,6 +88,8 @@ def target_already_known(clue: Clue, roster_entry: RosterEntry) -> bool:
 
     Drives the "this clue refers to X, but you already know this" flag — discovery
     surfaces a known-target clue rather than hiding it. Dispatches on target kind.
+    RESCUE, PERSONA_LINK, and ITEM (#2540) have no "already known" concept — an item
+    pointer clue simply grants the pointer, so unhandled kinds fall through to False.
     """
     if clue.target_kind == ClueTargetKind.CODEX:
         from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
@@ -125,6 +127,9 @@ def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
     - RESCUE: the character is handed the rescue mission for the held captive.
     - SECRET: the character learns the secret's fact (#1334).
     - PERSONA_LINK: the character pierces the masked-identity pair (#2120).
+    - ITEM: no-op (#2540) — the clue IS the knowledge; ``character_has_item_pointer``
+      (``world.scenes.boon_services``) reads the held ``CharacterClue`` directly, there
+      is nothing further to grant.
     The MISSION target kind is a documented extension point.
     """
     if clue.target_kind == ClueTargetKind.CODEX:

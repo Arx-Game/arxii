@@ -852,6 +852,23 @@ class VolatileObjectSerializer(serializers.Serializer):
     position_name = serializers.CharField(read_only=True, allow_null=True)
 
 
+class EngagementLockSerializer(serializers.Serializer):
+    """Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
+
+    Never instantiated for serialization — exists so drf-spectacular emits a
+    concrete component instead of {[key: string]: unknown}, mirroring
+    ClashContributorSerializer above. Field shape matches the dict
+    ``get_engagement_locks`` builds verbatim.
+    """
+
+    id = serializers.IntegerField()
+    opponent_id = serializers.IntegerField()
+    participant_id = serializers.IntegerField()
+    status = serializers.CharField()
+    initiated_by = serializers.CharField()
+    started_round = serializers.IntegerField()
+
+
 class EncounterDetailSerializer(serializers.ModelSerializer):
     """Full encounter state with covenant-filtered action visibility."""
 
@@ -1135,6 +1152,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             )
         return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
 
+    @extend_schema_field(EngagementLockSerializer(many=True))
     def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return active EngagementLock records for this encounter (#2020).
 

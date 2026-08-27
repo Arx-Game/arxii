@@ -1,4 +1,4 @@
-"""GM combat-encounter lifecycle telnet namespace (#1494).
+"""GM combat-encounter lifecycle telnet namespace (#1494, create #3388).
 
 A thin command face for the encounter actions in
 ``actions.definitions.gm_combat``. Each subverb delegates directly to
@@ -12,6 +12,7 @@ from commands.namespace import ArxNamespaceCommand
 
 _USAGE = (
     "Usage: encounter <subcommand>\n"
+    "  encounter create [pace]                 - start a new encounter here (alias: start)\n"
     "  encounter begin                         - begin a new round\n"
     "  encounter resolve                       - resolve the current round\n"
     "  encounter add <name> <tier> [pool]      - add an NPC opponent\n"
@@ -30,6 +31,7 @@ _USAGE = (
     "                                           - propose a lethal duel (#3068)"
 )
 
+_CREATE_USAGE = "Usage: encounter create [pace]  (pace: timed/ready/manual; default timed)"
 _ADD_USAGE = "Usage: encounter add <name> <tier> [pool]"
 _DEFAULT_USAGE = "Usage: encounter default <tier>"
 _ADDPC_USAGE = "Usage: encounter addpc <character>"
@@ -46,6 +48,8 @@ _ADD_POOL_INDEX = 2
 _DUEL_TOKENS = 4
 
 _SUBVERB_HANDLERS: dict[str, str] = {
+    "create": "_handle_create",
+    "start": "_handle_create",
     "begin": "_handle_begin",
     "resolve": "_handle_resolve",
     "add": "_handle_add",
@@ -74,6 +78,13 @@ class CmdEncounter(ArxNamespaceCommand):
     locks = "cmd:all()"
     _USAGE = _USAGE
     _SUBVERB_HANDLERS = _SUBVERB_HANDLERS
+
+    def _handle_create(self, rest: str) -> None:
+        """Parse ``create [pace]`` and dispatch CreateEncounterAction."""
+        from actions.definitions.gm_combat import CreateEncounterAction  # noqa: PLC0415
+
+        pace_mode = rest.split()[0].lower() if rest.strip() else None
+        self._run_action(CreateEncounterAction, pace_mode=pace_mode)
 
     def _handle_begin(self, _rest: str) -> None:
         """Dispatch BeginEncounterRoundAction."""
