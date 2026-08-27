@@ -161,6 +161,33 @@ class Secret(SharedMemoryModel):
     )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
+    # --- Item pointer (#2540 exact-pointer ruling) -----------------------------------
+    # Secrets stays dependency-free per ADR-0010: these FKs point items-ward (the
+    # consumer -> reusable primitive direction), never the reverse.
+    subject_item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="secrets_about",
+        help_text=(
+            "The item kind this secret is about, if any. Template-only means 'any of "
+            "this kind'; see subject_item_instance for the narrower 'this exact one' "
+            "pointer."
+        ),
+    )
+    subject_item_instance = models.ForeignKey(
+        "arxii.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="secrets_about",
+        help_text=(
+            "Optional exact instance this secret is about, narrowing "
+            "subject_item_template. SET_NULL so a destroyed instance degrades the "
+            "secret to template-only rather than deleting it."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_date"]
@@ -205,6 +232,13 @@ class Secret(SharedMemoryModel):
         if self.is_act_anchored and self.provenance == SecretProvenance.PLAYER_FLAVOR:
             msg = "A secret anchored to a recorded act is evidenced, not player-flavor."
             raise ValidationError({"provenance": msg})
+        if (
+            self.subject_item_instance_id is not None
+            and self.subject_item_template_id is not None
+            and self.subject_item_instance.template_id != self.subject_item_template_id
+        ):
+            msg = "Must be an instance of subject_item_template when both are set."
+            raise ValidationError({"subject_item_instance": msg})
 
 
 class SecretVictim(SharedMemoryModel):

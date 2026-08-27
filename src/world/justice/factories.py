@@ -1,14 +1,19 @@
+from datetime import timedelta
+
+from django.utils import timezone
 import factory
 import factory.django
 
 from world.areas.factories import AreaFactory
-from world.justice.constants import DEFAULT_HEAT_WEIGHT
+from world.justice.constants import DEFAULT_HEAT_WEIGHT, SentenceKind
 from world.justice.models import (
     AccusationCrimeClaim,
     AreaLaw,
     CrimeEvidence,
     CrimeKind,
+    ExileDecree,
     PersonaHeat,
+    SentenceLadderRung,
 )
 from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory
@@ -61,3 +66,24 @@ class CrimeEvidenceFactory(factory.django.DjangoModelFactory):
     deed = factory.SubFactory("world.societies.factories.LegendEntryFactory")
     room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
     item_instance = None
+
+
+class ExileDecreeFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ExileDecree
+
+    persona = factory.SubFactory(PersonaFactory)
+    area = factory.SubFactory(AreaFactory)
+    society = factory.SubFactory(SocietyFactory)
+    pin_until = factory.LazyFunction(lambda: timezone.now() + timedelta(days=7))
+    ends_at = None
+
+
+class SentenceLadderRungFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SentenceLadderRung
+
+    society = factory.SubFactory(SocietyFactory)
+    level = factory.Sequence(lambda n: n)
+    sentence_kind = SentenceKind.FINE
+    flavor = ""

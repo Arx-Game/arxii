@@ -95,3 +95,19 @@ class FenceTest(TestCase):
         with patch("world.items.market.services._accrue_fence_heat") as heat:
             sell_to_fence(self.persona, self.fence, instance)
         heat.assert_not_called()
+
+    def test_transfer_failure_rolls_back_the_sale(self):
+        """A crash between the coin mint and the item's deletion must not leave the item
+        gone with no coin paid (the atomicity bug the review round flagged: sell_to_fence
+        had no @transaction.atomic, so transfer and the instance delete each committed
+        independently)."""
+        from world.items.models import ItemInstance
+
+        instance = self._held_item(value=100)
+        with (
+            patch("world.currency.services.transfer", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
+            sell_to_fence(self.persona, self.fence, instance)
+        self.assertTrue(ItemInstance.objects.filter(pk=instance.pk).exists())
+        self.assertFalse(MarketSale.objects.exists())

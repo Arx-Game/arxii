@@ -12,6 +12,7 @@ from world.conditions.services import apply_condition, remove_condition
 from world.magic.constants import AlterationTier
 from world.mechanics.models import ObjectProperty
 from world.mechanics.types import AppliedEffect
+from world.room_features.brig_services import brig_has_capacity as _brig_has_capacity
 from world.roster.models import RosterEntry
 from world.vitals.services import process_damage_consequences
 
@@ -778,14 +779,13 @@ def _apply_magical_scars(
 def _find_brig_for_captor(context: "ResolutionContext") -> "RoomProfile | None":
     """Find an active Brig room feature in the captor's building (#1862).
 
-    Resolves the captor's building from ``context.location``, then searches
-    for an active Brig ``RoomFeatureInstance`` in that building's rooms.
-    Returns the Brig's ``RoomProfile`` if found, ``None`` otherwise (#2608 —
-    ``Captivity.holding_room`` takes the profile, so no ObjectDB round-trip).
+    Thin wrapper (#2378 Task 4): resolves the captor's building from
+    ``context.location``, then delegates to the promoted
+    ``room_features.brig_services.find_brig_for_area`` — the pipeline's arrest
+    custody path shares that same lookup without needing a ResolutionContext.
     """
     from world.buildings.room_services import building_for_room  # noqa: PLC0415
-    from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
-    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+    from world.room_features.brig_services import find_brig_for_area  # noqa: PLC0415
 
     captor_room = context.location
     if captor_room is None:
@@ -793,42 +793,7 @@ def _find_brig_for_captor(context: "ResolutionContext") -> "RoomProfile | None":
     building = building_for_room(captor_room)
     if building is None or building.area_id is None:
         return None
-    brig_instance = (
-        RoomFeatureInstance.objects.filter(
-            feature_kind__service_strategy=RoomFeatureServiceStrategy.BRIG,
-            room_profile__area_id=building.area_id,
-            dissolved_at__isnull=True,
-        )
-        .select_related("room_profile", "brig_details")
-        .first()
-    )
-    if brig_instance is None:
-        return None
-    return brig_instance.room_profile
-
-
-def _brig_has_capacity(brig_room: "RoomProfile") -> bool:
-    """Check if the Brig room has capacity for another prisoner (#1862)."""
-    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
-    from world.captivity.models import Captivity  # noqa: PLC0415
-    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
-
-    instance = (
-        RoomFeatureInstance.objects.filter(
-            room_profile=brig_room,
-            dissolved_at__isnull=True,
-        )
-        .select_related("brig_details")
-        .first()
-    )
-    if instance is None or not hasattr(instance, "brig_details"):
-        return False
-    max_prisoners = instance.brig_details.max_prisoners
-    current = Captivity.objects.filter(
-        holding_room=brig_room,
-        status=CaptivityStatus.HELD,
-    ).count()
-    return current < max_prisoners
+    return find_brig_for_area(building.area)
 
 
 def _capture_group_key(

@@ -330,7 +330,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - **Charm / switch-sides** an enemy NPC; **negotiate / parley** an NPC down (built in this PR,
   #1590/#1591, ADR-0058); **dispel** a condition.
 - **Companions / pets / summons** with breath weapons & ordered abilities.
-- **Roles grant techniques** via the one specialization engine (ADR-0055; reverses bonuses-only).
+- **Roles grant techniques** — SHIPPED (#2022 via #2106/#2109, 2026-07-09): `CovenantRoleGiftGrant`
+  + `_grant_role_gifts_and_techniques` on engage, revoked on disengage (`role_source`-stamped rows
+  only); granted techniques resolve through the ordinary cast pipeline. Stale "MVP gap" listing
+  corrected 2026-08-26.
 - **War / battle system** — spine landed (#1592): `Battle` (1:1 Scene extension),
   abstract unit attrition + VP accumulation, `BattleRoundContext` seam, GM + player REGISTRY
   actions, `CmdBattle` telnet namespace, E2E `test_battle_telnet_e2e.py`. Peril/rescue +

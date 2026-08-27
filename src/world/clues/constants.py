@@ -15,6 +15,7 @@ class ClueTargetKind(models.TextChoices):
     RESCUE = "rescue", "Rescue (a held captive)"
     SECRET = "secret", "Character Secret"
     PERSONA_LINK = "persona_link", "Persona Link (mask piercing)"
+    ITEM = "item", "Item (exact pointer)"
 
 
 class ClueResolution(models.TextChoices):

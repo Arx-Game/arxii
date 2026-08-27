@@ -31,6 +31,14 @@ def _active_persona(actor: ObjectDB):
     return active_persona_for_sheet(sheet)
 
 
+def _positive_amount(kwargs: dict[str, Any]) -> int | None:
+    """Return the ``amount`` kwarg if it's a positive int, else ``None`` (currency.py pattern)."""
+    amount = kwargs.get("amount")
+    if isinstance(amount, int) and amount > 0:
+        return amount
+    return None
+
+
 @dataclass
 class _MarketAction(Action):
     """Shared shape for market verbs."""
@@ -376,4 +384,48 @@ class SellToFenceAction(_MarketAction):
             success=True,
             message=f"The fence counts out {price} coppers for {template_name}. No names.",
             data={"price": price},
+        )
+
+
+@dataclass
+class SellMaterialsAction(_MarketAction):
+    """Sell bulk material bucket value to the market for coppers (#2540 slice 2).
+
+    Kwargs: ``material_category_id``, ``amount``. Performable anywhere — Apostate's
+    frictionless ruling (#2540 slice 2): unlike the fence (#2862), a bulk material sale
+    needs no stall, no NPC, and no location gate. Materials are abstract bucket value, not
+    a physical good someone has to haggle over in person.
+    """
+
+    key: str = "sell_materials"
+    name: str = "Sell Materials"
+    icon: str = "coins"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.items.market.services import MarketServiceError, sell_materials  # noqa: PLC0415
+        from world.items.models import MaterialCategory  # noqa: PLC0415
+
+        amount = _positive_amount(kwargs)
+        if amount is None:
+            return ActionResult(success=False, message="Sell how much?")
+        persona = _active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_PERSONA)
+        category = MaterialCategory.objects.filter(pk=kwargs.get("material_category_id")).first()
+        if category is None:
+            return ActionResult(success=False, message="Sell what?")
+        try:
+            coins = sell_materials(
+                seller_sheet=persona.character_sheet,
+                material_category=category,
+                amount=amount,
+            )
+        except MarketServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You sell {amount} worth of {category.name} for {coins} coppers.",
+            data={"coins": coins},
         )

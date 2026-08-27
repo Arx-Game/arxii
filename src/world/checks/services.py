@@ -1126,6 +1126,14 @@ def level_opposition(
       to do to them is harder when it is their wheelhouse. Skipped entirely when
       *character* is None (an ephemeral NPC with no sheet), which contributes
       level alone rather than raising.
+    * ``opponent_condition_opposition(character, check_type)`` (#3384) — the
+      defender's own active ``ConditionCheckModifier`` rows, read directly off
+      its ObjectDB (no ``CharacterSheet`` required, so an ephemeral
+      ``CombatOpponent`` is covered). Summed as-authored, no sign flip: a
+      penalty condition (negative ``modifier_value``) LOWERS the total, so a
+      staggered/distracted opponent presents less difficulty to whoever is
+      acting against it. Skipped entirely when *character* is None, same as
+      the aspect bonus.
 
     Deliberately EXCLUSIVE with :func:`compute_resist_increment`: an active
     resistance rating already contains the defender's level points, so a call
@@ -1136,6 +1144,9 @@ def level_opposition(
     total = LEVEL_POINTS_PER_LEVEL * max(0, level)
     if character is not None:
         total += _calculate_aspect_bonus(character, check_type, level)
+        from world.conditions.services import opponent_condition_opposition  # noqa: PLC0415
+
+        total += opponent_condition_opposition(character, check_type)
     return total
 
 
