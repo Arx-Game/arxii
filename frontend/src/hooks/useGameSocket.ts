@@ -90,7 +90,7 @@ type IncomingMessageHandler = (ctx: IncomingMessageContext) => void;
 // from this table falls through to parseGameMessage as a regular game
 // message. Keeping this as a lookup table (rather than an if-chain) is what
 // keeps the socket message listener's cognitive complexity in check.
-const INCOMING_MESSAGE_HANDLERS: Partial<Record<SocketMessageType, IncomingMessageHandler>> = {
+const INCOMING_MESSAGE_HANDLER_TABLE: Partial<Record<SocketMessageType, IncomingMessageHandler>> = {
   [WS_MESSAGE_TYPE.ROOM_STATE]: ({ character, kwargs, dispatch }) =>
     handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch),
 
@@ -145,6 +145,14 @@ const INCOMING_MESSAGE_HANDLERS: Partial<Record<SocketMessageType, IncomingMessa
   },
 };
 
+// Dispatch goes through a Map rather than indexing the object above. The key
+// arrives off the wire, and a Map holds no prototype chain, so a frame typed
+// "constructor" or "__proto__" simply misses instead of resolving to an
+// inherited Object.prototype member that would then be invoked as a handler.
+const INCOMING_MESSAGE_HANDLERS = new Map<SocketMessageType, IncomingMessageHandler>(
+  Object.entries(INCOMING_MESSAGE_HANDLER_TABLE) as [SocketMessageType, IncomingMessageHandler][]
+);
+
 /** Routes one parsed incoming websocket frame to its handler, or renders it as a plain game message. */
 function dispatchIncomingMessage(
   character: MyRosterEntry['name'],
@@ -153,13 +161,8 @@ function dispatchIncomingMessage(
   navigate: NavigateFunction
 ): void {
   const [msgType, args, kwargs] = parsed;
-  // msgType arrives off the wire, so look it up as an own property only. A crafted
-  // type ("constructor", "toString", "__proto__") would otherwise resolve to an
-  // inherited Object.prototype member and get invoked as if it were a handler.
-  const handler = Object.prototype.hasOwnProperty.call(INCOMING_MESSAGE_HANDLERS, msgType)
-    ? INCOMING_MESSAGE_HANDLERS[msgType]
-    : undefined;
-  if (typeof handler === 'function') {
+  const handler = INCOMING_MESSAGE_HANDLERS.get(msgType);
+  if (handler) {
     handler({ character, args, kwargs, dispatch, navigate });
     return;
   }
