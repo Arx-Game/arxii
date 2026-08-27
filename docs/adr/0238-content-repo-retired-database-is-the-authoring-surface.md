@@ -1,4 +1,4 @@
-# ADR-0236: The database is the authoring surface; the content repo is never loaded into a populated database again
+# ADR-0238: The database is the authoring surface; the content repo is never loaded into a populated database again
 
 **Status:** Accepted (Tehom, 2026-08-19 in-session; scope clarified 2026-08-26).
 **Supersedes the authoring-direction property of
@@ -13,7 +13,7 @@ plus fixture round trip that built it is over. **Authoring and editing happen in
 the database** - Django admin and the Authoring Workbench (`web/admin/authoring`) -
 not through content-repo branches and PRs. The database is the single source of
 truth for content, which is what makes
-[ADR-0235](0235-alpha-is-durable-the-production-database-is-the-master-copy.md)'s
+[ADR-0237](0237-alpha-is-durable-the-production-database-is-the-master-copy.md)'s
 durability tier real rather than aspirational: there is no git copy to fall back
 on, so **database backups are load-bearing** and the offsite replication in
 `infra/` is the corpus's only redundancy.
@@ -50,6 +50,6 @@ reader the Big Button loads the real corpus from the repo, which is exactly the
 belief that makes an agent treat a production database as reconstructible.
 
 > Status: accepted · Source: Tehom in-session 2026-08-19, scope clarified 2026-08-26 ·
-> Supersedes ADR-0142's authoring direction · Related: ADR-0235 (alpha durability),
+> Supersedes ADR-0142's authoring direction · Related: ADR-0237 (alpha durability),
 > ADR-0201 (credited rows frozen against loads), ADR-0168 (the seed boundary),
 > ADR-0140 (the content pipeline)

@@ -1,4 +1,4 @@
-# ADR-0235: Alpha is durable - the production database is the only master copy of authored content
+# ADR-0237: Alpha is durable - the production database is the only master copy of authored content
 
 **Status:** Accepted (2026-08-26, Tehom in-session). **Supersedes
 [ADR-0013](0013-schema-only-migrations-pre-production.md)** outright: its premise
@@ -12,7 +12,7 @@ Durability from 2026-08-26 forward is **two-tier, split by what created the row*
   techniques, traditions, conditions, check types, catalogs, grid rooms -
   everything staff writes - exists in exactly one place: the production database.
   Fixtures are gitignored repo-wide (`**/fixtures/**/*.json`), the content repo is
-  retired in favor of authoring directly in the database (ADR-0236), and the seed
+  retired in favor of authoring directly in the database (ADR-0238), and the seed
   data that *is* in the repo is clone-bootstrap and E2E-test scaffolding, not a
   copy of the corpus. There is no second copy in version control to reload from.
   Dropping a column of authored text is losing the text.
@@ -85,6 +85,6 @@ is legible in the diff, rather than at the console during a deploy. Revisit if a
 lossy migration ever actually reaches prod.
 
 > Status: accepted · Source: Tehom in-session 2026-08-26 · Supersedes ADR-0013 ·
-> Related: ADR-0236 (the content repo is retired; the DB is the master copy),
+> Related: ADR-0238 (the content repo is retired; the DB is the master copy),
 > ADR-0201 (credited rows are frozen against loads), ADR-0140 (grid bundles are
 > content snapshots, never live-game backups), ADR-0012 (PostgreSQL only)

@@ -1,7 +1,7 @@
 # The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables
 
 **The authoring direction here is SUPERSEDED (2026-08-19, recorded 2026-08-26) by
-[ADR-0236](0236-content-repo-retired-database-is-the-authoring-surface.md):** authoring
+[ADR-0238](0238-content-repo-retired-database-is-the-authoring-surface.md):** authoring
 happens in the database, and a content load is never run against a populated database
 again. The content repo itself is not deleted and may still be written to; it is simply
 downstream now rather than a source. What survives unchanged is this

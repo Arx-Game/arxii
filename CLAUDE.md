@@ -244,14 +244,14 @@ that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail
 
 **The production database is durable and holds the only copy of our content.** As of
 alpha (2026-08-26) it is not a dev convenience, not reconstructible from the repo, and
-not disposable — see ADR-0235 and ADR-0236. Durability is two-tier:
+not disposable — see ADR-0237 and ADR-0238. Durability is two-tier:
 
 - **Authored content is irreplaceable.** Codex entries, lore prose, techniques,
   traditions, conditions, check types, catalogs, grid rooms — everything staff writes
   lives *only* in the database. Fixtures are gitignored, and repo seed data is
   clone-bootstrap/E2E scaffolding, not a copy of the corpus. The content repo still
   exists and may still be written to, but it is downstream now — never a source the
-  database is populated from (ADR-0236). There is nothing to reload from. Dropping an
+  database is populated from (ADR-0238). There is nothing to reload from. Dropping an
   authored column loses the text.
 - **Alpha play state is resettable** (characters, sheets, XP, scenes, encounters) —
   declared so to players, and the only reason this is a two-tier rule.
@@ -259,7 +259,7 @@ not disposable — see ADR-0235 and ADR-0236. Durability is two-tier:
 What that requires of you:
 
 - **A `RemoveField`/`DeleteModel` on an authored-content table must declare its data
-  disposition in the PR** (ADR-0235): *restructure* — a `RunPython` in the same
+  disposition in the PR** (ADR-0237): *restructure* — a `RunPython` in the same
   migration carries the data across, and this one is mandatory; *deliberate discard* —
   stated and signed off, recoverable only from backup; or *empty in production* — a
   claim to be checked against prod, never assumed from a dev database. `RenameField`
@@ -329,7 +329,7 @@ Code quality (always-on; full list in `django_notes.md`):
 - **No Django signals** — explicit, testable service-function calls instead (see ADR-0009).
 - **Data migrations are required where authored content is at risk** — a `RunPython`
   backfill accompanies any migration that drops or renames an authored-content column
-  (see ADR-0235, which supersedes ADR-0013). Play-state tables still need none.
+  (see ADR-0237, which supersedes ADR-0013). Play-state tables still need none.
 - **Preserve every database** — never drop/flush/destroy dev or production (see the
   durability invariant at the top of this section).
 - **PostgreSQL only (production)** — use PG features directly (CTEs, materialized
@@ -366,7 +366,7 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 - **Fixtures are NOT in version control** (gitignored via `**/fixtures/**/*.json`).
   Never `git add -f` a fixture; don't write management commands to seed data — use
   Django's fixture system. Seed data is managed separately (admin, shared storage, docs).
-  This is *why* the database is the master copy (ADR-0236): no fixture in the repo is a
+  This is *why* the database is the master copy (ADR-0238): no fixture in the repo is a
   backup of authored content, and a fixture you generate locally is a stale snapshot the
   moment staff edits the row. **`loaddata` inserts; it does NOT update idmapper rows** —
   for re-seeding edited data use an upsert path (`load_entries` / `update_or_create`);

@@ -85,7 +85,7 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
   **Status (2026-08-26): (1) and (2) are DESIGNED, NOT BUILT.** There is no
   `tools/check_release_safety.py`, no `# release-safety:` marker anywhere in the tree,
   and no CI step — the text above describes intent, not a gate that exists. What *is*
-  built is the **pre-migration dump** (`roles/app_deploy`, ADR-0235): a verified local
+  built is the **pre-migration dump** (`roles/app_deploy`, ADR-0237): a verified local
   `pg_dump` taken immediately before `migrate`, gated on `migrate --check` and failing
   closed. It addresses a different axis from (1) — data recoverability rather than
   old-code/new-schema compatibility — and it is strictly a net, not a gate: it makes a

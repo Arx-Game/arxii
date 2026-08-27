@@ -247,7 +247,7 @@
 
 # Django/Evennia migrations are idempotent: re-running when up-to-date is a
 # no-op (output contains no "Applying" lines). Sourcing the rendered
-# --- Pre-migration dump (ADR-0235) -------------------------------------
+# --- Pre-migration dump (ADR-0237) -------------------------------------
 # The migrate task below applies whatever migration reached main, unattended.
 # Since alpha that means a RemoveField/DeleteModel can destroy authored content
 # holding no other copy, with no human in the loop and the nightly backup up to
@@ -337,7 +337,7 @@
 # only the design in docs/operations/observability-baseline.md §4.5. So this task
 # currently applies whatever migration reached main, unattended, with PR review
 # as the only gate — which since alpha means a RemoveField/DeleteModel merged
-# here destroys authored content that exists nowhere else (ADR-0235). Do not read
+# here destroys authored content that exists nowhere else (ADR-0237). Do not read
 # the line above as "something upstream already checked this."
 #
 # Deliberately `python -m django migrate`, NOT `evennia migrate`. Evennia's

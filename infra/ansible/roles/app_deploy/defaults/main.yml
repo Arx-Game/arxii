@@ -92,7 +92,7 @@ app_reload_stamp: /opt/arxii/reloaded_sha
 app_superuser_username: "{{ lookup('env', 'ARXII_DJANGO_SUPERUSER_USERNAME') | default('arxii_admin', true) }}"
 app_superuser_email: "{{ lookup('env', 'ARXII_DJANGO_SUPERUSER_EMAIL') | default('admin@example.invalid', true) }}"
 
-# Pre-migration dump (ADR-0235). Since alpha the production database holds
+# Pre-migration dump (ADR-0237). Since alpha the production database holds
 # authored content that exists in no other copy, and the migrate task below
 # runs unattended on every converge — so a RemoveField/DeleteModel that
 # reached main destroys that content with no human in the loop. The nightly

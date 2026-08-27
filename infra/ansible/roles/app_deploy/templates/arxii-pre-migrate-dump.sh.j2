@@ -4,10 +4,10 @@
 # NEVER touches the bucket. Creds from the systemd EnvironmentFile the caller
 # sources (no echo; set +x).
 #
-# Why this exists (ADR-0235): since alpha the production database holds
+# Why this exists (ADR-0237): since alpha the production database holds
 # authored content - codex entries, lore prose, techniques, traditions,
 # conditions, catalogs, grid rooms - that exists in NO other copy. Fixtures are
-# gitignored and the content repo is downstream-only (ADR-0236), so a
+# gitignored and the content repo is downstream-only (ADR-0238), so a
 # RemoveField/DeleteModel that reached main and got applied here is a permanent
 # loss, not an inconvenience. The nightly dump (roles/backups) can be almost 24h
 # stale at that instant. This closes that window, and it is the only guard in

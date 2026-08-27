@@ -1,7 +1,7 @@
 # Schema-only migrations pre-production
 
 **Status: SUPERSEDED (2026-08-26) by
-[ADR-0235](0235-alpha-is-durable-the-production-database-is-the-master-copy.md).**
+[ADR-0237](0237-alpha-is-durable-the-production-database-is-the-master-copy.md).**
 Do not follow this ADR. Its premise expired when alpha authoring began: the
 production database now holds authored content that exists nowhere else, and a
 migration that drops or renames an authored-content column must carry a

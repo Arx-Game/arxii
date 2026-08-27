@@ -31,10 +31,10 @@ on any database that already has `Roster` rows.
 
 **Dev databases only, and only for a database still stranded before migration 0011.**
 The delete-and-reseed below was written under ADR-0013, whose no-backfill premise
-ADR-0235 has since superseded: production is durable, `RosterEntry` and its tenures
+ADR-0237 has since superseded: production is durable, `RosterEntry` and its tenures
 cascade off `Roster`, and this statement would take real characters with it. Never run
 it against production; a production database in this state needs a `RunPython`
-backfill, per ADR-0235.
+backfill, per ADR-0237.
 
 ```sql
 DELETE FROM roster_roster;

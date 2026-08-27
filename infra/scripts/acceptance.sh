@@ -644,7 +644,7 @@ chkno "the standup workflow no longer passes the retired secret through" \
 chk   "ADR-0225 is marked superseded by ADR-0232" \
   "grep -q 'ADR-0232' docs/adr/0225-arx1-archived-to-object-storage-static-site.md"
 
-echo "== ADR-0235 (pre-migration dump: alpha DB is durable) =="
+echo "== ADR-0237 (pre-migration dump: alpha DB is durable) =="
 DEP=infra/ansible/roles/app_deploy/tasks/main.yml
 # The whole point is ORDER: a dump taken after the migration is worthless.
 # Anchored on the EXECUTION task's name, not on the script path — the path also
