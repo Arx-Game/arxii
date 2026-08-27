@@ -13,6 +13,7 @@ from django.test import TestCase, override_settings
 from actions.constants import ResolutionPhase
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse
 from world.relationships.models import AffectionShift
 from world.scenes.action_constants import BoonKind, BoonSumTier
@@ -21,7 +22,9 @@ from world.scenes.action_services import create_action_request
 from world.scenes.boon_models import Boon
 from world.scenes.boon_services import (
     BOON_AFFECTION_COST,
+    BOON_NO_POINTER_TEXT,
     BoonAsk,
+    _rank_gap_shift,
     boon_sum_values,
     fulfill_boon,
     npc_boon_tier_shift,
@@ -46,6 +49,12 @@ def _pilot(persona) -> None:
     character = persona.character_sheet.character
     character.db_account = AccountFactory()
     character.save(update_fields=["db_account"])
+
+
+def _set_rank(sheet, rank: int) -> None:
+    """Pin ``social_rank`` (the factory randomizes it) for deterministic gap math."""
+    sheet.social_rank = rank
+    sheet.save(update_fields=["social_rank"])
 
 
 def _success_resolution(success: bool = True) -> PendingActionResolution:
@@ -147,10 +156,115 @@ class BoonAskValidationTests(TestCase):
         with self.assertRaises(ValidationError):
             self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=999999)
 
+    def test_held_item_ask_rejected_without_asker_pointer(self) -> None:
+        """2026-08-27 exact-pointer ruling: a valid, target-held item id still fails
+        without prior asker knowledge — the API cannot be curled around the UI."""
+        from world.items.factories import ItemInstanceFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=item.pk)
+
+    def test_held_item_ask_accepted_with_asker_pointer(self) -> None:
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+        from world.roster.factories import RosterEntryFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        roster_entry = RosterEntryFactory(character_sheet=self.asker.character_sheet)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=roster_entry, clue=clue)
+        request = self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=item.pk)
+        self.assertEqual(request.boon.item_instance_id, item.pk)
+
     def test_vault_ask_requires_target_withdraw_authority(self) -> None:
         # No vaulted item / no authority — ineligible.
         with self.assertRaises(ValidationError):
             self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=999999)
+
+    def test_vault_ask_rejected_without_asker_pointer(self) -> None:
+        """2026-08-27 exact-pointer ruling: authority alone is not enough — the asker
+        also needs a pointer to the specific vaulted item."""
+        from world.items.factories import ItemInstanceFactory
+        from world.items.services.org_vault import deposit_item_to_vault
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.target, organization=org, rank=1)
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        deposit_item_to_vault(organization=org, persona=self.target, item_instance=item)
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item.pk)
+
+    def test_vault_ask_accepted_with_asker_pointer(self) -> None:
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+        from world.items.services.org_vault import deposit_item_to_vault
+        from world.roster.factories import RosterEntryFactory
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.target, organization=org, rank=1)
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        deposit_item_to_vault(organization=org, persona=self.target, item_instance=item)
+        roster_entry = RosterEntryFactory(character_sheet=self.asker.character_sheet)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=roster_entry, clue=clue)
+        request = self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item.pk)
+        self.assertEqual(request.boon.item_instance_id, item.pk)
+
+    def test_held_item_ask_error_text_is_identical_across_all_non_pointer_cases(self) -> None:
+        """2026-08-27 fix round 1 (oracle-leak fix): a pointer-less asker must not be
+        able to distinguish "no such item" from "not held by them" from "held by
+        someone else" by probing ids — all three fail with the SAME neutral text,
+        checked BEFORE the target-holds check ever runs."""
+        from world.items.factories import ItemInstanceFactory
+
+        third_party = PersonaFactory()
+        held_by_target = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        held_by_third_party = ItemInstanceFactory(
+            holder_character_sheet=third_party.character_sheet
+        )
+
+        messages = []
+        for item_id in (999999, held_by_target.pk, held_by_third_party.pk):
+            with self.assertRaises(ValidationError) as ctx:
+                self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=item_id)
+            messages.append(str(ctx.exception.messages[0]))
+
+        self.assertEqual(messages, [BOON_NO_POINTER_TEXT] * 3)
+
+    def test_vault_ask_error_text_is_identical_across_all_non_pointer_cases(self) -> None:
+        """Same oracle-leak fix, vault side: a nonexistent id, a real (unvaulted) item
+        held by the target, and a real item held by a third party must all fail with
+        the same neutral text before vault-authority is ever consulted."""
+        from world.items.factories import ItemInstanceFactory
+
+        third_party = PersonaFactory()
+        held_by_target = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        held_by_third_party = ItemInstanceFactory(
+            holder_character_sheet=third_party.character_sheet
+        )
+
+        messages = []
+        for item_id in (999999, held_by_target.pk, held_by_third_party.pk):
+            with self.assertRaises(ValidationError) as ctx:
+                self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item_id)
+            messages.append(str(ctx.exception.messages[0]))
+
+        self.assertEqual(messages, [BOON_NO_POINTER_TEXT] * 3)
 
     def test_deed_ask_requires_text(self) -> None:
         with self.assertRaises(ValidationError):
@@ -179,12 +293,64 @@ class BoonAskValidationTests(TestCase):
             )
         self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
 
+    def test_boon_payload_on_a_non_boon_action_key_is_rejected(self) -> None:
+        """Final-review fix (#2540): a boon payload must not ride a non-boon action
+        key (e.g. "flirt") — it would attach to that action's own consent category,
+        phantom-shift NPC difficulty via npc_boon_tier_shift, and strand an
+        unfulfillable Boon row (only the registered ``boon`` resolver ever calls
+        fulfill_boon)."""
+        with self.assertRaises(ValidationError):
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.target,
+                action_key="flirt",
+                boon=BoonAsk(kind=BoonKind.DEED, deed_text="Guard the gate"),
+            )
+        self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+        self.assertFalse(Boon.objects.exists())
+
+    def test_all_boon_action_keys_still_accept_a_boon_payload(self) -> None:
+        """The new mirror guard only rejects a MISMATCHED action key — every real
+        boon-ask flavor (BOON_ACTION_KEYS: boon/boon_con/boon_charm/boon_menace)
+        still accepts a well-formed payload."""
+        from world.scenes.boon_services import BOON_ACTION_KEYS
+
+        for action_key in BOON_ACTION_KEYS:
+            with self.subTest(action_key=action_key):
+                request = create_action_request(
+                    scene=self.scene,
+                    initiator_persona=self.asker,
+                    target_persona=self.target,
+                    action_key=action_key,
+                    boon=BoonAsk(kind=BoonKind.DEED, deed_text="Guard the gate"),
+                )
+                self.assertIsNotNone(request.boon)
+
+    def test_payload_less_request_is_rejected_for_every_ask_flavor(self) -> None:
+        """#2540 slice 3: the payload guard is keyed on BOON_ACTION_KEYS membership,
+        not a literal "boon" comparison — it must fire for every ask flavor."""
+        for key in ("boon_con", "boon_charm", "boon_menace"):
+            with self.assertRaises(ValidationError):
+                create_action_request(
+                    scene=self.scene,
+                    initiator_persona=self.asker,
+                    target_persona=self.target,
+                    action_key=key,
+                )
+        self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+
 
 class NpcBoonBandTests(TestCase):
     """Dial 2 — the mandatory NPC-side relative-cost band; piloted targets unshifted."""
 
     def _request_with_money_boon(self, *, sum_tier: str) -> SceneActionRequest:
         request = SceneActionRequestFactory(action_key="boon")
+        # Pin equal social_rank on both sides (the factory randomizes it) — these tests
+        # assert the cost band in isolation; the standing-gap shift has its own tests
+        # below (RankGapShiftTests). Equal rank => gap 0 => no rank-gap contribution.
+        _set_rank(request.initiator_persona.character_sheet, 10)
+        _set_rank(request.target_persona.character_sheet, 10)
         _fund(request.target_persona.character_sheet, 1000)
         Boon.objects.create(action_request=request, kind=BoonKind.MONEY, sum_tier=sum_tier)
         return request
@@ -209,6 +375,84 @@ class NpcBoonBandTests(TestCase):
     def test_non_boon_request_is_unshifted(self) -> None:
         request = SceneActionRequestFactory(action_key="persuade")
         self.assertEqual(npc_boon_tier_shift(request), 0)
+
+
+class RankGapShiftTests(TestCase):
+    """#2540 slice 3 — the standing-gap audacity shift, additive with dial 2's cost band.
+
+    ``social_rank`` is INVERTED (1=highest, default 10): gap = asker - target, positive
+    meaning the target outranks the asker.
+    """
+
+    def _request_with_ranks(self, *, asker_rank: int, target_rank: int) -> SceneActionRequest:
+        request = SceneActionRequestFactory(action_key="boon")
+        _set_rank(request.initiator_persona.character_sheet, asker_rank)
+        _set_rank(request.target_persona.character_sheet, target_rank)
+        _fund(request.target_persona.character_sheet, 1000)
+        Boon.objects.create(action_request=request, kind=BoonKind.MONEY, sum_tier=BoonSumTier.MINOR)
+        return request
+
+    def test_gap_below_the_first_band_adds_nothing(self) -> None:
+        # asker rank 14, target rank 10 -> gap 4 (below the 5 threshold)
+        asker_sheet = CharacterSheetFactory(social_rank=14)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 0)
+
+    def test_gap_at_the_first_band_edge_adds_one_tier(self) -> None:
+        # gap exactly 5 -> crosses the first band
+        asker_sheet = CharacterSheetFactory(social_rank=15)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 1)
+
+    def test_gap_just_below_the_second_band_stays_at_one_tier(self) -> None:
+        # gap 9 -> still only the first band
+        asker_sheet = CharacterSheetFactory(social_rank=19)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 1)
+
+    def test_gap_at_the_second_band_edge_adds_two_tiers(self) -> None:
+        # gap exactly 10 -> crosses the second band
+        asker_sheet = CharacterSheetFactory(social_rank=20)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 2)
+
+    def test_punching_down_is_never_harder(self) -> None:
+        # asker rank 1 (highest), target rank 20 (lowest) -> gap -19, clamped to 0
+        asker_sheet = CharacterSheetFactory(social_rank=1)
+        target_sheet = CharacterSheetFactory(social_rank=20)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 0)
+
+    def test_default_rank_sheets_are_unshifted(self) -> None:
+        # both sheets at the model's default rank (10; the factory itself randomizes
+        # it, so pin explicitly rather than relying on CharacterSheetFactory()'s draw)
+        asker_sheet = CharacterSheetFactory(social_rank=10)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 0)
+
+    def test_npc_target_below_first_band_is_unshifted(self) -> None:
+        request = self._request_with_ranks(asker_rank=14, target_rank=10)
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+    def test_npc_target_gap_shifts_the_npc_band(self) -> None:
+        request = self._request_with_ranks(asker_rank=20, target_rank=10)
+        self.assertEqual(npc_boon_tier_shift(request), 2)
+
+    def test_piloted_target_ignores_the_rank_gap(self) -> None:
+        request = self._request_with_ranks(asker_rank=20, target_rank=10)
+        _pilot(request.target_persona)  # their difficulty choice rules, gap or no gap
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+    def test_rank_gap_stacks_additively_with_the_cost_band(self) -> None:
+        request = SceneActionRequestFactory(action_key="boon")
+        _set_rank(request.initiator_persona.character_sheet, 20)  # gap 10 -> +2
+        _set_rank(request.target_persona.character_sheet, 10)
+        _fund(request.target_persona.character_sheet, 1000)
+        Boon.objects.create(
+            action_request=request,
+            kind=BoonKind.MONEY,
+            sum_tier=BoonSumTier.GREAT,  # cost band +2
+        )
+        self.assertEqual(npc_boon_tier_shift(request), 4)  # 2 (cost band) + 2 (rank gap)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
@@ -237,6 +481,21 @@ class BoonResolverE2ETests(TestCase):
         self.accrue_patcher = patch("world.scenes.action_services.accrue")
         self.accrue_patcher.start()
         self.addCleanup(self.accrue_patcher.stop)
+
+    def _grant_item_pointer(self, item) -> None:
+        """2026-08-27 exact-pointer ruling: a named-item ask needs asker knowledge."""
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.roster.factories import RosterEntryFactory
+
+        roster_entry = RosterEntryFactory(character_sheet=self.asker.character_sheet)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=roster_entry, clue=clue)
 
     def _dispatch(self, *, success: bool, sum_tier: str = BoonSumTier.FAIR) -> SceneActionRequest:
         with patch(
@@ -296,6 +555,7 @@ class BoonResolverE2ETests(TestCase):
         OrganizationMembershipFactory(persona=self.npc_target, organization=org, rank=1)
         item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
         deposit_item_to_vault(organization=org, persona=self.npc_target, item_instance=item)
+        self._grant_item_pointer(item)
 
         with patch(
             "world.scenes.action_services.start_action_resolution",
@@ -320,6 +580,7 @@ class BoonResolverE2ETests(TestCase):
         from world.items.models import OwnershipEvent
 
         item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
+        self._grant_item_pointer(item)
         with patch(
             "world.scenes.action_services.start_action_resolution",
             return_value=_success_resolution(success=True),
@@ -383,3 +644,72 @@ class BoonSeedTests(TestCase):
         template = ActionTemplate.objects.get(name="Boon")
         self.assertEqual(template.consent_category.key, "boon")
         self.assertEqual(template.consent_category.parent.key, "antagonism")
+
+    def test_ask_flavor_templates_share_the_boon_consent_category(self) -> None:
+        """#2540 slice 3: one opt-in (the shared "boon" antagonism-parented category)
+        covers every ask flavor, not just the base template."""
+        from actions.models import ActionTemplate
+        from world.seeds.checks import seed_check_resolution_tables
+        from world.seeds.consent import seed_social_consent_categories
+        from world.seeds.social_actions import seed_social_action_content
+        from world.seeds.social_checks import seed_social_check_content
+        from world.seeds.social_relationships import seed_social_relationship_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()
+        seed_social_consent_categories()
+
+        for name in ("Con a Boon", "Charm a Boon", "Menace a Boon"):
+            template = ActionTemplate.objects.get(name=name)
+            self.assertEqual(template.consent_category.key, "boon", name)
+            self.assertEqual(template.consent_category.parent.key, "antagonism", name)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class BoonAskFlavorResolverE2ETests(TestCase):
+    """#2540 slice 3: the resolver registered under BOON_ACTION_KEYS also fires for
+    an ask-flavor sibling key, not just the base "boon" key."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.seeds.checks import seed_check_resolution_tables
+        from world.seeds.relationship_scale import seed_relationship_scale_content
+        from world.seeds.social_actions import seed_social_action_content
+        from world.seeds.social_checks import seed_social_check_content
+        from world.seeds.social_relationships import seed_social_relationship_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()
+        seed_relationship_scale_content()
+        cls.scene = SceneFactory()
+
+    def setUp(self) -> None:
+        self.asker = PersonaFactory()
+        self.npc_target = PersonaFactory()  # no db_account → NPC, auto-accepts
+        _fund(self.npc_target.character_sheet, 1000)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+        self.addCleanup(self.accrue_patcher.stop)
+
+    def test_con_a_boon_success_fulfills_and_charges_affection(self) -> None:
+        with patch(
+            "world.scenes.action_services.start_action_resolution",
+            return_value=_success_resolution(success=True),
+        ):
+            request = create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.npc_target,
+                action_key="boon_con",
+                boon=BoonAsk(kind=BoonKind.MONEY, sum_tier=BoonSumTier.FAIR),
+            )
+        self.assertEqual(_balance(self.asker.character_sheet), 200)  # fair sum of 1000
+        self.assertEqual(_balance(self.npc_target.character_sheet), 800)
+        request.boon.refresh_from_db()
+        self.assertIsNotNone(request.boon.fulfilled_at)
+        shift = AffectionShift.objects.get(boon=request.boon)
+        self.assertEqual(shift.amount, -BOON_AFFECTION_COST)

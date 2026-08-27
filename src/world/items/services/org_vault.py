@@ -60,6 +60,14 @@ def can_access_vault(vault: OrganizationVault, persona: Persona) -> bool:
 
     The ``can_spend_treasury`` twin — the predicate VAULT_ITEM boons, the collection
     return leg, and the embezzlement branch all gate on.
+
+    ``world.scenes.boon_services._target_accessible_vault_ids`` inlines this SAME rule
+    as one batched joined query (a list-endpoint seam that can't call this per-pair
+    predicate once per candidate vault without reintroducing an N+1) — a parity test
+    (``PointerKnownItemsForTargetTests`` /
+    ``test_target_accessible_vault_ids_parity_with_can_access_vault`` in
+    ``world/scenes/tests/test_item_pointers.py``) cycles membership/rank fixtures
+    through both and asserts agreement. Keep the two rules in lockstep if this changes.
     """
     tier = _active_membership_tier(vault, persona)
     return tier is not None and tier <= vault.withdraw_rank_max

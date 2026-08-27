@@ -18,6 +18,12 @@ vi.mock('../actionQueries', async (importOriginal) => {
     createActionRequest: vi.fn(),
     castTechnique: vi.fn(),
     fetchCastableTechniques: vi.fn(),
+    // BoonAskForm's own useQuery call — kept a bare mock (never the real
+    // fetchBoonOptions, which hits apiFetch) so a boon-dispatch test can render
+    // the ask form without a network call.
+    fetchBoonOptions: vi.fn(() =>
+      Promise.resolve({ sum_tiers: [], material_categories: [], pointer_items: [] })
+    ),
     useCastableTechniques: vi.fn(() => ({
       data: [],
       isLoading: false,
@@ -112,11 +118,15 @@ vi.mock('@/magic/components/threads/ThreadPullPicker', () => ({
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
+const toastMock = vi.fn();
 vi.mock('sonner', () => ({
-  toast: {
+  // `toast` is itself callable (the plain neutral-notification form, e.g. a boon's
+  // honest refusal — #2540 slice 3) AND carries `.success`/`.error` variants, so
+  // the mock mirrors that same shape rather than a plain object.
+  toast: Object.assign((...args: unknown[]) => toastMock(...args), {
     success: (...args: unknown[]) => toastSuccessMock(...args),
     error: (...args: unknown[]) => toastErrorMock(...args),
-  },
+  }),
 }));
 
 const mockNavigate = vi.fn();
@@ -130,6 +140,7 @@ import {
   createActionRequest,
   castTechnique,
   useCastableTechniques,
+  fetchBoonOptions,
 } from '../actionQueries';
 import { useThreads } from '@/magic/queries';
 import type { Thread } from '@/magic/types';
@@ -1179,6 +1190,83 @@ describe('ActionPanel', () => {
     // the picker stays open so the player can narrow the selection to one.
     expect(createActionRequest).not.toHaveBeenCalled();
     expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Honest boon refusal surfaced to the player (final-review must-fix, #2540)
+  // -------------------------------------------------------------------------
+
+  it('toasts the diegetic refusal text on a boon_refused response and skips the success path', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Boon',
+          target_spec: {
+            kind: 'persona',
+            cardinality: 'single',
+            filters: {
+              in_same_scene: true,
+              exclude_self: false,
+              must_be_conscious: false,
+            },
+          },
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'boon',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    vi.mocked(fetchBoonOptions).mockResolvedValue({
+      sum_tiers: [],
+      material_categories: [],
+      pointer_items: [],
+    });
+    vi.mocked(createActionRequest).mockResolvedValue({
+      status: 'resolved',
+      boon_refused: true,
+      detail: 'PLACEHOLDER: they do not have that to give.',
+    });
+    await mockRosterWithPersona();
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole('button'));
+    await waitFor(() => {
+      expect(screen.getByText('Boon')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /^boon$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    // Single-cardinality target spec: clicking the candidate commits immediately
+    // (no checkbox/Confirm step — see TargetPicker's isMulti branch).
+    await user.click(screen.getByRole('button', { name: 'Alice' }));
+
+    // The boon ask form opens (single target picked) — ask for a deed, the one
+    // kind that needs no fetched option data.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'A deed' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: 'A deed' }));
+    await user.type(screen.getByPlaceholderText('The deed you ask of them…'), 'Guard the gate');
+    await user.click(screen.getByRole('button', { name: /make the ask/i }));
+
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalledWith('PLACEHOLDER: they do not have that to give.');
+    });
+    // No success-path toast fired — the honest refusal is not a dispatched-
+    // successfully outcome (disposition messages ride toast.success).
+    expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------

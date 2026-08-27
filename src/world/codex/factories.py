@@ -59,6 +59,9 @@ class CodexEntryFactory(DjangoModelFactory):
     display_order = factory.Sequence(lambda n: n)
     is_public = False
     is_featured = False
+    # Item pointer (#2540): override to point this entry at an item kind/instance.
+    subject_item_template = None
+    subject_item_instance = None
 
 
 class CharacterCodexKnowledgeFactory(DjangoModelFactory):
