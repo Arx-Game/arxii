@@ -2600,6 +2600,22 @@ action consent flow, and a three-mode non-combat round framework.
   fix):** `validate_boon_ask`/`fulfill_boon` dispatch on `kind` through explicit per-kind tables
   (`_BOON_ASK_VALIDATORS`/`_BOON_FULFILLERS`) — an unhandled kind raises `ValueError` loudly
   instead of silently falling through to DEED's handling (the original if/elif chains' trap).
+  **Ask flavors (slice 3, #2540):** three sibling `ActionTemplate` singletons over the same
+  Boon payload — Con a Boon (`boon_con`, Con check), Charm a Boon (`boon_charm`, Seduction
+  check), Menace a Boon (`boon_menace`, Intimidation check, +1 tier like Seduce-harder-than-
+  Flirt) — join plain `boon` in `BOON_ACTION_KEYS` (the frozenset replacing the old single
+  `BOON_ACTION_KEY` everywhere: the server payload guard, the resolver registration loop, and
+  the FE `ActionPanel` gate). All four share the `boon` consent category and one resolver
+  registration loop — one opt-in, one fulfillment path; only the check type differs per
+  flavor (rejected: a `flavor` payload field selecting the check type at resolution time — the
+  check type belongs on the template, ADR-0235).
+  **Standing-gap audacity shift (slice 3, #2540):** `npc_boon_tier_shift` (dial 2's NPC band)
+  now sums the existing relative-cost band with `_rank_gap_shift`, one difficulty tier per
+  `RANK_GAP_TIER_BANDS` (PLACEHOLDER magnitudes) threshold crossed by how far the asker's
+  inverted `social_rank` sits below the target's — asking a much higher-standing NPC is
+  harder; punching down or asking an equal never adds a tier. NPC-only: a piloted target's own
+  `difficulty_choice` always rules (`action_services.py`'s piloted call site omits
+  `extra_tier_modifier` by design, per the July piloted-consent ruling). See ADR-0235.
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).

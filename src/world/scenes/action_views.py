@@ -9,8 +9,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Exists, OuterRef, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status, viewsets
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -322,7 +322,23 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         return kwargs
 
     @extend_schema(
-        request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
+        request=SceneActionRequestCreateSerializer,
+        responses={
+            201: SceneActionRequestSerializer,
+            200: inline_serializer(
+                name="BoonRefusalResponse",
+                fields={
+                    "boon_refused": serializers.BooleanField(),
+                    "detail": serializers.CharField(),
+                },
+            ),
+        },
+        description=(
+            "Normally returns 201 with the created action request. A well-formed"
+            " MATERIAL boon ask naming a category the target's bucket is empty of is"
+            " instead honestly refused with 200 `{boon_refused: true, detail: ...}` —"
+            " no row is created, no error occurred (#2540 slice 3)."
+        ),
     )
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
         """Create a new action request."""
