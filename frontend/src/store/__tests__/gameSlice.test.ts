@@ -22,6 +22,7 @@ import {
   setActiveThreadTab,
   hydrateThreadTabs,
   resetGame,
+  hydrateActiveCharacter,
 } from '../gameSlice';
 import type {
   GameMessage,
@@ -67,6 +68,7 @@ interface Session {
 interface GameState {
   sessions: Record<string, Session>;
   active: string | null;
+  activeEntryId: number | null;
 }
 
 const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
@@ -159,6 +161,7 @@ const createStateWithSession = (
     [sessionName]: createDefaultSession(sessionData),
   },
   active,
+  activeEntryId: null,
 });
 
 const createStateWithMultipleSessions = (
@@ -169,6 +172,7 @@ const createStateWithMultipleSessions = (
     Object.entries(sessionsData).map(([name, data]) => [name, createDefaultSession(data)])
   ),
   active,
+  activeEntryId: null,
 });
 
 // --- Tests ---
@@ -189,7 +193,7 @@ describe('gameSlice', () => {
     it('returns initial state for unknown action', () => {
       const result = reducer(undefined, { type: 'unknown' });
 
-      expect(result).toEqual({ sessions: {}, active: null });
+      expect(result).toEqual({ sessions: {}, active: null, activeEntryId: null });
     });
 
     it('initial state has empty sessions object', () => {
@@ -208,7 +212,7 @@ describe('gameSlice', () => {
   describe('startSession', () => {
     describe('creating new sessions', () => {
       it('creates new session if it does not exist', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -216,7 +220,7 @@ describe('gameSlice', () => {
       });
 
       it('creates session with default values', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -236,7 +240,7 @@ describe('gameSlice', () => {
       });
 
       it('initializes threadLastSeen as an empty object', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -244,7 +248,7 @@ describe('gameSlice', () => {
       });
 
       it('sets new session as active', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -309,7 +313,7 @@ describe('gameSlice', () => {
 
     describe('edge cases', () => {
       it('handles empty string as session name', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
 
         const result = reducer(initialState, startSession(''));
 
@@ -318,7 +322,7 @@ describe('gameSlice', () => {
       });
 
       it('handles character names with special characters', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
         const specialName = "O'Brien the Third";
 
         const result = reducer(initialState, startSession(specialName));
@@ -328,7 +332,7 @@ describe('gameSlice', () => {
       });
 
       it('handles character names with unicode', () => {
-        const initialState: GameState = { sessions: {}, active: null };
+        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
         const unicodeName = 'Character\u2019s Name';
 
         const result = reducer(initialState, startSession(unicodeName));
@@ -1093,7 +1097,7 @@ describe('gameSlice', () => {
 
       const result = reducer(initialState, resetGame());
 
-      expect(result).toEqual({ sessions: {}, active: null });
+      expect(result).toEqual({ sessions: {}, active: null, activeEntryId: null });
     });
 
     it('clears all sessions', () => {
@@ -1118,11 +1122,11 @@ describe('gameSlice', () => {
     });
 
     it('works from already initial state', () => {
-      const initialState: GameState = { sessions: {}, active: null };
+      const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
 
       const result = reducer(initialState, resetGame());
 
-      expect(result).toEqual({ sessions: {}, active: null });
+      expect(result).toEqual({ sessions: {}, active: null, activeEntryId: null });
     });
 
     it('clears complex session data', () => {
@@ -1152,6 +1156,7 @@ describe('gameSlice', () => {
           },
         },
         active: 'Hero',
+        activeEntryId: 7,
       };
 
       const result = reducer(complexState, resetGame());
@@ -1163,7 +1168,7 @@ describe('gameSlice', () => {
 
   describe('integration scenarios', () => {
     it('handles typical session lifecycle', () => {
-      let state: GameState = { sessions: {}, active: null };
+      let state: GameState = { sessions: {}, active: null, activeEntryId: null };
 
       // Start session
       state = reducer(state, startSession('Hero'));
@@ -1203,7 +1208,7 @@ describe('gameSlice', () => {
     });
 
     it('handles multi-character scenario with tab switching', () => {
-      let state: GameState = { sessions: {}, active: null };
+      let state: GameState = { sessions: {}, active: null, activeEntryId: null };
 
       // Start first character
       state = reducer(state, startSession('CharacterA'));
@@ -1236,7 +1241,7 @@ describe('gameSlice', () => {
     });
 
     it('handles reset and restart scenario', () => {
-      let state: GameState = { sessions: {}, active: null };
+      let state: GameState = { sessions: {}, active: null, activeEntryId: null };
 
       // Build up state
       state = reducer(state, startSession('Hero'));
@@ -1401,5 +1406,43 @@ describe('conversation tabs (#2165)', () => {
     state = reducer(state, setSessionScene({ character, scene: { ...scene } }));
     expect(state.sessions[character].openThreadTabs).toEqual(['whisper:1,2']);
     expect(state.sessions[character].activeThreadTab).toBe('whisper:1,2');
+  });
+});
+
+describe('hydrateActiveCharacter (#3412 reload survival)', () => {
+  it('sets active and activeEntryId from an empty initial state', () => {
+    const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+
+    const result = reducer(initialState, hydrateActiveCharacter({ name: 'Aria', entryId: 7 }));
+
+    expect(result.active).toBe('Aria');
+    expect(result.activeEntryId).toBe(7);
+  });
+
+  it('does not create a session entry for the hydrated character', () => {
+    const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+
+    const result = reducer(initialState, hydrateActiveCharacter({ name: 'Aria', entryId: 7 }));
+
+    expect(result.sessions).toEqual({});
+  });
+
+  it('overwrites a previously hydrated active/activeEntryId (e.g. re-selecting a different character)', () => {
+    const initialState: GameState = { sessions: {}, active: 'Aria', activeEntryId: 7 };
+
+    const result = reducer(initialState, hydrateActiveCharacter({ name: 'Bianca', entryId: 9 }));
+
+    expect(result.active).toBe('Bianca');
+    expect(result.activeEntryId).toBe(9);
+  });
+
+  it('leaves an existing live session for the hydrated character untouched', () => {
+    const initialState = createStateWithSession('Aria', { isConnected: true, unread: 3 }, 'Aria');
+
+    const result = reducer(initialState, hydrateActiveCharacter({ name: 'Aria', entryId: 7 }));
+
+    expect(result.sessions['Aria'].isConnected).toBe(true);
+    expect(result.sessions['Aria'].unread).toBe(3);
+    expect(result.activeEntryId).toBe(7);
   });
 });

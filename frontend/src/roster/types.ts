@@ -15,6 +15,17 @@ export interface MyRosterEntry {
   active_persona_id: number | null;
 }
 
+/**
+ * Response body of `POST /api/roster/entries/select/` (#3412) — mirrors
+ * `GET /api/user/`'s `selected_entry_id`/`selected_entry` fields exactly, so
+ * the mutation result can hydrate the same slice state the account query does.
+ * `entry_id: null` clears the selection, in which case both fields come back null.
+ */
+export interface SelectedEntryResult {
+  selected_entry_id: number | null;
+  selected_entry: MyRosterEntry | null;
+}
+
 export interface CharacterGallery {
   name: string;
   url: string;

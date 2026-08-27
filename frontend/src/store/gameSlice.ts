@@ -60,6 +60,15 @@ export interface Session {
 interface GameState {
   sessions: Record<string, Session>;
   active: MyRosterEntry['name'] | null;
+  /**
+   * The durable server-side selection's RosterEntry id (#3412 state 2.5
+   * substrate — `PlayerData.selected_entry_id`), mirrored alongside `active`
+   * by `hydrateActiveCharacter`. `active` stays keyed by character NAME (a
+   * standing rule for this slice, not revisited here — a rename touches ~25
+   * call sites); this field is the seam a future refactor can use to key the
+   * slice by id instead, without another full sweep.
+   */
+  activeEntryId: number | null;
 }
 
 // Module-scope monotonic id for session messages (see addSessionMessage).
@@ -68,6 +77,7 @@ let nextMessageId = 0;
 const initialState: GameState = {
   sessions: {},
   active: null,
+  activeEntryId: null,
 };
 
 export const gameSlice = createSlice({
@@ -304,6 +314,24 @@ export const gameSlice = createSlice({
       }
     },
     resetGame: () => initialState,
+    // Reload survival (#3412): mirrors the account query's `selected_entry`
+    // into this slice on every successful fetch (see useAccountQuery). Only
+    // ever SETS active/activeEntryId from a real selection — it never nulls
+    // them out, so a background refetch that happens to carry no selection
+    // (e.g. an account that has never selected on this endpoint) can't
+    // clobber a live local session. Deliberately does NOT touch `sessions`:
+    // selection is not presence, so hydration never starts a session or
+    // connects — `active` can therefore point at a character with no
+    // `sessions[active]` entry yet, which callers (GameWindow, GameTopBar)
+    // must tolerate.
+    hydrateActiveCharacter: (
+      state,
+      action: PayloadAction<{ name: MyRosterEntry['name']; entryId: number }>
+    ) => {
+      const { name, entryId } = action.payload;
+      state.active = name;
+      state.activeEntryId = entryId;
+    },
   },
 });
 
@@ -325,4 +353,5 @@ export const {
   setActiveThreadTab,
   hydrateThreadTabs,
   resetGame,
+  hydrateActiveCharacter,
 } = gameSlice.actions;

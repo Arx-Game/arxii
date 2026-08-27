@@ -3,7 +3,7 @@ import { fetchAccount, fetchRegistrationStatus, postLogin, postLogout, postRegis
 import { AccountData } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
-import { resetGame } from '@/store/gameSlice';
+import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
 
@@ -18,6 +18,21 @@ export function useAccountQuery() {
   useEffect(() => {
     if (result.data !== undefined) {
       dispatch(setAccount(result.data));
+    }
+    // Reload survival (#3412): mirror the durable server-side selection into
+    // gameSlice on every successful account fetch — hard reload -> this
+    // fetch -> hydration -> IC-scoped pages (tidings, own-sheet) that read
+    // `gameSlice.active` stop degrading. Only fires when a selection
+    // actually exists; a null `selected_entry` (never selected, or logged
+    // out) is left alone rather than clobbering an already-live local
+    // session — see `hydrateActiveCharacter`'s own doc comment.
+    if (result.data?.selected_entry) {
+      dispatch(
+        hydrateActiveCharacter({
+          name: result.data.selected_entry.name,
+          entryId: result.data.selected_entry.id,
+        })
+      );
     }
   }, [result.data, dispatch]);
 

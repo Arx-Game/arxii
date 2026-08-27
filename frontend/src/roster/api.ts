@@ -5,6 +5,7 @@ import type {
   CharacterData,
   PlayerMedia,
   TenureGallery,
+  SelectedEntryResult,
 } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { apiFetch } from '@/evennia_replacements/api';
@@ -22,6 +23,23 @@ export async function fetchMyRosterEntries(): Promise<MyRosterEntry[]> {
   const res = await apiFetch('/api/roster/entries/mine/');
   if (!res.ok) {
     throw new Error('Failed to load characters');
+  }
+  return res.json();
+}
+
+/**
+ * Set (or clear, `entryId: null`) the account's durable server-side character
+ * selection (#3412 state 2.5 substrate). Selection is NOT presence — this
+ * triggers zero lifecycle/session/puppeting side effects server-side. Mirrors
+ * the persona set-active endpoint's shape.
+ */
+export async function postSelectEntry(entryId: number | null): Promise<SelectedEntryResult> {
+  const res = await apiFetch('/api/roster/entries/select/', {
+    method: 'POST',
+    body: JSON.stringify({ entry_id: entryId }),
+  });
+  if (!res.ok) {
+    throw new Error('Could not switch to that character.');
   }
   return res.json();
 }

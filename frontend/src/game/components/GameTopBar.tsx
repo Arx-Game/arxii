@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
+import { useSelectCharacterMutation } from '@/roster/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { actingPersonaId } from '@/roster/persona';
@@ -52,11 +53,20 @@ export function GameTopBar({ characters }: GameTopBarProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
+  const selectCharacter = useSelectCharacterMutation();
 
   const activeSession = active ? sessions[active] : null;
   const isConnected = activeSession?.isConnected ?? false;
 
   const handleSelectCharacter = (name: MyRosterEntry['name']) => {
+    // #3412 — persist the selection server-side ALONGSIDE the existing
+    // puppeting behavior below, never replacing it. Fire-and-forget: the
+    // local session switch below is immediate regardless of this call's
+    // outcome (see useSelectCharacterMutation's doc comment).
+    const entryId = characters.find((c) => c.name === name)?.id;
+    if (entryId !== undefined) {
+      selectCharacter.mutate(entryId);
+    }
     if (sessions[name]) {
       dispatch(setActiveSession(name));
       if (!sessions[name].isConnected) {
@@ -94,10 +104,20 @@ export function GameTopBar({ characters }: GameTopBarProps) {
 
       {active && activeCharacter ? (
         <div className="flex items-center gap-3">
-          <Avatar className="h-9 w-9 ring-2 ring-primary">
-            <AvatarImage src={activeCharacter.profile_picture_url ?? undefined} alt={active} />
-            <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
-          </Avatar>
+          {/* #3412 — a hydrated-on-reload selection has no live session yet
+              (selection isn't presence, so hydration never auto-connects).
+              Clickable so there's still a way to (re)connect; harmless
+              no-op when already connected (handleSelectCharacter just
+              re-activates the existing session). */}
+          <button
+            onClick={() => handleSelectCharacter(active)}
+            title={isConnected ? active : `Connect as ${active}`}
+          >
+            <Avatar className="h-9 w-9 ring-2 ring-primary">
+              <AvatarImage src={activeCharacter.profile_picture_url ?? undefined} alt={active} />
+              <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
+            </Avatar>
+          </button>
           <PersonaSwitcher
             characterSheetId={activeCharacter.character_id}
             activePersonaId={activeCharacter.active_persona_id}
