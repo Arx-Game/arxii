@@ -5,10 +5,12 @@
 surface in #3067, closing the last "server-only" gap in the party-combat REST API; the authored
 effect palette shipped (#1584, combat-wired for battlefield shaping by #2206); the frontier is
 embodied combat (companions, mounts, war) and *proving* the WIRED-UNPROVEN paths — not the round
-engine. Champion-duel challenge issuance and Battle round PLAY remain telnet-first: staging
-(create/stage/spawn/enlist) got its web `StagingPanel` in #2010, but round-action declaration
-(all 12 `BattleActionKind`s), the begin/resolve/conclude round lifecycle, and `battle duel` have
-no web surface (verified 2026-08-26 audit; filed as #3389). **Lethal NPC duels are reachable (#3068):**
+engine. **Battles are now fully web-playable (#3389):** the round-action declaration panel (all 12
+`BattleActionKind`s), GM round-lifecycle controls (begin/resolve/conclude), and Champion-duel
+challenge issuance all shipped a web surface, alongside the pre-existing Battle staging
+`StagingPanel` (#2010) — `CmdBattle` is no longer required to fight a war from the browser; see
+`docs/systems/battles.md`'s [Web surface (#2009)](../systems/battles.md#web-surface-2009) section.
+**Lethal NPC duels are reachable (#3068):**
 `world.combat.duels.create_lethal_duel` — previously a zero-caller service, flagged unreachable by
 the 2026-08-08 combat audit — now has a real GM-initiated caller: a GM proposes a climactic
 PC-vs-significant-NPC duel (web `GMEncounterControls` "Start Lethal Duel" dialog / telnet `encounter

@@ -17,8 +17,10 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from world.battles.constants import (
+    BattleActionKind,
     BattleOutcome,
     BattlePosture,
     BattleSideRole,
@@ -38,10 +40,22 @@ from world.battles.factories import (
     FortificationFactory,
 )
 from world.battles.resolution import resolve_battle_round
-from world.battles.services import begin_battle_round, conclude_battle, enlist_participant
+from world.battles.services import (
+    begin_battle_round,
+    conclude_battle,
+    declare_battle_action,
+    enlist_participant,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
-from world.covenants.factories import CovenantFactory
+from world.covenants.constants import CovenantType
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+)
+from world.covenants.services import set_engaged_membership
+from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.military.factories import MilitaryUnitFactory
 from world.roster.factories import MediaFactory
 from world.scenes.constants import RoundStatus, ScenePrivacyMode
@@ -247,6 +261,10 @@ class BattleApiJourneyTest(TestCase):
         self.assertIsNone(participant_data["persona"]["thumbnail_media_url"])
         self.assertNotIn("account", participant_data["persona"])
         self.assertNotIn("username", participant_data["persona"])
+        # #3389 additions
+        self.assertEqual(participant_data["character_sheet_id"], self.pc_sheet.pk)
+        self.assertIs(participant_data["is_champion"], False)
+        self.assertIs(participant_data["declared_this_round"], False)
 
     def test_participant_can_retrieve_full_detail_shape(self) -> None:
         client = APIClient()
@@ -373,9 +391,15 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         self.assertEqual(len(response.data["deeds"]), 3)
         query_count = len(ctx)
+        # Budget bumped 15 -> 17 for #3389's two flat, non-scaling additions to
+        # BattleParticipantSerializer: one is_champion covenant-membership
+        # lookup and one cached_declarations Prefetch. Both are fixed-cost per
+        # request (not per-deed/per-participant) — see
+        # test_round_declaration_sets_declared_this_round_true's own
+        # flat-query-across-participants assertion for the scaling guard.
         self.assertLess(
             query_count,
-            15,
+            17,
             f"Expected deeds prefetch to keep queries flat; got {query_count} queries "
             "-- the deeds SerializerMethodField may be issuing per-deed queries (N+1).",
         )
@@ -455,6 +479,72 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         participant_data = response.data["participants"][0]
         self.assertEqual(participant_data["persona"]["thumbnail_media_url"], media.cloudinary_url)
+
+    def test_is_champion_true_for_engaged_champion_role_holder(self) -> None:
+        """#3389 — a Champion (engaged is_champion_role CovenantRole) reads is_champion=True."""
+        champion_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            is_champion_role=True,
+            slug="champion-api-test",
+        )
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=self.pc_sheet,
+            covenant=self.covenant,
+            covenant_role=champion_role,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        participant_data = response.data["participants"][0]
+        self.assertIs(participant_data["is_champion"], True)
+
+    def test_round_declaration_sets_declared_this_round_true(self) -> None:
+        """#3389 — declared_this_round flips True once the participant has a
+        BattleActionDeclaration in the battle's current (open) round, and stays
+        flat across an unrelated second participant (no per-row query).
+
+        Named to sort alphabetically AFTER test_deeds_do_not_cause_n_plus_1_queries
+        (below) — that test's query-count budget assumes it's the FIRST test in
+        this class to hit self.battle.pk via the live API client; Django's
+        `to_attr` prefetch cache is set on the (idmapper-shared, class-level)
+        Battle instance the first time it's fetched and skipped on later
+        fetches within the same process, so a test that touches self.battle
+        earlier in alphabetical run order silently shifts that budget.
+        """
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.pc_sheet, technique=technique)
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=technique,
+            # self.ground_unit shares self.participant's place (The Ford) —
+            # a cross-place target would raise PlacesDoNotOverlapError.
+            target_unit=self.ground_unit,
+        )
+        # A second, undeclared participant on the same battle proves this stays
+        # per-row-accurate rather than a battle-wide flag.
+        other_sheet = CharacterSheetFactory()
+        other_account = AccountFactory(username="battle_other_pc")
+        SceneParticipationFactory(scene=self.battle.scene, account=other_account)
+        enlist_participant(
+            battle=self.battle,
+            character_sheet=other_sheet,
+            side=self.defender_side,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        by_sheet = {
+            p["character_sheet_id"]: p["declared_this_round"] for p in response.data["participants"]
+        }
+        self.assertIs(by_sheet[self.pc_sheet.pk], True)
+        self.assertIs(by_sheet[other_sheet.pk], False)
 
     def test_scene_filter_returns_exactly_this_battle_for_participant(self) -> None:
         client = APIClient()
