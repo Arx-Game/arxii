@@ -1766,7 +1766,6 @@ class StaffDuplicateRoomAction(_WorldBuilderAction):
         )
 
 
-@dataclass
 def _batch_dig_cells(
     area: Any, anchor: Any, spec: Any, count: int
 ) -> tuple[list[tuple[int, int, int]], str | None]:
@@ -1840,6 +1839,7 @@ def _dig_batch_rooms(  # noqa: PLR0913 - split from the batch-dig execute() (#32
     return made, None
 
 
+@dataclass
 class StaffBatchDigAction(_WorldBuilderAction):
     """Dig a corridor of linked rooms in one stroke (#3269 Phase B bulk).
 
