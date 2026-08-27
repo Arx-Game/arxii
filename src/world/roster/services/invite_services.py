@@ -131,7 +131,6 @@ def resolve_invite(token: str) -> GameInvite | None:
     return invite
 
 
-@transaction.atomic
 def claim_game_invite(token: str, account: AccountDB) -> GameInvite:
     """Link an invite to a newly-registered account (first login).
 
@@ -165,15 +164,21 @@ def claim_game_invite(token: str, account: AccountDB) -> GameInvite:
         raise ValueError(msg)
 
     if invite.expires_at is not None and timezone.now() >= invite.expires_at:
+        # Idmapper rollback staleness (django_notes.md): this write must commit
+        # on its own — it is not the claim, and a later raise inside a shared
+        # atomic block would have rolled it back while leaving the cached
+        # instance reporting EXPIRED forever. Kept outside any atomic block
+        # (and outside the claim mutation below) so it always persists.
         invite.status = InviteStatus.EXPIRED
         invite.save(update_fields=["status"])
         msg = "This invite has expired."
         raise ValueError(msg)
 
-    invite.status = InviteStatus.CLAIMED
-    invite.invited_account = account
-    invite.claimed_at = timezone.now()
-    invite.save(update_fields=["status", "invited_account", "claimed_at"])
+    with transaction.atomic():
+        invite.status = InviteStatus.CLAIMED
+        invite.invited_account = account
+        invite.claimed_at = timezone.now()
+        invite.save(update_fields=["status", "invited_account", "claimed_at"])
     return invite
 
 
