@@ -2550,14 +2550,15 @@ action consent flow, and a three-mode non-combat round framework.
   `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
   cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
-  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
+  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED/MATERIAL), `amount`,
   `item_instance`, `deed_text`, `fulfilled_at`, `material_category` (nullable FK →
-  `items.MaterialCategory`, slice 3 schema, consumed by a material-boon completion path).
-  Slice 3 also adds `character_has_item_pointer(*, sheet, item)` (`boon_services.py`) —
+  `items.MaterialCategory`, MATERIAL asks only).
+  `character_has_item_pointer(*, sheet, item)` (`boon_services.py`) —
   the exact-pointer predicate for a named-item ask: True when the roster entry holds a
   discovered ITEM-target clue, a KNOWN codex entry, or known secret knowledge naming the
   instance (or its template with no instance pinned) — see `ClueTargetKind.ITEM` and the
-  matching `CodexEntry`/`Secret` item-pointer FKs below. Slice 2 wired the full loop (`boon_services`):
+  matching `CodexEntry`/`Secret` item-pointer FKs below (not yet wired into `validate_boon_ask`).
+  Slice 2 wired the full loop (`boon_services`):
   `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
   grant never exists: penniless-target money, unheld item, empty deed rejected before any row).
   **Money asks are relative sum tiers (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the
@@ -2565,15 +2566,31 @@ action consent flow, and a three-mode non-combat round framework.
   `boon_sum_values` is the UI display seam (tier → concrete coppers, OOC reveal accepted) and
   the coppers freeze onto `Boon.amount` at ask time.** The `boon` action key on
   `BoonAction` (`actions/definitions/social.py`) + `ActionTemplate`/`boon`-consent-category seeds,
-  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money, the chosen tier IS the band,
-  fed into
+  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money and material, the chosen tier
+  IS the band, fed into
   `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
   and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
   cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.
   Every kind fulfills: MONEY via `currency.transfer`, VAULT_ITEM via the org vault's audited
   withdraw (target as authority, asker as recipient), HELD_ITEM via a lean sheet-level
   hand-over — unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)`
-  snapshotting the scene's presented personas — and DEED RP-only)
+  snapshotting the scene's presented personas, MATERIAL via `world.items.gems.buckets`'
+  spend/credit pair (amount computed fresh AT FULFILLMENT — tier pct of the target's bucket,
+  min 1, never frozen at ask time like money) — and DEED RP-only.
+  **MATERIAL kind + honest unavailability (slice 3, #2540):** `BoonAsk.material_category_id` +
+  `sum_tier` (reuses money's tier labels; NEVER a computed value — deliberate money asymmetry).
+  The boon-options endpoint's `material_categories` is the STATIC public `MaterialCategory` list
+  (`[{id, name}]`), never filtered by the target's holdings (a filtered picker would leak wealth
+  OOC — the ruling accepts the honest-refusal boolean reveal at ask time instead).
+  `check_boon_availability`, called right after `validate_boon_ask`, raises `BoonUnavailable`
+  (distinct from `ValidationError`) when a well-formed MATERIAL ask names an empty bucket — for
+  BOTH NPC and piloted targets, before any request row exists (no roll, no consent burn, no
+  affection drain). `SceneActionRequestViewSet.create` maps `BoonUnavailable` to a 200
+  `{"boon_refused": true, "detail": ...}` (non-error UX; chosen over a 400 since the existing
+  payload-less-boon guard's 400 has no FE error surface today). **Explicit dispatch (recon trap
+  fix):** `validate_boon_ask`/`fulfill_boon` dispatch on `kind` through explicit per-kind tables
+  (`_BOON_ASK_VALIDATORS`/`_BOON_FULFILLERS`) — an unhandled kind raises `ValueError` loudly
+  instead of silently falling through to DEED's handling (the original if/elif chains' trap).
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).

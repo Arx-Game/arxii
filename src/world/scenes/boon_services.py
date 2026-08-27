@@ -16,9 +16,20 @@ Every kind now fulfills: ``MONEY`` through the single currency mutation point
 (``transfer``, target purse → asker purse), ``VAULT_ITEM`` through the org vault's
 audited withdraw (target as authority, asker as recipient), ``HELD_ITEM`` through a
 lean sheet-level hand-over (unequip → object move/dematerialize → holder switch →
-``OwnershipEvent(TRANSFERRED)``), and ``DEED`` is RP-only (no mechanical transfer).
-Idempotent: a fulfilled Boon is a no-op (claimed under row lock, so concurrent
-fulfills cannot double-move).
+``OwnershipEvent(TRANSFERRED)``), ``MATERIAL`` (#2540 slice 3) through the material
+bucket's spend/credit pair (``world.items.gems.buckets`` — the module lives under
+``gems/`` despite the generalization), and ``DEED`` is RP-only (no mechanical
+transfer). Idempotent: a fulfilled Boon is a no-op (claimed under row lock, so
+concurrent fulfills cannot double-move).
+
+``validate_boon_ask`` and ``fulfill_boon`` both dispatch on ``kind`` through an
+explicit per-kind table (``_BOON_ASK_VALIDATORS`` / ``_BOON_FULFILLERS``) — a kind
+with no table entry raises ``ValueError`` loudly rather than silently falling
+through to another kind's handling (the original if/elif chains had an implicit
+DEED fallthrough on an unrecognized kind; #2540 slice 3 recon trap fix).
+
+MATERIAL asks show tier LABELS only, never a computed value (deliberate asymmetry
+with MONEY's ``boon_sum_values`` display seam — see ``BoonUnavailable`` below for why).
 """
 
 from __future__ import annotations
@@ -36,6 +47,8 @@ from world.scenes.action_resolvers import register_resolver
 from world.scenes.boon_models import Boon
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.action_models import SceneActionRequest
@@ -69,19 +82,47 @@ BOON_DEED_TIER_SHIFT = 1
 # flirt 5, seduction 50) — Apostate's tuning call.
 BOON_AFFECTION_COST = 15
 
+# #2540 slice 3: the diegetic refusal text for an honestly-unavailable MATERIAL ask
+# (empty bucket) — never a validation error, since the ask itself was well-formed.
+BOON_MATERIAL_REFUSAL_TEXT = "PLACEHOLDER: they do not have that to give."
+
+
+class BoonUnavailable(Exception):
+    """Honest unavailability (#2540 slice 3 controller ruling) — NOT a validation error.
+
+    Raised at request-creation time, AFTER ``validate_boon_ask`` passes: the ask is
+    well-formed (a real category, a real tier) but the target's bucket for it is
+    empty. The MATERIAL category picker is deliberately the STATIC public
+    ``MaterialCategory`` list, never filtered by the target's actual holdings (a
+    holdings-filtered picker would leak wealth OOC) — so this boolean reveal at ask
+    time is the ruling's accepted cost, instead.
+
+    No ``SceneActionRequest`` row is ever created for this call — the request never
+    lands in a piloted target's consent queue either (no feels-bad "no" roll, no
+    consent burn, no affection drain) for BOTH NPC and piloted targets alike.
+    """
+
+    def __init__(self, refusal_text: str = BOON_MATERIAL_REFUSAL_TEXT) -> None:
+        super().__init__(refusal_text)
+        self.refusal_text = refusal_text
+
 
 @dataclass(frozen=True)
 class BoonAsk:
     """The structured payload of a boon ask, passed into ``create_action_request``.
 
     MONEY asks carry a ``sum_tier`` (never a raw amount — #2540 ruling); the concrete
-    coppers are computed from the target's purse at validation time.
+    coppers are computed from the target's purse at validation time. MATERIAL asks
+    (#2540 slice 3) carry both a ``material_category_id`` and a ``sum_tier`` (reusing
+    the same MINOR/FAIR/GREAT labels as money) — but, unlike money, no concrete value
+    is ever computed or shown at ask time; see ``BoonUnavailable``.
     """
 
     kind: str
     sum_tier: str = ""
     item_instance_id: int | None = None
     deed_text: str = ""
+    material_category_id: int | None = None
 
 
 def boon_sum_values(target_sheet: CharacterSheet) -> dict[str, int]:
@@ -106,7 +147,16 @@ def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
     Raises ``ValidationError`` on: no target, an unknown kind, a MONEY ask with no
     valid sum tier or against a penniless target (options only present when grantable
     — #2540 ruling), a HELD_ITEM ask for an item the target does not hold, an empty
-    DEED, or a VAULT_ITEM ask for an item outside the target's withdraw authority.
+    DEED, a VAULT_ITEM ask for an item outside the target's withdraw authority, or a
+    MATERIAL ask naming an unknown category or an invalid sum tier. Dispatches on
+    ``kind`` through the explicit ``_BOON_ASK_VALIDATORS`` table — an unrecognized-but-
+    real ``BoonKind`` member with no table entry raises ``ValueError`` loudly (a coding
+    error, never a player-facing failure — every real kind is entered below).
+
+    A MATERIAL ask that names a real category the target's bucket happens to be empty
+    of is NOT rejected here — that's honest unavailability, not ineligibility; see
+    ``check_boon_availability``/``BoonUnavailable``, called separately at
+    request-creation time.
     """
     if target_persona is None:
         msg = "A boon is asked of someone — it needs a target."
@@ -114,19 +164,16 @@ def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
     if ask.kind not in BoonKind.values:
         msg = "Unknown boon kind."
         raise ValidationError(msg)
-    if ask.kind == BoonKind.MONEY:
-        _validate_money_ask(ask, target_persona.character_sheet)
-    elif ask.kind == BoonKind.HELD_ITEM:
-        _validate_held_item_ask(ask, target_persona.character_sheet)
-    elif ask.kind == BoonKind.VAULT_ITEM:
-        _validate_vault_item_ask(ask, target_persona)
-    elif not ask.deed_text.strip():
-        msg = "A deed boon needs the deed spelled out."
-        raise ValidationError(msg)
+    validator = _BOON_ASK_VALIDATORS.get(ask.kind)
+    if validator is None:
+        msg = f"unhandled boon kind {ask.kind}"
+        raise ValueError(msg)
+    validator(ask, target_persona)
 
 
-def _validate_money_ask(ask: BoonAsk, target_sheet: CharacterSheet) -> None:
+def _validate_money_ask(ask: BoonAsk, target_persona: Persona) -> None:
     """A money ask names a sum tier; the option only exists when the purse could pay it."""
+    target_sheet = target_persona.character_sheet
     if ask.sum_tier not in BOON_SUM_TIERS:
         msg = "A money boon asks for a minor, fair, or great sum."
         raise ValidationError(msg)
@@ -142,14 +189,14 @@ def _money_amount_for(ask: BoonAsk, target_sheet: CharacterSheet) -> int:
     return boon_sum_values(target_sheet).get(ask.sum_tier, 0)
 
 
-def _validate_held_item_ask(ask: BoonAsk, target_sheet: CharacterSheet) -> None:
+def _validate_held_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
     from world.items.models import ItemInstance  # noqa: PLC0415
 
     if ask.item_instance_id is None:
         msg = "A held-item boon names the item asked for."
         raise ValidationError(msg)
     held = ItemInstance.objects.filter(
-        pk=ask.item_instance_id, holder_character_sheet=target_sheet
+        pk=ask.item_instance_id, holder_character_sheet=target_persona.character_sheet
     ).exists()
     if not held:
         msg = "They do not hold that item."
@@ -179,6 +226,64 @@ def _validate_vault_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
         raise ValidationError(msg)
 
 
+def _validate_deed_ask(ask: BoonAsk, target_persona: Persona) -> None:  # noqa: ARG001
+    if not ask.deed_text.strip():
+        msg = "A deed boon needs the deed spelled out."
+        raise ValidationError(msg)
+
+
+def _validate_material_ask(ask: BoonAsk, target_persona: Persona) -> None:  # noqa: ARG001
+    """A material ask names a real category + a valid sum tier (reusing money's labels).
+
+    Deliberately does NOT check the target's bucket here (the STATIC public category
+    picker — #2540 ruling — is never filtered by target holdings, so an empty bucket
+    is not an ineligible ask, just an unavailable one; see ``check_boon_availability``).
+    """
+    from world.items.models import MaterialCategory  # noqa: PLC0415
+
+    if ask.material_category_id is None:
+        msg = "A material boon names the crafting category asked for."
+        raise ValidationError(msg)
+    if not MaterialCategory.objects.filter(pk=ask.material_category_id).exists():
+        msg = "Unknown material category."
+        raise ValidationError(msg)
+    if ask.sum_tier not in BOON_SUM_TIERS:
+        msg = "A material boon asks for a minor, fair, or great sum."
+        raise ValidationError(msg)
+
+
+_BOON_ASK_VALIDATORS: dict[str, Callable[[BoonAsk, Persona], None]] = {
+    BoonKind.MONEY: _validate_money_ask,
+    BoonKind.HELD_ITEM: _validate_held_item_ask,
+    BoonKind.VAULT_ITEM: _validate_vault_item_ask,
+    BoonKind.DEED: _validate_deed_ask,
+    BoonKind.MATERIAL: _validate_material_ask,
+}
+
+
+def check_boon_availability(*, ask: BoonAsk, target_persona: Persona | None) -> None:
+    """Honest unavailability (#2540 slice 3 ruling) — call AFTER ``validate_boon_ask``.
+
+    Only MATERIAL asks are checked: MONEY's penniless-target case is already covered
+    inside ``validate_boon_ask`` (the option never even presents, since the money-boon
+    picker IS filtered by ``boon_sum_values``), and the item/deed kinds have no "empty
+    bucket" concept. Raises ``BoonUnavailable`` — never ``ValidationError`` — when a
+    well-formed MATERIAL ask names a category the target's bucket holds none of; the
+    caller (``create_action_request``) must not create a ``SceneActionRequest`` row
+    when this raises. ``target_persona`` stays nullable to mirror ``validate_boon_ask``'s
+    signature — in practice this always runs after that raises on ``None``, so the
+    no-op branch below is unreachable, but callers shouldn't have to prove it to ty.
+    """
+    if ask.kind != BoonKind.MATERIAL or target_persona is None:
+        return
+    from world.items.gems.buckets import material_value  # noqa: PLC0415
+    from world.items.models import MaterialCategory  # noqa: PLC0415
+
+    category = MaterialCategory.objects.get(pk=ask.material_category_id)
+    if material_value(target_persona.character_sheet, category) == 0:
+        raise BoonUnavailable
+
+
 def create_boon_for_request(request: SceneActionRequest, ask: BoonAsk) -> Boon:
     """Persist the validated ask payload on its request (before NPC auto-resolve fires).
 
@@ -193,17 +298,18 @@ def create_boon_for_request(request: SceneActionRequest, ask: BoonAsk) -> Boon:
         amount=_money_amount_for(ask, target_sheet),
         item_instance_id=ask.item_instance_id,
         deed_text=ask.deed_text,
+        material_category_id=ask.material_category_id,
     )
 
 
 def boon_cost_tier_shift(boon: Boon, target_sheet: CharacterSheet) -> int:  # noqa: ARG001
     """Dial 2: how many difficulty tiers this ask's relative cost adds.
 
-    For MONEY the chosen sum tier IS the band (#2540 ruling — relative by construction).
-    ``target_sheet`` stays in the signature for the item kinds' future appraisal-vs-means
-    computation.
+    For MONEY and MATERIAL the chosen sum tier IS the band (#2540 ruling — relative by
+    construction; MATERIAL reuses the same MINOR/FAIR/GREAT tier table). ``target_sheet``
+    stays in the signature for the item kinds' future appraisal-vs-means computation.
     """
-    if boon.kind == BoonKind.MONEY:
+    if boon.kind in (BoonKind.MONEY, BoonKind.MATERIAL):
         _pct, shift = BOON_SUM_TIERS.get(boon.sum_tier, BOON_SUM_TIERS[BoonSumTier.GREAT])
         return shift
     if boon.kind in (BoonKind.HELD_ITEM, BoonKind.VAULT_ITEM):
@@ -230,9 +336,12 @@ def fulfill_boon(boon: Boon) -> bool:
     """Fulfill a granted Boon. True when THIS call fulfilled it; False when already done.
 
     A DEED boon fulfills without moving value (RP-only). Raises ``ValidationError`` if
-    the boon's request has no target persona, or (from ``transfer``) if a MONEY boon's
-    target cannot cover it — ask-time validation makes that unreachable unless the
-    target's purse shrank between ask and accept.
+    the boon's request has no target persona, or (from the kind-specific fulfiller) if
+    the target can no longer cover the grant — ask-time validation makes that
+    unreachable unless the target's holdings shrank between ask and accept. Dispatches
+    on ``kind`` through the explicit ``_BOON_FULFILLERS`` table — a kind with no table
+    entry raises ``ValueError`` loudly (mirrors ``validate_boon_ask``'s dispatch; a
+    coding error, never a player-facing failure — every real kind is entered below).
     """
     boon = Boon.objects.select_for_update().get(pk=boon.pk)
     if boon.fulfilled_at is not None:
@@ -243,25 +352,94 @@ def fulfill_boon(boon: Boon) -> bool:
         msg = "A boon rides a targeted ask; this request has no target persona."
         raise ValidationError(msg)
 
-    if boon.kind == BoonKind.MONEY and boon.amount > 0:
-        from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
-
-        asker_sheet = request.initiator_persona.character_sheet
-        target_sheet = request.target_persona.character_sheet
-        transfer(
-            amount=boon.amount,
-            reason="boon",
-            from_purse=get_or_create_purse(target_sheet),
-            to_purse=get_or_create_purse(asker_sheet),
-        )
-    elif boon.kind == BoonKind.VAULT_ITEM and boon.item_instance_id is not None:
-        _fulfill_vault_item(boon, request)
-    elif boon.kind == BoonKind.HELD_ITEM and boon.item_instance_id is not None:
-        _fulfill_held_item(boon, request)
+    fulfiller = _BOON_FULFILLERS.get(boon.kind)
+    if fulfiller is None:
+        msg = f"unhandled boon kind {boon.kind}"
+        raise ValueError(msg)
+    fulfiller(boon, request)
 
     boon.fulfilled_at = timezone.now()
     boon.save(update_fields=["fulfilled_at"])
     return True
+
+
+def _fulfill_money(boon: Boon, request: SceneActionRequest) -> None:
+    if boon.amount <= 0:
+        return
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+
+    asker_sheet = request.initiator_persona.character_sheet
+    target_sheet = request.target_persona.character_sheet
+    transfer(
+        amount=boon.amount,
+        reason="boon",
+        from_purse=get_or_create_purse(target_sheet),
+        to_purse=get_or_create_purse(asker_sheet),
+    )
+
+
+def _fulfill_vault_item_kind(boon: Boon, request: SceneActionRequest) -> None:
+    if boon.item_instance_id is None:
+        return
+    _fulfill_vault_item(boon, request)
+
+
+def _fulfill_held_item_kind(boon: Boon, request: SceneActionRequest) -> None:
+    if boon.item_instance_id is None:
+        return
+    _fulfill_held_item(boon, request)
+
+
+def _fulfill_deed_kind(boon: Boon, request: SceneActionRequest) -> None:
+    """RP-only — no mechanical transfer."""
+
+
+def _fulfill_material(boon: Boon, request: SceneActionRequest) -> None:
+    """The granted material boon: a tier pct of the target's bucket AT FULFILLMENT.
+
+    Unlike MONEY, the amount is NOT frozen at ask time — no computed value is ever
+    shown to the asker (#2540 slice 3 ruling, deliberate money asymmetry) — it's
+    derived fresh here, against whatever the target's bucket holds right now, minimum
+    1 when the bucket is non-empty. Spends the target's bucket then credits the
+    asker's — never a bare balance write, so a mid-transfer crash cannot mint or lose
+    value. Raises ``ValidationError`` (surfaced by the resolver's #1164 log-and-stamp
+    unfulfillable path) if the bucket drained to empty, or below the computed amount,
+    between the ask-time honest-availability check and this call — ask-time
+    availability only guarantees non-empty AT ASK TIME, not at grant.
+    """
+    if boon.material_category_id is None:
+        return
+    from world.items.exceptions import InsufficientMaterialStock  # noqa: PLC0415
+    from world.items.gems.buckets import (  # noqa: PLC0415
+        credit_materials,
+        material_value,
+        spend_materials,
+    )
+
+    target_sheet = request.target_persona.character_sheet
+    asker_sheet = request.initiator_persona.character_sheet
+    category = boon.material_category
+    bucket = material_value(target_sheet, category)
+    if bucket <= 0:
+        msg = "They no longer have that to give."
+        raise ValidationError(msg)
+    pct, _shift = BOON_SUM_TIERS.get(boon.sum_tier, BOON_SUM_TIERS[BoonSumTier.GREAT])
+    amount = max(1, bucket * pct // 100)
+    try:
+        spend_materials(target_sheet, category, amount)
+    except InsufficientMaterialStock as exc:
+        msg = "They no longer have enough of that to give."
+        raise ValidationError(msg) from exc
+    credit_materials(asker_sheet, category, amount)
+
+
+_BOON_FULFILLERS: dict[str, Callable[[Boon, SceneActionRequest], None]] = {
+    BoonKind.MONEY: _fulfill_money,
+    BoonKind.VAULT_ITEM: _fulfill_vault_item_kind,
+    BoonKind.HELD_ITEM: _fulfill_held_item_kind,
+    BoonKind.DEED: _fulfill_deed_kind,
+    BoonKind.MATERIAL: _fulfill_material,
+}
 
 
 def _fulfill_held_item(boon: Boon, request: SceneActionRequest) -> None:

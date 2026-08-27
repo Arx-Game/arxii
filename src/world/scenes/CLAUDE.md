@@ -113,9 +113,9 @@ the unified Persona identity system, and non-combat scene rounds.
 
 - **`Boon`** (#2540, `boon_models.py` + `boon_services.py`): the payload of a structured social ask
   ("ask a head/NPC for a thing, backed by a social roll"), attached 1:1 to a `SceneActionRequest`.
-  Fields: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`, `item_instance`, `deed_text`,
-  `fulfilled_at`, `material_category` (nullable FK → `items.MaterialCategory`, slice 3 schema
-  landed with the item-pointer migration; consumed by a later material-boon completion path).
+  Fields: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED/MATERIAL), `amount`, `item_instance`,
+  `deed_text`, `fulfilled_at`, `material_category` (nullable FK → `items.MaterialCategory`, MATERIAL
+  asks only).
   **Slice 2 wired the full loop:** `create_action_request(boon=BoonAsk(...))`
   validates eligibility up front (`validate_boon_ask`, dial 1 — penniless-target money / unheld item /
   empty deed / vault-stub asks are rejected before any row exists) and persists the `Boon` row
@@ -125,7 +125,8 @@ the unified Persona identity system, and non-combat scene rounds.
   `currency.transfer`, VAULT_ITEM via the org vault's audited `withdraw_item_from_vault` with the
   target as authority and the asker as recipient, HELD_ITEM via a lean sheet-level hand-over —
   unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)` with the
-  scene's presented personas snapshotted — and DEED RP-only; every kind fulfills) and charging
+  scene's presented personas snapshotted, MATERIAL via the bucket spend/credit pair (see below) —
+  and DEED RP-only; every kind fulfills) and charging
   the per-Boon **stacking** affection cost (`BOON_AFFECTION_COST` PLACEHOLDER, boon-keyed
   `AffectionShift` — serial asks wear out welcome; the hit never decays). **Fulfillment must NOT
   ride `BoonAction.execute()`** (consent paths never call it — the Blackmail-mint asymmetry) nor a
@@ -138,17 +139,43 @@ the unified Persona identity system, and non-combat scene rounds.
   (`resolved_base_difficulty(extra_tier_modifier=…)`); a piloted defender's difficulty choice
   rules — never band-shifted. Seeds: `Boon` template (`world/seeds/social_actions.py`) + `boon`
   consent category under `antagonism` (`world/seeds/consent.py`).
-  **Exact-pointer predicate (slice 3, #2540):** `character_has_item_pointer(*, sheet, item)` —
+  **Exact-pointer predicate:** `character_has_item_pointer(*, sheet, item)` —
   True when the sheet's roster entry holds prior knowledge naming `item` (or its template with
   no instance pinned): a discovered `Clue` with `target_kind=ITEM`, a KNOWN `CodexEntry`, or
   known `SecretKnowledge` — via the matching item-pointer FKs on `clues.Clue` / `codex.CodexEntry`
   / `secrets.Secret` (see `docs/systems/investigation_and_discovery.md`). Answers knowledge only
   (a destroyed item can still be "known"); callers needing liveness check separately. Not yet
   wired into `validate_boon_ask` — a later task's job.
+  **MATERIAL kind (slice 3, #2540):** `BoonAsk.material_category_id` + `sum_tier` (reuses money's
+  MINOR/FAIR/GREAT labels — but NEVER a computed value, deliberate money asymmetry). The
+  boon-options endpoint's `material_categories` is the STATIC public `MaterialCategory` list,
+  `[{id, name}]`, **never filtered by the target's holdings** (a holdings-filtered picker would
+  leak wealth OOC — the controller ruling accepts the honest-refusal boolean reveal at ask time
+  instead, below). `_validate_material_ask` (dial 1) only checks the ask is well-formed (a real
+  category + a real tier) — the target's bucket is deliberately NOT part of eligibility.
+  **Honest unavailability:** `check_boon_availability`, called from `create_action_request`
+  immediately after `validate_boon_ask`, raises `BoonUnavailable` (a distinct exception, NOT
+  `ValidationError`) when a well-formed MATERIAL ask names a category the target's
+  `material_value` bucket is empty of — for BOTH NPC and piloted targets, before any
+  `SceneActionRequest` row exists (no roll, no consent burn, no affection drain; a piloted ask
+  never reaches their queue). `SceneActionRequestViewSet.create` maps `BoonUnavailable` to a
+  **200** `{"boon_refused": true, "detail": ...}` rather than a 400 — a deliberate non-error-UX
+  choice over the payload-less-boon guard's 400 (that path has no visible client error surface
+  today; a 200 keeps the diegetic refusal (`BOON_MATERIAL_REFUSAL_TEXT`, PLACEHOLDER copy) in the
+  mutation's success flow). `_fulfill_material` computes the granted amount fresh AT FULFILLMENT
+  (tier pct of the target's *current* bucket, min 1 when non-empty — never frozen at ask time
+  like money's `amount`), then `spend_materials` (target) → `credit_materials` (asker)
+  (`world.items.gems.buckets` — the module lives under `gems/` despite the generalization);
+  `InsufficientMaterialStock` (a post-consent bucket drain between ask and grant) is wrapped as
+  `ValidationError`, riding the same #1164 log-and-stamp unfulfillable path every other kind uses.
+  **Explicit dispatch (recon trap fix):** `validate_boon_ask` and `fulfill_boon` both dispatch on
+  `kind` through an explicit per-kind table (`_BOON_ASK_VALIDATORS` / `_BOON_FULFILLERS`) — a kind
+  with no table entry raises `ValueError` loudly; the original if/elif chains had an implicit DEED
+  fallthrough on an unrecognized kind.
 
 ### `constants.py`
 - **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /
-  VAULT_ITEM / DEED).
+  VAULT_ITEM / DEED / MATERIAL).
 - **`SceneRoundMode`** (`TextChoices`): `OPEN` (immediate, unbounded), `POSE_ORDER` (immediate,
   quota-gated — quorum advances the round), `STRICT` (declare-then-batch-resolve).
   Social rounds default to `POSE_ORDER`; danger rounds are `STRICT` (#1466).

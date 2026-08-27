@@ -166,6 +166,67 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["sum_tiers"] == []  # the option never shows
 
+    def test_boon_options_material_categories_are_never_holdings_filtered(self) -> None:
+        """#2540 slice 3 ruling: the STATIC public category list, regardless of the
+        target's actual bucket — a holdings-filtered picker would leak wealth OOC."""
+        from world.items.factories import MaterialCategoryFactory
+
+        MaterialCategoryFactory(name="Precious Gemstones")
+        url = reverse("sceneactionrequest-boon-options")
+        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        names = {row["name"] for row in response.data["material_categories"]}
+        assert "Precious Gemstones" in names  # present even though the target holds none
+
+    def test_material_boon_dispatch_succeeds_when_target_holds_any(self) -> None:
+        from world.items.factories import MaterialCategoryFactory
+        from world.items.gems.buckets import credit_materials
+
+        category = MaterialCategoryFactory()
+        credit_materials(self.target_identity, category, 100)
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {
+                "kind": "material",
+                "sum_tier": "fair",
+                "material_category_id": category.pk,
+            },
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        boon = response.data["boon"]
+        assert boon["kind"] == "material"
+        assert boon["sum_tier"] == "fair"
+        assert boon["material_category_name"] == category.name
+        assert boon["amount"] == 0  # no computed value shown for material
+
+    def test_material_boon_dispatch_honestly_refuses_an_empty_bucket(self) -> None:
+        """#2540 slice 3: an honest refusal is a 200, not a 400 — the ask was
+        well-formed, the target just can't grant it (never a client error)."""
+        from world.items.factories import MaterialCategoryFactory
+
+        category = MaterialCategoryFactory()  # target's bucket is empty
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {
+                "kind": "material",
+                "sum_tier": "fair",
+                "material_category_id": category.pk,
+            },
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["boon_refused"] is True
+        assert not SceneActionRequest.objects.exists()  # no orphan row
+
     @patch("world.scenes.action_views.respond_to_action_request")
     def test_respond_accept(self, mock_respond: MagicMock) -> None:
         mock_respond.return_value = _make_enhanced_result("persuade")

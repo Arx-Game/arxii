@@ -50,6 +50,7 @@ from world.scenes.place_models import InteractionReceiver
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
+    from world.magic.models import Technique
     from world.scenes.boon_services import BoonAsk
 
 # Repeated API error detail strings. Centralized to avoid the duplicated-literal
@@ -93,6 +94,7 @@ def _build_boon_from_validated(validated_data: dict) -> BoonAsk | None:
         sum_tier=boon_payload.get("sum_tier", ""),
         item_instance_id=boon_payload.get("item_instance_id"),
         deed_text=boon_payload.get("deed_text", ""),
+        material_category_id=boon_payload.get("material_category_id"),
     )
 
 
@@ -417,8 +419,67 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             target_effect_type=target_effect_type,
         )
 
+        action_request_or_error = self._create_action_request_or_error(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            action_key=action_key,
+            effort_level=effort_level,
+            technique=technique,
+            strain_commitment=strain_commitment,
+            delivery=delivery,
+            delivery_receivers=delivery_receivers,
+            additional=additional,
+            pull=_build_pull_from_validated(serializer.validated_data),
+            boon=_build_boon_from_validated(serializer.validated_data),
+            treat_condition_kwargs=treat_condition_kwargs,
+        )
+        if isinstance(action_request_or_error, Response):
+            return action_request_or_error
+        action_request = action_request_or_error
+
+        response_data = SceneActionRequestSerializer(action_request).data
+        auto_resolve_result = action_request._auto_resolve_result  # noqa: SLF001
+        if auto_resolve_result is not None:
+            response_data["result"] = EnhancedSceneActionResultSerializer(
+                auto_resolve_result,
+                context={"request": request, "action_request": action_request},
+            ).data
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    def _create_action_request_or_error(  # noqa: PLR0913
+        self,
+        *,
+        scene: Scene,
+        initiator_persona: Persona,
+        target_persona: Persona | None,
+        action_key: str,
+        effort_level: str,
+        technique: Technique | None,
+        strain_commitment: int,
+        delivery: str,
+        delivery_receivers: list[Persona],
+        additional: list[Persona],
+        pull: CastPullDeclaration | None,
+        boon: BoonAsk | None,
+        treat_condition_kwargs: dict[str, Any],
+    ) -> SceneActionRequest | Response:
+        """Call ``create_action_request``, mapping its two failure exceptions to a
+        ``Response`` instead of letting ``create()`` carry the branching (#2540 slice 3
+        — keeps ``create()`` under the mccabe complexity gate).
+
+        ``BoonUnavailable`` (honest unavailability, #2540 slice 3) maps to a 200
+        "refusal" — see the comment at the call site's former location, preserved here:
+        this is NOT a client error, the ask was well-formed and the target just can't
+        grant it, no row was created, and this shape keeps it in the mutation's
+        success flow rather than its error flow — unlike the payload-less-boon guard's
+        400 (which the ask UI has no visible error surface for today). Any other
+        ``ValidationError`` maps to the existing 400 shape unchanged.
+        """
+        from world.scenes.boon_services import BoonUnavailable  # noqa: PLC0415
+
         try:
-            action_request = create_action_request(
+            return create_action_request(
                 scene=scene,
                 initiator_persona=initiator_persona,
                 target_persona=target_persona,
@@ -429,9 +490,14 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 delivery=delivery,
                 delivery_receivers=delivery_receivers,
                 additional_target_personas=additional,
-                pull=_build_pull_from_validated(serializer.validated_data),
-                boon=_build_boon_from_validated(serializer.validated_data),
+                pull=pull,
+                boon=boon,
                 **treat_condition_kwargs,
+            )
+        except BoonUnavailable as exc:
+            return Response(
+                {"boon_refused": True, "detail": exc.refusal_text},
+                status=status.HTTP_200_OK,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]
@@ -439,15 +505,6 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 {"detail": messages},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        response_data = SceneActionRequestSerializer(action_request).data
-        auto_resolve_result = action_request._auto_resolve_result  # noqa: SLF001
-        if auto_resolve_result is not None:
-            response_data["result"] = EnhancedSceneActionResultSerializer(
-                auto_resolve_result,
-                context={"request": request, "action_request": action_request},
-            ).data
-        return Response(response_data, status=status.HTTP_201_CREATED)
 
     def _create_technique_entrance(
         self, request: Request, serializer: SceneActionRequestCreateSerializer
@@ -830,14 +887,21 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         pagination_class=None,
     )
     def boon_options(self, request: Request) -> Response:
-        """Boon money-sum options against a prospective target (#2540 ruling display seam).
+        """Boon ask options against a prospective target (#2540 ruling display seam).
 
-        Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
-        target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+        ``sum_tiers``: each ``BoonSumTier`` with the concrete coppers it means against
+        THIS target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
         An empty list means the target presents no money-boon option at all (a
         penniless target — the option never shows, so 'no because I can't' never
         happens). The OOC reveal of these values is accepted per the ruling.
+
+        ``material_categories`` (#2540 slice 3): the STATIC public ``MaterialCategory``
+        list, ``[{id, name}]`` — deliberately NEVER filtered by this target's actual
+        holdings (that would leak wealth OOC); an ask against an empty bucket is
+        instead honestly refused at request-creation time (``BoonUnavailable``). No
+        computed value accompanies these — material asks show tier LABELS only.
         """
+        from world.items.models import MaterialCategory  # noqa: PLC0415
         from world.scenes.boon_services import boon_sum_values  # noqa: PLC0415
 
         target_id_str = request.query_params.get("target_persona")  # noqa: USE_FILTERSET
@@ -859,7 +923,11 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             {"tier": tier, "label": BoonSumTier(tier).label, "coppers": coppers}
             for tier, coppers in values.items()
         ]
-        return Response({"sum_tiers": sum_tiers})
+        material_categories = [
+            {"id": category.id, "name": category.name}
+            for category in MaterialCategory.objects.order_by("sort_order", "name")
+        ]
+        return Response({"sum_tiers": sum_tiers, "material_categories": material_categories})
 
 
 class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):

@@ -415,11 +415,13 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
 
         The specified-up-front payload is what lets a piloted target gauge whether it's
         an easy "just no": kind, the sum tier + frozen coppers for money, the item's
-        display name, or the deed text.
+        display name, the deed text, or (MATERIAL, #2540 slice 3) the category name +
+        tier — ``amount`` stays 0 for MATERIAL, same as the other non-money kinds; no
+        computed value is ever shown for it (deliberate money asymmetry).
         """
         from world.scenes.boon_models import Boon  # noqa: PLC0415
 
-        row = Boon.objects.filter(action_request=obj).first()
+        row = Boon.objects.filter(action_request=obj).select_related("material_category").first()
         if row is None:
             return None
         return {
@@ -428,6 +430,9 @@ class SceneActionRequestSerializer(_CombatStakesCacheMixin, serializers.ModelSer
             "amount": row.amount,
             "item_name": str(row.item_instance) if row.item_instance_id else None,
             "deed_text": row.deed_text,
+            "material_category_name": (
+                row.material_category.name if row.material_category_id else None
+            ),
         }
 
     def _compute_gating_risk(self, obj: SceneActionRequest) -> str | None:
@@ -505,10 +510,23 @@ class BoonSumOptionSerializer(serializers.Serializer):
     coppers = serializers.IntegerField()
 
 
+class BoonMaterialCategorySerializer(serializers.Serializer):
+    """One entry of the STATIC public material-category picker (#2540 slice 3).
+
+    Deliberately NEVER filtered by the target's actual holdings (that would leak
+    wealth OOC — the controller ruling accepts the honest-refusal reveal at ask time
+    instead, see ``BoonUnavailable``).
+    """
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class BoonOptionsSerializer(serializers.Serializer):
-    """Schema shape for the boon-options read (empty list = no money option shown)."""
+    """Schema shape for the boon-options read (empty ``sum_tiers`` = no money option shown)."""
 
     sum_tiers = BoonSumOptionSerializer(many=True)
+    material_categories = BoonMaterialCategorySerializer(many=True)
 
 
 class BoonAskSerializer(serializers.Serializer):
@@ -516,9 +534,11 @@ class BoonAskSerializer(serializers.Serializer):
 
     MONEY asks carry a ``sum_tier`` (never a raw amount — the concrete coppers derive
     from the target's purse server-side); item asks name an ``item_instance_id``; DEED
-    asks carry the deed text. Eligibility itself is validated by
-    ``validate_boon_ask`` inside ``create_action_request`` — this serializer only
-    shapes the payload.
+    asks carry the deed text; MATERIAL asks (#2540 slice 3) carry both a
+    ``material_category_id`` and a ``sum_tier`` (reusing money's MINOR/FAIR/GREAT
+    labels — no computed value is ever shown, unlike money's frozen coppers).
+    Eligibility itself is validated by ``validate_boon_ask`` inside
+    ``create_action_request`` — this serializer only shapes the payload.
     """
 
     kind = serializers.ChoiceField(choices=BoonKind.choices)
@@ -527,6 +547,7 @@ class BoonAskSerializer(serializers.Serializer):
     )
     item_instance_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     deed_text = serializers.CharField(required=False, allow_blank=True, default="", max_length=2000)
+    material_category_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
 
 class SceneActionRequestCreateSerializer(serializers.Serializer):

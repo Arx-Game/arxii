@@ -358,9 +358,12 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
         key).
 
     Raises:
-        ValidationError: If technique is provided but fails validation, or if
+        ValidationError: If technique is provided but fails validation, if
             TABLE_TALK delivery is requested while the initiator is not at a
-            place.
+            place, or if a boon ask is ineligible (see ``validate_boon_ask``).
+        BoonUnavailable: If a well-formed MATERIAL boon ask names a category the
+            target's bucket holds none of (#2540 slice 3 honest unavailability —
+            NOT a validation error; no row is created either way).
     """
     if technique is not None:
         _validate_technique_enhancement(
@@ -372,9 +375,17 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
     # #2540: validate the boon ask BEFORE creating any rows — an ineligible ask
     # (uncoverable amount, item not held, vault stub) must not leave an orphan request.
     if boon is not None:
-        from world.scenes.boon_services import validate_boon_ask  # noqa: PLC0415
+        from world.scenes.boon_services import (  # noqa: PLC0415
+            check_boon_availability,
+            validate_boon_ask,
+        )
 
         validate_boon_ask(ask=boon, target_persona=target_persona)
+        # #2540 slice 3 honest-unavailability short-circuit: a well-formed MATERIAL ask
+        # against an empty bucket raises BoonUnavailable here, BEFORE any row exists —
+        # for both NPC and piloted targets alike, so it never reaches a piloted target's
+        # consent queue (no roll, no consent burn, no affection drain).
+        check_boon_availability(ask=boon, target_persona=target_persona)
     elif action_key == BOON_ACTION_KEY:
         # #2540 fold-in: a boon request with no payload has nothing to ask for —
         # reject at the single dispatch orchestrator so every entry path (API,
