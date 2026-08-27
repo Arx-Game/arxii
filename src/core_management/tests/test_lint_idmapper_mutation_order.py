@@ -129,6 +129,19 @@ class IdmapperMutationOrderLintTests(SimpleTestCase):
             """
         self.assertEqual(self._findings(code), [])
 
+    def test_ignores_mutation_without_save_then_raise(self) -> None:
+        """No `.save()` call means no DB write to roll back — not the poisoning shape."""
+        code = """\
+            from django.db import transaction
+
+            def spend(obj, amount):
+                with transaction.atomic():
+                    obj.balance -= amount
+                    if amount > 1000:
+                        raise ValueError("too much")
+            """
+        self.assertEqual(self._findings(code), [])
+
     def test_ignores_raise_outside_any_atomic_block(self) -> None:
         code = """\
             def spend(obj, amount):

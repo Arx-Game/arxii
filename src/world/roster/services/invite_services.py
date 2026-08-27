@@ -167,10 +167,15 @@ def claim_game_invite(token: str, account: AccountDB) -> GameInvite:
         # Idmapper rollback staleness (django_notes.md): this write must commit
         # on its own — it is not the claim, and a later raise inside a shared
         # atomic block would have rolled it back while leaving the cached
-        # instance reporting EXPIRED forever. Kept outside any atomic block
-        # (and outside the claim mutation below) so it always persists.
-        invite.status = InviteStatus.EXPIRED
-        invite.save(update_fields=["status"])
+        # instance reporting EXPIRED forever. `durable=True` (Django 5.2; first
+        # use in this repo) makes that an ENFORCED contract rather than one that
+        # only holds by convention: if any future caller ever wraps
+        # claim_game_invite in an ambient transaction.atomic(), Django raises
+        # RuntimeError here immediately instead of silently letting this write
+        # get swallowed by an outer rollback again.
+        with transaction.atomic(durable=True):
+            invite.status = InviteStatus.EXPIRED
+            invite.save(update_fields=["status"])
         msg = "This invite has expired."
         raise ValueError(msg)
 
