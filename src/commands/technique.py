@@ -236,8 +236,48 @@ class CmdTechnique(ArxCommand):
         draft = start_technique_draft(self._get_sheet(), name=name)
         self.caller.msg(f"Draft started: '{draft.name}'. Use |wtechnique set|n to configure it.")
 
-    def _handle_show(self) -> None:
-        """Render the caller's current draft plus a live price line."""
+    @staticmethod
+    def _draft_grant_lines(draft: TechniqueDraft) -> list[str]:
+        """Render one status line per capability-grant row on *draft*."""
+        return [
+            f"  Grant [{idx}]: {g.capability}  base={g.base_value}  mult={g.intensity_multiplier}"
+            for idx, g in enumerate(draft.capability_grants.all().select_related("capability"), 1)
+        ]
+
+    @staticmethod
+    def _draft_damage_lines(draft: TechniqueDraft) -> list[str]:
+        """Render one status line per damage-profile row on *draft*."""
+        return [
+            f"  Damage [{idx}]: {p.damage_type}  base={p.base_damage}"
+            f"  mult={p.damage_intensity_multiplier}"
+            for idx, p in enumerate(draft.damage_profiles.all().select_related("damage_type"), 1)
+        ]
+
+    @staticmethod
+    def _draft_condition_lines(draft: TechniqueDraft) -> list[str]:
+        """Render one status line per applied-condition row on *draft*."""
+        lines = []
+        for idx, c in enumerate(draft.applied_conditions.all().select_related("condition"), 1):
+            dur_text = f"  duration={c.base_duration_rounds}" if c.base_duration_rounds else ""
+            lines.append(
+                f"  Condition [{idx}]: {c.condition}  severity={c.base_severity}{dur_text}"
+            )
+        return lines
+
+    @staticmethod
+    def _draft_dispel_lines(draft: TechniqueDraft) -> list[str]:
+        """Render one status line per removed-condition (dispel) row on *draft*."""
+        lines = []
+        for idx, d in enumerate(draft.removed_conditions.all().select_related("condition"), 1):
+            stacks_text = "all" if d.remove_all_stacks else "one"
+            lines.append(
+                f"  Dispel [{idx}]: removes {d.condition}  target={d.target_kind}"
+                f"  minsl={d.minimum_success_level}  stacks={stacks_text}"
+            )
+        return lines
+
+    def _draft_price_line(self, draft: TechniqueDraft) -> str:
+        """Render the live price line, or an incomplete-draft notice when it can't price yet."""
         from world.magic.exceptions import TechniqueDraftIncomplete  # noqa: PLC0415
         from world.magic.services.technique_builder import (  # noqa: PLC0415
             StaffPolicy,
@@ -245,6 +285,16 @@ class CmdTechnique(ArxCommand):
         )
         from world.magic.services.technique_draft import draft_to_design  # noqa: PLC0415
 
+        try:
+            design = draft_to_design(draft)
+            breakdown = enforce_policy(design, StaffPolicy(), self._get_sheet())
+            budget_label = "|gwithin budget|n" if breakdown.within_budget else "|rover budget|n"
+            return f"  |wPrice:|n {breakdown.total_cost}/{breakdown.budget} ({budget_label})"
+        except TechniqueDraftIncomplete:
+            return "  |wPrice:|n (incomplete: set all required fields to preview)"
+
+    def _handle_show(self) -> None:
+        """Render the caller's current draft plus a live price line."""
         draft = self._get_draft()
         tier_text = str(draft.tier) if draft.tier is not None else "(unset)"
         lines = [
@@ -261,34 +311,11 @@ class CmdTechnique(ArxCommand):
         restrictions = list(draft.restrictions.all())
         if restrictions:
             lines.append(f"  Restrictions: {', '.join(str(r) for r in restrictions)}")
-        for idx, g in enumerate(draft.capability_grants.all().select_related("capability"), 1):
-            lines.append(
-                f"  Grant [{idx}]: {g.capability}  base={g.base_value}"
-                f"  mult={g.intensity_multiplier}"
-            )
-        for idx, p in enumerate(draft.damage_profiles.all().select_related("damage_type"), 1):
-            lines.append(
-                f"  Damage [{idx}]: {p.damage_type}  base={p.base_damage}"
-                f"  mult={p.damage_intensity_multiplier}"
-            )
-        for idx, c in enumerate(draft.applied_conditions.all().select_related("condition"), 1):
-            dur_text = f"  duration={c.base_duration_rounds}" if c.base_duration_rounds else ""
-            lines.append(
-                f"  Condition [{idx}]: {c.condition}  severity={c.base_severity}{dur_text}"
-            )
-        for idx, d in enumerate(draft.removed_conditions.all().select_related("condition"), 1):
-            stacks_text = "all" if d.remove_all_stacks else "one"
-            lines.append(
-                f"  Dispel [{idx}]: removes {d.condition}  target={d.target_kind}"
-                f"  minsl={d.minimum_success_level}  stacks={stacks_text}"
-            )
-        try:
-            design = draft_to_design(draft)
-            breakdown = enforce_policy(design, StaffPolicy(), self._get_sheet())
-            budget_label = "|gwithin budget|n" if breakdown.within_budget else "|rover budget|n"
-            lines.append(f"  |wPrice:|n {breakdown.total_cost}/{breakdown.budget} ({budget_label})")
-        except TechniqueDraftIncomplete:
-            lines.append("  |wPrice:|n (incomplete: set all required fields to preview)")
+        lines.extend(self._draft_grant_lines(draft))
+        lines.extend(self._draft_damage_lines(draft))
+        lines.extend(self._draft_condition_lines(draft))
+        lines.extend(self._draft_dispel_lines(draft))
+        lines.append(self._draft_price_line(draft))
         self.caller.msg("\n".join(lines))
 
     def _handle_set(self, rest: str) -> None:

@@ -19,6 +19,8 @@ from commands.exceptions import CommandError
 from world.currency.constants import parse_coppers
 from world.items.models import Outfit
 
+_CMD_ALL_LOCK = "cmd:all()"
+
 
 class CmdWear(ArxCommand):
     """Equip an item from your inventory, or wear a saved outfit.
@@ -29,7 +31,7 @@ class CmdWear(ArxCommand):
     """
 
     key = "wear"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = EquipAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -58,7 +60,7 @@ class CmdUndress(ArxCommand):
     """Remove all worn items at once. They go back to your inventory."""
 
     key = "undress"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = UndressAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -69,7 +71,7 @@ class CmdRemove(ArxCommand):
     """Unequip (remove) a worn item."""
 
     key = "remove"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = UnequipAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -81,7 +83,7 @@ class CmdPut(ArxCommand):
     """Put an item from your inventory into a container."""
 
     key = "put"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PutInAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -112,7 +114,7 @@ class CmdWithdraw(ArxCommand):
     """
 
     key = "withdraw"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = TakeOutAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -151,7 +153,7 @@ class CmdUse(ArxCommand):
 
     key = "use"
     aliases: ClassVar[list[str]] = ["apply"]
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     arg_regex = r"\s|$"
     action = UseItemAction()
 
