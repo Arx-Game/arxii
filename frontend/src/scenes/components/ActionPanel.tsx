@@ -279,6 +279,22 @@ export function ActionPanel({ sceneId }: Props) {
       boon?: BoonAskPayload;
     }) => createActionRequest(sceneId, params),
     onSuccess: (data) => {
+      if (data.boon_refused) {
+        // #2540 slice 3 honest unavailability: the ask was well-formed (a real
+        // category, a real tier) but the target's bucket is empty — the server
+        // returns 200 (not an error; nothing was mis-sent) with NO
+        // SceneActionRequest row created. The refusal text is diegetic and MUST
+        // reach the player, so it can't just fall through the ordinary
+        // dispositionMessage path (which reads a different, always-absent field
+        // here) and get silently swallowed. Close the panel exactly like an
+        // ordinary dispatch — there is no pending request to leave the ask form
+        // open against.
+        toast(data.detail ?? 'They cannot grant that.');
+        setOpen(false);
+        setTargetingAction(null);
+        setStrainByAction({});
+        return;
+      }
       invalidateActionOutcomeQueries();
       toastDispositionMessage(data);
       setOpen(false);

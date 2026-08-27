@@ -375,10 +375,21 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
     # #2540: validate the boon ask BEFORE creating any rows — an ineligible ask
     # (uncoverable amount, item not held, vault stub) must not leave an orphan request.
     if boon is not None:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
         from world.scenes.boon_services import (  # noqa: PLC0415
             check_boon_availability,
             validate_boon_ask,
         )
+
+        # Final-review fix (#2540): the mirror of the elif guard below — a boon
+        # payload riding a non-boon action key (e.g. "flirt") must not silently
+        # attach: it would ride that action's own consent category, phantom-shift
+        # NPC difficulty via npc_boon_tier_shift, and strand an unfulfillable Boon
+        # row (nothing resolves it — only the boon resolver fires fulfill_boon).
+        if action_key not in BOON_ACTION_KEYS:
+            msg = "PLACEHOLDER: that request cannot carry a boon."
+            raise ValidationError(msg)
 
         validate_boon_ask(
             ask=boon,

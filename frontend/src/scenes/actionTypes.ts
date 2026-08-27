@@ -360,6 +360,17 @@ export interface ActionRequestResponse {
   status: 'pending' | 'resolved';
   request_id?: number;
   result?: ActionResultData;
+  /**
+   * Honest-unavailability refusal (#2540 slice 3) — present (`true`) only on the
+   * 200 shape `SceneActionRequestViewSet.create` returns for a well-formed MATERIAL
+   * boon ask the target's bucket is empty of. No `SceneActionRequest` row was
+   * created; `detail` carries the diegetic refusal text (e.g.
+   * `BOON_MATERIAL_REFUSAL_TEXT`) that MUST reach the player — see
+   * `performAction.onSuccess` in `ActionPanel.tsx`.
+   */
+  boon_refused?: boolean;
+  /** Refusal text accompanying `boon_refused: true`. */
+  detail?: string;
 }
 
 export interface ActionAttachmentInfo {

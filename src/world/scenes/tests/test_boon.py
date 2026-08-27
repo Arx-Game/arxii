@@ -293,6 +293,40 @@ class BoonAskValidationTests(TestCase):
             )
         self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
 
+    def test_boon_payload_on_a_non_boon_action_key_is_rejected(self) -> None:
+        """Final-review fix (#2540): a boon payload must not ride a non-boon action
+        key (e.g. "flirt") — it would attach to that action's own consent category,
+        phantom-shift NPC difficulty via npc_boon_tier_shift, and strand an
+        unfulfillable Boon row (only the registered ``boon`` resolver ever calls
+        fulfill_boon)."""
+        with self.assertRaises(ValidationError):
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.target,
+                action_key="flirt",
+                boon=BoonAsk(kind=BoonKind.DEED, deed_text="Guard the gate"),
+            )
+        self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+        self.assertFalse(Boon.objects.exists())
+
+    def test_all_boon_action_keys_still_accept_a_boon_payload(self) -> None:
+        """The new mirror guard only rejects a MISMATCHED action key — every real
+        boon-ask flavor (BOON_ACTION_KEYS: boon/boon_con/boon_charm/boon_menace)
+        still accepts a well-formed payload."""
+        from world.scenes.boon_services import BOON_ACTION_KEYS
+
+        for action_key in BOON_ACTION_KEYS:
+            with self.subTest(action_key=action_key):
+                request = create_action_request(
+                    scene=self.scene,
+                    initiator_persona=self.asker,
+                    target_persona=self.target,
+                    action_key=action_key,
+                    boon=BoonAsk(kind=BoonKind.DEED, deed_text="Guard the gate"),
+                )
+                self.assertIsNotNone(request.boon)
+
     def test_payload_less_request_is_rejected_for_every_ask_flavor(self) -> None:
         """#2540 slice 3: the payload guard is keyed on BOON_ACTION_KEYS membership,
         not a literal "boon" comparison — it must fire for every ask flavor."""
