@@ -6,10 +6,20 @@ prestige-hit apply hook for HUMILIATION, Task 5), a brig hold until
 ``sentence_ends_at``, a terminal sentence's rescue window (``terminal_due_at``),
 or an apply hook for the sentences later tasks build out (EXILE — Task 3;
 CONFISCATION — Task 4). :func:`sentence_sweep_tick` is the daily cron body: it
-serves matured brig terms and carries out terminal sentences whose rescue
-window has closed without a rescue/escape/pardon. :func:`active_public_marks`
-(Task 5) derives the public record of standing consequences in an area — no
-stored row, term-limited by arithmetic on read.
+serves matured brig terms, carries out terminal sentences whose rescue window
+has closed without a rescue/escape/pardon, and (#2378 follow-up, ruling 5)
+restores faded humiliation prestige hits. :func:`active_public_marks` (Task 5)
+derives the public record of standing consequences in an area — no stored row,
+term-limited by arithmetic on read; :func:`active_humiliation_mark` is its
+persona-scoped sibling for a profile/examine surface.
+
+**Humiliation brand + fading explanation (#2378 follow-up, 2026-08-27 design-call
+ruling 5):** the default HUMILIATION sentence is two-layered — a TEMPORARY
+reputational layer (the prestige hit, plus the examine/profile explanation
+:func:`active_humiliation_mark` surfaces) that fades at ``HUMILIATION_TERM_DAYS``
+(the sweep's restore leg, :func:`_sweep_humiliation_restores`), atop a PERMANENT
+physical brand (:func:`mint_humiliation_brand`, a documented no-op seam — scar
+substrate, TehomCD's domain) that outlives the term, provenance-free.
 """
 
 from __future__ import annotations
@@ -213,12 +223,21 @@ def _collect_fine_double(case: JusticeCase) -> None:
 
 
 def apply_humiliation(case: JusticeCase) -> None:
-    """HUMILIATION sentencing (#2378 Task 5): a deed-prestige hit, clamped at zero.
+    """HUMILIATION sentencing (#2378 Task 5, amended #2378 follow-up 2026-08-27): a
+    deed-prestige hit, clamped at zero, plus the two humiliation layers ratified at
+    the design call — a TEMPORARY reputational layer (this hit, plus the
+    examine/profile explanation :func:`active_humiliation_mark` surfaces — both
+    fade together at ``HUMILIATION_TERM_DAYS``, restored by
+    :func:`sentence_sweep_tick`'s restore leg) and a PERMANENT physical brand that
+    outlives the term (:func:`mint_humiliation_brand`).
 
     Called from :func:`schedule_sentence` BEFORE the sentence's outright release.
-    NO prose beyond neutral procedural strings anywhere in this path — the
-    persona's own record and the public feed both say only that they were
-    "sentenced by the magistrates," never what the humiliation was. Dan
+    The actual hit applied is persisted onto ``JusticeCase.humiliation_prestige_hit``
+    so the sweep can restore the EXACT amount later, not a fresh
+    ``HUMILIATION_PRESTIGE_HIT`` lookup (which could double-restore if the constant
+    ever changes). NO prose beyond neutral procedural strings anywhere in this
+    path — the persona's own record and the public feed both say only that they
+    were "sentenced by the magistrates," never what the humiliation was. Dan
     (Apostate) authors the real humiliation copy personally; this hook is
     mechanics-only.
     """
@@ -228,6 +247,33 @@ def apply_humiliation(case: JusticeCase) -> None:
     hit = min(HUMILIATION_PRESTIGE_HIT, max(0, persona.prestige_from_deeds))
     if hit:
         award_deed_prestige(persona, -hit)
+    case.humiliation_prestige_hit = hit
+    case.save(update_fields=["humiliation_prestige_hit"])
+    mint_humiliation_brand(case)
+
+
+def mint_humiliation_brand(case: JusticeCase) -> None:  # noqa: ARG001 — seam, wired later
+    """Seam for the PERMANENT physical brand a HUMILIATION sentence leaves (#2378
+    follow-up, 2026-08-27 design-call ruling 5).
+
+    The design call's default humiliation is two-layered: a TEMPORARY
+    reputational layer (the prestige hit + the examine/profile explanation,
+    both faded by :func:`sentence_sweep_tick`'s restore leg once
+    ``HUMILIATION_TERM_DAYS`` passes) atop a PERMANENT physical brand that
+    outlives it — provenance-free, its story discoverable in play but never
+    spelled out on the record itself (mirrors ``apply_humiliation``'s
+    neutral-copy rule).
+
+    The brand itself is SCAR SUBSTRATE — TehomCD's domain (see
+    ``world/justice/AGENT_GLOSSARY.md`` and the scars system he owns). This
+    hook is a documented no-op: it exists so the call site is correct today
+    (``apply_humiliation`` already calls it, every HUMILIATION sentence
+    already passes through here) and wiring it later is a one-function change
+    once the scar system exposes a minting API, not a new call site. ``case``
+    is part of the seam's contract even though this stub body doesn't consult
+    it yet.
+    """
+    return
 
 
 def active_public_marks(*, area: Area, now: datetime | None = None) -> list[PublicMark]:
@@ -298,6 +344,42 @@ def active_public_marks(*, area: Area, now: datetime | None = None) -> list[Publ
     )
 
     return marks
+
+
+def active_humiliation_mark(persona: Persona, *, now: datetime | None = None) -> PublicMark | None:
+    """The persona's own active humiliation mark, if any (#2378 follow-up, ruling 5).
+
+    Persona-scoped sibling of :func:`active_public_marks` — that function answers
+    "who in THIS area carries a standing consequence"; this one answers "does THIS
+    persona currently carry a fresh humiliation," irrespective of which area tried
+    them, for a profile/examine surface that doesn't scope by area. Same
+    term-limited-by-arithmetic derivation, no stored row: a TRIED HUMILIATION case
+    whose ``resolved_at`` is still inside ``HUMILIATION_TERM_DAYS``. Returns the
+    persona's most recently resolved qualifying case when more than one is somehow
+    still in-term. ``None`` once the term has passed — the fading half of the #2378
+    follow-up brand-plus-fading-explanation model; the permanent brand
+    (:func:`mint_humiliation_brand`) is unaffected by this window.
+    """
+    now = now or timezone.now()
+    case = (
+        JusticeCase.objects.filter(
+            persona=persona,
+            status=CaseStatus.TRIED,
+            sentence_kind=SentenceKind.HUMILIATION,
+            resolved_at__gt=now - timedelta(days=HUMILIATION_TERM_DAYS),
+        )
+        .select_related("area")
+        .order_by("-resolved_at")
+        .first()
+    )
+    if case is None:
+        return None
+    return PublicMark(
+        kind=SentenceKind.HUMILIATION,
+        persona_name=persona.name,
+        area_name=case.area.name,
+        until=case.resolved_at + timedelta(days=HUMILIATION_TERM_DAYS),
+    )
 
 
 def schedule_sentence(case: JusticeCase) -> None:
@@ -465,10 +547,49 @@ def _sweep_terminals(now) -> int:
     return touched
 
 
-def sentence_sweep_tick() -> int:
-    """Daily cron body (#2378): serve matured brig terms, carry out due terminals.
+def _sweep_humiliation_restores(now) -> int:
+    """Restore the deed-prestige hit for humiliation cases whose term has ended
+    (#2378 follow-up, ruling 5) — the other fading half of the mark
+    :func:`active_humiliation_mark` stops surfacing once the same window closes.
 
-    Returns the number of cases touched (released, voided, or carried out).
+    **ADR-0081 nuance** ("automatic loss is fine; automatic gain is not"): this
+    sweep hands a persona positive prestige with nobody acting, which reads like
+    the forbidden automatic-gain shape at a glance. It isn't one — this is a
+    reversal of a loss the sweep's own sibling (``apply_humiliation``) inflicted
+    automatically in the first place, restoring status quo ante for the EXACT
+    amount debited (``JusticeCase.humiliation_prestige_hit``, not a fresh
+    ``HUMILIATION_PRESTIGE_HIT`` lookup). No new value is created; a debt this
+    system created against itself is being closed on schedule, same as any other
+    term expiring.
+
+    Idempotent: zeroes ``humiliation_prestige_hit`` after crediting it, so a case
+    already restored (or one whose hit was clamped to 0 and never debited
+    anything) never matches the ``__gt=0`` filter again.
+    """
+    from world.societies.renown import award_deed_prestige  # noqa: PLC0415
+
+    cases = JusticeCase.objects.filter(
+        status=CaseStatus.TRIED,
+        sentence_kind=SentenceKind.HUMILIATION,
+        resolved_at__lte=now - timedelta(days=HUMILIATION_TERM_DAYS),
+        humiliation_prestige_hit__gt=0,
+    ).select_related("persona")
+    touched = 0
+    for case in cases:
+        award_deed_prestige(case.persona, case.humiliation_prestige_hit)
+        case.humiliation_prestige_hit = 0
+        case.save(update_fields=["humiliation_prestige_hit"])
+        touched += 1
+    return touched
+
+
+def sentence_sweep_tick() -> int:
+    """Daily cron body (#2378, humiliation-restore leg added #2378 follow-up):
+    serve matured brig terms, carry out due terminals, restore faded humiliation
+    prestige hits.
+
+    Returns the number of cases touched (released, voided, carried out, or
+    restored).
     """
     now = timezone.now()
-    return _sweep_brig_releases(now) + _sweep_terminals(now)
+    return _sweep_brig_releases(now) + _sweep_terminals(now) + _sweep_humiliation_restores(now)

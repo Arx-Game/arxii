@@ -199,6 +199,11 @@ RESCUE_WINDOW_DAYS = 7  # PLACEHOLDER magnitudes (spec #2378)
 # Public humiliation: term length and the prestige hit it lands.
 HUMILIATION_TERM_DAYS = 30  # PLACEHOLDER magnitudes (spec #2378)
 HUMILIATION_PRESTIGE_HIT = 50  # PLACEHOLDER magnitudes (spec #2378)
+# Examine/profile copy for the fading reputational layer (#2378 follow-up,
+# 2026-08-27 ruling 5) — neutral by design, same rule as apply_humiliation:
+# never what the humiliation was, only that it happened. Dan (Apostate)
+# authors the real copy personally.
+HUMILIATION_MARK_EXPLANATION = "PLACEHOLDER: their recent disgrace precedes them."
 # Breach of exile: crime slug minted when an exiled persona is caught back
 # inside the exiling area, and the heat-weight bonus that crime carries.
 BREACH_OF_EXILE_CRIME_SLUG = "breach-of-exile"

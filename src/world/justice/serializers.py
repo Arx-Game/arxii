@@ -56,6 +56,22 @@ class PublicMarkSerializer(serializers.Serializer):
     until = serializers.DateTimeField(allow_null=True)
 
 
+class HumiliationMarkSerializer(serializers.Serializer):
+    """The fading half of a #2378-follow-up humiliation, for examine/profile display.
+
+    Serializes :func:`world.justice.sentences.active_humiliation_mark`'s
+    :class:`~world.justice.types.PublicMark` (or None) — ``persona_name``/
+    ``area_name`` are implied by whichever persona this is attached to, so only
+    ``kind``, ``until``, and the neutral ``explanation`` copy
+    (``constants.HUMILIATION_MARK_EXPLANATION``) are exposed. Consumed by
+    ``PersonaSerializer.humiliation_mark`` (``world/scenes/serializers.py``).
+    """
+
+    kind = serializers.CharField()
+    until = serializers.DateTimeField()
+    explanation = serializers.CharField()
+
+
 class MyCaseSerializer(serializers.ModelSerializer):
     """The captive's own case picture (#2378) — status, sentence + countdown fields.
 

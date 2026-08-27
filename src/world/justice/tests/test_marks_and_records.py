@@ -1,12 +1,14 @@
 """Humiliation prestige + derived public records + my-case countdown tests (#2378 Task 5)."""
 
 from datetime import timedelta
+from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from world.justice.constants import (
+    HUMILIATION_MARK_EXPLANATION,
     HUMILIATION_PRESTIGE_HIT,
     HUMILIATION_TERM_DAYS,
     CaseStatus,
@@ -15,9 +17,18 @@ from world.justice.constants import (
 )
 from world.justice.factories import ExileDecreeFactory
 from world.justice.models import JusticeCase
-from world.justice.sentences import active_public_marks, apply_humiliation, schedule_sentence
+from world.justice.sentences import (
+    active_humiliation_mark,
+    active_public_marks,
+    apply_humiliation,
+    mint_humiliation_brand,
+    schedule_sentence,
+    sentence_sweep_tick,
+)
 from world.justice.tests.test_services import JusticeFixtureMixin
 from world.roster.factories import RosterTenureFactory
+from world.scenes.factories import PersonaFactory
+from world.scenes.serializers import PersonaSerializer
 
 
 class HumiliationPrestigeTests(JusticeFixtureMixin, TestCase):
@@ -78,6 +89,230 @@ class HumiliationPrestigeTests(JusticeFixtureMixin, TestCase):
         captivity.refresh_from_db()
         self.assertEqual(self.persona.prestige_from_deeds, 100 - HUMILIATION_PRESTIGE_HIT)
         self.assertEqual(captivity.status, CaptivityStatus.RELEASED)
+
+    def test_persists_the_actual_hit_onto_the_case(self):
+        """#2378 follow-up: the EXACT applied hit is stored, not re-derived later."""
+        self.persona.prestige_from_deeds = 10  # less than HUMILIATION_PRESTIGE_HIT
+        self.persona.save(update_fields=["prestige_from_deeds"])
+        case = self._case()
+
+        apply_humiliation(case)
+
+        case.refresh_from_db()
+        self.assertEqual(case.humiliation_prestige_hit, 10)
+
+    def test_zero_hit_persists_zero(self):
+        case = self._case()  # fresh persona: prestige_from_deeds defaults to 0
+
+        apply_humiliation(case)
+
+        case.refresh_from_db()
+        self.assertEqual(case.humiliation_prestige_hit, 0)
+
+    def test_calls_the_brand_seam(self):
+        """mint_humiliation_brand (#2378 follow-up ruling 5) fires from apply_humiliation."""
+        case = self._case()
+
+        with mock.patch("world.justice.sentences.mint_humiliation_brand") as mint:
+            apply_humiliation(case)
+
+        mint.assert_called_once_with(case)
+
+
+class HumiliationBrandSeamTests(JusticeFixtureMixin, TestCase):
+    """mint_humiliation_brand (#2378 follow-up ruling 5) — documented no-op seam."""
+
+    def test_is_a_no_op_that_never_raises(self):
+        case = JusticeCase.objects.create(
+            persona=self.persona, area=self.kingdom, society=self.crown, prosecution_weight=10
+        )
+        self.assertIsNone(mint_humiliation_brand(case))
+
+
+class HumiliationRestoreSweepTests(JusticeFixtureMixin, TestCase):
+    """sentence_sweep_tick's restore leg (#2378 follow-up ruling 5)."""
+
+    def _tried_case(self, *, resolved_at, hit, persona=None):
+        return JusticeCase.objects.create(
+            persona=persona or self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            prosecution_weight=10,
+            status=CaseStatus.TRIED,
+            verdict=Verdict.FULL,
+            sentence_kind=SentenceKind.HUMILIATION,
+            resolved_at=resolved_at,
+            humiliation_prestige_hit=hit,
+        )
+
+    def test_restores_the_exact_hit_once_the_term_ends(self):
+        self.persona.prestige_from_deeds = 0
+        self.persona.save(update_fields=["prestige_from_deeds"])
+        self._tried_case(
+            resolved_at=timezone.now() - timedelta(days=HUMILIATION_TERM_DAYS, hours=1),
+            hit=HUMILIATION_PRESTIGE_HIT,
+        )
+
+        touched = sentence_sweep_tick()
+
+        self.persona.refresh_from_db()
+        self.assertEqual(touched, 1)
+        self.assertEqual(self.persona.prestige_from_deeds, HUMILIATION_PRESTIGE_HIT)
+
+    def test_does_not_restore_before_the_term_ends(self):
+        self.persona.prestige_from_deeds = 0
+        self.persona.save(update_fields=["prestige_from_deeds"])
+        case = self._tried_case(resolved_at=timezone.now(), hit=HUMILIATION_PRESTIGE_HIT)
+
+        touched = sentence_sweep_tick()
+
+        case.refresh_from_db()
+        self.persona.refresh_from_db()
+        self.assertEqual(touched, 0)
+        self.assertEqual(self.persona.prestige_from_deeds, 0)
+        self.assertEqual(case.humiliation_prestige_hit, HUMILIATION_PRESTIGE_HIT)
+
+    def test_a_zero_hit_never_restores_anything(self):
+        """A case whose hit was already clamped to zero must not double-award."""
+        self._tried_case(
+            resolved_at=timezone.now() - timedelta(days=HUMILIATION_TERM_DAYS, hours=1), hit=0
+        )
+
+        touched = sentence_sweep_tick()
+
+        self.persona.refresh_from_db()
+        self.assertEqual(touched, 0)
+        self.assertEqual(self.persona.prestige_from_deeds, 0)
+
+    def test_idempotent_a_second_sweep_does_not_restore_again(self):
+        self.persona.prestige_from_deeds = 0
+        self.persona.save(update_fields=["prestige_from_deeds"])
+        case = self._tried_case(
+            resolved_at=timezone.now() - timedelta(days=HUMILIATION_TERM_DAYS, hours=1),
+            hit=HUMILIATION_PRESTIGE_HIT,
+        )
+
+        first = sentence_sweep_tick()
+        second = sentence_sweep_tick()
+
+        case.refresh_from_db()
+        self.persona.refresh_from_db()
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertEqual(case.humiliation_prestige_hit, 0)
+        self.assertEqual(self.persona.prestige_from_deeds, HUMILIATION_PRESTIGE_HIT)
+
+
+class ActiveHumiliationMarkTests(JusticeFixtureMixin, TestCase):
+    """active_humiliation_mark (#2378 follow-up ruling 5) — persona-scoped read."""
+
+    def _humiliation_case(self, *, resolved_at, persona=None):
+        return JusticeCase.objects.create(
+            persona=persona or self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            prosecution_weight=10,
+            status=CaseStatus.TRIED,
+            verdict=Verdict.FULL,
+            sentence_kind=SentenceKind.HUMILIATION,
+            resolved_at=resolved_at,
+        )
+
+    def test_no_case_returns_none(self):
+        self.assertIsNone(active_humiliation_mark(self.persona))
+
+    def test_appears_during_the_term(self):
+        now = timezone.now()
+        case = self._humiliation_case(resolved_at=now)
+
+        mark = active_humiliation_mark(self.persona, now=now)
+
+        self.assertIsNotNone(mark)
+        self.assertEqual(mark.kind, SentenceKind.HUMILIATION)
+        self.assertEqual(mark.persona_name, self.persona.name)
+        self.assertEqual(mark.area_name, self.kingdom.name)
+        self.assertEqual(mark.until, case.resolved_at + timedelta(days=HUMILIATION_TERM_DAYS))
+
+    def test_disappears_after_the_term(self):
+        now = timezone.now()
+        self._humiliation_case(resolved_at=now - timedelta(days=HUMILIATION_TERM_DAYS, hours=1))
+
+        mark = active_humiliation_mark(self.persona, now=now)
+
+        self.assertIsNone(mark)
+
+    def test_scoped_to_the_persona_not_other_personas_in_the_same_area(self):
+        now = timezone.now()
+        other = PersonaFactory()
+        self._humiliation_case(resolved_at=now, persona=other)
+
+        mark = active_humiliation_mark(self.persona, now=now)
+
+        self.assertIsNone(mark)
+
+    def test_only_tried_cases_count(self):
+        """An AWAITING_TRIAL humiliation-kind row (never really possible, but a
+        wrong status must never leak the mark) does not match."""
+        now = timezone.now()
+        JusticeCase.objects.create(
+            persona=self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            prosecution_weight=10,
+            status=CaseStatus.AWAITING_TRIAL,
+            sentence_kind=SentenceKind.HUMILIATION,
+            resolved_at=now,
+        )
+
+        mark = active_humiliation_mark(self.persona, now=now)
+
+        self.assertIsNone(mark)
+
+
+class PersonaSerializerHumiliationMarkTests(JusticeFixtureMixin, TestCase):
+    """PersonaSerializer.humiliation_mark (#2378 follow-up ruling 5) — the
+    examine/profile surface active_humiliation_mark feeds.
+    """
+
+    def test_none_when_no_active_mark(self):
+        data = PersonaSerializer(self.persona).data
+        self.assertIsNone(data["humiliation_mark"])
+
+    def test_present_with_neutral_copy_during_the_term(self):
+        now = timezone.now()
+        JusticeCase.objects.create(
+            persona=self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            prosecution_weight=10,
+            status=CaseStatus.TRIED,
+            verdict=Verdict.FULL,
+            sentence_kind=SentenceKind.HUMILIATION,
+            resolved_at=now,
+        )
+
+        data = PersonaSerializer(self.persona).data
+
+        self.assertIsNotNone(data["humiliation_mark"])
+        self.assertEqual(data["humiliation_mark"]["kind"], SentenceKind.HUMILIATION)
+        self.assertEqual(data["humiliation_mark"]["explanation"], HUMILIATION_MARK_EXPLANATION)
+
+    def test_absent_once_the_term_has_passed(self):
+        now = timezone.now()
+        JusticeCase.objects.create(
+            persona=self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            prosecution_weight=10,
+            status=CaseStatus.TRIED,
+            verdict=Verdict.FULL,
+            sentence_kind=SentenceKind.HUMILIATION,
+            resolved_at=now - timedelta(days=HUMILIATION_TERM_DAYS, hours=1),
+        )
+
+        data = PersonaSerializer(self.persona).data
+
+        self.assertIsNone(data["humiliation_mark"])
 
 
 class ActivePublicMarksTests(JusticeFixtureMixin, TestCase):

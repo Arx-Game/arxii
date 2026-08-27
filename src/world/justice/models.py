@@ -578,6 +578,15 @@ class JusticeCase(SharedMemoryModel):
         null=True, blank=True, help_text="Rescue-window deadline for a terminal sentence (#2378)."
     )
     terminal_carried_out_at = models.DateTimeField(null=True, blank=True)
+    humiliation_prestige_hit = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The actual deed-prestige debit apply_humiliation recorded (may be "
+            "less than HUMILIATION_PRESTIGE_HIT when clamped at zero, #2378 "
+            "follow-up). sentence_sweep_tick's restore leg awards this amount "
+            "back at HUMILIATION_TERM_DAYS and zeroes it — idempotent."
+        ),
+    )
     opened_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 

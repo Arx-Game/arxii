@@ -92,3 +92,19 @@
   (`pin_heat_for_decree`). Shared by EXILE sentencing and terminal BANISHMENT — one
   pin implementation, not two. _Avoid_: "lock" — pin is the term used in code and
   docstrings throughout `sentences.py`.
+- **Humiliation Brand** — the PERMANENT half of a HUMILIATION sentence (#2378
+  follow-up, ADR-0235, 2026-08-27 design call): a physical, provenance-free mark
+  that outlives the sentence's TEMPORARY reputational layer (the prestige hit +
+  the examine/profile explanation, both faded by `HUMILIATION_TERM_DAYS`). The
+  brand itself is scar substrate — TehomCD's domain — so `mint_humiliation_brand`
+  is a documented no-op seam, not a real minting call, until his scar system
+  exposes an API. _Avoid_: conflating the brand with the humiliation mark
+  (`active_humiliation_mark`/`PersonaSerializer.humiliation_mark`) — the mark
+  fades; the brand does not.
+- **Humiliation mark** — the fading half of a HUMILIATION sentence, distinct from
+  the permanent brand above: `active_humiliation_mark(persona)`'s persona-scoped
+  `PublicMark`, surfaced on `PersonaSerializer.humiliation_mark` for
+  examine/profile with neutral PLACEHOLDER copy
+  (`constants.HUMILIATION_MARK_EXPLANATION`). Disappears at
+  `HUMILIATION_TERM_DAYS`, the same tick `_sweep_humiliation_restores` restores
+  the prestige hit.

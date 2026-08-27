@@ -1614,15 +1614,27 @@ carried goods into the area's Brig room (`room_features.brig_services
 .find_brig_for_area`/`brig_has_capacity` — also the capture-time custody route,
 promoted from #1862) or falls back to a double-rate fine. HUMILIATION applies a
 clamped deed-prestige hit (`apply_humiliation`, mechanics-only — Apostate authors
-the real copy). `active_public_marks(area)` derives the wanted board's public
-record (no stored row) from live humiliations/decrees/pending terminals, surfaced
-on `GET /api/justice/wanted/`'s `records` field and `GET /api/justice/my-case/`'s
-sentence/countdown fields; a sentenced verdict also fires a `tidings` VERDICT feed
-item. `justice/notifications.py`: `notify_verdict`/`notify_verdict_safely` deliver
-a verdict/carried-out/voided notice (three DISTINCT bodies — a voided terminal
-never re-sends sentence-affirming copy) to the case's reachable audience;
-`notify_brig_visitation` OOC-adverts a served brig term to the accused's active
-friends.
+the real copy), persisted onto `JusticeCase.humiliation_prestige_hit`. **Two-layered
+humiliation (#2378 follow-up, ADR-0235):** a PERMANENT physical brand
+(`mint_humiliation_brand` — documented no-op seam, scar substrate, TehomCD's
+domain) atop a TEMPORARY reputational layer (the prestige hit + a persona-scoped
+examine/profile explanation, `active_humiliation_mark` → `PersonaSerializer
+.humiliation_mark`) that fades at `HUMILIATION_TERM_DAYS`, restored by
+`sentence_sweep_tick`'s `_sweep_humiliation_restores` leg (ADR-0081 "automatic
+gain" nuance addressed in ADR-0235 — it's a reversal of the sweep's own earlier
+automatic loss, not new value). `active_public_marks(area)` derives the wanted
+board's public record (no stored row) from live humiliations/decrees/pending
+terminals, surfaced on `GET /api/justice/wanted/`'s `records` field and `GET
+/api/justice/my-case/`'s sentence/countdown fields; a sentenced verdict also
+fires a `tidings` VERDICT feed item. `justice/notifications.py`:
+`notify_verdict`/`notify_verdict_safely` deliver a verdict/carried-out/voided
+notice (three DISTINCT bodies — a voided terminal never re-sends
+sentence-affirming copy) to the case's reachable audience (accused + exculpatory
+submitters — accusers/victims deliberately out of scope, ratified #2378
+follow-up: broader reach lives in the area-scoped public record instead, never a
+direct push); `notify_brig_visitation` OOC-adverts a served brig term to the
+accused's active friends. Public records are permanent IC history — removed
+only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
@@ -1639,7 +1651,8 @@ friends.
   `ExileDecree` (persona × area × society banishment; `ends_at` null = permanent,
   #2378), `SentenceLadderRung` (per-society escalation step keyed on
   `(society, level)`, matched against `failed_outs - 1`, #2378); `JusticeCase`
-  gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378);
+  gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378) and
+  `humiliation_prestige_hit` (#2378 follow-up — the exact restorable hit);
   `areas.Area` gains `exile_destination` (RoomProfile the banished are ejected to,
   #2378)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
@@ -1654,8 +1667,10 @@ friends.
   `case_file.has_local_authority`/`produce_case_evidence`/`examine_evidence`;
   sentence enforcement (`justice/sentences.py`, #2378): `schedule_sentence`,
   `sentence_sweep_tick`, `apply_exile`, `apply_confiscation`, `apply_humiliation`,
-  `active_public_marks`, `terminal_kind_for`, `pin_heat_for_decree`, `eject`,
-  `is_magically_concealed`; seeds: `seeds.seed_placeholder_sentence_ladders`
+  `mint_humiliation_brand` (no-op seam, #2378 follow-up), `active_public_marks`,
+  `active_humiliation_mark` (persona-scoped sibling, #2378 follow-up),
+  `terminal_kind_for`, `pin_heat_for_decree`, `eject`, `is_magically_concealed`;
+  seeds: `seeds.seed_placeholder_sentence_ladders`
   (Umbros/Inferna placeholder rungs, skips gracefully when a society is absent)
 - **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
   CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
@@ -1667,7 +1682,10 @@ friends.
   public standing (#2378): the wanted board's `records` field (`PublicMarkSerializer`)
   and `GET /api/justice/my-case/` (`MyCaseSerializer` — `sentence_kind`,
   `sentence_amount`, `sentence_ends_at`, `terminal_due_at`, `failed_outs`) plus web
-  sentence-countdown UI on the character sheet's Crime tab. Fix
+  sentence-countdown UI on the character sheet's Crime tab; examine/profile
+  (#2378 follow-up): `PersonaViewSet`'s `PersonaSerializer.humiliation_mark`
+  (`HumiliationMarkSerializer` — `kind`/`until`/neutral `explanation`), None once
+  the term passes. Fix
   round (#2378 Task 7): `scenes` serializer identity leaks closed —
   `endorsee_sheet_id` and `dramatic_moment_tags`' sheet ids now gate behind the same
   reveal predicate as the rest of a masked persona's identity, so a disguised
