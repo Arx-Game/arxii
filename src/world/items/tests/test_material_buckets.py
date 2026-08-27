@@ -22,6 +22,7 @@ from world.items.factories import (
     MaterialCategoryFactory,
 )
 from world.items.gems.buckets import credit_materials, material_value, spend_materials
+from world.items.materials_models import MaterialBucket
 
 
 class BucketServiceTests(TestCase):
@@ -49,6 +50,36 @@ class BucketServiceTests(TestCase):
         with self.assertRaises(InsufficientMaterialStock):
             spend_materials(self.sheet, self.material_category, 50)
         self.assertEqual(material_value(self.sheet, self.material_category), 20)
+
+    def test_spend_locks_the_bucket_row_before_mutating(self):
+        """#2540 slice 3 review fold-in: spend_materials now locks the bucket row
+        before checking/mutating it (mirrors currency.services.transfer's source
+        lock) — concurrent same-bucket drains (two boon accepts against one NPC)
+        became realistic once this task added the first caller that can trigger
+        them. Not a threading test (deliberately, per the fold-in note) — this
+        proves the mutate lands under a locked re-read rather than the prior
+        unlocked filter().first(), by re-reading under select_for_update() inside
+        the same transaction and asserting it sees the post-spend value."""
+        credit_materials(self.sheet, self.material_category, 100)
+        with transaction.atomic():
+            spend_materials(self.sheet, self.material_category, 30)
+            locked = MaterialBucket.objects.select_for_update().get(
+                character_sheet=self.sheet, material_category=self.material_category
+            )
+            self.assertEqual(locked.value, 70)
+        self.assertEqual(material_value(self.sheet, self.material_category), 70)
+
+    def test_credit_locks_the_bucket_row_before_mutating(self):
+        """Symmetric fold-in for credit_materials — see test_spend_locks_the_
+        bucket_row_before_mutating."""
+        credit_materials(self.sheet, self.material_category, 100)
+        with transaction.atomic():
+            credit_materials(self.sheet, self.material_category, 25)
+            locked = MaterialBucket.objects.select_for_update().get(
+                character_sheet=self.sheet, material_category=self.material_category
+            )
+            self.assertEqual(locked.value, 125)
+        self.assertEqual(material_value(self.sheet, self.material_category), 125)
 
 
 class ValueRequirementConstraintTests(TestCase):

@@ -204,6 +204,37 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert boon["material_category_name"] == category.name
         assert boon["amount"] == 0  # no computed value shown for material
 
+    def test_material_boon_dispatch_to_piloted_target_stays_pending(self) -> None:
+        """#2540 slice 3 review fold-in: a funded PILOTED target's material ask must
+        create a normal PENDING request — never auto-resolved (auto-resolve only
+        fires for NPC targets, and this target is explicitly given a db_account) and
+        never honestly refused (their bucket is funded)."""
+        from world.items.factories import MaterialCategoryFactory
+        from world.items.gems.buckets import credit_materials
+
+        self.target_character.db_account = AccountFactory()
+        self.target_character.save(update_fields=["db_account"])
+        category = MaterialCategoryFactory()
+        credit_materials(self.target_identity, category, 100)
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {
+                "kind": "material",
+                "sum_tier": "fair",
+                "material_category_id": category.pk,
+            },
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data["status"] == ActionRequestStatus.PENDING
+        assert "result" not in response.data  # never auto-resolved
+        assert response.data.get("boon_refused") is None  # never refused
+        assert SceneActionRequest.objects.filter(pk=response.data["id"]).exists()
+
     def test_material_boon_dispatch_honestly_refuses_an_empty_bucket(self) -> None:
         """#2540 slice 3: an honest refusal is a 200, not a 400 — the ask was
         well-formed, the target just can't grant it (never a client error)."""
