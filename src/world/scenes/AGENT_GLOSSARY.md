@@ -86,3 +86,19 @@ language/persona-display's ADR-0214 live recompute) and downstream read-time fee
 filtering (Axis 3 — this app's own Mute/`InteractionQuerySet.visible_to`/Block).
 Root cross-app entry: root `AGENT_GLOSSARY_MAP.md`'s "Perception" section.
 _Avoid_: perception layer, visibility mode.
+
+**Boon** (#2540):
+A structured social ask — "ask a target for a thing, backed by a social roll" — riding `SceneActionRequest` 1:1 as its payload (`kind`, `amount`, `item_instance`, `deed_text`, `material_category`). Four ask flavors share one payload and one resolver: `boon`/`boon_con`/`boon_charm`/`boon_menace` (plain, Con, Seduction, Intimidation checks respectively). A granted Boon fulfills via kind-specific mechanics (money transfer, item hand-over, vault withdraw, material bucket credit, or RP-only for a deed) and permanently costs the target's affection for the asker, stacking per granted ask. See Item Pointer, Material Boon, Standing-Gap Shift below.
+_Avoid_: favor, request (Boon names the specific structured-ask model; a plain conversational request is not a Boon unless it rides this payload)
+
+**Item Pointer** (#2540 slice 3):
+Prior in-fiction knowledge that a specific item (or its template) exists — a discovered `Clue` with `target_kind=ITEM`, a known `CodexEntry`, or known `SecretKnowledge`, tested via `character_has_item_pointer`. A held-item or vault-item Boon ask requires the asker to hold a pointer to the named item; the check is exact (the item itself or its unpinned template), never a browse of anyone's actual holdings — the asker's ask window is bounded by what they know, not what exists.
+_Avoid_: inventory visibility, item awareness, knowledge flag (the term names the FK-backed knowledge link specifically, not a generic "has seen it" state)
+
+**Material Boon** (#2540 slice 3):
+A `Boon` of `kind=MATERIAL`: an ask for a crafting-equivalence class of bulk material (a `MaterialCategory`) at a relative sum tier (MINOR/FAIR/GREAT, reusing money's vocabulary), rather than a named item or coin. The category list offered is the full public catalog, never filtered by the target's actual stock (a filtered list would leak wealth OOC) — a well-formed ask against an empty bucket is instead honestly refused at submit time (`BoonUnavailable`, a 200 `{boon_refused: true}`, not an error), with no roll, no consent burn, no affection drain. The granted amount is computed fresh at fulfillment (a tier percentage of the target's bucket at that moment), never frozen at ask time like money's amount. See ADR-0235.
+_Avoid_: material request, bulk gift (Material Boon specifically names this kind's honest-refusal ask/fulfill shape)
+
+**Standing-Gap Shift** (Audacity Shift, #2540 slice 3):
+The additional NPC-only difficulty tier(s) a Boon ask picks up when the asker's standing sits well below the target's (`npc_boon_tier_shift`'s rank-gap term, banded via `RANK_GAP_TIER_BANDS`) — asking a much higher-standing NPC for a boon is harder than asking a peer or someone beneath you; punching down never adds a tier. Applies to dial 2's NPC band only — a piloted (player-controlled) target's own chosen difficulty is never band-shifted by the asker's standing.
+_Avoid_: standing penalty, rank check (the shift only ever adds difficulty tiers on NPC-target boon asks; it is not a general standing gate)

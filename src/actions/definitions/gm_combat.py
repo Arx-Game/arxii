@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.combat.scaling import OpponentStatBlock
+    from world.scenes.models import Scene
 
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -40,6 +41,7 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
 
 _NO_ACTIVE_ENCOUNTER = "There is no active encounter here."
 _NO_GM_PERMISSION = "Only the scene's GM or staff can do that."
+_NO_ACTIVE_SCENE = "There is no active scene here to start an encounter in."
 
 
 def _encounter_in_room(
@@ -77,6 +79,23 @@ def _actor_may_gm_encounter(actor: ObjectDB, encounter: CombatEncounter) -> bool
     if account.is_staff:
         return True
     return encounter.scene.is_gm(account)
+
+
+def _actor_may_start_encounter(actor: ObjectDB, scene: Scene) -> bool:
+    """True when *actor* may create an encounter in *scene* (#3388).
+
+    Delegates to ``world.combat.permissions.can_create_encounter_for_scene`` — the single
+    predicate shared with the web create gate (see that function's docstring). Deliberately
+    broader than ``_actor_may_gm_encounter`` (adds the scene co-owner branch) because
+    creation is "may you administer this scene," not "are you this existing encounter's
+    established GM."
+    """
+    from world.combat.permissions import can_create_encounter_for_scene  # noqa: PLC0415
+
+    account = resolve_account_or_none(actor)
+    if account is None:
+        return False
+    return can_create_encounter_for_scene(account, scene)
 
 
 def _resolve_participant_in_encounter(
@@ -534,3 +553,47 @@ class PreviewOpponentDefaultsAction(Action):
 
         message = self._format_preview(tier, block, stakes_ok, stakes_message)
         return ActionResult(success=True, message=message)
+
+
+@dataclass
+class CreateEncounterAction(Action):
+    """Start a new combat encounter in the actor's current scene (#3388)."""
+
+    key: str = "create_encounter"
+    name: str = "Create Encounter"
+    icon: str = "swords"
+    category: str = "combat"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        *,
+        pace_mode: str | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.constants import PaceMode  # noqa: PLC0415
+        from world.combat.models import CombatEncounter  # noqa: PLC0415
+        from world.combat.services import finalize_new_encounter  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        scene = get_active_scene(actor.location)
+        if scene is None:
+            return ActionResult(success=False, message=_NO_ACTIVE_SCENE)
+        if not _actor_may_start_encounter(actor, scene):
+            return ActionResult(success=False, message=_NO_GM_PERMISSION)
+
+        resolved_pace_mode = PaceMode.TIMED
+        if pace_mode is not None:
+            if pace_mode not in PaceMode.values:
+                return ActionResult(success=False, message="Invalid pace mode.")
+            resolved_pace_mode = pace_mode
+
+        encounter = CombatEncounter.objects.create(scene=scene, pace_mode=resolved_pace_mode)
+        finalize_new_encounter(encounter)
+        return ActionResult(
+            success=True,
+            message=f"Encounter #{encounter.pk} begins ({resolved_pace_mode} pace).",
+        )

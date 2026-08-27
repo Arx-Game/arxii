@@ -17,3 +17,4 @@ class FeedItemKind(models.TextChoices):
     BIRTHDAY = "birthday", "Birthday"
     STATURE = "stature", "Stature"
     MENACE = "menace", "Menace"
+    VERDICT = "verdict", "Verdict"

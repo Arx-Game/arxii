@@ -223,13 +223,18 @@ fail their task via the hourly sweep.
 
 `TaskOutcomeRoute.collection_success_level` grades a task's issuing org
 `currency.collect_org_income` dispatch: `_land_route_collection` calls
-`collect_org_income(organization=task.org, character=handler_sheet.character,
-success_level_override=route.collection_success_level)`, so the mission's
-authored terminal outcome — not a second dice roll — decides how much of the
-org's gathered pool lands (`currency.COLLECTION_BAND_PCTS`' own floors; below
-the lowest floor is catastrophe, the pool is lost with the collector). A
-`ValidationError` from an empty pool degrades to a report line, never a hard
-task-resolution failure. Note the task-status split: `resolve_task_for_mission`
+`collect_and_distribute(organization=task.org, character=handler_sheet.character,
+success_level_override=route.collection_success_level)` (#2540 — no longer a bare
+`collect_org_income` call), so the mission's authored terminal outcome — not a
+second dice roll — decides how much of the org's gathered pool lands
+(`currency.COLLECTION_BAND_PCTS`' own floors; below the lowest floor is
+catastrophe, the pool is lost with the collector), and the debt-first
+principal + active-piloted allowance legs ride along on whatever landed
+before the remainder settles in the treasury. Returns `list[str]` report
+lines (levy total, debt-principal paid if any, allowance recipient count if
+any) rather than the raw `CollectionResult`. A `ValidationError` from an
+empty pool degrades to a report line, never a hard task-resolution failure.
+Note the task-status split: `resolve_task_for_mission`
 marks the task COMPLETED only for `success_level > 0` terminal tiers, so a
 Partial Success (level 0) or Failure (level -1) route still lands its authored
 band of coin (85% / 35% under the PLACEHOLDER seeds) while the task itself

@@ -447,4 +447,44 @@ describe('CombatantsList', () => {
     const row = screen.getByTestId('opponent-row-10');
     expect(within(row).queryByTestId('position-badge')).not.toBeInTheDocument();
   });
+
+  // ---------------------------------------------------------------------------
+  // engagement_locks display (#3386) — read-only visibility badge
+  // ---------------------------------------------------------------------------
+
+  it('renders a "Locked: <PC name>" badge on an opponent named by an active engagement lock', () => {
+    const encounter: EncounterDetail = {
+      ...makeEncounter(
+        [makeParticipant({ id: 1, character_name: 'Aerande' })],
+        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+      ),
+      engagement_locks: [
+        {
+          id: 1,
+          opponent_id: 10,
+          participant_id: 1,
+          status: 'active',
+          initiated_by: 'pc_challenge',
+          started_round: 1,
+        },
+      ],
+    };
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-10');
+    expect(within(row).getByTestId('engagement-lock-badge')).toHaveTextContent('Aerande');
+  });
+
+  it('renders no engagement-lock badge when engagement_locks is empty', () => {
+    const encounter = makeEncounter(
+      [makeParticipant({ id: 1, character_name: 'Aerande' })],
+      [makeOpponent({ id: 10, name: 'Mire Knight' })]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('opponent-row-10');
+    expect(within(row).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
+  });
 });

@@ -29,6 +29,7 @@ from world.scenes.action_models import (
     SceneActionTarget,
 )
 from world.scenes.action_resolvers import get_resolver
+from world.scenes.boon_services import BOON_ACTION_KEYS
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
@@ -357,9 +358,12 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
         key).
 
     Raises:
-        ValidationError: If technique is provided but fails validation, or if
+        ValidationError: If technique is provided but fails validation, if
             TABLE_TALK delivery is requested while the initiator is not at a
-            place.
+            place, or if a boon ask is ineligible (see ``validate_boon_ask``).
+        BoonUnavailable: If a well-formed MATERIAL boon ask names a category the
+            target's bucket holds none of (#2540 slice 3 honest unavailability —
+            NOT a validation error; no row is created either way).
     """
     if technique is not None:
         _validate_technique_enhancement(
@@ -371,9 +375,40 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
     # #2540: validate the boon ask BEFORE creating any rows — an ineligible ask
     # (uncoverable amount, item not held, vault stub) must not leave an orphan request.
     if boon is not None:
-        from world.scenes.boon_services import validate_boon_ask  # noqa: PLC0415
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
 
-        validate_boon_ask(ask=boon, target_persona=target_persona)
+        from world.scenes.boon_services import (  # noqa: PLC0415
+            check_boon_availability,
+            validate_boon_ask,
+        )
+
+        # Final-review fix (#2540): the mirror of the elif guard below — a boon
+        # payload riding a non-boon action key (e.g. "flirt") must not silently
+        # attach: it would ride that action's own consent category, phantom-shift
+        # NPC difficulty via npc_boon_tier_shift, and strand an unfulfillable Boon
+        # row (nothing resolves it — only the boon resolver fires fulfill_boon).
+        if action_key not in BOON_ACTION_KEYS:
+            msg = "PLACEHOLDER: that request cannot carry a boon."
+            raise ValidationError(msg)
+
+        validate_boon_ask(
+            ask=boon,
+            target_persona=target_persona,
+            asker_sheet=initiator_persona.character_sheet,
+        )
+        # #2540 slice 3 honest-unavailability short-circuit: a well-formed MATERIAL ask
+        # against an empty bucket raises BoonUnavailable here, BEFORE any row exists —
+        # for both NPC and piloted targets alike, so it never reaches a piloted target's
+        # consent queue (no roll, no consent burn, no affection drain).
+        check_boon_availability(ask=boon, target_persona=target_persona)
+    elif action_key in BOON_ACTION_KEYS:
+        # #2540 fold-in: a boon request (any ask flavor) with no payload has nothing
+        # to ask for — reject at the single dispatch orchestrator so every entry path
+        # (API, telnet) is covered, not just the ones that remember to pass boon=....
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        msg = "This ask needs a boon payload."
+        raise ValidationError(msg)
 
     # Validate only the EXPLICIT override here — the template default is
     # resolved at resolution time (the template FK is attached later in the

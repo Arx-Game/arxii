@@ -45,7 +45,12 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.combat.services import get_penetration_check_type, resolve_round
 from world.combat.tests.penetration_helpers import _build_resolver, _ledger
-from world.conditions.factories import wire_penetration_factors
+from world.conditions.factories import (
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+    wire_penetration_factors,
+)
 from world.fatigue.models import FatiguePool
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -77,7 +82,14 @@ class LevelOpposedOffenseJourneyTests(TestCase):
         CheckType.flush_instance_cache()
         ResultChart.clear_cache()
 
-    def _offense_success_level(self, *, pc_level: int | None, opp_level: int, roll: int) -> int:
+    def _offense_success_level(
+        self,
+        *,
+        pc_level: int | None,
+        opp_level: int,
+        roll: int,
+        opponent_condition=None,
+    ) -> int:
         """Resolve one fresh round: a lone PC's technique against a lone opponent.
 
         Returns the CheckResult.success_level the round's offense roll actually
@@ -85,6 +97,11 @@ class LevelOpposedOffenseJourneyTests(TestCase):
         ``get_character_path_level`` fallback of 1 (no CharacterClassLevel row).
         The opponent's threat pool has no entries, so it never attacks back --
         the round resolves exactly one offense check.
+
+        ``opponent_condition`` (#3384): a ``ConditionTemplate`` applied to the
+        opponent's ObjectDB via ``ConditionInstanceFactory`` before the round
+        resolves, so its ``ConditionCheckModifier`` rows feed
+        ``level_opposition`` through ``opponent_condition_opposition``.
         """
         encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
         empty_pool = ThreatPoolFactory()
@@ -96,6 +113,8 @@ class LevelOpposedOffenseJourneyTests(TestCase):
             threat_pool=empty_pool,
             level=opp_level,
         )
+        if opponent_condition is not None:
+            ConditionInstanceFactory(target=opponent.objectdb, condition=opponent_condition)
         sheet = CharacterSheetFactory()
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
@@ -173,6 +192,43 @@ class LevelOpposedOffenseJourneyTests(TestCase):
         # "Markedly" -- at least one roll clears a full outcome tier, not a hair's difference.
         self.assertTrue(
             any(lo - hi >= 2 for lo, hi in zip(against_low_opp, against_high_opp, strict=True))
+        )
+
+    def test_a_condition_on_the_opponent_makes_it_easier_to_hit(self) -> None:
+        """#3384: staggering the opponent measurably raises the PC's success_level
+        against it, versus an otherwise-identical control with no condition applied.
+
+        The condition's penalty (-70) is sized to exactly reproduce the same
+        target_difficulty as the level-1-vs-level-15 comparison
+        ``test_high_level_attacker_lands_markedly_better_against_a_low_level_target``
+        already pins above (``LEVEL_POINTS_PER_LEVEL * (15 - 1) == 70``, and neither
+        opponent has a CharacterPathHistory row, so the aspect bonus is 0 either
+        way) -- reusing the same rolls/assertions that test already proved move
+        the outcome tier.
+        """
+        staggered = ConditionTemplateFactory(name="JourneyOffenseStaggered")
+        ConditionCheckModifierFactory(
+            condition=staggered,
+            check_type=self.check_type,
+            modifier_value=-70,
+        )
+        rolls = [20, 50, 85]
+
+        control = [
+            self._offense_success_level(pc_level=15, opp_level=15, roll=roll) for roll in rolls
+        ]
+        conditioned = [
+            self._offense_success_level(
+                pc_level=15, opp_level=15, roll=roll, opponent_condition=staggered
+            )
+            for roll in rolls
+        ]
+
+        for hit_conditioned, hit_control in zip(conditioned, control, strict=True):
+            self.assertGreater(hit_conditioned, hit_control)
+        self.assertTrue(
+            any(c - h >= 2 for c, h in zip(conditioned, control, strict=True)),
+            "expected at least one roll to clear a full outcome tier, not a hair's difference",
         )
 
 

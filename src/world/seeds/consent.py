@@ -195,6 +195,11 @@ _TEMPLATE_CATEGORY_MAP: dict[str, str] = {
     "Feed": "drain",
     "Drain": "drain",
     "Boon": "boon",
+    # #2540 slice 3 — the ask flavors share the base Boon's category (same
+    # antagonism-parented opt-in covers every flavor of the same structured ask).
+    "Con a Boon": "boon",
+    "Charm a Boon": "boon",
+    "Menace a Boon": "boon",
     "Deceive": "manipulative",
     "Persuade": "manipulative",
     "Perform": "general",

@@ -169,6 +169,9 @@ SEPARATE axis from `OpponentTier`: a level 3 BOSS and a level 20 MOOK are both c
 power-scaling axis a PC uses). Opposes a PC's checks through `world.checks.services
 .level_opposition` at every combat call site (offense, penetration, and NPC-attack
 defense) and is public in the opponent payload, so a threat readout can be built on it.
+Since #3384, `level_opposition` also folds in the opponent's own active
+`ConditionCheckModifier` rows (via `opponent_condition_opposition`), so a debuff
+applied to the opponent lowers the difficulty it presents on the same call sites.
 Auto-scaled spawns default to the encounter's average party level; a GM setting it
 deliberately low is how a soloable or upset-victory boss is authored.
 _Avoid_: tier (that's `OpponentTier`, a different axis — see above), rank, difficulty

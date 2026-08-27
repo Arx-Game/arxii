@@ -100,6 +100,10 @@ _Avoid_: alliance object, treaty, marriage contract (contracts are a different s
 An org-owned decoration on a DOMAIN-level `Area` — PLACEHOLDER civ stats plus `DomainHolding` rows that each materialize an `OrgIncomeStream`. Abstract by design; visitable grids are a later phase.
 _Avoid_: province model, land parcel, estate (that's buildings/dwellings).
 
+**Material Source** (`HoldingMaterialSource`, #2540 slice 2):
+One material-producing row on a `DomainHolding` — `material_category` + `quality` + `source_kind` (`MaterialSourceKind.BULK`/`GEM_MINE`, `world.items.constants`). Replaces the old flat `DomainHolding.mine_quality`/`common_gem_tier` fields so one holding can carry more than one production source, and so a non-gem bulk yield (farm, quarry) shares the exact same shape a gem mine used to hard-code. `GEM_MINE` sources still roll rare finds (`gems.mining.roll_gem_haul`); `BULK` sources produce flat value only. The weekly cycle (`items.materials_production.accrue_holding_materials`) iterates every source a holding carries, crediting the holding's `OrgIncomeStream` per category.
+_Avoid_: mine (gem-only, superseded — a Material Source need not be a mine), production slot, yield row.
+
 **House Feed**:
 The pull feed of a household's own deeds and revealed scandals (`house_feed_for`, tidings) — the Arx 1 informs replacement. No feed model; query-and-merge like the public feed.
 _Avoid_: org informs, house inbox, notifications (it is not push).

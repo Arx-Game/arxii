@@ -395,6 +395,7 @@ fire-gift thread can never inflate an unrelated capability's number.
 ```python
 from world.conditions.services import (
     get_check_modifier,
+    opponent_condition_opposition,
     get_capability_status,
     get_capability_value,
     get_all_capability_values,
@@ -404,6 +405,11 @@ from world.conditions.services import (
 result = get_check_modifier(character, stealth_check_type)
 result.total_modifier   # -20
 result.breakdown        # [(frozen_instance, -10), (wounded_instance, -10)]
+
+# Same query, but keyed directly on an ObjectDB with no CharacterSheet (#3384) --
+# an ephemeral CombatOpponent. Returns the total_modifier int alone; no sign
+# flip, so a penalty condition still lowers the number.
+opponent_condition_opposition(opponent.objectdb, combat_attack_check_type)  # -20
 
 # Capability value (additive, floor at 0)
 status = get_capability_status(character, movement_capability)
