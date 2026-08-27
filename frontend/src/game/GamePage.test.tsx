@@ -1512,6 +1512,27 @@ describe('GamePage', () => {
       expect(store.getState().game.active).toBe('Corvin');
     });
 
+    it('a mount that finds a live session also spends the crossing', async () => {
+      store.dispatch(setAccount(mockAccount));
+      // SPA re-nav shape: GamePage remounts while Redux still holds a live
+      // session for the active character. No connect fires (existing-session
+      // rule) — but the mount's one crossing must be SPENT anyway, or a later
+      // cross-tab flip of `active` would slip past the guard and connect.
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+      expect(connectMock).not.toHaveBeenCalled();
+
+      act(() => {
+        store.dispatch(hydrateActiveCharacter({ name: 'Corvin', entryId: rosterEntry.id + 1 }));
+      });
+
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(store.getState().game.sessions['Corvin']).toBeUndefined();
+    });
+
     it('does nothing when there is no selection at all', () => {
       store.dispatch(setAccount(mockAccount));
       // No hydration, no session — the logged-in-but-no-selection state.

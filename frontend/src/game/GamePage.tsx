@@ -114,11 +114,18 @@ export function GamePage() {
   // that would be selection summoning presence, which the state model forbids
   // outside this one mount-path crossing (ADR-0241). Switching puppets
   // mid-mount stays what it always was: GameTopBar's explicit avatar click.
+  // The ref is spent on the first run that OBSERVES an active name at all —
+  // whether or not a connect fires. A mount that finds a live session already
+  // in place (SPA re-nav to /game while Redux still holds the connection) has
+  // its world entry too; leaving the ref unspent there would let a later
+  // cross-tab flip of `active` slip past the guard. Only null-before-hydration
+  // runs leave the crossing unspent.
   const autoStartSpent = useRef(false);
   const hasActiveSession = active ? Boolean(sessions[active]) : false;
   useEffect(() => {
-    if (!active || hasActiveSession || autoStartSpent.current) return;
+    if (!active || autoStartSpent.current) return;
     autoStartSpent.current = true;
+    if (hasActiveSession) return;
     dispatch(startSession(active));
     connect(active).catch(() => {});
   }, [active, hasActiveSession, dispatch, connect]);
