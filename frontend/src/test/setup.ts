@@ -6,9 +6,18 @@ import React from 'react';
 // (use-size hook in @radix-ui/react-use-size uses it for layout measurements)
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
+    // Intentional no-op stub: jsdom has no layout engine, so there is nothing to observe.
+    observe(): void {
+      return undefined;
+    }
+    // Intentional no-op stub: nothing was ever observed, so there is nothing to stop observing.
+    unobserve(): void {
+      return undefined;
+    }
+    // Intentional no-op stub: no observation state exists to tear down.
+    disconnect(): void {
+      return undefined;
+    }
   };
 }
 
