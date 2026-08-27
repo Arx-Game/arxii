@@ -56,6 +56,9 @@ GM_TABLE_MODEL = "arxii.GMTable"
 EPISODE_MODEL = "arxii.Episode"
 STORY_MODEL = "arxii.Story"
 
+# Display placeholder for "no current episode" progress states.
+FRONTIER_EPISODE_LABEL = "(frontier)"
+
 # Foreclosure wrap-up annotation: the nullable resolved_at/resolved_by pair shared
 # by all three progress models (StoryProgress / GroupStoryProgress / GlobalStoryProgress).
 # FORECLOSED stays the honest terminal status; a non-null resolved_at marks a staff
@@ -1547,7 +1550,7 @@ class EpisodeResolution(SharedMemoryModel):
         if self.chosen_transition and self.chosen_transition.target_episode:
             dest = self.chosen_transition.target_episode.title
         else:
-            dest = "(frontier)"
+            dest = FRONTIER_EPISODE_LABEL
         return f"EpisodeResolution({self.episode.title} -> {dest})"
 
 
@@ -1611,7 +1614,7 @@ class GroupStoryProgress(SharedMemoryModel):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        ep = self.current_episode.title if self.current_episode else "(frontier)"
+        ep = self.current_episode.title if self.current_episode else FRONTIER_EPISODE_LABEL
         return f"GroupStoryProgress({self.gm_table.name} in {self.story.title} @ {ep})"
 
 
@@ -1662,7 +1665,7 @@ class GlobalStoryProgress(SharedMemoryModel):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        ep = self.current_episode.title if self.current_episode else "(frontier)"
+        ep = self.current_episode.title if self.current_episode else FRONTIER_EPISODE_LABEL
         return f"GlobalStoryProgress({self.story.title} @ {ep})"
 
 
@@ -1731,7 +1734,9 @@ class StoryProgress(SharedMemoryModel):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        episode_title = self.current_episode.title if self.current_episode else "(frontier)"
+        episode_title = (
+            self.current_episode.title if self.current_episode else FRONTIER_EPISODE_LABEL
+        )
         char_label = self.character_sheet.character.db_key if self.character_sheet_id else "?"
         return f"StoryProgress({char_label} in {self.story.title} @ {episode_title})"
 

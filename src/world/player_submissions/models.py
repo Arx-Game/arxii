@@ -12,6 +12,7 @@ from world.player_submissions.constants import (
 )
 
 PERSONA_MODEL = "arxii.Persona"
+SCENE_MODEL = "arxii.Scene"
 
 
 class PlayerFeedback(SharedMemoryModel):
@@ -165,7 +166,7 @@ class PlayerReport(SharedMemoryModel):
         help_text="Whether the reporter blocked or muted as a result.",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -280,7 +281,7 @@ class Petition(SharedMemoryModel):
     )
     category = models.CharField(max_length=30, choices=PetitionCategory.choices)
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -370,7 +371,7 @@ class CheckProposal(SharedMemoryModel):
         help_text="The situation this check would serve -- when someone would roll it.",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

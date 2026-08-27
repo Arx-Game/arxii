@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 _SITUATION_KIND_MODEL = "arxii.SituationKind"
 GM_PROFILE_MODEL = "arxii.GMProfile"
 ROOM_PROFILE_MODEL = "arxii.RoomProfile"
+ACCOUNT_DB_MODEL = "accounts.AccountDB"
 
 
 class GMProfile(SharedMemoryModel):
@@ -42,7 +43,7 @@ class GMProfile(SharedMemoryModel):
     """
 
     account = models.OneToOneField(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.CASCADE,
         related_name="gm_profile",
     )
@@ -57,7 +58,7 @@ class GMProfile(SharedMemoryModel):
         help_text="When this account was approved as a GM.",
     )
     approved_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Staff account that approved the GM application.",
@@ -86,7 +87,7 @@ class GMApplication(SharedMemoryModel):
     """
 
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.CASCADE,
         related_name="gm_applications",
     )
@@ -110,7 +111,7 @@ class GMApplication(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     reviewed_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -260,7 +261,7 @@ class GMRosterInvite(SharedMemoryModel):
     )
     claimed_at = models.DateTimeField(null=True, blank=True)
     claimed_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -355,7 +356,7 @@ class GMLevelChange(SharedMemoryModel):
     old_level = models.CharField(max_length=20, choices=GMLevel.choices)
     new_level = models.CharField(max_length=20, choices=GMLevel.choices)
     changed_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Staff account that made this change.",
@@ -721,7 +722,7 @@ class CatalogSuggestion(SharedMemoryModel):
     """
 
     submitted_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.CASCADE,
         related_name="catalog_suggestions",
         help_text="OOC authoring, not IC -- mirrors GMApplication.account, not persona-anchored.",
@@ -746,7 +747,7 @@ class CatalogSuggestion(SharedMemoryModel):
         db_index=True,
     )
     reviewer = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

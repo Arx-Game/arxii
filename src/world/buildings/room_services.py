@@ -43,6 +43,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+EXIT_TYPECLASS_PATH = "typeclasses.exits.Exit"
+
 
 class RoomBuildError(Exception):
     """A room-builder operation was refused; carries ``user_message``.
@@ -312,7 +314,7 @@ def _exit_pair(exit_obj: DefaultObject) -> list[DefaultObject]:
 
     pair = [exit_obj]
     reverse = ObjectDB.objects.filter(
-        db_typeclass_path="typeclasses.exits.Exit",
+        db_typeclass_path=EXIT_TYPECLASS_PATH,
         db_location=exit_obj.db_destination,
         db_destination=exit_obj.db_location,
     ).first()
@@ -423,11 +425,11 @@ def remove_room(*, persona: Persona, room: DefaultObject) -> None:
             for obj in list(room.contents):
                 obj.move_to(entry_obj, quiet=True)
         ObjectDB.objects.filter(
-            db_typeclass_path="typeclasses.exits.Exit",
+            db_typeclass_path=EXIT_TYPECLASS_PATH,
             db_location=room,
         ).delete()
         ObjectDB.objects.filter(
-            db_typeclass_path="typeclasses.exits.Exit",
+            db_typeclass_path=EXIT_TYPECLASS_PATH,
             db_destination=room,
         ).delete()
         room.delete()
