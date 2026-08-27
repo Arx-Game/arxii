@@ -535,6 +535,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     apply_technique_treatments(
         technique=technique,
         success_level=success_level,
+        eff_intensity=eff_intensity,
         targets_by_kind=targets_by_kind,
         source_character=character,
         scene=scene,
@@ -546,6 +547,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     remove_technique_conditions(
         technique=technique,
         success_level=success_level,
+        eff_intensity=eff_intensity,
         targets_by_kind=targets_by_kind,
         source_character=character,
     )

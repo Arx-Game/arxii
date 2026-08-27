@@ -308,10 +308,16 @@ Three independent gates per target, evaluated in order: (1) **cast-SL row gate**
 `success_level < row.minimum_success_level` skips the row (mirrors the apply path; a botched cast
 removes nothing); (2) **`can_be_dispelled` hard gate** — a condition whose template has
 `can_be_dispelled=False` is a no-op (never an error); (3) **opposed cure check** — when the
-condition's `cure_check_type` is set, `perform_check(caster, cure_check_type, cure_difficulty)`
-is rolled; removal succeeds iff `check_result.success_level > 0`, else resisted (no-op for that
-target, cast continues). When `cure_check_type` is null, removal proceeds unconditionally
-(uncontested dispel). Delegates to `world.conditions.services.remove_condition`
+condition's `cure_check_type` is set, `perform_check_with_modifiers(caster, cure_check_type,
+cure_difficulty, extra_modifiers=power_bonus)` is rolled, where `power_bonus =
+int(row.cure_power_multiplier * eff_intensity)` (#3391 — power leg); removal succeeds iff
+`check_result.success_level > 0`, else resisted (no-op for that target, cast continues). When
+`cure_check_type` is null, removal proceeds unconditionally (uncontested dispel) — power has
+nothing to modify, so an uncontested dispel is never turned into a coin flip by this leg.
+`cure_power_multiplier` (`TechniqueRemovedCondition`, `DecimalField`, default 0) is a caster-power
+knob layered on top of `can_be_dispelled`, which stays an absolute hard gate independent of power
+(ADR-0064) — a technique authored before #3391, or any row an author leaves at the default, casts
+byte-identically to before. Delegates to `world.conditions.services.remove_condition`
 (`remove_all_stacks` forwarded → partial-stack decrement or full removal; reuses
 `CONDITION_REMOVED` emission + deferred-death resolution).
 
@@ -1860,4 +1866,4 @@ not in a standalone pull.
 - Technique has intensity (power) and control (safety/precision) as base stats
 - Technique tier is derived from level (1-5=T1, 6-10=T2, etc.)
 - CG links a staff-authored catalog Gift + Techniques — it never mints new rows (#2426)
-- Bounded mends are castable via `TechniqueTreatment` payload rows → `perform_treatment` (#2668); the attrition invariant (ADR-0156) holds — per-healer-once-per-wound, never-to-full fraction. Magical treatment works in combat (`skip_engagement_gate=True`); mundane treatment stays non-combat-only.
+- Bounded mends are castable via `TechniqueTreatment` payload rows → `perform_treatment` (#2668); the attrition invariant (ADR-0156) holds — per-healer-once-per-wound, never-to-full fraction. Magical treatment works in combat (`skip_engagement_gate=True`); mundane treatment stays non-combat-only. **Power scaling (#3391):** `TreatmentTemplate.mend_intensity_multiplier` (`DecimalField`, default 0) scales the outcome-tier mend amount by the caster's `eff_intensity`/`power_intensity`, added strictly after `_map_outcome_to_mend`'s gate (a failed/unmended-tier outcome still mends 0 regardless of power) and strictly before `mend_wound()`, whose fraction cap and `max_health` clamp remain the final word — power composes with the double-bound (ADR-0156), it does not bypass it. Dispel's sibling power leg is `TechniqueRemovedCondition.cure_power_multiplier`, feeding the opposed cure check's `extra_modifiers` — see "Dispel / Cleanse" above.

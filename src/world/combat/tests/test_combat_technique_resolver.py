@@ -532,6 +532,27 @@ class ApplyConditionsTests(TestCase):
         mock_bulk.assert_not_called()
         self.assertEqual(results, [])
 
+    def test_forwards_eff_intensity_to_treatments_and_removal(self) -> None:
+        """#3391: _apply_conditions forwards its own eff_intensity into both
+        apply_technique_treatments and remove_technique_conditions — the combat
+        path's power leg for dispel/treatment, mirroring the standalone-cast seam.
+        """
+        check = MagicMock(success_level=2)
+        with (
+            patch(
+                "world.magic.services.condition_application.apply_technique_treatments"
+            ) as mock_treatments,
+            patch(
+                "world.magic.services.condition_application.remove_technique_conditions"
+            ) as mock_removed,
+        ):
+            mock_treatments.return_value = []
+            mock_removed.return_value = []
+            self.resolver._apply_conditions(check, eff_intensity=42)
+
+        self.assertEqual(mock_treatments.call_args.kwargs["eff_intensity"], 42)
+        self.assertEqual(mock_removed.call_args.kwargs["eff_intensity"], 42)
+
 
 class CombatTechniqueResolverCallTests(TestCase):
     @classmethod
