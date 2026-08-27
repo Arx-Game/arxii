@@ -56,9 +56,21 @@ production column, and the review of the diff is the only gate there is. The sam
 reasoning narrows "No Backwards Compatibility in Dev": it governs code, wire
 formats and APIs, never a persisted column that holds authored rows.
 
-There is no escape hatch. A schema change whose old column genuinely cannot be
-backfilled needs the content re-authored first, or an explicit ruling from Tehom
-recorded on the PR before it merges.
+**The one mechanical guard that exists is a net, not a gate.** `roles/app_deploy`
+takes a verified local `pg_dump` immediately before `migrate`, gated on
+`migrate --check` so code-only deploys pay nothing, and fails closed: a dump that
+cannot be written, verified, or fitted on disk aborts the play with the migration
+unapplied, and an unverified dump file is deleted rather than left looking
+legitimate. It makes a destructive migration *recoverable*; it does not stop one.
+It is deliberately the guard that does not depend on anyone having anticipated the
+failure mode, which is why it was built before the classifier: a declaration gate
+can only catch operation classes someone thought to enumerate.
+
+The declaration itself is still enforced by review alone. The expand/contract
+classifier that would check it mechanically is designed in
+`docs/operations/observability-baseline.md` §4.5 and **not built** - that doc's
+claim to the contrary, and a comment in `app_deploy` asserting the gate "lives in
+the release-safety classifier upstream," were both corrected when this ADR landed.
 
 **Rejected:** *Keeping ADR-0013 with a "be careful once we launch" caveat* - the
 rule as written tells agents backfill code is untested ballast, which is precisely

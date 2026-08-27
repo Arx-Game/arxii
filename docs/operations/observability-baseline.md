@@ -82,6 +82,17 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
   - *Recommended escalation (named, optional — deferred by default for cost/solo):* a CI job that runs the **previous release's** smoke tests against a DB migrated to the new head — the only *empirical* proof of old-code/new-schema compatibility. The gold standard if classifier+marker discipline ever proves insufficient.
   Together these are the **sole DB safety net**; auto-rollback can revert code, never data.
 
+  **Status (2026-08-26): (1) and (2) are DESIGNED, NOT BUILT.** There is no
+  `tools/check_release_safety.py`, no `# release-safety:` marker anywhere in the tree,
+  and no CI step — the text above describes intent, not a gate that exists. What *is*
+  built is the **pre-migration dump** (`roles/app_deploy`, ADR-0235): a verified local
+  `pg_dump` taken immediately before `migrate`, gated on `migrate --check` and failing
+  closed. It addresses a different axis from (1) — data recoverability rather than
+  old-code/new-schema compatibility — and it is strictly a net, not a gate: it makes a
+  destructive migration *recoverable*, it does not stop one. Building (1) is tracked
+  separately; until it exists, PR review is the only thing standing between a
+  `RemoveField` on an authored-content table and production.
+
 ### 4.5.1 Rollback model (operational — the actual mechanics)
 
 **Schema changes do NOT block automated releases.** The common case — additive migrations (new model/field/index, nullable or defaulted) — is *not* flagged, needs *no* marker, and ships through the normal automated tag→deploy pipeline with zero ceremony. A required marker is a one-line comment written *when authoring the migration*, reviewed in the same PR, and carried through the *same* automated pipeline — it is not a manual deploy step. CI blocks only a migration that is *unsafe as written* (an unmarked destructive op) — on a single prod box with no staging that is precisely the latent data-loss bug you want stopped, not friction. The discipline below is authoring-time; the release stays automated.

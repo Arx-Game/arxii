@@ -247,6 +247,87 @@
 
 # Django/Evennia migrations are idempotent: re-running when up-to-date is a
 # no-op (output contains no "Applying" lines). Sourcing the rendered
+# --- Pre-migration dump (ADR-0235) -------------------------------------
+# The migrate task below applies whatever migration reached main, unattended.
+# Since alpha that means a RemoveField/DeleteModel can destroy authored content
+# holding no other copy, with no human in the loop and the nightly backup up to
+# ~24h stale. These four tasks take a verified local dump immediately before
+# migrate, and only when migrate actually has work to do.
+#
+# roles/backups also installs a client — but that role runs AFTER app_deploy in
+# site.yml, so on a first converge pg_dump would not exist yet. Declaring it
+# here too is idempotent and removes the ordering dependency. Pinned to the
+# server's major (see app_premigrate_pg_version) rather than the unversioned
+# meta-package: pg_dump refuses to dump a server newer than itself.
+- name: Install postgresql-client (pg_dump for the pre-migration dump)
+  ansible.builtin.apt:
+    name: ["postgresql-client-{{ app_premigrate_pg_version }}"]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 600
+
+- name: Pre-migration dump dir (root-owned, not world-readable)
+  ansible.builtin.file:
+    path: "{{ app_premigrate_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the pre-migration dump script
+  ansible.builtin.template:
+    src: arxii-pre-migrate-dump.sh.j2
+    dest: /usr/local/sbin/arxii-pre-migrate-dump
+    owner: root
+    group: root
+    mode: "0750"
+
+# `migrate --check` exits 1 when a migration plan exists and 0 when it does not,
+# applying nothing either way (verified against Django 5.2's migrate command:
+# `if options["check_unapplied"]: if plan: sys.exit(1)`). So a code-only deploy
+# — the overwhelming majority — pays nothing for any of this.
+#
+# rc 1 is ambiguous: a Django CommandError also exits 1. That ambiguity resolves
+# in the safe direction — a crashing Django means we take an unnecessary dump
+# (harmless) and then the migrate task fails on its own anyway.
+- name: Check whether this release has migrations to apply
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck source=/dev/null
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    {{ base_uv_bin }} run python -m django migrate --check --noinput
+  args:
+    chdir: "{{ app_release_gamedir }}"
+    executable: /bin/bash
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_django_settings_module }}"
+  become: true
+  become_user: "{{ app_user }}"
+  register: app_migrate_check
+  changed_when: false
+  failed_when: false
+
+# NOT `failed_when: false`. This task failing must abort the play with the
+# migration unapplied — that is the entire point. A deploy that cannot prove it
+# has a recovery copy does not get to touch the schema.
+- name: Dump the database before migrating (only when migrations are pending)
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck source=/dev/null
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    /usr/local/sbin/arxii-pre-migrate-dump
+  args:
+    executable: /bin/bash
+  become: true
+  when: app_migrate_check.rc != 0
+  register: app_premigrate_dump
+  changed_when: "'verified' in app_premigrate_dump.stdout"
+
 # EnvironmentFile gives the migration the Postgres password + SECRET_KEY it
 # needs. Runs every deploy by design — the gate against schema-breaking
 # changes belongs in the release-safety classifier upstream, not here.

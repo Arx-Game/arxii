@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Managed by Ansible (app_deploy). Plain-SQL pg_dump taken immediately BEFORE
+# a migration that has something to apply. NEVER restores, NEVER uploads,
+# NEVER touches the bucket. Creds from the systemd EnvironmentFile the caller
+# sources (no echo; set +x).
+#
+# Why this exists (ADR-0235): since alpha the production database holds
+# authored content - codex entries, lore prose, techniques, traditions,
+# conditions, catalogs, grid rooms - that exists in NO other copy. Fixtures are
+# gitignored and the content repo is downstream-only (ADR-0236), so a
+# RemoveField/DeleteModel that reached main and got applied here is a permanent
+# loss, not an inconvenience. The nightly dump (roles/backups) can be almost 24h
+# stale at that instant. This closes that window, and it is the only guard in
+# the chain that works against a mistake nobody anticipated - a classifier can
+# only catch the operation classes someone thought to enumerate.
+#
+# It deliberately does NOT upload. The failure mode it insures against is "the
+# migration I just applied ate data on a healthy box," where a local copy is
+# both sufficient and fast. Box loss is the nightly + offsite chain's job, and
+# an upload here would add a network failure mode to the deploy path for no
+# gain against the risk actually being covered.
+set -euo pipefail
+set +x
+
+dest_dir="{{ app_premigrate_dir }}"
+keep="{{ app_premigrate_keep }}"
+db="{{ app_premigrate_db }}"
+db_user="{{ app_premigrate_db_user }}"
+ratio="{{ app_premigrate_free_space_ratio_percent }}"
+
+log() { printf '[pre-migrate-dump] %s\n' "$*"; }
+fail() { printf '[pre-migrate-dump] FATAL: %s\n' "$*" >&2; exit 1; }
+
+# pg_hba.conf requires scram on 127.0.0.1 TCP (roles/postgres/templates/
+# pg_hba.conf.j2 - no `trust` anywhere), and libpq only honors a password via
+# PGPASSWORD or ~/.pgpass. Same reason roles/backups' script exports it: without
+# this every dump fails at auth.
+[[ -n "${POSTGRES_PASSWORD:-}" ]] || fail "POSTGRES_PASSWORD unset (EnvironmentFile not sourced?)"
+export PGPASSWORD="${POSTGRES_PASSWORD}"
+
+mkdir -p "$dest_dir"
+
+# A dump file that exists but was never verified is the dangerous artifact:
+# `set -e` aborts the moment pg_dump or gzip dies mid-stream, which is BEFORE
+# the completion check below, so without this trap a truncated file would be
+# left behind wearing a legitimate-looking name for a future operator to
+# restore from. Anything not explicitly verified gets removed on the way out.
+dump=""
+verified=0
+cleanup() {
+  if [[ -n "$dump" && "$verified" -eq 0 && -f "$dump" ]]; then
+    rm -f "$dump"
+    printf '[pre-migrate-dump] removed unverified dump: %s\n' "$dump" >&2
+  fi
+}
+trap cleanup EXIT
+
+# Disk-space precheck. Filling the disk out from under Postgres on a box with
+# no standby is a worse outcome than a deploy that stops, so refuse up front
+# rather than discovering it partway through a large dump.
+db_bytes="$(psql -U "$db_user" -h 127.0.0.1 -d "$db" -tAc \
+  'SELECT pg_database_size(current_database())')" \
+  || fail "could not read database size (auth or connectivity)"
+[[ "$db_bytes" =~ ^[0-9]+$ ]] || fail "unexpected database size value: '${db_bytes}'"
+free_bytes="$(df --output=avail -B1 "$dest_dir" | tail -n 1 | tr -d ' ')"
+need_bytes=$(( db_bytes * ratio / 100 ))
+if (( free_bytes < need_bytes )); then
+  fail "insufficient space in ${dest_dir}: ${free_bytes}B free, need ${need_bytes}B (${ratio}% of the ${db_bytes}B database)"
+fi
+
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+dump="${dest_dir}/premigrate-${ts}.sql.gz"
+
+# Plain SQL, matching roles/backups and what infra/scripts/restore.sh consumes
+# - deliberately NOT -Fc, so a dump from here can be fed straight through the
+# same restore path an operator already knows.
+log "dumping ${db} (${db_bytes} bytes) to ${dump}"
+pg_dump -U "$db_user" -h 127.0.0.1 "$db" | gzip -9 > "$dump"
+
+# Verify the dump is COMPLETE, not merely present. `set -o pipefail` above
+# catches a pg_dump that exits non-zero, but a dump truncated by a disk or
+# connection failure mid-stream can still leave a plausible-looking file. Plain
+# pg_dump output always ends with its own completion marker, so decompressing
+# and checking the tail proves both gzip integrity (zcat fails on a corrupt
+# stream) and that pg_dump ran to the end. This is the same "never trust a bare
+# existence check" reasoning as restore.sh's migration-ledger + table-floor
+# verification.
+if ! zcat "$dump" | tail -n 5 | grep -q 'PostgreSQL database dump complete'; then
+  fail "dump did not complete (truncated or corrupt); refusing to migrate"
+fi
+verified=1
+
+log "verified ${dump} ($(stat -c %s "$dump") bytes compressed)"
+
+# Retention: newest $keep. Scoped to this directory's own premigrate-* glob so
+# it can never touch roles/backups' staging dir or its `latest.sql.gz` symlink.
+ls -1t "${dest_dir}"/premigrate-*.sql.gz 2>/dev/null | tail -n "+$(( keep + 1 ))" | xargs -r rm -f

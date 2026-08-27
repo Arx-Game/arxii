@@ -629,6 +629,57 @@ chkno "the standup workflow no longer passes the retired secret through" \
 chk   "ADR-0225 is marked superseded by ADR-0232" \
   "grep -q 'ADR-0232' docs/adr/0225-arx1-archived-to-object-storage-static-site.md"
 
+echo "== ADR-0235 (pre-migration dump: alpha DB is durable) =="
+DEP=infra/ansible/roles/app_deploy/tasks/main.yml
+# The whole point is ORDER: a dump taken after the migration is worthless.
+# Anchored on the EXECUTION task's name, not on the script path — the path also
+# appears in the earlier "Install the pre-migration dump script" task, which
+# stays put even if the execution task moves, making a path-anchored check
+# vacuous (caught by mutation-testing this check when it was first written).
+assert_before "pre-migration dump runs BEFORE the migrate task" \
+  'name: Dump the database before migrating' 'python -m django migrate --noinput' "${DEP}"
+# `failed_when: false` on the dump task would silently reduce this to a
+# best-effort nicety — the deploy would sail on and migrate with no recovery
+# copy, which is precisely the failure the dump exists to prevent. The check
+# reads the task block between the dump task's name and the migrate task's.
+chkno "the dump task does not swallow its own failure" \
+  "sed -n '/name: Dump the database before migrating/,/name: Apply Django/p' \
+     \"${DEP}\" | nc /dev/stdin | grep -q 'failed_when'"
+# Gate on `migrate --check` so code-only deploys pay nothing. If this ever
+# turns into an unconditional dump, that is a (harmless) cost regression worth
+# noticing; if it turns into NO gate at all, the `when:` is gone and the dump
+# may not run when it must.
+chk   "the dump is gated on a pending-migration check" \
+  "nc \"${DEP}\" | grep -q 'migrate --check' && nc \"${DEP}\" | grep -q 'app_migrate_check.rc'"
+DUMPSH=infra/ansible/roles/app_deploy/templates/arxii-pre-migrate-dump.sh.j2
+# A dump that is merely PRESENT is not a dump you can restore from. pipefail
+# catches a failing pg_dump; the completion-marker check catches truncation.
+chk   "dump script sets pipefail" \
+  "nc \"${DUMPSH}\" | grep -qE 'set -euo pipefail'"
+chk   "dump script verifies the dump completed, not just that it exists" \
+  "nc \"${DUMPSH}\" | grep -q 'PostgreSQL database dump complete'"
+# This script must never grow a restore or an upload path: it runs unattended
+# on every migrating deploy, where a destructive or network operation has no
+# business being (see the header comment for the reasoning).
+chkno "dump script never restores (no psql -f / pg_restore / dropdb)" \
+  "nc \"${DUMPSH}\" | grep -qE 'pg_restore|dropdb|createdb|psql[^|]*-f '"
+chkno "dump script never uploads (no aws/s3)" \
+  "nc \"${DUMPSH}\" | grep -qE 'aws |s3://'"
+# Retention must stay scoped to its OWN directory and glob. roles/backups
+# prunes {{ backups_staging }}/arxii-*.sql.gz; if these two ever share a path
+# or a glob they start deleting each other's files.
+chk   "dump retention is scoped to the premigrate- glob" \
+  "nc \"${DUMPSH}\" | grep -E 'rm -f' -B2 | grep -q 'premigrate-'"
+# pg_dump cannot dump a server newer than itself, so the client major must
+# track postgres_version or every pre-migration dump fails (and, fail-closed,
+# blocks the deploy).
+chk   "premigrate pg client major == roles/postgres postgres_version" \
+  "[[ \"\$(grep -oP '^app_premigrate_pg_version: \\K[0-9]+' infra/ansible/roles/app_deploy/defaults/main.yml)\" \
+   == \"\$(grep -oP '^postgres_version: \\K[0-9]+' infra/ansible/roles/postgres/defaults/main.yml)\" ]]"
+chkno "premigrate dir is not the backups staging dir" \
+  "grep -q 'app_premigrate_dir: /var/backups/arxii$' \
+     infra/ansible/roles/app_deploy/defaults/main.yml"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1
