@@ -285,6 +285,19 @@ class BoonAskValidationTests(TestCase):
             )
         self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
 
+    def test_payload_less_request_is_rejected_for_every_ask_flavor(self) -> None:
+        """#2540 slice 3: the payload guard is keyed on BOON_ACTION_KEYS membership,
+        not a literal "boon" comparison — it must fire for every ask flavor."""
+        for key in ("boon_con", "boon_charm", "boon_menace"):
+            with self.assertRaises(ValidationError):
+                create_action_request(
+                    scene=self.scene,
+                    initiator_persona=self.asker,
+                    target_persona=self.target,
+                    action_key=key,
+                )
+        self.assertFalse(SceneActionRequest.objects.exists())  # no orphan row
+
 
 class NpcBoonBandTests(TestCase):
     """Dial 2 — the mandatory NPC-side relative-cost band; piloted targets unshifted."""
@@ -506,3 +519,72 @@ class BoonSeedTests(TestCase):
         template = ActionTemplate.objects.get(name="Boon")
         self.assertEqual(template.consent_category.key, "boon")
         self.assertEqual(template.consent_category.parent.key, "antagonism")
+
+    def test_ask_flavor_templates_share_the_boon_consent_category(self) -> None:
+        """#2540 slice 3: one opt-in (the shared "boon" antagonism-parented category)
+        covers every ask flavor, not just the base template."""
+        from actions.models import ActionTemplate
+        from world.seeds.checks import seed_check_resolution_tables
+        from world.seeds.consent import seed_social_consent_categories
+        from world.seeds.social_actions import seed_social_action_content
+        from world.seeds.social_checks import seed_social_check_content
+        from world.seeds.social_relationships import seed_social_relationship_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()
+        seed_social_consent_categories()
+
+        for name in ("Con a Boon", "Charm a Boon", "Menace a Boon"):
+            template = ActionTemplate.objects.get(name=name)
+            self.assertEqual(template.consent_category.key, "boon", name)
+            self.assertEqual(template.consent_category.parent.key, "antagonism", name)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class BoonAskFlavorResolverE2ETests(TestCase):
+    """#2540 slice 3: the resolver registered under BOON_ACTION_KEYS also fires for
+    an ask-flavor sibling key, not just the base "boon" key."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.seeds.checks import seed_check_resolution_tables
+        from world.seeds.relationship_scale import seed_relationship_scale_content
+        from world.seeds.social_actions import seed_social_action_content
+        from world.seeds.social_checks import seed_social_check_content
+        from world.seeds.social_relationships import seed_social_relationship_content
+
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()
+        seed_relationship_scale_content()
+        cls.scene = SceneFactory()
+
+    def setUp(self) -> None:
+        self.asker = PersonaFactory()
+        self.npc_target = PersonaFactory()  # no db_account → NPC, auto-accepts
+        _fund(self.npc_target.character_sheet, 1000)
+        self.accrue_patcher = patch("world.scenes.action_services.accrue")
+        self.accrue_patcher.start()
+        self.addCleanup(self.accrue_patcher.stop)
+
+    def test_con_a_boon_success_fulfills_and_charges_affection(self) -> None:
+        with patch(
+            "world.scenes.action_services.start_action_resolution",
+            return_value=_success_resolution(success=True),
+        ):
+            request = create_action_request(
+                scene=self.scene,
+                initiator_persona=self.asker,
+                target_persona=self.npc_target,
+                action_key="boon_con",
+                boon=BoonAsk(kind=BoonKind.MONEY, sum_tier=BoonSumTier.FAIR),
+            )
+        self.assertEqual(_balance(self.asker.character_sheet), 200)  # fair sum of 1000
+        self.assertEqual(_balance(self.npc_target.character_sheet), 800)
+        request.boon.refresh_from_db()
+        self.assertIsNotNone(request.boon.fulfilled_at)
+        shift = AffectionShift.objects.get(boon=request.boon)
+        self.assertEqual(shift.amount, -BOON_AFFECTION_COST)

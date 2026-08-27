@@ -29,13 +29,14 @@ import { extractErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { magicKeys } from '@/magic/queries';
-import type {
-  PlayerAction,
-  AvailableEnhancement,
-  BoonAskPayload,
-  CastableTechnique,
-  CastResponse,
-  CastPullRequestBody,
+import {
+  BOON_ACTION_KEYS,
+  type PlayerAction,
+  type AvailableEnhancement,
+  type BoonAskPayload,
+  type CastableTechnique,
+  type CastResponse,
+  type CastPullRequestBody,
 } from '../actionTypes';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
@@ -382,7 +383,7 @@ export function ActionPanel({ sceneId }: Props) {
     if (!targetingAction || ids.length === 0) return;
     // #2540: a boon needs its structured ask specified before dispatch — hold the
     // action and open the ask form instead of committing on target pick.
-    if ((targetingAction.ref.registry_key ?? '') === 'boon') {
+    if (BOON_ACTION_KEYS.includes(targetingAction.ref.registry_key ?? '')) {
       if (ids.length !== 1) {
         // A boon asks exactly one target for a specific thing — a multi-select
         // has no single ask form to open, so block instead of falling through

@@ -5,12 +5,14 @@ deed) and rides the ``SceneActionRequest`` consent flow. This module owns the as
 eligibility validation (dial 1), the NPC-side relative-cost difficulty band (dial 2),
 fulfillment on a granted ask, and the per-Boon affection cost (the dial-3 drain).
 
-Fulfillment fires via the ``boon`` action resolver (``register_resolver``), which both
-resolution paths invoke — NPC auto-accept at dispatch and a piloted target's later
-accept. It must NOT ride ``BoonAction.execute()``: the consent paths never call
-``execute()`` (the Blackmail mint asymmetry), and it must not ride a seeded
-``SHIFT_AFFECTION`` ``ConsequenceEffect`` either — the consent path resolves with a
-sceneless ``ResolutionContext``, where scene-keyed data effects skip.
+Fulfillment fires via the same resolver (``register_resolver``) registered under every
+key in ``BOON_ACTION_KEYS`` — ``boon`` plus the #2540 slice 3 ask flavors
+(``boon_con``/``boon_charm``/``boon_menace``) — which both resolution paths invoke —
+NPC auto-accept at dispatch and a piloted target's later accept. It must NOT ride
+``BoonAction.execute()``: the consent paths never call ``execute()`` (the Blackmail
+mint asymmetry), and it must not ride a seeded ``SHIFT_AFFECTION`` ``ConsequenceEffect``
+either — the consent path resolves with a sceneless ``ResolutionContext``, where
+scene-keyed data effects skip.
 
 Every kind now fulfills: ``MONEY`` through the single currency mutation point
 (``transfer``, target purse → asker purse), ``VAULT_ITEM`` through the org vault's
@@ -69,7 +71,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-BOON_ACTION_KEY = "boon"
+# #2540 slice 3 — the ask flavors (con/charm/menace) share the base Boon's structured
+# payload, consent category, and resolver: one opt-in and one fulfillment path covers
+# every flavor, only the check type + template name differ.
+BOON_ACTION_KEYS = frozenset({"boon", "boon_con", "boon_charm", "boon_menace"})
 
 # Money asks are RELATIVE sum tiers (#2540 ruling 2026-07-20): the asker picks
 # minor/fair/great *to the target*, the concrete coppers derive from the target's purse
@@ -804,4 +809,5 @@ def _resolve_boon(request: SceneActionRequest, result: EnhancedSceneActionResult
     )
 
 
-register_resolver(BOON_ACTION_KEY, _resolve_boon)
+for _boon_action_key in BOON_ACTION_KEYS:
+    register_resolver(_boon_action_key, _resolve_boon)

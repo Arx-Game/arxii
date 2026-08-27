@@ -182,6 +182,20 @@ export type BoonSumTier = 'minor' | 'fair' | 'great';
 export type BoonKind = 'money' | 'held_item' | 'vault_item' | 'deed' | 'material';
 
 /**
+ * Registry keys for every Boon ask flavor (#2540 slice 3): the base structured ask
+ * plus its con/charm/menace siblings. They share the same structured-ask gate (the
+ * target-confirm step must hold open for the ask form instead of committing) and the
+ * same consent category server-side — mirrors `BOON_ACTION_KEYS` in
+ * `world.scenes.boon_services`.
+ */
+export const BOON_ACTION_KEYS: readonly string[] = [
+  'boon',
+  'boon_con',
+  'boon_charm',
+  'boon_menace',
+];
+
+/**
  * The structured-ask payload on a boon dispatch (#2540). MATERIAL asks (#2540
  * slice 3) carry a `material_category_id` + `sum_tier` (reusing money's labels) —
  * but never a raw amount; no computed value is ever shown for material asks.

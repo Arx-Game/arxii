@@ -29,7 +29,7 @@ from world.scenes.action_models import (
     SceneActionTarget,
 )
 from world.scenes.action_resolvers import get_resolver
-from world.scenes.boon_services import BOON_ACTION_KEY
+from world.scenes.boon_services import BOON_ACTION_KEYS
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
@@ -390,10 +390,10 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
         # for both NPC and piloted targets alike, so it never reaches a piloted target's
         # consent queue (no roll, no consent burn, no affection drain).
         check_boon_availability(ask=boon, target_persona=target_persona)
-    elif action_key == BOON_ACTION_KEY:
-        # #2540 fold-in: a boon request with no payload has nothing to ask for —
-        # reject at the single dispatch orchestrator so every entry path (API,
-        # telnet) is covered, not just the ones that remember to pass boon=....
+    elif action_key in BOON_ACTION_KEYS:
+        # #2540 fold-in: a boon request (any ask flavor) with no payload has nothing
+        # to ask for — reject at the single dispatch orchestrator so every entry path
+        # (API, telnet) is covered, not just the ones that remember to pass boon=....
         from django.core.exceptions import ValidationError  # noqa: PLC0415
 
         msg = "This ask needs a boon payload."

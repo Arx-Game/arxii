@@ -444,6 +444,9 @@ from actions.definitions.situations import PlaceChallengeAction, SetSituationAct
 from actions.definitions.social import (
     blackmail,
     boon,
+    boon_charm,
+    boon_con,
+    boon_menace,
     deceive,
     entrance,
     flirt,
@@ -850,6 +853,9 @@ _ALL_ACTIONS: list[Action] = [
     seduce,
     blackmail,
     boon,
+    boon_con,
+    boon_charm,
+    boon_menace,
     vault_deposit,
     vault_withdraw,
     treasury_withdraw,
@@ -1143,6 +1149,16 @@ SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
         perform,
         entrance,
         restore_sense,
+        # #2540 slice 3: `boon` was previously absent here — its lowercased-fallback
+        # key in _scene_actions (player_interface.py) happens to equal its real
+        # registry key ("boon" == "boon".lower()), so it worked by coincidence. The
+        # three ask flavors below do NOT have that luck ("Con a Boon".lower() !=
+        # "boon_con"), so they MUST be here; `boon` is added alongside them for the
+        # same robustness every other entry in this map already has.
+        boon,
+        boon_con,
+        boon_charm,
+        boon_menace,
     )
 }
 
