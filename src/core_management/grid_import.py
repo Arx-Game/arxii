@@ -1239,6 +1239,69 @@ def _import_places(
             result.updated_places += not created
 
 
+def _upsert_travel_hub_row(row_data: dict, room_by_fixture_key: dict[str, RoomProfile]) -> None:
+    """Upsert one TravelHub bundle row."""
+    from world.travel.models import TravelHub  # noqa: PLC0415
+
+    room_profile = room_by_fixture_key[row_data["room"]]
+    TravelHub.objects.update_or_create(
+        room_profile=room_profile,
+        defaults={
+            "name": row_data["name"],
+            "description": row_data.get("description", ""),
+            "travel_modes": row_data.get("travel_modes", []),
+            "is_transit_stop": row_data.get("is_transit_stop", True),
+            "is_active": True,
+        },
+    )
+
+
+def _place_functionary_row(
+    row_data: dict, room_by_fixture_key: dict[str, RoomProfile], result: GridImportResult
+) -> None:
+    """Place one functionary bundle row, reporting and skipping an unauthored role."""
+    from world.npc_services.functionaries import place_functionary  # noqa: PLC0415
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
+
+    room_profile = room_by_fixture_key[row_data["room"]]
+    role = NPCRole.objects.filter(name=row_data["role"]).first()
+    if role is None:
+        result.reports.append(
+            f"functionary role {row_data['role']!r} not authored; skipped in {row_data['room']}"
+        )
+        return
+    place_functionary(role=role, room=room_profile)
+
+
+def _upsert_room_feature_row(
+    row_data: dict, room_by_fixture_key: dict[str, RoomProfile], result: GridImportResult
+) -> None:
+    """Upsert one RoomFeatureInstance bundle row (one active feature per room)."""
+    from world.room_features.models import RoomFeatureInstance, RoomFeatureKind  # noqa: PLC0415
+
+    room_profile = room_by_fixture_key[row_data["room"]]
+    kind = RoomFeatureKind.objects.filter(name=row_data["kind"]).first()
+    if kind is None:
+        result.reports.append(
+            f"feature kind {row_data['kind']!r} not authored; skipped in {row_data['room']}"
+        )
+        return
+    existing = RoomFeatureInstance.objects.filter(room_profile=room_profile).active().first()
+    if existing is not None and existing.feature_kind_id != kind.pk:
+        result.reports.append(
+            f"room {row_data['room']} carries a different active feature; "
+            f"bundle {row_data['kind']!r} skipped (one feature per room)"
+        )
+        return
+    if existing is None:
+        RoomFeatureInstance.objects.create(
+            room_profile=room_profile, feature_kind=kind, level=row_data["level"]
+        )
+    elif existing.level != row_data["level"]:
+        existing.level = row_data["level"]
+        existing.save(update_fields=["level"])
+
+
 def _import_room_flags(
     bundles: list[tuple[Path, dict]],
     room_by_fixture_key: dict[str, RoomProfile],
@@ -1252,58 +1315,107 @@ def _import_room_flags(
     instances upsert row-only by (room, kind): the level lands, but install
     side effects (traffic modifiers, criers) were exported as their own rows.
     """
-    from world.npc_services.functionaries import place_functionary  # noqa: PLC0415
-    from world.npc_services.models import NPCRole  # noqa: PLC0415
-    from world.room_features.models import RoomFeatureInstance, RoomFeatureKind  # noqa: PLC0415
-    from world.travel.models import TravelHub  # noqa: PLC0415
-
     for _path, bundle in bundles:
         for row_data in bundle.get("travel_hubs", []):
-            room_profile = room_by_fixture_key[row_data["room"]]
-            TravelHub.objects.update_or_create(
-                room_profile=room_profile,
-                defaults={
-                    "name": row_data["name"],
-                    "description": row_data.get("description", ""),
-                    "travel_modes": row_data.get("travel_modes", []),
-                    "is_transit_stop": row_data.get("is_transit_stop", True),
-                    "is_active": True,
-                },
-            )
+            _upsert_travel_hub_row(row_data, room_by_fixture_key)
         for row_data in bundle.get("functionaries", []):
-            room_profile = room_by_fixture_key[row_data["room"]]
-            role = NPCRole.objects.filter(name=row_data["role"]).first()
-            if role is None:
-                result.reports.append(
-                    f"functionary role {row_data['role']!r} not authored; skipped "
-                    f"in {row_data['room']}"
-                )
-                continue
-            place_functionary(role=role, room=room_profile)
+            _place_functionary_row(row_data, room_by_fixture_key, result)
         for row_data in bundle.get("room_features", []):
-            room_profile = room_by_fixture_key[row_data["room"]]
-            kind = RoomFeatureKind.objects.filter(name=row_data["kind"]).first()
-            if kind is None:
-                result.reports.append(
-                    f"feature kind {row_data['kind']!r} not authored; skipped in {row_data['room']}"
-                )
-                continue
-            existing = (
-                RoomFeatureInstance.objects.filter(room_profile=room_profile).active().first()
+            _upsert_room_feature_row(row_data, room_by_fixture_key, result)
+
+
+def _contributor_by_name(name: str | None):
+    """Look up a ContentContributor by name, returning None when unset or missing."""
+    from world.contributors.models import ContentContributor  # noqa: PLC0415
+
+    if not name:
+        return None
+    return ContentContributor.objects.filter(name=name).first()
+
+
+def _build_ambient_emit_fields(
+    row_data: dict, room_profile: RoomProfile | None, area: Area | None
+) -> dict:
+    """Build the AmbientEmit ``defaults`` dict for one bundle row."""
+    return {
+        "text": row_data["text"],
+        "gm_notes": row_data.get("gm_notes", ""),
+        "weight": row_data.get("weight", 1),
+        "cooldown_minutes": row_data.get("cooldown_minutes", 0),
+        "room_profile": room_profile,
+        "area": area if row_data.get("area_scoped") else None,
+        "gate_stat_key": row_data.get("gate_stat_key", ""),
+        "gate_min": row_data.get("gate_min"),
+        "gate_max": row_data.get("gate_max"),
+        "in_spring": row_data.get("in_spring", False),
+        "in_summer": row_data.get("in_summer", False),
+        "in_autumn": row_data.get("in_autumn", False),
+        "in_winter": row_data.get("in_winter", False),
+        "at_dawn": row_data.get("at_dawn", False),
+        "at_day": row_data.get("at_day", False),
+        "at_dusk": row_data.get("at_dusk", False),
+        "at_night": row_data.get("at_night", False),
+        "written_by": _contributor_by_name(row_data.get("written_by")),
+        "written_on": row_data.get("written_on") or None,
+        "reviewed_by": _contributor_by_name(row_data.get("reviewed_by")),
+        "reviewed_on": row_data.get("reviewed_on") or None,
+    }
+
+
+# Fields compared to decide whether a credited AmbientEmit's content diverges from
+# the incoming bundle row (room_profile is compared separately, by id).
+_AMBIENT_EMIT_CONTENT_FIELDS = (
+    "text",
+    "gm_notes",
+    "weight",
+    "cooldown_minutes",
+    "gate_stat_key",
+    "gate_min",
+    "gate_max",
+    "in_spring",
+    "in_summer",
+    "in_autumn",
+    "in_winter",
+    "at_dawn",
+    "at_day",
+    "at_dusk",
+    "at_night",
+)
+
+
+def _ambient_emit_differs(existing, fields: dict, room_profile: RoomProfile | None) -> bool:
+    """Return True if a credited existing AmbientEmit diverges from the bundle fields."""
+    differs = any(getattr(existing, name) != fields[name] for name in _AMBIENT_EMIT_CONTENT_FIELDS)
+    return differs or existing.room_profile_id != (
+        room_profile.pk if room_profile is not None else None
+    )
+
+
+def _upsert_ambient_emit_row(
+    row_data: dict,
+    area: Area | None,
+    room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
+) -> None:
+    """Upsert one AmbientEmit bundle row, freezing on a credited content conflict."""
+    from world.narrative.models import AmbientEmit  # noqa: PLC0415
+
+    room_fixture = row_data.get("room")
+    room_profile = room_by_fixture_key[room_fixture] if room_fixture else None
+    fields = _build_ambient_emit_fields(row_data, room_profile, area)
+
+    existing = AmbientEmit.objects.filter(key=row_data["key"]).first()
+    if existing is not None and existing.written_by_id is not None:
+        if _ambient_emit_differs(existing, fields, room_profile):
+            result.reports.append(
+                f"ambient emit {row_data['key']!r} is credited and differs from the "
+                "bundle; frozen (resolve via the load-conflict admin)"
             )
-            if existing is not None and existing.feature_kind_id != kind.pk:
-                result.reports.append(
-                    f"room {row_data['room']} carries a different active feature; "
-                    f"bundle {row_data['kind']!r} skipped (one feature per room)"
-                )
-                continue
-            if existing is None:
-                RoomFeatureInstance.objects.create(
-                    room_profile=room_profile, feature_kind=kind, level=row_data["level"]
-                )
-            elif existing.level != row_data["level"]:
-                existing.level = row_data["level"]
-                existing.save(update_fields=["level"])
+            return
+
+    _, created = AmbientEmit.objects.update_or_create(key=row_data["key"], defaults=fields)
+    result.created_ambient_emits += created
+    result.updated_ambient_emits += not created
 
 
 def _import_ambient_emits(
@@ -1318,75 +1430,10 @@ def _import_ambient_emits(
     reported rather than overwritten — the ADR-0201 load-conflict rule, same as
     ``_ensure_ambient_group_trigger``'s credited-TriggerDefinition branch.
     """
-    from world.contributors.models import ContentContributor  # noqa: PLC0415
-    from world.narrative.models import AmbientEmit  # noqa: PLC0415
-
-    def _contributor(name):
-        if not name:
-            return None
-        return ContentContributor.objects.filter(name=name).first()
-
     for path, bundle in bundles:
         area = area_by_path.get(path)
         for row_data in bundle.get("ambient_emits", []):
-            room_fixture = row_data.get("room")
-            room_profile = room_by_fixture_key[room_fixture] if room_fixture else None
-            fields = {
-                "text": row_data["text"],
-                "gm_notes": row_data.get("gm_notes", ""),
-                "weight": row_data.get("weight", 1),
-                "cooldown_minutes": row_data.get("cooldown_minutes", 0),
-                "room_profile": room_profile,
-                "area": area if row_data.get("area_scoped") else None,
-                "gate_stat_key": row_data.get("gate_stat_key", ""),
-                "gate_min": row_data.get("gate_min"),
-                "gate_max": row_data.get("gate_max"),
-                "in_spring": row_data.get("in_spring", False),
-                "in_summer": row_data.get("in_summer", False),
-                "in_autumn": row_data.get("in_autumn", False),
-                "in_winter": row_data.get("in_winter", False),
-                "at_dawn": row_data.get("at_dawn", False),
-                "at_day": row_data.get("at_day", False),
-                "at_dusk": row_data.get("at_dusk", False),
-                "at_night": row_data.get("at_night", False),
-                "written_by": _contributor(row_data.get("written_by")),
-                "written_on": row_data.get("written_on") or None,
-                "reviewed_by": _contributor(row_data.get("reviewed_by")),
-                "reviewed_on": row_data.get("reviewed_on") or None,
-            }
-            existing = AmbientEmit.objects.filter(key=row_data["key"]).first()
-            if existing is not None and existing.written_by_id is not None:
-                content_fields = (
-                    "text",
-                    "gm_notes",
-                    "weight",
-                    "cooldown_minutes",
-                    "gate_stat_key",
-                    "gate_min",
-                    "gate_max",
-                    "in_spring",
-                    "in_summer",
-                    "in_autumn",
-                    "in_winter",
-                    "at_dawn",
-                    "at_day",
-                    "at_dusk",
-                    "at_night",
-                )
-                differs = any(
-                    getattr(existing, name) != fields[name] for name in content_fields
-                ) or existing.room_profile_id != (
-                    room_profile.pk if room_profile is not None else None
-                )
-                if differs:
-                    result.reports.append(
-                        f"ambient emit {row_data['key']!r} is credited and differs from the "
-                        "bundle; frozen (resolve via the load-conflict admin)"
-                    )
-                    continue
-            _, created = AmbientEmit.objects.update_or_create(key=row_data["key"], defaults=fields)
-            result.created_ambient_emits += created
-            result.updated_ambient_emits += not created
+            _upsert_ambient_emit_row(row_data, area, room_by_fixture_key, result)
 
 
 def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:

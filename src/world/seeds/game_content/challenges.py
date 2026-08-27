@@ -519,6 +519,128 @@ class ChallengeContent:
         return conditions
 
     @staticmethod
+    def _build_categories() -> dict[str, ChallengeCategory]:
+        """Create one ChallengeCategory per CHALLENGE_CATEGORIES entry."""
+        from world.mechanics.factories import ChallengeCategoryFactory  # noqa: PLC0415
+
+        categories: dict[str, ChallengeCategory] = {}
+        for order, cat_name in enumerate(CHALLENGE_CATEGORIES):
+            categories[cat_name] = ChallengeCategoryFactory(
+                name=cat_name,
+                description=f"{cat_name} challenges.",
+                display_order=order,
+            )
+        return categories
+
+    @staticmethod
+    def _build_social_check_types() -> dict[str, CheckType]:
+        """Look up existing Social-category CheckTypes for the Proud Noble challenge."""
+        from world.checks.models import CheckType  # noqa: PLC0415
+
+        social_check_types: dict[str, CheckType] = {}
+        for ct in CheckType.objects.filter(category__name="Social"):
+            social_check_types[ct.name] = ct
+        return social_check_types
+
+    @staticmethod
+    def _add_challenge_properties(
+        template: ChallengeTemplate, prop_names: list[str], properties: dict[str, Property]
+    ) -> None:
+        """Create ChallengeTemplateProperty rows linking template to its properties."""
+        from world.mechanics.factories import ChallengeTemplatePropertyFactory  # noqa: PLC0415
+
+        for prop_name in prop_names:
+            ChallengeTemplatePropertyFactory(
+                challenge_template=template,
+                property=properties[prop_name],
+            )
+
+    @staticmethod
+    def _create_challenge_consequences(
+        template: ChallengeTemplate,
+        ch_name: str,
+        pool,
+        outcomes: dict[str, CheckOutcome],
+        bonus_cond: ConditionTemplate | None,
+    ) -> None:
+        """Create the 4-tier ConsequencePool entries (with critical bonus) for template."""
+        from actions.factories import (  # noqa: PLC0415
+            ConsequencePoolEntryFactory,
+        )
+        from world.checks.constants import EffectTarget, EffectType  # noqa: PLC0415
+        from world.checks.factories import ConsequenceFactory  # noqa: PLC0415
+        from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+        from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+        from world.mechanics.factories import ChallengeTemplateConsequenceFactory  # noqa: PLC0415
+
+        # (outcome_key, resolution_type, duration_rounds)
+        consequence_tiers: list[tuple[str, str, int | None]] = [
+            ("failure", ResolutionType.PERSONAL, None),
+            ("partial", ResolutionType.TEMPORARY, 3),
+            ("success", ResolutionType.DESTROY, None),
+            ("critical", ResolutionType.DESTROY, None),
+        ]
+
+        for outcome_key, resolution_type, duration_rounds in consequence_tiers:
+            outcome = outcomes[outcome_key]
+            consequence = ConsequenceFactory(
+                outcome_tier=outcome,
+                label=f"{ch_name} {outcome_key.title()}",
+                weight=1,
+                character_loss=False,
+            )
+
+            ChallengeTemplateConsequenceFactory(
+                challenge_template=template,
+                consequence=consequence,
+                resolution_type=resolution_type,
+                resolution_duration_rounds=duration_rounds,
+            )
+
+            ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+            # Critical success: apply bonus condition
+            if outcome_key == "critical" and bonus_cond is not None:  # noqa: STRING_LITERAL
+                ConsequenceEffect.objects.create(
+                    consequence=consequence,
+                    effect_type=EffectType.APPLY_CONDITION,
+                    target=EffectTarget.SELF,
+                    condition_template=bonus_cond,
+                    condition_severity=1,
+                    execution_order=0,
+                )
+
+    @staticmethod
+    def _create_challenge_approaches(  # noqa: PLR0913
+        template: ChallengeTemplate,
+        ch_name: str,
+        approaches,
+        app_by_name: dict[str, Application],
+        challenge_check_types: dict[str, CheckType],
+        social_check_types: dict[str, CheckType],
+    ) -> None:
+        """Create ChallengeApproach rows linking template's applications to check types."""
+        from world.mechanics.factories import ChallengeApproachFactory  # noqa: PLC0415
+
+        for display_name, app_name, ct_name in approaches:
+            # Look up check type: first in challenge check types, then social
+            ct = challenge_check_types.get(ct_name) or social_check_types.get(ct_name)
+            if ct is None:
+                msg = (
+                    f"CheckType '{ct_name}' not found for approach '{display_name}' "
+                    f"on challenge '{ch_name}'."
+                )
+                raise ValueError(msg)
+
+            ChallengeApproachFactory(
+                challenge_template=template,
+                application=app_by_name[app_name],
+                check_type=ct,
+                display_name=display_name,
+                custom_description=f"{display_name} approach to {ch_name.lower()}.",
+            )
+
+    @staticmethod
     def create_challenges(
         properties: dict[str, Property],
         applications: list[Application],
@@ -543,21 +665,9 @@ class ChallengeContent:
         Returns:
             Tuple of (categories dict, challenges dict) keyed by name.
         """
-        from actions.factories import (  # noqa: PLC0415
-            ConsequencePoolEntryFactory,
-            ConsequencePoolFactory,
-        )
-        from world.checks.constants import EffectTarget, EffectType  # noqa: PLC0415
-        from world.checks.factories import ConsequenceFactory  # noqa: PLC0415
-        from world.checks.models import CheckType, ConsequenceEffect  # noqa: PLC0415
-        from world.mechanics.constants import ChallengeType, ResolutionType  # noqa: PLC0415
-        from world.mechanics.factories import (  # noqa: PLC0415
-            ChallengeApproachFactory,
-            ChallengeCategoryFactory,
-            ChallengeTemplateConsequenceFactory,
-            ChallengeTemplateFactory,
-            ChallengeTemplatePropertyFactory,
-        )
+        from actions.factories import ConsequencePoolFactory  # noqa: PLC0415
+        from world.mechanics.constants import ChallengeType  # noqa: PLC0415
+        from world.mechanics.factories import ChallengeTemplateFactory  # noqa: PLC0415
 
         # --- Build application lookup by name ---
         app_by_name: dict[str, Application] = {a.name: a for a in applications}
@@ -566,28 +676,10 @@ class ChallengeContent:
         bonus_conditions = ChallengeContent._create_bonus_conditions()
 
         # --- Categories ---
-        categories: dict[str, ChallengeCategory] = {}
-        for order, cat_name in enumerate(CHALLENGE_CATEGORIES):
-            categories[cat_name] = ChallengeCategoryFactory(
-                name=cat_name,
-                description=f"{cat_name} challenges.",
-                display_order=order,
-            )
+        categories = ChallengeContent._build_categories()
 
         # --- Social check types (from Pass 1) for the Proud Noble challenge ---
-        social_check_types: dict[str, CheckType] = {}
-        social_cts = CheckType.objects.filter(category__name="Social")
-        for ct in social_cts:
-            social_check_types[ct.name] = ct
-
-        # --- Consequence tier configs ---
-        # (outcome_key, resolution_type, duration_rounds)
-        consequence_tiers: list[tuple[str, str, int | None]] = [
-            ("failure", ResolutionType.PERSONAL, None),
-            ("partial", ResolutionType.TEMPORARY, 3),
-            ("success", ResolutionType.DESTROY, None),
-            ("critical", ResolutionType.DESTROY, None),
-        ]
+        social_check_types = ChallengeContent._build_social_check_types()
 
         # --- Challenges ---
         challenges: dict[str, ChallengeTemplate] = {}
@@ -607,12 +699,7 @@ class ChallengeContent:
             )
             challenges[ch_name] = template
 
-            # --- Properties ---
-            for prop_name in prop_names:
-                ChallengeTemplatePropertyFactory(
-                    challenge_template=template,
-                    property=properties[prop_name],
-                )
+            ChallengeContent._add_challenge_properties(template, prop_names, properties)
 
             # --- Consequence pool ---
             pool = ConsequencePoolFactory(name=f"{ch_name} Pool")
@@ -620,53 +707,18 @@ class ChallengeContent:
             bonus_cond_name = CHALLENGE_BONUS_CONDITIONS.get(ch_name)
             bonus_cond = bonus_conditions.get(bonus_cond_name) if bonus_cond_name else None
 
-            for outcome_key, resolution_type, duration_rounds in consequence_tiers:
-                outcome = outcomes[outcome_key]
-                consequence = ConsequenceFactory(
-                    outcome_tier=outcome,
-                    label=f"{ch_name} {outcome_key.title()}",
-                    weight=1,
-                    character_loss=False,
-                )
+            ChallengeContent._create_challenge_consequences(
+                template, ch_name, pool, outcomes, bonus_cond
+            )
 
-                ChallengeTemplateConsequenceFactory(
-                    challenge_template=template,
-                    consequence=consequence,
-                    resolution_type=resolution_type,
-                    resolution_duration_rounds=duration_rounds,
-                )
-
-                ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
-
-                # Critical success: apply bonus condition
-                if outcome_key == "critical" and bonus_cond is not None:  # noqa: STRING_LITERAL
-                    ConsequenceEffect.objects.create(
-                        consequence=consequence,
-                        effect_type=EffectType.APPLY_CONDITION,
-                        target=EffectTarget.SELF,
-                        condition_template=bonus_cond,
-                        condition_severity=1,
-                        execution_order=0,
-                    )
-
-            # --- Approaches ---
-            for display_name, app_name, ct_name in approaches:
-                # Look up check type: first in challenge check types, then social
-                ct = challenge_check_types.get(ct_name) or social_check_types.get(ct_name)
-                if ct is None:
-                    msg = (
-                        f"CheckType '{ct_name}' not found for approach '{display_name}' "
-                        f"on challenge '{ch_name}'."
-                    )
-                    raise ValueError(msg)
-
-                ChallengeApproachFactory(
-                    challenge_template=template,
-                    application=app_by_name[app_name],
-                    check_type=ct,
-                    display_name=display_name,
-                    custom_description=f"{display_name} approach to {ch_name.lower()}.",
-                )
+            ChallengeContent._create_challenge_approaches(
+                template,
+                ch_name,
+                approaches,
+                app_by_name,
+                challenge_check_types,
+                social_check_types,
+            )
 
         return categories, challenges
 

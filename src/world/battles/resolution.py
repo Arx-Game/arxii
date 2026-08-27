@@ -77,6 +77,7 @@ if TYPE_CHECKING:
     )
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.companions.models import CompanionOrder
     from world.conditions.models import ConditionInstance
     from world.covenants.perks.context import SituationContext
     from world.magic.models import Technique
@@ -1376,6 +1377,50 @@ def _block_if_participant_mid_audere_majora_crossing(battle: Battle) -> None:
         )
 
 
+def _declaration_for_companion_order(order: CompanionOrder, battle_round: BattleRound):
+    """Build the BattleActionDeclaration for one ATTACK_TARGET companion order.
+
+    Returns None (no declaration) for a HOLD order, an undeployed companion, a
+    non-ATTACK_TARGET order, a missing technique/target, or a missing participant.
+    """
+    from world.battles.constants import BattleActionKind  # noqa: PLC0415
+    from world.battles.models import BattleActionDeclaration  # noqa: PLC0415
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionDeployment  # noqa: PLC0415
+
+    if order.order_kind == CompanionOrderKind.HOLD:
+        return None
+
+    try:
+        CompanionDeployment.objects.select_related(
+            "vehicle__unit",
+        ).get(companion=order.companion, battle=battle_round.battle)
+    except CompanionDeployment.DoesNotExist:
+        return None
+
+    if order.order_kind != CompanionOrderKind.ATTACK_TARGET:
+        return None
+
+    technique = order.ability.technique if order.ability and order.ability.technique else None
+    if technique is None or order.target_unit is None:
+        return None
+
+    # Find the participant (the ordering player)
+    participant = battle_round.battle.participants.filter(
+        character_sheet=order.companion.owner,
+    ).first()
+    if participant is None:
+        return None
+
+    return BattleActionDeclaration.objects.create(
+        battle_round=battle_round,
+        participant=participant,
+        technique=technique,
+        action_kind=BattleActionKind.STRIKE,
+        target_unit=order.target_unit,
+    )
+
+
 def _process_companion_orders(battle_round: BattleRound) -> list:
     """Create BattleActionDeclarations for ordered companion vehicles (#1921).
 
@@ -1384,10 +1429,7 @@ def _process_companion_orders(battle_round: BattleRound) -> list:
     unit as the target. HOLD orders are skipped (no declaration created).
     DEFEND_ALLY is handled via the damage-interception path, not here.
     """
-    from world.battles.constants import BattleActionKind  # noqa: PLC0415
-    from world.battles.models import BattleActionDeclaration  # noqa: PLC0415
-    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
-    from world.companions.models import CompanionDeployment, CompanionOrder  # noqa: PLC0415
+    from world.companions.models import CompanionOrder  # noqa: PLC0415
 
     orders = list(
         CompanionOrder.objects.filter(
@@ -1400,37 +1442,8 @@ def _process_companion_orders(battle_round: BattleRound) -> list:
 
     declarations = []
     for order in orders:
-        if order.order_kind == CompanionOrderKind.HOLD:
-            continue
-
-        try:
-            CompanionDeployment.objects.select_related(
-                "vehicle__unit",
-            ).get(companion=order.companion, battle=battle_round.battle)
-        except CompanionDeployment.DoesNotExist:
-            continue
-
-        if order.order_kind == CompanionOrderKind.ATTACK_TARGET:
-            technique = (
-                order.ability.technique if order.ability and order.ability.technique else None
-            )
-            if technique is None or order.target_unit is None:
-                continue
-
-            # Find the participant (the ordering player)
-            participant = battle_round.battle.participants.filter(
-                character_sheet=order.companion.owner,
-            ).first()
-            if participant is None:
-                continue
-
-            decl = BattleActionDeclaration.objects.create(
-                battle_round=battle_round,
-                participant=participant,
-                technique=technique,
-                action_kind=BattleActionKind.STRIKE,
-                target_unit=order.target_unit,
-            )
+        decl = _declaration_for_companion_order(order, battle_round)
+        if decl is not None:
             declarations.append(decl)
 
     return declarations

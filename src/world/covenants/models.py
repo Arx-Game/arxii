@@ -209,8 +209,8 @@ class Covenant(SharedMemoryModel):
             return
         super().save(*args, **kwargs)
 
-    def clean(self) -> None:
-        super().clean()
+    def _clean_battle_binding(self) -> None:
+        """Raise unless battle_binding is set exactly for BATTLE covenants."""
         if self.covenant_type == CovenantType.BATTLE:
             if not self.battle_binding:
                 raise ValidationError(
@@ -223,17 +223,33 @@ class Covenant(SharedMemoryModel):
                 )
             if self.is_dormant:
                 raise ValidationError({"is_dormant": "Only Battle covenants may be dormant."})
+
+    def _clean_dormant(self) -> None:
+        """Raise unless is_dormant is only set on STANDING battle covenants."""
         if self.is_dormant and self.battle_binding != BattleBinding.STANDING:
             raise ValidationError({"is_dormant": "Only STANDING battle covenants may be dormant."})
+
+    def _clean_campaign_story(self) -> None:
+        """Raise unless campaign_story is only set on CAMPAIGN battle covenants."""
         if self.campaign_story_id and self.battle_binding != BattleBinding.CAMPAIGN:
             raise ValidationError(
                 {"campaign_story": "Only CAMPAIGN battle covenants may set campaign_story."}
             )
+
+    def _clean_leader(self) -> None:
+        """Raise unless leader is set exactly for COURT covenants."""
         if self.covenant_type == CovenantType.COURT:
             if self.leader_id is None:
                 raise ValidationError({"leader": "Court covenants require a leader."})
         elif self.leader_id is not None:
             raise ValidationError({"leader": "Only Court covenants may set a leader."})
+
+    def clean(self) -> None:
+        super().clean()
+        self._clean_battle_binding()
+        self._clean_dormant()
+        self._clean_campaign_story()
+        self._clean_leader()
 
     @cached_property
     def member_roster(self) -> CovenantMembershipHandler:
