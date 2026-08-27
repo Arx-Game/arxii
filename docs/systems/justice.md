@@ -198,8 +198,18 @@ opted into lethal consequences (ADR-0233 amends ADR-0023's scope note for this f
 
 `schedule_sentence` routes a just-TRIED case's `sentence_kind` to its enforcement
 path: FINE/HUMILIATION release outright (`apply_humiliation` — a deed-prestige hit,
-clamped at zero; NO prose beyond neutral procedural strings — Dan authors the real
-humiliation copy personally); BRIG_TERM holds until `JusticeCase.sentence_ends_at`
+clamped at zero, persisted onto `JusticeCase.humiliation_prestige_hit`; NO prose
+beyond neutral procedural strings — Dan authors the real humiliation copy
+personally). **Humiliation is two-layered (#2378 follow-up, ADR-0235, 2026-08-27
+design call):** a PERMANENT physical brand (`mint_humiliation_brand` — a
+documented no-op seam; the brand itself is scar substrate, TehomCD's domain, wired
+here when the scar system exposes a minting API) atop a TEMPORARY reputational
+layer that fades at `HUMILIATION_TERM_DAYS` — the prestige hit (restored by
+`sentence_sweep_tick`'s restore leg, below) plus a persona-scoped examine/profile
+explanation, `active_humiliation_mark`, surfaced as `PersonaSerializer
+.humiliation_mark` (`world/scenes/serializers.py`) with neutral PLACEHOLDER copy
+(`constants.HUMILIATION_MARK_EXPLANATION` — never what the humiliation was, same
+rule as `apply_humiliation`). BRIG_TERM holds until `JusticeCase.sentence_ends_at`
 with a best-effort brig-visitation advert (`notifications.notify_brig_visitation`, OOC
 to the accused's active friends — skipped entirely when the accused's persona is a
 fake name, an identity-bridge guard: the advert names the persona, and sending it to
@@ -219,10 +229,17 @@ back to a double-rate fine, `_collect_fine_double`, when there's no Brig or no b
 
 `sentence_sweep_tick` is the daily cron body (`justice.sentence_sweep` in
 `game_clock/tasks.py`): `_sweep_brig_releases` frees every HELD captivity whose
-BRIG_TERM has matured; `_sweep_terminals` carries out (or voids) every terminal
-sentence whose rescue window has closed — a rescue or an escape (captivity no longer
-HELD by sweep time) voids it (`notify_verdict_safely(reason=VOIDED)`, never the
-CARRIED_OUT copy); otherwise `_carry_out_execution` re-judges the lethal wall
+BRIG_TERM has matured; `_sweep_humiliation_restores` (#2378 follow-up) restores the
+exact stored `humiliation_prestige_hit` for every TRIED HUMILIATION case whose
+`resolved_at` has aged past `HUMILIATION_TERM_DAYS`, then zeroes the field
+(idempotent — a restored or never-debited case never matches again). This reads
+like the automatic-gain shape ADR-0081 forbids, but isn't one: it reverses a loss
+`apply_humiliation` itself inflicted automatically, closing a debt the system
+created against itself (ADR-0235). `_sweep_terminals` carries out (or voids) every
+terminal sentence whose rescue window has closed — a rescue or an escape (captivity
+no longer HELD by sweep time) voids it (`notify_verdict_safely(reason=VOIDED)`,
+never the CARRIED_OUT copy); otherwise `_carry_out_execution` re-judges the lethal
+wall
 (`terminal_kind_for`) before carrying it out — a sentence_kind of EXECUTION judged
 up to `RESCUE_WINDOW_DAYS` earlier may no longer clear the wall by carry-out time
 (e.g. an NPC persona's sheet gets claimed by a player without lethal-consequences
@@ -251,10 +268,26 @@ row) from three live sources: still-term-limited humiliations
 null), and pending terminal countdowns (`terminal_due_at` in the future, not yet
 carried out) — surfaced on the wanted board (`GET /api/justice/wanted/`'s `records`
 field, `PublicMarkSerializer`) and `GET /api/justice/my-case/`'s sentence/countdown
-fields (`MyCaseSerializer`) for the captive's own case. The verdict itself also fires a
-`tidings` VERDICT feed item (`tidings.services._verdict_items` — neutral procedural
-headline naming only the sentence kind, never humiliation specifics: there is no
-narrative data on `JusticeCase` to leak).
+fields (`MyCaseSerializer`) for the captive's own case. `active_humiliation_mark
+(persona)` is its persona-scoped sibling (#2378 follow-up) — the same
+term-limited-by-arithmetic humiliation lookup, but keyed on one persona rather than
+one area, for the examine/profile surface (`PersonaSerializer.humiliation_mark`)
+rather than an area's wanted board. The verdict itself also fires a `tidings`
+VERDICT feed item (`tidings.services._verdict_items` — neutral procedural headline
+naming only the sentence kind, never humiliation specifics: there is no narrative
+data on `JusticeCase` to leak).
+
+**Verdict-notification audience and records permanence, ratified (#2378 follow-up,
+ADR-0235):** `notify_verdict`'s existing reachable audience (accused + exculpatory
+submitters, direct narrative message) plus the area-scoped public record
+(`active_public_marks`, the wanted board, the `tidings` VERDICT item) is the
+INTENDED final shape — accusers/victims were never meant to get a direct push
+beyond what the area feed already carries (see the accuser-routing-gap note in
+`notifications.py`); no code changed for this ruling, only the design-call
+confirmation. Public records are permanent IC history — nothing prunes an
+`ExileDecree` or a case's trace from the record except an explicit pardon
+(`lifecycle.pardon_persona`) or an `AccusationNullification`; already true in code,
+now recorded as a deliberate principle rather than an implicit default.
 
 `is_magically_concealed(persona)` is the ratified magic-exception seam (spec #2378
 §5): magical concealment (invisibility, shapechange) should bypass the mundane exile
@@ -281,10 +314,13 @@ taxonomy rather than inventing a parallel check — wire it when that taxonomy e
 - **`JusticeCase.sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at`** —
   brig release / exile term end; rescue-window deadline; when a terminal was actually
   carried out.
+- **`JusticeCase.humiliation_prestige_hit`** (#2378 follow-up) — the exact deed-prestige
+  amount `apply_humiliation` debited; read back and re-credited by
+  `sentence_sweep_tick`'s restore leg, then zeroed (idempotence guard).
 - **`Area.exile_destination`** (`world/areas/models.py`) — the RoomProfile the
   banished are ejected to (outside the walls); null = no physical move.
 
-## Deferred (verified against code, updated #2378)
+## Deferred (verified against code, updated #2378 follow-up)
 
 Still open from before this slice: #1334 secrets-outing writer (calls
 `associate_heat`); allied-society warrant sharing; NPC false-accusers (a content loop
@@ -292,10 +328,12 @@ over this machinery) — future content issue. Newly deferred by the sentence-en
 slice itself (all #2378): **arena/trial-by-combat mechanics** — `ARENA_TRIAL` rungs are
 seeded but INERT (substituted for `BRIG_TERM` at consult time) pending TehomCD's combat
 substrate; **magical-detection wiring** for `is_magically_concealed` (TehomCD, seam
-above); **realm sentencing-ladder content, execution-method prose, and every
-PLACEHOLDER copy string in the sentencing paths above** (lore/Apostate pass);
-**humiliation prose specifically** stays Apostate-authored only — the mechanics hook
-(`apply_humiliation`) is neutral by design and never narrative.
+above); **the humiliation brand itself** — `mint_humiliation_brand` is a documented
+no-op seam pending TehomCD's scar-minting API (#2378 follow-up, ADR-0235); **realm
+sentencing-ladder content, execution-method prose, and every PLACEHOLDER copy string
+in the sentencing paths above** (lore/Apostate pass); **humiliation prose
+specifically** stays Apostate-authored only — the mechanics hooks (`apply_humiliation`,
+`HUMILIATION_MARK_EXPLANATION`) are neutral by design and never narrative.
 
 ## Authored law postures (Apostate, 2026-07-03 — transcribe to AreaLaw when the grid lands)
 
