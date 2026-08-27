@@ -2,13 +2,19 @@
 
 **Status:** core party and duel combat ship end-to-end, on both telnet and web — the GM lifecycle
 (start an encounter, spawn an NPC opponent, add/remove a PC, manual round control) got its web
-surface in #3067, closing the last "server-only" gap in the party-combat REST API; the authored
+surface in #3067, closing the last "server-only" gap in the party-combat REST API; **removing/
+despawning a spawned NPC opponent mid-fight is now symmetric with `remove_participant`** (#3382 —
+`world.combat.services.remove_opponent`, web `CombatEncounterViewSet.remove_opponent`, telnet
+`encounter removenpc`, `GMEncounterControls`' Opponents list) — the one asymmetric hole the
+2026-08-26 combat audit flagged in the roster-management set; the authored
 effect palette shipped (#1584, combat-wired for battlefield shaping by #2206); the frontier is
 embodied combat (companions, mounts, war) and *proving* the WIRED-UNPROVEN paths — not the round
-engine. Champion-duel challenge issuance and Battle round PLAY remain telnet-first: staging
-(create/stage/spawn/enlist) got its web `StagingPanel` in #2010, but round-action declaration
-(all 12 `BattleActionKind`s), the begin/resolve/conclude round lifecycle, and `battle duel` have
-no web surface (verified 2026-08-26 audit; filed as #3389). **Lethal NPC duels are reachable (#3068):**
+engine. **Battles are now fully web-playable (#3389):** the round-action declaration panel (all 12
+`BattleActionKind`s), GM round-lifecycle controls (begin/resolve/conclude), and Champion-duel
+challenge issuance all shipped a web surface, alongside the pre-existing Battle staging
+`StagingPanel` (#2010) — `CmdBattle` is no longer required to fight a war from the browser; see
+`docs/systems/battles.md`'s [Web surface (#2009)](../systems/battles.md#web-surface-2009) section.
+**Lethal NPC duels are reachable (#3068):**
 `world.combat.duels.create_lethal_duel` — previously a zero-caller service, flagged unreachable by
 the 2026-08-08 combat audit — now has a real GM-initiated caller: a GM proposes a climactic
 PC-vs-significant-NPC duel (web `GMEncounterControls` "Start Lethal Duel" dialog / telnet `encounter
@@ -197,6 +203,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   than defaulting everyone to the same spot (journey test in `world/combat/tests/
   test_declare_reach_gate.py`). Full telnet parity: `position` / `position <name>`
   (`CmdPosition`) lists/takes/moves the same way the web position panel does.
+- **GM mid-fight repositioning (#3385).** `gm_place_in_position` was registered and tested
+  since #2005 but reachable from nowhere — no telnet verb, no web click handler, and the web
+  `_positioning_actions` adapter deliberately excluded it. Closed: the
+  `_gm_place_in_position_actions` web adapter (`actions/player_interface.py`) surfaces it
+  through the same registry-key-filter pattern as `set_the_stage`; `TacticalMap` gained an
+  `onGMPlace` click-to-place prop consumed by a "Place" toggle + target picker on both
+  `CombatTacticalMap` and `SceneTacticalMap` (so GM staging/unsticking works in and out of an
+  active `CombatEncounter`); telnet gained `position/place <target>=<position name>`
+  (`CmdPosition`, not `CmdEncounter` — the gate is scene-GM, not encounter-scoped); and
+  `encounter add` gained an optional trailing position token, closing telnet's last gap with
+  the web `AddOpponentDialog`.
 - **Technique-driven combat entrance (#2183, ADR-0113).** A hostile technique cast made
   as an entrance (`enter <technique>=<target>`) seeds/feeds the encounter exactly like a
   normal declared hostile cast, additionally stamping `CombatRoundAction.from_entrance`

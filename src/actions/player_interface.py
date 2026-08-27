@@ -519,6 +519,7 @@ def get_player_actions(character: ObjectDB) -> list[PlayerAction]:
     actions.extend(_scene_actions(character))
     actions.extend(_positioning_actions(character))
     actions.extend(_set_the_stage_actions(character))
+    actions.extend(_gm_place_in_position_actions(character))
     actions.extend(_battle_staging_actions(character))
     # Registry backend: all remaining registry actions excluded (no ActionTemplate /
     # check_type) — see module docstring.  When a registry action gains ActionTemplate
@@ -1214,6 +1215,51 @@ def _set_the_stage_actions(character: ObjectDB) -> list[PlayerAction]:
             description=blueprint.description if blueprint.description else "",
             action_category=ActionCategory.PHYSICAL,
         )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# GM-place adapter (gm_place_in_position quick action, #3385)
+# ---------------------------------------------------------------------------
+
+
+def _gm_place_in_position_actions(character: ObjectDB) -> list[PlayerAction]:
+    """Surface a ``gm_place_in_position`` ``PlayerAction`` for each Position in the room.
+
+    Modeled directly on ``_set_the_stage_actions``. Only emits actions when the
+    caller passes ``_actor_may_gm_place`` (staff, or the GM of the active scene in
+    the actor's current room) -- the same gate ``GMPlaceInPositionAction.execute()``
+    re-checks server-side, so a forged dispatch is still refused even if this
+    adapter were bypassed.
+
+    Deliberately no ``target_object_id`` on the emitted ``ActionRef`` -- the target
+    (which co-located object to place) is chosen by the caller at dispatch time and
+    supplied as a ``target_object_id`` kwarg. ``_dispatch_registry`` merges caller
+    kwargs into ``merged_kwargs`` *before* overlaying ``ref.position_id``, so an
+    arbitrary REST ``target_object_id`` kwarg already flows straight into
+    ``action_obj.run()`` with zero ``ActionRef`` schema change.
+    """
+    from actions.definitions.positioning import _actor_may_gm_place  # noqa: PLC0415
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+
+    if character.location is None:
+        return []
+    if not _actor_may_gm_place(character):
+        return []
+
+    return [
+        PlayerAction(
+            backend=ActionBackend.REGISTRY,
+            display_name=f"Place in position: {position.name}",
+            ref=ActionRef(
+                backend=ActionBackend.REGISTRY,
+                registry_key="gm_place_in_position",
+                position_id=position.pk,
+            ),
+            description=position.description,
+            action_category=ActionCategory.PHYSICAL,
+        )
+        for position in Position.objects.filter(room=character.location)
     ]
 
 

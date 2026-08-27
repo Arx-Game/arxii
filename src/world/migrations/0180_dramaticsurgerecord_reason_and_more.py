@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0178_cast_power_scale_dispel_treatment")]
+    dependencies = [("arxii", "0179_alter_combatopponent_status_and_more")]
 
     operations = [
         migrations.AddField(

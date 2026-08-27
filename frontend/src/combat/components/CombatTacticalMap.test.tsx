@@ -1,4 +1,5 @@
 import { render, screen, within, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -48,6 +49,7 @@ import { fetchAvailableActions } from '@/scenes/actionQueries';
 import { toast } from 'sonner';
 import { CombatTacticalMap } from './CombatTacticalMap';
 import type { EncounterDetail } from '../types';
+import { makeGMPlaceAction } from '@/test/utils/playerActionFixtures';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -366,5 +368,116 @@ describe('CombatTacticalMap', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(7) });
     });
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // GM-place target picker (#3385)
+  // ---------------------------------------------------------------------------
+
+  it('dispatches gm_place_in_position with the selected target on node click', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    const gmPlaceAction = makeGMPlaceAction(102);
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [gmPlaceAction],
+    });
+
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: [
+          {
+            id: 1,
+            character_sheet_id: 10,
+            character_name: 'Aerande',
+            status: 'active',
+            health: 10,
+            max_health: 10,
+            character_status: null,
+            available_strain: null,
+            fatigue: null,
+            active_conditions: [],
+            thumbnail_url: null,
+            thumbnail_media_url: null,
+            escalation_level: null,
+            intensity_modifier: null,
+            control_modifier: null,
+            current_position: null,
+          },
+        ],
+        opponents: [],
+        position_nodes: [
+          {
+            id: 101,
+            name: 'North Wall',
+            kind: 'feature',
+            elevation_anchor_id: null,
+            layout_x: null,
+            layout_y: null,
+            rampart_element: null,
+            rampart_integrity: null,
+            rampart_max_integrity: null,
+            rampart_crack_state: null,
+          },
+          {
+            id: 102,
+            name: 'Center',
+            kind: 'primary',
+            elevation_anchor_id: null,
+            layout_x: null,
+            layout_y: null,
+            rampart_element: null,
+            rampart_integrity: null,
+            rampart_max_integrity: null,
+            rampart_crack_state: null,
+          },
+        ],
+        position_edges: [],
+      }),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+
+    await user.click(await screen.findByTestId('gm-place-toggle'));
+    await user.click(screen.getByTestId('gm-place-target-select'));
+    await user.click(await screen.findByRole('option', { name: 'Aerande' }));
+
+    const centerNode = screen.getByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
+
+    await vi.waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        ref: gmPlaceAction.ref,
+        kwargs: { target_object_id: 10 },
+      });
+    });
+  });
+
+  it('does not show the Place toggle when no gm_place_in_position action is available', async () => {
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: [],
+        opponents: [],
+        position_nodes: [],
+        position_edges: [],
+      }),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('gm-place-toggle')).not.toBeInTheDocument();
   });
 });

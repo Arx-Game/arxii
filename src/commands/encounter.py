@@ -9,16 +9,19 @@ from __future__ import annotations
 
 from commands.exceptions import CommandError
 from commands.namespace import ArxNamespaceCommand
+from commands.utils.gm_resolution import resolve_position_by_name
 
 _USAGE = (
     "Usage: encounter <subcommand>\n"
     "  encounter create [pace]                 - start a new encounter here (alias: start)\n"
     "  encounter begin                         - begin a new round\n"
     "  encounter resolve                       - resolve the current round\n"
-    "  encounter add <name> <tier> [pool]      - add an NPC opponent\n"
+    "  encounter add <name> <tier> [pool [position]]\n"
+    "                                           - add an NPC opponent\n"
     "  encounter default <tier>                - preview opponent defaults\n"
     "  encounter addpc <character>             - add a PC to the encounter\n"
     "  encounter removepc <participant>        - remove a PC from the encounter\n"
+    "  encounter removenpc <opponent>          - remove an NPC opponent (#3382)\n"
     "  encounter pause                         - pause/resume the encounter\n"
     "  encounter end                           - force-end the encounter\n"
     "  encounter duel <character> <name> <tier> <pool>\n"
@@ -26,15 +29,17 @@ _USAGE = (
 )
 
 _CREATE_USAGE = "Usage: encounter create [pace]  (pace: timed/ready/manual; default timed)"
-_ADD_USAGE = "Usage: encounter add <name> <tier> [pool]"
+_ADD_USAGE = "Usage: encounter add <name> <tier> [pool [position]]"
 _DEFAULT_USAGE = "Usage: encounter default <tier>"
 _ADDPC_USAGE = "Usage: encounter addpc <character>"
 _REMOVEPC_USAGE = "Usage: encounter removepc <participant>"
+_REMOVENPC_USAGE = "Usage: encounter removenpc <opponent>"
 _DUEL_USAGE = "Usage: encounter duel <character> <name> <tier> <pool>"
 
 # Token-count thresholds for argument parsing.
 _MIN_ADD_TOKENS = 2
 _ADD_POOL_INDEX = 2
+_ADD_POSITION_INDEX = 3
 _DUEL_TOKENS = 4
 
 _SUBVERB_HANDLERS: dict[str, str] = {
@@ -46,6 +51,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "default": "_handle_default",
     "addpc": "_handle_addpc",
     "removepc": "_handle_removepc",
+    "removenpc": "_handle_removenpc",
     "pause": "_handle_pause",
     "end": "_handle_end",
     "duel": "_handle_duel",
@@ -85,7 +91,15 @@ class CmdEncounter(ArxNamespaceCommand):
         self._run_action(ResolveEncounterRoundAction)
 
     def _handle_add(self, rest: str) -> None:
-        """Parse ``add <name> <tier> [pool]`` and dispatch AddOpponentAction."""
+        """Parse ``add <name> <tier> [pool [position]]`` and dispatch AddOpponentAction.
+
+        The position token (#3385) is only parseable once pool is given -- pool is
+        already effectively required by ``_resolve_add_opponent_inputs``'s
+        validation (``gm_combat.py``) even though this usage string calls it
+        optional. Resolved against the encounter's spawn room (the caller's
+        current room) via the shared ``resolve_position_by_name`` helper -- the
+        same one ``CmdPosition`` uses.
+        """
         from actions.definitions.gm_combat import AddOpponentAction  # noqa: PLC0415
 
         tokens = rest.split()
@@ -97,12 +111,20 @@ class CmdEncounter(ArxNamespaceCommand):
         tier = tokens[1]
         threat_pool_id = tokens[_ADD_POOL_INDEX] if len(tokens) > _ADD_POOL_INDEX else None
 
-        self._run_action(
-            AddOpponentAction,
-            name=name,
-            tier=tier,
-            threat_pool_id=threat_pool_id,
-        )
+        kwargs: dict[str, object] = {
+            "name": name,
+            "tier": tier,
+            "threat_pool_id": threat_pool_id,
+        }
+        if len(tokens) > _ADD_POSITION_INDEX:
+            room = self.caller.location
+            if room is None:
+                msg = "You aren't anywhere."
+                raise CommandError(msg)
+            position = resolve_position_by_name(room, tokens[_ADD_POSITION_INDEX])
+            kwargs["position_id"] = position.pk
+
+        self._run_action(AddOpponentAction, **kwargs)
 
     def _handle_default(self, rest: str) -> None:
         """Parse ``default <tier>`` and dispatch PreviewOpponentDefaultsAction."""
@@ -129,6 +151,16 @@ class CmdEncounter(ArxNamespaceCommand):
         self._run_action(
             RemoveEncounterParticipantAction,
             participant_id=participant_id.split()[0],
+        )
+
+    def _handle_removenpc(self, rest: str) -> None:
+        """Parse ``removenpc <opponent>`` and dispatch RemoveOpponentAction (#3382)."""
+        from actions.definitions.gm_combat import RemoveOpponentAction  # noqa: PLC0415
+
+        opponent_id = self._require_arg(rest, _REMOVENPC_USAGE)
+        self._run_action(
+            RemoveOpponentAction,
+            opponent_id=opponent_id.split()[0],
         )
 
     def _handle_pause(self, _rest: str) -> None:

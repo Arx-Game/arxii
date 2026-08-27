@@ -16,6 +16,7 @@ import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../quer
 import { isDispatchFailure } from '../types';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { TacticalMap } from '@/areas/components/TacticalMap';
+import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import type { PositionTargetShape } from '@/actions/types';
@@ -56,6 +57,13 @@ export function CombatTacticalMap({
     (a) =>
       a.ref.backend === 'registry' &&
       (a.ref.registry_key === 'move_to_position' || a.ref.registry_key === 'take_position')
+  );
+  // GM-place (#3385): a non-empty list is itself the "am I GM" signal — the
+  // adapter (_gm_place_in_position_actions) only ever emits these when the
+  // caller already passes the server-side GM gate. Mirrors the
+  // SceneTacticalMap.tsx setTheStageAction pattern — no separate "can GM" prop.
+  const gmPlaceActions = availableActions.filter(
+    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'gm_place_in_position'
   );
 
   const { mutateAsync: dispatchAction } = useDispatchPlayerAction(characterId);
@@ -119,19 +127,45 @@ export function CombatTacticalMap({
   // whenever no position-shaped technique is selected.
   const isPositionPickActive = positionShape !== 'none' && onPickPosition !== undefined;
 
+  // GM-place target picker (#3385): value = the co-located object's ObjectDB
+  // pk — participant.character_sheet_id (CharacterSheet/ObjectDB share a pk,
+  // see root CLAUDE.md) or opponent.objectdb_id (already serialized).
+  const placeTargets = [
+    ...(encounter.participants ?? [])
+      .filter((p) => p.character_sheet_id != null)
+      .map((p) => ({ id: p.character_sheet_id, name: p.character_name })),
+    ...(encounter.opponents ?? [])
+      .filter((o) => o.objectdb_id != null)
+      .map((o) => ({ id: o.objectdb_id as number, name: o.name })),
+  ];
+
   return (
     <div
       className="h-[480px] rounded-lg border border-border bg-card"
       data-testid="combat-tactical-map"
     >
-      <TacticalMap
-        nodes={encounter.position_nodes ?? []}
-        edges={encounter.position_edges ?? []}
-        occupantsByPosition={occupantsByPosition}
-        moveActions={moveActions}
-        onDispatchMove={handleDispatchMove}
-        onPickPosition={isPositionPickActive ? onPickPosition : undefined}
-      />
+      <GMPlacementControls
+        gmPlaceActions={gmPlaceActions}
+        targets={placeTargets}
+        dispatchAction={dispatchAction}
+        onPlaced={() => {
+          queryClient
+            .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+            .catch(() => {});
+        }}
+      >
+        {(onGMPlace) => (
+          <TacticalMap
+            nodes={encounter.position_nodes ?? []}
+            edges={encounter.position_edges ?? []}
+            occupantsByPosition={occupantsByPosition}
+            moveActions={moveActions}
+            onDispatchMove={handleDispatchMove}
+            onPickPosition={isPositionPickActive ? onPickPosition : undefined}
+            onGMPlace={onGMPlace}
+          />
+        )}
+      </GMPlacementControls>
     </div>
   );
 }

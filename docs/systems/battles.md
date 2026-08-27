@@ -1028,6 +1028,26 @@ by the `Situation.CHAMPION_DUEL` situational-perk evaluator
 .is_champion_duel` off the subject's `CombatRoundContext` resolution) — see
 `docs/systems/covenants.md`'s "Layer 4: Situational Perks" for the perk side.
 
+**Web affordance (#3389).** `ChampionDuelSection` (`frontend/src/battles/components/
+PlaceDetailPanel.tsx`) is the map-side counterpart to telnet's `battle duel <front>
+vs <name>` (`src/commands/battle.py`) — a per-place form, not part of
+`BattleActionPanel`, matching the "View encounter" link's own placement. It renders
+when the selected place has no open `combat_encounter` and the viewer's own
+`BattleParticipant` row (matched via `character_sheet_id`) reads `is_champion: true`
+— `BattleParticipantSerializer.is_champion` (#3389 Phase 1) mirrors
+`open_champion_duel`'s `CharacterCovenantRole` gate verbatim as a read-only
+visibility hint; the server-side `NotAChampionError` check is unchanged and remains
+the actual authority. The form takes a boss name plus an optional `ThreatPool`
+picker (`useThreatPools`, the same hook `GMEncounterControls` uses) and dispatches
+`challenge_champion_duel` with `{battle_place_id, opponent_kwargs: {name,
+max_health: 300, threat_pool}}` — `max_health` matches `CmdBattle`'s own hardcoded
+value, so the web form stays telnet-parity-minimal rather than inventing a richer
+boss-authoring UI the action doesn't ask for. `ChallengeChampionDuelAction`'s result
+only carries `encounter_id`, not a scene id, so a successful dispatch invalidates
+`battleKeys.detail`/`battleKeys.forScene` and an effect watches for the refetched
+place's `encounter_scene_id` to populate before navigating to `/scenes/<id>` — the
+same destination the "View encounter" link uses.
+
 ## Sieges (#1713)
 
 Siege warfare is a battle variety built on two new pieces: the `Fortification`
@@ -1267,7 +1287,16 @@ every other mutation in this system, so the "no bypass of Actions" invariant sti
   surfaces the bridged `CombatEncounter`'s scene (#1236) for the panel's "View
   encounter" link. `vehicle`/`fortifications` are read through
   `Battle.state_cache`/the view's `to_attr` prefetches — zero extra queries per
-  place, never a bare related-manager query.
+  place, never a bare related-manager query. `BattleParticipantSerializer` also
+  carries three #3389 web-declaration-surface fields: `character_sheet_id` (an
+  internal FK int, same privacy tier as `side_id`/`place_id` — lets the frontend
+  match "which participant row is mine" without a second lookup),
+  `is_champion` (mirrors `open_champion_duel`'s `CharacterCovenantRole` gate —
+  a read-only visibility hint, not a new write path), and `declared_this_round`
+  (whether this participant has a `BattleActionDeclaration` in the battle's
+  current round — backed by a `cached_declarations` `to_attr` Prefetch and a
+  `current_round_id` `BattleDetailSerializer.to_representation` stashes once in
+  `context`, so neither field costs a per-participant query).
 
 **Visibility:** `_filter_readable` mirrors `CombatEncounterViewSet`'s rule
 exactly — staff see every battle unfiltered; everyone else is scoped to
@@ -1296,16 +1325,59 @@ state payload over the socket.
 
 ### Frontend: `/scenes/:id/battle` (`frontend/src/battles/`)
 
-`BattleMapPage` (route registered in `App.tsx`) is a read-only React Flow
-canvas: `useBattleForSceneQuery` resolves the scene's one Battle, then
-`useBattleDetailQuery` fetches the aggregate `BattleMapCanvas` (places
-positioned by their `x`/`y`/`footprint_radius`) and `PlaceDetailPanel`
-(selected place's units/participants/fortifications, with a "View encounter"
-link to `/scenes/:id` when `encounter_scene_id` is set — combat renders
-in-scene, #2197) both read from.
+`BattleMapPage` (route registered in `App.tsx`) pairs a React Flow canvas with
+a write-affordance column: `useBattleForSceneQuery` resolves the scene's one
+Battle, then `useBattleDetailQuery` fetches the aggregate `BattleMapCanvas`
+(places positioned by their `x`/`y`/`footprint_radius`, still read-only — see
+[Move (#2007)](#move-2007) for why click-to-move stays deferred) and
+`PlaceDetailPanel` (selected place's units/participants/fortifications, with a
+"View encounter" link to `/scenes/:id` when `encounter_scene_id` is set —
+combat renders in-scene, #2197) both read from.
 `hooks/handleBattleStatePayload.ts` handles the `BATTLE_STATE` WS message by
 calling `queryClient.invalidateQueries({ queryKey: battleKeys.all })` — no
 payload data is applied directly; invalidation alone triggers the refetch.
+
+**Write affordances (#3389).** `StagingPanel` (map setup, [Staging
+(#2010)](#staging-2010)) and `BattleActionPanel` (fighting the battle) mount
+side by side in the same right-column stack, both null-rendering when they
+have nothing to show for the current viewer. `BattleActionPanel` dispatches
+through `useDispatchPlayerAction` + `registryRef` (the `DuelChallengeControls`
+direct-dispatch precedent) rather than a discoverability adapter — none of
+`declare_battle_action`/`begin_battle_round`/`resolve_battle_round`/
+`conclude_battle` carries a `Prerequisite`, so there is no server-truth gate a
+client needs an adapter to discover; availability is decided entirely from
+data already on the page:
+
+- `BattleDeclarationSection` — the round-action form covering all 12
+  `BattleActionKind`s (`frontend/src/battles/constants.ts` hand-mirrors the
+  backend enum, same convention as `BATTLE_RISK_LEVELS`). Renders when the
+  viewer's `character_sheet_id` (== their active character's ObjectDB pk,
+  `CharacterSheet` being a `primary_key=True` O2O onto it — no extra lookup
+  needed) matches an `ACTIVE` participant row and the battle's round is
+  `declaring`. The action-kind picker drives a target-shape map
+  (`BATTLE_ACTION_TARGET_SHAPES`) that swaps in the right target field(s) —
+  enemy unit (STRIKE/ROUT), own-side ally (SUPPORT/RESCUE/RALLY), place
+  (REPEL/HOLD/SET_ENVIRONMENT, scope forced PLACE), fortification sourced from
+  a picked place's `fortifications` (BREACH/FORTIFY), place plus an optional
+  own-side unit for a commander order (MOVE, the one kind where the scope
+  selector itself is user-editable between UNIT self-move and PLACE order),
+  or place plus `reposition_dx`/`reposition_dy` (REPOSITION, scope forced
+  PLACE). The technique picker reuses `useCastableTechniques` keyed off the
+  viewer's own persona id (read off their `BattleParticipant.persona`).
+  `declared_this_round` renders a one-line "already declared" note; no
+  full-declaration replay (deferred, see the issue's Scope/follow-ups).
+- `BattleLifecycleSection` — GM round controls (Begin/Resolve/Conclude),
+  gated client-side on `SceneDetail.viewer_can_gm` (a strict superset of the
+  Actions' own `_actor_may_gm_battle` server gate, per the issue's Decision 3 —
+  the server call is the actual authority either way). Begin enables with no
+  open round or a `completed` one; Resolve enables only while `declaring`;
+  Conclude always enables while `concluded_at` is unset and requires a
+  confirm step (mirrors `StagingPanel`'s replace-confirm pattern) since it
+  force-ends the war.
+- `ChampionDuelSection` (Phase 3) — see [Command Hierarchy & the Champion
+  (#1710)](#command-hierarchy--the-champion-1710) below; rendered from
+  `PlaceDetailPanel`, not `BattleActionPanel`, since it's a per-place
+  affordance.
 
 ## Test Coverage
 

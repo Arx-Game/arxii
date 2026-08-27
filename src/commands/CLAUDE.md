@@ -112,7 +112,7 @@ actions, backends, and service functions.
   open session at that Place. Every subverb dispatches the matching REGISTRY action
   (`tavern_game_open`/`_join`/`_roll`/`_leave`, `actions/definitions/tavern_games.py`)
   -- the same seam the web Place-bar game widget uses.
-- **`positions.py`**: `CmdPosition` (`position`, #2005) — the telnet face of the tactical
+- **`positions.py`**: `CmdPosition` (`position`, #2005/#3385) — the telnet face of the tactical
   position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
   room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or
   `"This room has no positions staged."`); `position <name>` resolves a `Position` by name
@@ -120,6 +120,12 @@ actions, backends, and service functions.
   `TakePositionAction` when the caller is unplaced, else `MoveToPositionAction`
   (`actions/definitions/positioning.py`) — the same seam the web position panel uses.
   Ineligible/gated/non-adjacent failures surface the action's own error text verbatim.
+  `position/place <target>=<position name>` (#3385) dispatches `GMPlaceInPositionAction` —
+  `<target>` resolves via a co-located `self.caller.search(...)`, `<position name>` via the
+  shared `resolve_position_by_name` helper (`commands/utils/gm_resolution.py`); no gate in
+  the command, the Action re-checks `_actor_may_gm_place` server-side. Lives here rather than
+  `CmdEncounter` because the gate is "staff, or the active *scene's* GM" — nothing to do with
+  a live `CombatEncounter` existing, unlike every `CmdEncounter` subverb.
 - **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
   implementation (replacing the former stubs) dispatching to `LockAction`/
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
@@ -149,7 +155,9 @@ actions, backends, and service functions.
 - **`encounter.py`**: `CmdEncounter` (`encounter`, #1494, create #3388) — the GM
   combat-encounter lifecycle namespace, thin over the Actions in
   `actions/definitions/gm_combat.py` (`create`/alias `start`/`begin`/`resolve`/`add`/`default`/
-  `addpc`/`removepc`/`pause`/`end`). `encounter create [pace]` (#3388, alias `start`) dispatches
+  `addpc`/`removepc`/`removenpc`/`pause`/`end`; `removenpc` added #3382 — pull a live
+  `CombatOpponent` out of the fight without a defeat/flee, symmetric with `removepc`).
+  `encounter create [pace]` (#3388, alias `start`) dispatches
   `CreateEncounterAction` — the telnet parity gap this closed (every other lifecycle verb already
   had a telnet face; only starting the fight didn't). It resolves the actor's room's active
   scene via `get_active_scene()` and is gated by the shared
@@ -161,6 +169,11 @@ actions, backends, and service functions.
   *existing* encounter's established GM while creation mirrors the web "Start encounter"
   button's broader "may administer this scene" gate. `pace` is an optional token
   (`timed`/`ready`/`manual`, default `timed`). No business logic in the command.
+  `add <name> <tier> [pool [position]]` (#3385) gained an optional trailing position token —
+  resolved against the caller's room via the same shared `resolve_position_by_name` helper
+  `CmdPosition` uses (`commands/utils/gm_resolution.py`) and forwarded as `position_id` to
+  `AddOpponentAction`, closing telnet's gap with the web `AddOpponentDialog`'s position
+  picker (#2005).
   `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
   `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
   GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own

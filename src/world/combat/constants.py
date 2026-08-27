@@ -163,6 +163,7 @@ class LockBreakReason(models.TextChoices):
     DISENGAGE = "disengage", "Deliberate Disengage"
     INTERFERENCE = "interference", "Interference Defeated"
     EXPIRED = "expired", "Expired"
+    REMOVED = "removed", "Opponent Removed"
 
 
 class DuelChallengeStatus(models.TextChoices):
@@ -250,6 +251,7 @@ class OpponentStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     DEFEATED = "defeated", "Defeated"
     FLED = "fled", "Fled"
+    REMOVED = "removed", "Removed"
 
 
 class CombatAllegiance(models.TextChoices):
