@@ -118,6 +118,22 @@ the bare `target_difficulty=0` here should not "fix" it into a double-count.
   banded tier that treats levels 1-5 as identical can't do that. A per-level linear term
   was needed, not a banded tier.
 
+## Update (#3384): `level_opposition` also folds in the opposed entity's conditions
+
+The passive half, `level_opposition`, gained a third additive term:
+`opponent_condition_opposition(character, check_type)` (`world.conditions.services`),
+summed alongside `LEVEL_POINTS_PER_LEVEL * level` and the aspect bonus, skipped
+whenever `character is None` (same guard as the aspect bonus). It reads the SAME
+`ConditionCheckModifier` rows a `CharacterSheet`-owning bearer's own roll reads, keyed
+directly off the opposed entity's ObjectDB — no `CharacterSheet` required, so an
+ephemeral `CombatOpponent` (which has none, ADR-0038) is covered. No sign flip: a
+penalty condition (negative `modifier_value`) lowers the total, matching this ADR's
+existing "opposing side" additive shape (the aspect bonus is likewise a plain additive
+term, never a replacement). This does not touch `compute_resist_increment` or its
+`level_override`, and does not change the two helpers' mutual-exclusivity rule above —
+the new term lives entirely inside `level_opposition`'s own internals, with no new call
+site.
+
 > Status: accepted · Source: issue #2707 (level both sides of check) · relates to
 > ADR-0165 (chart-direction convention; landed alongside this); extends ADR-0019; extends
 > ADR-0145; supersedes nothing.

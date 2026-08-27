@@ -346,6 +346,24 @@ def _seed_counterplay() -> None:
     ensure_frame_job_contribution_method()
 
 
+def _seed_bank() -> None:
+    from world.room_features.seeds import ensure_bank_kind  # noqa: PLC0415
+
+    ensure_bank_kind()
+
+
+def _seed_command_center() -> None:
+    from world.room_features.seeds import ensure_command_center_kind  # noqa: PLC0415
+
+    ensure_command_center_kind()
+
+
+def _seed_brig() -> None:
+    from world.room_features.seeds import ensure_brig_kind  # noqa: PLC0415
+
+    ensure_brig_kind()
+
+
 def _seed_building_condition() -> None:
     from world.buildings.seeds import ensure_preparation_contribution_method  # noqa: PLC0415
 
@@ -616,6 +634,25 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # frame-job Forgery contribution method. After "security" (rides its
     # Forge Evidence CheckType) and "justice" (crime kinds).
     "counterplay": _seed_counterplay,
+    # Bank access (#2540 Layer 4): the BANK RoomFeatureKind that gates org-vault
+    # deposit/withdraw, treasury withdrawal, and the collection return leg
+    # (``DeliverCollectionAction``) via the ``_at_bank`` prerequisite. Without this
+    # cluster the BANK kind never exists on a fresh database, ``_at_bank`` fails
+    # closed everywhere, and every bank action is unreachable. No dependencies on
+    # any other cluster.
+    "bank": _seed_bank,
+    # Command Center (#930): the estate's nerve-center RoomFeatureKind — where the
+    # family books are kept and the org-books management screen (#675) is
+    # reachable IC. Orphaned until this fix (2026-08-27 final-review ruling, #2540):
+    # ``ensure_command_center_kind`` existed but was never registered in any
+    # production seed cluster, so the kind never existed on a fresh database — same
+    # shape as the "bank" fix above. No dependencies on any other cluster.
+    "command_center": _seed_command_center,
+    # Brig (#1862): the ship holding-cell RoomFeatureKind, restricted to Vessel
+    # buildings — ``ensure_brig_kind`` also ensures the Vessel ``BuildingKind``
+    # itself (``ensure_ship_kind``, ``world.ships.seeds``) as a side effect. Same
+    # orphan-seed fix as "command_center" above (2026-08-27, #2540).
+    "brig": _seed_brig,
     # Building condition: the Grand Preparation AP-check contribution method
     # (#1930). After "governance" (rides its Household Command CheckType).
     "building_condition": _seed_building_condition,
@@ -920,6 +957,15 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Counter-play: the Workshop of Iniquity kind + the frame-job
         # ContributionMethod (#1825); represented by ContributionMethod.
         "counterplay": [ContributionMethod],
+        # Bank access (#2540 Layer 4): the BANK RoomFeatureKind gating org-vault
+        # deposit/withdraw + treasury withdrawal + the collection return leg.
+        "bank": [RoomFeatureKind],
+        # Command Center (#930): the estate nerve-center RoomFeatureKind. Orphan-seed
+        # fix, 2026-08-27 (#2540) — see CLUSTER_SEEDERS.
+        "command_center": [RoomFeatureKind],
+        # Brig (#1862): the ship holding-cell RoomFeatureKind. Orphan-seed fix,
+        # 2026-08-27 (#2540) — see CLUSTER_SEEDERS.
+        "brig": [RoomFeatureKind],
         # Building condition: the Grand Preparation "Direct the Household"
         # ContributionMethod (#1930).
         "building_condition": [ContributionMethod],

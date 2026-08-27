@@ -215,24 +215,18 @@ class CombatEncounterViewSet(ModelViewSet):
     pagination_class = StandardResultsSetPagination
 
     def perform_create(self, serializer: BaseSerializer[CombatEncounter]) -> None:
-        """Create the encounter, defaulting room from the scene's location.
+        """Create the encounter, then apply the shared post-creation defaults (#3388).
 
-        The web GM-start-encounter flow (#3067) only supplies ``scene`` —
-        mirroring every other encounter-creation call site (duels,
-        cast_seed), which always thread an explicit room, this is the one
-        path where the caller doesn't have a room to hand yet. Default it to
-        the scene's current location so ephemeral opponent ObjectDBs
-        (``add_opponent`` -> ``create_object(..., location=encounter.room)``)
-        land somewhere instead of nowhere. An explicit ``room`` in the
-        request always wins.
+        The web GM-start-encounter flow (#3067) only supplies ``scene`` — the room
+        defaulting and escalation-curve assignment now live in
+        ``world.combat.services.finalize_new_encounter``, shared with telnet's
+        ``CreateEncounterAction`` so both callers get byte-identical behavior. An
+        explicit ``room`` sent by the client always wins (unchanged).
         """
-        from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+        from world.combat.services import finalize_new_encounter  # noqa: PLC0415
 
         encounter = serializer.save()
-        if encounter.room_id is None and encounter.scene.location_id is not None:
-            encounter.room = encounter.scene.location
-            encounter.save(update_fields=["room"])
-        assign_default_escalation_curve(encounter)
+        finalize_new_encounter(encounter)
 
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Create, then re-serialize through the prefetch-primed queryset (#3067).

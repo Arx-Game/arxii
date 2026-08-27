@@ -146,14 +146,23 @@ actions, backends, and service functions.
   action). Web reaches `StartSceneAction`/`FinishSceneAction`/`GrantSceneGMAction` through the
   same generic available-actions dispatcher. See "Scene Administration" in
   `docs/systems/scenes.md`. No business logic in the command.
-- **`encounter.py`**: `CmdEncounter` (`encounter`, #1494) — the GM combat-encounter lifecycle
-  namespace, thin over the Actions in `actions/definitions/gm_combat.py` (`begin`/
-  `resolve`/`add`/`default`/`addpc`/`removepc`/`removenpc`/`pause`/`end`; `removenpc` added
-  #3382 — pull a live `CombatOpponent` out of the fight without a defeat/flee, symmetric with
-  `removepc`). Every subverb is gated by
+- **`encounter.py`**: `CmdEncounter` (`encounter`, #1494, create #3388) — the GM
+  combat-encounter lifecycle namespace, thin over the Actions in
+  `actions/definitions/gm_combat.py` (`create`/alias `start`/`begin`/`resolve`/`add`/`default`/
+  `addpc`/`removepc`/`removenpc`/`pause`/`end`; `removenpc` added #3382 — pull a live
+  `CombatOpponent` out of the fight without a defeat/flee, symmetric with `removepc`).
+  `encounter create [pace]` (#3388, alias `start`) dispatches
+  `CreateEncounterAction` — the telnet parity gap this closed (every other lifecycle verb already
+  had a telnet face; only starting the fight didn't). It resolves the actor's room's active
+  scene via `get_active_scene()` and is gated by the shared
+  `world.combat.permissions.can_create_encounter_for_scene` (staff/scene-GM/scene-co-owner) —
+  deliberately **broader** than every other subverb below, which are gated by
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
-  `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
+  `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113), since those act on an
+  *existing* encounter's established GM while creation mirrors the web "Start encounter"
+  button's broader "may administer this scene" gate. `pace` is an optional token
+  (`timed`/`ready`/`manual`, default `timed`). No business logic in the command.
   `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
   `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
   GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own

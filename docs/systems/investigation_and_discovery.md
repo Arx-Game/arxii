@@ -10,15 +10,24 @@ them. Lives in `src/world/clues/`. Epic: #1143.
 A `Clue` is a pointer defined by three orthogonal things:
 
 1. **Target** — *what it points at.* `target_kind` (DiscriminatorMixin) ∈ `CODEX` /
-   `MISSION` / `RESCUE` / `SECRET` (#1334) / `PERSONA_LINK` (#2120), with a matching
-   per-kind FK (`target_codex_entry`, `target_mission`, `target_captivity`,
-   `target_secret`, `target_persona`). **Invariant:** a clue cannot save without a
-   target (`clean()` enforces exactly one) — no red herrings, no empty clues. The target
-   also drives the "you already know this" flag (`target_already_known`) — a known-target
-   clue is surfaced, not hidden. **PERSONA_LINK is the documented multi-discriminator
-   exception:** it points at a *pair* of `scenes.Persona` rows (`target_persona` +
-   `target_persona_linked`, both required together — `clean()` folds in the second FK,
-   per `DiscriminatorMixin`'s multi-discriminator override guidance).
+   `MISSION` / `RESCUE` / `SECRET` (#1334) / `PERSONA_LINK` (#2120) / `ITEM` (#2540),
+   with a matching per-kind FK (`target_codex_entry`, `target_mission`,
+   `target_captivity`, `target_secret`, `target_persona`, `target_item_template`).
+   **Invariant:** a clue cannot save without a target (`clean()` enforces exactly one) —
+   no red herrings, no empty clues. The target also drives the "you already know this"
+   flag (`target_already_known`) — a known-target clue is surfaced, not hidden.
+   **PERSONA_LINK is the documented multi-discriminator exception:** it points at a
+   *pair* of `scenes.Persona` rows (`target_persona` + `target_persona_linked`, both
+   required together — `clean()` folds in the second FK, per `DiscriminatorMixin`'s
+   multi-discriminator override guidance). **ITEM is a second such exception (the
+   2026-08-27 exact-pointer ruling, #2540):** `target_item_template` is the required
+   discriminator target ("any of this kind"); the optional `target_item_instance`
+   narrows it to "this exact one" (must be an instance of the same template when both
+   are set). ITEM has no "already known" concept and no `AUTOMATIC` grant — the held
+   `CharacterClue` row *is* the knowledge, read by
+   `world.scenes.boon_services.character_has_item_pointer`, the exact-pointer predicate
+   a named-item boon ask will gate on (alongside the equivalent `CodexEntry`/`Secret`
+   item pointers — same shape, own FKs, no clue involved).
 2. **Acquisition** — *how you come to hold it.* A room **search** (`RoomClue` + the Search
    action) or a passive **trigger** (`ClueTrigger`, fired on room entry). Both record the
    holding via `CharacterClue` (roster-scoped, idempotent `acquire_clue`).

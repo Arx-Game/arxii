@@ -637,13 +637,13 @@ class AdornmentFactory(factory.django.DjangoModelFactory):
     narration = ""
 
 
-class CommonGemBucketFactory(factory.django.DjangoModelFactory):
-    """Factory for CommonGemBucket — a crafter's per-tier common-gem value stock."""
+class MaterialBucketFactory(factory.django.DjangoModelFactory):
+    """Factory for MaterialBucket — a crafter's per-category bulk material value stock."""
 
     class Meta:
-        model = "arxii.CommonGemBucket"
-        django_get_or_create = ("character_sheet", "tier")
+        model = "arxii.MaterialBucket"
+        django_get_or_create = ("character_sheet", "material_category")
 
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
-    tier = factory.SubFactory(MaterialCategoryFactory)
+    material_category = factory.SubFactory(MaterialCategoryFactory)
     value = 0

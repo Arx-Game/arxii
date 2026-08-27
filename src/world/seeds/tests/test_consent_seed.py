@@ -60,3 +60,8 @@ class BlackmailConsentCategoryTests(TestCase):
 
     def test_blackmail_template_mapped_to_blackmail_category(self) -> None:
         self.assertEqual(_TEMPLATE_CATEGORY_MAP["Blackmail"], "blackmail")
+
+    def test_boon_ask_flavors_mapped_to_the_shared_boon_category(self) -> None:
+        # #2540 slice 3: one opt-in covers every ask flavor of the same structured ask.
+        for name in ("Boon", "Con a Boon", "Charm a Boon", "Menace a Boon"):
+            self.assertEqual(_TEMPLATE_CATEGORY_MAP[name], "boon", name)

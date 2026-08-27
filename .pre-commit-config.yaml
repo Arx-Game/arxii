@@ -120,6 +120,22 @@ repos:
             |character_creation/models\.py
             |mechanics/models\.py
           )$
+      - id: lint-idmapper-mutation-order
+        name: Reject mutate-then-save-then-raise inside an atomic block
+        entry: uv run python tools/lint_idmapper_mutation_order.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/world/
+        # Apostate ruling 7 (2026-08-27): a raise after mutate-then-save on a
+        # SharedMemoryModel instance inside transaction.atomic() rolls back the
+        # DB row but not the cached identity-map instance, poisoning it for the
+        # process lifetime. Convention + narrow lint, deliberately no rollback
+        # hook — see django_notes.md's "Idmapper Rollback Staleness" section and
+        # ADR-0008's addendum. Repo-wide within src/world/ from day one (the
+        # shape is narrow enough not to need the expand-one-app-at-a-time
+        # rollout objectdb-param uses). Suppress with
+        # `# noqa: IDMAPPER_MUTATE_ORDER` plus a stated reason.
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py

@@ -932,11 +932,13 @@ class AffectionShift(SharedMemoryModel):
     )
     boon = models.OneToOneField(
         "arxii.Boon",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="affection_shift",
-        help_text="The granted Boon this shift charges (#2540) — per-Boon dedup, stacking",
+        help_text="The granted Boon this shift charges (#2540) — per-Boon dedup, stacking. "
+        "CASCADE (not SET_NULL): affection_shift_has_provenance requires effect-or-boon "
+        "non-null, so a boon-keyed row's provenance dies with the boon.",
     )
     amount = models.IntegerField(
         help_text="Signed points applied: positive → Regard, negative → Friction",
