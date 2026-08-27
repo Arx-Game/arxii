@@ -153,8 +153,13 @@ function dispatchIncomingMessage(
   navigate: NavigateFunction
 ): void {
   const [msgType, args, kwargs] = parsed;
-  const handler = INCOMING_MESSAGE_HANDLERS[msgType];
-  if (handler) {
+  // msgType arrives off the wire, so look it up as an own property only. A crafted
+  // type ("constructor", "toString", "__proto__") would otherwise resolve to an
+  // inherited Object.prototype member and get invoked as if it were a handler.
+  const handler = Object.prototype.hasOwnProperty.call(INCOMING_MESSAGE_HANDLERS, msgType)
+    ? INCOMING_MESSAGE_HANDLERS[msgType]
+    : undefined;
+  if (typeof handler === 'function') {
     handler({ character, args, kwargs, dispatch, navigate });
     return;
   }
