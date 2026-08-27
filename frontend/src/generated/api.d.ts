@@ -4706,6 +4706,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/remove_opponent/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Remove an NPC opponent from the encounter (GM action, #3382). */
+    post: operations['combat_remove_opponent_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/remove_participant/': {
     parameters: {
       query?: never;
@@ -31771,9 +31788,10 @@ export interface components {
      * @description * `active` - Active
      *     * `defeated` - Defeated
      *     * `fled` - Fled
+     *     * `removed` - Removed
      * @enum {string}
      */
-    OpponentStatusEnum: 'active' | 'defeated' | 'fled';
+    OpponentStatusEnum: 'active' | 'defeated' | 'fled' | 'removed';
     /**
      * @description * `swarm` - Swarm
      *     * `mook` - Mook
@@ -49353,6 +49371,32 @@ export interface operations {
     };
   };
   combat_ready_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_remove_opponent_create: {
     parameters: {
       query?: never;
       header?: never;

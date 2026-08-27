@@ -28,6 +28,7 @@ vi.mock('../queries', () => ({
   usePauseEncounter: vi.fn(),
   useUpdateEncounterSettings: vi.fn(),
   useRemoveParticipant: vi.fn(),
+  useRemoveOpponent: vi.fn(),
   useProposeLethalDuel: vi.fn(),
 }));
 
@@ -43,7 +44,7 @@ import * as combatQueries from '../queries';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import { GMEncounterControls } from '../sections/GMEncounterControls';
 import type { ThreatPool } from '../api';
-import type { EncounterDetail, Participant, PositionNode } from '../types';
+import type { EncounterDetail, Opponent, Participant, PositionNode } from '../types';
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -73,6 +74,7 @@ function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetai
     status: 'between_rounds',
     is_paused: false,
     participants: [],
+    opponents: [],
     position_nodes: [],
     ...overrides,
   } as unknown as EncounterDetail;
@@ -80,6 +82,10 @@ function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetai
 
 function makeParticipant(id: number, name: string): Participant {
   return { id, character_name: name } as unknown as Participant;
+}
+
+function makeOpponent(id: number, name: string, status = 'active'): Opponent {
+  return { id, name, status } as unknown as Opponent;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +104,7 @@ const mockedUseUpdateEncounterSettings = combatQueries.useUpdateEncounterSetting
   typeof vi.fn
 >;
 const mockedUseRemoveParticipant = combatQueries.useRemoveParticipant as ReturnType<typeof vi.fn>;
+const mockedUseRemoveOpponent = combatQueries.useRemoveOpponent as ReturnType<typeof vi.fn>;
 const mockedUseProposeLethalDuel = combatQueries.useProposeLethalDuel as ReturnType<typeof vi.fn>;
 const mockedUsePersonaSearch = usePersonaSearch as unknown as ReturnType<typeof vi.fn>;
 
@@ -133,6 +140,7 @@ const mockUpdateSettingsMutate = vi.fn(
   ) => {}
 );
 const mockRemoveParticipantMutate = vi.fn((_vars: number, _opts?: MutateOpts) => {});
+const mockRemoveOpponentMutate = vi.fn((_vars: number, _opts?: MutateOpts) => {});
 const mockProposeLethalDuelMutate = vi.fn(
   (
     _vars: {
@@ -176,6 +184,10 @@ beforeEach(() => {
   });
   mockedUseRemoveParticipant.mockReturnValue({
     mutate: mockRemoveParticipantMutate,
+    isPending: false,
+  });
+  mockedUseRemoveOpponent.mockReturnValue({
+    mutate: mockRemoveOpponentMutate,
     isPending: false,
   });
   mockedUseProposeLethalDuel.mockReturnValue({
@@ -541,6 +553,44 @@ describe('GMEncounterControls — remove participant', () => {
       42,
       expect.objectContaining({ onError: expect.any(Function) })
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Remove opponent (#3382)
+// ---------------------------------------------------------------------------
+
+describe('GMEncounterControls — remove opponent', () => {
+  it('calls the remove mutation with the opponent id', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const encounter = makeEncounter({ opponents: [makeOpponent(9, 'Goblin')] });
+    render(<GMEncounterControls sceneId={5} encounter={encounter} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('remove-opponent-btn-9'));
+
+    expect(mockRemoveOpponentMutate).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+
+  it('only lists ACTIVE opponents — a defeated/removed row has no control', () => {
+    const encounter = makeEncounter({
+      opponents: [
+        makeOpponent(9, 'Goblin', 'active'),
+        makeOpponent(10, 'Fallen Ogre', 'defeated'),
+        makeOpponent(11, 'Pulled Wolf', 'removed'),
+      ],
+    });
+    render(<GMEncounterControls sceneId={5} encounter={encounter} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('gm-opponent-row-9')).toBeInTheDocument();
+    expect(screen.queryByTestId('gm-opponent-row-10')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('gm-opponent-row-11')).not.toBeInTheDocument();
   });
 });
 

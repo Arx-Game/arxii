@@ -1282,6 +1282,12 @@ class RemoveParticipantSerializer(serializers.Serializer):
     participant_id = serializers.IntegerField()
 
 
+class RemoveOpponentSerializer(serializers.Serializer):
+    """Write serializer for removing an NPC opponent from an encounter (#3382)."""
+
+    opponent_id = serializers.IntegerField()
+
+
 class UpgradeComboSerializer(serializers.Serializer):
     """Write serializer for upgrading an action to a combo."""
 

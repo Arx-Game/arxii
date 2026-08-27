@@ -69,6 +69,7 @@ from world.combat.serializers import (
     OpponentStatBlockSerializer,
     OpponentTargetSerializer,
     ProposeLethalDuelSerializer,
+    RemoveOpponentSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
     ThreatPoolSerializer,
@@ -80,6 +81,7 @@ from world.combat.services import (
     add_participant,
     begin_declaration_phase,
     end_encounter,
+    remove_opponent,
     remove_participant,
     resolve_round,
     run_combo_detection,
@@ -104,6 +106,7 @@ _ERR_DECLARE_FAILED = "Failed to declare action."
 _ERR_INVALID_STATUS = "Encounter is not in a valid status for this action."
 _ERR_ALREADY_COMPLETED = "Encounter is already completed."
 _ERR_COMBO_UPGRADE = "Cannot upgrade to the requested combo."
+_ERR_REMOVE_OPPONENT = "Opponent is not active in this encounter."
 
 
 class DuelChallengeViewSet(ReadOnlyModelViewSet):
@@ -555,6 +558,29 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         # Update cached opponent list in-place
         encounter.opponents_cached.append(new_opponent)
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def remove_opponent(self, request: Request, pk: int | None = None) -> Response:
+        """Remove an NPC opponent from the encounter (GM action, #3382)."""
+        encounter = self.get_object()
+        serializer = RemoveOpponentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        opponent_id = serializer.validated_data["opponent_id"]
+        opponent = get_object_or_404(
+            CombatOpponent,
+            pk=opponent_id,
+            encounter=encounter,
+        )
+        try:
+            remove_opponent(opponent)
+        except ValueError:
+            return Response(
+                {"detail": _ERR_REMOVE_OPPONENT},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Remove from cached list (prefetch only loads ACTIVE)
+        encounter.opponents_cached = [o for o in encounter.opponents_cached if o.pk != opponent.pk]
         return self._serialize_encounter(request, encounter)
 
     @extend_schema(

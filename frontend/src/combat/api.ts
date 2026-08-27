@@ -234,6 +234,23 @@ export async function postRemoveParticipant(
 }
 
 /**
+ * Remove an NPC opponent from the encounter (GM only, #3382).
+ * POST /api/combat/{encounterId}/remove_opponent/
+ */
+export async function postRemoveOpponent(
+  encounterId: number,
+  opponentId: number
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/remove_opponent/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ opponent_id: opponentId }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to remove opponent');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/**
  * Begin a new declaration phase (GM only) — manual round control.
  * POST /api/combat/{encounterId}/begin_round/
  */

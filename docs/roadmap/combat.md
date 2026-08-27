@@ -2,7 +2,11 @@
 
 **Status:** core party and duel combat ship end-to-end, on both telnet and web — the GM lifecycle
 (start an encounter, spawn an NPC opponent, add/remove a PC, manual round control) got its web
-surface in #3067, closing the last "server-only" gap in the party-combat REST API; the authored
+surface in #3067, closing the last "server-only" gap in the party-combat REST API; **removing/
+despawning a spawned NPC opponent mid-fight is now symmetric with `remove_participant`** (#3382 —
+`world.combat.services.remove_opponent`, web `CombatEncounterViewSet.remove_opponent`, telnet
+`encounter removenpc`, `GMEncounterControls`' Opponents list) — the one asymmetric hole the
+2026-08-26 combat audit flagged in the roster-management set; the authored
 effect palette shipped (#1584, combat-wired for battlefield shaping by #2206); the frontier is
 embodied combat (companions, mounts, war) and *proving* the WIRED-UNPROVEN paths — not the round
 engine. **Battles are now fully web-playable (#3389):** the round-action declaration panel (all 12
@@ -211,6 +215,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   than defaulting everyone to the same spot (journey test in `world/combat/tests/
   test_declare_reach_gate.py`). Full telnet parity: `position` / `position <name>`
   (`CmdPosition`) lists/takes/moves the same way the web position panel does.
+- **GM mid-fight repositioning (#3385).** `gm_place_in_position` was registered and tested
+  since #2005 but reachable from nowhere — no telnet verb, no web click handler, and the web
+  `_positioning_actions` adapter deliberately excluded it. Closed: the
+  `_gm_place_in_position_actions` web adapter (`actions/player_interface.py`) surfaces it
+  through the same registry-key-filter pattern as `set_the_stage`; `TacticalMap` gained an
+  `onGMPlace` click-to-place prop consumed by a "Place" toggle + target picker on both
+  `CombatTacticalMap` and `SceneTacticalMap` (so GM staging/unsticking works in and out of an
+  active `CombatEncounter`); telnet gained `position/place <target>=<position name>`
+  (`CmdPosition`, not `CmdEncounter` — the gate is scene-GM, not encounter-scoped); and
+  `encounter add` gained an optional trailing position token, closing telnet's last gap with
+  the web `AddOpponentDialog`.
 - **Technique-driven combat entrance (#2183, ADR-0113).** A hostile technique cast made
   as an entrance (`enter <technique>=<target>`) seeds/feeds the encounter exactly like a
   normal declared hostile cast, additionally stamping `CombatRoundAction.from_entrance`

@@ -2834,6 +2834,38 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     return opp
 
 
+def remove_opponent(opponent: CombatOpponent) -> None:
+    """Pull an opponent out of a live encounter (GM action, #3382).
+
+    Reuses the defeat teardown seam minus defeat consequences: no legend/loot/
+    aftermath, no narrated defeat. Raises ValueError if the opponent is not
+    ACTIVE (already defeated/fled/removed — nothing to tear down twice).
+    """
+    from world.combat.constants import LockBreakReason  # noqa: PLC0415
+
+    if opponent.status != OpponentStatus.ACTIVE:
+        msg = f"Opponent {opponent.pk} is not ACTIVE (status={opponent.status})."
+        raise ValueError(msg)
+
+    opponent.status = OpponentStatus.REMOVED
+    opponent.save(update_fields=["status"])
+
+    # Break the active engagement lock immediately, same as a defeat teardown
+    # (decision 2) — a GM pull is a harder cut than fleeing, not a softer one.
+    _break_engagement_lock_on_defeat(opponent, reason=LockBreakReason.REMOVED)
+
+    # Fizzle any pending wind-up this opponent had committed to — it never
+    # deletes the CombatOpponent row (decision 5), so CASCADE never fires and
+    # a stale PendingOpponentAttack would otherwise still resolve next round.
+    for pending in PendingOpponentAttack.objects.filter(opponent=opponent):
+        _broadcast_windup_fizzled(pending, reason="is called off")
+        pending.delete()
+
+    encounter = opponent.encounter
+    if encounter.status != RoundStatus.COMPLETED and _check_encounter_completion(encounter):
+        complete_encounter(encounter, outcome=_classify_encounter_outcome(encounter))
+
+
 def spawn_from_creature_template(
     encounter: CombatEncounter,
     template: CreatureTemplate,
@@ -5797,8 +5829,15 @@ def _apply_execute_multiplier(
     return max(0, int(damage_amount * factor))
 
 
-def _break_engagement_lock_on_defeat(opponent: CombatOpponent) -> None:
-    """Release the opponent's active engagement lock, if any, on its defeat (#2020)."""
+def _break_engagement_lock_on_defeat(
+    opponent: CombatOpponent, *, reason: str | None = None
+) -> None:
+    """Release the opponent's active engagement lock, if any, on its defeat (#2020).
+
+    ``reason`` defaults to ``LockBreakReason.DEFEAT`` (the original call site);
+    ``remove_opponent`` (#3382) passes ``LockBreakReason.REMOVED`` for a GM pull,
+    reusing this same lock-breaking seam rather than duplicating the query.
+    """
     from world.combat.constants import LockBreakReason  # noqa: PLC0415
     from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
 
@@ -5807,7 +5846,7 @@ def _break_engagement_lock_on_defeat(opponent: CombatOpponent) -> None:
         status=EngagementLockStatus.ACTIVE,
     ).first()
     if active_lock is not None:
-        break_engagement_lock(active_lock, reason=LockBreakReason.DEFEAT)
+        break_engagement_lock(active_lock, reason=reason or LockBreakReason.DEFEAT)
 
 
 def _accumulate_damage_threat(

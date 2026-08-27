@@ -535,6 +535,13 @@ export function useRemoveParticipant(encounterId: number) {
   );
 }
 
+/** Remove an NPC opponent from the encounter (GM only, #3382). */
+export function useRemoveOpponent(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, number>(encounterId, (opponentId) =>
+    api.postRemoveOpponent(encounterId, opponentId)
+  );
+}
+
 /** Begin a new declaration phase (GM only) — manual round control. */
 export function useBeginRound(encounterId: number) {
   return useEncounterMutation<EncounterDetail, void>(encounterId, () =>

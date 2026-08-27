@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -77,6 +78,7 @@ import { fetchAvailableActions } from '../actionQueries';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { toast } from 'sonner';
 import { SceneTacticalMap } from './SceneTacticalMap';
+import { makeGMPlaceAction } from '@/test/utils/playerActionFixtures';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -327,5 +329,59 @@ describe('SceneTacticalMap', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sceneKeys.detail('10') });
     });
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // GM-place target picker (#3385)
+  // ---------------------------------------------------------------------------
+
+  it('dispatches gm_place_in_position with the selected persona target on node click', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    vi.mocked(fetchScene).mockResolvedValue({
+      ...MOCK_SCENE,
+      personas: [
+        { id: 1, name: 'Alice Persona', character_sheet: 42 },
+        { id: 2, name: 'Bob Persona', character_sheet: 43 },
+      ],
+    });
+
+    const gmPlaceAction = makeGMPlaceAction(102);
+    vi.mocked(fetchAvailableActions).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [gmPlaceAction],
+    });
+
+    render(<SceneTacticalMap sceneId="10" />, { wrapper: createWrapper() });
+
+    await user.click(await screen.findByTestId('gm-place-toggle'));
+    await user.click(screen.getByTestId('gm-place-target-select'));
+    await user.click(await screen.findByRole('option', { name: 'Alice Persona' }));
+
+    const centerNode = screen.getByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
+
+    await vi.waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        ref: gmPlaceAction.ref,
+        kwargs: { target_object_id: 42 },
+      });
+    });
+  });
+
+  it('does not show the Place toggle when no gm_place_in_position action is available', async () => {
+    render(<SceneTacticalMap sceneId="10" />, { wrapper: createWrapper() });
+
+    await screen.findByTestId('tactical-map');
+    expect(screen.queryByTestId('gm-place-toggle')).not.toBeInTheDocument();
   });
 });

@@ -118,6 +118,55 @@ class CmdEncounterSubverbTests(TestCase):
             f"Expected usage error; got {messages}",
         )
 
+    @patch("actions.definitions.gm_combat.AddOpponentAction.run")
+    def test_add_with_position_token_resolves_position_id(self, mock_run: MagicMock) -> None:
+        """#3385: a 4th ``add`` token resolves to a Position pk in the caller's room."""
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.areas.positioning.constants import PositionKind
+        from world.areas.positioning.factories import PositionFactory
+
+        room = ObjectDBFactory(
+            db_key="EncounterAddPosRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        throne = PositionFactory(room=room, name="throne", kind=PositionKind.PRIMARY)
+        self.caller.location = room
+        mock_run.return_value = ActionResult(success=True, message="Opponent added.")
+
+        self._run("add Goblin mook 5 throne")
+
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["name"], "Goblin")
+        self.assertEqual(kwargs["tier"], "mook")
+        self.assertEqual(kwargs["threat_pool_id"], "5")
+        self.assertEqual(kwargs["position_id"], throne.pk)
+
+    @patch("actions.definitions.gm_combat.AddOpponentAction.run")
+    def test_add_without_position_token_omits_position_id(self, mock_run: MagicMock) -> None:
+        """Omitting the position token behaves exactly as today -- no position_id kwarg."""
+        mock_run.return_value = ActionResult(success=True, message="Opponent added.")
+
+        self._run("add Goblin mook 5")
+
+        kwargs = mock_run.call_args.kwargs
+        self.assertNotIn("position_id", kwargs)
+
+    def test_add_with_unknown_position_token_errors(self) -> None:
+        """An unresolvable position name surfaces an error and never calls the action."""
+        from evennia_extensions.factories import ObjectDBFactory
+
+        room = ObjectDBFactory(
+            db_key="EncounterAddBadPosRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.caller.location = room
+
+        messages = self._run("add Goblin mook 5 nowhere")
+
+        self.assertTrue(
+            any("No such position" in m for m in messages),
+            f"Expected a position-not-found error; got {messages}",
+        )
+
     @patch("actions.definitions.gm_combat.PreviewOpponentDefaultsAction.run")
     def test_default_dispatches_tier(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Preview.")
@@ -166,6 +215,23 @@ class CmdEncounterSubverbTests(TestCase):
         messages = self._run("removepc")
         self.assertTrue(
             any("Usage" in m or "participant" in m.lower() for m in messages),
+            f"Expected usage error; got {messages}",
+        )
+
+    @patch("actions.definitions.gm_combat.RemoveOpponentAction.run")
+    def test_removenpc_dispatches_opponent_id(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Opponent removed.")
+        messages = self._run("removenpc 9")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["opponent_id"], "9")
+        self.assertIn("Opponent removed.", messages)
+
+    def test_removenpc_requires_opponent(self) -> None:
+        messages = self._run("removenpc")
+        self.assertTrue(
+            any("Usage" in m or "opponent" in m.lower() for m in messages),
             f"Expected usage error; got {messages}",
         )
 

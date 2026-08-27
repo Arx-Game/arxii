@@ -165,6 +165,63 @@ describe('TacticalMap', () => {
     expect(nodeEl.querySelector('[data-testid="rampart-ring"]')).toBeInTheDocument();
   });
 
+  it('consumes the click via onGMPlace (#3385) instead of dispatching a move', () => {
+    const onDispatchMove = vi.fn();
+    const onGMPlace = vi.fn().mockReturnValue(true);
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        moveActions={[moveAction(2)]}
+        onDispatchMove={onDispatchMove}
+        onGMPlace={onGMPlace}
+      />
+    );
+    fireEvent.click(screen.getByTestId('tactical-map-node-2'));
+    expect(onGMPlace).toHaveBeenCalledWith(2);
+    expect(onDispatchMove).not.toHaveBeenCalled();
+  });
+
+  it('falls through to move-dispatch when onGMPlace declines the click', () => {
+    const onDispatchMove = vi.fn();
+    const onGMPlace = vi.fn().mockReturnValue(false);
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        moveActions={[moveAction(2)]}
+        onDispatchMove={onDispatchMove}
+        onGMPlace={onGMPlace}
+      />
+    );
+    fireEvent.click(screen.getByTestId('tactical-map-node-2'));
+    expect(onGMPlace).toHaveBeenCalledWith(2);
+    expect(onDispatchMove).toHaveBeenCalledWith(moveAction(2));
+  });
+
+  it('consumes the click via onPickPosition before onGMPlace ever runs (#2206 precedence)', () => {
+    const onDispatchMove = vi.fn();
+    const onPickPosition = vi.fn().mockReturnValue(true);
+    const onGMPlace = vi.fn().mockReturnValue(true);
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        moveActions={[moveAction(2)]}
+        onDispatchMove={onDispatchMove}
+        onPickPosition={onPickPosition}
+        onGMPlace={onGMPlace}
+      />
+    );
+    fireEvent.click(screen.getByTestId('tactical-map-node-2'));
+    expect(onPickPosition).toHaveBeenCalledWith(2);
+    expect(onGMPlace).not.toHaveBeenCalled();
+    expect(onDispatchMove).not.toHaveBeenCalled();
+  });
+
   it('renders no rampart ring on an uncovered node', () => {
     render(
       <TacticalMap

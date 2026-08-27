@@ -16,6 +16,7 @@ from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import (
     DuelChallengeStatus,
     EncounterType,
+    OpponentStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -265,6 +266,46 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
             self.participant.status,
             ParticipantStatus.REMOVED,
         )
+
+    def test_remove_opponent_as_gm(self) -> None:
+        """GM can remove an NPC opponent (#3382)."""
+        opponent = CombatOpponentFactory(encounter=self.encounter)
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/remove_opponent/",
+            {"opponent_id": opponent.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        opponent.refresh_from_db()
+        self.assertEqual(opponent.status, OpponentStatus.REMOVED)
+        self.assertNotIn(opponent.pk, [o.pk for o in response.data["opponents"]])
+
+    def test_remove_opponent_non_gm_denied(self) -> None:
+        """Non-GM player cannot remove an opponent."""
+        opponent = CombatOpponentFactory(encounter=self.encounter)
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/remove_opponent/",
+            {"opponent_id": opponent.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_remove_opponent_wrong_encounter_404s(self) -> None:
+        """An opponent belonging to a different encounter 404s."""
+        other_encounter = CombatEncounterFactory(scene=self.scene)
+        other_opponent = CombatOpponentFactory(encounter=other_encounter)
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/remove_opponent/",
+            {"opponent_id": other_opponent.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_404_NOT_FOUND)
 
     def test_resolve_round_returns_400_for_technique_missing_action_template(self) -> None:
         """resolve_round returns HTTP 400 with safe user_message when a declared

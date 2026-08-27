@@ -61,6 +61,7 @@ import {
   useOpponentDefaults,
   usePauseEncounter,
   useProposeLethalDuel,
+  useRemoveOpponent,
   useRemoveParticipant,
   useResolveRound,
   useThreatPools,
@@ -201,6 +202,7 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
   const resolveRound = useResolveRound(encounter.id);
   const pause = usePauseEncounter(encounter.id);
   const removeParticipant = useRemoveParticipant(encounter.id);
+  const removeOpponent = useRemoveOpponent(encounter.id);
 
   // Manual round control is only meaningful in MANUAL pace — TIMED resolves on
   // its own timer, READY resolves once every participant readies up.
@@ -208,9 +210,21 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
   const canBegin = isManual && encounter.status === 'between_rounds';
   const canResolve = isManual && encounter.status === 'declaring';
 
+  // Unlike encounter.participants (prefetch-scoped to ACTIVE server-side),
+  // encounter.opponents carries every status (defeated/fled/removed included) —
+  // filter client-side so a removed/defeated opponent doesn't linger with a
+  // dangling "Remove" control (#3382).
+  const activeOpponents = encounter.opponents.filter((o) => o.status === 'active');
+
   function handleRemove(participantId: number) {
     removeParticipant.mutate(participantId, {
       onError: (err: Error) => toast.error(err.message || 'Failed to remove participant.'),
+    });
+  }
+
+  function handleRemoveOpponent(opponentId: number) {
+    removeOpponent.mutate(opponentId, {
+      onError: (err: Error) => toast.error(err.message || 'Failed to remove opponent.'),
     });
   }
 
@@ -298,6 +312,30 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
                 onClick={() => handleRemove(p.id)}
                 disabled={removeParticipant.isPending}
                 data-testid={`remove-participant-btn-${p.id}`}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeOpponents.length > 0 && (
+        <div className="space-y-1" data-testid="gm-opponents-list">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Opponents</p>
+          {activeOpponents.map((o) => (
+            <div
+              key={o.id}
+              className="flex items-center justify-between text-xs"
+              data-testid={`gm-opponent-row-${o.id}`}
+            >
+              <span>{o.name}</span>
+              <button
+                type="button"
+                className="text-destructive hover:underline disabled:opacity-50"
+                onClick={() => handleRemoveOpponent(o.id)}
+                disabled={removeOpponent.isPending}
+                data-testid={`remove-opponent-btn-${o.id}`}
               >
                 Remove
               </button>
