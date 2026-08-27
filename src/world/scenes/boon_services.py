@@ -43,6 +43,15 @@ the API cannot be curled around the UI. ``pointer_known_items_for_target`` is th
 display-seam counterpart (the boon-options ``pointer_items`` list): the asker's
 pointer-known items relevant to one target, computed from the asker's OWN pointers,
 never a browse of the target's actual holdings.
+
+#2540 slice 3 standing-gap audacity shift: ``npc_boon_tier_shift`` (dial 2's NPC band)
+now sums two additive terms for every boon key — the relative-cost band
+(``boon_cost_tier_shift``) and ``_rank_gap_shift``, one tier per ``RANK_GAP_TIER_BANDS``
+threshold crossed by how far the asker's inverted ``social_rank`` sits below the
+target's. Punching down (asker equal-or-above) never adds a tier. Boon-ask-only, like
+the rest of this module's dial-2 band; a piloted target's own difficulty choice still
+rules (``action_services.py``'s piloted call site omits ``extra_tier_modifier`` by
+design).
 """
 
 from __future__ import annotations
@@ -91,6 +100,13 @@ BOON_SUM_TIERS: dict[str, tuple[int, int]] = {
 # asking for a named possession is painful; a deed is notable.
 BOON_HELD_ITEM_TIER_SHIFT = 2
 BOON_DEED_TIER_SHIFT = 1
+
+# #2540 slice 3 — the standing-gap audacity shift: one tier per rank-gap band the asker
+# reaches ABOVE their station, mirroring `_affection_base_index`'s band pattern
+# (social_difficulty.py:80). `social_rank` is INVERTED (1=highest, default 10), so a
+# positive gap means the target outranks the asker. PLACEHOLDER magnitudes — Apostate's
+# tuning.
+RANK_GAP_TIER_BANDS: tuple[tuple[int, int], ...] = ((5, 1), (10, 2))
 
 # Dial 3 drain — every granted Boon costs affection (target's regard for the asker),
 # applied per-Boon (stacking, even within one scene) and permanent until rebuilt via
@@ -386,18 +402,47 @@ def boon_cost_tier_shift(boon: Boon, target_sheet: CharacterSheet) -> int:  # no
     return BOON_DEED_TIER_SHIFT
 
 
+def _rank_gap_shift(asker_sheet: CharacterSheet, target_sheet: CharacterSheet) -> int:
+    """#2540 slice 3 — asking above your station is harder: one tier per rank-gap band.
+
+    ``social_rank`` is INVERTED (1=highest, default 10): gap =
+    ``asker.social_rank - target.social_rank``, so a positive gap means the target
+    outranks the asker. Mirrors ``_affection_base_index``'s band-crossing pattern
+    (``social_difficulty.py:80``) — the shift is the highest ``RANK_GAP_TIER_BANDS``
+    threshold the gap meets or exceeds. A negative-or-zero gap (the asker is equal or
+    outranks the target) is never harder — 0 shift; punching down carries no penalty.
+    Boon asks only — the caller (``npc_boon_tier_shift``) already scopes this to boon
+    requests, so this helper takes no ``request``/kind and never checks scope itself.
+    """
+    gap = asker_sheet.social_rank - target_sheet.social_rank
+    if gap <= 0:
+        return 0
+    shift = 0
+    for threshold, tier in RANK_GAP_TIER_BANDS:
+        if gap >= threshold:
+            shift = tier
+    return shift
+
+
 def npc_boon_tier_shift(request: SceneActionRequest) -> int:
     """The mandatory NPC-side band (#2540 addendum): 0 unless a boon ask against an NPC.
 
     A piloted defender's difficulty choice rules — the band is consent-time framing for
-    them, never a mechanical shift; without it NPCs would be farmable for money.
+    them, never a mechanical shift; without it NPCs would be farmable for money. Boon
+    asks only (this function is gated on a ``Boon`` row existing for ``request``, so a
+    non-boon request always returns 0). Combines two additive terms for every boon key:
+    the relative-cost band (``boon_cost_tier_shift``, dial 2) and the standing-gap
+    audacity shift (``_rank_gap_shift``, #2540 slice 3) — asking a lofty NPC for
+    anything is harder than asking a lowly one, on top of what's being asked for.
     """
     boon = Boon.objects.filter(action_request=request).first()
     if boon is None or request.target_persona is None:
         return 0
-    if request.target_persona.character_sheet.character.db_account is not None:
+    target_sheet = request.target_persona.character_sheet
+    if target_sheet.character.db_account is not None:
         return 0
-    return boon_cost_tier_shift(boon, request.target_persona.character_sheet)
+    asker_sheet = request.initiator_persona.character_sheet
+    return boon_cost_tier_shift(boon, target_sheet) + _rank_gap_shift(asker_sheet, target_sheet)
 
 
 @transaction.atomic

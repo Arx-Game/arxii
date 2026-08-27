@@ -13,6 +13,7 @@ from django.test import TestCase, override_settings
 from actions.constants import ResolutionPhase
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse
 from world.relationships.models import AffectionShift
 from world.scenes.action_constants import BoonKind, BoonSumTier
@@ -23,6 +24,7 @@ from world.scenes.boon_services import (
     BOON_AFFECTION_COST,
     BOON_NO_POINTER_TEXT,
     BoonAsk,
+    _rank_gap_shift,
     boon_sum_values,
     fulfill_boon,
     npc_boon_tier_shift,
@@ -47,6 +49,12 @@ def _pilot(persona) -> None:
     character = persona.character_sheet.character
     character.db_account = AccountFactory()
     character.save(update_fields=["db_account"])
+
+
+def _set_rank(sheet, rank: int) -> None:
+    """Pin ``social_rank`` (the factory randomizes it) for deterministic gap math."""
+    sheet.social_rank = rank
+    sheet.save(update_fields=["social_rank"])
 
 
 def _success_resolution(success: bool = True) -> PendingActionResolution:
@@ -304,6 +312,11 @@ class NpcBoonBandTests(TestCase):
 
     def _request_with_money_boon(self, *, sum_tier: str) -> SceneActionRequest:
         request = SceneActionRequestFactory(action_key="boon")
+        # Pin equal social_rank on both sides (the factory randomizes it) — these tests
+        # assert the cost band in isolation; the standing-gap shift has its own tests
+        # below (RankGapShiftTests). Equal rank => gap 0 => no rank-gap contribution.
+        _set_rank(request.initiator_persona.character_sheet, 10)
+        _set_rank(request.target_persona.character_sheet, 10)
         _fund(request.target_persona.character_sheet, 1000)
         Boon.objects.create(action_request=request, kind=BoonKind.MONEY, sum_tier=sum_tier)
         return request
@@ -328,6 +341,84 @@ class NpcBoonBandTests(TestCase):
     def test_non_boon_request_is_unshifted(self) -> None:
         request = SceneActionRequestFactory(action_key="persuade")
         self.assertEqual(npc_boon_tier_shift(request), 0)
+
+
+class RankGapShiftTests(TestCase):
+    """#2540 slice 3 — the standing-gap audacity shift, additive with dial 2's cost band.
+
+    ``social_rank`` is INVERTED (1=highest, default 10): gap = asker - target, positive
+    meaning the target outranks the asker.
+    """
+
+    def _request_with_ranks(self, *, asker_rank: int, target_rank: int) -> SceneActionRequest:
+        request = SceneActionRequestFactory(action_key="boon")
+        _set_rank(request.initiator_persona.character_sheet, asker_rank)
+        _set_rank(request.target_persona.character_sheet, target_rank)
+        _fund(request.target_persona.character_sheet, 1000)
+        Boon.objects.create(action_request=request, kind=BoonKind.MONEY, sum_tier=BoonSumTier.MINOR)
+        return request
+
+    def test_gap_below_the_first_band_adds_nothing(self) -> None:
+        # asker rank 14, target rank 10 -> gap 4 (below the 5 threshold)
+        asker_sheet = CharacterSheetFactory(social_rank=14)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 0)
+
+    def test_gap_at_the_first_band_edge_adds_one_tier(self) -> None:
+        # gap exactly 5 -> crosses the first band
+        asker_sheet = CharacterSheetFactory(social_rank=15)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 1)
+
+    def test_gap_just_below_the_second_band_stays_at_one_tier(self) -> None:
+        # gap 9 -> still only the first band
+        asker_sheet = CharacterSheetFactory(social_rank=19)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 1)
+
+    def test_gap_at_the_second_band_edge_adds_two_tiers(self) -> None:
+        # gap exactly 10 -> crosses the second band
+        asker_sheet = CharacterSheetFactory(social_rank=20)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 2)
+
+    def test_punching_down_is_never_harder(self) -> None:
+        # asker rank 1 (highest), target rank 20 (lowest) -> gap -19, clamped to 0
+        asker_sheet = CharacterSheetFactory(social_rank=1)
+        target_sheet = CharacterSheetFactory(social_rank=20)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 0)
+
+    def test_default_rank_sheets_are_unshifted(self) -> None:
+        # both sheets at the model's default rank (10; the factory itself randomizes
+        # it, so pin explicitly rather than relying on CharacterSheetFactory()'s draw)
+        asker_sheet = CharacterSheetFactory(social_rank=10)
+        target_sheet = CharacterSheetFactory(social_rank=10)
+        self.assertEqual(_rank_gap_shift(asker_sheet, target_sheet), 0)
+
+    def test_npc_target_below_first_band_is_unshifted(self) -> None:
+        request = self._request_with_ranks(asker_rank=14, target_rank=10)
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+    def test_npc_target_gap_shifts_the_npc_band(self) -> None:
+        request = self._request_with_ranks(asker_rank=20, target_rank=10)
+        self.assertEqual(npc_boon_tier_shift(request), 2)
+
+    def test_piloted_target_ignores_the_rank_gap(self) -> None:
+        request = self._request_with_ranks(asker_rank=20, target_rank=10)
+        _pilot(request.target_persona)  # their difficulty choice rules, gap or no gap
+        self.assertEqual(npc_boon_tier_shift(request), 0)
+
+    def test_rank_gap_stacks_additively_with_the_cost_band(self) -> None:
+        request = SceneActionRequestFactory(action_key="boon")
+        _set_rank(request.initiator_persona.character_sheet, 20)  # gap 10 -> +2
+        _set_rank(request.target_persona.character_sheet, 10)
+        _fund(request.target_persona.character_sheet, 1000)
+        Boon.objects.create(
+            action_request=request,
+            kind=BoonKind.MONEY,
+            sum_tier=BoonSumTier.GREAT,  # cost band +2
+        )
+        self.assertEqual(npc_boon_tier_shift(request), 4)  # 2 (cost band) + 2 (rank gap)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # Regard/Friction RelationshipTrack gates on #2698
