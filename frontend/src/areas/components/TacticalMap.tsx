@@ -81,6 +81,14 @@ export interface TacticalMapProps {
    * the map has no reach pre-filter for position-picking.
    */
   onPickPosition?: (positionId: number) => boolean;
+  /**
+   * GM click-to-place hook (#3385) — consumed second in the click handler,
+   * after `onPickPosition` and before move-dispatch. A `true` return means
+   * the click was consumed (a selected target was placed at this node) and
+   * move-dispatch logic is skipped. Leave undefined when no GM-place target
+   * is currently selected.
+   */
+  onGMPlace?: (positionId: number) => boolean;
 }
 
 function edgeStyle(edge: PositionEdgeLike): { style: React.CSSProperties; label?: string } {
@@ -103,6 +111,7 @@ export function TacticalMap({
   moveActions,
   onDispatchMove,
   onPickPosition,
+  onGMPlace,
 }: TacticalMapProps) {
   const moveActionByPositionId = useMemo(() => {
     const map = new Map<number, PlayerAction>();
@@ -118,6 +127,11 @@ export function TacticalMap({
     // Position-picking (#2206) takes priority — a true return consumes the
     // click and skips move-dispatch logic entirely.
     if (onPickPosition?.(positionId)) {
+      return;
+    }
+    // GM click-to-place (#3385) takes priority over move-dispatch — a true
+    // return consumes the click (the selected target was placed here).
+    if (onGMPlace?.(positionId)) {
       return;
     }
     const action = moveActionByPositionId.get(positionId);
@@ -160,7 +174,7 @@ export function TacticalMap({
         })
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition]
+    [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition, onGMPlace]
   );
 
   const flowEdges: Edge[] = useMemo(

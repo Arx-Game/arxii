@@ -1216,11 +1216,15 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 - **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
   (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
   #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
-  unchecked placement, #2005) + `SetTheStageAction` (`registry_key="set_the_stage"`, gated on
-  `MinimumGMLevelPrerequisite(GMLevel.STARTING)`, staff bypass preserved, #2117)
-- **Telnet:** `CmdPosition` (`position` / `position <name>`, #2005) — list/take/move face over
-  `TakePositionAction`/`MoveToPositionAction`, room-scoped name resolution; see
-  [areas.md](areas.md) "Telnet" section
+  unchecked placement, #2005; surfaced to the web via the `_gm_place_in_position_actions`
+  adapter and to telnet via `position/place`, #3385) + `SetTheStageAction`
+  (`registry_key="set_the_stage"`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,
+  staff bypass preserved, #2117)
+- **Telnet:** `CmdPosition` (`position` / `position <name>` / `position/place <target>=<position
+  name>`, #2005/#3385) — list/take/move face over `TakePositionAction`/`MoveToPositionAction`,
+  room-scoped name resolution, plus a GM-only `place` switch dispatching
+  `GMPlaceInPositionAction`; see [areas.md](areas.md) "Telnet" section. `CmdEncounter add`
+  (`commands/encounter.py`) also gained an optional position token (#3385).
 - **Scene API:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`,
   `persona_positions`, and (#2006) `position_nodes`/`position_edges` — the full tactical-map
   graph for the scene's room, via `position_graph(obj.location)`
@@ -1236,7 +1240,11 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   renders in-scene on `SceneDetailPage`'s `/scenes/:id`, not a dedicated route,
   `frontend/src/combat/components/`) + `MovementActions` (shared adjacent-position button
   list, `frontend/src/combat/components/`). `PositionMapNode` renders a covering Rampart as
-  a colored ring (solid/dashed/pulsing-dashed by `crack_state`, #2209).
+  a colored ring (solid/dashed/pulsing-dashed by `crack_state`, #2209). `TacticalMap` gained
+  an `onGMPlace` prop (#3385) — GM click-to-place, consumed after the #2206
+  `onPickPosition` cast-targeting hook; `SceneTacticalMap`/`CombatTacticalMap` both grew a
+  "Place" toggle + target picker over the room's co-located participants/opponents/personas
+  when a `gm_place_in_position` `PlayerAction` is available.
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /

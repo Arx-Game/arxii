@@ -17,6 +17,7 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { TacticalMap } from '@/areas/components/TacticalMap';
+import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import { fetchScene, sceneKeys } from '../queries';
 import { useAvailableActionsQuery } from '../actionQueries';
@@ -66,6 +67,12 @@ export function SceneTacticalMap({ sceneId }: Props) {
       (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'set_the_stage'
     ) ?? null;
 
+  // GM-place (#3385): a non-empty list is itself the "am I GM" signal —
+  // mirrors setTheStageAction above; no separate "can GM" prop.
+  const gmPlaceActions = availableActions.filter(
+    (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'gm_place_in_position'
+  );
+
   // ---------------------------------------------------------------------------
   // Dispatch
   // ---------------------------------------------------------------------------
@@ -78,9 +85,12 @@ export function SceneTacticalMap({ sceneId }: Props) {
   const positionNodes = scene?.position_nodes ?? [];
   const positionEdges = scene?.position_edges ?? [];
 
-  const personaNameById = useMemo(() => {
+  // Extended to carry the character's ObjectDB pk (CharacterSheet/ObjectDB
+  // share a pk, see root CLAUDE.md) alongside the name (#3385) — the GM-place
+  // target picker needs it as `target_object_id`.
+  const personaById = useMemo(() => {
     const personas = scene?.personas ?? [];
-    return new Map(personas.map((p) => [p.id, p.name]));
+    return new Map(personas.map((p) => [p.id, { name: p.name, characterId: p.character_sheet }]));
   }, [scene?.personas]);
 
   const occupantsByPosition = useMemo(() => {
@@ -89,13 +99,28 @@ export function SceneTacticalMap({ sceneId }: Props) {
     for (const pp of personaPositions) {
       if (pp.position !== null) {
         const occupants = map.get(pp.position.id) ?? [];
-        const name = personaNameById.get(pp.persona_id);
-        if (name) occupants.push({ name });
+        const persona = personaById.get(pp.persona_id);
+        if (persona) occupants.push({ name: persona.name });
         map.set(pp.position.id, occupants);
       }
     }
     return map;
-  }, [scene?.persona_positions, personaNameById]);
+  }, [scene?.persona_positions, personaById]);
+
+  // GM-place target picker (#3385): every persona co-located on the graph
+  // with a resolvable character ObjectDB pk.
+  const placeTargets = useMemo(() => {
+    const personaPositions = scene?.persona_positions ?? [];
+    const targets: { id: number; name: string }[] = [];
+    for (const pp of personaPositions) {
+      if (pp.position === null) continue;
+      const persona = personaById.get(pp.persona_id);
+      if (persona?.characterId != null) {
+        targets.push({ id: persona.characterId, name: persona.name });
+      }
+    }
+    return targets;
+  }, [scene?.persona_positions, personaById]);
 
   // ---------------------------------------------------------------------------
   // Early exit — no positions defined for this room
@@ -124,15 +149,27 @@ export function SceneTacticalMap({ sceneId }: Props) {
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Positions
       </p>
-      <div className="h-[320px] rounded-md border border-border">
-        <TacticalMap
-          nodes={positionNodes}
-          edges={positionEdges}
-          occupantsByPosition={occupantsByPosition}
-          moveActions={moveActions}
-          onDispatchMove={handleDispatchMove}
-        />
-      </div>
+      <GMPlacementControls
+        gmPlaceActions={gmPlaceActions}
+        targets={placeTargets}
+        dispatchAction={dispatchAction}
+        onPlaced={() => {
+          queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+        }}
+      >
+        {(onGMPlace) => (
+          <div className="h-[320px] rounded-md border border-border">
+            <TacticalMap
+              nodes={positionNodes}
+              edges={positionEdges}
+              occupantsByPosition={occupantsByPosition}
+              moveActions={moveActions}
+              onDispatchMove={handleDispatchMove}
+              onGMPlace={onGMPlace}
+            />
+          </div>
+        )}
+      </GMPlacementControls>
 
       {setTheStageAction && (
         <button

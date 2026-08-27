@@ -139,3 +139,24 @@ class GMPlaceInPositionActionTests(TestCase):
         current = position_of(bare_npc)
         self.assertIsNotNone(current)
         self.assertEqual(current.pk, bare_position.pk)
+
+    def test_places_combat_opponent_via_objectdb(self) -> None:
+        """#3385 decision 2: target_object_id=<opponent.objectdb_id> is a valid,
+        already-tested argument -- CombatOpponent.objectdb/.current_position
+        derive from the same position_of() primitive GMPlaceInPositionAction writes
+        through, so an encounter opponent can be GM-placed exactly like any other
+        co-located ObjectDB.
+        """
+        from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
+
+        encounter = CombatEncounterFactory(room=self.room, scene=self.scene)
+        opponent = CombatOpponentFactory(encounter=encounter)
+
+        result = GMPlaceInPositionAction().run(
+            self.gm_actor,
+            position_id=self.throne.pk,
+            target_object_id=opponent.objectdb_id,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertIsNotNone(opponent.current_position)
+        self.assertEqual(opponent.current_position.pk, self.throne.pk)
