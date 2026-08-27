@@ -46,6 +46,7 @@ from web.admin.tuning.ops_views import (
     ops_tech_fragment,
 )
 from web.admin.tuning.views import (
+    tuning_capabilities_fragment,
     tuning_checks_fragment,
     tuning_conditions_fragment,
     tuning_consequences_fragment,
@@ -138,6 +139,7 @@ urlpatterns = [
     path("_tuning/conditions/", tuning_conditions_fragment, name="admin_tuning_conditions"),
     path("_tuning/simulation/", tuning_simulation_fragment, name="admin_tuning_simulation"),
     path("_tuning/techniques/", tuning_techniques_fragment, name="admin_tuning_techniques"),
+    path("_tuning/capabilities/", tuning_capabilities_fragment, name="admin_tuning_capabilities"),
     path("_ops/", ops_dashboard, name="admin_ops"),
     path("_ops/progression/", ops_progression_fragment, name="admin_ops_progression"),
     path("_ops/economy/", ops_economy_fragment, name="admin_ops_economy"),

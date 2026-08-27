@@ -68,8 +68,10 @@ treat those names as hints to confirm, not gospel.
 - [0010 — FK direction is specific→general; avoid FKs to ObjectDB](0010-fk-direction-specific-to-general.md)
 - [0011 — IC-meaningful state keys on CharacterSheet/Persona, never AccountDB](0011-ic-state-keys-on-charactersheet-not-account.md)
 - [0012 — PostgreSQL-only in production; use PG features directly](0012-postgresql-only-in-production.md)
-- [0013 — Schema-only migrations pre-production](0013-schema-only-migrations-pre-production.md)
+- [0013 — Schema-only migrations pre-production](0013-schema-only-migrations-pre-production.md) (**SUPERSEDED by ADR-0237** — alpha is durable; authored-content columns need backfills)
 - [0014 — No persisted derived data; derive-on-read](0014-no-persisted-derived-data-derive-on-read.md)
+- [0237 — Alpha is durable: the production database is the only master copy of authored content](0237-alpha-is-durable-the-production-database-is-the-master-copy.md) (**supersedes ADR-0013**; related ADR-0238, ADR-0201, ADR-0140)
+- [0238 — The database is the authoring surface; the content repo is never loaded into a populated database again](0238-content-repo-retired-database-is-the-authoring-surface.md) (**supersedes ADR-0142's authoring direction**; related ADR-0237, ADR-0201, ADR-0168)
 - [0015 — No polymorphic / GenericFK / ContentType models](0015-no-polymorphic-genericfk-models.md)
 - [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
 - [0100 — Service functions read through cached handlers, not bare ORM queries](0100-service-functions-use-cached-handlers-not-queries.md)
@@ -105,7 +107,7 @@ treat those names as hints to confirm, not gospel.
 - [0084 — SQLite fast tier restores a cached schema template instead of rebuilding per run](0084-sqlite-test-schema-template-cache.md)
 - [0137 — CI shards balanced by measured runtime; oversized apps split via generated module labels](0137-ci-shards-balanced-by-measured-runtime-with-generated-splits.md) (extends ADR-0083's CI pipeline)
 - [0138 — Paginate list endpoints by default; opt out explicitly](0138-paginate-list-endpoints-by-default-with-explicit-opt-out.md)
-- [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474)
+- [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474; **authoring direction superseded by ADR-0238**)
 - [0168 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0168-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
 - [0171 — CONTENT_MODELS stays the model-level line; code-required rows get a declared per-row config carve-out, and per-player rows export by owner column, never name pattern](0171-code-required-content-rows-are-declared-config.md) (amends ADR-0168; #2724)
 - [0208 — Registration gates on per-email invites, not codes or an allowlist, behind a DB-singleton open/closed toggle](0208-invite-gated-registration-db-singleton-toggle.md) (#3054)
@@ -242,6 +244,7 @@ treat those names as hints to confirm, not gospel.
 - [0234 - Material economy renames stocks over duplicating them, keeps per-category stock, drives crafting via allowance, and sells only at collection time](0234-material-economy-generalizes-stocks-allowance-driven-draw-and-selling.md) (#2540 slice 2; extends ADR-0081, ADR-0150; related ADR-0008)
 - [0235 - Boon completion: knowledge-side item pointers, honest material refusal, sibling ask flavors, NPC-only standing-gap shift](0235-boon-completion-item-pointers-material-honesty-flavors-standing-gap.md) (#2540 slice 3; refines the visibility-=-eligibility tenet; extends ADR-0234)
 - [0236 - Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire](0236-humiliation-brand-plus-fading-explanation-and-prestige.md) (#2378 follow-up; extends ADR-0233; related ADR-0081)
+- [0239 - One shared DE currency and reference frame across techniques, conditions, and capabilities](0239-shared-de-currency-across-techniques-conditions-capabilities.md) (#3390; extends ADR-0223)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -167,10 +167,24 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
     side_id = serializers.IntegerField(read_only=True)
     place_id = serializers.IntegerField(read_only=True, allow_null=True)
     persona = serializers.SerializerMethodField()
+    # #3389 web declaration/duel surface — internal FK id only, same privacy
+    # tier as the pre-existing side_id/place_id ints (never account/username).
+    character_sheet_id = serializers.IntegerField(read_only=True)
+    is_champion = serializers.SerializerMethodField()
+    declared_this_round = serializers.SerializerMethodField()
 
     class Meta:
         model = BattleParticipant
-        fields = ["id", "status", "side_id", "place_id", "persona"]
+        fields = [
+            "id",
+            "status",
+            "side_id",
+            "place_id",
+            "persona",
+            "character_sheet_id",
+            "is_champion",
+            "declared_this_round",
+        ]
 
     def _primary_persona(self, obj: BattleParticipant):
         """Resolve the participant's PRIMARY persona through the cached accessor.
@@ -230,6 +244,49 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
             "thumbnail_url": persona.thumbnail_url or None,
             "thumbnail_media_url": thumbnail_media_url,
         }
+
+    def get_is_champion(self, obj: BattleParticipant) -> bool:
+        """Mirrors ``open_champion_duel``'s own Champion-standing gate verbatim
+
+        (``world.battles.services``, ``ChallengeChampionDuelAction``'s
+        ``NotAChampionError`` source of truth) so the web duel-challenge
+        control (#3389) doesn't render for a participant who will always be
+        rejected server-side. Read-only visibility hint, not a new write path
+        — dispatch remains gated by the unchanged service-layer check.
+        """
+        from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+        covenant = obj.side.covenant if obj.side_id else None
+        if covenant is None:
+            return False
+        return CharacterCovenantRole.objects.filter(
+            character_sheet=obj.character_sheet,
+            covenant=covenant,
+            covenant_role__is_champion_role=True,
+            engaged=True,
+            left_at__isnull=True,
+        ).exists()
+
+    def get_declared_this_round(self, obj: BattleParticipant) -> bool:
+        """Whether this participant already has a declaration in the CURRENT round (#3389).
+
+        Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
+        against ``current_round_id`` stashed once by
+        ``BattleDetailSerializer.to_representation`` — never a per-participant
+        query, so this stays flat regardless of roster size.
+        """
+        current_round_id = self.context.get("current_round_id")
+        if current_round_id is None:
+            return False
+        # cached_declarations is a to_attr Prefetch set only when the view's
+        # queryset prefetches it (world/battles/views.py); the
+        # obj.declarations.all() fallback keeps this serializer usable outside
+        # that view (e.g. a bare BattleParticipant in a unit test).
+        if hasattr(obj, "cached_declarations"):
+            declarations = obj.cached_declarations
+        else:
+            declarations = obj.declarations.all()
+        return any(decl.battle_round_id == current_round_id for decl in declarations)
 
 
 class BattleDeedSerializer(serializers.ModelSerializer):
@@ -301,7 +358,11 @@ class BattleDetailSerializer(serializers.ModelSerializer):
     )
     # Writeup fields (#1735) — additive to the existing aggregate; the live
     # battle-map page ignores these, the writeup page consumes them.
-    concluded_at = serializers.DateTimeField(read_only=True)
+    # allow_null=True: Battle.concluded_at is null=True at the model level
+    # (world/battles/models.py) — an UNRESOLVED battle genuinely serializes
+    # null (see test_api.py's assertIsNone), so the OpenAPI schema must say
+    # so too. Missing before #3389's fixture work surfaced the gap.
+    concluded_at = serializers.DateTimeField(read_only=True, allow_null=True)
     created_at = serializers.DateTimeField(read_only=True)
     campaign_story_id = serializers.IntegerField(read_only=True, allow_null=True)
     scene_id = serializers.IntegerField(read_only=True)
@@ -327,9 +388,28 @@ class BattleDetailSerializer(serializers.ModelSerializer):
             "deeds",
         ]
 
+    def to_representation(self, instance: Battle) -> dict:
+        """Resolve ``current_round`` once and stash its id in context (#3389).
+
+        ``Battle.current_round`` is a plain query-backed property, not a
+        cached one — computing it here once and reusing it in ``get_round``
+        (below) and in the nested ``BattleParticipantSerializer.
+        get_declared_this_round`` (via the shared ``context`` dict every
+        nested field serializer reads from the same root) keeps this at two
+        queries total for the whole aggregate, never one per participant.
+        """
+        self._current_round = instance.current_round
+        self.context["current_round_id"] = (
+            self._current_round.id if self._current_round is not None else None
+        )
+        return super().to_representation(instance)
+
     def get_round(self, obj: Battle) -> dict | None:
         """The battle's current (latest non-completed) round, or None."""
-        current = obj.current_round
+        # _current_round is stashed by to_representation on this same serializer
+        # instance, not a model field — hasattr guards a caller reaching
+        # get_round without going through to_representation first.
+        current = self._current_round if hasattr(self, "_current_round") else obj.current_round
         if current is None:
             return None
         return {"number": current.round_number, "status": current.status}

@@ -2,7 +2,7 @@
  * Tests for CombatantsList rail section.
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { configureStore } from '@reduxjs/toolkit';
@@ -34,6 +34,22 @@ vi.mock('@/components/PersonaAvatar', () => ({
       <span data-testid="persona-avatar">{source.name[0].toUpperCase()}</span>
     );
   },
+}));
+
+// #3381 — opponent click-menu dispatch + toast mocks.
+const mockUseRegistryDispatch = vi.fn();
+const mockManeuverMutateAsync = vi.fn();
+vi.mock('../queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../queries')>();
+  return {
+    ...actual,
+    useRegistryDispatch: (...args: unknown[]) => mockUseRegistryDispatch(...args),
+  };
+});
+
+const toastErrorMock = vi.fn();
+vi.mock('sonner', () => ({
+  toast: { error: (...args: unknown[]) => toastErrorMock(...args) },
 }));
 
 import { CombatantsList } from '../sections/CombatantsList';
@@ -151,6 +167,11 @@ function makeEncounter(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockManeuverMutateAsync.mockResolvedValue({ success: true });
+  mockUseRegistryDispatch.mockReturnValue({
+    mutateAsync: mockManeuverMutateAsync,
+    isPending: false,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -446,6 +467,86 @@ describe('CombatantsList', () => {
 
     const row = screen.getByTestId('opponent-row-10');
     expect(within(row).queryByTestId('position-badge')).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Opponent click-menu — Taunt/Demoralize/Parley (#3381)
+  // ---------------------------------------------------------------------------
+
+  describe('opponent click-menu', () => {
+    it('renders a menu trigger when canDeclareManeuvers and characterId are provided', () => {
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(screen.getByTestId('opponent-menu-trigger-10')).toBeInTheDocument();
+    });
+
+    it('does not render a menu trigger when canDeclareManeuvers is false (GM/observer)', () => {
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={false} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(screen.queryByTestId('opponent-menu-trigger-10')).not.toBeInTheDocument();
+    });
+
+    it('does not render a menu trigger without a characterId', () => {
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+
+      render(<CombatantsList encounter={encounter} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(screen.queryByTestId('opponent-menu-trigger-10')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['combat_taunt', 'Taunt'],
+      ['combat_demoralize', 'Demoralize'],
+      ['combat_parley', 'Parley'],
+    ] as const)('%s dispatches with the opponent_id kwarg', async (registryKey, label) => {
+      const user = userEvent.setup();
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      await user.click(await screen.findByTestId(`opponent-${registryKey}-10`));
+
+      expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+        registryKey,
+        kwargs: { opponent_id: 10 },
+      });
+      void label;
+    });
+
+    it('shows a toast (not a crash) when a maneuver dispatch fails', async () => {
+      const user = userEvent.setup();
+      mockManeuverMutateAsync.mockResolvedValueOnce({
+        success: false,
+        message: 'Too far away to taunt.',
+      });
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      await user.click(await screen.findByTestId('opponent-combat_taunt-10'));
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith('Too far away to taunt.');
+      });
+      // No crash — the row is still rendered.
+      expect(screen.getByTestId('opponent-row-10')).toBeInTheDocument();
+    });
   });
 
   // ---------------------------------------------------------------------------

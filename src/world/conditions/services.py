@@ -3734,6 +3734,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     target_effect: "ConditionInstance | PendingAlteration",
     bond_thread: "Thread | None" = None,
     skip_engagement_gate: bool = False,
+    power_intensity: int = 0,
 ) -> TreatmentOutcome:
     """Resolve a TreatmentTemplate against an effect instance.
 
@@ -3751,6 +3752,12 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     The PENDING_ALTERATION branch calls reduce_pending_alteration_tier (lazy
     import) to reduce the alteration's tier. The import is lazy so an ImportError
     only fires at runtime if this code path is actually invoked.
+
+    ``power_intensity`` (#3391) is the caster's effective intensity; multiplied by
+    ``treatment.mend_intensity_multiplier`` and added to the outcome-tier mend amount
+    before ``mend_wound()``'s never-to-full cap is applied. Default 0, combined with
+    the field's default 0, is a no-op — the mundane (non-technique) caller
+    (``world/scenes/action_services.py``) never passes this, so it always no-ops.
     """
     from django.db import IntegrityError  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415
@@ -3940,6 +3947,12 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     health_mended = 0
     if not is_failure and isinstance(target_effect, ConditionInstance):
         mend_amount = _map_outcome_to_mend(check_result.outcome, treatment)
+        if mend_amount > 0:
+            # #3391: power leg, applied strictly after the outcome-tier gate (a
+            # failed/unmended-tier treatment still mends 0 regardless of power) and
+            # strictly before mend_wound(), whose never-to-full fraction cap and
+            # max_health clamp remain the final, untouched word on what actually lands.
+            mend_amount += int(treatment.mend_intensity_multiplier * power_intensity)
         if mend_amount > 0:
             from world.vitals.services import mend_wound  # noqa: PLC0415
 

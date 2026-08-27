@@ -91,3 +91,36 @@ app_reload_stamp: /opt/arxii/reloaded_sha
 # the DB means the task is skipped, not retried).
 app_superuser_username: "{{ lookup('env', 'ARXII_DJANGO_SUPERUSER_USERNAME') | default('arxii_admin', true) }}"
 app_superuser_email: "{{ lookup('env', 'ARXII_DJANGO_SUPERUSER_EMAIL') | default('admin@example.invalid', true) }}"
+
+# Pre-migration dump (ADR-0237). Since alpha the production database holds
+# authored content that exists in no other copy, and the migrate task below
+# runs unattended on every converge — so a RemoveField/DeleteModel that
+# reached main destroys that content with no human in the loop. The nightly
+# backup (roles/backups, OnCalendar 03:30) can be up to ~24h stale at that
+# moment, which is the window this dump closes: it runs immediately before
+# migrate, and only when migrate actually has something to apply.
+# MUST equal roles/postgres/defaults/main.yml's postgres_version — same "two
+# roles pinned equal" idiom as app_secret_settings_src/app_web_backend above,
+# and acceptance.sh pins them. pg_dump REFUSES to dump a server newer than
+# itself ("aborting because of server version mismatch" — observed live at
+# client 16 vs server 17 while developing this), so an unversioned
+# `postgresql-client` that drifts behind a bumped postgres_version would fail
+# every pre-migration dump and, because this task is fail-closed by design,
+# block every migrating deploy until noticed.
+app_premigrate_pg_version: 16
+app_premigrate_dir: /var/backups/arxii-premigrate
+app_premigrate_db: arxii
+app_premigrate_db_user: arxii
+# How many pre-migration dumps to retain. This is a SHORT-HORIZON net —
+# rolled off after this many migrating deploys — and deliberately so: it
+# exists to make "the migration I just shipped ate a column" a restore
+# rather than a loss. Data loss noticed weeks later is the nightly offsite
+# chain's job (roles/backups + roles/offsite_replication), not this one.
+app_premigrate_keep: 5
+# Refuse to dump unless free space on app_premigrate_dir's filesystem is at
+# least this fraction of the live database size. A gzip -9 plain-SQL dump of
+# a Postgres DB typically lands at 10-20% of on-disk size, so 50% is a wide
+# margin — chosen because the failure it prevents (filling the disk out from
+# under Postgres on the box that has no standby) is far worse than a deploy
+# that stops and asks for attention.
+app_premigrate_free_space_ratio_percent: 50

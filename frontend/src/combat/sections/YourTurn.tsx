@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useInventory } from '@/inventory/hooks/useInventory';
 import {
   combatKeys,
   invalidateConsequenceOutcomes,
@@ -45,6 +46,7 @@ import {
   useDispatchPlayerAction,
   useFleeMutation,
   useGuardMutation,
+  useRegistryDispatch,
   useUpgradeCombo,
 } from '../queries';
 import { isDispatchFailure } from '../types';
@@ -57,6 +59,9 @@ import type {
   PositionNode,
   RoundActionTyped,
 } from '../types';
+import type { components } from '@/generated/api';
+
+type ConditionInstance = components['schemas']['ConditionInstance'];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,6 +148,21 @@ const GUARD_DESTINATION_OPPONENT_PREFIX = 'opponent:';
 const GUARD_DESTINATION_OBJECT_PREFIX = 'object:';
 
 /**
+ * Use Item target sentinel/prefixes (#3381) — mirrors the guard-redirect
+ * sentinel pattern above. `on_use_target_kind` isn't exposed on any item
+ * serializer (verified against code — the anti-reinvention ledger's premise
+ * that it was already serialized turned out false), so rather than add a
+ * backend field this always offers an optional self/ally/opponent target and
+ * lets the backend accept or reject it, the same backend-trusting philosophy
+ * the spec already applies to Charge/Joust (Decision 4).
+ */
+const USE_ITEM_TARGET_SELF = '__self__';
+const USE_ITEM_TARGET_ALLY_PREFIX = 'ally:';
+const USE_ITEM_TARGET_OPPONENT_PREFIX = 'opponent:';
+/** Condition name gating the Mounted Maneuvers mini-panel (#3381, #1843). */
+const MOUNTED_CONDITION_NAME = 'Mounted';
+
+/**
  * Derive the focused slot's category from the selected technique's
  * `action_category` (#614), surfaced on the PlayerAction descriptor. The
  * matching passive slot is hidden (spec §6). Returns null when no focused
@@ -204,6 +224,20 @@ interface RoundScopedState {
   guardAllyId: string;
   guardTechniqueId: string;
   guardDestination: string;
+  // #3381 additions — rally/succor ally pickers, use-item declaration,
+  // charge/joust mini-panel. Each control's own error is tracked separately
+  // from `maneuverError` since these render outside the Maneuvers cluster
+  // (except rally/succor, which share it, mirroring Cover).
+  rallyAllyId: string;
+  succorAllyId: string;
+  useItemInstanceId: string;
+  useItemTargetValue: string;
+  useItemError: string | null;
+  chargeOpponentId: string;
+  chargeTechniqueId: string;
+  chargeError: string | null;
+  joustTechniqueId: string;
+  joustError: string | null;
 }
 
 /** Everything a new round must wipe — reset WHOLESALE so a missed atom is impossible (#2423). */
@@ -229,6 +263,16 @@ function initialRoundState(): RoundScopedState {
     guardAllyId: GUARD_ANYONE_VALUE,
     guardTechniqueId: GUARD_NO_TECHNIQUE_VALUE,
     guardDestination: GUARD_DESTINATION_AWAY,
+    rallyAllyId: '',
+    succorAllyId: '',
+    useItemInstanceId: '',
+    useItemTargetValue: USE_ITEM_TARGET_SELF,
+    useItemError: null,
+    chargeOpponentId: '',
+    chargeTechniqueId: '',
+    chargeError: null,
+    joustTechniqueId: '',
+    joustError: null,
   };
 }
 
@@ -586,6 +630,16 @@ export function YourTurn({
     guardAllyId,
     guardTechniqueId,
     guardDestination,
+    rallyAllyId,
+    succorAllyId,
+    useItemInstanceId,
+    useItemTargetValue,
+    useItemError,
+    chargeOpponentId,
+    chargeTechniqueId,
+    chargeError,
+    joustTechniqueId,
+    joustError,
   } = roundState;
 
   // Per-field setter preserving React.SetStateAction semantics so every
@@ -625,6 +679,16 @@ export function YourTurn({
   const setGuardAllyId = useMemo(() => makeFieldSetter('guardAllyId'), []);
   const setGuardTechniqueId = useMemo(() => makeFieldSetter('guardTechniqueId'), []);
   const setGuardDestination = useMemo(() => makeFieldSetter('guardDestination'), []);
+  const setRallyAllyId = useMemo(() => makeFieldSetter('rallyAllyId'), []);
+  const setSuccorAllyId = useMemo(() => makeFieldSetter('succorAllyId'), []);
+  const setUseItemInstanceId = useMemo(() => makeFieldSetter('useItemInstanceId'), []);
+  const setUseItemTargetValue = useMemo(() => makeFieldSetter('useItemTargetValue'), []);
+  const setUseItemError = useMemo(() => makeFieldSetter('useItemError'), []);
+  const setChargeOpponentId = useMemo(() => makeFieldSetter('chargeOpponentId'), []);
+  const setChargeTechniqueId = useMemo(() => makeFieldSetter('chargeTechniqueId'), []);
+  const setChargeError = useMemo(() => makeFieldSetter('chargeError'), []);
+  const setJoustTechniqueId = useMemo(() => makeFieldSetter('joustTechniqueId'), []);
+  const setJoustError = useMemo(() => makeFieldSetter('joustError'), []);
 
   // Cast-time position selection for the focused technique (#2206). Controlled
   // by the caller when castPositionProp/onCastPositionChangeProp are supplied
@@ -753,12 +817,28 @@ export function YourTurn({
     (p) => p.status === 'active' && p.id !== myParticipantId
   );
 
+  // The viewer's own participant row — shared by actorPositionId below and the
+  // Mounted-condition gate for the Charge/Joust mini-panel (#3381).
+  const myParticipantSelf: Participant | null =
+    myParticipantId === null
+      ? null
+      : ((encounter?.participants ?? []).find((p) => p.id === myParticipantId) ?? null);
+
   // Actor's position — the viewer's own participant's current_position.
-  const actorPositionId: number | null = (() => {
-    if (myParticipantId === null) return null;
-    const self = (encounter?.participants ?? []).find((p) => p.id === myParticipantId);
-    return self?.current_position?.id ?? null;
-  })();
+  const actorPositionId: number | null = myParticipantSelf?.current_position?.id ?? null;
+
+  // Mounted Maneuvers gate (#3381 Decision 4): visibility keyed off the cheap,
+  // already-serialized `active_conditions` signal — no client-side
+  // re-implementation of Mounted+Lance+reach validation, which the backend
+  // already owns (ChargeAction/JoustAction's own prerequisite checks).
+  const isMounted = ((myParticipantSelf?.active_conditions ?? []) as ConditionInstance[]).some(
+    (c) => c.name === MOUNTED_CONDITION_NAME
+  );
+  const isDuelEncounter = encounter?.encounter_type === 'duel';
+
+  // Active opponents — reused by the opponent-targeted Use Item picker and
+  // Charge's opponent select (same source CombatantsList/focusedTargets read).
+  const activeOpponents = (encounter?.opponents ?? []).filter((o) => o.status === 'active');
 
   // Focused-target options (#1001a): active opponents + allies. Opponents carry
   // their ObjectDB id for the applicable-pulls API; the dispatch uses the
@@ -857,12 +937,34 @@ export function YourTurn({
   );
   const isRedirectGuardTechnique = selectedGuardTechnique?.protective_flavor === 'redirect';
 
+  // Usable held items for the Use Item control (#3381) — filters the same
+  // inventory query the wardrobe/inventory panel uses, no new endpoint.
+  const { data: inventoryItems = [] } = useInventory(characterId > 0 ? characterId : undefined);
+  const usableItems = inventoryItems.filter((item) => item.is_usable);
+
+  // Physical-category combat techniques, offered by Charge/Joust's technique
+  // picker (#3381) — a minimal `<select>`, not the full ActionDeclarationCard
+  // (Decision 4: no client-side reach/prerequisite duplication).
+  const physicalTechniques = availableActions.filter(
+    (a) =>
+      a.ref.backend === 'combat' && a.ref.technique_id != null && a.action_category === 'physical'
+  );
+
   // ---------------------------------------------------------------------------
   // Dispatch
   // ---------------------------------------------------------------------------
 
   const { mutateAsync: dispatchAction, isPending: dispatchPending } =
     useDispatchPlayerAction(characterId);
+
+  // #3381 — shared registry-dispatch mutation for the new maneuvers below
+  // (rally/succor/use-item/revert/charge/joust). One mutation instance is
+  // fine to share across all of them: none of these controls can be
+  // in-flight simultaneously (a single participant declares one round action).
+  const { mutateAsync: dispatchManeuver, isPending: maneuverDispatchPending } = useRegistryDispatch(
+    encounterId,
+    characterId
+  );
 
   // ---------------------------------------------------------------------------
   // Submit handler
@@ -1032,6 +1134,134 @@ export function YourTurn({
   }
 
   // ---------------------------------------------------------------------------
+  // #3381 handlers — rally/succor/use-item/revert-combo/charge/joust. All ride
+  // the shared dispatchManeuver mutation (useRegistryDispatch) declared above.
+  // ---------------------------------------------------------------------------
+
+  async function handleRally() {
+    const allyId = parseInt(rallyAllyId, 10);
+    if (!allyId) {
+      setManeuverError('Select an ally to rally.');
+      return;
+    }
+    setManeuverError(null);
+    try {
+      const result = await dispatchManeuver({
+        registryKey: 'combat_rally',
+        kwargs: { ally_participant_id: allyId },
+      });
+      if (isDispatchFailure(result)) {
+        setManeuverError(result.message ?? 'Failed to declare rally.');
+      }
+    } catch (err) {
+      setManeuverError(err instanceof Error ? err.message : 'Failed to declare rally.');
+    }
+  }
+
+  async function handleSuccor() {
+    const allyId = parseInt(succorAllyId, 10);
+    if (!allyId) {
+      setManeuverError('Select an ally to shelter.');
+      return;
+    }
+    setManeuverError(null);
+    try {
+      const result = await dispatchManeuver({
+        registryKey: 'combat_succor',
+        kwargs: { ally_participant_id: allyId },
+      });
+      if (isDispatchFailure(result)) {
+        setManeuverError(result.message ?? 'Failed to declare succor.');
+      }
+    } catch (err) {
+      setManeuverError(err instanceof Error ? err.message : 'Failed to declare succor.');
+    }
+  }
+
+  async function handleUseItem() {
+    const itemInstanceId = parseInt(useItemInstanceId, 10);
+    if (!itemInstanceId) {
+      setUseItemError('Select an item to use.');
+      return;
+    }
+    setUseItemError(null);
+    // At most one of ally_participant_id / opponent_id (mirrors UseItemSerializer's
+    // mutual-exclusivity, #2120) — "self" (the default) sends neither.
+    const kwargs: Record<string, number> = { item_instance_id: itemInstanceId };
+    if (useItemTargetValue.startsWith(USE_ITEM_TARGET_ALLY_PREFIX)) {
+      const allyId = parseInt(useItemTargetValue.slice(USE_ITEM_TARGET_ALLY_PREFIX.length), 10);
+      if (allyId) kwargs.ally_participant_id = allyId;
+    } else if (useItemTargetValue.startsWith(USE_ITEM_TARGET_OPPONENT_PREFIX)) {
+      const opponentId = parseInt(
+        useItemTargetValue.slice(USE_ITEM_TARGET_OPPONENT_PREFIX.length),
+        10
+      );
+      if (opponentId) kwargs.opponent_id = opponentId;
+    }
+    try {
+      const result = await dispatchManeuver({ registryKey: 'combat_use', kwargs });
+      if (isDispatchFailure(result)) {
+        setUseItemError(result.message ?? 'Failed to use item.');
+      }
+    } catch (err) {
+      setUseItemError(err instanceof Error ? err.message : 'Failed to use item.');
+    }
+  }
+
+  async function handleRevertCombo() {
+    setManeuverError(null);
+    try {
+      const result = await dispatchManeuver({ registryKey: 'combat_revert' });
+      if (isDispatchFailure(result)) {
+        setManeuverError(result.message ?? 'Failed to revert combo.');
+      }
+    } catch (err) {
+      setManeuverError(err instanceof Error ? err.message : 'Failed to revert combo.');
+    }
+  }
+
+  async function handleCharge() {
+    const opponentId = parseInt(chargeOpponentId, 10);
+    const techniqueId = parseInt(chargeTechniqueId, 10);
+    if (!opponentId || !techniqueId) {
+      setChargeError('Select an opponent and a technique to charge with.');
+      return;
+    }
+    setChargeError(null);
+    try {
+      const result = await dispatchManeuver({
+        registryKey: 'combat_charge',
+        kwargs: { opponent_id: opponentId, technique_id: techniqueId },
+      });
+      if (isDispatchFailure(result)) {
+        setChargeError(result.message ?? 'Failed to charge.');
+      }
+    } catch (err) {
+      setChargeError(err instanceof Error ? err.message : 'Failed to charge.');
+    }
+  }
+
+  async function handleJoust() {
+    const techniqueId = parseInt(joustTechniqueId, 10);
+    if (!techniqueId) {
+      setJoustError('Select a technique to joust with.');
+      return;
+    }
+    setJoustError(null);
+    try {
+      const result = await dispatchManeuver({
+        registryKey: 'combat_joust',
+        kwargs: { technique_id: techniqueId },
+      });
+      if (isDispatchFailure(result)) {
+        setJoustError(result.message ?? 'Failed to joust.');
+      }
+    } catch (err) {
+      setJoustError(err instanceof Error ? err.message : 'Failed to joust.');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -1190,6 +1420,250 @@ export function YourTurn({
               isLoading={combosLoading || upgradePending}
             />
           ))}
+        </div>
+      )}
+
+      {/* Revert Combo — symmetric with the upgrade row above; visible only while
+          this round's action has an active combo upgrade (#3381). */}
+      {ownRoundAction?.combo_upgrade != null && (
+        <button
+          type="button"
+          disabled={isLocked || maneuverDispatchPending}
+          onClick={() => {
+            handleRevertCombo().catch(() => {});
+          }}
+          data-testid="revert-combo-btn"
+          className={cn(
+            'w-full rounded-md border px-3 py-1.5 text-left text-xs font-medium transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            isLocked
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-amber-500/40 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10'
+          )}
+        >
+          {maneuverDispatchPending ? 'Reverting combo…' : 'Revert combo upgrade'}
+        </button>
+      )}
+
+      {/* Use Item — declare using a held on-use item as this round's action
+          (#3381, #2023/#2120). A primary maneuver, mutually exclusive with the
+          focused technique slot above. */}
+      {usableItems.length > 0 && (
+        <div
+          className="space-y-1.5 rounded border border-border bg-card/60 p-2"
+          data-testid="use-item-section"
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            title="Use a held item as your round action, optionally against an ally or opponent."
+          >
+            Use Item
+          </p>
+          <Select
+            value={useItemInstanceId}
+            onValueChange={setUseItemInstanceId}
+            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+          >
+            <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
+              <SelectValue placeholder="Choose an item…" />
+            </SelectTrigger>
+            <SelectContent>
+              {usableItems.map((item) => (
+                <SelectItem key={item.id} value={String(item.id)}>
+                  {item.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={useItemTargetValue}
+            onValueChange={setUseItemTargetValue}
+            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+          >
+            <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
+              <SelectValue placeholder="Target" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
+              {coverableAllies.map((ally) => (
+                <SelectItem
+                  key={`use-item-ally-${ally.id}`}
+                  value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
+                >
+                  {ally.character_name}
+                </SelectItem>
+              ))}
+              {activeOpponents.map((opponent) => (
+                <SelectItem
+                  key={`use-item-opponent-${opponent.id}`}
+                  value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
+                >
+                  {opponent.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            disabled={
+              isLocked || !isDeclaringPhase || maneuverDispatchPending || useItemInstanceId === ''
+            }
+            onClick={() => {
+              handleUseItem().catch(() => {});
+            }}
+            data-testid="use-item-confirm-btn"
+            className={cn(
+              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              isLocked || !isDeclaringPhase || useItemInstanceId === ''
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+            )}
+          >
+            {maneuverDispatchPending ? 'Using item…' : 'Use Item'}
+          </button>
+          {useItemError !== null && (
+            <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
+              {useItemError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Mounted Maneuvers — Charge / Joust, gated on the viewer's own Mounted
+          condition (#3381, #1843). Backend-trusting per Decision 4: no client-
+          side reach/Lance re-validation; a rejected declaration surfaces the
+          backend's own message inline. */}
+      {isMounted && (
+        <div
+          className="space-y-2 rounded border border-border bg-card/60 p-2"
+          data-testid="mounted-maneuvers-section"
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            title="Mounted-only declarations — close distance with a Charge, or Joust your duel opponent."
+          >
+            Mounted Maneuvers
+          </p>
+
+          {/* Charge — close distance to an opponent, then attack with the chosen technique. */}
+          <div className="space-y-1.5" data-testid="charge-control">
+            <Select
+              value={chargeOpponentId}
+              onValueChange={setChargeOpponentId}
+              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+            >
+              <SelectTrigger data-testid="charge-opponent-select" className="h-8 text-xs">
+                <SelectValue placeholder="Charge which opponent…" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeOpponents.map((opponent) => (
+                  <SelectItem key={opponent.id} value={String(opponent.id)}>
+                    {opponent.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={chargeTechniqueId}
+              onValueChange={setChargeTechniqueId}
+              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+            >
+              <SelectTrigger data-testid="charge-technique-select" className="h-8 text-xs">
+                <SelectValue placeholder="With which technique…" />
+              </SelectTrigger>
+              <SelectContent>
+                {physicalTechniques.map((action) => (
+                  <SelectItem
+                    key={action.ref.technique_id ?? action.display_name}
+                    value={String(action.ref.technique_id)}
+                  >
+                    {action.display_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              disabled={
+                isLocked ||
+                !isDeclaringPhase ||
+                maneuverDispatchPending ||
+                chargeOpponentId === '' ||
+                chargeTechniqueId === ''
+              }
+              onClick={() => {
+                handleCharge().catch(() => {});
+              }}
+              data-testid="charge-confirm-btn"
+              className={cn(
+                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                isLocked || !isDeclaringPhase || chargeOpponentId === '' || chargeTechniqueId === ''
+                  ? 'border-border bg-muted text-muted-foreground'
+                  : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+              )}
+            >
+              {maneuverDispatchPending ? 'Charging…' : 'Charge'}
+            </button>
+            {chargeError !== null && (
+              <p role="alert" className="text-sm text-destructive" data-testid="charge-error">
+                {chargeError}
+              </p>
+            )}
+          </div>
+
+          {/* Joust — duel-only, opponent implied by the 2-participant duel. */}
+          {isDuelEncounter && (
+            <div className="space-y-1.5" data-testid="joust-control">
+              <Select
+                value={joustTechniqueId}
+                onValueChange={setJoustTechniqueId}
+                disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+              >
+                <SelectTrigger data-testid="joust-technique-select" className="h-8 text-xs">
+                  <SelectValue placeholder="Joust with which technique…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {physicalTechniques.map((action) => (
+                    <SelectItem
+                      key={action.ref.technique_id ?? action.display_name}
+                      value={String(action.ref.technique_id)}
+                    >
+                      {action.display_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                disabled={
+                  isLocked ||
+                  !isDeclaringPhase ||
+                  maneuverDispatchPending ||
+                  joustTechniqueId === ''
+                }
+                onClick={() => {
+                  handleJoust().catch(() => {});
+                }}
+                data-testid="joust-confirm-btn"
+                className={cn(
+                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  isLocked || !isDeclaringPhase || joustTechniqueId === ''
+                    ? 'border-border bg-muted text-muted-foreground'
+                    : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+                )}
+              >
+                {maneuverDispatchPending ? 'Jousting…' : 'Joust'}
+              </button>
+              {joustError !== null && (
+                <p role="alert" className="text-sm text-destructive" data-testid="joust-error">
+                  {joustError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1446,6 +1920,94 @@ export function YourTurn({
               </button>
             </div>
           )}
+
+          {/* Rally control — ally picker + confirm button (#3381) */}
+          <div className="space-y-1.5" data-testid="rally-control">
+            <Select
+              value={rallyAllyId}
+              onValueChange={setRallyAllyId}
+              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+            >
+              <SelectTrigger data-testid="rally-ally-select" className="h-8 text-xs">
+                <SelectValue placeholder="Rally an ally…" />
+              </SelectTrigger>
+              <SelectContent>
+                {coverableAllies.map((ally) => (
+                  <SelectItem key={ally.id} value={String(ally.id)}>
+                    {ally.character_name}
+                  </SelectItem>
+                ))}
+                {coverableAllies.length === 0 && (
+                  <SelectItem value="__none__" disabled>
+                    No allies available
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              disabled={
+                isLocked || !isDeclaringPhase || maneuverDispatchPending || rallyAllyId === ''
+              }
+              onClick={() => {
+                handleRally().catch(() => {});
+              }}
+              data-testid="rally-confirm-btn"
+              className={cn(
+                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                isLocked || !isDeclaringPhase || rallyAllyId === ''
+                  ? 'border-border bg-muted text-muted-foreground'
+                  : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+              )}
+            >
+              {maneuverDispatchPending ? 'Declaring rally…' : 'Rally'}
+            </button>
+          </div>
+
+          {/* Succor control — shelter an ally from an environmental hazard (#3381, #1744) */}
+          <div className="space-y-1.5" data-testid="succor-control">
+            <Select
+              value={succorAllyId}
+              onValueChange={setSuccorAllyId}
+              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+            >
+              <SelectTrigger data-testid="succor-ally-select" className="h-8 text-xs">
+                <SelectValue placeholder="Shelter an ally…" />
+              </SelectTrigger>
+              <SelectContent>
+                {coverableAllies.map((ally) => (
+                  <SelectItem key={ally.id} value={String(ally.id)}>
+                    {ally.character_name}
+                  </SelectItem>
+                ))}
+                {coverableAllies.length === 0 && (
+                  <SelectItem value="__none__" disabled>
+                    No allies available
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              disabled={
+                isLocked || !isDeclaringPhase || maneuverDispatchPending || succorAllyId === ''
+              }
+              onClick={() => {
+                handleSuccor().catch(() => {});
+              }}
+              data-testid="succor-confirm-btn"
+              className={cn(
+                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                isLocked || !isDeclaringPhase || succorAllyId === ''
+                  ? 'border-border bg-muted text-muted-foreground'
+                  : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
+              )}
+            >
+              {maneuverDispatchPending ? 'Declaring succor…' : 'Succor'}
+            </button>
+          </div>
 
           {/* Maneuver error display */}
           {maneuverError !== null && (
