@@ -27,6 +27,7 @@ import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack'
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useGameSocket } from '@/hooks/useGameSocket';
 import {
   markThreadSeen,
   setSceneBaseline,
@@ -34,6 +35,7 @@ import {
   closeThreadTab,
   setActiveThreadTab,
   hydrateThreadTabs,
+  startSession,
 } from '@/store/gameSlice';
 import { loadThreadTabs, saveThreadTabs } from './threadTabsStorage';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
@@ -84,8 +86,31 @@ function deriveRoomTabLabel(focus: FocusEntry, roomName: string | undefined): st
 export function GamePage() {
   const account = useAccount();
   const dispatch = useAppDispatch();
+  const { connect } = useGameSocket();
   const { data: characters = [] } = useMyRosterEntriesQuery();
   const { sessions, active } = useAppSelector((state) => state.game);
+
+  // Enter-the-world auto-start (#3412): a fresh hydration (reload survival,
+  // or arriving here via the header's docked chip) sets `active` with no
+  // `sessions[active]` entry yet — until now, GameTopBar's clickable avatar
+  // was the ONLY way to actually connect from that state, i.e. selecting a
+  // character always cost a second click once you got to /game. This is the
+  // ONE deliberate selection->presence crossing (selection precedes
+  // puppeting): GamePage's own mount path auto-starts the session instead of
+  // waiting for that click. Scoped strictly to "no session object exists
+  // yet" (via the boolean below, not the raw `sessions` object, so the
+  // effect doesn't re-run on every unrelated session mutation once started)
+  // — once a session exists, reconnection on a drop is useGameSocket's own
+  // backoff-driven job, and re-dispatching `startSession` here would zero
+  // its accumulated `unread` count on every rerun. A session that already
+  // exists (connected or not — e.g. GameTopBar was used to switch puppets
+  // before this effect ever saw a gap) is therefore left entirely alone.
+  const hasActiveSession = active ? Boolean(sessions[active]) : false;
+  useEffect(() => {
+    if (!active || hasActiveSession) return;
+    dispatch(startSession(active));
+    connect(active).catch(() => {});
+  }, [active, hasActiveSession, dispatch, connect]);
 
   const focus = useFocusStack(DEFAULT_ROOM_ENTRY);
 

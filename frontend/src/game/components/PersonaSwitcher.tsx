@@ -36,13 +36,19 @@ function avatarSource(p: SwitchablePersona): PersonaAvatarSource {
 }
 
 /**
- * Top-bar control for the face the player is presenting as (#1043).
+ * Control for the face the player is presenting as (#1043).
  *
  * Shows the worn identity and, when the character has more than one face, lets the
  * player switch via `POST /api/personas/set-active/`. The worn face is made
  * deliberately obvious so a player never acts as the wrong identity by accident.
  * A worn non-primary face also offers "Edit guise sheet…" (#1682) — its
  * fabricated bio, authored via `POST /api/personas/set-profile/`.
+ *
+ * Mounted in two places (#3412): `GameTopBar` (inside `/game`) and the header's
+ * app-wide `SelectedCharacterChip` (`frontend/src/components/SelectedCharacterChip.tsx`)
+ * — both pass the same `characterSheetId`/`activePersonaId` pair, so switching from
+ * either mount point reads back identically from the other via the shared
+ * `useCharacterPersonasQuery`/`useSetActivePersonaMutation` cache.
  */
 export function PersonaSwitcher({ characterSheetId, activePersonaId }: PersonaSwitcherProps) {
   const { data: personas = [] } = useCharacterPersonasQuery(characterSheetId);
