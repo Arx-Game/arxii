@@ -6,7 +6,8 @@ from http import HTTPMethod
 
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -22,7 +23,10 @@ from world.roster.serializers import (
     RosterApplicationCreateSerializer,
     RosterApplicationSerializer,
     RosterEntrySerializer,
+    SelectedEntryResultSerializer,
+    SelectEntryRequestSerializer,
 )
+from world.roster.services.selection import SelectionError, set_selected_entry
 
 
 class RosterEntryPagination(PageNumberPagination):
@@ -91,6 +95,48 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         entries = RosterEntry.objects.filter(character_sheet__character__in=available_characters)
         serializer = self.get_serializer(entries, many=True)
         return Response(serializer.data)
+
+    @extend_schema(
+        request=SelectEntryRequestSerializer,
+        responses={200: SelectedEntryResultSerializer},
+        tags=["roster"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsAuthenticated],
+    )
+    def select(self, request: Request) -> Response:
+        """#3412 — set/clear the account's durable character selection (state 2.5).
+
+        Selection is NOT presence: this triggers zero lifecycle, session, or
+        puppeting side effects. The chosen entry must be one of the account's
+        own current roster entries (mirrors ``mine``'s queryset); a foreign or
+        unknown id is rejected uniformly, mirroring the persona set-active
+        endpoint. ``entry_id: null`` always clears.
+        """
+        body = SelectEntryRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        entry_id = body.validated_data["entry_id"]
+        try:
+            player_data = request.user.player_data
+        except AttributeError:
+            msg = "Account has no player data."
+            raise serializers.ValidationError(msg) from None
+
+        entry = None
+        if entry_id is not None:
+            entry = RosterEntry.objects.filter(pk=entry_id).first()
+            if entry is None:
+                msg = "That isn't one of your characters."
+                raise serializers.ValidationError(msg)
+
+        try:
+            set_selected_entry(player_data, entry)
+        except SelectionError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+        return Response(SelectedEntryResultSerializer(player_data).data)
 
     @action(
         detail=True,

@@ -26,6 +26,7 @@ class AccountPayloadContext(TypedDict):
     active_entries: list[RosterEntry]
     pending_applications: list[RosterApplication]
     puppeted_character_ids: set[int]
+    selected_entry: RosterEntry | None
 
 
 def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
@@ -42,6 +43,9 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
           one ObjectDB query per pending application.
         - puppeted_character_ids: ObjectDB ids currently puppeted by
           this account in any session.
+        - selected_entry: the account's durable character selection (#3412
+          state 2.5 substrate — see `PlayerData.selected_entry`), with the
+          same select_related the display fields need, or None if unset.
 
     Single round of queries; serializer methods walk attributes only.
     """
@@ -88,8 +92,16 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
         puppeted_character_ids = {char.id for char in account.get_puppeted_characters()}
     except (AttributeError, RuntimeError):
         puppeted_character_ids = set()
+    selected_entry = None
+    if player_data is not None and player_data.selected_entry_id is not None:
+        selected_entry = (
+            RosterEntry.objects.filter(pk=player_data.selected_entry_id)
+            .select_related("character_sheet__character", "profile_picture__media")
+            .first()
+        )
     return {
         "active_entries": active_entries,
         "pending_applications": pending_applications,
         "puppeted_character_ids": puppeted_character_ids,
+        "selected_entry": selected_entry,
     }

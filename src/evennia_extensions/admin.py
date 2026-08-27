@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 @admin.register(PlayerData)
 class PlayerDataAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["account"]
+    autocomplete_fields = ["account", "selected_entry"]
     list_display: ClassVar[list[str]] = [
         "account",
         "display_name",
@@ -47,6 +47,17 @@ class PlayerDataAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Account Info", {"fields": ("account", "display_name")}),
+        (
+            "Character Selection",
+            {
+                "fields": ("selected_entry",),
+                "description": (
+                    "The character this account has taken up offscreen (state "
+                    "2.5, #3412). Selection is not presence — no lifecycle/"
+                    "session/puppeting state hangs off this."
+                ),
+            },
+        ),
         ("Preferences", {"fields": ("karma", "hide_from_watch", "private_mode")}),
         (
             "Media Settings",

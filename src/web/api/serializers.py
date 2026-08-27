@@ -7,6 +7,7 @@ from rest_framework import serializers
 from evennia_extensions.models import PageBackground
 from web.api.character_type import derive_character_type
 from world.roster.models import RosterApplication, RosterEntry
+from world.roster.serializers import MyRosterEntrySerializer
 from world.scenes.models import Persona
 
 
@@ -120,6 +121,8 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
     available_characters = serializers.SerializerMethodField()
     pending_applications = serializers.SerializerMethodField()
+    selected_entry_id = serializers.SerializerMethodField()
+    selected_entry = serializers.SerializerMethodField()
 
     def get_email_verified(self, obj):
         """Check if user's primary email is verified."""
@@ -167,6 +170,26 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         apps = self.context.get("pending_applications", [])
         return PendingApplicationSerializer(apps, many=True).data
 
+    def get_selected_entry_id(self, obj) -> int | None:
+        """The account's durable character selection (#3412 state 2.5).
+
+        Selection is not presence — this is just the persisted fact, read
+        off `PlayerData.selected_entry_id` with no lifecycle/session/
+        puppeting side effects.
+        """
+        try:
+            return obj.player_data.selected_entry_id
+        except AttributeError:
+            return None
+
+    def get_selected_entry(self, _obj) -> dict | None:
+        """Minimal display fields for the selected entry (from prefetched
+        context) — reuses `MyRosterEntrySerializer`, no new media plumbing."""
+        entry = self.context.get("selected_entry")
+        if entry is None:
+            return None
+        return MyRosterEntrySerializer(entry).data
+
     class Meta:
         model = AccountDB
         fields = [
@@ -182,4 +205,6 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "avatar_url",
             "available_characters",
             "pending_applications",
+            "selected_entry_id",
+            "selected_entry",
         ]

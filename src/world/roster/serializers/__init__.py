@@ -49,6 +49,8 @@ from world.roster.serializers.roster_core import (
     RosterEntryListSerializer,
     RosterEntrySerializer,
     RosterListSerializer,
+    SelectedEntryResultSerializer,
+    SelectEntryRequestSerializer,
 )
 from world.roster.serializers.tenures import (
     RosterTenureLookupSerializer,
@@ -89,6 +91,8 @@ __all__ = [
     "RosterTenureLookupSerializer",
     # Tenure serializers
     "RosterTenureSerializer",
+    "SelectEntryRequestSerializer",
+    "SelectedEntryResultSerializer",
     "TenureGallerySerializer",
     "TenureMediaSerializer",
     "UnreadMailCountSerializer",

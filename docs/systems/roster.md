@@ -142,6 +142,7 @@ definition of it.
 |-------|---------|------------|
 | `RosterTenure` | Player-character relationship with anonymity — `Meta.ordering = ["-start_date"]` (#2728), so the lazy and prefetched fills of `RosterEntry.cached_tenures` agree on sort without either restating it | `player_data` (FK PlayerData), `roster_entry` (FK), `player_number`, `start_date`, `end_date` (null = current), `applied_date`, `approved_date`, `approved_by` (FK PlayerData), `photo_folder` |
 | `RosterApplication` | Application workflow before tenures | `player_data` (FK PlayerData), `character` (FK CharacterSheet — retargeted from ObjectDB in #2608), `status` (TextChoices), `application_text`, `review_notes`, `reviewed_by` (FK PlayerData) |
+| `PlayerData` (`evennia_extensions`) | Extends `AccountDB`; holds `selected_entry` (FK `RosterEntry`, `SET_NULL`, #3412) — the durable, offscreen "which character has this account taken up" fact (state 2.5 substrate). **Selection is not presence**: set only via `world.roster.services.selection.set_selected_entry`, which triggers zero lifecycle/session/puppeting writes. Must be one of `get_available_characters()`'s own-current population; a foreign entry is rejected. | `account` (OneToOne AccountDB, pk), `selected_entry` (FK RosterEntry, nullable), `display_name`, `karma`, `gm_notes`, ... |
 
 ### Settings & Media
 
@@ -312,6 +313,13 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 - `GET /api/roster/entries/mine/` - Current user's characters (authenticated)
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
 - `POST /api/roster/entries/{id}/set_profile_picture/` - Set profile picture from tenure media
+- `POST /api/roster/entries/select/` - Set/clear the account's durable character selection
+  (`{entry_id}` or `null`) — the state 2.5 substrate (#3412). Mirrors the persona
+  set-active endpoint's shape: the entry must be one of `mine`'s own-current-entries
+  population, a foreign/unknown id is rejected uniformly, and `entry_id: null` always
+  clears. **Selection is NOT presence** — no lifecycle/session/puppeting side effects
+  fire. Sole mutator: `world.roster.services.selection.set_selected_entry`. Response
+  mirrors the `/api/user/` payload fragment (`selected_entry_id` + `selected_entry`).
 
 **Filters:** `RosterEntryFilterSet` via DjangoFilterBackend
 
