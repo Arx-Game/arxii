@@ -66,6 +66,10 @@ vi.mock('@/roster/queries', () => ({
   // test suite isn't exercising the drawer's own identity resolution.
   useRosterEntryByNameQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
   useRosterEntryQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  // #3412 — GameTopBar/GameWindow's select handlers call this alongside their
+  // existing puppeting dispatch; stub it out so those clicks don't hit the
+  // network. Not exercised directly by this suite's assertions.
+  useSelectCharacterMutation: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
 // ---------------------------------------------------------------------------

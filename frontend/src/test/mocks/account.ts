@@ -12,6 +12,8 @@ export const mockAccount: AccountData = {
   is_gm: false,
   available_characters: [],
   pending_applications: [],
+  selected_entry_id: null,
+  selected_entry: null,
 };
 
 export const mockStaffAccount: AccountData = {
@@ -26,4 +28,6 @@ export const mockStaffAccount: AccountData = {
   is_gm: false,
   available_characters: [],
   pending_applications: [],
+  selected_entry_id: null,
+  selected_entry: null,
 };
