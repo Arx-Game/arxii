@@ -7,6 +7,7 @@ instance or "any instance of this template".
 """
 
 from django.test import TestCase
+from django.utils import timezone
 
 from world.clues.constants import ClueTargetKind
 from world.clues.factories import CharacterClueFactory, ClueFactory
@@ -14,9 +15,17 @@ from world.clues.models import CharacterClue, Clue
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
-from world.items.services.org_vault import deposit_item_to_vault
+from world.items.services.org_vault import (
+    can_access_vault,
+    deposit_item_to_vault,
+    get_or_create_org_vault,
+)
 from world.roster.factories import RosterEntryFactory
-from world.scenes.boon_services import character_has_item_pointer, pointer_known_items_for_target
+from world.scenes.boon_services import (
+    _target_accessible_vault_ids,
+    character_has_item_pointer,
+    pointer_known_items_for_target,
+)
 from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory, SecretKnowledgeFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
@@ -227,3 +236,51 @@ class PointerKnownItemsForTargetTests(TestCase):
             ),
             [],
         )
+
+
+class TargetAccessibleVaultIdsParityTests(TestCase):
+    """#2540 slice 3 fix round 1 (drift guard): ``_target_accessible_vault_ids`` inlines
+    ``can_access_vault``'s rule as a batched query rather than calling that per-pair
+    predicate per membership row (would reintroduce an N+1) — this cycles a few
+    membership/rank states through BOTH and asserts they always agree, so a future
+    edit to one rule that forgets the other fails loudly here rather than drifting
+    silently (see the cross-reference comment on ``can_access_vault``).
+    """
+
+    def test_agrees_with_can_access_vault_across_membership_states(self) -> None:
+        org = OrganizationFactory()
+        vault = get_or_create_org_vault(org)  # withdraw_rank_max defaults to 1
+
+        active_at_max = PersonaFactory()
+        OrganizationMembershipFactory(
+            persona=active_at_max, organization=org, rank=vault.withdraw_rank_max
+        )
+        active_above_max = PersonaFactory()
+        OrganizationMembershipFactory(
+            persona=active_above_max, organization=org, rank=vault.withdraw_rank_max + 1
+        )
+        exiled = PersonaFactory()
+        OrganizationMembershipFactory(
+            persona=exiled,
+            organization=org,
+            rank=1,
+            left_at=timezone.now(),
+            exiled_at=timezone.now(),
+        )
+        left = PersonaFactory()
+        OrganizationMembershipFactory(
+            persona=left, organization=org, rank=1, left_at=timezone.now()
+        )
+        no_membership = PersonaFactory()
+
+        cases = {
+            "active_at_max": active_at_max,
+            "active_above_max": active_above_max,
+            "exiled": exiled,
+            "left": left,
+            "no_membership": no_membership,
+        }
+        for label, persona in cases.items():
+            expected = can_access_vault(vault, persona)
+            actual = vault.pk in _target_accessible_vault_ids(persona)
+            self.assertEqual(expected, actual, f"parity mismatch for case: {label}")

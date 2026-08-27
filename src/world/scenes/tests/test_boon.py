@@ -21,6 +21,7 @@ from world.scenes.action_services import create_action_request
 from world.scenes.boon_models import Boon
 from world.scenes.boon_services import (
     BOON_AFFECTION_COST,
+    BOON_NO_POINTER_TEXT,
     BoonAsk,
     boon_sum_values,
     fulfill_boon,
@@ -215,6 +216,47 @@ class BoonAskValidationTests(TestCase):
         CharacterClueFactory(roster_entry=roster_entry, clue=clue)
         request = self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item.pk)
         self.assertEqual(request.boon.item_instance_id, item.pk)
+
+    def test_held_item_ask_error_text_is_identical_across_all_non_pointer_cases(self) -> None:
+        """2026-08-27 fix round 1 (oracle-leak fix): a pointer-less asker must not be
+        able to distinguish "no such item" from "not held by them" from "held by
+        someone else" by probing ids — all three fail with the SAME neutral text,
+        checked BEFORE the target-holds check ever runs."""
+        from world.items.factories import ItemInstanceFactory
+
+        third_party = PersonaFactory()
+        held_by_target = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        held_by_third_party = ItemInstanceFactory(
+            holder_character_sheet=third_party.character_sheet
+        )
+
+        messages = []
+        for item_id in (999999, held_by_target.pk, held_by_third_party.pk):
+            with self.assertRaises(ValidationError) as ctx:
+                self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=item_id)
+            messages.append(str(ctx.exception.messages[0]))
+
+        self.assertEqual(messages, [BOON_NO_POINTER_TEXT] * 3)
+
+    def test_vault_ask_error_text_is_identical_across_all_non_pointer_cases(self) -> None:
+        """Same oracle-leak fix, vault side: a nonexistent id, a real (unvaulted) item
+        held by the target, and a real item held by a third party must all fail with
+        the same neutral text before vault-authority is ever consulted."""
+        from world.items.factories import ItemInstanceFactory
+
+        third_party = PersonaFactory()
+        held_by_target = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        held_by_third_party = ItemInstanceFactory(
+            holder_character_sheet=third_party.character_sheet
+        )
+
+        messages = []
+        for item_id in (999999, held_by_target.pk, held_by_third_party.pk):
+            with self.assertRaises(ValidationError) as ctx:
+                self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item_id)
+            messages.append(str(ctx.exception.messages[0]))
+
+        self.assertEqual(messages, [BOON_NO_POINTER_TEXT] * 3)
 
     def test_deed_ask_requires_text(self) -> None:
         with self.assertRaises(ValidationError):

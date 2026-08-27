@@ -221,19 +221,27 @@ def _money_amount_for(ask: BoonAsk, target_sheet: CharacterSheet) -> int:
 def _validate_held_item_ask(
     ask: BoonAsk, target_persona: Persona, asker_sheet: CharacterSheet
 ) -> None:
+    """Dial-1 eligibility for a held-item ask — pointer FIRST (oracle-leak fix).
+
+    2026-08-27 fix round 1: the pointer check must run BEFORE the target-holds check,
+    and with the SAME error text as "no such item" — otherwise a pointer-less asker
+    could iterate item ids and distinguish "not held by them" from "no pointer",
+    browsing the target's inventory one probe at a time (the exact thing the gate
+    exists to prevent). Only once a pointer is confirmed does "they don't currently
+    hold it" become a safe, distinct message — a pointer-holder legitimately knows
+    the item exists.
+    """
     from world.items.models import ItemInstance  # noqa: PLC0415
 
     if ask.item_instance_id is None:
         msg = "A held-item boon names the item asked for."
         raise ValidationError(msg)
-    item = ItemInstance.objects.filter(
-        pk=ask.item_instance_id, holder_character_sheet=target_persona.character_sheet
-    ).first()
-    if item is None:
+    item = ItemInstance.objects.filter(pk=ask.item_instance_id).first()
+    if item is None or not character_has_item_pointer(sheet=asker_sheet, item=item):
+        raise ValidationError(BOON_NO_POINTER_TEXT)
+    if item.holder_character_sheet_id != target_persona.character_sheet_id:
         msg = "They do not hold that item."
         raise ValidationError(msg)
-    if not character_has_item_pointer(sheet=asker_sheet, item=item):
-        raise ValidationError(BOON_NO_POINTER_TEXT)
 
 
 def _validate_vault_item_ask(
@@ -245,23 +253,31 @@ def _validate_vault_item_ask(
     asker's behalf (#2540 Layer 4) — so the ask is only eligible when the named item
     sits in a vault the target can withdraw from AND the asker holds a pointer to it
     (2026-08-27 exact-pointer ruling).
+
+    2026-08-27 fix round 1: pointer FIRST, same oracle-leak fix as
+    ``_validate_held_item_ask`` — a nonexistent item id, a real item with no asker
+    pointer, and a real item pointed-to but held by a third party (not vaulted) must
+    all fail identically (``BOON_NO_POINTER_TEXT``) before the vault-authority check
+    ever runs, so a pointer-less asker can't distinguish them by probing ids.
     """
+    from world.items.models import ItemInstance  # noqa: PLC0415
     from world.items.org_vault_models import VaultHolding  # noqa: PLC0415
     from world.items.services.org_vault import can_access_vault  # noqa: PLC0415
 
     if ask.item_instance_id is None:
         msg = "A vault boon names the item asked for."
         raise ValidationError(msg)
+    item = ItemInstance.objects.filter(pk=ask.item_instance_id).first()
+    if item is None or not character_has_item_pointer(sheet=asker_sheet, item=item):
+        raise ValidationError(BOON_NO_POINTER_TEXT)
     holding = (
         VaultHolding.objects.filter(item_instance_id=ask.item_instance_id)
-        .select_related("vault", "item_instance")
+        .select_related("vault")
         .first()
     )
     if holding is None or not can_access_vault(holding.vault, target_persona):
         msg = "They cannot draw that from any vault."
         raise ValidationError(msg)
-    if not character_has_item_pointer(sheet=asker_sheet, item=holding.item_instance):
-        raise ValidationError(BOON_NO_POINTER_TEXT)
 
 
 def _validate_deed_ask(
