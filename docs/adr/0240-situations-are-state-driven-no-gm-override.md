@@ -1,4 +1,4 @@
-# ADR-0233: Situation declaration has no GM override — GMs make it true, not assert it
+# ADR-0240: Situation declaration has no GM override — GMs make it true, not assert it
 
 **Status:** Accepted (2026-08-26, Tehom in-session).
 

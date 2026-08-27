@@ -25,7 +25,8 @@ class TestTuningDashboardView(TestCase):
         self.assertEqual(resp.status_code, 403)
 
     def test_superuser_gets_dashboard(self) -> None:
-        """Superuser sees the dashboard with all four panel stubs."""
+        """Superuser sees the dashboard with every panel stub, including the new
+        Capabilities panel (#3390)."""
         self.client.force_login(self.super)
         resp = self.client.get(reverse("admin_tuning"))
         self.assertEqual(resp.status_code, 200)
@@ -34,3 +35,5 @@ class TestTuningDashboardView(TestCase):
         self.assertIn('id="panel-consequences"', body)
         self.assertIn('id="panel-conditions"', body)
         self.assertIn('id="panel-simulation"', body)
+        self.assertIn('id="panel-techniques"', body)
+        self.assertIn('id="panel-capabilities"', body)

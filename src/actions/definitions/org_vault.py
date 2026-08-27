@@ -4,6 +4,10 @@ Deposit/withdraw are performable only where a **BANK** room feature stands (a ba
 room on grid, or an owner-installed bank-access decor feature — Apostate's ratified
 access surface). The actions are thin over the audited ``world.items`` vault
 services; custody never depends on the room, only reachability does.
+
+CONTROLLER RULING (#2540): the same access surface covers the org's "bank account"
+too — ``TreasuryWithdrawAction`` reuses the identical ``_at_bank`` gate to draw
+coppers from the org treasury, not just items from the vault.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ _MSG_NO_ACTIVE_CHARACTER = "No active character."
 _MSG_NOT_AT_BANK = "There is no bank access here."
 _MSG_NO_ORGANIZATION = "No such organization."
 _MSG_NO_ITEM = "No such item."
+_MSG_INVALID_AMOUNT = "amount must be a positive whole number."
 
 
 def _resolve_active_persona(actor: ObjectDB) -> Any:
@@ -79,6 +84,39 @@ def _resolve_item(item_instance_id: Any) -> Any:
     return ItemInstance.objects.filter(pk=item_instance_id).first()
 
 
+def _coerce_positive_int(value: Any) -> int | None:
+    """Return ``value`` as a positive int, or ``None`` if it isn't one.
+
+    Fails loud (returns None -> caller refuses) rather than silently coercing a
+    negative/zero/missing amount to something valid. Mirrors
+    ``gm_adjudication._coerce_positive_int``.
+    """
+    try:
+        amount = int(value)
+    except (TypeError, ValueError):
+        return None
+    return amount if amount > 0 else None
+
+
+def _bank_org_context(actor: ObjectDB, kwargs: dict[str, Any]) -> tuple[Any, Any]:
+    """Resolve (persona, organization) at a bank, or a failure ActionResult in slot 0.
+
+    The item-free half of ``_bank_context`` — active persona + the ``_at_bank`` WHERE
+    gate + org resolution, with no item involved. Shared by every bank-gated action:
+    the vault item actions build on it via ``_BankAction._bank_context``, and
+    ``TreasuryWithdrawAction`` (coin, no item) uses it directly.
+    """
+    persona = _resolve_active_persona(actor)
+    if persona is None:
+        return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER), None
+    if not _at_bank(actor):
+        return ActionResult(success=False, message=_MSG_NOT_AT_BANK), None
+    organization = _resolve_organization(kwargs.get("organization_id"))
+    if organization is None:
+        return ActionResult(success=False, message=_MSG_NO_ORGANIZATION), None
+    return persona, organization
+
+
 @dataclass
 class _BankAction(Action):
     """Shared shape: active persona + bank-room gate + org/item resolution."""
@@ -88,14 +126,9 @@ class _BankAction(Action):
 
     def _bank_context(self, actor: ObjectDB, kwargs: dict[str, Any]) -> tuple[Any, Any, Any]:
         """Resolve (persona, organization, item) or a failure ActionResult in slot 0."""
-        persona = _resolve_active_persona(actor)
-        if persona is None:
-            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER), None, None
-        if not _at_bank(actor):
-            return ActionResult(success=False, message=_MSG_NOT_AT_BANK), None, None
-        organization = _resolve_organization(kwargs.get("organization_id"))
-        if organization is None:
-            return ActionResult(success=False, message=_MSG_NO_ORGANIZATION), None, None
+        persona, organization = _bank_org_context(actor, kwargs)
+        if isinstance(persona, ActionResult):
+            return persona, None, None
         item = _resolve_item(kwargs.get("item_instance_id"))
         if item is None:
             return ActionResult(success=False, message=_MSG_NO_ITEM), None, None
@@ -148,6 +181,111 @@ class VaultWithdrawAction(_BankAction):
         )
 
 
+@dataclass
+class TreasuryWithdrawAction(_BankAction):
+    """Draw coppers from an organization's treasury into the actor's purse.
+
+    CONTROLLER RULING (#2540): treasury withdrawal is bank-gated with the same
+    ``_at_bank`` prerequisite as the vault item actions — the ratified Layer 4 access
+    surface covers the org's "bank account" (coin) as well as the vault (items).
+    Skips item resolution entirely (``_bank_org_context``, not ``_bank_context``);
+    the rank gate itself is enforced by the service (``can_spend_treasury``), not
+    here.
+    """
+
+    key: str = "treasury_withdraw"
+    name: str = "Withdraw from Treasury"
+    icon: str = "vault"
+    description: str = (
+        "Draw coppers from your organization's treasury into your purse (rank-gated)."
+    )
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.currency.constants import format_coppers  # noqa: PLC0415
+        from world.currency.services import withdraw_from_treasury  # noqa: PLC0415
+
+        persona, organization = _bank_org_context(actor, kwargs)
+        if isinstance(persona, ActionResult):
+            return persona
+        amount = _coerce_positive_int(kwargs.get("amount"))
+        if amount is None:
+            return ActionResult(success=False, message=_MSG_INVALID_AMOUNT)
+        try:
+            withdraw_from_treasury(organization=organization, persona=persona, amount=amount)
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        return ActionResult(
+            success=True,
+            message=f"You draw {format_coppers(amount)} from {organization.name}'s treasury.",
+        )
+
+
+@dataclass
+class DeliverCollectionAction(_BankAction):
+    """Deliver everything owed to an org's vault from a collection haul (#2540 ruling).
+
+    Resolves ALL of the actor's open ``VaultTransit`` rows for the named org in one
+    act via ``resolve_vault_transit`` — the collection mission's return leg. Both live
+    collection paths are PC-driven (verified 2026-08-26, #2540), so there is no
+    NPC-actor auto-deposit branch to build here; the "NPC collectors never skim"
+    ruling is enforced inside ``can_embezzle_from``'s piloted-carrier gate, not by
+    this action.
+
+    ``keep_item_ids`` is the carrier's explicit opt-in half of the embezzlement
+    double-gate — ``can_embezzle_from``'s consent-authority check is the other half.
+    The service call is one atomic transaction that validates the keep request BEFORE
+    resolving any transit, so a refusal (surfaced here as a failure ``ActionResult``)
+    leaves every transit open rather than partially deposited. Success copy stays
+    neutral: a deposited count, and — only when something was kept — a matter-of-fact
+    note that some of the take never reached the vault. Discovery of a skim is the
+    audit rail's job, not this action's.
+    """
+
+    key: str = "deliver_collection"
+    name: str = "Deliver the Take"
+    icon: str = "vault"
+    description: str = "Deliver everything you're carrying back to your organization's vault."
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.items.constants import VaultTransitResolution  # noqa: PLC0415
+        from world.items.org_vault_models import VaultTransit  # noqa: PLC0415
+        from world.items.services.org_vault import resolve_vault_transit  # noqa: PLC0415
+
+        persona, organization = _bank_org_context(actor, kwargs)
+        if isinstance(persona, ActionResult):
+            return persona
+        keep_item_ids = kwargs.get("keep_item_ids") or []
+        open_transits = VaultTransit.objects.filter(
+            vault__organization=organization,
+            carrier_character_sheet=persona.character_sheet,
+            resolved_at__isnull=True,
+        )
+        if not open_transits.exists():
+            return ActionResult(
+                success=False, message=f"You carry nothing owed to {organization.name}."
+            )
+        try:
+            transits = resolve_vault_transit(
+                organization=organization,
+                carrier_persona=persona,
+                keep_item_ids=keep_item_ids,
+            )
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        kept = sum(1 for transit in transits if transit.resolution == VaultTransitResolution.KEPT)
+        deposited = len(transits) - kept
+        message = f"You deliver {deposited} item(s) to {organization.name}'s vault."
+        if kept:
+            message += " PLACEHOLDER: some of the take never reached the vault."
+        return ActionResult(success=True, message=message)
+
+
 # Module-level singletons — registered in actions/registry.py
 vault_deposit = VaultDepositAction()
 vault_withdraw = VaultWithdrawAction()
+treasury_withdraw = TreasuryWithdrawAction()
+deliver_collection = DeliverCollectionAction()

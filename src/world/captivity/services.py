@@ -74,10 +74,10 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
 
     with transaction.atomic():
         if holding_room is not None:
-            captive.lifecycle_state = LifecycleState.CAPTURED
-            captive.lifecycle_state_at = timezone.now()
-            captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
-
+            # Idmapper rollback staleness (django_notes.md): the create() below
+            # can raise on a concurrent-capture race, so it must run before we
+            # touch `captive` in place — otherwise a rollback here would leave
+            # the cached CharacterSheet reporting CAPTURED forever.
             try:
                 captivity = Captivity.objects.create(
                     captive=captive,
@@ -88,6 +88,10 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
                 )
             except IntegrityError as exc:
                 raise AlreadyCapturedError from exc
+
+            captive.lifecycle_state = LifecycleState.CAPTURED
+            captive.lifecycle_state_at = timezone.now()
+            captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
 
             character = captive.character
             if character is not None:
@@ -106,10 +110,10 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
             )
             cell = room.room_profile.instance_data
 
-        captive.lifecycle_state = LifecycleState.CAPTURED
-        captive.lifecycle_state_at = timezone.now()
-        captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
-
+        # Idmapper rollback staleness (django_notes.md): the create() below can
+        # raise on a concurrent-capture race, so it must run before we touch
+        # `captive` in place — otherwise a rollback here would leave the cached
+        # CharacterSheet reporting CAPTURED forever.
         try:
             captivity = Captivity.objects.create(
                 captive=captive,
@@ -122,6 +126,10 @@ def capture_character(  # noqa: PLR0913 — keyword-only; each arg is a distinct
             # constraint (one HELD per captive) is the real guard; surface it
             # as the typed error the .exists() check above promises.
             raise AlreadyCapturedError from exc
+
+        captive.lifecycle_state = LifecycleState.CAPTURED
+        captive.lifecycle_state_at = timezone.now()
+        captive.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
 
     character = captive.character
     if character is not None:

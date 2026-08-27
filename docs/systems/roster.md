@@ -27,8 +27,14 @@ from world.roster.models import (
 
 `Roster.roster_type` (#2728) is `null=False` with no default — migration 0011
 (`alter_roster_roster_type`) fails with `column "roster_type" contains null values`
-on any database that already has `Roster` rows (ADR-0013 forbids a data-migration
-backfill). There is no production data pre-launch, so the fix is simply:
+on any database that already has `Roster` rows.
+
+**Dev databases only, and only for a database still stranded before migration 0011.**
+The delete-and-reseed below was written under ADR-0013, whose no-backfill premise
+ADR-0237 has since superseded: production is durable, `RosterEntry` and its tenures
+cascade off `Roster`, and this statement would take real characters with it. Never run
+it against production; a production database in this state needs a `RunPython`
+backfill, per ADR-0237.
 
 ```sql
 DELETE FROM roster_roster;

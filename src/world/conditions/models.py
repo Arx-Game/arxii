@@ -1560,6 +1560,16 @@ class TreatmentTemplate(SharedMemoryModel):
             "set this True; leave once_per_scene_per_helper governing everything else."
         ),
     )
+    mend_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text=(
+            "Multiplied by the caster's eff_intensity and added to the outcome-tier "
+            "mend amount, before mend_wound()'s never-to-full cap is applied "
+            "(0 = power has no effect, today's behavior)."
+        ),
+    )
 
     def clean(self) -> None:
         super().clean()

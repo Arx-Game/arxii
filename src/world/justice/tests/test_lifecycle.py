@@ -178,6 +178,31 @@ class PardonTests(JusticeFixtureMixin, TestCase):
         with self.assertRaises(HeatLifecycleError):
             pardon_persona(outsider, self.persona, self.kingdom)
 
+    def test_pardon_releases_an_awaiting_trial_captive(self):
+        # Final review: a pardoned captive must never stand trial on the stale
+        # warrant the pardon just erased — previously pardon_persona never
+        # touched an AWAITING_TRIAL case at all, so they stayed held in the brig.
+        from world.captivity.constants import CaptivityStatus
+        from world.captivity.factories import CaptivityFactory
+        from world.justice.constants import CaseStatus
+        from world.justice.models import JusticeCase
+
+        granter = self._magistrate()
+        case = JusticeCase.objects.create(
+            persona=self.persona, area=self.kingdom, society=self.crown, prosecution_weight=50
+        )
+        captivity = CaptivityFactory(captive=self.persona.character_sheet)
+        case.captivity = captivity
+        case.save(update_fields=["captivity"])
+
+        pardon_persona(granter, self.persona, self.kingdom)
+
+        case.refresh_from_db()
+        captivity.refresh_from_db()
+        self.assertEqual(case.status, CaseStatus.RELEASED_PARDON)
+        self.assertIsNotNone(case.resolved_at)
+        self.assertEqual(captivity.status, CaptivityStatus.RELEASED)
+
     def test_pardon_surfaces_on_public_feed(self):
         from world.tidings.services import public_feed_for_societies
 

@@ -2245,12 +2245,18 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
 
 
-def get_check_modifier(
-    character_sheet: "CharacterSheet",
+def _check_modifier_for_target(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     check_type: CheckType,
 ) -> CheckModifierResult:
     """
-    Get the total modifier for a check type from active conditions.
+    Get the total modifier for a check type from active conditions on *target*.
+
+    Purely ObjectDB-keyed — no CharacterSheet dependency. This is the extracted
+    core of ``get_check_modifier`` (#3384): every line below already operated
+    only on the ObjectDB, so this helper is the reusable seam both
+    ``get_check_modifier`` (sheet-owning bearer, own roll) and
+    ``opponent_condition_opposition`` (ephemeral opponent, no sheet) delegate to.
 
     Args:
         target: The ObjectDB instance
@@ -2259,7 +2265,6 @@ def get_check_modifier(
     Returns:
         CheckModifierResult with total and breakdown
     """
-    target = character_sheet.character
     ctype = check_type
 
     result = CheckModifierResult(total_modifier=0, breakdown=[])
@@ -2293,6 +2298,40 @@ def get_check_modifier(
             result.breakdown.append((instance, modifier_value))
 
     return result
+
+
+def get_check_modifier(
+    character_sheet: "CharacterSheet",
+    check_type: CheckType,
+) -> CheckModifierResult:
+    """
+    Get the total modifier for a check type from active conditions.
+
+    Args:
+        character_sheet: The CharacterSheet whose bearer's active conditions are read
+        check_type: CheckType instance
+
+    Returns:
+        CheckModifierResult with total and breakdown
+    """
+    return _check_modifier_for_target(character_sheet.character, check_type)
+
+
+def opponent_condition_opposition(
+    objectdb: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    check_type: CheckType,
+) -> int:
+    """Difficulty delta an opposing entity's active conditions contribute (#3384).
+
+    Reads the SAME ConditionCheckModifier rows condition_contributions reads for a
+    CharacterSheet-owning bearer's own roll -- summed the identical way (severity/stage
+    scaling included) -- but keyed directly on the opposing ObjectDB, so it works for an
+    ephemeral CombatOpponent with no CharacterSheet (ADR-0038). No sign flip: a penalty
+    row (negative modifier_value) LOWERS the total, which is exactly right when this
+    feeds level_opposition's additive difficulty -- a debuffed opponent presents lower
+    difficulty to whoever is acting against it.
+    """
+    return _check_modifier_for_target(objectdb, check_type).total_modifier
 
 
 def condition_contributions(
@@ -3695,6 +3734,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     target_effect: "ConditionInstance | PendingAlteration",
     bond_thread: "Thread | None" = None,
     skip_engagement_gate: bool = False,
+    power_intensity: int = 0,
 ) -> TreatmentOutcome:
     """Resolve a TreatmentTemplate against an effect instance.
 
@@ -3712,6 +3752,12 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     The PENDING_ALTERATION branch calls reduce_pending_alteration_tier (lazy
     import) to reduce the alteration's tier. The import is lazy so an ImportError
     only fires at runtime if this code path is actually invoked.
+
+    ``power_intensity`` (#3391) is the caster's effective intensity; multiplied by
+    ``treatment.mend_intensity_multiplier`` and added to the outcome-tier mend amount
+    before ``mend_wound()``'s never-to-full cap is applied. Default 0, combined with
+    the field's default 0, is a no-op — the mundane (non-technique) caller
+    (``world/scenes/action_services.py``) never passes this, so it always no-ops.
     """
     from django.db import IntegrityError  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415
@@ -3901,6 +3947,12 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     health_mended = 0
     if not is_failure and isinstance(target_effect, ConditionInstance):
         mend_amount = _map_outcome_to_mend(check_result.outcome, treatment)
+        if mend_amount > 0:
+            # #3391: power leg, applied strictly after the outcome-tier gate (a
+            # failed/unmended-tier treatment still mends 0 regardless of power) and
+            # strictly before mend_wound(), whose never-to-full fraction cap and
+            # max_health clamp remain the final, untouched word on what actually lands.
+            mend_amount += int(treatment.mend_intensity_multiplier * power_intensity)
         if mend_amount > 0:
             from world.vitals.services import mend_wound  # noqa: PLC0415
 

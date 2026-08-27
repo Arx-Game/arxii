@@ -32,6 +32,7 @@ vi.mock('@/combat/queries', () => ({
   useFleeMutation: vi.fn(),
   useCoverMutation: vi.fn(),
   useGuardMutation: vi.fn(),
+  useRegistryDispatch: vi.fn(),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -41,6 +42,10 @@ vi.mock('@/combat/queries', () => ({
 
 vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
+}));
+
+vi.mock('@/inventory/hooks/useInventory', () => ({
+  useInventory: vi.fn(),
 }));
 
 vi.mock('@/magic/queries', async (importOriginal) => {
@@ -115,6 +120,7 @@ vi.mock('@/actions/ActionDeclarationCard', () => ({
 }));
 
 import * as combatQueries from '@/combat/queries';
+import * as inventoryHooks from '@/inventory/hooks/useInventory';
 import { YourTurn } from '../sections/YourTurn';
 import type { YourTurnProps } from '../sections/YourTurn';
 import type { EncounterDetail } from '../types';
@@ -142,6 +148,8 @@ function setupMocks() {
   const mockedUseFleeMutation = combatQueries.useFleeMutation as ReturnType<typeof vi.fn>;
   const mockedUseCoverMutation = combatQueries.useCoverMutation as ReturnType<typeof vi.fn>;
   const mockedUseGuardMutation = combatQueries.useGuardMutation as ReturnType<typeof vi.fn>;
+  const mockedUseRegistryDispatch = combatQueries.useRegistryDispatch as ReturnType<typeof vi.fn>;
+  const mockedUseInventory = inventoryHooks.useInventory as ReturnType<typeof vi.fn>;
 
   mockedUseAvailableCombos.mockReturnValue({ data: [], isLoading: false, isError: false });
   mockedUseUpgradeCombo.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -152,6 +160,11 @@ function setupMocks() {
   mockedUseFleeMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
   mockedUseCoverMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
   mockedUseGuardMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
+  mockedUseRegistryDispatch.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({ success: true }),
+    isPending: false,
+  });
+  mockedUseInventory.mockReturnValue({ data: [], isLoading: false, isError: false });
 }
 
 /** Build a PlayerAction with the given technique_id, reach, and optional action_category. */

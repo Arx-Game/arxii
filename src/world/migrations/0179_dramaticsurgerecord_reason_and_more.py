@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0171_playerdata_arx1_archive_access"),
-    ]
+    dependencies = [("arxii", "0178_cast_power_scale_dispel_treatment")]
 
     operations = [
         migrations.AddField(

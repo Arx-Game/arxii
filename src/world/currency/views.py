@@ -10,10 +10,12 @@ so the UI can show who may spend).
 
 from __future__ import annotations
 
+from http import HTTPMethod
 import logging
 
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -28,7 +30,7 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
-from world.currency.serializers import CharacterPurseSerializer
+from world.currency.serializers import CharacterPurseSerializer, OrgVaultEventSerializer
 from world.currency.services import (
     get_or_create_economics,
     get_or_create_purse,
@@ -153,6 +155,31 @@ class OrgBooksViewSet(viewsets.ViewSet):
         organization = _require_member_org(request, pk)
         payload = _books_payload(organization)
         return Response(OrgBooksSerializer(payload).data)
+
+    @extend_schema(
+        responses={
+            200: OrgVaultEventSerializer(many=True),
+            403: OpenApiResponse(description="Not a member of the organization."),
+            404: OpenApiResponse(description="No such organization."),
+        },
+    )
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="vault-events")
+    def vault_events(self, request: Request, pk: str | None = None) -> Response:
+        """GET /org-books/{org_id}/vault-events/ — the item-vault audit trail (#2540).
+
+        Same membership gate as the books themselves (#930's posture: visible to any
+        active member, not just withdraw-authorized ones — the audit trail is how
+        embezzlement gets discovered, so it can't be gated behind the same authority
+        it exists to catch). Newest first (the model's own ``Meta.ordering``), capped
+        at ``_RECENT_ROWS`` like the currency ledger.
+        """
+        from world.items.org_vault_models import OrgVaultEvent  # noqa: PLC0415
+
+        organization = _require_member_org(request, pk)
+        events = OrgVaultEvent.objects.filter(vault__organization=organization).select_related(
+            "item_instance", "actor_persona"
+        )[:_RECENT_ROWS]
+        return Response(OrgVaultEventSerializer(events, many=True).data)
 
 
 def _require_member_org(request: Request, pk: str | None):

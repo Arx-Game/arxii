@@ -32,6 +32,11 @@ export type PositionEdgeInfo = components['schemas']['PositionEdge'];
 
 export type EncounterDetail = components['schemas']['EncounterDetail'];
 
+// engagement_locks is schema-typed via @extend_schema_field (#3386) — a real
+// component, not {[key: string]: unknown}[]. Active foil-duel pairings for
+// the encounter.
+export type EngagementLock = components['schemas']['EngagementLock'];
+
 // current_round_actions is typed as {[key: string]: unknown}[] in the schema —
 // the backend serializes these with varying shapes depending on action type.
 // For Phase 7 we surface them as opaque blobs; a typed shape is a follow-up.
@@ -65,6 +70,8 @@ export interface RoundActionTyped extends RoundAction {
   is_ready: boolean;
   maneuver: 'flee' | 'cover' | 'interpose' | null;
   focused_ally_target: number | null;
+  /** ComboDefinition PK when this round's action has been upgraded to a combo, else null (#3381). */
+  combo_upgrade: number | null;
 }
 
 // ---------------------------------------------------------------------------

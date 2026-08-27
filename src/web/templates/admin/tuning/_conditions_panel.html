@@ -49,12 +49,27 @@
     border-radius: 2px;
     border: 1px solid var(--hairline-color);
     color: var(--tuning-muted);
+    margin-right: 0.25rem;
+  }
+  #panel-conditions .valuation-lines {
+    margin: 0.4rem 0 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+  #panel-conditions .valuation-lines li {
+    margin-bottom: 0.15rem;
+  }
+  #panel-conditions .provenance-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--tuning-muted);
   }
 </style>
 
 <h2>{% translate "Condition Danger" %}</h2>
 <p>
-  {% translate "Ranks every condition template by a danger score combining worst-stage effective severity and damage-over-time throughput at a chosen severity level." %}
+  {% translate "Ranks every condition template by DE (damage-equivalent, the same currency the Techniques panel uses) alongside its existing danger score - severity combining worst-stage effective severity and damage-over-time throughput. DE is the default sort; danger score stays as its own reference column." %}
 </p>
 
 <form class="tuning-form" hx-get="{% url 'admin_tuning_conditions' %}"
@@ -66,12 +81,28 @@
     <input type="range" id="conditions-severity" name="severity"
            min="1" max="10" step="1" value="{{ severity }}">
   </div>
+  <div class="tuning-field">
+    <label for="conditions-duration-rounds">
+      {% translate "Duration (rounds)" %}: <span>{{ duration_rounds }}</span>
+    </label>
+    <input type="range" id="conditions-duration-rounds" name="duration_rounds"
+           min="1" max="10" step="1" value="{{ duration_rounds }}">
+  </div>
 </form>
+
+{% if power_reference %}
+<p>
+  {% translate "Reference DPR" %}:
+  <strong>{{ power_reference.outgoing_dpr|floatformat:2 }}</strong>
+  ({{ power_reference.source_label }})
+</p>
+{% endif %}
 
 <table class="tuning-table">
   <thead>
     <tr>
       <th>{% translate "Condition" %}</th>
+      <th>{% translate "DE" %}</th>
       <th>{% translate "Effective Severity" %}</th>
       <th>{% translate "DoT / round" %}</th>
       <th>{% translate "Days to Decay" %}</th>
@@ -79,29 +110,58 @@
     </tr>
   </thead>
   <tbody>
-    {% for row in rows %}
+    {% for row in power_rows %}
     <tr>
-      <td>{{ row.template_name }}</td>
+      <td>
+        <details>
+          <summary>{{ row.power.name }}</summary>
+          <ul class="valuation-lines">
+            {% for valuation in row.power.valuations %}
+            <li>
+              <strong>{{ valuation.kind }}</strong> &middot; {{ valuation.value|floatformat:2 }} &middot;
+              <span class="badge">{{ valuation.provenance }}</span>
+              {{ valuation.detail }}
+            </li>
+            {% empty %}
+            <li>{% translate "No priced valuations." %}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      </td>
+      <td>{{ row.power.total_de|floatformat:2 }}</td>
+      {% if row.danger %}
       <td>
         <div class="bar-row">
           <div class="bar-track">
-            <span class="bar" style="width: {% widthratio row.effective_severity 10 100 %}%"></span>
+            <span class="bar" style="width: {% widthratio row.danger.effective_severity 10 100 %}%"></span>
           </div>
-          <span class="bar-label">{{ row.effective_severity|floatformat:2 }}</span>
+          <span class="bar-label">{{ row.danger.effective_severity|floatformat:2 }}</span>
         </div>
       </td>
-      <td>{{ row.dot_per_round|floatformat:2 }}</td>
+      <td>{{ row.danger.dot_per_round|floatformat:2 }}</td>
       <td>
-        {% if row.days_to_decay is None %}
+        {% if row.danger.days_to_decay is None %}
         <span class="badge">{% translate "No passive exit" %}</span>
         {% else %}
-        {{ row.days_to_decay|floatformat:1 }}
+        {{ row.danger.days_to_decay|floatformat:1 }}
         {% endif %}
       </td>
-      <td>{{ row.danger_score|floatformat:2 }}</td>
+      <td>{{ row.danger.danger_score|floatformat:2 }}</td>
+      {% else %}
+      <td colspan="4">&mdash;</td>
+      {% endif %}
     </tr>
     {% empty %}
-    <tr><td colspan="5">{% translate "No condition templates are seeded yet." %}</td></tr>
+    <tr><td colspan="6">{% translate "No condition templates are seeded yet." %}</td></tr>
     {% endfor %}
   </tbody>
 </table>
+
+<h3>{% translate "Valuation provenance" %}</h3>
+<p class="provenance-summary">
+  {% for provenance, count in power_provenance_summary.items %}
+  <span>{{ provenance }}: {{ count }}</span>
+  {% empty %}
+  <span>{% translate "No valuations to summarize." %}</span>
+  {% endfor %}
+</p>

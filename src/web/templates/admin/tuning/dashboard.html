@@ -31,6 +31,11 @@
            hx-get="{% url 'admin_tuning_techniques' %}" hx-trigger="load">
     <p>Loading technique combat-power analytics&hellip;</p>
   </section>
+
+  <section class="tuning-panel" id="panel-capabilities"
+           hx-get="{% url 'admin_tuning_capabilities' %}" hx-trigger="load">
+    <p>Loading capability combat-power analytics&hellip;</p>
+  </section>
 </div>
 <script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
 {% endblock %}

@@ -990,12 +990,33 @@ def _register_weekly_money_tasks() -> None:
     )
 
 
-def _register_late_tasks(roll_and_echo_weather: object) -> None:
-    """Register summons expiry, weather, and area quality cron tasks.
+def _register_justice_sentence_sweep_task() -> None:
+    """Register the daily justice sentence sweep (#2378).
 
     Extracted from ``register_all_tasks`` to keep that function under the
     ruff PLR0915 statement limit.
     """
+    from world.justice.sentences import sentence_sweep_tick
+
+    register_task(
+        CronDefinition(
+            task_key="justice.sentence_sweep",
+            callable=sentence_sweep_tick,
+            interval=timedelta(hours=24),
+            description="Serve brig terms and carry out scheduled terminal sentences (#2378).",
+        )
+    )
+
+
+def _register_late_tasks(roll_and_echo_weather: object) -> None:
+    """Register summons expiry, weather, area quality, and the justice sweep.
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit; the justice sentence sweep (#2378) rides
+    along here for the same reason rather than growing its own call site.
+    """
+    _register_justice_sentence_sweep_task()
+
     from world.npc_services.summons import expire_summonses
 
     register_task(

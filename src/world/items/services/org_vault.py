@@ -60,6 +60,14 @@ def can_access_vault(vault: OrganizationVault, persona: Persona) -> bool:
 
     The ``can_spend_treasury`` twin — the predicate VAULT_ITEM boons, the collection
     return leg, and the embezzlement branch all gate on.
+
+    ``world.scenes.boon_services._target_accessible_vault_ids`` inlines this SAME rule
+    as one batched joined query (a list-endpoint seam that can't call this per-pair
+    predicate once per candidate vault without reintroducing an N+1) — a parity test
+    (``PointerKnownItemsForTargetTests`` /
+    ``test_target_accessible_vault_ids_parity_with_can_access_vault`` in
+    ``world/scenes/tests/test_item_pointers.py``) cycles membership/rank fixtures
+    through both and asserts agreement. Keep the two rules in lockstep if this changes.
     """
     tier = _active_membership_tier(vault, persona)
     return tier is not None and tier <= vault.withdraw_rank_max
@@ -183,14 +191,26 @@ def resolve_vault_transit(
     Every open transit row the carrier holds for this org's vault resolves: items in
     ``keep_item_ids`` resolve KEPT (embezzled — requires the consent double-gate; the
     stone stays in the carrier's hands and NO vault event is booked), the rest resolve
-    DEPOSITED (custody converts to a ``VaultHolding`` + audited DEPOSIT event).
-    Raises ``ValidationError`` when a keep is requested but the double-gate fails.
+    DEPOSITED (custody converts to a ``VaultHolding`` + audited DEPOSIT event) — unless
+    the item is already vaulted in THIS org's vault (a plain ``VaultDepositAction`` beat
+    us to it), in which case the transit resolves DEPOSITED without a second holding or
+    event (#2540 review finding 3 — closes the wedge where an honestly-deposited item's
+    open transit would otherwise hit the ``VaultHolding`` OneToOne and IntegrityError the
+    whole act). Raises ``ValidationError`` when a keep is requested but the double-gate
+    fails, or when ``keep_item_ids`` names anything outside the carrier's own open
+    transits for this org (#2540 review: a bogus id must never silently no-op into a
+    full honest deposit, nor spuriously block one) — either way, nothing resolves.
+
+    Every remaining non-kept, not-already-vaulted transit additionally requires the
+    carrier still HOLD the item right now (#2540 review finding 2 — sell-the-stone-
+    then-deliver must not both pocket the sale price AND yank the item into the vault
+    out of the buyer's hands): a mismatch fails the WHOLE act with a neutral
+    ``ValidationError`` — no repossession is attempted here, nothing resolves. That
+    check runs strictly AFTER the already-vaulted-here check above, since a vaulted
+    item's holder is null and would otherwise wrongly trip the holder mismatch.
     """
     vault = get_or_create_org_vault(organization)
     keep_ids = set(keep_item_ids)
-    if keep_ids and not can_embezzle_from(organization, carrier_persona):
-        msg = "Skimming this house's collection is not on the table."
-        raise ValidationError(msg)
     transits = list(
         VaultTransit.objects.filter(
             vault=vault,
@@ -198,28 +218,56 @@ def resolve_vault_transit(
             resolved_at__isnull=True,
         ).select_related("item_instance")
     )
+    open_item_ids = {transit.item_instance_id for transit in transits}
+    if keep_ids - open_item_ids:
+        msg = "PLACEHOLDER: you cannot keep what you are not carrying for this house."
+        raise ValidationError(msg)
+    if keep_ids and not can_embezzle_from(organization, carrier_persona):
+        msg = "Skimming this house's collection is not on the table."
+        raise ValidationError(msg)
     now = timezone.now()
     for transit in transits:
         item = ItemInstance.objects.select_for_update().get(pk=transit.item_instance_id)
+        # Race hardening (#2540 review): re-check under lock in case a concurrent
+        # resolve_vault_transit call already resolved this transit between the
+        # initial (unlocked) SELECT above and this row's lock.
+        locked_transit = VaultTransit.objects.select_for_update().get(pk=transit.pk)
+        if locked_transit.resolved_at is not None:
+            continue
         if item.pk in keep_ids:
             transit.resolution = VaultTransitResolution.KEPT
         else:
-            if item.game_object is not None:
-                item.game_object.delete()
-                item.game_object = None
-            item.holder_character_sheet = None
-            item.save(update_fields=["holder_character_sheet", "game_object"])
-            VaultHolding.objects.create(
-                vault=vault, item_instance=item, deposited_by=carrier_persona
-            )
-            OrgVaultEvent.objects.create(
-                vault=vault,
-                item_instance=item,
-                kind=OrgVaultEventKind.DEPOSIT,
-                actor_persona=carrier_persona,
-                reason="collection deposit",
-            )
-            transit.resolution = VaultTransitResolution.DEPOSITED
+            already_vaulted_here = VaultHolding.objects.filter(
+                vault=vault, item_instance=item
+            ).exists()
+            if already_vaulted_here:
+                # Finding 3: delivered already (plain deposit beat this call to it) —
+                # resolve without creating a duplicate holding or duplicate event.
+                transit.resolution = VaultTransitResolution.DEPOSITED
+            elif item.holder_character_sheet_id != carrier_persona.character_sheet_id:
+                # Finding 2: the carrier no longer holds this item — sold it, or it's
+                # vaulted in a DIFFERENT org's vault. Fail the whole act loudly; the
+                # @transaction.atomic wrapper rolls back anything resolved so far in
+                # this call.
+                msg = "PLACEHOLDER: you no longer carry all of the take."
+                raise ValidationError(msg)
+            else:
+                if item.game_object is not None:
+                    item.game_object.delete()
+                    item.game_object = None
+                item.holder_character_sheet = None
+                item.save(update_fields=["holder_character_sheet", "game_object"])
+                VaultHolding.objects.create(
+                    vault=vault, item_instance=item, deposited_by=carrier_persona
+                )
+                OrgVaultEvent.objects.create(
+                    vault=vault,
+                    item_instance=item,
+                    kind=OrgVaultEventKind.DEPOSIT,
+                    actor_persona=carrier_persona,
+                    reason="collection deposit",
+                )
+                transit.resolution = VaultTransitResolution.DEPOSITED
         transit.resolved_at = now
         transit.save(update_fields=["resolution", "resolved_at"])
     return transits
