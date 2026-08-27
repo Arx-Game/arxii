@@ -110,15 +110,21 @@ browsing as (state 2.5 in the four-state model: logged out / logged in-no-select
 / selected / puppeting) — `PlayerData.selected_entry`, mutated only through
 `world.roster.services.selection.set_selected_entry`, mirrored client-side by
 `gameSlice` (#3412). Selection is a fact, not an action: it carries zero
-lifecycle, session, or puppeting side effects — see ADR-0241. PLACEHOLDER: the
-player-facing name for this state (currently spelled out in UI copy, e.g. "Taken
-Up" below) is Apostate's to finalize before it ships broadly.
+lifecycle, session, or puppeting side effects — see ADR-0241. Player-facing
+state label ratified by Apostate 2026-08-27: **Playing: Not In World** (see
+below).
 _Avoid_: active character (ambiguous with puppeting/session state); current
-character (same ambiguity).
+character (same ambiguity); taken up (retired working label, superseded by the
+ratified term).
 
-**Taken Up**:
-PLACEHOLDER player-facing label for Selection (state 2.5) — "you have taken up
-[Character]," distinct from actively playing them. Apostate's call to finalize;
-not yet load-bearing anywhere except descriptive code comments/help text.
-_Avoid_: treating this as settled terminology — it is a working label, not a
-ratified one.
+**Playing: Not In World**:
+Ratified player-facing label for Selection (state 2.5), by Apostate 2026-08-27 —
+a character is being played but is not in the world (vs. state 3, puppeted play).
+The ratification carries a UI ruling with it: the load-bearing state signal is the
+**selected character's portrait, prominently displayed** — played-by portraits are
+one of the game's most popular features and effectively every player sets them, so
+the docked portrait itself tells the player who they are playing; the text label is
+supporting copy and the accessible equivalent (some blind players skip portraits —
+the label/alt text must always carry the same fact). Design chrome around the
+portrait, not around a subtle text badge.
+_Avoid_: taken up (retired); subtle text-only state indicators.
