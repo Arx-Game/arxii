@@ -3,9 +3,9 @@
 <!--
 Numbering note (#3412 slice 1 task 5): this worktree's docs/adr/ topped out at
 0239 (shared-DE-currency) at task-5 time, but origin/main had already moved to
-0240 (situations-are-state-driven) via merged PRs #3408/#3409 (which resolved
-the earlier 0235/0236 in-flight collision this branch was warned about). 0241
-is the next number clear of both this worktree's local tip and main's tip;
+0240 (situations-are-state-driven, PR #3399). PRs #3408/#3409 landed as
+ADR-0235/0236, resolving the in-flight collision this branch was warned about.
+0241 is the next number clear of both this worktree's local tip and main's tip;
 re-verify at enqueue in case another PR claimed it in the meantime.
 -->
 
