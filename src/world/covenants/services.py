@@ -157,38 +157,22 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
 
 
 @transaction.atomic
-def create_covenant(  # noqa: PLR0913, C901, PLR0912
-    *,
-    name: str,
-    covenant_type: str,
-    sworn_objective: str,
-    founders: Sequence[CovenantFounder],
-    battle_binding: str = "",
-    campaign_story: Story | None = None,
-    leader: CharacterSheet | None = None,
-    flat: bool = False,
-) -> Covenant:
-    """Create a covenant with its initial set of founder memberships. Atomic.
-
-    Covenants are inherently group structures — formation requires at least
-    two distinct founders (`feedback_covenants_are_group_only.md`). The
-    serializer layer enforces this for user-supplied data; the service
-    raises typed exceptions as defensive assertions against programmer
-    errors (Insufficient/DuplicateFounderError).
-
-    Rank ladder:
-    - Default (flat=False): "Founder" rank (tier 1, all caps) + "Member" rank (tier 2, no caps).
-    - Flat (flat=True): single "Member" rank (tier 1, no caps).
-
-    Seating: the founder with ``is_leader=True`` gets the Founder rank; all others get Member.
-    If no founder is flagged is_leader and flat=False, the FIRST founder defaults to leader.
-    """
+def _validate_founders(founders: Sequence[CovenantFounder]) -> None:
+    """Raise InsufficientFoundersError/DuplicateFounderError for a bad founder list."""
     if len(founders) < MINIMUM_FOUNDERS:
         raise InsufficientFoundersError
     sheet_pks = [founder.character_sheet.pk for founder in founders]
     if len(set(sheet_pks)) != len(sheet_pks):
         raise DuplicateFounderError
 
+
+def _validate_covenant_type_constraints(
+    covenant_type: str,
+    battle_binding: str,
+    campaign_story: Story | None,
+    leader: CharacterSheet | None,
+) -> None:
+    """Raise if covenant_type/battle_binding/campaign_story/leader are inconsistent."""
     from world.covenants.constants import BattleBinding, CovenantType  # noqa: PLC0415
     from world.covenants.exceptions import (  # noqa: PLC0415
         BattleBindingNotAllowedError,
@@ -219,18 +203,16 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
     elif leader is not None:
         raise CourtLeaderNotAllowedError
 
-    cov = Covenant.objects.create(
-        name=name,
-        covenant_type=covenant_type,
-        sworn_objective=sworn_objective,
-        battle_binding=battle_binding,
-        campaign_story=campaign_story,
-        leader=leader,
-    )
 
-    # Build rank ladder and determine which rank each founder gets.
-    top_rank, base_rank = _build_default_ladder(cov, flat=flat)
-
+def _create_founder_memberships(
+    cov: Covenant,
+    founders: Sequence[CovenantFounder],
+    top_rank: CovenantRank,
+    base_rank: CovenantRank,
+    *,
+    flat: bool,
+) -> None:
+    """Create each founder's CharacterCovenantRole, seating the leader in top_rank."""
     # Determine the leader: the first is_leader=True founder; if none, the first founder.
     any_leader_flagged = any(f.is_leader for f in founders)
     for idx, founder in enumerate(founders):
@@ -247,6 +229,59 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
             rank=founder_rank,
         )
         founder.character_sheet.character.covenant_roles.invalidate()
+
+
+def _notify_founders_covenant_sworn(founders: Sequence[CovenantFounder]) -> None:
+    """Fire the #1035 COVENANT_SWORN external-act beat for each founder."""
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+
+    for founder in founders:
+        notify_external_act(founder.character_sheet, ExternalAct.COVENANT_SWORN)
+
+
+def create_covenant(  # noqa: PLR0913
+    *,
+    name: str,
+    covenant_type: str,
+    sworn_objective: str,
+    founders: Sequence[CovenantFounder],
+    battle_binding: str = "",
+    campaign_story: Story | None = None,
+    leader: CharacterSheet | None = None,
+    flat: bool = False,
+) -> Covenant:
+    """Create a covenant with its initial set of founder memberships. Atomic.
+
+    Covenants are inherently group structures — formation requires at least
+    two distinct founders (`feedback_covenants_are_group_only.md`). The
+    serializer layer enforces this for user-supplied data; the service
+    raises typed exceptions as defensive assertions against programmer
+    errors (Insufficient/DuplicateFounderError).
+
+    Rank ladder:
+    - Default (flat=False): "Founder" rank (tier 1, all caps) + "Member" rank (tier 2, no caps).
+    - Flat (flat=True): single "Member" rank (tier 1, no caps).
+
+    Seating: the founder with ``is_leader=True`` gets the Founder rank; all others get Member.
+    If no founder is flagged is_leader and flat=False, the FIRST founder defaults to leader.
+    """
+    _validate_founders(founders)
+    _validate_covenant_type_constraints(covenant_type, battle_binding, campaign_story, leader)
+
+    cov = Covenant.objects.create(
+        name=name,
+        covenant_type=covenant_type,
+        sworn_objective=sworn_objective,
+        battle_binding=battle_binding,
+        campaign_story=campaign_story,
+        leader=leader,
+    )
+
+    # Build rank ladder and determine which rank each founder gets.
+    top_rank, base_rank = _build_default_ladder(cov, flat=flat)
+
+    _create_founder_memberships(cov, founders, top_rank, base_rank, flat=flat)
     # The covenant is freshly created so its member_roster handler is new, but
     # invalidate for consistency in case the handler was accessed during this flow.
     cov.member_roster.invalidate()
@@ -254,11 +289,7 @@ def create_covenant(  # noqa: PLR0913, C901, PLR0912
     # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
     # (ADR-0112) — isolation from create_covenant's own @transaction.atomic block now
     # lives in that shared wrapper.
-    from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
-
-    for founder in founders:
-        notify_external_act(founder.character_sheet, ExternalAct.COVENANT_SWORN)
+    _notify_founders_covenant_sworn(founders)
 
     return cov
 

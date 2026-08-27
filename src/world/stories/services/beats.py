@@ -295,6 +295,93 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
 _OUTLIER_SUCCESS_LEVEL_THRESHOLD = 8
 
 
+def _validate_outcome_tier_args(
+    beat: Beat, withdrawal: bool, force_outcome: BeatOutcome | None
+) -> None:
+    """Raise ValueError for a malformed record_outcome_tier_completion call."""
+    if beat.predicate_type != BeatPredicateType.OUTCOME_TIER:
+        msg = (
+            f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
+            "only OUTCOME_TIER beats can be resolved via record_outcome_tier_completion."
+        )
+        raise ValueError(msg)
+    if withdrawal and force_outcome != BeatOutcome.PENDING_GM_REVIEW:
+        msg = (
+            f"Beat {beat.pk}: withdrawal=True is only legal with "
+            "force_outcome=PENDING_GM_REVIEW (the beat pends; withdrawal-authored "
+            "stakes fire their WITHDRAWAL branch)."
+        )
+        raise ValueError(msg)
+
+
+def _record_forced_review_completion(  # noqa: PLR0913
+    *,
+    beat: Beat,
+    progress: AnyStoryProgress,
+    scope: StoryScope,
+    gm_notes: str,
+    participants: list[Persona] | None,
+    withdrawal: bool,
+    force_outcome: BeatOutcome,
+) -> BeatCompletion:
+    """Resolve a machine-detected non-success/failure beat to PENDING_GM_REVIEW.
+
+    Fires no consequence pool - the beat sits in PENDING_GM_REVIEW for a GM to
+    adjudicate. Only PENDING_GM_REVIEW is accepted; any other force_outcome raises.
+    """
+    if force_outcome != BeatOutcome.PENDING_GM_REVIEW:
+        msg = (
+            f"force_outcome {force_outcome!r} is not valid; only "
+            "PENDING_GM_REVIEW is accepted by the machine-driven path."
+        )
+        raise ValueError(msg)
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=BeatOutcome.PENDING_GM_REVIEW,
+        era=Era.objects.get_active(),
+        gm_notes=gm_notes,
+        progress=progress,
+        scope=scope,
+        outcome_tier=None,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=BeatOutcome.PENDING_GM_REVIEW,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=participants if scope == StoryScope.GROUP else None,
+        outcome_tier=None,
+        withdrawal=withdrawal,
+    )
+
+
+def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> BeatOutcome:
+    """Derive the coarse BeatOutcome for a graded CheckOutcome, honoring the outlier-crit gate.
+
+    Outlier-crit: when outcome_tier.success_level is at or above
+    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has no
+    Consequence row at that exact tier, the outcome resolves to PENDING_GM_REVIEW
+    instead of SUCCESS (the pool does not fire for this call).
+    """
+    outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
+    is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD
+    if outcome != BeatOutcome.SUCCESS or not is_outlier_crit:
+        return outcome
+
+    pool = _pool_for_outcome(beat, BeatOutcome.SUCCESS)
+    has_authored_tier = False
+    if pool is not None:
+        from world.checks.consequence_resolution import (  # noqa: PLC0415
+            resolve_pool_consequences,
+        )
+
+        has_authored_tier = any(
+            c.outcome_tier_id == outcome_tier.pk for c in resolve_pool_consequences(pool)
+        )
+    return outcome if has_authored_tier else BeatOutcome.PENDING_GM_REVIEW
+
+
 def record_outcome_tier_completion(  # noqa: PLR0913
     *,
     progress: AnyStoryProgress,
@@ -346,19 +433,7 @@ def record_outcome_tier_completion(  # noqa: PLR0913
 
     Flips beat.outcome in-place, creates and returns a BeatCompletion row.
     """
-    if beat.predicate_type != BeatPredicateType.OUTCOME_TIER:
-        msg = (
-            f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
-            "only OUTCOME_TIER beats can be resolved via record_outcome_tier_completion."
-        )
-        raise ValueError(msg)
-    if withdrawal and force_outcome != BeatOutcome.PENDING_GM_REVIEW:
-        msg = (
-            f"Beat {beat.pk}: withdrawal=True is only legal with "
-            "force_outcome=PENDING_GM_REVIEW (the beat pends; withdrawal-authored "
-            "stakes fire their WITHDRAWAL branch)."
-        )
-        raise ValueError(msg)
+    _validate_outcome_tier_args(beat, withdrawal, force_outcome)
 
     scope = progress.story.scope
 
@@ -366,30 +441,14 @@ def record_outcome_tier_completion(  # noqa: PLR0913
     # (e.g. a fled/abandoned encounter). Skips success_level derivation; fires no
     # consequence pool — the beat sits in PENDING_GM_REVIEW for a GM to adjudicate.
     if force_outcome is not None:
-        if force_outcome != BeatOutcome.PENDING_GM_REVIEW:
-            msg = (
-                f"force_outcome {force_outcome!r} is not valid; only "
-                "PENDING_GM_REVIEW is accepted by the machine-driven path."
-            )
-            raise ValueError(msg)
-        completion_kwargs = _scope_completion_kwargs(
+        return _record_forced_review_completion(
             beat=beat,
-            outcome=BeatOutcome.PENDING_GM_REVIEW,
-            era=Era.objects.get_active(),
+            progress=progress,
+            scope=scope,
             gm_notes=gm_notes,
-            progress=progress,
-            scope=scope,
-            outcome_tier=None,
-        )
-        return _create_completion_and_fire_pool(
-            beat=beat,
-            outcome=BeatOutcome.PENDING_GM_REVIEW,
-            completion_kwargs=completion_kwargs,
-            progress=progress,
-            scope=scope,
-            explicit_participants=participants if scope == StoryScope.GROUP else None,
-            outcome_tier=None,
+            participants=participants,
             withdrawal=withdrawal,
+            force_outcome=force_outcome,
         )
 
     if outcome_tier is None:
@@ -399,21 +458,7 @@ def record_outcome_tier_completion(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
-    outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
-    is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD
-    if outcome == BeatOutcome.SUCCESS and is_outlier_crit:
-        pool = _pool_for_outcome(beat, BeatOutcome.SUCCESS)
-        has_authored_tier = False
-        if pool is not None:
-            from world.checks.consequence_resolution import (  # noqa: PLC0415
-                resolve_pool_consequences,
-            )
-
-            has_authored_tier = any(
-                c.outcome_tier_id == outcome_tier.pk for c in resolve_pool_consequences(pool)
-            )
-        if not has_authored_tier:
-            outcome = BeatOutcome.PENDING_GM_REVIEW
+    outcome = _derive_outcome_tier_outcome(beat, outcome_tier)
 
     completion_kwargs = _scope_completion_kwargs(
         beat=beat,
