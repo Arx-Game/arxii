@@ -22,6 +22,21 @@ chkno(){ if eval "$2" >/dev/null 2>&1; then bad "$1"; else ok "$1"; fi }
 # that *describe* the safe behaviour (a test matched by its own explanation
 # is a broken test).
 nc(){ sed -E '/^[[:space:]]*#/d; s/[[:space:]]+#.*$//' "$1"; }
+# has_code <pattern> <file>: extended-regex <pattern> appears in <file>'s
+# non-comment lines. Deliberately NOT `nc f | grep -q p`: that form's exit
+# status depends on two concurrent processes, and an early-exiting `grep -q`
+# made one such check flip red on CI while passing 60/60 locally on the
+# IDENTICAL commit (PR #3407, run 33090635697 vs 33090640942 — same SHA, one
+# FAIL, one PASS). The command substitution here completes before grep starts,
+# so there is nothing left to race. Prefer this over a pipeline in new checks.
+has_code(){ grep -qE "$1" <<<"$(nc "$2")"; }
+# has_code_between <start_re> <end_re> <pattern> <file>: like has_code, but
+# scoped to the non-comment lines between two anchors — for asserting things
+# about ONE task block rather than a whole file.
+has_code_between(){
+  grep -qE "$3" <<<"$(sed -n "/$1/,/$2/p" "$4" \
+    | sed -E '/^[[:space:]]*#/d; s/[[:space:]]+#.*$//')"
+}
 # line_no <pattern> <file>: 1-based line number of the first match, or ""
 # if not found. Used by assert_before() below (previously two hand-rolled
 # grep+cut+head pipelines per ordering check).
@@ -643,33 +658,33 @@ assert_before "pre-migration dump runs BEFORE the migrate task" \
 # copy, which is precisely the failure the dump exists to prevent. The check
 # reads the task block between the dump task's name and the migrate task's.
 chkno "the dump task does not swallow its own failure" \
-  "sed -n '/name: Dump the database before migrating/,/name: Apply Django/p' \
-     \"${DEP}\" | nc /dev/stdin | grep -q 'failed_when'"
+  "has_code_between 'name: Dump the database before migrating' 'name: Apply Django' \
+     'failed_when' \"${DEP}\""
 # Gate on `migrate --check` so code-only deploys pay nothing. If this ever
 # turns into an unconditional dump, that is a (harmless) cost regression worth
 # noticing; if it turns into NO gate at all, the `when:` is gone and the dump
 # may not run when it must.
 chk   "the dump is gated on a pending-migration check" \
-  "nc \"${DEP}\" | grep -q 'migrate --check' && nc \"${DEP}\" | grep -q 'app_migrate_check.rc'"
+  "has_code 'migrate --check' \"${DEP}\" && has_code 'app_migrate_check\\.rc' \"${DEP}\""
 DUMPSH=infra/ansible/roles/app_deploy/templates/arxii-pre-migrate-dump.sh.j2
 # A dump that is merely PRESENT is not a dump you can restore from. pipefail
 # catches a failing pg_dump; the completion-marker check catches truncation.
 chk   "dump script sets pipefail" \
-  "nc \"${DUMPSH}\" | grep -qE 'set -euo pipefail'"
+  "has_code 'set -euo pipefail' \"${DUMPSH}\""
 chk   "dump script verifies the dump completed, not just that it exists" \
-  "nc \"${DUMPSH}\" | grep -q 'PostgreSQL database dump complete'"
+  "has_code 'PostgreSQL database dump complete' \"${DUMPSH}\""
 # This script must never grow a restore or an upload path: it runs unattended
 # on every migrating deploy, where a destructive or network operation has no
 # business being (see the header comment for the reasoning).
 chkno "dump script never restores (no psql -f / pg_restore / dropdb)" \
-  "nc \"${DUMPSH}\" | grep -qE 'pg_restore|dropdb|createdb|psql[^|]*-f '"
+  "has_code 'pg_restore|dropdb|createdb|psql[^|]*-f ' \"${DUMPSH}\""
 chkno "dump script never uploads (no aws/s3)" \
-  "nc \"${DUMPSH}\" | grep -qE 'aws |s3://'"
+  "has_code 'aws |s3://' \"${DUMPSH}\""
 # Retention must stay scoped to its OWN directory and glob. roles/backups
 # prunes {{ backups_staging }}/arxii-*.sql.gz; if these two ever share a path
 # or a glob they start deleting each other's files.
 chk   "dump retention is scoped to the premigrate- glob" \
-  "nc \"${DUMPSH}\" | grep -E 'rm -f' -B2 | grep -q 'premigrate-'"
+  "has_code 'premigrate-[^ ]*sql\\.gz.*rm -f|rm -f' \"${DUMPSH}\" && has_code 'ls -1t .*premigrate-' \"${DUMPSH}\""
 # pg_dump cannot dump a server newer than itself, so the client major must
 # track postgres_version or every pre-migration dump fails (and, fail-closed,
 # blocks the deploy).
