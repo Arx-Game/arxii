@@ -28917,6 +28917,22 @@ export interface components {
       /** @description Vacant slot set aside for the Phase D house creator. */
       is_claimable?: boolean;
     };
+    /**
+     * @description The fading half of a #2378-follow-up humiliation, for examine/profile display.
+     *
+     *     Serializes :func:`world.justice.sentences.active_humiliation_mark`'s
+     *     :class:`~world.justice.types.PublicMark` (or None) — ``persona_name``/
+     *     ``area_name`` are implied by whichever persona this is attached to, so only
+     *     ``kind``, ``until``, and the neutral ``explanation`` copy
+     *     (``constants.HUMILIATION_MARK_EXPLANATION``) are exposed. Consumed by
+     *     ``PersonaSerializer.humiliation_mark`` (``world/scenes/serializers.py``).
+     */
+    HumiliationMark: {
+      kind: string;
+      /** Format: date-time */
+      until: string;
+      explanation: string;
+    };
     /** @description Serializer for HybridRelationshipType with nested requirements. */
     HybridRelationshipType: {
       readonly id: number;
@@ -37217,6 +37233,7 @@ export interface components {
       readonly guise_quote: string;
       readonly guise_personality: string;
       readonly guise_background: string;
+      readonly humiliation_mark: components['schemas']['HumiliationMark'] | null;
     };
     /**
      * @description One warrant row on the viewer's own crime tab — tiers only, never the raw number.

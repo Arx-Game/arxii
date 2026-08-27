@@ -50310,6 +50310,29 @@ components:
       - id
       - name
       - tier
+    HumiliationMark:
+      type: object
+      description: |-
+        The fading half of a #2378-follow-up humiliation, for examine/profile display.
+
+        Serializes :func:`world.justice.sentences.active_humiliation_mark`'s
+        :class:`~world.justice.types.PublicMark` (or None) — ``persona_name``/
+        ``area_name`` are implied by whichever persona this is attached to, so only
+        ``kind``, ``until``, and the neutral ``explanation`` copy
+        (``constants.HUMILIATION_MARK_EXPLANATION``) are exposed. Consumed by
+        ``PersonaSerializer.humiliation_mark`` (``world/scenes/serializers.py``).
+      properties:
+        kind:
+          type: string
+        until:
+          type: string
+          format: date-time
+        explanation:
+          type: string
+      required:
+      - explanation
+      - kind
+      - until
     HybridRelationshipType:
       type: object
       description: Serializer for HybridRelationshipType with nested requirements.
@@ -64837,6 +64860,11 @@ components:
         guise_background:
           type: string
           readOnly: true
+        humiliation_mark:
+          allOf:
+          - $ref: '#/components/schemas/HumiliationMark'
+          nullable: true
+          readOnly: true
       required:
       - allow_social_actions
       - character_sheet
@@ -64845,6 +64873,7 @@ components:
       - guise_concept
       - guise_personality
       - guise_quote
+      - humiliation_mark
       - id
       - name
       - roster_entry
