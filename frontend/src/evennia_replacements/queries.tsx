@@ -26,23 +26,23 @@ export function useAccountQuery() {
     if (result.data === undefined) {
       return;
     }
-    dispatch(setAccount(result.data));
+    const account = result.data;
+    dispatch(setAccount(account));
     // Reload survival (#3412): mirror the durable server-side selection into
     // gameSlice on every successful account fetch — hard reload -> this
     // fetch -> hydration -> IC-scoped pages (tidings, own-sheet) that read
     // `gameSlice.active` stop degrading. #3412 review fix: this now mirrors
     // BOTH directions — a `selected_entry` SETS active/activeEntryId, and its
-    // absence CLEARS them (e.g. after `useSelectCharacterMutation.mutate(null)`
-    // + the account refetch it triggers) — see `hydrateActiveCharacter`'s own
-    // doc comment for why clearing the mirror is safe (never tears down a
-    // live session; selection isn't presence in either direction).
-    dispatch(
-      hydrateActiveCharacter(
-        result.data.selected_entry
-          ? { name: result.data.selected_entry.name, entryId: result.data.selected_entry.id }
-          : null
-      )
-    );
+    // absence (including `account === null`, the logged-out/no-account case)
+    // CLEARS them (e.g. after `useSelectCharacterMutation.mutate(null)` + the
+    // account refetch it triggers) — see `hydrateActiveCharacter`'s own doc
+    // comment for why clearing the mirror is safe (never tears down a live
+    // session; selection isn't presence in either direction). `entry` is
+    // hoisted out (rather than narrowing `account.selected_entry` inline) so
+    // the `account === null` case falls through the same `?? null` path
+    // instead of needing its own branch.
+    const entry = account?.selected_entry ?? null;
+    dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
   }, [result.data, dispatch]);
 
   return result;
