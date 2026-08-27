@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from world.boards.models import Board, BoardPost
 
+_NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
+
 
 def _actor_persona(actor: ObjectDB):
     """Resolve the actor's active persona, or None (no character sheet)."""
@@ -100,7 +102,7 @@ class PostToBoardAction(Action):
 
         persona = _actor_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_NO_ACTIVE_CHARACTER_MESSAGE)
 
         board, error = _resolve_target_board(actor, kwargs)
         if board is None:
@@ -161,7 +163,7 @@ class EditBoardPostAction(Action):
 
         persona = _actor_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_NO_ACTIVE_CHARACTER_MESSAGE)
 
         post, error = _resolve_target_post(kwargs)
         if post is None:
@@ -201,7 +203,7 @@ class RemoveBoardPostAction(Action):
 
         persona = _actor_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_NO_ACTIVE_CHARACTER_MESSAGE)
 
         post, error = _resolve_target_post(kwargs)
         if post is None:

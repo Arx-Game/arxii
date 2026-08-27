@@ -15,6 +15,8 @@ from flows.scene_data_manager import SceneDataManager
 if TYPE_CHECKING:
     from world.items.models import ItemInstance
 
+_LOOK_AT_WHAT_MESSAGE = "Look at what?"
+
 
 def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     """Resolve the look target from either dispatch shape (#3044).
@@ -57,7 +59,7 @@ class LookAction(Action):
     ) -> ActionResult:
         target = _resolve_look_target(kwargs)
         if target is None:
-            return ActionResult(success=False, message="Look at what?")
+            return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
 
         # #1225: gate direct look-at-target on the real perception/concealment seam.
         # The bare-``look`` case (target is the room itself) and looking at oneself
@@ -143,10 +145,10 @@ class LookAtItemAction(Action):
         container_id = kwargs.get("container_id")
 
         if not item_name:
-            return ActionResult(success=False, message="Look at what?")
+            return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
 
         if owner_id is None and container_id is None:
-            return ActionResult(success=False, message="Look at what?")
+            return ActionResult(success=False, message=_LOOK_AT_WHAT_MESSAGE)
 
         if owner_id is not None:
             return self._look_at_worn(actor, owner_id, item_name)

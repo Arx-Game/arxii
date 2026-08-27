@@ -91,6 +91,37 @@ def _tokenize_draft_args(rest: str) -> tuple[str, list[str], dict[str, str]]:
     return " ".join(name_parts).strip(), invite_names, kwargs
 
 
+def _tokenize_kv_with_trailing(tokens: list[str]) -> dict[str, str]:
+    """Parse ``key=value`` *tokens* into a dict, consuming trailing non-``=`` tokens.
+
+    A value with no ``=`` in the tokens that follow it is appended to that
+    value (trailing-value semantics: ``role=Iron Warden`` spans two tokens) -
+    mirrors ``_tokenize_draft_args``'s per-key trailing-value rule. Tokens
+    that carry no ``=`` at all and aren't consumed as trailing text are
+    skipped.
+    """
+    kwargs: dict[str, str] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if "=" in token and not token.startswith("="):
+            key, _, val = token.partition("=")
+            j = index + 1
+            trailing: list[str] = []
+            while j < len(tokens) and "=" not in tokens[j]:
+                trailing.append(tokens[j])
+                j += 1
+            if trailing:
+                val = " ".join([val, *trailing]).strip()
+                index = j
+            else:
+                index += 1
+            kwargs[key] = val
+        else:
+            index += 1
+    return kwargs
+
+
 class CmdRitual(ArxCommand):
     """Perform a magical ritual or manage a multi-participant ritual session.
 
@@ -263,27 +294,7 @@ class CmdRitual(ArxCommand):
         )
         # Consume trailing non-key=value tokens into a key's value so that
         # multi-word names (e.g. ``role=Iron Warden``) are captured in full.
-        # Mirrors ``_tokenize_draft_args`` trailing-value semantics.
-        kwargs: dict[str, str] = {}
-        tokens = rest.split()[1:]
-        index = 0
-        while index < len(tokens):
-            token = tokens[index]
-            if "=" in token and not token.startswith("="):
-                key, _, val = token.partition("=")
-                j = index + 1
-                trailing: list[str] = []
-                while j < len(tokens) and "=" not in tokens[j]:
-                    trailing.append(tokens[j])
-                    j += 1
-                if trailing:
-                    val = " ".join([val, *trailing]).strip()
-                    index = j
-                else:
-                    index += 1
-                kwargs[key] = val
-            else:
-                index += 1
+        kwargs = _tokenize_kv_with_trailing(rest.split()[1:])
 
         sheet = self.caller.sheet_data
         participant = (

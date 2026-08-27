@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 NOT_IN_ACTIVE_ROUND_MESSAGE = "You are not in an active combat round."
 NO_ACTION_DECLARED_MESSAGE = "You have not declared an action yet."
 _NO_SUCH_OPPONENT_MSG = "No such opponent in this encounter."
+_NO_SUCH_ALLY_MSG = "No such ally in this encounter."
 
 
 def _sheet(actor: ObjectDB) -> CharacterSheet | None:
@@ -214,7 +215,7 @@ class CoverAction(Action):
             return ActionResult(success=False, message="Cover requires an ally to protect.")
         ally = _resolve_ally(participant, ally_participant_id)
         if ally is None:
-            return ActionResult(success=False, message="No such ally in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
         try:
             declare_cover(participant, ally)
         except ValueError as err:
@@ -251,7 +252,7 @@ class InterposeAction(Action):
             return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
         ally = _resolve_ally(participant, ally_participant_id)
         if ally_participant_id is not None and ally is None:
-            return ActionResult(success=False, message="No such ally in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
         technique = _resolve_technique(technique_id)
         if technique_id is not None and technique is None:
             return ActionResult(success=False, message="No such technique.")
@@ -382,7 +383,7 @@ class SuccorAction(Action):
             return ActionResult(success=False, message="Succor requires an ally to shelter.")
         ally = _resolve_ally(participant, ally_participant_id)
         if ally is None:
-            return ActionResult(success=False, message="No such ally in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
         try:
             declare_succor(participant, ally)
         except ValueError as err:
@@ -463,7 +464,7 @@ class UseItemManeuverAction(Action):
         if ally_participant_id is not None:
             target = _resolve_ally(participant, ally_participant_id)
             if target is None:
-                return ActionResult(success=False, message="No such ally in this encounter.")
+                return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
         elif opponent_id is not None:
             target = _resolve_opponent(participant, opponent_id)
             if target is None:
@@ -804,7 +805,7 @@ class RallyAction(Action):
             return ActionResult(success=False, message="Rally requires an ally to inspire.")
         ally = _resolve_ally(participant, ally_participant_id)
         if ally is None:
-            return ActionResult(success=False, message="No such ally in this encounter.")
+            return ActionResult(success=False, message=_NO_SUCH_ALLY_MSG)
         try:
             declare_rally(participant, ally)
         except ValueError as err:
