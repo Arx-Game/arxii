@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
@@ -105,9 +105,20 @@ export function GamePage() {
   // its accumulated `unread` count on every rerun. A session that already
   // exists (connected or not — e.g. GameTopBar was used to switch puppets
   // before this effect ever saw a gap) is therefore left entirely alone.
+  // The crossing is once-per-mount: the ref spends the auto-start on the
+  // FIRST session-less active name this mount observes (present at mount, or
+  // arriving via the initial account hydration on a hard reload of /game).
+  // Any LATER change of `active` while mounted — a cross-tab selection
+  // surfacing through a focus refetch, a failed select POST reverting to the
+  // server value — must not connect a session nobody asked this tab to start:
+  // that would be selection summoning presence, which the state model forbids
+  // outside this one mount-path crossing (ADR-0241). Switching puppets
+  // mid-mount stays what it always was: GameTopBar's explicit avatar click.
+  const autoStartSpent = useRef(false);
   const hasActiveSession = active ? Boolean(sessions[active]) : false;
   useEffect(() => {
-    if (!active || hasActiveSession) return;
+    if (!active || hasActiveSession || autoStartSpent.current) return;
+    autoStartSpent.current = true;
     dispatch(startSession(active));
     connect(active).catch(() => {});
   }, [active, hasActiveSession, dispatch, connect]);

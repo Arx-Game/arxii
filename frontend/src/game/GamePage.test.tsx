@@ -1,4 +1,4 @@
-import { screen, within, waitFor } from '@testing-library/react';
+import { act, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
@@ -1485,6 +1485,31 @@ describe('GamePage', () => {
 
       await screen.findByText('stretches languidly.');
       expect(connectMock).not.toHaveBeenCalled();
+    });
+
+    it('spends the auto-start once per mount: a later selection change never connects', async () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
+
+      renderWithProviders(<GamePage />);
+
+      await waitFor(() => {
+        expect(connectMock).toHaveBeenCalledWith(ACTIVE_NAME);
+      });
+      connectMock.mockClear();
+
+      // A selection change surfacing MID-MOUNT (cross-tab select arriving via
+      // an account refetch, or a failed select POST reverting to the server
+      // value) hydrates a new session-less name. The mount's one crossing is
+      // already spent — connecting here would be selection summoning presence
+      // (ADR-0241), so the effect must stay quiet and no session may appear.
+      act(() => {
+        store.dispatch(hydrateActiveCharacter({ name: 'Corvin', entryId: rosterEntry.id + 1 }));
+      });
+
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(store.getState().game.sessions['Corvin']).toBeUndefined();
+      expect(store.getState().game.active).toBe('Corvin');
     });
 
     it('does nothing when there is no selection at all', () => {
