@@ -252,6 +252,30 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
         related_name="codex_entries",
         help_text="Illustration for this entry, shown in the codex modal (#2408).",
     )
+    subject_item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="codex_entries_about",
+        help_text=(
+            "The item kind this entry is about, if any (#2540 exact-pointer ruling). "
+            "Template-only means 'any of this kind'; see subject_item_instance for the "
+            "narrower 'this exact one' pointer."
+        ),
+    )
+    subject_item_instance = models.ForeignKey(
+        "arxii.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="codex_entries_about",
+        help_text=(
+            "Optional exact instance this entry is about (#2540), narrowing "
+            "subject_item_template. SET_NULL so a destroyed instance degrades the "
+            "entry to template-only rather than deleting it."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -277,6 +301,13 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
         if self.is_featured and not self.is_public:
             msg = "A featured entry must also be public (is_public=True)."
             raise ValidationError({"is_featured": msg})
+        if (
+            self.subject_item_instance_id is not None
+            and self.subject_item_template_id is not None
+            and self.subject_item_instance.template_id != self.subject_item_template_id
+        ):
+            msg = "Must be an instance of subject_item_template when both are set."
+            raise ValidationError({"subject_item_instance": msg})
 
 
 class CharacterCodexKnowledge(SharedMemoryModel):

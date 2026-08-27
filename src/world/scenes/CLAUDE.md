@@ -114,7 +114,9 @@ the unified Persona identity system, and non-combat scene rounds.
 - **`Boon`** (#2540, `boon_models.py` + `boon_services.py`): the payload of a structured social ask
   ("ask a head/NPC for a thing, backed by a social roll"), attached 1:1 to a `SceneActionRequest`.
   Fields: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`, `item_instance`, `deed_text`,
-  `fulfilled_at`. **Slice 2 wired the full loop:** `create_action_request(boon=BoonAsk(...))`
+  `fulfilled_at`, `material_category` (nullable FK → `items.MaterialCategory`, slice 3 schema
+  landed with the item-pointer migration; consumed by a later material-boon completion path).
+  **Slice 2 wired the full loop:** `create_action_request(boon=BoonAsk(...))`
   validates eligibility up front (`validate_boon_ask`, dial 1 — penniless-target money / unheld item /
   empty deed / vault-stub asks are rejected before any row exists) and persists the `Boon` row
   BEFORE NPC auto-resolve, so the defender sees the ask pre-consent. The `boon` **resolver**
@@ -136,6 +138,13 @@ the unified Persona identity system, and non-combat scene rounds.
   (`resolved_base_difficulty(extra_tier_modifier=…)`); a piloted defender's difficulty choice
   rules — never band-shifted. Seeds: `Boon` template (`world/seeds/social_actions.py`) + `boon`
   consent category under `antagonism` (`world/seeds/consent.py`).
+  **Exact-pointer predicate (slice 3, #2540):** `character_has_item_pointer(*, sheet, item)` —
+  True when the sheet's roster entry holds prior knowledge naming `item` (or its template with
+  no instance pinned): a discovered `Clue` with `target_kind=ITEM`, a KNOWN `CodexEntry`, or
+  known `SecretKnowledge` — via the matching item-pointer FKs on `clues.Clue` / `codex.CodexEntry`
+  / `secrets.Secret` (see `docs/systems/investigation_and_discovery.md`). Answers knowledge only
+  (a destroyed item can still be "known"); callers needing liveness check separately. Not yet
+  wired into `validate_boon_ask` — a later task's job.
 
 ### `constants.py`
 - **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /

@@ -55,6 +55,17 @@ class Boon(SharedMemoryModel):
     deed_text = models.TextField(
         blank=True, help_text="The deed asked, for DEED boons (RP; no mechanical transfer)."
     )
+    material_category = models.ForeignKey(
+        "arxii.MaterialCategory",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Crafting-equivalence class asked for material-boon completion (#2540 slice "
+            "3, consumed by Task 2). Null when the ask is not material-scoped."
+        ),
+    )
     fulfilled_at = models.DateTimeField(
         null=True, blank=True, help_text="Set when a successful Boon has been fulfilled."
     )

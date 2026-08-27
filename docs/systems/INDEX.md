@@ -1445,9 +1445,15 @@ held captive to rescue, a character secret, or a masked identity); players acqui
 a collaborative **research project**.
 
 - **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
-  PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
-  documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
-  FKs → `scenes.Persona`, required together. Also carries a `NaturalKeyMixin` `slug`
+  PERSONA_LINK / ITEM + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is
+  the documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
+  FKs → `scenes.Persona`, required together. ITEM (#2540 exact-pointer ruling) is a second such
+  exception: `target_item_template` (required, FK → `items.ItemTemplate`) + optional
+  `target_item_instance` (FK → `items.ItemInstance`, must match the template's instance when
+  both set) — template-only means "any of this kind", instance-pinned means "this exact one".
+  ITEM has no "already known"/AUTOMATIC-grant concept; the held `CharacterClue` row IS the
+  knowledge, read by `scenes.boon_services.character_has_item_pointer`. Also carries a
+  `NaturalKeyMixin` `slug`
   (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
   lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
   `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
@@ -1498,7 +1504,11 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
-  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution),
+  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution;
+  `subject_item_template`/`subject_item_instance`, nullable FKs → `items.ItemTemplate`/
+  `ItemInstance` — #2540 exact-pointer ruling, an optional "this secret is about an item"
+  pointer, same shape as `Clue`'s ITEM target; dependency stays specific→general per
+  ADR-0010, `secrets` points items-ward, never the reverse),
   `SecretCategory` (staff-editable lookup; null category = Unknown), `SecretKnowledge`
   (roster-scoped held record with partial-knowledge layers — fact / `knows_category` /
   `knows_consequences`, monotonic; tracks *others* learning a secret),
@@ -2541,7 +2551,13 @@ action consent flow, and a three-mode non-combat round framework.
   cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
   `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
-  `item_instance`, `deed_text`, `fulfilled_at`. Slice 2 wired the full loop (`boon_services`):
+  `item_instance`, `deed_text`, `fulfilled_at`, `material_category` (nullable FK →
+  `items.MaterialCategory`, slice 3 schema, consumed by a material-boon completion path).
+  Slice 3 also adds `character_has_item_pointer(*, sheet, item)` (`boon_services.py`) —
+  the exact-pointer predicate for a named-item ask: True when the roster entry holds a
+  discovered ITEM-target clue, a KNOWN codex entry, or known secret knowledge naming the
+  instance (or its template with no instance pinned) — see `ClueTargetKind.ITEM` and the
+  matching `CodexEntry`/`Secret` item-pointer FKs below. Slice 2 wired the full loop (`boon_services`):
   `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
   grant never exists: penniless-target money, unheld item, empty deed rejected before any row).
   **Money asks are relative sum tiers (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the

@@ -37,6 +37,7 @@ from world.scenes.boon_models import Boon
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.items.models import ItemInstance
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Persona
     from world.scenes.types import EnhancedSceneActionResult
@@ -331,6 +332,76 @@ def _fulfill_vault_item(boon: Boon, request: SceneActionRequest) -> None:
         item_instance=boon.item_instance,
         to_persona=request.initiator_persona,
         reason="boon",
+    )
+
+
+def character_has_item_pointer(*, sheet: CharacterSheet, item: ItemInstance) -> bool:
+    """The 2026-08-27 exact-pointer ruling: a named-item ask needs prior knowledge.
+
+    True when the character's roster entry holds ANY of: a discovered clue whose ITEM
+    target names this instance (or names its template with no instance pinned), a KNOWN
+    codex entry about it, or known secret knowledge about it (same instance-or-template
+    match). NPC pointing is content convention (dialogue names the item), not schema.
+
+    Answers knowledge only — a destroyed item can still be "known", callers that care
+    about liveness (an actual boon ask) check that separately.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.clues.constants import ClueTargetKind  # noqa: PLC0415
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.secrets.models import SecretKnowledge  # noqa: PLC0415
+
+    try:
+        roster_entry = sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        return False
+
+    if (
+        CharacterClue.objects.filter(
+            roster_entry=roster_entry,
+            clue__target_kind=ClueTargetKind.ITEM,
+        )
+        .filter(
+            Q(clue__target_item_instance=item)
+            | Q(
+                clue__target_item_instance__isnull=True,
+                clue__target_item_template_id=item.template_id,
+            )
+        )
+        .exists()
+    ):
+        return True
+
+    if (
+        CharacterCodexKnowledge.objects.filter(
+            roster_entry=roster_entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+        .filter(
+            Q(entry__subject_item_instance=item)
+            | Q(
+                entry__subject_item_instance__isnull=True,
+                entry__subject_item_template_id=item.template_id,
+            )
+        )
+        .exists()
+    ):
+        return True
+
+    return (
+        SecretKnowledge.objects.filter(roster_entry=roster_entry)
+        .filter(
+            Q(secret__subject_item_instance=item)
+            | Q(
+                secret__subject_item_instance__isnull=True,
+                secret__subject_item_template_id=item.template_id,
+            )
+        )
+        .exists()
     )
 
 
