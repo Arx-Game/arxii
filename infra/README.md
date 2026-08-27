@@ -780,8 +780,11 @@ the R2 offsite copy is a genuinely independent second copy — separate provider
 account, separate out-of-band credential — so a compromise of one copy's credential cannot
 reach or delete the other. Neither backstop is immutability against a compromised credential
 with delete rights on *its own* bucket, which is the residual risk Object Lock would close.
-Tracked in #2236; revisit when either provider pin is deliberately bumped past the versions
-above.
+Tracked in **#3410** (split out of #2236 when ADR-0235 made the backups the corpus's only
+redundancy); revisit when either provider pin is deliberately bumped past the versions above.
+Note what the compensating posture does *not* cover: it defends against a compromised
+credential, not against a stronger-than-intended credential being handed over by mistake, for
+which immutability is the only remaining control.
 
 ## Layout
 
