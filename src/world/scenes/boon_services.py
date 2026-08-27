@@ -30,6 +30,17 @@ DEED fallthrough on an unrecognized kind; #2540 slice 3 recon trap fix).
 
 MATERIAL asks show tier LABELS only, never a computed value (deliberate asymmetry
 with MONEY's ``boon_sum_values`` display seam — see ``BoonUnavailable`` below for why).
+
+2026-08-27 exact-pointer ruling (#2540 slice 3): a HELD_ITEM/VAULT_ITEM ask also
+requires the asker to hold a pointer to the named item (``character_has_item_
+pointer``) — checked inside ``_validate_held_item_ask``/``_validate_vault_item_ask``,
+which both now take the asker's ``CharacterSheet`` from ``validate_boon_ask``. A
+pointer-less ask with a valid item id fails with a neutral message
+(``BOON_NO_POINTER_TEXT``) that never reveals whether the item exists or is held —
+the API cannot be curled around the UI. ``pointer_known_items_for_target`` is the
+display-seam counterpart (the boon-options ``pointer_items`` list): the asker's
+pointer-known items relevant to one target, computed from the asker's OWN pointers,
+never a browse of the target's actual holdings.
 """
 
 from __future__ import annotations
@@ -51,6 +62,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
+    from world.roster.models import RosterEntry
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Persona
     from world.scenes.types import EnhancedSceneActionResult
@@ -85,6 +97,12 @@ BOON_AFFECTION_COST = 15
 # #2540 slice 3: the diegetic refusal text for an honestly-unavailable MATERIAL ask
 # (empty bucket) — never a validation error, since the ask itself was well-formed.
 BOON_MATERIAL_REFUSAL_TEXT = "PLACEHOLDER: they do not have that to give."
+
+# 2026-08-27 exact-pointer ruling: a named-item ask (HELD_ITEM/VAULT_ITEM) is
+# ineligible without prior pointer knowledge — this text stays neutral (never reveals
+# whether the item exists, whether the target holds it, or anything else) so the API
+# can't be curled around the UI to fish for information the asker doesn't have.
+BOON_NO_POINTER_TEXT = "PLACEHOLDER: you have no knowledge of any such thing."
 
 
 class BoonUnavailable(Exception):
@@ -141,22 +159,29 @@ def boon_sum_values(target_sheet: CharacterSheet) -> dict[str, int]:
     return {tier: max(1, balance * pct // 100) for tier, (pct, _shift) in BOON_SUM_TIERS.items()}
 
 
-def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
+def validate_boon_ask(
+    *, ask: BoonAsk, target_persona: Persona | None, asker_sheet: CharacterSheet
+) -> None:
     """Ask-time eligibility (dial 1): an ask the target could not grant never exists.
 
     Raises ``ValidationError`` on: no target, an unknown kind, a MONEY ask with no
     valid sum tier or against a penniless target (options only present when grantable
-    — #2540 ruling), a HELD_ITEM ask for an item the target does not hold, an empty
-    DEED, a VAULT_ITEM ask for an item outside the target's withdraw authority, or a
-    MATERIAL ask naming an unknown category or an invalid sum tier. Dispatches on
-    ``kind`` through the explicit ``_BOON_ASK_VALIDATORS`` table — an unrecognized-but-
-    real ``BoonKind`` member with no table entry raises ``ValueError`` loudly (a coding
-    error, never a player-facing failure — every real kind is entered below).
+    — #2540 ruling), a HELD_ITEM ask for an item the target does not hold OR the asker
+    has no pointer to (2026-08-27 exact-pointer ruling — see ``character_has_item_
+    pointer``), an empty DEED, a VAULT_ITEM ask for an item outside the target's
+    withdraw authority or the asker has no pointer to, or a MATERIAL ask naming an
+    unknown category or an invalid sum tier. Dispatches on ``kind`` through the
+    explicit ``_BOON_ASK_VALIDATORS`` table — an unrecognized-but-real ``BoonKind``
+    member with no table entry raises ``ValueError`` loudly (a coding error, never a
+    player-facing failure — every real kind is entered below).
 
     A MATERIAL ask that names a real category the target's bucket happens to be empty
     of is NOT rejected here — that's honest unavailability, not ineligibility; see
     ``check_boon_availability``/``BoonUnavailable``, called separately at
     request-creation time.
+
+    ``asker_sheet`` is the initiator's sheet (visibility = eligibility, one predicate:
+    the server enforces the pointer gate — the API cannot be curled around the UI).
     """
     if target_persona is None:
         msg = "A boon is asked of someone — it needs a target."
@@ -168,10 +193,14 @@ def validate_boon_ask(*, ask: BoonAsk, target_persona: Persona | None) -> None:
     if validator is None:
         msg = f"unhandled boon kind {ask.kind}"
         raise ValueError(msg)
-    validator(ask, target_persona)
+    validator(ask, target_persona, asker_sheet)
 
 
-def _validate_money_ask(ask: BoonAsk, target_persona: Persona) -> None:
+def _validate_money_ask(
+    ask: BoonAsk,
+    target_persona: Persona,
+    asker_sheet: CharacterSheet,  # noqa: ARG001
+) -> None:
     """A money ask names a sum tier; the option only exists when the purse could pay it."""
     target_sheet = target_persona.character_sheet
     if ask.sum_tier not in BOON_SUM_TIERS:
@@ -189,26 +218,33 @@ def _money_amount_for(ask: BoonAsk, target_sheet: CharacterSheet) -> int:
     return boon_sum_values(target_sheet).get(ask.sum_tier, 0)
 
 
-def _validate_held_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
+def _validate_held_item_ask(
+    ask: BoonAsk, target_persona: Persona, asker_sheet: CharacterSheet
+) -> None:
     from world.items.models import ItemInstance  # noqa: PLC0415
 
     if ask.item_instance_id is None:
         msg = "A held-item boon names the item asked for."
         raise ValidationError(msg)
-    held = ItemInstance.objects.filter(
+    item = ItemInstance.objects.filter(
         pk=ask.item_instance_id, holder_character_sheet=target_persona.character_sheet
-    ).exists()
-    if not held:
+    ).first()
+    if item is None:
         msg = "They do not hold that item."
         raise ValidationError(msg)
+    if not character_has_item_pointer(sheet=asker_sheet, item=item):
+        raise ValidationError(BOON_NO_POINTER_TEXT)
 
 
-def _validate_vault_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
+def _validate_vault_item_ask(
+    ask: BoonAsk, target_persona: Persona, asker_sheet: CharacterSheet
+) -> None:
     """Dial-1 eligibility for a vault ask: the target must hold withdraw authority.
 
     A granted vault boon is the target *exercising* their org-vault authority on the
     asker's behalf (#2540 Layer 4) — so the ask is only eligible when the named item
-    sits in a vault the target can withdraw from.
+    sits in a vault the target can withdraw from AND the asker holds a pointer to it
+    (2026-08-27 exact-pointer ruling).
     """
     from world.items.org_vault_models import VaultHolding  # noqa: PLC0415
     from world.items.services.org_vault import can_access_vault  # noqa: PLC0415
@@ -218,26 +254,38 @@ def _validate_vault_item_ask(ask: BoonAsk, target_persona: Persona) -> None:
         raise ValidationError(msg)
     holding = (
         VaultHolding.objects.filter(item_instance_id=ask.item_instance_id)
-        .select_related("vault")
+        .select_related("vault", "item_instance")
         .first()
     )
     if holding is None or not can_access_vault(holding.vault, target_persona):
         msg = "They cannot draw that from any vault."
         raise ValidationError(msg)
+    if not character_has_item_pointer(sheet=asker_sheet, item=holding.item_instance):
+        raise ValidationError(BOON_NO_POINTER_TEXT)
 
 
-def _validate_deed_ask(ask: BoonAsk, target_persona: Persona) -> None:  # noqa: ARG001
+def _validate_deed_ask(
+    ask: BoonAsk,
+    target_persona: Persona,  # noqa: ARG001
+    asker_sheet: CharacterSheet,  # noqa: ARG001
+) -> None:
     if not ask.deed_text.strip():
         msg = "A deed boon needs the deed spelled out."
         raise ValidationError(msg)
 
 
-def _validate_material_ask(ask: BoonAsk, target_persona: Persona) -> None:  # noqa: ARG001
+def _validate_material_ask(
+    ask: BoonAsk,
+    target_persona: Persona,  # noqa: ARG001
+    asker_sheet: CharacterSheet,  # noqa: ARG001
+) -> None:
     """A material ask names a real category + a valid sum tier (reusing money's labels).
 
     Deliberately does NOT check the target's bucket here (the STATIC public category
     picker — #2540 ruling — is never filtered by target holdings, so an empty bucket
     is not an ineligible ask, just an unavailable one; see ``check_boon_availability``).
+    Materials are not exact-pointer-gated (no named-item concept — a category, not an
+    instance).
     """
     from world.items.models import MaterialCategory  # noqa: PLC0415
 
@@ -252,7 +300,7 @@ def _validate_material_ask(ask: BoonAsk, target_persona: Persona) -> None:  # no
         raise ValidationError(msg)
 
 
-_BOON_ASK_VALIDATORS: dict[str, Callable[[BoonAsk, Persona], None]] = {
+_BOON_ASK_VALIDATORS: dict[str, Callable[[BoonAsk, Persona, CharacterSheet], None]] = {
     BoonKind.MONEY: _validate_money_ask,
     BoonKind.HELD_ITEM: _validate_held_item_ask,
     BoonKind.VAULT_ITEM: _validate_vault_item_ask,
@@ -581,6 +629,127 @@ def character_has_item_pointer(*, sheet: CharacterSheet, item: ItemInstance) -> 
         )
         .exists()
     )
+
+
+@dataclass(frozen=True)
+class PointerItemOption:
+    """One entry of the boon-options ``pointer_items`` list (#2540 slice 3 UI seam)."""
+
+    item_instance_id: int
+    name: str
+    source: str  # "held" | "vault"
+
+
+def _asker_pointer_ids(roster_entry: RosterEntry) -> tuple[set[int], set[int]]:
+    """The asker's pointer-known item template/instance ids, across all three surfaces.
+
+    Three queries total (one per knowledge surface, mirroring ``character_has_item_
+    pointer``'s per-surface shape) — never a query per item. Returns
+    ``(template_ids, instance_ids)``: a template id means "any instance of this
+    template is known"; an instance id is an exact pin (does NOT also imply its
+    template id is known — an instance-pinned pointer names ONLY that instance).
+    """
+    from world.clues.constants import ClueTargetKind  # noqa: PLC0415
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.secrets.models import SecretKnowledge  # noqa: PLC0415
+
+    rows = [
+        *CharacterClue.objects.filter(
+            roster_entry=roster_entry, clue__target_kind=ClueTargetKind.ITEM
+        ).values_list("clue__target_item_template_id", "clue__target_item_instance_id"),
+        *CharacterCodexKnowledge.objects.filter(
+            roster_entry=roster_entry,
+            status=CodexKnowledgeStatus.KNOWN,
+            entry__subject_item_template_id__isnull=False,
+        ).values_list("entry__subject_item_template_id", "entry__subject_item_instance_id"),
+        *SecretKnowledge.objects.filter(
+            roster_entry=roster_entry, secret__subject_item_template_id__isnull=False
+        ).values_list("secret__subject_item_template_id", "secret__subject_item_instance_id"),
+    ]
+    template_ids: set[int] = set()
+    instance_ids: set[int] = set()
+    for template_id, instance_id in rows:
+        if instance_id is not None:
+            instance_ids.add(instance_id)
+        elif template_id is not None:
+            template_ids.add(template_id)
+    return template_ids, instance_ids
+
+
+def _target_accessible_vault_ids(target_persona: Persona) -> list[int]:
+    """Vaults the target holds active withdraw authority in — ONE joined query.
+
+    Mirrors ``can_access_vault``'s rule (active membership, rank tier <=
+    ``withdraw_rank_max``) inline rather than calling that per-pair predicate per
+    membership row, which would be a query-per-membership loop for a list endpoint.
+    """
+    from django.db.models import F  # noqa: PLC0415
+
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return list(
+        OrganizationMembership.objects.filter(
+            persona=target_persona,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+            organization__item_vault__isnull=False,
+            rank__tier__lte=F("organization__item_vault__withdraw_rank_max"),
+        ).values_list("organization__item_vault__id", flat=True)
+    )
+
+
+def pointer_known_items_for_target(
+    *, asker_sheet: CharacterSheet, target_persona: Persona
+) -> list[PointerItemOption]:
+    """Boon-options display seam (#2540 slice 3): the asker's pointer-known items
+    relevant to THIS target — held by them, or sitting in a vault they can withdraw
+    from. Computed from the ASKER's pointers only (their clues/codex/secrets); NEVER
+    a browse of the target's actual holdings — a pointer the asker holds is the only
+    window (visibility = eligibility, one predicate — the same rule
+    ``character_has_item_pointer`` enforces at ask time). Batched: a handful of
+    queries total, never a query per candidate item.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.org_vault_models import VaultHolding  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        roster_entry = asker_sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        return []
+
+    template_ids, instance_ids = _asker_pointer_ids(roster_entry)
+    if not template_ids and not instance_ids:
+        return []
+    pointer_filter = Q(pk__in=instance_ids) | Q(template_id__in=template_ids)
+
+    options: list[PointerItemOption] = [
+        PointerItemOption(item_instance_id=item.pk, name=str(item), source="held")
+        for item in ItemInstance.objects.filter(
+            holder_character_sheet=target_persona.character_sheet
+        ).filter(pointer_filter)
+    ]
+
+    vault_ids = _target_accessible_vault_ids(target_persona)
+    if vault_ids:
+        vault_pointer_filter = Q(item_instance_id__in=instance_ids) | Q(
+            item_instance__template_id__in=template_ids
+        )
+        options.extend(
+            PointerItemOption(
+                item_instance_id=holding.item_instance_id,
+                name=str(holding.item_instance),
+                source="vault",
+            )
+            for holding in VaultHolding.objects.filter(vault_id__in=vault_ids)
+            .select_related("item_instance")
+            .filter(vault_pointer_filter)
+        )
+    return options
 
 
 def _resolve_boon(request: SceneActionRequest, result: EnhancedSceneActionResult) -> None:

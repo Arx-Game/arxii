@@ -147,10 +147,74 @@ class BoonAskValidationTests(TestCase):
         with self.assertRaises(ValidationError):
             self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=999999)
 
+    def test_held_item_ask_rejected_without_asker_pointer(self) -> None:
+        """2026-08-27 exact-pointer ruling: a valid, target-held item id still fails
+        without prior asker knowledge — the API cannot be curled around the UI."""
+        from world.items.factories import ItemInstanceFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=item.pk)
+
+    def test_held_item_ask_accepted_with_asker_pointer(self) -> None:
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+        from world.roster.factories import RosterEntryFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        roster_entry = RosterEntryFactory(character_sheet=self.asker.character_sheet)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=roster_entry, clue=clue)
+        request = self._ask(kind=BoonKind.HELD_ITEM, item_instance_id=item.pk)
+        self.assertEqual(request.boon.item_instance_id, item.pk)
+
     def test_vault_ask_requires_target_withdraw_authority(self) -> None:
         # No vaulted item / no authority — ineligible.
         with self.assertRaises(ValidationError):
             self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=999999)
+
+    def test_vault_ask_rejected_without_asker_pointer(self) -> None:
+        """2026-08-27 exact-pointer ruling: authority alone is not enough — the asker
+        also needs a pointer to the specific vaulted item."""
+        from world.items.factories import ItemInstanceFactory
+        from world.items.services.org_vault import deposit_item_to_vault
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.target, organization=org, rank=1)
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        deposit_item_to_vault(organization=org, persona=self.target, item_instance=item)
+        with self.assertRaises(ValidationError):
+            self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item.pk)
+
+    def test_vault_ask_accepted_with_asker_pointer(self) -> None:
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+        from world.items.services.org_vault import deposit_item_to_vault
+        from world.roster.factories import RosterEntryFactory
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.target, organization=org, rank=1)
+        item = ItemInstanceFactory(holder_character_sheet=self.target.character_sheet)
+        deposit_item_to_vault(organization=org, persona=self.target, item_instance=item)
+        roster_entry = RosterEntryFactory(character_sheet=self.asker.character_sheet)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=roster_entry, clue=clue)
+        request = self._ask(kind=BoonKind.VAULT_ITEM, item_instance_id=item.pk)
+        self.assertEqual(request.boon.item_instance_id, item.pk)
 
     def test_deed_ask_requires_text(self) -> None:
         with self.assertRaises(ValidationError):
@@ -238,6 +302,21 @@ class BoonResolverE2ETests(TestCase):
         self.accrue_patcher.start()
         self.addCleanup(self.accrue_patcher.stop)
 
+    def _grant_item_pointer(self, item) -> None:
+        """2026-08-27 exact-pointer ruling: a named-item ask needs asker knowledge."""
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.roster.factories import RosterEntryFactory
+
+        roster_entry = RosterEntryFactory(character_sheet=self.asker.character_sheet)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=roster_entry, clue=clue)
+
     def _dispatch(self, *, success: bool, sum_tier: str = BoonSumTier.FAIR) -> SceneActionRequest:
         with patch(
             "world.scenes.action_services.start_action_resolution",
@@ -296,6 +375,7 @@ class BoonResolverE2ETests(TestCase):
         OrganizationMembershipFactory(persona=self.npc_target, organization=org, rank=1)
         item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
         deposit_item_to_vault(organization=org, persona=self.npc_target, item_instance=item)
+        self._grant_item_pointer(item)
 
         with patch(
             "world.scenes.action_services.start_action_resolution",
@@ -320,6 +400,7 @@ class BoonResolverE2ETests(TestCase):
         from world.items.models import OwnershipEvent
 
         item = ItemInstanceFactory(holder_character_sheet=self.npc_target.character_sheet)
+        self._grant_item_pointer(item)
         with patch(
             "world.scenes.action_services.start_action_resolution",
             return_value=_success_resolution(success=True),

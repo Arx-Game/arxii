@@ -380,7 +380,11 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
             validate_boon_ask,
         )
 
-        validate_boon_ask(ask=boon, target_persona=target_persona)
+        validate_boon_ask(
+            ask=boon,
+            target_persona=target_persona,
+            asker_sheet=initiator_persona.character_sheet,
+        )
         # #2540 slice 3 honest-unavailability short-circuit: a well-formed MATERIAL ask
         # against an empty bucket raises BoonUnavailable here, BEFORE any row exists —
         # for both NPC and piloted targets alike, so it never reaches a piloted target's

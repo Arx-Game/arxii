@@ -14,9 +14,12 @@ from world.clues.models import CharacterClue, Clue
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.services.org_vault import deposit_item_to_vault
 from world.roster.factories import RosterEntryFactory
-from world.scenes.boon_services import character_has_item_pointer
+from world.scenes.boon_services import character_has_item_pointer, pointer_known_items_for_target
+from world.scenes.factories import PersonaFactory
 from world.secrets.factories import SecretFactory, SecretKnowledgeFactory
+from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
 
 def grant_item_pointer_clue(roster_entry, item, *, instance_pinned: bool = False) -> CharacterClue:
@@ -84,7 +87,143 @@ class CharacterHasItemPointerTests(TestCase):
         )
         self.assertFalse(character_has_item_pointer(sheet=self.sheet, item=self.item))
 
+    def test_template_level_codex_entry_matches_any_instance_of_the_kind(self) -> None:
+        """#2540 slice 3 Task 1 review fold-in: the CLUE pin-semantics pair, mirrored
+        for CODEX — a template-only KNOWN entry (no instance pinned) matches ANY
+        sibling instance of that template."""
+        other_item = ItemInstanceFactory(template=self.template)
+        entry = CodexEntryFactory(subject_item_template=self.template, subject_item_instance=None)
+        CharacterCodexKnowledgeFactory(
+            roster_entry=self.roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+        self.assertTrue(character_has_item_pointer(sheet=self.sheet, item=other_item))
+
+    def test_instance_pinned_codex_entry_does_not_match_a_sibling_instance(self) -> None:
+        """#2540 slice 3 Task 1 review fold-in: the CLUE pin-semantics pair, mirrored
+        for CODEX — an instance-pinned KNOWN entry names ONLY that instance."""
+        other_item = ItemInstanceFactory(template=self.template)
+        entry = CodexEntryFactory(
+            subject_item_template=self.template, subject_item_instance=self.item
+        )
+        CharacterCodexKnowledgeFactory(
+            roster_entry=self.roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+        self.assertFalse(character_has_item_pointer(sheet=self.sheet, item=other_item))
+        self.assertTrue(character_has_item_pointer(sheet=self.sheet, item=self.item))
+
     def test_true_via_known_secret(self) -> None:
         secret = SecretFactory(subject_item_template=self.template)
         SecretKnowledgeFactory(roster_entry=self.roster_entry, secret=secret)
         self.assertTrue(character_has_item_pointer(sheet=self.sheet, item=self.item))
+
+    def test_template_level_secret_matches_any_instance_of_the_kind(self) -> None:
+        """#2540 slice 3 Task 1 review fold-in: the CLUE pin-semantics pair, mirrored
+        for SECRET — a template-only secret (no instance pinned) matches ANY sibling
+        instance of that template."""
+        other_item = ItemInstanceFactory(template=self.template)
+        secret = SecretFactory(subject_item_template=self.template, subject_item_instance=None)
+        SecretKnowledgeFactory(roster_entry=self.roster_entry, secret=secret)
+        self.assertTrue(character_has_item_pointer(sheet=self.sheet, item=other_item))
+
+    def test_instance_pinned_secret_does_not_match_a_sibling_instance(self) -> None:
+        """#2540 slice 3 Task 1 review fold-in: the CLUE pin-semantics pair, mirrored
+        for SECRET — an instance-pinned secret names ONLY that instance."""
+        other_item = ItemInstanceFactory(template=self.template)
+        secret = SecretFactory(subject_item_template=self.template, subject_item_instance=self.item)
+        SecretKnowledgeFactory(roster_entry=self.roster_entry, secret=secret)
+        self.assertFalse(character_has_item_pointer(sheet=self.sheet, item=other_item))
+        self.assertTrue(character_has_item_pointer(sheet=self.sheet, item=self.item))
+
+
+class PointerKnownItemsForTargetTests(TestCase):
+    """The boon-options display seam (#2540 slice 3): ``pointer_known_items_for_target``."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.asker_roster_entry = RosterEntryFactory()
+        cls.asker_sheet = cls.asker_roster_entry.character_sheet
+        cls.target = PersonaFactory()
+        cls.template = ItemTemplateFactory()
+
+    def test_empty_with_no_asker_pointers(self) -> None:
+        ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.target.character_sheet
+        )
+        self.assertEqual(
+            pointer_known_items_for_target(
+                asker_sheet=self.asker_sheet, target_persona=self.target
+            ),
+            [],
+        )
+
+    def test_held_item_the_asker_has_a_pointer_to(self) -> None:
+        item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.target.character_sheet
+        )
+        grant_item_pointer_clue(self.asker_roster_entry, item)
+        options = pointer_known_items_for_target(
+            asker_sheet=self.asker_sheet, target_persona=self.target
+        )
+        self.assertEqual(len(options), 1)
+        self.assertEqual(options[0].item_instance_id, item.pk)
+        self.assertEqual(options[0].source, "held")
+
+    def test_never_lists_a_held_item_the_asker_has_no_pointer_to(self) -> None:
+        """NEVER a browse of the target's actual holdings — a pointer is the only window."""
+        ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.target.character_sheet
+        )
+        self.assertEqual(
+            pointer_known_items_for_target(
+                asker_sheet=self.asker_sheet, target_persona=self.target
+            ),
+            [],
+        )
+
+    def test_template_only_pointer_matches_any_held_instance(self) -> None:
+        pinned_item = ItemInstanceFactory(template=self.template)
+        held_item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.target.character_sheet
+        )
+        grant_item_pointer_clue(self.asker_roster_entry, pinned_item)  # template-only pointer
+        options = pointer_known_items_for_target(
+            asker_sheet=self.asker_sheet, target_persona=self.target
+        )
+        self.assertEqual([o.item_instance_id for o in options], [held_item.pk])
+
+    def test_vault_item_the_asker_has_a_pointer_to_and_target_can_access(self) -> None:
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=self.target, organization=org, rank=1)
+        item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.target.character_sheet
+        )
+        deposit_item_to_vault(organization=org, persona=self.target, item_instance=item)
+        grant_item_pointer_clue(self.asker_roster_entry, item)
+        options = pointer_known_items_for_target(
+            asker_sheet=self.asker_sheet, target_persona=self.target
+        )
+        self.assertEqual(len(options), 1)
+        self.assertEqual(options[0].item_instance_id, item.pk)
+        self.assertEqual(options[0].source, "vault")
+
+    def test_never_lists_a_vault_item_the_target_cannot_withdraw(self) -> None:
+        """The target's own authority still gates the vault side (rank too low)."""
+        org = OrganizationFactory()
+        depositor = PersonaFactory()
+        OrganizationMembershipFactory(persona=depositor, organization=org, rank=1)
+        OrganizationMembershipFactory(persona=self.target, organization=org, rank=5)  # too low
+        item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=depositor.character_sheet
+        )
+        deposit_item_to_vault(organization=org, persona=depositor, item_instance=item)
+        grant_item_pointer_clue(self.asker_roster_entry, item)
+        self.assertEqual(
+            pointer_known_items_for_target(
+                asker_sheet=self.asker_sheet, target_persona=self.target
+            ),
+            [],
+        )

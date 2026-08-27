@@ -522,11 +522,25 @@ class BoonMaterialCategorySerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
+class BoonPointerItemSerializer(serializers.Serializer):
+    """One of the asker's pointer-known items relevant to a target (#2540 slice 3).
+
+    Computed server-side from the asker's OWN pointers (clues/codex/secrets) — NEVER
+    a browse of the target's actual holdings; ``source`` distinguishes an item the
+    target physically holds from one sitting in a vault the target can withdraw from.
+    """
+
+    item_instance_id = serializers.IntegerField()
+    name = serializers.CharField()
+    source = serializers.ChoiceField(choices=["held", "vault"])
+
+
 class BoonOptionsSerializer(serializers.Serializer):
     """Schema shape for the boon-options read (empty ``sum_tiers`` = no money option shown)."""
 
     sum_tiers = BoonSumOptionSerializer(many=True)
     material_categories = BoonMaterialCategorySerializer(many=True)
+    pointer_items = BoonPointerItemSerializer(many=True)
 
 
 class BoonAskSerializer(serializers.Serializer):

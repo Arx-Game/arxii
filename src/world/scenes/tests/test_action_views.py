@@ -151,18 +151,22 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def _boon_options(self, extra: dict | None = None) -> object:
+        url = reverse("sceneactionrequest-boon-options")
+        params = {"target_persona": self.target_persona.pk, "initiator_persona": self.persona.pk}
+        params.update(extra or {})
+        return self.client.get(url, params)
+
     def test_boon_options_lists_tier_values_for_target(self) -> None:
         """The ask UI's display seam: tier → concrete coppers against THIS target."""
         self._fund_target(1000)
-        url = reverse("sceneactionrequest-boon-options")
-        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        response = self._boon_options()
         assert response.status_code == status.HTTP_200_OK
         by_tier = {row["tier"]: row["coppers"] for row in response.data["sum_tiers"]}
         assert by_tier == {"minor": 50, "fair": 200, "great": 500}
 
     def test_boon_options_empty_for_penniless_target(self) -> None:
-        url = reverse("sceneactionrequest-boon-options")
-        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        response = self._boon_options()
         assert response.status_code == status.HTTP_200_OK
         assert response.data["sum_tiers"] == []  # the option never shows
 
@@ -172,11 +176,59 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         from world.items.factories import MaterialCategoryFactory
 
         MaterialCategoryFactory(name="Precious Gemstones")
-        url = reverse("sceneactionrequest-boon-options")
-        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        response = self._boon_options()
         assert response.status_code == status.HTTP_200_OK
         names = {row["name"] for row in response.data["material_categories"]}
         assert "Precious Gemstones" in names  # present even though the target holds none
+
+    def test_boon_options_requires_initiator_persona(self) -> None:
+        url = reverse("sceneactionrequest-boon-options")
+        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_boon_options_rejects_initiator_not_owned_by_caller(self) -> None:
+        """#2540 slice 3: pointer knowledge is private — can't probe as another persona."""
+        response = self._boon_options({"initiator_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_boon_options_pointer_items_empty_with_no_knowledge(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+
+        ItemInstanceFactory(holder_character_sheet=self.target_identity)
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == []
+
+    def test_boon_options_pointer_items_lists_held_item_the_asker_knows_of(self) -> None:
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target_identity)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=self.roster_entry, clue=clue)
+
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == [
+            {"item_instance_id": item.pk, "name": str(item), "source": "held"}
+        ]
+
+    def test_boon_options_pointer_items_never_lists_a_held_item_the_asker_has_no_pointer_to(
+        self,
+    ) -> None:
+        """#2540 slice 3: NEVER a browse of target inventory — a pointer is the only window."""
+        from world.items.factories import ItemInstanceFactory
+
+        ItemInstanceFactory(holder_character_sheet=self.target_identity)  # no pointer granted
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == []
 
     def test_material_boon_dispatch_succeeds_when_target_holds_any(self) -> None:
         from world.items.factories import MaterialCategoryFactory

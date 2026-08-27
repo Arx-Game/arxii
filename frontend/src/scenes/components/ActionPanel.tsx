@@ -880,10 +880,11 @@ export function ActionPanel({ sceneId }: Props) {
         />
       )}
 
-      {boonAskState && (
+      {boonAskState && initiatorPersonaId !== null && (
         <BoonAskForm
           targetPersonaId={boonAskState.targetId}
           targetName={candidates.find((c) => c.id === boonAskState.targetId)?.name}
+          initiatorPersonaId={initiatorPersonaId}
           onConfirm={handleBoonConfirm}
           onCancel={() => setBoonAskState(null)}
         />

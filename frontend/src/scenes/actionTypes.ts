@@ -175,28 +175,35 @@ export interface StakesSummary {
   stakes: StakeSummaryEntry[];
 }
 
-/** A boon's money sum tier (#2540) — relative to the target, never raw coppers. */
+/** A boon's money/material sum tier (#2540) — relative to the target, never raw coppers. */
 export type BoonSumTier = 'minor' | 'fair' | 'great';
 
-/** What a Boon asks for (#2540). Item kinds await the visibility ruling in the UI. */
-export type BoonKind = 'money' | 'held_item' | 'vault_item' | 'deed';
+/** What a Boon asks for (#2540, #2540 slice 3). */
+export type BoonKind = 'money' | 'held_item' | 'vault_item' | 'deed' | 'material';
 
-/** The structured-ask payload on a boon dispatch (#2540). */
+/**
+ * The structured-ask payload on a boon dispatch (#2540). MATERIAL asks (#2540
+ * slice 3) carry a `material_category_id` + `sum_tier` (reusing money's labels) —
+ * but never a raw amount; no computed value is ever shown for material asks.
+ */
 export interface BoonAskPayload {
   kind: BoonKind;
   sum_tier?: BoonSumTier;
   item_instance_id?: number;
   deed_text?: string;
+  material_category_id?: number;
 }
 
 /** The ask riding a pending request — what the defender is being asked for (#2540). */
 export interface BoonReadPayload {
   kind: BoonKind;
   sum_tier: BoonSumTier | '';
-  /** Concrete coppers frozen at ask time (money asks). */
+  /** Concrete coppers frozen at ask time (money asks only; always 0 for material). */
   amount: number;
   item_name: string | null;
   deed_text: string;
+  /** Crafting category name (material asks only) — #2540 slice 3. */
+  material_category_name: string | null;
 }
 
 /** One money-sum option against a specific target: 'Fair (200 coppers)' (#2540). */
@@ -204,6 +211,36 @@ export interface BoonSumOption {
   tier: BoonSumTier;
   label: string;
   coppers: number;
+}
+
+/**
+ * One entry of the STATIC public material-category picker (#2540 slice 3) — NEVER
+ * filtered by the target's actual holdings (that would leak wealth OOC; an ask
+ * against an empty bucket is instead honestly refused at request-creation time).
+ */
+export interface BoonMaterialCategory {
+  id: number;
+  name: string;
+}
+
+/**
+ * One of the asker's pointer-known items relevant to a specific target (#2540
+ * slice 3, 2026-08-27 exact-pointer ruling) — computed server-side from the
+ * asker's OWN pointers (clues/codex/secrets), NEVER a browse of the target's
+ * actual holdings. `source` distinguishes an item the target physically holds
+ * from one sitting in a vault the target can withdraw from.
+ */
+export interface BoonPointerItem {
+  item_instance_id: number;
+  name: string;
+  source: 'held' | 'vault';
+}
+
+/** The full boon-options read (#2540, #2540 slice 3) — the ask UI's display seam. */
+export interface BoonOptions {
+  sum_tiers: BoonSumOption[];
+  material_categories: BoonMaterialCategory[];
+  pointer_items: BoonPointerItem[];
 }
 
 /** Mirrors SceneActionRequestSerializer's FLAT payload (#892 — keep in sync). */

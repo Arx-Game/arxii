@@ -877,6 +877,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
     @extend_schema(
         parameters=[
             OpenApiParameter(name="target_persona", type=int, required=True),
+            OpenApiParameter(name="initiator_persona", type=int, required=True),
         ],
         responses={200: BoonOptionsSerializer},
     )
@@ -900,24 +901,45 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         holdings (that would leak wealth OOC); an ask against an empty bucket is
         instead honestly refused at request-creation time (``BoonUnavailable``). No
         computed value accompanies these — material asks show tier LABELS only.
+
+        ``pointer_items`` (#2540 slice 3, 2026-08-27 exact-pointer ruling): the
+        CALLER's (``initiator_persona``'s) pointer-known items relevant to THIS
+        target — held by them, or sitting in a vault they can withdraw from —
+        ``[{item_instance_id, name, source: "held"|"vault"}]``. Computed from the
+        caller's own pointers only; requires ``initiator_persona`` to be one of the
+        requesting account's own personas (mirrors ``castable_techniques``'
+        ownership gate — this reveals what a character privately knows).
         """
         from world.items.models import MaterialCategory  # noqa: PLC0415
-        from world.scenes.boon_services import boon_sum_values  # noqa: PLC0415
+        from world.scenes.boon_services import (  # noqa: PLC0415
+            boon_sum_values,
+            pointer_known_items_for_target,
+        )
 
         target_id_str = request.query_params.get("target_persona")  # noqa: USE_FILTERSET
-        if not target_id_str:
+        initiator_id_str = request.query_params.get("initiator_persona")  # noqa: USE_FILTERSET
+        if not target_id_str or not initiator_id_str:
             return Response(
-                {"detail": "target_persona query parameter is required."},
+                {"detail": "target_persona and initiator_persona query parameters are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
             target_id = int(target_id_str)
+            initiator_id = int(initiator_id_str)
         except (TypeError, ValueError):
             return Response(
-                {"detail": "target_persona must be an integer."},
+                {"detail": "target_persona and initiator_persona must be integers."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        persona_ids = get_account_personas(request)
+        if initiator_id not in persona_ids:
+            return Response(
+                {"detail": _INITIATOR_NOT_FOUND_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         target = get_object_or_404(Persona, pk=target_id)
+        initiator = get_object_or_404(Persona, pk=initiator_id)
         values = boon_sum_values(target.character_sheet)
         sum_tiers = [
             {"tier": tier, "label": BoonSumTier(tier).label, "coppers": coppers}
@@ -927,7 +949,23 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             {"id": category.id, "name": category.name}
             for category in MaterialCategory.objects.order_by("sort_order", "name")
         ]
-        return Response({"sum_tiers": sum_tiers, "material_categories": material_categories})
+        pointer_items = [
+            {
+                "item_instance_id": option.item_instance_id,
+                "name": option.name,
+                "source": option.source,
+            }
+            for option in pointer_known_items_for_target(
+                asker_sheet=initiator.character_sheet, target_persona=target
+            )
+        ]
+        return Response(
+            {
+                "sum_tiers": sum_tiers,
+                "material_categories": material_categories,
+                "pointer_items": pointer_items,
+            }
+        )
 
 
 class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):
