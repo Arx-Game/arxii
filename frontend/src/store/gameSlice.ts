@@ -315,19 +315,30 @@ export const gameSlice = createSlice({
     },
     resetGame: () => initialState,
     // Reload survival (#3412): mirrors the account query's `selected_entry`
-    // into this slice on every successful fetch (see useAccountQuery). Only
-    // ever SETS active/activeEntryId from a real selection — it never nulls
-    // them out, so a background refetch that happens to carry no selection
-    // (e.g. an account that has never selected on this endpoint) can't
-    // clobber a live local session. Deliberately does NOT touch `sessions`:
-    // selection is not presence, so hydration never starts a session or
-    // connects — `active` can therefore point at a character with no
-    // `sessions[active]` entry yet, which callers (GameWindow, GameTopBar)
-    // must tolerate.
+    // into this slice on every successful fetch (see useAccountQuery) — a
+    // truthy payload SETS active/activeEntryId, `null` CLEARS both (#3412
+    // review fix: the explicit-clear path — mutate(null) + the account
+    // refetch it triggers — must actually un-hydrate, not just leave the
+    // slice stuck on the last-selected character forever). Deliberately does
+    // NOT touch `sessions`: selection is not presence, so hydration/clearing
+    // never starts OR tears down a session/connection. Concretely: clearing
+    // can leave `active: null` while `sessions[thatName]` still holds a live,
+    // connected session — the WebSocket (owned by useGameSocket, outside
+    // Redux) keeps running and accumulating that session's state regardless;
+    // only the "which character is currently highlighted/selected" pointer
+    // moves. `active` can therefore point at a character with no
+    // `sessions[active]` entry yet (a fresh SET with no session started), or
+    // at nothing while a session persists orphaned in `sessions` (a CLEAR) —
+    // callers (GameWindow, GameTopBar) must tolerate both.
     hydrateActiveCharacter: (
       state,
-      action: PayloadAction<{ name: MyRosterEntry['name']; entryId: number }>
+      action: PayloadAction<{ name: MyRosterEntry['name']; entryId: number } | null>
     ) => {
+      if (action.payload === null) {
+        state.active = null;
+        state.activeEntryId = null;
+        return;
+      }
       const { name, entryId } = action.payload;
       state.active = name;
       state.activeEntryId = entryId;

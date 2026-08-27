@@ -127,6 +127,12 @@ export function useSelectCharacterMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account'] });
     },
+    // PLACEHOLDER wording — matches useSendRosterApplication's toast pattern
+    // above. The local switch already happened (fire-and-forget, see the doc
+    // comment above), so this is purely "your reload-durable pick didn't
+    // save" — never blocking, never re-thrown.
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Couldn't save your character selection."),
   });
 }
 

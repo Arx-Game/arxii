@@ -11,7 +11,12 @@ vi.mock('@/evennia_replacements/api', () => ({
   apiFetch: vi.fn(),
 }));
 
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import { apiFetch } from '@/evennia_replacements/api';
+import { toast } from 'sonner';
 import { postSelectEntry } from '../api';
 import { useSelectCharacterMutation } from '../queries';
 import type { SelectedEntryResult } from '../types';
@@ -130,5 +135,23 @@ describe('useSelectCharacterMutation', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['account'] });
     });
+  });
+
+  // #3412 review fix (finding 1): a failed select POST must surface, not be
+  // swallowed silently — matches useSendRosterApplication's onError pattern.
+  it('surfaces a failed select via toast.error instead of swallowing it', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({ ok: false } as Response);
+
+    const { wrapper } = createWrapperWithClient();
+    const { result } = renderHook(() => useSelectCharacterMutation(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync(999).catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // postSelectEntry throws a real Error, so onError surfaces its message
+    // (not the generic fallback, which only covers a non-Error rejection).
+    expect(toast.error).toHaveBeenCalledWith('Could not switch to that character.');
   });
 });

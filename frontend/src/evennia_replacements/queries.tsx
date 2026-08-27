@@ -16,24 +16,33 @@ export function useAccountQuery() {
   });
 
   useEffect(() => {
-    if (result.data !== undefined) {
-      dispatch(setAccount(result.data));
+    // `undefined` means the query hasn't resolved yet (still pending) —
+    // don't touch either slice until there's a real payload (which may
+    // itself be `null`, meaning "no account": see fetchAccount's empty-body
+    // case). `result.data` resolving to `null` also runs the hydrate branch
+    // below, correctly clearing gameSlice — useLogout separately dispatches
+    // resetGame() for the explicit-logout path, so this is belt-and-suspenders
+    // for any other route that lands `data: null` (e.g. a stale/expired session).
+    if (result.data === undefined) {
+      return;
     }
+    dispatch(setAccount(result.data));
     // Reload survival (#3412): mirror the durable server-side selection into
     // gameSlice on every successful account fetch — hard reload -> this
     // fetch -> hydration -> IC-scoped pages (tidings, own-sheet) that read
-    // `gameSlice.active` stop degrading. Only fires when a selection
-    // actually exists; a null `selected_entry` (never selected, or logged
-    // out) is left alone rather than clobbering an already-live local
-    // session — see `hydrateActiveCharacter`'s own doc comment.
-    if (result.data?.selected_entry) {
-      dispatch(
-        hydrateActiveCharacter({
-          name: result.data.selected_entry.name,
-          entryId: result.data.selected_entry.id,
-        })
-      );
-    }
+    // `gameSlice.active` stop degrading. #3412 review fix: this now mirrors
+    // BOTH directions — a `selected_entry` SETS active/activeEntryId, and its
+    // absence CLEARS them (e.g. after `useSelectCharacterMutation.mutate(null)`
+    // + the account refetch it triggers) — see `hydrateActiveCharacter`'s own
+    // doc comment for why clearing the mirror is safe (never tears down a
+    // live session; selection isn't presence in either direction).
+    dispatch(
+      hydrateActiveCharacter(
+        result.data.selected_entry
+          ? { name: result.data.selected_entry.name, entryId: result.data.selected_entry.id }
+          : null
+      )
+    );
   }, [result.data, dispatch]);
 
   return result;

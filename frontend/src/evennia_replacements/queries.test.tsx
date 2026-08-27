@@ -23,7 +23,7 @@ import { fetchAccount } from './api';
 import { useAccountQuery } from './queries';
 import type { AccountData } from './types';
 import { store } from '@/store/store';
-import { resetGame, startSession } from '@/store/gameSlice';
+import { resetGame, startSession, setSessionConnectionStatus } from '@/store/gameSlice';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -95,14 +95,36 @@ describe('useAccountQuery hydration (#3412)', () => {
     expect(store.getState().game.activeEntryId).toBeNull();
   });
 
-  it('does not clobber an already-active local session when the fetch carries no selection', async () => {
+  // #3412 review fix (finding 2): the explicit-clear path (mutate(null) on
+  // useSelectCharacterMutation, then the account refetch it triggers) must
+  // actually null the slice mirror — a `selected_entry: null` payload is now
+  // mirrored just as faithfully as a real selection, in both directions.
+  it('clears an already-active gameSlice selection when the fetch carries no selection', async () => {
     store.dispatch(startSession('Bianca'));
     vi.mocked(fetchAccount).mockResolvedValue(BASE_ACCOUNT);
 
     const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(store.getState().game.active).toBe('Bianca');
+    await waitFor(() => expect(store.getState().game.active).toBeNull());
+    expect(store.getState().game.activeEntryId).toBeNull();
+  });
+
+  // Clearing the mirror must NOT tear down a live session — selection isn't
+  // presence in either direction. The WebSocket/session data (owned by
+  // `sessions`, independent of the `active` pointer) survives orphaned; the
+  // /game surface can still work off it once re-selected.
+  it('leaves the live session itself untouched when clearing the active mirror', async () => {
+    store.dispatch(startSession('Bianca'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Bianca', status: true }));
+    vi.mocked(fetchAccount).mockResolvedValue(BASE_ACCOUNT);
+
+    const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(store.getState().game.active).toBeNull());
+    expect(store.getState().game.sessions['Bianca']).toBeDefined();
+    expect(store.getState().game.sessions['Bianca'].isConnected).toBe(true);
   });
 
   it('does not create a session for the hydrated character (selection is not presence)', async () => {

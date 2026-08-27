@@ -1445,4 +1445,37 @@ describe('hydrateActiveCharacter (#3412 reload survival)', () => {
     expect(result.sessions['Aria'].unread).toBe(3);
     expect(result.activeEntryId).toBe(7);
   });
+
+  // #3412 review fix (finding 2): a `null` payload is the explicit-clear
+  // path (useSelectCharacterMutation.mutate(null) -> the account refetch it
+  // triggers) — it must actually null the mirror, not be a silent no-op.
+  describe('clearing (null payload)', () => {
+    it('nulls active and activeEntryId', () => {
+      const initialState: GameState = { sessions: {}, active: 'Aria', activeEntryId: 7 };
+
+      const result = reducer(initialState, hydrateActiveCharacter(null));
+
+      expect(result.active).toBeNull();
+      expect(result.activeEntryId).toBeNull();
+    });
+
+    it('is a no-op on an already-empty state', () => {
+      const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+
+      const result = reducer(initialState, hydrateActiveCharacter(null));
+
+      expect(result).toEqual(initialState);
+    });
+
+    it('leaves a live session for the just-cleared character untouched (selection is not presence)', () => {
+      const initialState = createStateWithSession('Aria', { isConnected: true, unread: 3 }, 'Aria');
+
+      const result = reducer(initialState, hydrateActiveCharacter(null));
+
+      expect(result.active).toBeNull();
+      expect(result.sessions['Aria']).toBeDefined();
+      expect(result.sessions['Aria'].isConnected).toBe(true);
+      expect(result.sessions['Aria'].unread).toBe(3);
+    });
+  });
 });
