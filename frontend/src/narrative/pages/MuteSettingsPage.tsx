@@ -5,7 +5,9 @@
  * Lets users squelch whole narrative categories (the weather echo, #1522) and review/remove
  * their per-story mutes selectively.
  *
- * Wave 11 will register the route at /profile/mute-settings.
+ * Registered at /narrative/mute-settings (#3412 fix: MessagesSection's "Manage muted
+ * stories" link had drifted to the stale pre-Wave-11 path, /profile/mute-settings,
+ * which no route ever claimed).
  */
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';

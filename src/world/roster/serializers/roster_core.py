@@ -135,6 +135,34 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         return self.get_primary_persona_id(obj)
 
 
+class SelectEntryRequestSerializer(serializers.Serializer):
+    """POST body for the #3412 character-selection endpoint.
+
+    ``entry_id: null`` clears the selection; any other value must be one of
+    the account's own current roster entries (validated in the service, not
+    here — a foreign id is rejected uniformly, mirroring the persona
+    set-active endpoint).
+    """
+
+    entry_id = serializers.IntegerField(min_value=1, allow_null=True)
+
+
+class SelectedEntryResultSerializer(serializers.Serializer):
+    """Result of the #3412 select/clear endpoint — the updated selection
+    fragment, in the same shape ``/api/user/`` exposes it in.
+
+    Both fields are ``allow_null`` because a clear (``entry_id: null``) returns
+    ``player_data.selected_entry_id``/``selected_entry`` as ``None`` — DRF's
+    ``Serializer.to_representation`` already emits ``null`` for a ``None``
+    attribute regardless of this flag, but omitting it left drf-spectacular
+    generating a non-nullable schema/TS type for a field that is genuinely
+    nullable at runtime.
+    """
+
+    selected_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    selected_entry = MyRosterEntrySerializer(read_only=True, allow_null=True)
+
+
 class RosterEntryListSerializer(serializers.ModelSerializer):
     """
     Serializer for listing available roster entries to apply for.

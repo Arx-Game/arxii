@@ -2,6 +2,26 @@ import { Megaphone, ScrollText } from 'lucide-react';
 import type { HubTidings } from '@/hooks/types';
 import { WantedBoard } from '@/justice/components/WantedBoard';
 
+// PLACEHOLDER wording (#3412 hygiene fold-in): `item.kind` carries the same lowercase
+// FeedItemKind wire values as the tidings feed's PublicFeedItem (see room_state.py's
+// `_get_hub`, which serializes `item.kind` straight from the same dataclass), but only
+// deed/scandal had labels — the other 7 kinds all fell through to "Scandal", including
+// e.g. a birthday tiding. Deliberately plain enum-derived names, not lore-authoritative
+// copy; a later design pass can replace them. Keyed as a plain Record (not
+// Record<FeedItemKind,...>) because `HubTidingsItem.kind` is hand-typed as a bare
+// `string` in hooks/types.ts (a WS payload shape, not generated from the OpenAPI schema).
+const HUB_KIND_LABELS: Record<string, string> = {
+  deed: 'Deed',
+  scandal: 'Scandal',
+  pardon: 'Pardon',
+  crisis: 'Crisis',
+  proclamation: 'Proclamation',
+  birthday: 'Birthday',
+  stature: 'Stature',
+  menace: 'Menace',
+  verdict: 'Verdict',
+};
+
 interface HubTidingsPanelProps {
   hub: HubTidings;
   /** The viewer's active RosterEntry pk; null when unknown (wanted board stays read-only). */
@@ -32,7 +52,7 @@ export function HubTidingsPanel({ hub, viewerEntryId = null }: HubTidingsPanelPr
                     : 'font-semibold text-rose-600 dark:text-rose-400'
                 }
               >
-                {item.category ?? (item.kind === 'deed' ? 'Deed' : 'Scandal')}
+                {item.category ?? HUB_KIND_LABELS[item.kind] ?? item.kind}
               </span>{' '}
               <span className="text-muted-foreground">{item.subject}:</span> {item.headline}
             </li>

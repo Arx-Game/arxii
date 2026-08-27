@@ -1,4 +1,4 @@
-import { screen, within, waitFor } from '@testing-library/react';
+import { act, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
@@ -17,6 +17,7 @@ import {
   setSceneBaseline,
   clearSceneInteractions,
   resetGame,
+  hydrateActiveCharacter,
 } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 import type { InteractionWsPayload } from '@/hooks/types';
@@ -66,6 +67,24 @@ vi.mock('@/roster/queries', () => ({
   // test suite isn't exercising the drawer's own identity resolution.
   useRosterEntryByNameQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
   useRosterEntryQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  // #3412 — GameTopBar/GameWindow's select handlers call this alongside their
+  // existing puppeting dispatch; stub it out so those clicks don't hit the
+  // network. Not exercised directly by this suite's assertions.
+  useSelectCharacterMutation: vi.fn(() => ({ mutate: vi.fn() })),
+}));
+
+// #3412 — GamePage's mount-path auto-start effect calls `connect()`. Mocked
+// (mirroring GameTopBar.selection.test.tsx's own rationale) so no test in
+// this file opens a real WebSocket; the dedicated describe block below
+// exercises the effect's own contract via `connectMock`.
+const connectMock = vi.fn(() => Promise.resolve());
+vi.mock('@/hooks/useGameSocket', () => ({
+  useGameSocket: () => ({
+    connect: connectMock,
+    send: vi.fn(),
+    disconnectAll: vi.fn(),
+    executeAction: vi.fn(),
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -277,6 +296,7 @@ describe('GamePage', () => {
     // clear between tests to keep them isolated from each other.
     localStorage.clear();
     mockUseDreamState.mockReturnValue({ data: undefined, isLoading: false });
+    connectMock.mockClear();
   });
 
   afterEach(() => {
@@ -1426,6 +1446,101 @@ describe('GamePage', () => {
       });
 
       invalidateSpy.mockRestore();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Enter-the-world auto-start (#3412) — a durable selection with no live
+  // session yet (reload hydration, or arriving via the header's docked chip)
+  // auto-puppets on mount instead of requiring a manual click.
+  // ---------------------------------------------------------------------------
+
+  describe('Enter-the-world auto-start (#3412)', () => {
+    it('auto-starts and connects a hydrated selection that has no session yet', async () => {
+      store.dispatch(setAccount(mockAccount));
+      // Reload-hydration shape: `active` set via `hydrateActiveCharacter`,
+      // deliberately WITHOUT `startSession` — mirrors what `useAccountQuery`
+      // actually dispatches, unlike this file's other tests which seed a
+      // session directly.
+      store.dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
+
+      renderWithProviders(<GamePage />);
+
+      await waitFor(() => {
+        expect(connectMock).toHaveBeenCalledWith(ACTIVE_NAME);
+      });
+      expect(store.getState().game.sessions[ACTIVE_NAME]).toBeDefined();
+      expect(store.getState().game.active).toBe(ACTIVE_NAME);
+    });
+
+    it('does not re-start or reconnect a session that already exists', async () => {
+      store.dispatch(setAccount(mockAccount));
+      // A live session already exists (e.g. GameTopBar was used to switch
+      // puppets) — the mount-path effect must leave it alone: no second
+      // `connect()` call, and no `startSession` re-dispatch that would zero
+      // its accumulated `unread` count.
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+      expect(connectMock).not.toHaveBeenCalled();
+    });
+
+    it('spends the auto-start once per mount: a later selection change never connects', async () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(hydrateActiveCharacter({ name: ACTIVE_NAME, entryId: rosterEntry.id }));
+
+      renderWithProviders(<GamePage />);
+
+      await waitFor(() => {
+        expect(connectMock).toHaveBeenCalledWith(ACTIVE_NAME);
+      });
+      connectMock.mockClear();
+
+      // A selection change surfacing MID-MOUNT (cross-tab select arriving via
+      // an account refetch, or a failed select POST reverting to the server
+      // value) hydrates a new session-less name. The mount's one crossing is
+      // already spent — connecting here would be selection summoning presence
+      // (ADR-0241), so the effect must stay quiet and no session may appear.
+      act(() => {
+        store.dispatch(hydrateActiveCharacter({ name: 'Corvin', entryId: rosterEntry.id + 1 }));
+      });
+
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(store.getState().game.sessions['Corvin']).toBeUndefined();
+      expect(store.getState().game.active).toBe('Corvin');
+    });
+
+    it('a mount that finds a live session also spends the crossing', async () => {
+      store.dispatch(setAccount(mockAccount));
+      // SPA re-nav shape: GamePage remounts while Redux still holds a live
+      // session for the active character. No connect fires (existing-session
+      // rule) — but the mount's one crossing must be SPENT anyway, or a later
+      // cross-tab flip of `active` would slip past the guard and connect.
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      await screen.findByText('stretches languidly.');
+      expect(connectMock).not.toHaveBeenCalled();
+
+      act(() => {
+        store.dispatch(hydrateActiveCharacter({ name: 'Corvin', entryId: rosterEntry.id + 1 }));
+      });
+
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(store.getState().game.sessions['Corvin']).toBeUndefined();
+    });
+
+    it('does nothing when there is no selection at all', () => {
+      store.dispatch(setAccount(mockAccount));
+      // No hydration, no session — the logged-in-but-no-selection state.
+
+      renderWithProviders(<GamePage />);
+
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(store.getState().game.active).toBeNull();
     });
   });
 });

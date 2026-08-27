@@ -53,6 +53,8 @@ function makeAccount(overrides: Partial<AccountData> = {}): AccountData {
     is_gm: false,
     available_characters: [],
     pending_applications: [],
+    selected_entry_id: null,
+    selected_entry: null,
     ...overrides,
   };
 }

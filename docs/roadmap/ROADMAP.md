@@ -189,6 +189,34 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   when their respective systems are built. See `src/world/mechanics/TECH_DEBT.md` for the tracking
   table.
 
+- **Durable character-selection foundation (#3412 slice 1, complete, ADR-0241):** the
+  four-state model (logged out / logged in-no-selection / selected / puppeting) gets its
+  state-2.5 substrate. Backend: `PlayerData.selected_entry` (nullable FK → `RosterEntry`,
+  `SET_NULL`), sole mutator `world.roster.services.selection.set_selected_entry`
+  (zero lifecycle/session/puppeting side effects by design), `POST
+  /api/roster/entries/select/`, `selected_entry`/`selected_entry_id` added to `GET
+  /api/user/`. Frontend: `gameSlice` mirrors the server fact (hydrated every account
+  fetch, so a hard reload or a second device reproduces the same selection); app-wide
+  `SelectedCharacterChip` in `Header` (portrait, reused `PersonaSwitcher`, "Enter the
+  world" link, "step away" clear); `GamePage`'s mount-path effect auto-starts the
+  session on arrival when a selection exists but nothing is puppeting yet — the one
+  deliberate selection→presence crossing. Degradation sweep + hygiene fold-ins done in
+  the same slice (fold in, don't file): tidings/wardrobe loading states, a mute-settings
+  link, three message-tab fixes, notification badge routing, nine feed-kind labels,
+  consent-notifier gating, and a second remedy on `RequireCharacter`'s zero-character
+  guard. Slice 1 is deliberately chrome + substrate only — **no Hall page, no 2.5 act
+  gates, no offscreen acts** (those are slices 2-3). See
+  [roster.md](../systems/roster.md) for full model/service/endpoint/frontend detail and
+  ADR-0241 for the rejected alternatives.
+  - **Known seams for slice 2/3:** per-character narrative unread counts need a new
+    backend filter/field — `narrative/views.py`'s unread queryset is account-only today,
+    verified absent rather than assumed. `gameSlice`'s name-keyed shape (not
+    `RosterEntry` id) is a deliberately deferred wart; the entry-id refactor touches an
+    estimated 25 call sites and is out of this slice's scope. Migration-number and
+    ADR-number collisions with in-flight PRs are expected and resolve at enqueue time
+    per the standard recipe (`arx manage rebase_migration arxii` /
+    renumber-at-merge) — not a defect of this slice.
+
 ### Critical Infrastructure Gap: Reactive Layer Activation
 
 The flows/triggers system in `src/flows/` is a fully-implemented reactive engine —

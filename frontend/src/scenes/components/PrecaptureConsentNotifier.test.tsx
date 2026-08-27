@@ -2,6 +2,10 @@ import { render, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
+import { Provider } from 'react-redux';
+import { configureStore } from '@reduxjs/toolkit';
+import { authSlice, setAccount } from '@/store/authSlice';
+import { mockAccount } from '@/test/mocks/account';
 import type { PrecaptureConsentRequest } from '../types';
 
 const mockFetchPendingPrecaptureConsents = vi.fn();
@@ -44,12 +48,24 @@ function request(id: number, overrides: Partial<PrecaptureConsentRequest> = {}) 
   };
 }
 
-function createWrapper() {
+// Logged-in by default (#3412 hygiene fold-in: the query is now account-gated,
+// mirroring DuelChallengeNotifier/ConsentAttentionNotifier) — every pre-existing
+// test in this file exercises the fetch-and-toast path, so it needs an account
+// present unless a test explicitly opts into the logged-out case.
+function createWrapper(loggedIn = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
+  const store = configureStore({ reducer: { auth: authSlice.reducer } });
+  if (loggedIn) {
+    store.dispatch(setAccount(mockAccount));
+  }
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </Provider>
+    );
   };
 }
 
@@ -57,6 +73,13 @@ describe('PrecaptureConsentNotifier', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchPendingPrecaptureConsents.mockResolvedValue([]);
+  });
+
+  it('does not fetch while logged out (#3412 account gate)', async () => {
+    render(<PrecaptureConsentNotifier />, { wrapper: createWrapper(false) });
+    // Give any accidental fetch a tick to fire before asserting its absence.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockFetchPendingPrecaptureConsents).not.toHaveBeenCalled();
   });
 
   it('renders nothing itself', async () => {

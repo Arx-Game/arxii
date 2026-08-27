@@ -7,6 +7,7 @@ import {
   fetchRosters,
   fetchRosterEntries,
   postRosterApplication,
+  postSelectEntry,
   fetchPlayerMedia,
   uploadPlayerMedia,
   associateMedia,
@@ -106,6 +107,32 @@ export function useSendRosterApplication(id: RosterEntryData['id']) {
       queryClient.invalidateQueries({ queryKey: ['account'] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to send.'),
+  });
+}
+
+/**
+ * Set (or clear) the account's durable server-side character selection
+ * (#3412 state 2.5 substrate). Invalidates `['account']` on success — the
+ * key `useAccountQuery()` (mounted globally via `AuthProvider`) reads; its
+ * own success effect re-hydrates `gameSlice.active`/`activeEntryId` from the
+ * refetched `selected_entry`, so this mutation never writes to Redux
+ * directly. Fire-and-forget from callers: a failed select degrades to "the
+ * local switch worked, but a reload might not restore it" rather than
+ * blocking the (already-immediate) local session switch.
+ */
+export function useSelectCharacterMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (entryId: number | null) => postSelectEntry(entryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['account'] });
+    },
+    // PLACEHOLDER wording — matches useSendRosterApplication's toast pattern
+    // above. The local switch already happened (fire-and-forget, see the doc
+    // comment above), so this is purely "your reload-durable pick didn't
+    // save" — never blocking, never re-thrown.
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Couldn't save your character selection."),
   });
 }
 

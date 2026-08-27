@@ -75,12 +75,12 @@ Re-exports from `@/generated/api`:
 
 **Phase 4 — message delivery:**
 
-| File                       | Purpose                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `CategoryBadge.tsx`        | Colored badge for narrative category                                                                                |
-| `MessageRow.tsx`           | Single message row — body, category badge, timestamp, acknowledge button                                            |
-| `MessagesSection.tsx`      | Full messages section embedded in the character-sheet page; category filter tabs, unread-first ordering, pagination |
-| `UnreadNarrativeBadge.tsx` | Red badge shown in the top-level nav when there are unread messages; navigates to the messages section on click     |
+| File                       | Purpose                                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CategoryBadge.tsx`        | Colored badge for narrative category                                                                                                                                                                  |
+| `MessageRow.tsx`           | Single message row — body, category badge, timestamp, acknowledge button                                                                                                                              |
+| `MessagesSection.tsx`      | Full messages section embedded in the character-sheet page; category filter tabs, unread-first ordering, pagination                                                                                   |
+| `UnreadNarrativeBadge.tsx` | Red badge shown in the top-level nav when there are unread messages; links to the selected character's sheet (`gameSlice.active`), falling back to the first owned character, then the roster (#3412) |
 
 **Phase 5 — gemit + mute:**
 
@@ -139,7 +139,7 @@ is surfaced in `MessagesSection`.
 - **Character sheet** (`frontend/src/roster/pages/CharacterSheetPage.tsx`):
   `MessagesSection` is embedded as a named section after the existing sheet data
 - **Navigation** (`frontend/src/components/Header.tsx`): `UnreadNarrativeBadge`
-  uses `useUnreadNarrativeCount()` and links to the character-sheet messages anchor
+  uses `useUnreadNarrativeCount()` and links to the character sheet
 
 ## Common Gotchas
 
@@ -155,7 +155,10 @@ embedded inside the character sheet which already requires authentication;
 the component itself does not add another auth guard.
 
 **Backend recipients are character sheets, not accounts.** The narrative
-`NarrativeMessageDelivery` is keyed to `recipient_character_sheet`. The
-`/api/narrative/my-messages/` endpoint scopes delivery rows to the
-current session's puppeted character sheet, not the account. If no
-character is puppeted, the endpoint returns an empty list.
+`NarrativeMessageDelivery` is keyed to `recipient_character_sheet`. Fix-on-sight
+(#3412): `/api/narrative/my-messages/` (`MyNarrativeMessagesView.get_queryset`)
+scopes delivery rows to `recipient_character_sheet__character__db_account=user`
+— every character sheet the account owns, not one puppeted character. There is
+no per-character filter yet, so `UnreadNarrativeBadge`'s count is always this
+account-wide total (the badge routes its _link_ to the selected character via
+`gameSlice.active`, but the count itself stays grouped).

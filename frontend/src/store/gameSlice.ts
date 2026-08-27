@@ -60,6 +60,15 @@ export interface Session {
 interface GameState {
   sessions: Record<string, Session>;
   active: MyRosterEntry['name'] | null;
+  /**
+   * The durable server-side selection's RosterEntry id (#3412 state 2.5
+   * substrate — `PlayerData.selected_entry_id`), mirrored alongside `active`
+   * by `hydrateActiveCharacter`. `active` stays keyed by character NAME (a
+   * standing rule for this slice, not revisited here — a rename touches ~25
+   * call sites); this field is the seam a future refactor can use to key the
+   * slice by id instead, without another full sweep.
+   */
+  activeEntryId: number | null;
 }
 
 // Module-scope monotonic id for session messages (see addSessionMessage).
@@ -68,6 +77,7 @@ let nextMessageId = 0;
 const initialState: GameState = {
   sessions: {},
   active: null,
+  activeEntryId: null,
 };
 
 export const gameSlice = createSlice({
@@ -304,6 +314,35 @@ export const gameSlice = createSlice({
       }
     },
     resetGame: () => initialState,
+    // Reload survival (#3412): mirrors the account query's `selected_entry`
+    // into this slice on every successful fetch (see useAccountQuery) — a
+    // truthy payload SETS active/activeEntryId, `null` CLEARS both (#3412
+    // review fix: the explicit-clear path — mutate(null) + the account
+    // refetch it triggers — must actually un-hydrate, not just leave the
+    // slice stuck on the last-selected character forever). Deliberately does
+    // NOT touch `sessions`: selection is not presence, so hydration/clearing
+    // never starts OR tears down a session/connection. Concretely: clearing
+    // can leave `active: null` while `sessions[thatName]` still holds a live,
+    // connected session — the WebSocket (owned by useGameSocket, outside
+    // Redux) keeps running and accumulating that session's state regardless;
+    // only the "which character is currently highlighted/selected" pointer
+    // moves. `active` can therefore point at a character with no
+    // `sessions[active]` entry yet (a fresh SET with no session started), or
+    // at nothing while a session persists orphaned in `sessions` (a CLEAR) —
+    // callers (GameWindow, GameTopBar) must tolerate both.
+    hydrateActiveCharacter: (
+      state,
+      action: PayloadAction<{ name: MyRosterEntry['name']; entryId: number } | null>
+    ) => {
+      if (action.payload === null) {
+        state.active = null;
+        state.activeEntryId = null;
+        return;
+      }
+      const { name, entryId } = action.payload;
+      state.active = name;
+      state.activeEntryId = entryId;
+    },
   },
 });
 
@@ -325,4 +364,5 @@ export const {
   setActiveThreadTab,
   hydrateThreadTabs,
   resetGame,
+  hydrateActiveCharacter,
 } = gameSlice.actions;

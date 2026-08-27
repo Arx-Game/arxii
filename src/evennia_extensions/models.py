@@ -136,6 +136,21 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         "exported corpus never carries a username (ADR-0010, ADR-0196).",
     )
 
+    # State 2.5 substrate (#3412): the character this account has taken up
+    # offscreen. Selection is NOT presence — setting/clearing it triggers zero
+    # lifecycle/session/puppeting side effects; it is a durable fact the web
+    # client reads to know "who am I browsing as" before any presence step.
+    # The sole mutator is world.roster.services.selection.set_selected_entry.
+    selected_entry = models.ForeignKey(
+        "arxii.RosterEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The character this account has taken up offscreen (state "
+        "2.5). Selection is not presence (#3412).",
+    )
+
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)

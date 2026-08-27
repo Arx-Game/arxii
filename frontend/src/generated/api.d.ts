@@ -18166,6 +18166,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/entries/select/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #3412 — set/clear the account's durable character selection (state 2.5).
+     *
+     *     Selection is NOT presence: this triggers zero lifecycle, session, or
+     *     puppeting side effects. The chosen entry must be one of the account's
+     *     own current roster entries (mirrors ``mine``'s queryset); a foreign or
+     *     unknown id is rejected uniformly, mirroring the persona set-active
+     *     endpoint. ``entry_id: null`` always clears.
+     */
+    post: operations['roster_entries_select_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/families/': {
     parameters: {
       query?: never;
@@ -39657,6 +39682,32 @@ export interface components {
       name: string;
       /** @description Staff note on what belongs here. */
       description?: string;
+    };
+    /**
+     * @description POST body for the #3412 character-selection endpoint.
+     *
+     *     ``entry_id: null`` clears the selection; any other value must be one of
+     *     the account's own current roster entries (validated in the service, not
+     *     here — a foreign id is rejected uniformly, mirroring the persona
+     *     set-active endpoint).
+     */
+    SelectEntryRequestRequest: {
+      entry_id: number | null;
+    };
+    /**
+     * @description Result of the #3412 select/clear endpoint — the updated selection
+     *     fragment, in the same shape ``/api/user/`` exposes it in.
+     *
+     *     Both fields are ``allow_null`` because a clear (``entry_id: null``) returns
+     *     ``player_data.selected_entry_id``/``selected_entry`` as ``None`` — DRF's
+     *     ``Serializer.to_representation`` already emits ``null`` for a ``None``
+     *     attribute regardless of this flag, but omitting it left drf-spectacular
+     *     generating a non-nullable schema/TS type for a field that is genuinely
+     *     nullable at runtime.
+     */
+    SelectedEntryResult: {
+      readonly selected_entry_id: number | null;
+      readonly selected_entry: components['schemas']['MyRosterEntry'] | null;
     };
     /** @description Shop-directory row: who crafts what, where — execution requires visiting. */
     ServiceOffer: {
@@ -68437,6 +68488,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MyRosterEntry'];
+        };
+      };
+    };
+  };
+  roster_entries_select_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SelectEntryRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SelectedEntryResult'];
         };
       };
     };

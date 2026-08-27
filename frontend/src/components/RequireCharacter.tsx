@@ -37,9 +37,14 @@ export function RequireCharacter({ children }: RequireCharacterProps) {
             This page requires an active character. Browse the roster to find a character to play,
             or start a new character application.
           </p>
+          {/* #3412 hygiene fold-in: mirror WelcomePanel's zero-character card, which
+              offers both remedies (browse vs. create) — this guard offered only one. */}
           <div className="flex gap-2">
             <Button asChild>
               <Link to="/roster">Browse the roster</Link>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link to="/characters/create">Create a character</Link>
             </Button>
           </div>
         </CardContent>

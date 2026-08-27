@@ -5,14 +5,15 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { Header } from '../Header';
 import { authSlice } from '@/store/authSlice';
-import { gameSlice } from '@/store/gameSlice';
+import { gameSlice, hydrateActiveCharacter } from '@/store/gameSlice';
 import { rouletteSlice } from '@/store/rouletteSlice';
+import type { MyRosterEntry } from '@/roster/types';
 
 function setupUser() {
   return { user: userEvent.setup() };
@@ -39,15 +40,43 @@ vi.mock('@/rituals/queries', () => ({
   }),
 }));
 
-function Wrapper({ children }: { children: ReactNode }) {
-  const store = configureStore({
+// #3412 — the docked-portrait chip's roster lookup + selection-clearing
+// mutation. No QueryClientProvider is mounted in this file's Wrapper (every
+// other query hook here is mocked out the same way), so a real
+// `useMyRosterEntriesQuery` would throw "No QueryClient set". Empty by
+// default; the chip-specific describe block below overrides this per test
+// via `mockRosterEntries`.
+const mockRosterEntries = vi.fn(() => ({ data: [] as MyRosterEntry[] }));
+const mockSelectMutate = vi.fn();
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: () => mockRosterEntries(),
+  useSelectCharacterMutation: () => ({ mutate: mockSelectMutate, isPending: false }),
+}));
+
+// PersonaSwitcher pulls in its own react-query hooks (personaQueries.ts) —
+// stubbed out for the same QueryClientProvider-less-Wrapper reason. Its own
+// behavior is covered by PersonaSwitcher.test.tsx.
+vi.mock('@/game/components/PersonaSwitcher', () => ({
+  PersonaSwitcher: () => <span data-testid="persona-switcher-stub" />,
+}));
+
+function makeStore() {
+  return configureStore({
     reducer: {
       auth: authSlice.reducer,
       game: gameSlice.reducer,
       roulette: rouletteSlice.reducer,
     },
   });
+}
 
+function Wrapper({
+  children,
+  store = makeStore(),
+}: {
+  children: ReactNode;
+  store?: ReturnType<typeof makeStore>;
+}) {
   return (
     <Provider store={store}>
       <MemoryRouter>{children}</MemoryRouter>
@@ -56,6 +85,11 @@ function Wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('Header', () => {
+  beforeEach(() => {
+    mockRosterEntries.mockReturnValue({ data: [] });
+    mockSelectMutate.mockClear();
+  });
+
   it('renders direct nav links and dropdown triggers', () => {
     render(
       <Wrapper>
@@ -136,5 +170,88 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: /crossover/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /codex/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /tidings/i })).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Docked-portrait chip (#3412) — the app-wide chrome surface for the
+  // account's durable server-side character selection.
+  // ---------------------------------------------------------------------------
+
+  describe('docked-portrait chip (#3412)', () => {
+    const aria: MyRosterEntry = {
+      id: 1,
+      name: 'Aria',
+      character_id: 42,
+      profile_picture_url: null,
+      primary_persona_id: 7,
+      active_persona_id: 7,
+    };
+
+    it("renders no chip when there is no selection (byte-for-byte today's header)", () => {
+      mockRosterEntries.mockReturnValue({ data: [aria] });
+      const store = makeStore();
+
+      render(
+        <Wrapper store={store}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.queryByText('Aria')).not.toBeInTheDocument();
+      expect(screen.queryByText(/enter the world/i)).not.toBeInTheDocument();
+    });
+
+    it('renders the chip (portrait, name, persona switcher, enter-the-world, step-away) when a selection exists', () => {
+      mockRosterEntries.mockReturnValue({ data: [aria] });
+      const store = makeStore();
+      store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+
+      render(
+        <Wrapper store={store}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.getByText('Aria')).toBeInTheDocument();
+      expect(screen.getByTestId('persona-switcher-stub')).toBeInTheDocument();
+      const enterLink = screen.getByRole('link', { name: /enter the world/i });
+      expect(enterLink).toHaveAttribute('href', '/game');
+      expect(screen.getByTitle('Step away')).toBeInTheDocument();
+    });
+
+    it('clicking "Step away" clears the selection via the select-character mutation', async () => {
+      const { user } = setupUser();
+      mockRosterEntries.mockReturnValue({ data: [aria] });
+      const store = makeStore();
+      store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+
+      render(
+        <Wrapper store={store}>
+          <Header />
+        </Wrapper>
+      );
+
+      await user.click(screen.getByTitle('Step away'));
+
+      expect(mockSelectMutate).toHaveBeenCalledWith(null);
+      // Never touches a live session — selection isn't presence (#3412).
+      expect(store.getState().game.sessions).toEqual({});
+    });
+
+    it('does not render the chip when the roster entry for the active name has not loaded yet', () => {
+      // `active` set (e.g. hydration in flight) but the roster query hasn't
+      // resolved the matching entry yet — no chip until there's data to show.
+      mockRosterEntries.mockReturnValue({ data: [] });
+      const store = makeStore();
+      store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+
+      render(
+        <Wrapper store={store}>
+          <Header />
+        </Wrapper>
+      );
+
+      expect(screen.queryByText('Aria')).not.toBeInTheDocument();
+    });
   });
 });

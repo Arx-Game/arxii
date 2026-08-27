@@ -3,7 +3,7 @@ import { fetchAccount, fetchRegistrationStatus, postLogin, postLogout, postRegis
 import { AccountData } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
-import { resetGame } from '@/store/gameSlice';
+import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
 
@@ -16,9 +16,33 @@ export function useAccountQuery() {
   });
 
   useEffect(() => {
-    if (result.data !== undefined) {
-      dispatch(setAccount(result.data));
+    // `undefined` means the query hasn't resolved yet (still pending) —
+    // don't touch either slice until there's a real payload (which may
+    // itself be `null`, meaning "no account": see fetchAccount's empty-body
+    // case). `result.data` resolving to `null` also runs the hydrate branch
+    // below, correctly clearing gameSlice — useLogout separately dispatches
+    // resetGame() for the explicit-logout path, so this is belt-and-suspenders
+    // for any other route that lands `data: null` (e.g. a stale/expired session).
+    if (result.data === undefined) {
+      return;
     }
+    const account = result.data;
+    dispatch(setAccount(account));
+    // Reload survival (#3412): mirror the durable server-side selection into
+    // gameSlice on every successful account fetch — hard reload -> this
+    // fetch -> hydration -> IC-scoped pages (tidings, own-sheet) that read
+    // `gameSlice.active` stop degrading. #3412 review fix: this now mirrors
+    // BOTH directions — a `selected_entry` SETS active/activeEntryId, and its
+    // absence (including `account === null`, the logged-out/no-account case)
+    // CLEARS them (e.g. after `useSelectCharacterMutation.mutate(null)` + the
+    // account refetch it triggers) — see `hydrateActiveCharacter`'s own doc
+    // comment for why clearing the mirror is safe (never tears down a live
+    // session; selection isn't presence in either direction). `entry` is
+    // hoisted out (rather than narrowing `account.selected_entry` inline) so
+    // the `account === null` case falls through the same `?? null` path
+    // instead of needing its own branch.
+    const entry = account?.selected_entry ?? null;
+    dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
   }, [result.data, dispatch]);
 
   return result;

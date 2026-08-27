@@ -178,6 +178,31 @@ describe('MessagesSection', () => {
 
     const link = screen.getByTestId('manage-mutes-link');
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', '/profile/mute-settings');
+    expect(link).toHaveAttribute('href', '/narrative/mute-settings');
+  });
+
+  // #3412 hygiene fold-in: the filter tab list had drifted behind
+  // NarrativeCategoryEnum (justice/weather/ability were missing).
+  it('renders a filter tab for every NarrativeCategory plus All/Unread', () => {
+    setupMocks([]);
+    render(<MessagesSection />, { wrapper: createWrapper() });
+
+    const expectedLabels = [
+      'All',
+      'Unread',
+      'Story',
+      'Atmosphere',
+      'Visions',
+      'Happenstance',
+      'System',
+      'Covenant',
+      'Renown',
+      'Justice',
+      'Weather',
+      'Ability',
+    ];
+    for (const label of expectedLabels) {
+      expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
+    }
   });
 });

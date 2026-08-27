@@ -164,6 +164,7 @@
   - account -> evennia.AccountDB [OneToOne]
   - profile_picture -> evennia_extensions.Media [FK] (nullable)
   - contributor -> contributors.ContentContributor [OneToOne] (nullable)
+  - selected_entry -> roster.RosterEntry [FK] (nullable)
 **Pointed to by:**
   - applications <- roster.RosterApplication
   - reviewed_applications <- roster.RosterApplication

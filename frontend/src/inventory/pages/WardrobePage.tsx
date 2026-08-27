@@ -38,11 +38,13 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAppSelector } from '@/store/hooks';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload, RoomStateObject } from '@/hooks/types';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useAuthStatus } from '@/evennia_replacements/queries';
 import { ItemCard } from '../components/ItemCard';
 import { ItemDetailPanel } from '../components/ItemDetailPanel';
 import { GiveItemDialog } from '../components/GiveItemDialog';
@@ -60,7 +62,14 @@ import type { ContainerAccessPolicy, ItemInstance } from '../types';
 
 export function WardrobePage() {
   const activeCharacter = useAppSelector((state) => state.game.active);
-  const { data: myEntries = [] } = useMyRosterEntriesQuery();
+  const { data: myEntries = [], isLoading: entriesLoading } = useMyRosterEntriesQuery();
+  // #3412 review fix: this page is behind ProtectedRoute, so the exposure window is
+  // narrow (a render or two before `useAccountQuery`'s hydration effect mirrors the
+  // durable selection into `gameSlice.active`, plus the shorter gap until the roster
+  // query resolves the id for an already-hydrated selection) — but it's real, and the
+  // fix is the same skeleton-not-empty-state pattern as TidingsFeed/TidingsPage.
+  const { isLoading: authLoading } = useAuthStatus();
+  const isResolvingActiveCharacter = authLoading || (activeCharacter != null && entriesLoading);
 
   // Resolve the active character name to its underlying ObjectDB pk. The pk
   // doubles as the CharacterSheet pk because CharacterSheet is OneToOne with
@@ -307,7 +316,10 @@ export function WardrobePage() {
     return (
       <div className="container mx-auto px-4 py-12">
         <h1 className="mb-4 text-3xl font-bold">Wardrobe</h1>
-        <NoActiveCharacterState />
+        {/* `!activeCharacter` is ambiguous on its own during the hydration window
+            (#3412 review fix) — show a skeleton there, and only the "no character"
+            empty-state once resolution genuinely lands on no selection. */}
+        {isResolvingActiveCharacter ? <WardrobeLoadingSkeleton /> : <NoActiveCharacterState />}
       </div>
     );
   }
@@ -506,6 +518,15 @@ function EmptyOutfitsState({ onSaveLook, hasWardrobe }: EmptyOutfitsStateProps) 
           You&apos;ll need a wardrobe item before you can save outfits.
         </p>
       )}
+    </div>
+  );
+}
+
+function WardrobeLoadingSkeleton() {
+  return (
+    <div className="space-y-4" data-testid="wardrobe-loading-skeleton">
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-24 w-full" />
     </div>
   );
 }

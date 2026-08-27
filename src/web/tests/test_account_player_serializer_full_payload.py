@@ -5,6 +5,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.models import PlayerData
 from web.api.payload_helpers import build_account_payload_context
 from web.api.serializers import AccountPlayerSerializer
 from world.character_sheets.factories import CharacterSheetFactory
@@ -14,6 +15,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import ApplicationStatus, RosterApplication, RosterType
+from world.roster.services.selection import set_selected_entry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
@@ -192,3 +194,71 @@ class AccountPayloadQueryCountTests(TestCase):
             f"Payload query count grew from {one_count} (1 char) to "
             f"{five_count} (5 chars) — N+1 in serializer methods"
         )
+
+
+class SelectedEntryPayloadTests(TestCase):
+    """The /api/user/ payload exposes the #3412 state 2.5 selection substrate."""
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.active_roster = RosterFactory(name=RosterType.ACTIVE, roster_type=RosterType.ACTIVE)
+
+    def _add_character(self, *, key: str):
+        character = CharacterFactory(db_key=key)
+        sheet = CharacterSheetFactory(character=character)
+        entry = RosterEntryFactory(character_sheet=sheet, roster=self.active_roster)
+        RosterTenureFactory(player_data=self.account.player_data, roster_entry=entry)
+        return entry
+
+    def test_payload_selected_entry_id_null_when_unset(self) -> None:
+        data = AccountPlayerSerializer(
+            self.account,
+            context=build_account_payload_context(self.account),
+        ).data
+        assert data["selected_entry_id"] is None
+        assert data["selected_entry"] is None
+
+    def test_payload_exposes_selected_entry_id_and_display_fields(self) -> None:
+        entry = self._add_character(key="Bob")
+        set_selected_entry(self.account.player_data, entry)
+
+        data = AccountPlayerSerializer(
+            self.account,
+            context=build_account_payload_context(self.account),
+        ).data
+
+        assert data["selected_entry_id"] == entry.pk
+        assert data["selected_entry"]["id"] == entry.pk
+        assert data["selected_entry"]["name"] == "Bob"
+
+    def test_payload_selected_entry_survives_other_accounts_untouched(self) -> None:
+        """Exposure check: one account's selection never leaks onto another's payload."""
+        entry = self._add_character(key="Bob")
+        set_selected_entry(self.account.player_data, entry)
+
+        other_account = AccountFactory()
+        other_data = AccountPlayerSerializer(
+            other_account,
+            context=build_account_payload_context(other_account),
+        ).data
+
+        assert other_data["selected_entry_id"] is None
+        assert other_data["selected_entry"] is None
+
+    def test_payload_selected_entry_set_null_on_entry_deletion(self) -> None:
+        """SET_NULL: deleting the selected entry clears the payload field too."""
+        entry = self._add_character(key="Bob")
+        set_selected_entry(self.account.player_data, entry)
+
+        entry.delete()
+        # Collector-driven SET_NULL bypasses per-instance .save(), leaving the
+        # resident PlayerData identity-map entry with a stale scalar id even
+        # after a fresh query (sharedmemory-model skill, stale-cache-traps #2).
+        PlayerData.flush_instance_cache()
+
+        data = AccountPlayerSerializer(
+            self.account,
+            context=build_account_payload_context(self.account),
+        ).data
+        assert data["selected_entry_id"] is None
+        assert data["selected_entry"] is None

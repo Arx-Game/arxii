@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react';
 import { SiteTitle } from './SiteTitle';
 import { UserNav } from './UserNav';
 import { ModeToggle } from './ModeToggle';
+import { SelectedCharacterChip } from './SelectedCharacterChip';
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -16,6 +17,7 @@ import { Badge } from './ui/badge';
 import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
 import { UnreadMailBadge } from '@/mail/components/UnreadMailBadge';
 import { useRitualSessionInbox } from '@/rituals/queries';
@@ -71,10 +73,23 @@ export function Header() {
   const { data: inboxSessions } = useRitualSessionInbox();
   const pendingInvitationCount = account ? (inboxSessions?.length ?? 0) : 0;
 
+  // Docked-portrait chip (#3412): the app-wide surface for the account's
+  // durable server-side character selection. `gameSlice.active` (not
+  // `account.selected_entry` directly) is the source of truth here — it's
+  // the same pointer GameTopBar/GamePage already key off, so the chip stays
+  // in lockstep with a local session switch instead of lagging behind the
+  // account refetch `useSelectCharacterMutation` triggers. Absent when
+  // there's no selection: no empty chip, no placeholder slot — the header
+  // renders exactly as it did before this existed.
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: characters } = useMyRosterEntriesQuery();
+  const selectedEntry = characters?.find((c) => c.name === activeCharacterName) ?? null;
+
   return (
     <header className="border-b">
       <div className="container mx-auto flex items-center justify-between px-4 py-4">
         <SiteTitle />
+        {selectedEntry && <SelectedCharacterChip entry={selectedEntry} />}
         <NavigationMenu className="hidden md:block">
           <NavigationMenuList>
             <NavigationMenuItem>

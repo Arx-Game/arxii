@@ -142,6 +142,7 @@ definition of it.
 |-------|---------|------------|
 | `RosterTenure` | Player-character relationship with anonymity — `Meta.ordering = ["-start_date"]` (#2728), so the lazy and prefetched fills of `RosterEntry.cached_tenures` agree on sort without either restating it | `player_data` (FK PlayerData), `roster_entry` (FK), `player_number`, `start_date`, `end_date` (null = current), `applied_date`, `approved_date`, `approved_by` (FK PlayerData), `photo_folder` |
 | `RosterApplication` | Application workflow before tenures | `player_data` (FK PlayerData), `character` (FK CharacterSheet — retargeted from ObjectDB in #2608), `status` (TextChoices), `application_text`, `review_notes`, `reviewed_by` (FK PlayerData) |
+| `PlayerData` (`evennia_extensions`) | Extends `AccountDB`; holds `selected_entry` (FK `RosterEntry`, `SET_NULL`, #3412) — the durable, offscreen "which character has this account taken up" fact (state 2.5 substrate). **Selection is not presence**: set only via `world.roster.services.selection.set_selected_entry`, which triggers zero lifecycle/session/puppeting writes. Must be one of `get_available_characters()`'s own-current population; a foreign entry is rejected. | `account` (OneToOne AccountDB, pk), `selected_entry` (FK RosterEntry, nullable), `display_name`, `karma`, `gm_notes`, ... |
 
 ### Settings & Media
 
@@ -312,6 +313,13 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 - `GET /api/roster/entries/mine/` - Current user's characters (authenticated)
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
 - `POST /api/roster/entries/{id}/set_profile_picture/` - Set profile picture from tenure media
+- `POST /api/roster/entries/select/` - Set/clear the account's durable character selection
+  (`{entry_id}` or `null`) — the state 2.5 substrate (#3412). Mirrors the persona
+  set-active endpoint's shape: the entry must be one of `mine`'s own-current-entries
+  population, a foreign/unknown id is rejected uniformly, and `entry_id: null` always
+  clears. **Selection is NOT presence** — no lifecycle/session/puppeting side effects
+  fire. Sole mutator: `world.roster.services.selection.set_selected_entry`. Response
+  mirrors the `/api/user/` payload fragment (`selected_entry_id` + `selected_entry`).
 
 **Filters:** `RosterEntryFilterSet` via DjangoFilterBackend
 
@@ -398,6 +406,44 @@ shelf, not new player-made characters going through CG.
 - **Character Creation**: `Family` and `FamilyMember` used during CG for family selection; families filtered by `origin_realm`
 
 ---
+
+## Frontend: Selection Chrome (#3412 slice 1, ADR-0241)
+
+Web-only; no telnet surface (selection is a web-first state substrate, not a
+command). Client state mirrors the server; nothing here is a source of truth.
+
+- **`gameSlice`** (`frontend/src/store/gameSlice.ts`) mirrors
+  `PlayerData.selected_entry_id`/`selected_entry` alongside the existing
+  `active`/`activeEntryId` puppeting fields — hydrated from `useAccountQuery`'s
+  `GET /api/user/` response on every fetch, so a hard reload or a second device
+  reproduces the same selection. **Known wart:** the slice keys by character
+  *name*, not `RosterEntry` id, a pre-existing shape deliberately not refactored
+  here (25-surface change, out of slice scope — see the #3412 roadmap entry's
+  "known seams").
+- **`SelectedCharacterChip`** (`frontend/src/components/SelectedCharacterChip.tsx`)
+  — docked-portrait chip in `Header`, rendered app-wide (not just inside
+  `/game`) whenever a selection exists. Shows portrait + name, reuses the same
+  `PersonaSwitcher` `GameTopBar` mounts in-game (re-mounted here so
+  identity-switching works before entering `/game`), an "Enter the world" link,
+  and a "step away" control that clears the selection via
+  `useSelectCharacterMutation`. PLACEHOLDER copy throughout — final wording is
+  a separate pass; see the "Taken Up" glossary entry.
+- **`RequireCharacter`** (`frontend/src/components/RequireCharacter.tsx`) — route
+  guard gaining a second remedy (#3412 hygiene fold-in): offers both "Browse the
+  roster" and "Create a character," mirroring `WelcomePanel`'s zero-character
+  card instead of offering only one path.
+- **Enter-the-world auto-start** — the one deliberate selection→presence
+  crossing. `SelectedCharacterChip`'s "Enter the world" link never puppets
+  anything itself; `GamePage`'s own mount-path effect (`frontend/src/game/GamePage.tsx`)
+  auto-starts the session on arrival when a selection exists but no session is
+  live yet, keeping the selection/puppeting distinction intact even at the one
+  place they meet.
+- **Degradation sweep (#3412 hygiene fold-in):** loading states for tidings and
+  wardrobe panels, a mute-settings link, three message-tab fixes, notification
+  badge routing corrections, nine feed-kind labels, and consent-notifier gating
+  — all pre-existing gaps surfaced while wiring selection-aware chrome, fixed in
+  the same slice rather than filed separately (repo convention: fold in, don't
+  file).
 
 ## Admin
 

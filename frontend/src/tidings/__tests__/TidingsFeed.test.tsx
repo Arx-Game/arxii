@@ -62,4 +62,51 @@ describe('TidingsFeed', () => {
 
     expect(screen.getByText(/choose an active character/i)).toBeInTheDocument();
   });
+
+  // #3412 review fix: the resolving window (account/roster hydration still in
+  // flight) must show a skeleton, never the "choose a character" empty-state —
+  // that message is only correct once resolution genuinely lands on no selection.
+  it('shows a loading skeleton, not the empty-state, while the viewer is still resolving', () => {
+    mockFeed(undefined);
+    render(<TidingsFeed viewerId={null} isResolvingViewer />);
+
+    expect(screen.queryByText(/choose an active character/i)).not.toBeInTheDocument();
+  });
+
+  it('renders a distinct label for every PublicFeedItemKindEnum value', () => {
+    const kinds = [
+      'deed',
+      'scandal',
+      'pardon',
+      'crisis',
+      'proclamation',
+      'birthday',
+      'stature',
+      'menace',
+      'verdict',
+    ] as const;
+    mockFeed(
+      kinds.map((kind, index) => ({
+        kind,
+        headline: `headline-${index}`,
+        subject: `subject-${index}`,
+        occurred_at: '2026-06-24T00:00:00Z',
+      }))
+    );
+    render(<TidingsFeed viewerId={1} />);
+
+    const labels = [
+      'Deed',
+      'Scandal',
+      'Pardon',
+      'Crisis',
+      'Proclamation',
+      'Birthday',
+      'Stature',
+      'Menace',
+      'Verdict',
+    ];
+    const seen = new Set(labels.map((label) => screen.getByText(label).textContent));
+    expect(seen.size).toBe(labels.length);
+  });
 });

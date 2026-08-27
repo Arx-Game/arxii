@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
@@ -27,6 +27,7 @@ import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack'
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useGameSocket } from '@/hooks/useGameSocket';
 import {
   markThreadSeen,
   setSceneBaseline,
@@ -34,6 +35,7 @@ import {
   closeThreadTab,
   setActiveThreadTab,
   hydrateThreadTabs,
+  startSession,
 } from '@/store/gameSlice';
 import { loadThreadTabs, saveThreadTabs } from './threadTabsStorage';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
@@ -84,8 +86,49 @@ function deriveRoomTabLabel(focus: FocusEntry, roomName: string | undefined): st
 export function GamePage() {
   const account = useAccount();
   const dispatch = useAppDispatch();
+  const { connect } = useGameSocket();
   const { data: characters = [] } = useMyRosterEntriesQuery();
   const { sessions, active } = useAppSelector((state) => state.game);
+
+  // Enter-the-world auto-start (#3412): a fresh hydration (reload survival,
+  // or arriving here via the header's docked chip) sets `active` with no
+  // `sessions[active]` entry yet — until now, GameTopBar's clickable avatar
+  // was the ONLY way to actually connect from that state, i.e. selecting a
+  // character always cost a second click once you got to /game. This is the
+  // ONE deliberate selection->presence crossing (selection precedes
+  // puppeting): GamePage's own mount path auto-starts the session instead of
+  // waiting for that click. Scoped strictly to "no session object exists
+  // yet" (via the boolean below, not the raw `sessions` object, so the
+  // effect doesn't re-run on every unrelated session mutation once started)
+  // — once a session exists, reconnection on a drop is useGameSocket's own
+  // backoff-driven job, and re-dispatching `startSession` here would zero
+  // its accumulated `unread` count on every rerun. A session that already
+  // exists (connected or not — e.g. GameTopBar was used to switch puppets
+  // before this effect ever saw a gap) is therefore left entirely alone.
+  // The crossing is once-per-mount: the ref spends the auto-start on the
+  // FIRST session-less active name this mount observes (present at mount, or
+  // arriving via the initial account hydration on a hard reload of /game).
+  // Any LATER change of `active` while mounted — a cross-tab selection
+  // surfacing through a focus refetch, a failed select POST reverting to the
+  // server value — must not connect a session nobody asked this tab to start:
+  // that would be selection summoning presence, which the state model forbids
+  // outside this one mount-path crossing (ADR-0241). Switching puppets
+  // mid-mount stays what it always was: GameTopBar's explicit avatar click.
+  // The ref is spent on the first run that OBSERVES an active name at all —
+  // whether or not a connect fires. A mount that finds a live session already
+  // in place (SPA re-nav to /game while Redux still holds the connection) has
+  // its world entry too; leaving the ref unspent there would let a later
+  // cross-tab flip of `active` slip past the guard. Only null-before-hydration
+  // runs leave the crossing unspent.
+  const autoStartSpent = useRef(false);
+  const hasActiveSession = active ? Boolean(sessions[active]) : false;
+  useEffect(() => {
+    if (!active || autoStartSpent.current) return;
+    autoStartSpent.current = true;
+    if (hasActiveSession) return;
+    dispatch(startSession(active));
+    connect(active).catch(() => {});
+  }, [active, hasActiveSession, dispatch, connect]);
 
   const focus = useFocusStack(DEFAULT_ROOM_ENTRY);
 
