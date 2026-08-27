@@ -44,6 +44,8 @@ A hidden fact, anchored to a subject.
 | `legend_deed` | FK `societies.LegendEntry`, null — the public legend telling of the act this secret is the truth behind (#1573) |
 | `mission_deed` | FK `missions.MissionDeedRecord`, null — the recorded mission act (#1573) |
 | `scene` | FK `scenes.Scene`, null — the scene the act happened in (freeform/blackmail context) (#1573) |
+| `subject_item_template` | FK `items.ItemTemplate`, null — the item kind this secret is about, if any (#2540 exact-pointer ruling). "Any of this kind" |
+| `subject_item_instance` | FK `items.ItemInstance`, null, SET_NULL — narrows to "this exact one"; must be an instance of `subject_item_template` when both are set |
 
 ### `SecretCategory`
 Staff-editable lookup (`SharedMemoryModel`) so the taxonomy grows without a migration. A

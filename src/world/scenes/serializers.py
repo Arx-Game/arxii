@@ -10,6 +10,8 @@ from world.areas.positioning.serializers import (
     PositionNodeSerializer,
     PositionSummarySerializer,
 )
+from world.justice.constants import HUMILIATION_MARK_EXPLANATION
+from world.justice.serializers import HumiliationMarkSerializer
 from world.scenes.constants import ScenePrivacyMode, SceneRoundMode, SceneRoundStartReason
 from world.scenes.models import (
     Persona,
@@ -34,6 +36,9 @@ class PersonaSerializer(serializers.ModelSerializer):
     guise_quote = serializers.SerializerMethodField()
     guise_personality = serializers.SerializerMethodField()
     guise_background = serializers.SerializerMethodField()
+    # #2378 follow-up (ruling 5) — the fading reputational layer atop a
+    # permanent, provenance-free brand; None once HUMILIATION_TERM_DAYS passes.
+    humiliation_mark = serializers.SerializerMethodField()
 
     class Meta:
         model = Persona
@@ -54,6 +59,7 @@ class PersonaSerializer(serializers.ModelSerializer):
             "guise_quote",
             "guise_personality",
             "guise_background",
+            "humiliation_mark",
         ]
         read_only_fields = ["roster_entry", "allow_social_actions", "display_name"]
 
@@ -129,6 +135,24 @@ class PersonaSerializer(serializers.ModelSerializer):
         if entry:
             return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
+
+    @extend_schema_field(HumiliationMarkSerializer(allow_null=True))
+    def get_humiliation_mark(self, obj: Persona) -> dict[str, str] | None:
+        """The fading half of a #2378-follow-up humiliation, or None (ruling 5).
+
+        Neutral PLACEHOLDER copy only — never what the humiliation was, mirroring
+        ``apply_humiliation``'s own rule. Disappears at ``HUMILIATION_TERM_DAYS``
+        (prestige restored the same tick); the persona's permanent brand is
+        unaffected either way — this field is examine/profile-only, not the brand.
+        """
+        from world.justice.sentences import active_humiliation_mark  # noqa: PLC0415
+
+        mark = active_humiliation_mark(obj)
+        if mark is None:
+            return None
+        return HumiliationMarkSerializer(
+            {"kind": mark.kind, "until": mark.until, "explanation": HUMILIATION_MARK_EXPLANATION}
+        ).data
 
 
 class SceneParticipantSerializer(serializers.ModelSerializer):

@@ -1445,9 +1445,15 @@ held captive to rescue, a character secret, or a masked identity); players acqui
 a collaborative **research project**.
 
 - **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
-  PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
-  documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
-  FKs → `scenes.Persona`, required together. Also carries a `NaturalKeyMixin` `slug`
+  PERSONA_LINK / ITEM + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is
+  the documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
+  FKs → `scenes.Persona`, required together. ITEM (#2540 exact-pointer ruling) is a second such
+  exception: `target_item_template` (required, FK → `items.ItemTemplate`) + optional
+  `target_item_instance` (FK → `items.ItemInstance`, must match the template's instance when
+  both set) — template-only means "any of this kind", instance-pinned means "this exact one".
+  ITEM has no "already known"/AUTOMATIC-grant concept; the held `CharacterClue` row IS the
+  knowledge, read by `scenes.boon_services.character_has_item_pointer`. Also carries a
+  `NaturalKeyMixin` `slug`
   (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
   lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
   `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
@@ -1498,7 +1504,11 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
-  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution),
+  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution;
+  `subject_item_template`/`subject_item_instance`, nullable FKs → `items.ItemTemplate`/
+  `ItemInstance` — #2540 exact-pointer ruling, an optional "this secret is about an item"
+  pointer, same shape as `Clue`'s ITEM target; dependency stays specific→general per
+  ADR-0010, `secrets` points items-ward, never the reverse),
   `SecretCategory` (staff-editable lookup; null category = Unknown), `SecretKnowledge`
   (roster-scoped held record with partial-knowledge layers — fact / `knows_category` /
   `knows_consequences`, monotonic; tracks *others* learning a secret),
@@ -1582,13 +1592,54 @@ captured (`resolve_guard_encounter`); capture brigs via captivity and opens a
 checks by accused + helpers, nobody prosecutes); helpers can only help
 (`submit_exculpatory` — threshold releases outright; manufactured evidence
 exposed backfires on the SUBMITTER). Sentences scale with prosecution weight
-(fine/brig/humiliation/exile); **the lethal wall holds** (ADR-0023):
+(fine/brig/humiliation/exile), a society's `SentenceLadderRung` can override the
+kind on repeat offenses (`ARENA_TRIAL` seeded but INERT pending the combat
+substrate); **the lethal wall holds** (ADR-0023):
 `PlayerData.lethal_consequences_opt_in` + an exhausted case (`failed_outs`)
-gate PC execution — NPCs may hang.
+gate PC execution — NPCs may hang; a non-opted PC's terminal instead lands
+BANISHMENT, the non-lethal terminal ADR-0233 adds (amends ADR-0023's scope
+note, doesn't supersede it).
+
+**Sentence enforcement (#2378, `justice/sentences.py`):** `schedule_sentence`
+dispatches a TRIED case's verdict to its enforcement path; `sentence_sweep_tick`
+is the daily cron (`justice.sentence_sweep`) that serves matured BRIG_TERM
+releases and carries out (or voids, on rescue/pardon) due terminal sentences.
+EXILE mints an `ExileDecree` + floors/holds heat at `pin_heat_for_decree`
+(shared with terminal BANISHMENT) and ejects to `Area.exile_destination`
+(`eject`, null-safe); returning under an active decree mints its own
+`breach-of-exile` CrimeKind heat (`pipeline._mint_breach_heat`) and forces a
+near-auto-botch evasion roll unless magically concealed (`is_magically_concealed`
+— seam, always False today, TehomCD's detection substrate). CONFISCATION seizes
+carried goods into the area's Brig room (`room_features.brig_services
+.find_brig_for_area`/`brig_has_capacity` — also the capture-time custody route,
+promoted from #1862) or falls back to a double-rate fine. HUMILIATION applies a
+clamped deed-prestige hit (`apply_humiliation`, mechanics-only — Apostate authors
+the real copy), persisted onto `JusticeCase.humiliation_prestige_hit`. **Two-layered
+humiliation (#2378 follow-up, ADR-0235):** a PERMANENT physical brand
+(`mint_humiliation_brand` — documented no-op seam, scar substrate, TehomCD's
+domain) atop a TEMPORARY reputational layer (the prestige hit + a persona-scoped
+examine/profile explanation, `active_humiliation_mark` → `PersonaSerializer
+.humiliation_mark`) that fades at `HUMILIATION_TERM_DAYS`, restored by
+`sentence_sweep_tick`'s `_sweep_humiliation_restores` leg (ADR-0081 "automatic
+gain" nuance addressed in ADR-0235 — it's a reversal of the sweep's own earlier
+automatic loss, not new value). `active_public_marks(area)` derives the wanted
+board's public record (no stored row) from live humiliations/decrees/pending
+terminals, surfaced on `GET /api/justice/wanted/`'s `records` field and `GET
+/api/justice/my-case/`'s sentence/countdown fields; a sentenced verdict also
+fires a `tidings` VERDICT feed item. `justice/notifications.py`:
+`notify_verdict`/`notify_verdict_safely` deliver a verdict/carried-out/voided
+notice (three DISTINCT bodies — a voided terminal never re-sends
+sentence-affirming copy) to the case's reachable audience (accused + exculpatory
+submitters — accusers/victims deliberately out of scope, ratified #2378
+follow-up: broader reach lives in the area-scoped public record instead, never a
+direct push); `notify_brig_visitation` OOC-adverts a served brig term to the
+accused's active friends. Public records are permanent IC history — removed
+only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
-  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society), `HeatSource`
+  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society;
+  `pinned_until` — decay-exempt exile-pin hold, #2378), `HeatSource`
   (allegation provenance — false accusations are emergent, never flagged),
   `AccusationCrimeClaim` (→ `secrets.Secret` — the frame-job→heat bridge; `real_deed`
   null = wild L2, set = L3 frame for a real crime; `retracted_at` set by
@@ -1596,7 +1647,14 @@ gate PC execution — NPCs may hang.
   left at its scene; → `items.ItemInstance` when gathered; states
   AT_SCENE→GATHERED→TAMPERING→OFF_GRID→PRODUCED/DISPOSED), `FrameJobDetails`
   (FRAME_JOB Project payload), `AccusationNullification` (proven-fabrication
-  record + the authorship secret), `DenounceRecord` (once-only backfire guard)
+  record + the authorship secret), `DenounceRecord` (once-only backfire guard),
+  `ExileDecree` (persona × area × society banishment; `ends_at` null = permanent,
+  #2378), `SentenceLadderRung` (per-society escalation step keyed on
+  `(society, level)`, matched against `failed_outs - 1`, #2378); `JusticeCase`
+  gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378) and
+  `humiliation_prestige_hit` (#2378 follow-up — the exact restorable hit);
+  `areas.Area` gains `exile_destination` (RoomProfile the banished are ejected to,
+  #2378)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
   `accrue_heat`, `accrue_for_deed_knowledge` (evidence-disposal dampener), `heat_for`,
   `associate_heat`, `tag_deed_crimes` (+ evidence generation), `heat_decay_tick`
@@ -1606,14 +1664,32 @@ gate PC execution — NPCs may hang.
   counter-play (#1825): `evidence.generate_crime_evidence`/`gather_evidence`/
   `dispose_evidence`, `frame_jobs.start_frame_job`/`resolve_frame_job` (FRAME_JOB
   handler), `nullification.nullify_accusation`, `denounce.denounce_framer`,
-  `case_file.has_local_authority`/`produce_case_evidence`/`examine_evidence`
+  `case_file.has_local_authority`/`produce_case_evidence`/`examine_evidence`;
+  sentence enforcement (`justice/sentences.py`, #2378): `schedule_sentence`,
+  `sentence_sweep_tick`, `apply_exile`, `apply_confiscation`, `apply_humiliation`,
+  `mint_humiliation_brand` (no-op seam, #2378 follow-up), `active_public_marks`,
+  `active_humiliation_mark` (persona-scoped sibling, #2378 follow-up),
+  `terminal_kind_for`, `pin_heat_for_decree`, `eject`, `is_magically_concealed`;
+  seeds: `seeds.seed_placeholder_sentence_ladders`
+  (Umbros/Inferna placeholder rungs, skips gracefully when a society is absent)
 - **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
   CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
   MOSTLY_ACCURATE dodge + masked-report association chance)
 - **Surfaces (self-only):** room-desc tier line + `heat` on the room-state payload;
   safe-now relief line on movement; `sheet/crime` + web Crime tab over
   `GET /api/justice/heat/` (tiers only, never raw values; `PersonaHeatSerializer`
-  also carries `society` id for the web Reputation tab's client-side join, #1446)
+  also carries `society` id for the web Reputation tab's client-side join, #1446);
+  public standing (#2378): the wanted board's `records` field (`PublicMarkSerializer`)
+  and `GET /api/justice/my-case/` (`MyCaseSerializer` — `sentence_kind`,
+  `sentence_amount`, `sentence_ends_at`, `terminal_due_at`, `failed_outs`) plus web
+  sentence-countdown UI on the character sheet's Crime tab; examine/profile
+  (#2378 follow-up): `PersonaViewSet`'s `PersonaSerializer.humiliation_mark`
+  (`HumiliationMarkSerializer` — `kind`/`until`/neutral `explanation`), None once
+  the term passes. Fix
+  round (#2378 Task 7): `scenes` serializer identity leaks closed —
+  `endorsee_sheet_id` and `dramatic_moment_tags`' sheet ids now gate behind the same
+  reveal predicate as the rest of a masked persona's identity, so a disguised
+  persona can no longer be unmasked through those two fields.
 - **Source:** `src/world/justice/`
 - **Details:** [justice.md](justice.md)
 
@@ -2492,8 +2568,29 @@ action consent flow, and a three-mode non-combat round framework.
   `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
   cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
-  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
-  `item_instance`, `deed_text`, `fulfilled_at`. Slice 2 wired the full loop (`boon_services`):
+  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED/MATERIAL), `amount`,
+  `item_instance`, `deed_text`, `fulfilled_at`, `material_category` (nullable FK →
+  `items.MaterialCategory`, MATERIAL asks only).
+  `character_has_item_pointer(*, sheet, item)` (`boon_services.py`) —
+  the exact-pointer predicate for a named-item ask: True when the roster entry holds a
+  discovered ITEM-target clue, a KNOWN codex entry, or known secret knowledge naming the
+  instance (or its template with no instance pinned) — see `ClueTargetKind.ITEM` and the
+  matching `CodexEntry`/`Secret` item-pointer FKs below. **Wired into `validate_boon_ask`
+  (2026-08-27 ruling, slice 3):** `_validate_held_item_ask`/`_validate_vault_item_ask` also
+  require `character_has_item_pointer(sheet=asker_sheet, item=item)` (`asker_sheet` threaded
+  from `create_action_request`'s `initiator_persona`) — a pointer-less ask on a valid,
+  target-held item id fails with a neutral message, never revealing whether the item exists.
+  `pointer_known_items_for_target(*, asker_sheet, target_persona)` is the boon-options display
+  seam: the asker's pointer-known items relevant to one target (held or vault-accessible),
+  batched from the asker's own pointers, never a browse of the target's holdings — surfaced as
+  `boon-options`' `pointer_items` (requires an `initiator_persona` query param owned by the
+  caller, since this reveals private knowledge). **Co-presence gate (2026-08-27 fix wave 3):**
+  returns `[]` (200, never an error) unless the asker and target currently share an active scene
+  (`_asker_and_target_share_an_active_scene`, reusing `interaction_services.get_active_scene`) —
+  `pointer_items` must not become a remote discovery surface for holder identity. Named-item ask
+  validation is unaffected; the action-dispatch flow itself does not enforce scene co-presence on
+  `target_persona` (verified, not fixed — see `world/scenes/CLAUDE.md`).
+  Slice 2 wired the full loop (`boon_services`):
   `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
   grant never exists: penniless-target money, unheld item, empty deed rejected before any row).
   **Money asks are relative sum tiers (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the
@@ -2501,15 +2598,47 @@ action consent flow, and a three-mode non-combat round framework.
   `boon_sum_values` is the UI display seam (tier → concrete coppers, OOC reveal accepted) and
   the coppers freeze onto `Boon.amount` at ask time.** The `boon` action key on
   `BoonAction` (`actions/definitions/social.py`) + `ActionTemplate`/`boon`-consent-category seeds,
-  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money, the chosen tier IS the band,
-  fed into
+  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money and material, the chosen tier
+  IS the band, fed into
   `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
   and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
   cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.
   Every kind fulfills: MONEY via `currency.transfer`, VAULT_ITEM via the org vault's audited
   withdraw (target as authority, asker as recipient), HELD_ITEM via a lean sheet-level
   hand-over — unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)`
-  snapshotting the scene's presented personas — and DEED RP-only)
+  snapshotting the scene's presented personas, MATERIAL via `world.items.gems.buckets`'
+  spend/credit pair (amount computed fresh AT FULFILLMENT — tier pct of the target's bucket,
+  min 1, never frozen at ask time like money) — and DEED RP-only.
+  **MATERIAL kind + honest unavailability (slice 3, #2540):** `BoonAsk.material_category_id` +
+  `sum_tier` (reuses money's tier labels; NEVER a computed value — deliberate money asymmetry).
+  The boon-options endpoint's `material_categories` is the STATIC public `MaterialCategory` list
+  (`[{id, name}]`), never filtered by the target's holdings (a filtered picker would leak wealth
+  OOC — the ruling accepts the honest-refusal boolean reveal at ask time instead).
+  `check_boon_availability`, called right after `validate_boon_ask`, raises `BoonUnavailable`
+  (distinct from `ValidationError`) when a well-formed MATERIAL ask names an empty bucket — for
+  BOTH NPC and piloted targets, before any request row exists (no roll, no consent burn, no
+  affection drain). `SceneActionRequestViewSet.create` maps `BoonUnavailable` to a 200
+  `{"boon_refused": true, "detail": ...}` (non-error UX; chosen over a 400 since the existing
+  payload-less-boon guard's 400 has no FE error surface today). **Explicit dispatch (recon trap
+  fix):** `validate_boon_ask`/`fulfill_boon` dispatch on `kind` through explicit per-kind tables
+  (`_BOON_ASK_VALIDATORS`/`_BOON_FULFILLERS`) — an unhandled kind raises `ValueError` loudly
+  instead of silently falling through to DEED's handling (the original if/elif chains' trap).
+  **Ask flavors (slice 3, #2540):** three sibling `ActionTemplate` singletons over the same
+  Boon payload — Con a Boon (`boon_con`, Con check), Charm a Boon (`boon_charm`, Seduction
+  check), Menace a Boon (`boon_menace`, Intimidation check, +1 tier like Seduce-harder-than-
+  Flirt) — join plain `boon` in `BOON_ACTION_KEYS` (the frozenset replacing the old single
+  `BOON_ACTION_KEY` everywhere: the server payload guard, the resolver registration loop, and
+  the FE `ActionPanel` gate). All four share the `boon` consent category and one resolver
+  registration loop — one opt-in, one fulfillment path; only the check type differs per
+  flavor (rejected: a `flavor` payload field selecting the check type at resolution time — the
+  check type belongs on the template, ADR-0235).
+  **Standing-gap audacity shift (slice 3, #2540):** `npc_boon_tier_shift` (dial 2's NPC band)
+  now sums the existing relative-cost band with `_rank_gap_shift`, one difficulty tier per
+  `RANK_GAP_TIER_BANDS` (PLACEHOLDER magnitudes) threshold crossed by how far the asker's
+  inverted `social_rank` sits below the target's — asking a much higher-standing NPC is
+  harder; punching down or asking an equal never adds a tier. NPC-only: a piloted target's own
+  `difficulty_choice` always rules (`action_services.py`'s piloted call site omits
+  `extra_tier_modifier` by design, per the July piloted-consent ruling). See ADR-0235.
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -3761,13 +3890,46 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `distribute_allowance(*, organization, surplus)` (#2540 — the non-discretionary allowance rail:
   a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
   piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
-  cannot withhold it),
-  `collect_and_distribute(*, organization, character)` (#2540, ruled 2026-07-20 — THE distribution
-  dispatch: collect → `service_debt_principal` [a mandatory PLACEHOLDER `DEBT_PRINCIPAL_GROSS_PCT`
-  of GROSS toward debt principal, oldest first, diverting debts skipped, capped by treasury; a
-  catastrophe funds no debt service; complements the weekly at-source ARREARS/interest withholding
-  #927] → `distribute_allowance` on the post-debt remainder of what landed; each phase
-  independently atomic; the rest stays in the treasury. Returns `DistributionResult`)
+  cannot withhold it; the active-piloted member scan itself lives in the shared
+  `_active_allowance_sheets(organization, cutoff)` helper, reused below),
+  `distribute_material_allowance(*, organization, landed_by_category)` (#2540 slice 2, "the
+  crafting draw" — the materials analogue of `distribute_allowance`: for each
+  `(MaterialCategory, landed)` in `landed_by_category`, a PLACEHOLDER `MATERIALS_ALLOWANCE_PCT`
+  share splits evenly across `_active_allowance_sheets`'s population into each member's
+  `MaterialBucket` via `items.gems.buckets.credit_materials`; `OrgMaterialStock` [`select_for_update`]
+  is debited by exactly the total actually credited [`per_member * member_count`, floor
+  remainder stays in stock], capped at the stock's current value so a concurrent spend can
+  never drive it negative — the cap recomputes `per_member` down rather than over-crediting. A
+  category with nothing landed, or a missing stock row [shouldn't happen], is skipped. Returns
+  `MaterialAllowanceResult(total_by_category, member_count)`),
+  `collect_and_distribute(*, organization, character, success_level_override=None)` (#2540,
+  ruled 2026-07-20 — THE distribution dispatch, both live call sites now wired: the active
+  piloted collection (`npc_services.effects.run_collection`) and the route-graded mission
+  landing (`tasking._land_route_collection`, which passes its own
+  `success_level_override`) — collect → `service_debt_principal` [a mandatory PLACEHOLDER
+  `DEBT_PRINCIPAL_GROSS_PCT` of GROSS toward debt principal, oldest first, diverting debts
+  skipped, capped by treasury; a catastrophe funds no debt service; complements the weekly
+  at-source ARREARS/interest withholding #927] → `distribute_allowance` on the post-debt
+  remainder of what landed → `distribute_material_allowance` (#2540 slice 2) on
+  `collection.landed_by_category` → `auto_sell_excess_materials` (#2540 slice 2, ALWAYS LAST —
+  liquidates whatever `OrgMaterialStock` the allowance leg didn't already draw down) — each
+  phase independently atomic; the coin remainder stays in the treasury, the materials remainder
+  stays in `OrgMaterialStock`.
+  `success_level_override` passes straight through to `collect_org_income` for a
+  caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`, which
+  carries `material_allowance: MaterialAllowanceResult` alongside `allowance` and `auto_sold:
+  int` (coppers minted to the treasury from the auto-sell leg, 0 when nothing sold)). Both entry
+  points append one PLACEHOLDER report line ("raw materials were shared out to N members")
+  only when `material_allowance.total_by_category` is non-empty.
+  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2) — the
+  org-level analogue of `market.sell_materials`: for each `OrgMaterialStock` row over the
+  PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells `excess = value - threshold` at the market's
+  `MATERIAL_SALE_RATE_PCT` (imported from its market home, one rate constant, no duplicate) into
+  the treasury; rows read/debited under `select_for_update`, same locking discipline as the
+  allowance leg since both debit the same stock table. A category whose excess rounds to zero
+  coppers is left alone; each category liquidates independently. Called ONLY from the end of
+  `collect_and_distribute` — never the weekly cron directly (ADR-0081/ADR-0234: automatic gain
+  is not automatic).
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
@@ -3784,6 +3946,12 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,
   ledger; per-line summon affordances drive the npc_services interaction dialog
   (`frontend/src/org_books/`)
+- **Vault-events surface (#2540):** `GET /api/currency/org-books/{org}/vault-events/`
+  (`OrgBooksViewSet.vault_events`, `OrgVaultEventSerializer`) — read-only reader for the
+  item vault's `OrgVaultEvent` audit rail (kind, item display name, actor persona name,
+  `created_at`; newest first, capped at 50); same membership gate as the books
+  (`_require_member_org` — visible to any active member, not just withdraw-authorized
+  ones, since the audit trail is how embezzlement gets discovered)
 - **Purse surface:** `GET /api/currency/purse/{character_id}/` (`CharacterPurseView`) —
   self-scoped `{balance}` coppers (vitals-view gating: staff or active tenure, else 404);
   lazy-creates the purse at zero. Feeds the web Status tab (`formatCoppers`) and
@@ -5167,39 +5335,71 @@ holder is never notified a claim exists.
     `ItemInstance`s (born uncut, loose). Mine quality + minister bonus both raise the Rare-Find
     chance (base 1%) and shift every axis roll up; a find rolls 1d4 stones with `size`/`purity`
     floored above common (type not floored), top-heavy grade distribution (`_grade_index`, roll²).
-    Does **not** schedule or wire domains — the weekly cron, the per-holding `mine_quality` field,
-    and the schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
+    Does **not** schedule or wire domains — the weekly cron, the per-holding
+    `HoldingMaterialSource` row (#2540 slice 2; was the `mine_quality` field), and the
+    schema-only minister-check seam (`OrganizationOffice.feeds_check`, #2239) are the
     Build-1 wiring that *calls* this; where common value accrues is handled by
-    `accrue_mine_cycle` (below). All magnitudes PLACEHOLDER.
-  - **Common-gem value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5)
-    — `CommonGemBucket` (a crafter's common-gem value per tier — a `MaterialCategory` — never
-    instanced; the type-blind bulk source). `credit_common_gems` / `spend_common_gems` /
-    `common_gem_value` (canonical mutate-then-save, not `F()`; `InsufficientCommonGems`).
+    `accrue_holding_materials` (below). All magnitudes PLACEHOLDER.
+  - **Material value buckets + bulk requirements** (`world.items.gems.buckets`, Build 0b slice 5,
+    generalized #2540 slice 2) — `MaterialBucket` (`world.items.materials_models`; a crafter's
+    material value per category — a `MaterialCategory` — never instanced; the type-blind bulk
+    source, originally gem-only). `credit_materials` / `spend_materials` / `material_value`
+    (canonical mutate-then-save, not `F()`; `InsufficientMaterialStock` — kept distinct from the
+    pre-existing instance-consumption `InsufficientMaterials`).
     `CraftingMaterialRequirement.required_value` (nullable, category-only, DB-constrained) is a
-    "N value of {tier}" **bulk** requirement: `stage_and_assert_affordable` splits value reqs from
-    instance reqs — instance reqs go through `gather_consumable_pks` (0a, unchanged), value reqs are
-    aggregated per tier and checked against the crafter's buckets (via `StagedCost.bucket_spends`);
-    `consume_cost` spends them. Named Rare-Find stones are never auto-consumed — only this fungible
-    bulk source is. This is the "gem-covered table, don't care which" path; the primary use is still
-    adornment. Common value crediting from mining is the Build-1 cron's job.
-  - **Mine accrual** (`world.items.gems.mining.accrue_mine_cycle`, Build 0b slice 7) — the weekly
-    cycle for a mine holding. `DomainHolding` gains `mine_quality` + `common_gem_tier`; the cycle
-    calls `roll_gem_haul` and accrues the haul into **uncollected** pools on the holding's
-    `OrgIncomeStream` — common value into `StreamCommonGemPool` (per stream/tier; the gem analogue
-    of `OrgIncomeStream.uncollected_pool`), each Rare Find into a `PendingRareFind` (a loose stone
-    awaiting collection). "Lumped with tax collection": both ride the **same** active
+    "N value of {category}" **bulk** requirement: `stage_and_assert_affordable` splits value reqs
+    from instance reqs — instance reqs go through `gather_consumable_pks` (0a, unchanged), value
+    reqs are aggregated per category and checked against the crafter's buckets (via
+    `StagedCost.bucket_spends`); `consume_cost` spends them. Named Rare-Find stones are never
+    auto-consumed — only this fungible bulk source is. This is the "gem-covered table, don't care
+    which" path; the primary use is still adornment. Common value crediting from mining is the
+    Build-1 cron's job.
+  - **Holding material accrual** (`world.items.materials_production.accrue_holding_materials`,
+    #2540 slice 2 Task 2 — replaces the deleted, gem-mine-only `accrue_mine_cycle`) — the weekly
+    cycle for a holding, iterating *every* `HoldingMaterialSource` row it carries (not just one).
+    A `GEM_MINE` source (`quality` + `material_category`) still calls `roll_gem_haul` (`gems.mining`,
+    unchanged; `minister_bonus` passthrough kept for the #2239 seam); a `BULK` source produces flat
+    `quality * BULK_YIELD_PER_QUALITY` (new constant, PLACEHOLDER 100, `world.items.constants`) with
+    no rare finds. Both credit **uncollected** pools on the holding's `OrgIncomeStream` — common
+    value into `StreamMaterialPool` (`world.items.materials_models`, per stream/category; the gem
+    analogue of `OrgIncomeStream.uncollected_pool`), GEM_MINE Rare Finds into `PendingRareFind` (a
+    loose stone awaiting collection). Returns `MaterialHaul` (`common_value_by_category:
+    list[tuple[MaterialCategory, int]]`, `rare_finds: list[ItemInstance]`) — the multi-source
+    generalization of `GemHaul`. "Lumped with tax collection": both ride the **same** active
     `collect_org_income` dispatch (same band/graft/catastrophe loss) into the house's stock — see
-    Mine collection (below). A holding with no `common_gem_tier`/stream accrues nothing.
+    Mine collection (below). A holding with no income stream accrues nothing. Lives in a new
+    top-level `world.items.materials_production` module, not `gems.mining` — it is no longer
+    gem-specific, and only imports the gem roller as one of its two source-kind branches.
   - **Mine collection** (`world.items.gems.collection`, Build 0b domain-cron collection) —
     `collect_org_income` gathers the org's pending gems alongside coin and applies the *same* Tax
-    Collection band + graft + catastrophe. `collect_org_gems` zeros the pools, credits net common
-    value to the shared **`OrgGemStock`** (`organization`+`tier`; `credit_org_gems`, the stock
-    members craft from), delivers `floor(count × band × (1−graft))` of the stones to the collector,
-    and destroys the rest (catastrophe loses all). `org_has_pending_gems` widens the empty-gate so a
-    gems-but-no-coin mine still collects. `CollectionResult` grew `gem_value_landed` /
-    `stones_delivered` / `stones_lost`. Currency reaches this via a lazy import (FK direction
-    preserved — currency stays free of an items dependency at load). Remaining sub-slices: the
-    crafting draw off `OrgGemStock`, the `game_clock` scheduling, and the minister seam (#2239).
+    Collection band + graft + catastrophe. `collect_org_materials` (renamed from
+    `collect_org_gems`, #2540 slice 2) zeros the pools, credits net common value to the shared
+    **`OrgMaterialStock`** (`world.items.materials_models`; `organization`+`material_category`;
+    `credit_org_materials`, the stock members craft from), delivers
+    `floor(count × band × (1−graft))` of the stones to the collector, and destroys the rest
+    (catastrophe loses all). `org_has_pending_materials` (renamed from `org_has_pending_gems`)
+    widens the empty-gate so a gems-but-no-coin mine still collects. `CollectionResult`
+    (`world.currency.types`) grew `material_value_landed` (renamed from `gem_value_landed`) /
+    `landed_by_category` / `stones_delivered` / `stones_lost`. Currency reaches this via a lazy
+    import (FK direction preserved — currency stays free of an items dependency at load).
+    Remaining sub-slices: only the minister seam
+    (#2239) — the `game_clock` scheduling shipped (#2610) and the crafting draw itself shipped
+    (see the currency section's `distribute_material_allowance`).
+  - **Personal material sale** (`world.items.market.services.sell_materials`,
+    `@transaction.atomic`, #2540 slice 2) — sells `amount` of a `CharacterSheet`'s
+    `MaterialBucket` value for one category at the market's PLACEHOLDER
+    `MATERIAL_SALE_RATE_PCT` (40%), coppers minted straight to the seller's purse
+    (`sell_to_fence`'s mint-to-purse convention). Apostate's frictionless ruling (ADR-0234):
+    unlike the fence (#2862), needs no stall, no NPC, no location gate — bulk material is
+    abstract bucket value, not a physical good to haggle over. The coin computation happens
+    BEFORE the bucket is touched, so a sale too small to round up to a single copper is refused
+    outright rather than debiting the bucket for nothing; raises `MarketServiceError` (wrapping
+    `InsufficientMaterialStock`) when the bucket falls short — nothing moves in that case.
+    Surfaced via `SellMaterialsAction` (`actions.definitions.market`, key `sell_materials`,
+    kwargs `material_category_id`/`amount`). Both this and `sell_to_fence` are
+    `@transaction.atomic` (fix commit `32b1a8d37` — a mid-sale exception previously left a
+    spent-but-unpaid seller). The org-level auto-sell sibling
+    (`currency.services.auto_sell_excess_materials`) is documented in the currency section.
 - **Org vault (#2540 Layer 4, `org_vault_models.py` + `services/org_vault.py`):** logical org
   custody of items — the ratified "model B with model D's access surface". `OrganizationVault`
   (OneToOne org, get-or-create; `withdraw_rank_max`, the `spend_rank_max` twin),
@@ -5224,14 +5424,22 @@ holder is never notified a claim exists.
   hook. In-transit loss deliberately not built (loss lives in the collection roll). **The
   WHERE gate is now wired** (#2540 economy wiring — supersedes the earlier follow-up note):
   `VaultDepositAction`/`VaultWithdrawAction` (`actions/definitions/org_vault.py`, keys
-  `vault_deposit`/`vault_withdraw`, REST int kwargs) are performable only where an active
+  `vault_deposit`/`vault_withdraw`, REST int kwargs), **`TreasuryWithdrawAction`** (key
+  `treasury_withdraw` — draws coppers from the org treasury via
+  `currency.withdraw_from_treasury`; the CONTROLLER RULING extending the same access
+  surface to coin, not just items, cites the Layer 4 access-surface ruling on #2540), and
+  **`DeliverCollectionAction`** (key `deliver_collection`, "Deliver the Take" — the
+  collection mission's return leg over `resolve_vault_transit`; `keep_item_ids` is the
+  carrier's embezzlement opt-in, subset-validated against the actor's own open
+  `VaultTransit` rows and resolved atomically) are ALL performable only where an active
   **BANK** `RoomFeatureServiceStrategy` feature stands (a bank room on grid or an
   owner-installed bank-access decor feature — the ratified access surface; reachability-only
-  handler in `room_features`, COMMAND_CENTER's shape). Distinct from the physical room-feature
-  VAULT (#2179), which secures loose items in a room. **Weekly gem accrual is wired**:
-  `run_weekly_economy`'s `gem_mines` phase (`_weekly_mine_accrual`) runs one `accrue_mine_cycle`
-  per configured holding (`common_gem_tier` set) — haul amasses uncollected per ADR-0081; only
-  an active collection delivers it.
+  handler in `room_features`, COMMAND_CENTER's shape; seeded via `ensure_bank_kind()`,
+  `world/room_features/seeds.py`). Distinct from the physical room-feature
+  VAULT (#2179), which secures loose items in a room. **Weekly material accrual is wired**:
+  `run_weekly_economy`'s `materials` phase (`_weekly_mine_accrual`, renamed key #2540 Task 2) runs
+  one `accrue_holding_materials` per holding with a `HoldingMaterialSource` row (#2540 slice 2) —
+  haul amasses uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
@@ -6590,6 +6798,31 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   entry and a `conditions_applied` entry) in one call, mirroring
   `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
   fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
+- **Engagement locks — foil duels (#2020, player surface #3386):** `EngagementLock`
+  (`world/combat/models.py`) pairs one PC to one opponent; while ACTIVE the locked
+  opponent's targeting narrows to just that PC (`_build_opponent_round_actions`,
+  `world/combat/services.py`). #2020 shipped the whole mechanic (threat tracking,
+  autonomous lock formation past `auto_lock_threshold`, boss-suppression consumer —
+  see the break-bar entry above) but left its two player entry points unreachable
+  until #3386: `EngageAction`/`DisengageAction` (`actions/definitions/
+  combat_maneuvers.py`, registry keys `combat_engage`/`combat_disengage`) are now
+  routed from telnet `combat engage <opponent>`/`combat disengage`
+  (`CmdCombat._SUBVERBS`, `src/commands/combat_maneuvers.py`) — the same REGISTRY
+  keys the web reaches generically via `useDispatchPlayerAction`
+  (`{ ref: { backend: 'registry', registry_key: 'combat_engage' }, kwargs: {
+  opponent_id } }`); no bespoke web click affordance yet — that's #3381's scope.
+  `EncounterDetailSerializer.get_engagement_locks` is schema-typed via
+  `@extend_schema_field(EngagementLockSerializer(many=True))` (mirrors
+  `get_clashes`/`ClashStateSerializer`), and `CombatantsList.tsx` renders a
+  read-only "Locked: `<PC name>`" badge on the paired opponent row — no click
+  handling. **Lock-lifecycle close-out (#3386):** fleeing while locked now breaks
+  the lock (`LockBreakReason.FLEE`, `_resolve_flee` in `world/combat/services.py`)
+  alongside the pre-existing defeat-breaks-lock and disengage-breaks-lock paths —
+  a PC who flees no longer leaves a phantom pairing behind.
+  `trigger_interference_drama` (`world/combat/engagement_locks.py`) — the "an ally
+  interfering with a locked NPC is a narrative payoff" mechanic — remains
+  unwired (zero callers); flagged, not built, pending a real
+  non-locked-PC-attacks-locked-opponent detection mechanism.
 - **Duels — `DuelChallenge` + GM-initiated lethal duels (#568, #3068):** `DuelChallenge`
   (`world/combat/models.py`) is the one challenge/accept/decline/withdraw handshake model
   for BOTH shapes: PC-vs-PC (`challenger_sheet` set, accepting opens `create_pvp_duel`) and
@@ -7482,7 +7715,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `blend_power_contribution`/`specialty_power_contribution`
   (`world/magic/services/power_terms.py`), and mitigation magnitudes parsed from
   MODIFY_PAYLOAD reactive triggers via `protective_magnitude`
-  (`world/magic/services/targeting.py`). #3390 (ADR-0234) extracted the row-independent
+  (`world/magic/services/targeting.py`). #3390 (ADR-0239) extracted the row-independent
   DE formula core into `world/magic/services/de_valuation.py` and its shared
   `compute_reference_frame(EvalContext) -> ReferenceFrame` median-baseline-attack
   bootstrap, so the standalone condition (`world/magic/services/condition_power_eval.py`

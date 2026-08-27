@@ -222,6 +222,28 @@ class VaultTransitTests(TestCase):
         resolved = self._resolve(keep=[self.stones[0].pk])
         self.assertEqual(len(resolved), 3)
 
+    def test_bogus_keep_id_with_permissive_authority_rejected(self) -> None:
+        # The carrier is the org's sole active member -> the topmost piloted
+        # stakeholder -> self-dealing would otherwise be allowed unconditionally.
+        self._pilot(self.carrier)
+        bogus_id = self.stones[0].pk + 100_000
+        with self.assertRaises(ValidationError):
+            self._resolve(keep=[bogus_id])
+        # Nothing resolved: no partial deposit, no holdings, every transit still open.
+        self.assertEqual(VaultHolding.objects.count(), 0)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=False).exists())
+
+    def test_bogus_keep_id_mixed_with_valid_keep_rejected_without_partial_effects(self) -> None:
+        self._pilot(self.carrier)
+        bogus_id = self.stones[0].pk + 100_000
+        with self.assertRaises(ValidationError):
+            self._resolve(keep=[self.stones[0].pk, bogus_id])
+        self.assertEqual(VaultHolding.objects.count(), 0)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=False).exists())
+        for stone in self.stones:
+            stone.refresh_from_db()
+            self.assertEqual(stone.holder_character_sheet, self.carrier.character_sheet)
+
     def test_keep_resolves_kept_with_no_vault_event(self) -> None:
         self._pilot(self.carrier)
         self._pilot(self.head)
@@ -237,3 +259,64 @@ class VaultTransitTests(TestCase):
         self.assertEqual(self._events.objects.count(), 2)
         kept_row = self._transits.objects.get(item_instance=kept_stone)
         self.assertEqual(kept_row.resolution, "kept")  # the staff-side record
+
+    def test_sold_item_deliver_rejected_and_buyer_keeps_it(self) -> None:
+        # #2540 review finding 2: the carrier sold the stone before delivering — the
+        # buyer now holds it. Delivering must fail the WHOLE act loudly, not yank the
+        # item out of the buyer's hands while the carrier still pockets the sale price.
+        sold_stone = self.stones[0]
+        buyer = PersonaFactory()
+        sold_stone.holder_character_sheet = buyer.character_sheet
+        sold_stone.save(update_fields=["holder_character_sheet"])
+        with self.assertRaises(ValidationError):
+            self._resolve()
+        self.assertEqual(VaultHolding.objects.count(), 0)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=False).exists())
+        sold_stone.refresh_from_db()
+        self.assertEqual(sold_stone.holder_character_sheet, buyer.character_sheet)  # untouched
+        # Sanity: the surviving stones are still genuinely held by the carrier.
+        for stone in self.stones[1:]:
+            stone.refresh_from_db()
+            self.assertEqual(stone.holder_character_sheet, self.carrier.character_sheet)
+
+    def test_item_vaulted_in_a_different_org_vault_fails_loud(self) -> None:
+        # #2540 review ordering note: a DIFFERENT org's vault holding must fall to
+        # finding 2's loud failure, not finding 3's silent-success wedge fix.
+        stone = self.stones[0]
+        other_org = OrganizationFactory()
+        other_vault = get_or_create_org_vault(other_org)
+        stone.holder_character_sheet = None
+        stone.save(update_fields=["holder_character_sheet"])
+        VaultHolding.objects.create(vault=other_vault, item_instance=stone, deposited_by=self.head)
+        with self.assertRaises(ValidationError):
+            self._resolve()
+        self.assertEqual(VaultHolding.objects.filter(vault=self.vault).count(), 0)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=False).exists())
+        # The other org's holding is untouched — no cross-org custody transfer.
+        self.assertTrue(
+            VaultHolding.objects.filter(vault=other_vault, item_instance=stone).exists()
+        )
+
+    def test_plain_deposit_before_delivery_resolves_without_wedging(self) -> None:
+        # #2540 review finding 3: an item honestly deposited via the plain
+        # VaultDepositAction (deposit_item_to_vault) leaves its VaultTransit open.
+        # The next deliver_collection must resolve it DEPOSITED — no duplicate
+        # VaultHolding (would IntegrityError the whole act on the OneToOne), no
+        # duplicate DEPOSIT event — and the remaining transits deposit normally.
+        stone = self.stones[0]
+        deposit_item_to_vault(organization=self.org, persona=self.carrier, item_instance=stone)
+        resolved = self._resolve()
+        self.assertEqual(len(resolved), 3)
+        self.assertEqual(VaultHolding.objects.filter(item_instance=stone).count(), 1)
+        self.assertEqual(
+            self._events.objects.filter(
+                item_instance=stone, kind=OrgVaultEventKind.DEPOSIT
+            ).count(),
+            1,
+        )
+        stone_row = self._transits.objects.get(item_instance=stone)
+        self.assertEqual(stone_row.resolution, "deposited")
+        self.assertIsNotNone(stone_row.resolved_at)
+        # The other two stones still deposit normally in the same call.
+        self.assertEqual(VaultHolding.objects.filter(vault=self.vault).count(), 3)
+        self.assertFalse(self._transits.objects.filter(resolved_at__isnull=True).exists())

@@ -22,9 +22,19 @@ from world.justice.constants import (
     BRIBERY_CRIME_SLUG,
     MAGISTRATE_OFFICE,
     WANTED_VALUE_FLOOR,
+    CaseStatus,
+    SentenceKind,
+    VerdictNotifyReason,
     tier_for_value,
 )
-from world.justice.models import CrimeKind, LieLowState, PardonGrant, PersonaHeat
+from world.justice.models import (
+    CrimeKind,
+    ExileDecree,
+    JusticeCase,
+    LieLowState,
+    PardonGrant,
+    PersonaHeat,
+)
 from world.justice.services import enforcing_society_for
 
 if TYPE_CHECKING:
@@ -205,7 +215,22 @@ def can_pardon(granter: Persona, area: Area) -> bool:
 
 
 def pardon_persona(granter: Persona, target: Persona, area: Area) -> PardonGrant:
-    """A lord's grant: zero the target's warrant with the enforcing society."""
+    """A lord's grant: zero the target's warrant with the enforcing society.
+
+    Also lifts standing consequences in the area (#2378 Task 3): any active
+    exile decree is lifted, pinned heat there is unpinned, terminal sentences
+    (execution/banishment) still awaiting their rescue window are voided with
+    any held captive walking free, and held BRIG_TERM captives are released
+    with their sentence cleared.
+
+    An open AWAITING_TRIAL case is released outright too (final review): a
+    pardoned captive must never stand trial on a warrant the pardon just
+    erased — previously this branch never touched AWAITING_TRIAL cases, so a
+    pardoned captive stayed in the brig awaiting a trial on the stale weight.
+    A voided scheduled terminal fires the VOIDED notice right here, at grant
+    time — the sweep will never see the case again once ``terminal_due_at`` is
+    cleared below, so this is the only place that notice can fire.
+    """
     society = enforcing_society_for(area)
     if society is None:
         msg = f"area {area.pk} has no enforcing society"
@@ -216,13 +241,56 @@ def pardon_persona(granter: Persona, target: Persona, area: Area) -> PardonGrant
     rows = PersonaHeat.objects.filter(persona=target, area=area, society=society)
     cleared = sum(row.value for row in rows)
     rows.delete()
-    return PardonGrant.objects.create(
+    grant = PardonGrant.objects.create(
         granter_persona=granter,
         target_persona=target,
         area=area,
         society=society,
         heat_cleared=cleared,
     )
+
+    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
+    from world.captivity.services import resolve_captivity  # noqa: PLC0415
+    from world.justice.notifications import notify_verdict_safely  # noqa: PLC0415
+    from world.justice.pipeline import _release  # noqa: PLC0415
+
+    now = timezone.now()
+    ExileDecree.objects.filter(persona=target, area=area, lifted_at__isnull=True).update(
+        lifted_at=now
+    )
+    PersonaHeat.objects.filter(persona=target, area=area).update(pinned_until=None)
+
+    # A captive still awaiting trial is released outright — never tried on the
+    # stale weight the pardon just erased.
+    for case in JusticeCase.objects.filter(
+        persona=target, area=area, status=CaseStatus.AWAITING_TRIAL
+    ):
+        _release(case, CaseStatus.RELEASED_PARDON)
+
+    for case in JusticeCase.objects.filter(
+        persona=target, area=area, terminal_carried_out_at__isnull=True
+    ).exclude(terminal_due_at__isnull=True):
+        case.terminal_due_at = None
+        case.save(update_fields=["terminal_due_at"])
+        # A held terminal captive walks free on pardon.
+        if case.captivity and case.captivity.status == CaptivityStatus.HELD:
+            resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
+        # The sweep never sees this case again — the voided notice must fire now.
+        notify_verdict_safely(case, reason=VerdictNotifyReason.VOIDED)
+
+    # Brig: release held brig captives in the area the same way.
+    brig_cases = JusticeCase.objects.filter(
+        persona=target,
+        area=area,
+        sentence_kind=SentenceKind.BRIG_TERM,
+        captivity__status=CaptivityStatus.HELD,
+    )
+    for case in brig_cases:
+        resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
+        case.sentence_ends_at = None
+        case.save(update_fields=["sentence_ends_at"])
+
+    return grant
 
 
 # ---------------------------------------------------------------------------

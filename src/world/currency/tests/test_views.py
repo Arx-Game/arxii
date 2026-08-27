@@ -125,6 +125,166 @@ class OrgBooksApiTests(TestCase):
         assert response.json() == []
 
 
+class OrgVaultEventsApiTests(TestCase):
+    """GET /org-books/{org}/vault-events/ — the item-vault audit trail (#2540)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.items.factories import ItemInstanceFactory
+        from world.items.services.org_vault import get_or_create_org_vault
+        from world.societies.factories import (
+            OrganizationFactory,
+            OrganizationMembershipFactory,
+        )
+
+        cls.user = AccountFactory(username="vault_events_user")
+        cls.org = OrganizationFactory()
+        cls.member = PersonaFactory()
+        cls.outsider = PersonaFactory()
+        OrganizationMembershipFactory(persona=cls.member, organization=cls.org, rank=3)
+        cls.vault = get_or_create_org_vault(cls.org)
+        cls.item = ItemInstanceFactory()
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _get(self, org_id=None):
+        return self.client.get(f"/api/currency/org-books/{org_id or self.org.pk}/vault-events/")
+
+    def _event(self, kind, *, item=None, actor=None, reason=""):
+        from world.items.org_vault_models import OrgVaultEvent
+
+        return OrgVaultEvent.objects.create(
+            vault=self.vault, item_instance=item, kind=kind, actor_persona=actor, reason=reason
+        )
+
+    def test_member_sees_deposit_and_withdraw_events_newest_first(self) -> None:
+        from world.items.constants import OrgVaultEventKind
+
+        deposit = self._event(OrgVaultEventKind.DEPOSIT, item=self.item, actor=self.member)
+        withdraw = self._event(OrgVaultEventKind.WITHDRAW, item=self.item, actor=self.member)
+
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            response = self._get()
+
+        assert response.status_code == 200
+        rows = response.json()
+        assert [row["id"] for row in rows] == [withdraw.pk, deposit.pk]
+        assert rows[0]["kind"] == "withdraw"
+        assert rows[0]["item_name"] == self.item.display_name
+        assert rows[0]["actor_persona_name"] == self.member.name
+        assert rows[1]["kind"] == "deposit"
+
+    def test_non_member_denied(self) -> None:
+        from world.items.constants import OrgVaultEventKind
+
+        self._event(OrgVaultEventKind.DEPOSIT, item=self.item, actor=self.member)
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.outsider):
+            response = self._get()
+        assert response.status_code == 403
+
+    def test_no_persona_denied(self) -> None:
+        with mock.patch("world.currency.views._viewer_persona", return_value=None):
+            response = self._get()
+        assert response.status_code == 403
+
+    def test_unknown_org_404(self) -> None:
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            response = self._get(org_id=999_999)
+        assert response.status_code == 404
+
+    def test_capped_at_fifty(self) -> None:
+        from world.items.constants import OrgVaultEventKind
+
+        for _ in range(55):
+            self._event(OrgVaultEventKind.DEPOSIT, item=self.item, actor=self.member)
+
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            response = self._get()
+
+        assert response.status_code == 200
+        assert len(response.json()) == 50
+
+    def test_deleted_item_and_actor_show_as_none(self) -> None:
+        from world.items.constants import OrgVaultEventKind
+
+        self._event(OrgVaultEventKind.DEPOSIT, item=None, actor=None)
+
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.member):
+            response = self._get()
+
+        row = response.json()[0]
+        assert row["item_name"] is None
+        assert row["actor_persona_name"] is None
+
+
+class OrgVaultEventsAuditGapTests(TestCase):
+    """The embezzlement branch books NO vault event — the discovery hook (#2540 ruling).
+
+    A kept item stays invisible on the audit trail; only the honest deposits in the
+    same resolution show up. This is the exact story the reader exists to serve: the
+    gap between a collection tally and what actually landed in the vault.
+    """
+
+    def setUp(self) -> None:
+        from world.consent.constants import ConsentMode
+        from world.consent.factories import SocialConsentCategoryFactory
+        from world.items.factories import ItemInstanceFactory
+        from world.items.org_vault_models import VaultTransit
+        from world.items.services.org_vault import get_or_create_org_vault
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.societies.factories import (
+            OrganizationFactory,
+            OrganizationMembershipFactory,
+        )
+
+        self.user = AccountFactory(username="audit_gap_user")
+        self.org = OrganizationFactory()
+        self.carrier = PersonaFactory()
+        OrganizationMembershipFactory(persona=self.carrier, organization=self.org, rank=3)
+        vault = get_or_create_org_vault(self.org)
+        self.kept_item = ItemInstanceFactory(holder_character_sheet=self.carrier.character_sheet)
+        self.deposited_item = ItemInstanceFactory(
+            holder_character_sheet=self.carrier.character_sheet
+        )
+        for item in (self.kept_item, self.deposited_item):
+            VaultTransit.objects.create(
+                vault=vault,
+                item_instance=item,
+                carrier_character_sheet=self.carrier.character_sheet,
+            )
+        entry = RosterEntryFactory(character_sheet=self.carrier.character_sheet)
+        RosterTenureFactory(roster_entry=entry)
+        # The carrier is the org's sole active piloted member — the topmost piloted
+        # stakeholder, so their own embezzlement double-gate self-resolves (#2540 ruling).
+        character = self.carrier.character_sheet.character
+        character.db_account = AccountFactory()
+        character.save(update_fields=["db_account"])
+        SocialConsentCategoryFactory(key="embezzlement", default_mode=ConsentMode.ALLOWLIST)
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_kept_item_invisible_deposit_still_shows(self) -> None:
+        from world.items.services.org_vault import resolve_vault_transit
+
+        resolve_vault_transit(
+            organization=self.org,
+            carrier_persona=self.carrier,
+            keep_item_ids=[self.kept_item.pk],
+        )
+
+        with mock.patch("world.currency.views._viewer_persona", return_value=self.carrier):
+            response = self.client.get(f"/api/currency/org-books/{self.org.pk}/vault-events/")
+
+        assert response.status_code == 200
+        rows = response.json()
+        assert len(rows) == 1  # only the honest deposit — the kept stone leaves no trace here
+        assert rows[0]["kind"] == "deposit"
+        assert rows[0]["item_name"] == self.deposited_item.display_name
+
+
 class OrgBooksActivePersonaLeakTests(TestCase):
     """#981 end-to-end: books follow the worn face, never leak the other faces."""
 

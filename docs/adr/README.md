@@ -111,7 +111,7 @@ treat those names as hints to confirm, not gospel.
 - [0208 — Registration gates on per-email invites, not codes or an allowlist, behind a DB-singleton open/closed toggle](0208-invite-gated-registration-db-singleton-toggle.md) (#3054)
 
 ### Game-design tenets
-- [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
+- [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md) (terminal-fork scope note amended by 0233)
 - [0024 — Consent gates behavior-altering effects, not benefit](0024-consent-gates-behavior-altering-effects.md)
 - [0025 — Never parse pose text for mechanics](0025-never-parse-pose-text-for-mechanics.md)
 - [0026 — The watched player is always OOC-aware](0026-the-watched-player-is-always-ooc-aware.md) (see also ADR-0083)
@@ -238,7 +238,11 @@ treat those names as hints to confirm, not gospel.
 - [0230 - Board posts are authored by Persona, not by account or CharacterSheet](0230-board-posts-are-authored-by-persona.md) (#3286)
 - [0231 - Org appeals are a distinct IC surface from the OOC staff-contact Petition](0231-org-appeals-are-distinct-from-ooc-petitions.md) (#3293)
 - [0232 - The Arx I archive is gated on Arx II accounts, not a shared password](0232-arx1-archive-gated-on-arx-ii-accounts.md) (#3320)
-- [0234 - One shared DE currency and reference frame across techniques, conditions, and capabilities](0234-shared-de-currency-across-techniques-conditions-capabilities.md) (#3390; extends ADR-0223)
+- [0233 - Sentences are enforced by a daily sweep, and exile rides the existing heat ladder](0233-sentences-are-swept-and-exile-rides-the-heat-ladder.md) (#2378; amends ADR-0023's scope note; humiliation model extended by 0235)
+- [0234 - Material economy renames stocks over duplicating them, keeps per-category stock, drives crafting via allowance, and sells only at collection time](0234-material-economy-generalizes-stocks-allowance-driven-draw-and-selling.md) (#2540 slice 2; extends ADR-0081, ADR-0150; related ADR-0008)
+- [0235 - Boon completion: knowledge-side item pointers, honest material refusal, sibling ask flavors, NPC-only standing-gap shift](0235-boon-completion-item-pointers-material-honesty-flavors-standing-gap.md) (#2540 slice 3; refines the visibility-=-eligibility tenet; extends ADR-0234)
+- [0236 - Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire](0236-humiliation-brand-plus-fading-explanation-and-prestige.md) (#2378 follow-up; extends ADR-0233; related ADR-0081)
+- [0239 - One shared DE currency and reference frame across techniques, conditions, and capabilities](0239-shared-de-currency-across-techniques-conditions-capabilities.md) (#3390; extends ADR-0223)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

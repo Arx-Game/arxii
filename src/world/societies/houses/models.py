@@ -14,6 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.items.constants import MaterialSourceKind
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
@@ -364,31 +365,55 @@ class DomainHolding(SharedMemoryModel):
         related_name="domain_holding",
         help_text="The materialized stream feeding the owner org's books.",
     )
-    mine_quality = models.PositiveSmallIntegerField(
-        default=0,
-        help_text=(
-            "Gem-mining lode quality (Build 0b): drives the weekly haul — raises the "
-            "Rare-Find chance and shifts every axis roll up. 0 = not a gem mine. "
-            "PLACEHOLDER magnitudes."
-        ),
-    )
-    common_gem_tier = models.ForeignKey(
-        "arxii.MaterialCategory",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text=(
-            "The gem tier this mine's common bulk output is denominated in (a "
-            "'semiprecious mine' vs a 'precious mine'). Required to accrue common value."
-        ),
-    )
 
     class Meta:
         ordering = ["domain", "name"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.domain.name})"
+
+
+class HoldingMaterialSource(SharedMemoryModel):
+    """One material-producing source on a holding (#2540 slice 2).
+
+    Replaces ``DomainHolding.mine_quality``/``common_gem_tier`` with a proper row so a
+    holding can carry more than one production source and so non-gem bulk yields (farms,
+    quarries, etc.) share the same shape as a gem mine. ``source_kind`` distinguishes a
+    gem mine (rolls rare finds alongside flat value) from a plain bulk yield (flat value
+    only); ``quality`` drives the magnitude of the weekly haul.
+    """
+
+    holding = models.ForeignKey(
+        DomainHolding,
+        on_delete=models.CASCADE,
+        related_name="material_sources",
+    )
+    material_category = models.ForeignKey(
+        "arxii.MaterialCategory",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    quality = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Production strength. PLACEHOLDER magnitudes.",
+    )
+    source_kind = models.CharField(
+        max_length=20,
+        choices=MaterialSourceKind.choices,
+        default=MaterialSourceKind.BULK,
+    )
+
+    class Meta:
+        ordering = ["holding_id", "material_category_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["holding", "material_category"],
+                name="houses_holdingmaterialsource_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.holding_id} {self.material_category}: {self.get_source_kind_display()}"
 
 
 class DomainImprovementDetails(SharedMemoryModel):

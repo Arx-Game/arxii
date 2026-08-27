@@ -194,7 +194,7 @@ live combat formulas and stays importable by future budget/simulation phases:
   bootstrap, extracted from this module's own pass 1). The standalone condition
   (`condition_power_eval.py`) and capability (`capability_power_eval.py`) evaluators
   below import this module directly rather than re-deriving any of its math — ONE
-  currency across all three instruments (ADR-0234). `technique_power_eval.py` itself
+  currency across all three instruments (ADR-0239). `technique_power_eval.py` itself
   now delegates to it (thin aliases/wrapper calls); the refactor is byte-identical,
   proven by the pre-existing `test_technique_power_eval_valuators.py` regression suite.
 - **SL distribution:** rolls 1..100 enumerated against the context's

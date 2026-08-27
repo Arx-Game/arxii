@@ -20,7 +20,6 @@ from world.items.gems.constants import (
 _ITEM_TEMPLATE_FK = "arxii.ItemTemplate"
 _ITEM_INSTANCE_FK = "arxii.ItemInstance"
 _GEM_GRADE_FK = "arxii.GemGrade"
-_MATERIAL_CATEGORY_FK = "arxii.MaterialCategory"
 
 
 class GemGrade(SharedMemoryModel):
@@ -196,80 +195,6 @@ class Adornment(SharedMemoryModel):
         return f"gem {self.gem_instance_id} set in item {self.host_instance_id}"
 
 
-class CommonGemBucket(SharedMemoryModel):
-    """A crafter's stock of *common* gems as an aggregate value, per tier (Build 0b slice 5).
-
-    Common gems are never instanced — they live as a per-tier value integer that mining
-    credits and bulk crafting spends ("slap 20 semiprecious on the table, don't care
-    which"). Keyed to a CharacterSheet + a gem ``MaterialCategory`` (the tier). This is
-    the type-blind bulk source; specific-type demand still uses real instances.
-    """
-
-    character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
-        on_delete=models.CASCADE,
-        related_name="common_gem_buckets",
-    )
-    tier = models.ForeignKey(
-        _MATERIAL_CATEGORY_FK,
-        on_delete=models.PROTECT,
-        related_name="common_gem_buckets",
-        help_text="The gem tier (a MaterialCategory) this value is denominated in.",
-    )
-    value = models.PositiveIntegerField(
-        default=0,
-        help_text="Aggregate common-gem value held, in coppers.",
-    )
-
-    class Meta:
-        app_label = "arxii"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["character_sheet", "tier"],
-                name="items_commongembucket_sheet_tier_unique",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"sheet {self.character_sheet_id} {self.tier}: {self.value}"
-
-
-class StreamCommonGemPool(SharedMemoryModel):
-    """Per-tier uncollected common-gem value amassed by a mine's income stream (Build 0b).
-
-    The gem analogue of ``OrgIncomeStream.uncollected_pool``: a mine cycle accrues common
-    value here, and it rides the *same* active collection dispatch (graft/loss) into the
-    house's collected gem stock. Keyed to the stream + tier (a gem ``MaterialCategory``).
-    """
-
-    income_stream = models.ForeignKey(
-        "arxii.OrgIncomeStream",
-        on_delete=models.CASCADE,
-        related_name="common_gem_pools",
-    )
-    tier = models.ForeignKey(
-        _MATERIAL_CATEGORY_FK,
-        on_delete=models.PROTECT,
-        related_name="+",
-    )
-    uncollected_value = models.PositiveBigIntegerField(
-        default=0,
-        help_text="Common-gem value awaiting collection. No cap — a hoarded pool is outcome risk.",
-    )
-
-    class Meta:
-        app_label = "arxii"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["income_stream", "tier"],
-                name="items_streamcommongempool_stream_tier_unique",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"stream {self.income_stream_id} {self.tier}: {self.uncollected_value} uncollected"
-
-
 class PendingRareFind(SharedMemoryModel):
     """A Rare-Find gem instance a mine has produced but that hasn't been collected yet (Build 0b).
 
@@ -295,39 +220,3 @@ class PendingRareFind(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"pending rare find {self.gem_instance_id} on stream {self.income_stream_id}"
-
-
-class OrgGemStock(SharedMemoryModel):
-    """An organization's *collected* common-gem value, per tier (Build 0b).
-
-    The house-level shared stock that members craft from (the B ownership model). Mining
-    accrues into per-stream ``StreamCommonGemPool``s; an active ``collect_org_income``
-    dispatch delivers the net (after the same band + graft the coin rides) here.
-    """
-
-    organization = models.ForeignKey(
-        "arxii.Organization",
-        on_delete=models.CASCADE,
-        related_name="gem_stocks",
-    )
-    tier = models.ForeignKey(
-        _MATERIAL_CATEGORY_FK,
-        on_delete=models.PROTECT,
-        related_name="+",
-    )
-    value = models.PositiveBigIntegerField(
-        default=0,
-        help_text="Collected common-gem value the house holds, in coppers.",
-    )
-
-    class Meta:
-        app_label = "arxii"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["organization", "tier"],
-                name="items_orggemstock_org_tier_unique",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"org {self.organization_id} {self.tier}: {self.value}"
