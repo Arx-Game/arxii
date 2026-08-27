@@ -30,7 +30,7 @@
  * force this open.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type React from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
-import type { LethalDuelTier, OpponentTier, PaceMode } from '../api';
+import type { LethalDuelTier, OpponentTier, PaceMode, RiskLevel, StakesLevel } from '../api';
 import {
   useAddOpponent,
   useAddParticipant,
@@ -65,6 +65,7 @@ import {
   useRemoveParticipant,
   useResolveRound,
   useThreatPools,
+  useUpdateEncounterSettings,
 } from '../queries';
 import type { EncounterDetail, PositionNode } from '../types';
 
@@ -97,6 +98,22 @@ const PACE_OPTIONS: { value: PaceMode; label: string }[] = [
   { value: 'timed', label: 'Timed — auto-resolves on a timer' },
   { value: 'ready', label: 'Ready — resolves once everyone is ready' },
   { value: 'manual', label: 'Manual — GM controls each round' },
+];
+
+const STAKES_OPTIONS: { value: StakesLevel; label: string }[] = [
+  { value: 'local', label: 'Local' },
+  { value: 'regional', label: 'Regional' },
+  { value: 'national', label: 'National' },
+  { value: 'continental', label: 'Continental' },
+  { value: 'world', label: 'World' },
+];
+
+const RISK_OPTIONS: { value: RiskLevel; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'moderate', label: 'Moderate' },
+  { value: 'high', label: 'High' },
+  { value: 'extreme', label: 'Extreme' },
+  { value: 'lethal', label: 'Lethal' },
 ];
 
 // Significant-NPC tiers only — mirrors world.combat.constants.SIGNIFICANT_NPC_TIERS,
@@ -252,6 +269,8 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
         </Button>
       </div>
 
+      <EncounterSettingsRow encounter={encounter} />
+
       {isManual && (canBegin || canResolve) && (
         <div className="flex gap-2">
           {canBegin && (
@@ -324,6 +343,123 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Encounter settings row (#3383) — stakes/risk/pace/timer, changeable
+// mid-encounter. A persistent settings strip, not a one-shot dialog action —
+// each control fires the mutation directly on change.
+// ---------------------------------------------------------------------------
+
+function EncounterSettingsRow({ encounter }: { encounter: EncounterDetail }) {
+  const updateSettings = useUpdateEncounterSettings(encounter.id);
+  const [timerDraft, setTimerDraft] = useState(String(encounter.pace_timer_minutes));
+
+  // Keep the draft in sync when the server value changes from elsewhere
+  // (another GM's edit, or our own mutation's refetch) — cheap and avoids a
+  // stale display after a concurrent edit.
+  useEffect(() => {
+    setTimerDraft(String(encounter.pace_timer_minutes));
+  }, [encounter.pace_timer_minutes]);
+
+  function handleError(err: Error) {
+    toast.error(err.message || 'Failed to update encounter settings.');
+  }
+
+  function handleStakesChange(value: string) {
+    updateSettings.mutate({ stakesLevel: value as StakesLevel }, { onError: handleError });
+  }
+
+  function handleRiskChange(value: string) {
+    updateSettings.mutate({ riskLevel: value as RiskLevel }, { onError: handleError });
+  }
+
+  function handlePaceChange(value: string) {
+    updateSettings.mutate({ paceMode: value as PaceMode }, { onError: handleError });
+  }
+
+  function commitTimer() {
+    const minutes = Number(timerDraft);
+    if (!Number.isInteger(minutes) || minutes < 1) {
+      setTimerDraft(String(encounter.pace_timer_minutes));
+      return;
+    }
+    if (minutes === encounter.pace_timer_minutes) return;
+    updateSettings.mutate({ paceTimerMinutes: minutes }, { onError: handleError });
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-2">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Settings</p>
+      <div className="flex flex-wrap gap-2">
+        <div className="space-y-1">
+          <Label className="text-[10px]">Stakes</Label>
+          <Select value={encounter.stakes_level} onValueChange={handleStakesChange}>
+            <SelectTrigger data-testid="encounter-stakes-select" className="h-8 w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STAKES_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px]">Risk</Label>
+          <Select value={encounter.risk_level} onValueChange={handleRiskChange}>
+            <SelectTrigger data-testid="encounter-risk-select" className="h-8 w-28 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RISK_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px]">Pace</Label>
+          <Select value={encounter.pace_mode} onValueChange={handlePaceChange}>
+            <SelectTrigger data-testid="encounter-pace-select" className="h-8 w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PACE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {encounter.pace_mode === 'timed' && (
+          <div className="space-y-1">
+            <Label htmlFor="encounter-timer-input" className="text-[10px]">
+              Timer (min)
+            </Label>
+            <Input
+              id="encounter-timer-input"
+              type="number"
+              min={1}
+              className="h-8 w-20 text-xs"
+              value={timerDraft}
+              onChange={(e) => setTimerDraft(e.target.value)}
+              onBlur={commitTimer}
+              data-testid="encounter-timer-input"
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

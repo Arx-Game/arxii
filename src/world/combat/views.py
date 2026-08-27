@@ -62,6 +62,7 @@ from world.combat.serializers import (
     DuelChallengeSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
+    EncounterSettingsSerializer,
     InterposeSerializer,
     JoinEncounterSerializer,
     OpponentDefaultsResponseSerializer,
@@ -84,6 +85,7 @@ from world.combat.services import (
     remove_participant,
     resolve_round,
     run_combo_detection,
+    update_encounter_settings,
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
@@ -650,6 +652,24 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter.is_paused = not encounter.is_paused
         encounter.save(update_fields=["is_paused"])
         # save() updates the identity map — no re-fetch needed
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.PATCH], url_path="settings")
+    def update_settings(self, request: Request, pk: int | None = None) -> Response:
+        """GM: change stakes/risk/pace/timer on a live encounter (#3383).
+
+        Named ``update_settings`` rather than ``settings`` — ``APIView`` sets a
+        class attribute ``settings = api_settings`` (DRF's own settings
+        accessor, read by ``get_format_suffix``/``get_exception_handler``/etc.
+        via ``self.settings``); a same-named action method would shadow it on
+        the instance and break every other action on this ViewSet with
+        ``AttributeError: 'function' object has no attribute '...'``. The URL
+        stays ``/api/combat/{id}/settings/`` via ``url_path``.
+        """
+        encounter = self.get_object()
+        serializer = EncounterSettingsSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        update_encounter_settings(encounter, **serializer.validated_data)
         return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])

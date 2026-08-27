@@ -155,8 +155,9 @@ actions, backends, and service functions.
 - **`encounter.py`**: `CmdEncounter` (`encounter`, #1494, create #3388) — the GM
   combat-encounter lifecycle namespace, thin over the Actions in
   `actions/definitions/gm_combat.py` (`create`/alias `start`/`begin`/`resolve`/`add`/`default`/
-  `addpc`/`removepc`/`removenpc`/`pause`/`end`; `removenpc` added #3382 — pull a live
-  `CombatOpponent` out of the fight without a defeat/flee, symmetric with `removepc`).
+  `addpc`/`removepc`/`removenpc`/`pause`/`end`/`stakes`/`risk`/`pace`/`timer`;
+  `removenpc` added #3382 — pull a live `CombatOpponent` out of the fight without a
+  defeat/flee, symmetric with `removepc`).
   `encounter create [pace]` (#3388, alias `start`) dispatches
   `CreateEncounterAction` — the telnet parity gap this closed (every other lifecycle verb already
   had a telnet face; only starting the fight didn't). It resolves the actor's room's active
@@ -174,6 +175,13 @@ actions, backends, and service functions.
   `CmdPosition` uses (`commands/utils/gm_resolution.py`) and forwarded as `position_id` to
   `AddOpponentAction`, closing telnet's gap with the web `AddOpponentDialog`'s position
   picker (#2005).
+  `encounter stakes|risk|pace|timer <value>` (#3383) all dispatch the single
+  `UpdateEncounterSettingsAction` (key `update_encounter_settings`), each supplying exactly
+  one of `stakes_level`/`risk_level`/`pace_mode`/`pace_timer_minutes` — the telnet face of the
+  web `CombatEncounterViewSet.update_settings` PATCH action (`PATCH
+  /api/combat/{id}/settings/`); both converge on
+  `world.combat.services.update_encounter_settings`. Four small subverbs rather than one
+  combined settings grammar, matching every other subverb here taking one positional value.
   `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
   `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
   GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own

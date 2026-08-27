@@ -556,6 +556,14 @@ export function useResolveRound(encounterId: number) {
   );
 }
 
+/** Change stakes/risk/pace/timer on a live encounter (GM only, #3383). */
+export function useUpdateEncounterSettings(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, api.EncounterSettingsPayload>(
+    encounterId,
+    (payload) => api.patchEncounterSettings(encounterId, payload)
+  );
+}
+
 /** Toggle pause on the encounter timer (GM only). */
 export function usePauseEncounter(encounterId: number) {
   return useEncounterMutation<EncounterDetail, void>(encounterId, () => api.postPause(encounterId));

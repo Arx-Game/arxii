@@ -186,6 +186,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   target select) dispatches through the generic registry seam (`combat_use`), not the
   dedicated REST action — see Decision 1 in the issue's spec for why generic dispatch was
   picked as the uniform path going forward.
+- **GM mid-encounter settings (#3383).** `stakes_level`/`risk_level`/`pace_mode`/
+  `pace_timer_minutes` were writable model fields with no GM-facing write path (flagged by
+  the 2026-08-26 combat audit) — every encounter ran at the model defaults for its whole
+  life. `world.combat.services.update_encounter_settings` is the shared seam: web
+  `PATCH /api/combat/{id}/settings/` (`CombatEncounterViewSet.update_settings`) and telnet
+  `encounter stakes|risk|pace|timer <value>` (`UpdateEncounterSettingsAction`) both converge
+  on it, gated the same as every other GM lifecycle mutation (`IsEncounterGMOrStaff` /
+  `_actor_may_gm_encounter`). Stakes/risk changes gate only *future* `add_opponent` spawns —
+  already-spawned `CombatOpponent` stat blocks are never retroactively rescaled (no existing
+  recompute seam). Flipping into TIMED mid-round resets `round_started_at` to a fresh window;
+  flipping into READY calls the existing `maybe_resolve_on_ready` seam in the same call, so a
+  round where everyone already readied up resolves immediately.
 - **Ready-mode early resolution (#2120).** In `PaceMode.READY`, the round resolves the
   moment every ACTIVE participant is ready (`maybe_resolve_on_ready`, wired into
   `combat ready` / the web `ready` endpoint via `ReadyAction`); a lone ready participant

@@ -7007,6 +7007,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/settings/:
+    patch:
+      operationId: combat_settings_partial_update
+      description: |-
+        GM: change stakes/risk/pace/timer on a live encounter (#3383).
+
+        Named ``update_settings`` rather than ``settings`` — ``APIView`` sets a
+        class attribute ``settings = api_settings`` (DRF's own settings
+        accessor, read by ``get_format_suffix``/``get_exception_handler``/etc.
+        via ``self.settings``); a same-named action method would shadow it on
+        the instance and break every other action on this ViewSet with
+        ``AttributeError: 'function' object has no attribute '...'``. The URL
+        stays ``/api/combat/{id}/settings/`` via ``url_path``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEncounterDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/taunt/:
     post:
       operationId: combat_taunt_create

@@ -4780,6 +4780,33 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description GM: change stakes/risk/pace/timer on a live encounter (#3383).
+     *
+     *     Named ``update_settings`` rather than ``settings`` — ``APIView`` sets a
+     *     class attribute ``settings = api_settings`` (DRF's own settings
+     *     accessor, read by ``get_format_suffix``/``get_exception_handler``/etc.
+     *     via ``self.settings``); a same-named action method would shadow it on
+     *     the instance and break every other action on this ViewSet with
+     *     ``AttributeError: 'function' object has no attribute '...'``. The URL
+     *     stays ``/api/combat/{id}/settings/`` via ``url_path``.
+     */
+    patch: operations['combat_settings_partial_update'];
+    trace?: never;
+  };
   '/api/combat/{id}/taunt/': {
     parameters: {
       query?: never;
@@ -49460,6 +49487,32 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedEncounterDetailRequest'];
       };
     };
     responses: {
