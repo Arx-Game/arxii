@@ -244,6 +244,7 @@ treat those names as hints to confirm, not gospel.
 - [0234 - Material economy renames stocks over duplicating them, keeps per-category stock, drives crafting via allowance, and sells only at collection time](0234-material-economy-generalizes-stocks-allowance-driven-draw-and-selling.md) (#2540 slice 2; extends ADR-0081, ADR-0150; related ADR-0008)
 - [0235 - Boon completion: knowledge-side item pointers, honest material refusal, sibling ask flavors, NPC-only standing-gap shift](0235-boon-completion-item-pointers-material-honesty-flavors-standing-gap.md) (#2540 slice 3; refines the visibility-=-eligibility tenet; extends ADR-0234)
 - [0236 - Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire](0236-humiliation-brand-plus-fading-explanation-and-prestige.md) (#2378 follow-up; extends ADR-0233; related ADR-0081)
+- [0239 - One shared DE currency and reference frame across techniques, conditions, and capabilities](0239-shared-de-currency-across-techniques-conditions-capabilities.md) (#3390; extends ADR-0223)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

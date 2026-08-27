@@ -1,0 +1,178 @@
+{% load i18n %}
+<style>
+  #panel-capabilities .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-capabilities .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+  }
+  #panel-capabilities .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-capabilities table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  #panel-capabilities table.tuning-table th,
+  #panel-capabilities table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-capabilities .badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    border: 1px solid var(--hairline-color);
+    color: var(--body-quiet-color);
+    margin-right: 0.25rem;
+  }
+  #panel-capabilities .valuation-lines {
+    margin: 0.4rem 0 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+  #panel-capabilities .valuation-lines li {
+    margin-bottom: 0.15rem;
+  }
+  #panel-capabilities .provenance-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--body-quiet-color);
+  }
+  #panel-capabilities .zero-bucket-list {
+    font-size: 0.85rem;
+    margin: 0 0 1rem 1rem;
+  }
+  #panel-capabilities .zero-bucket-list li {
+    margin-bottom: 0.15rem;
+  }
+  #panel-capabilities .errorlist {
+    color: var(--error-fg);
+    font-size: 0.8rem;
+    margin: 0.2rem 0 0;
+    padding-left: 1rem;
+  }
+</style>
+
+<h2>{% translate "Capability Combat Power" %}</h2>
+<p>
+  {% translate "Prices what one point of each capability mechanically buys, on the same DE (damage-equivalent) currency the Techniques and Conditions panels use - via its authored check-bridge rows (CheckTypeCapabilityModifier), each priced as a marginal roll_modifier shift against the synthetic reference attack. A capability with no authored bridge rows prices 0 DE with a \"no authored bridge\" flag - correct behavior, not a gap, until staff wire one up." %}
+</p>
+
+<form id="panel-capabilities-form" class="tuning-form" method="post"
+      hx-post="{% url 'admin_tuning_capabilities' %}" hx-target="#panel-capabilities">
+  <div class="tuning-field">
+    <label for="{{ form.level.id_for_label }}">{% translate "Level" %}</label>
+    {{ form.level }}
+    {{ form.level.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.thread_level.id_for_label }}">{% translate "Thread level" %}</label>
+    {{ form.thread_level }}
+    {{ form.thread_level.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.roller_points.id_for_label }}">{% translate "Roller points" %}</label>
+    {{ form.roller_points }}
+    {{ form.roller_points.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.target_difficulty.id_for_label }}">{% translate "Target difficulty" %}</label>
+    {{ form.target_difficulty }}
+    {{ form.target_difficulty.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.roll_modifier.id_for_label }}">{% translate "Roll modifier" %}</label>
+    {{ form.roll_modifier }}
+    {{ form.roll_modifier.errors }}
+  </div>
+  <div class="tuning-field">
+    <button type="submit">{% translate "Evaluate catalog" %}</button>
+  </div>
+</form>
+
+{% if panel %}
+<p>
+  {% translate "Reference DPR" %}:
+  <strong>{{ panel.reference.outgoing_dpr|floatformat:2 }}</strong>
+  ({{ panel.reference.source_label }})
+</p>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Capability" %}</th>
+      <th>{% translate "DE / point" %}</th>
+      <th>{% translate "Check bridges" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for report in panel.rows %}
+    <tr>
+      <td>
+        <details>
+          <summary>{{ report.name }}</summary>
+          <ul class="valuation-lines">
+            {% for valuation in report.valuations %}
+            <li>
+              <strong>{{ valuation.kind }}</strong> &middot; {{ valuation.label }} &middot;
+              {{ valuation.value|floatformat:2 }} &middot;
+              <span class="badge">{{ valuation.provenance }}</span>
+              {{ valuation.detail }}
+            </li>
+            {% empty %}
+            <li>{% translate "No priced valuations." %}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      </td>
+      <td>{{ report.total_de|floatformat:2 }}</td>
+      <td>{{ report.valuations|length }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3">{% translate "No priced capabilities at these parameters." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>{% translate "Unpriced (no authored check bridge)" %}</h3>
+{% if panel.zero_bucket %}
+<ul class="zero-bucket-list">
+  {% for report in panel.zero_bucket %}
+  <li>
+    {{ report.name }} &middot;
+    {% if report.flags %}
+    {% for flag in report.flags %}<span class="badge">{{ flag }}</span>{% endfor %}
+    {% else %}
+    <span class="badge">{% translate "no priced payload" %}</span>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>{% translate "Every capability in the catalog has at least one authored check bridge." %}</p>
+{% endif %}
+
+<h3>{% translate "Valuation provenance" %}</h3>
+<p class="provenance-summary">
+  {% for provenance, count in panel.provenance_summary.items %}
+  <span>{{ provenance }}: {{ count }}</span>
+  {% empty %}
+  <span>{% translate "No valuations to summarize." %}</span>
+  {% endfor %}
+</p>
+{% else %}
+<p>{% translate "No evaluation has been run yet - set parameters above and evaluate the catalog." %}</p>
+{% endif %}

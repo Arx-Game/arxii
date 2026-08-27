@@ -89,6 +89,23 @@ stages via `Prefetch`, one for all `ConditionDamageOverTime` rows grouped in Pyt
 The `severity` query param drives the slider re-render; the form lives inside
 `_conditions_panel.html`.
 
+**DE column (#3390, Decision 1).** Alongside the unchanged `danger_score` column, the
+panel now shows each condition's standalone DE (damage-equivalent) figure — the same
+currency the Techniques panel uses, computed by
+`world.magic.services.condition_power_eval.evaluate_condition` at the panel's
+`severity`/`duration_rounds` knobs. `danger_score` is a cheap, reference-frame-free
+heuristic kept for a quick eyeball; DE is the panel's **default sort**. The
+`web.admin.tuning.condition_power_analytics` module mirrors `technique_analytics.py`'s
+two-tier caching contract (`ConditionPowerAnalyticsParams` /
+`build_condition_power_panel` / `_CORPUS_CACHE_TIMEOUT`), and
+`tuning_conditions_fragment` merges the two data sources into one
+`ConditionPanelRow(power, danger)` list, joined by condition name (both scan every
+`ConditionTemplate`, so every row finds its match). A condition whose payload can't be
+priced standalone — the team-damage-percent lane or a stage-scoped DoT row, both of
+which need technique-wrapper context a bare `ConditionTemplate` doesn't carry — shows a
+named `UNPRICEABLE` valuation and a `team_lane_excluded`/`stage_dot_excluded` flag
+rather than a silent zero (Decision 6).
+
 ### Simulation panel — Monte Carlo party-vs-boss batches
 
 `tuning_simulation_fragment` (in `views.py`) renders `SimulationRunForm`, runs a batch on
@@ -169,6 +186,17 @@ live combat formulas and stays importable by future budget/simulation phases:
 - `world/magic/services/technique_power_eval.py` —
   `evaluate_all_with_reference(EvalContext) -> (list[TechniquePowerReport], ReferenceFrame)`
   (and the `evaluate_all` wrapper). Types in `world/magic/types/technique_power.py`.
+- **Shared DE formula core (#3390):** `world/magic/services/de_valuation.py` holds every
+  row/technique-independent formula this evaluator uses — `matchup_bands`,
+  `reference_attack_de`, `cached_damage_multiplier`, `dot_per_round`,
+  `modifier_effect_shift`, `mitigation_value`, `is_team_lane_condition`,
+  `has_stage_scoped_dot`, and `compute_reference_frame` (the median-baseline-attack
+  bootstrap, extracted from this module's own pass 1). The standalone condition
+  (`condition_power_eval.py`) and capability (`capability_power_eval.py`) evaluators
+  below import this module directly rather than re-deriving any of its math — ONE
+  currency across all three instruments (ADR-0239). `technique_power_eval.py` itself
+  now delegates to it (thin aliases/wrapper calls); the refactor is byte-identical,
+  proven by the pre-existing `test_technique_power_eval_valuators.py` regression suite.
 - **SL distribution:** rolls 1..100 enumerated against the context's
   roller-points/target-difficulty matchup (same math as the Checks panel; local
   re-implementation over `world.traits` models because `world` services must not import
@@ -202,6 +230,50 @@ level (whitelisted); each row has a `<details>` drill-down showing every valuati
 bucket and provenance summary. Weapon-scaled damage profiles are flagged
 (`weapon_scaled`), not weapon-augmented; execute ramps are flagged, not folded into the
 headline; windup techniques divide DE by `1 + windup_rounds`.
+
+### Capabilities panel — DE-per-point league table (#3390)
+
+Answers "what does one point of this capability mechanically buy in combat power,"
+extending the DE currency to the third instrument — `CapabilityType`. Lives in
+`world.magic` for the same reason the Techniques evaluator does (reuses live combat
+formulas, importable by future budget/simulation phases):
+
+- `world/magic/services/capability_power_eval.py` —
+  `evaluate_capability(capability, *, context, reference) -> CapabilityPowerReport` (the
+  unit-test seam) and
+  `evaluate_all_capabilities_with_reference(EvalContext) -> (list[CapabilityPowerReport], ReferenceFrame)`.
+  Types in `world/magic/types/capability_power.py`.
+- **Pricing model (Decision 3, #3390):** post-#2704/#2708, a capability's mechanical
+  value flows into checks entirely through authored `CheckTypeCapabilityModifier` rows.
+  Each row's `weight` is the exact pre-truncation marginal rate (the derivative of
+  `weight * (value - baseline)` w.r.t. `value` is `weight`) — treated directly as a
+  synthetic `roll_modifier` shift and measured via `de_valuation.reference_attack_de`
+  base-vs-shifted, the SAME machinery the technique/condition generic-modifier
+  valuators use. This is a documented ESTIMATE-provenance linear approximation, not the
+  full truncated/largest-remainder allocation (`world.checks.services
+  ._capability_point_allocation`) — that needs a real `CharacterSheet`'s simultaneous
+  capability set, which doesn't exist for "one abstract point of capability X."
+- **No authored bridge = 0 DE, not a crash (Decision 5):** a capability with zero
+  `CheckTypeCapabilityModifier` rows prices at exactly 0.0 with a `no_authored_bridge`
+  flag on the report. As of #3390 no production seeder authors these rows, so a real
+  deploy prices **every** capability at 0 today — correct behavior, not a gap.
+- **Guardian-reaction leg needs no bespoke code (Decision 4):** guardian reactions
+  resolve through ordinary `CheckType`s via `compute_check_rating` — this evaluator
+  already iterates every authored `CheckTypeCapabilityModifier` row across every
+  `CheckType`, so a guardian-reaction bridge row prices itself automatically the moment
+  staff author one.
+- **Not reused here:** `CapabilityPowerConfig`/`apply_capability_curve` (the
+  caster-power-scales-magnitude geometric curve, ADR-0169) answers a different
+  question — this evaluator prices what one point *buys*, not how caster power scales a
+  magnitude. No conflict, no duplication.
+
+Panel mechanics mirror the Techniques panel: a param form (level, thread level, matchup
+knobs — no severity/duration axis, capabilities have none) POSTs a recompute cached 24h
+under an exact-param key with a `tuning-capability-power:last` pointer
+(`capability_power_analytics.py`). The league table sorts by `total_de` desc; each row
+has a `<details>` drill-down showing every check-bridge valuation line. Below the
+table: the zero/unpriced bucket (today, the whole catalog per Decision 5) and
+provenance summary.
 
 ## Game Ops — `/admin/_ops/` (`admin_ops`)
 
