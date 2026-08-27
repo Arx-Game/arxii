@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 
 from world.registration.models import get_registration_config
 from world.roster.factories import GameInviteFactory, PlayerDataFactory
-from world.roster.models import InviteStatus
+from world.roster.models import GameInvite, InviteStatus
 from world.roster.services.invite_services import (
     RegistrationClosedError,
     claim_game_invite,
@@ -199,6 +202,31 @@ class ClaimGameInviteTests(TestCase):
             claim_game_invite(invite.token, AccountFactory())
         invite.refresh_from_db()
         self.assertEqual(invite.status, InviteStatus.PENDING)
+
+    def test_rejects_expired_and_persists_the_expiry_mark(self):
+        """Regression for the idmapper-rollback-staleness fix (ADR-0008 addendum).
+
+        The EXPIRED write happens right before the raise; before the fix it was
+        rolled back along with everything else in the function's atomic block
+        (the DB row reverted, but the cached instance kept lying). Verify both
+        halves: the caller sees the expected error, AND the database itself —
+        not just this in-process reference — durably recorded EXPIRED. Flushing
+        the identity-map cache before re-fetching is the documented convention
+        (django_notes.md's "Idmapper Rollback Staleness" section) for proving a
+        write survived rather than reading back the same poisoned instance.
+        """
+        from evennia_extensions.factories import AccountFactory
+
+        invite = GameInviteFactory(
+            status=InviteStatus.PENDING,
+            expires_at=timezone.now() - timedelta(days=1),
+        )
+        with self.assertRaises(ValueError):
+            claim_game_invite(invite.token, AccountFactory())
+
+        GameInvite.flush_instance_cache()
+        reloaded = GameInvite.objects.get(token=invite.token)
+        self.assertEqual(reloaded.status, InviteStatus.EXPIRED)
 
 
 class RevokeGameInviteTests(TestCase):
