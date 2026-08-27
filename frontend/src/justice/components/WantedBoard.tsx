@@ -26,6 +26,23 @@ const TIER_STYLES: Record<string, string> = {
   extreme_heat: 'bg-red-600/25 text-red-700 dark:text-red-300',
 };
 
+/** Mirrors `SentenceKind.choices` labels (`src/world/justice/constants.py`) — no generated
+ * schema for this plain-value field, so kept in sync by hand. */
+const SENTENCE_KIND_LABELS: Record<string, string> = {
+  fine: 'Fine',
+  brig_term: 'Imprisonment',
+  humiliation: 'Public Humiliation',
+  exile: 'Exile',
+  execution: 'Execution',
+  confiscation: 'Confiscation',
+  banishment: 'Banishment',
+  arena_trial: 'Trial by Combat',
+};
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString();
+}
+
 export function WantedBoard({ areaId, viewerEntryId }: Props) {
   const { data, isLoading } = useWantedList(areaId, viewerEntryId);
   const pardon = usePardonMutation(viewerEntryId);
@@ -39,7 +56,7 @@ export function WantedBoard({ areaId, viewerEntryId }: Props) {
       </div>
     );
   }
-  if (!data || (data.wanted.length === 0 && data.held.length === 0)) {
+  if (!data || (data.wanted.length === 0 && data.held.length === 0 && data.records.length === 0)) {
     return null;
   }
 
@@ -128,6 +145,32 @@ export function WantedBoard({ areaId, viewerEntryId }: Props) {
                     </Button>
                   </span>
                 )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {data.records.length > 0 && (
+        <div className="mt-2" data-testid="standing-sentences">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">
+            Standing sentences
+          </div>
+          <ul className="space-y-1">
+            {data.records.map((record, idx) => (
+              <li
+                key={`${record.kind}-${record.persona_name}-${idx}`}
+                className="text-xs"
+                data-testid="standing-sentence-row"
+              >
+                <span className="font-semibold">
+                  {SENTENCE_KIND_LABELS[record.kind] ?? record.kind}
+                </span>
+                <span className="text-muted-foreground">
+                  {': '}
+                  {record.persona_name}
+                  {' — '}
+                  {record.until ? `until ${formatDate(record.until)}` : 'permanently'}
+                </span>
               </li>
             ))}
           </ul>

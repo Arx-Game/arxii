@@ -479,7 +479,7 @@ These standards apply across all Django (and broader Python) work in this repo.
 - **PostgreSQL Only (production)**: This project uses PostgreSQL exclusively in production. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Don't write database-agnostic workarounds in production code; use the Postgres feature directly.
 
   **For tests, see the two-tier model in the `running-tests` skill.** The SQLite inner-loop tier is a developer convenience that exposes PG-specific features as `@tag("postgres")` skips; the Postgres parity tier (every CI run, `just test-parity` locally) always runs the full chain. New tests should pass on both tiers unless they exercise PG-specific code, in which case `@tag("postgres")` is the correct decoration.
-- **`# noqa` Suppression Policy**: `# noqa` comments for our custom linters should be rare exceptions, not a convenient escape hatch. Only suppress when fixing the violation would cause more harm than good — for example, necessitating a massive and inelegant refactor. Every suppression MUST include a brief justification comment explaining why (e.g., `# noqa: SHARED_MEMORY — abstract mixin used by multiple apps`). Custom linter tokens: `PREFETCH_STRING`, `STRING_LITERAL`, `SHARED_MEMORY`, `USE_FILTERSET`, `GETATTR_LITERAL`, `CACHED_PROPERTY_IMPORT`, `OBJECTDB_PARAM`
+- **`# noqa` Suppression Policy**: `# noqa` comments for our custom linters should be rare exceptions, not a convenient escape hatch. Only suppress when fixing the violation would cause more harm than good — for example, necessitating a massive and inelegant refactor. Every suppression MUST include a brief justification comment explaining why (e.g., `# noqa: SHARED_MEMORY — abstract mixin used by multiple apps`). Custom linter tokens: `PREFETCH_STRING`, `STRING_LITERAL`, `SHARED_MEMORY`, `USE_FILTERSET`, `GETATTR_LITERAL`, `CACHED_PROPERTY_IMPORT`, `OBJECTDB_PARAM`, `IDMAPPER_MUTATE_ORDER`
 
   **Suppression counts are ratcheted** (`tools/lint_noqa_ratchet.py` + `tools/noqa_ratchet_baseline.txt`, enforced by the `noqa-ratchet` pre-commit hook): the per-token count of `# noqa` suppressions under `src/` may only go down. Adding a new suppression fails the hook until the baseline is deliberately bumped in the same commit with a justification — build the missing scaffolding instead of silencing the linter. When an audit tranche retires suppressions, lower the baseline in the same PR to lock the progress in. (Currently ratcheted: `GETATTR_LITERAL`.)
 - **SharedMemoryModel Default**: All concrete Django models should use `SharedMemoryModel`. Both lookup tables and per-instance data benefit from the identity-map cache. Only suppress with `# noqa: SHARED_MEMORY` and a justification
@@ -488,6 +488,48 @@ These standards apply across all Django (and broader Python) work in this repo.
 - **cached_property must come from Django**: Use `from django.utils.functional import cached_property` exclusively. `functools.cached_property` silently breaks `Prefetch(to_attr=...)` because Django's prefetch machinery checks `isinstance` against its own class. Enforced by `lint_cached_property_import.py`. See `src/evennia_extensions/CACHED_PROPERTY_STANDARD.md` for full rationale.
 - **Constants over String Literals**: Never return spaceless string literals or compare against them. Use `TextChoices`, `IntegerChoices`, or module-level constants. This prevents typo bugs and makes refactoring safe
 - **FilterSets in Views**: Always use `django-filter` FilterSet classes for query parameter handling in ViewSets and Views. Never access `request.query_params` or `request.GET` directly
+
+## Idmapper Rollback Staleness (mutate-then-validate order)
+
+Ruled 2026-08-27 (Apostate, ruling 7): a convention + a narrow lint, deliberately
+**no rollback hook**.
+
+**The rule: inside an atomic block, complete ALL validation/raises BEFORE the
+first in-place mutation of a `SharedMemoryModel` instance. Never mutate-then-validate.**
+
+**The failure mechanism.** Evennia's idmapper returns the same cached in-memory
+instance for a given pk from every `.get()`/`.filter()` call that hits it — that is
+the entire point of the identity map (see ADR-0008). If code inside
+`transaction.atomic()` mutates a cached instance's attribute in place (`obj.balance -=
+amount`, `obj.save()`) and *then* raises — closing the block and rolling back the
+DB write — the row in Postgres reverts, but the mutated Python object sitting in the
+identity map does not: nothing about a rollback touches process memory. Evennia also
+disables the `request_finished` signal that would otherwise flush the cache between
+requests. So the phantom value survives for the rest of the process lifetime, and the
+next `.get()` for that pk — in this request, the next request, or a test — hands back
+the same poisoned instance. A later read reports a value the database never actually
+held; a later compound write can bake the phantom back into a fresh save.
+
+**Why a lint instead of a rollback hook:** hooking `transaction.on_commit`'s rollback
+counterpart to flush touched instances would have to track every mutated instance per
+atomic block process-wide — expensive, easy to get wrong, and it treats the symptom.
+The actual bug is always a specific code shape: validation that could have run first
+ran after a mutation instead. Ordering it correctly costs nothing and eliminates the
+hazard at the source.
+
+**Test-side convention:** a test that intentionally triggers a rollback inside an
+atomic service call and then re-reads the row **must** call
+`Model.flush_instance_cache()` before the read, or the assertion silently checks the
+identity-map's stale copy instead of the database. See the existing precedents:
+`world/progression/tests/test_kudos.py:519` and `world/currency/tests/test_currency.py:327`.
+
+**Lint:** `tools/lint_idmapper_mutation_order.py` (`lint-idmapper-mutation-order` pre-commit
+hook, scoped to `src/world/`) flags the narrow shape that actually bit us: a `raise`
+appearing after a same-block sequence that both mutates an attribute on some name and
+calls `.save(...)` on that same name, inside `transaction.atomic()`. It does not try to
+catch the general case — too noisy — only mutate-save-then-raise. Suppress a
+deliberate keeper with `# noqa: IDMAPPER_MUTATE_ORDER` and a stated reason (added to
+the custom linter token list above).
 
 ## FactoryBoy `django_get_or_create` Gotcha
 

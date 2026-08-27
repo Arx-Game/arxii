@@ -2245,12 +2245,18 @@ def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, in
     return {cap_id: max(0, val) for cap_id, val in totals.items()}
 
 
-def get_check_modifier(
-    character_sheet: "CharacterSheet",
+def _check_modifier_for_target(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     check_type: CheckType,
 ) -> CheckModifierResult:
     """
-    Get the total modifier for a check type from active conditions.
+    Get the total modifier for a check type from active conditions on *target*.
+
+    Purely ObjectDB-keyed — no CharacterSheet dependency. This is the extracted
+    core of ``get_check_modifier`` (#3384): every line below already operated
+    only on the ObjectDB, so this helper is the reusable seam both
+    ``get_check_modifier`` (sheet-owning bearer, own roll) and
+    ``opponent_condition_opposition`` (ephemeral opponent, no sheet) delegate to.
 
     Args:
         target: The ObjectDB instance
@@ -2259,7 +2265,6 @@ def get_check_modifier(
     Returns:
         CheckModifierResult with total and breakdown
     """
-    target = character_sheet.character
     ctype = check_type
 
     result = CheckModifierResult(total_modifier=0, breakdown=[])
@@ -2293,6 +2298,40 @@ def get_check_modifier(
             result.breakdown.append((instance, modifier_value))
 
     return result
+
+
+def get_check_modifier(
+    character_sheet: "CharacterSheet",
+    check_type: CheckType,
+) -> CheckModifierResult:
+    """
+    Get the total modifier for a check type from active conditions.
+
+    Args:
+        character_sheet: The CharacterSheet whose bearer's active conditions are read
+        check_type: CheckType instance
+
+    Returns:
+        CheckModifierResult with total and breakdown
+    """
+    return _check_modifier_for_target(character_sheet.character, check_type)
+
+
+def opponent_condition_opposition(
+    objectdb: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    check_type: CheckType,
+) -> int:
+    """Difficulty delta an opposing entity's active conditions contribute (#3384).
+
+    Reads the SAME ConditionCheckModifier rows condition_contributions reads for a
+    CharacterSheet-owning bearer's own roll -- summed the identical way (severity/stage
+    scaling included) -- but keyed directly on the opposing ObjectDB, so it works for an
+    ephemeral CombatOpponent with no CharacterSheet (ADR-0038). No sign flip: a penalty
+    row (negative modifier_value) LOWERS the total, which is exactly right when this
+    feeds level_opposition's additive difficulty -- a debuffed opponent presents lower
+    difficulty to whoever is acting against it.
+    """
+    return _check_modifier_for_target(objectdb, check_type).total_modifier
 
 
 def condition_contributions(

@@ -89,6 +89,7 @@ money bands rather than being one task.
 | Weather roll + echo | 2h real (≈6 IC h) | weather (#1522) |
 | Gossip heat decay | 24h real | secrets (#1572) |
 | Persona pursuit-heat decay | 24h real | justice (#1765) |
+| Justice sentence sweep (`justice.sentence_sweep`) | 24h real | justice (#2378) |
 | Sanctum resonance generation (`sanctum.resonance_generation_tick`) | 24h real | magic |
 | Room ward upkeep (`room_features.ward_upkeep_tick`) | 24h real | room_features (#2177) |
 | Weekly rollover (`weekly_rollover`) | weekly, Sun 00:00 EST anchor, `ECONOMY` | game_clock (#932) |

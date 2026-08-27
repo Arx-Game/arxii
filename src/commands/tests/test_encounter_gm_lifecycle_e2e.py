@@ -193,3 +193,59 @@ class EncounterGMLifecycleE2ETest(TestCase):
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.status, RoundStatus.COMPLETED)
         self.assertEqual(self.encounter.outcome, EncounterOutcome.ABANDONED)
+
+
+class EncounterCreateE2ETest(TestCase):
+    """E2E telnet journey: ``encounter create`` (#3388) -- the gap the audit named.
+
+    Starts from a room with NO pre-existing CombatEncounter (unlike the lifecycle
+    test above, which always starts from one) since creation wasn't telnet-reachable
+    before this issue.
+    """
+
+    def setUp(self) -> None:
+        self.room = _create_room()
+
+        self.gm_actor, self.gm_account, _ = _create_pc_with_account(
+            "CreateJourneyGM",
+            room=self.room,
+        )
+        self.player_actor, self.player_account, _ = _create_pc_with_account(
+            "CreateJourneyPlayer",
+            room=self.room,
+        )
+
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
+        SceneParticipationFactory(scene=self.scene, account=self.player_account)
+
+        seed_scaling_defaults()
+        self.threat_pool = ThreatPoolFactory(name="soldiers")
+
+    def test_create_then_add_closes_the_telnet_gap(self) -> None:
+        """GM creates an encounter here, then ``encounter add`` works against it."""
+        from world.combat.constants import PaceMode
+        from world.combat.models import CombatEncounter
+
+        msgs = _run_cmd(self.gm_actor, "create ready")
+        joined = " ".join(msgs).lower()
+        self.assertIn("encounter #", joined)
+        self.assertIn("ready", joined)
+
+        encounter = CombatEncounter.objects.get(room=self.room)
+        self.assertEqual(encounter.scene_id, self.scene.pk)
+        self.assertEqual(encounter.pace_mode, PaceMode.READY)
+
+        msgs = _run_cmd(
+            self.gm_actor,
+            f"add Soldier {OpponentTier.MOOK} {self.threat_pool.name}",
+        )
+        self.assertIn("opponent 'soldier' added", " ".join(msgs).lower())
+        self.assertTrue(CombatOpponent.objects.filter(encounter=encounter, name="Soldier").exists())
+
+    def test_non_gm_create_is_refused(self) -> None:
+        from world.combat.models import CombatEncounter
+
+        msgs = _run_cmd(self.player_actor, "create")
+        self.assertTrue(msgs, "expected a refusal message")
+        self.assertFalse(CombatEncounter.objects.filter(room=self.room).exists())

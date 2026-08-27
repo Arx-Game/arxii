@@ -229,12 +229,18 @@ class GemAlreadyAdorned(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That gem is already set in a piece."})
 
 
-class InsufficientCommonGems(ItemError):
-    """Raised when a common-gem value bucket lacks the value a bulk requirement needs (Build 0b)."""
+class InsufficientMaterialStock(ItemError):
+    """Raised when a material bucket/stock lacks the value a bulk requirement needs (#2540).
 
-    user_message = "You don't have enough common gems of that kind."
+    NOTE: this is deliberately NOT named ``InsufficientMaterials`` — that name is already
+    taken by the instance-consumption exception below (``requirement``/``provided_qty``
+    shape, raised by ``gather_consumable_pks``). Renaming this one to match would have
+    silently clobbered a distinct, actively-used exception; see task-1-report.md deviations.
+    """
+
+    user_message = "PLACEHOLDER: You don't have enough of that material."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
-        {"You don't have enough common gems of that kind."},
+        {"PLACEHOLDER: You don't have enough of that material."},
     )
 
 

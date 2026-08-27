@@ -326,6 +326,7 @@ owns the full lifecycle (dispatch → consent → resolution → result recordin
 | `SceneActionRequest` | Primary targeted (or area) social action request | `scene`, `initiator_persona`, `target_persona` (nullable), `action_key`, `action_template`, `technique`, `status` (ActionRequestStatus), `effort_level` (EffortLevel), `delivery`, `pose_text`, `created_at`, `resolved_at` — plus all `DefenderConsentFields` columns |
 | `SceneActionTarget` | One additional non-primary target in a multi-target request | `action_request` (FK → SceneActionRequest), `target_persona`, `status`, `result_interaction`, `resolved_at` — plus all `DefenderConsentFields` columns |
 | `SceneCastPullDeclaration` | Paid thread-pull declared alongside a benign standalone cast | `request` (OneToOne), `resonance`, `tier`, `threads` (M2M) |
+| `Boon` (#2540) | Structured social-ask payload — what the asker wants, named up front | `action_request` (OneToOne), `kind` (BoonKind), `sum_tier`, `amount`, `item_instance`, `deed_text`, `material_category`, `fulfilled_at` |
 
 `SceneActionTarget` has a `UniqueConstraint` on `(action_request, target_persona)` —
 a persona cannot appear as an additional target more than once per request.
@@ -411,6 +412,23 @@ and is added to the defender's `WeeklySocialEngagement` pending ledger via
 `progression.services.engagement.accrue()`. Anti-farm guards: NPC defenders/initiators and
 self-targeting are skipped. At weekly rollover (`grant_social_engagement_kudos()`), ledgers
 with `distinct_initiators >= MIN_ENGAGEMENT_BAR` (currently 2) are granted Kudos and marked.
+
+### Boon: the structured social ask (#2540)
+
+A `Boon` (see the scenes `AGENT_GLOSSARY`) rides a `SceneActionRequest` 1:1, naming what the
+asker wants up front so a target can gauge plausibility before consenting. Five kinds:
+MONEY, HELD_ITEM, VAULT_ITEM, DEED, MATERIAL. A held-item or vault-item ask requires the
+asker to hold a prior knowledge pointer to the named item (`character_has_item_pointer`) —
+every non-pointer-holding path returns identical output, the oracle-closure rule recorded in
+ADR-0235. A MATERIAL ask against a target's empty bucket is honestly refused
+(`BoonUnavailable`, surfaced as a 200 `boon_refused` response) rather than rejected as
+invalid — see ADR-0235 for why this refines rather than breaks the visibility-=-eligibility
+tenet. Four action keys share the one payload: plain `boon` (Persuasion) plus the ask
+flavors `boon_con`/`boon_charm`/`boon_menace` (Con/Seduction/Intimidation checks). Difficulty
+against an NPC target sums the relative-cost band with a standing-gap shift — both NPC-only;
+a piloted target's own `difficulty_choice` always rules. A granted Boon permanently drains
+the target's affection for the asker, stacking per ask. Fulfillment mechanics and the full
+decision record: `world/scenes/CLAUDE.md` and ADR-0235.
 
 ---
 
