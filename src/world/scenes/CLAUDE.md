@@ -144,8 +144,19 @@ the unified Persona identity system, and non-combat scene rounds.
   no instance pinned): a discovered `Clue` with `target_kind=ITEM`, a KNOWN `CodexEntry`, or
   known `SecretKnowledge` — via the matching item-pointer FKs on `clues.Clue` / `codex.CodexEntry`
   / `secrets.Secret` (see `docs/systems/investigation_and_discovery.md`). Answers knowledge only
-  (a destroyed item can still be "known"); callers needing liveness check separately. Not yet
-  wired into `validate_boon_ask` — a later task's job.
+  (a destroyed item can still be "known"); callers needing liveness check separately.
+  **Wired into `validate_boon_ask` (2026-08-27 exact-pointer ruling, #2540 slice 3):**
+  `_validate_held_item_ask`/`_validate_vault_item_ask` additionally require
+  `character_has_item_pointer(sheet=asker_sheet, item=item)`, with `asker_sheet` threaded in from
+  `create_action_request`'s `initiator_persona.character_sheet` — a pointer-less ask on a valid,
+  target-held item id still fails, with a neutral `BOON_NO_POINTER_TEXT` message that never
+  reveals whether the item exists or is held (the API cannot be curled around the UI).
+  `pointer_known_items_for_target(*, asker_sheet, target_persona)` is the boon-options display-seam
+  counterpart — the asker's pointer-known items relevant to THIS target (held or in an accessible
+  vault), computed from the asker's OWN pointers via a handful of batched queries, NEVER a browse
+  of the target's actual holdings; surfaced as `boon-options`' `pointer_items` field
+  (`[{item_instance_id, name, source: "held"|"vault"}]`), which requires an `initiator_persona`
+  query param owned by the caller (pointer knowledge is private).
   **MATERIAL kind (slice 3, #2540):** `BoonAsk.material_category_id` + `sum_tier` (reuses money's
   MINOR/FAIR/GREAT labels — but NEVER a computed value, deliberate money asymmetry). The
   boon-options endpoint's `material_categories` is the STATIC public `MaterialCategory` list,

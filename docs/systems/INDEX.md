@@ -2557,7 +2557,16 @@ action consent flow, and a three-mode non-combat round framework.
   the exact-pointer predicate for a named-item ask: True when the roster entry holds a
   discovered ITEM-target clue, a KNOWN codex entry, or known secret knowledge naming the
   instance (or its template with no instance pinned) — see `ClueTargetKind.ITEM` and the
-  matching `CodexEntry`/`Secret` item-pointer FKs below (not yet wired into `validate_boon_ask`).
+  matching `CodexEntry`/`Secret` item-pointer FKs below. **Wired into `validate_boon_ask`
+  (2026-08-27 ruling, slice 3):** `_validate_held_item_ask`/`_validate_vault_item_ask` also
+  require `character_has_item_pointer(sheet=asker_sheet, item=item)` (`asker_sheet` threaded
+  from `create_action_request`'s `initiator_persona`) — a pointer-less ask on a valid,
+  target-held item id fails with a neutral message, never revealing whether the item exists.
+  `pointer_known_items_for_target(*, asker_sheet, target_persona)` is the boon-options display
+  seam: the asker's pointer-known items relevant to one target (held or vault-accessible),
+  batched from the asker's own pointers, never a browse of the target's holdings — surfaced as
+  `boon-options`' `pointer_items` (requires an `initiator_persona` query param owned by the
+  caller, since this reveals private knowledge).
   Slice 2 wired the full loop (`boon_services`):
   `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
   grant never exists: penniless-target money, unheld item, empty deed rejected before any row).

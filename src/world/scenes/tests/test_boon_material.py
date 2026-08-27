@@ -56,10 +56,15 @@ class BoonExplicitDispatchTests(TestCase):
         from world.scenes.boon_services import _BOON_ASK_VALIDATORS
 
         target = PersonaFactory()
+        asker = PersonaFactory()
         # A real BoonKind value with its dispatch entry removed — simulates a future
         # kind added to the enum without a matching validator wired in.
         with patch.dict(_BOON_ASK_VALIDATORS, clear=True), self.assertRaises(ValueError):
-            validate_boon_ask(ask=BoonAsk(kind=BoonKind.MONEY), target_persona=target)
+            validate_boon_ask(
+                ask=BoonAsk(kind=BoonKind.MONEY),
+                target_persona=target,
+                asker_sheet=asker.character_sheet,
+            )
 
     def test_fulfill_boon_raises_loudly_on_an_unhandled_kind(self) -> None:
         request = SceneActionRequestFactory()
