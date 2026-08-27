@@ -6,9 +6,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0171_playerdata_arx1_archive_access"),
-    ]
+    dependencies = [("arxii", "0177_justicecase_humiliation_prestige_hit")]
 
     operations = [
         migrations.AddField(

@@ -441,6 +441,7 @@
   - realm -> realms.Realm [FK] (nullable)
   - climate -> weather.Climate [FK] (nullable)
   - dominant_society -> societies.Society [FK] (nullable)
+  - exile_destination -> evennia_extensions.RoomProfile [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
   - children <- areas.Area
@@ -468,6 +469,7 @@
   - pardons <- justice.PardonGrant
   - guard_encounters <- justice.GuardEncounter
   - justice_cases <- justice.JusticeCase
+  - exile_decrees <- justice.ExileDecree
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -1583,8 +1585,8 @@
   - detected_traps <- room_features.Trap
   - prepared_ground <- room_features.PreparedGround
   - recipe_knowledge <- items.CharacterRecipeKnowledge
-  - common_gem_buckets <- items.CommonGemBucket
   - expulsion_bars <- npc_services.ExpulsionBar
+  - material_buckets <- items.MaterialBucket
   - vault_transits <- items.VaultTransit
   - trade_sessions_initiated <- items.TradeSession
   - trade_sessions_received <- items.TradeSession
@@ -1929,6 +1931,8 @@
   - target_secret -> secrets.Secret [FK] (nullable)
   - target_persona -> scenes.Persona [FK] (nullable)
   - target_persona_linked -> scenes.Persona [FK] (nullable)
+  - target_item_template -> items.ItemTemplate [FK] (nullable)
+  - target_item_instance -> items.ItemInstance [FK] (nullable)
 **Pointed to by:**
   - pool_entries <- assets.CluePoolEntry
   - held_by <- clues.CharacterClue
@@ -1997,6 +2001,8 @@
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - art -> evennia_extensions.Media [FK] (nullable)
+  - subject_item_template -> items.ItemTemplate [FK] (nullable)
+  - subject_item_instance -> items.ItemInstance [FK] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - consequence_effects <- checks.ConsequenceEffect
@@ -2487,6 +2493,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' - GM force-end: completes as ABANDONED (#876 §8).`
 - `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' - Delete all CombatPull rows from prior rounds and recompute affected max_health.`
+- `finalize_new_encounter(encounter: 'CombatEncounter') -> 'None' - Apply the post-creation defaults every "scene-anchored, no explicit room" creation`
 - `get_clash_config() -> 'ClashConfig' - Get-or-create the ClashConfig singleton (pk=1).`
 - `get_concentration_check_type() -> 'CheckType' - Return the seeded 'Concentration' CheckType rolled at sustained-action`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
@@ -2889,6 +2896,7 @@
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
+- `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None, skip_engagement_gate: bool = False, power_intensity: int = 0) -> world.conditions.types.TreatmentOutcome - Resolve a TreatmentTemplate against an effect instance.`
 - `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int - Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
@@ -3307,8 +3315,8 @@
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
-  - common_gem_pools <- items.StreamCommonGemPool
   - pending_rare_finds <- items.PendingRareFind
+  - material_pools <- items.StreamMaterialPool
 
 ### OrgObligation
 **Foreign Keys:**
@@ -3339,12 +3347,14 @@
 ### Service Functions
 - `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' - One weekly cycle: the gross amasses in the uncollected pool (#930).`
 - `accrue_monthly_interest(organization: 'Organization') -> 'int' - One month's interest lands in arrears (#927). Returns total accrued.`
+- `auto_sell_excess_materials(*, organization: 'Organization') -> 'int' - Liquidate any ``OrgMaterialStock`` row over ``MATERIAL_AUTO_SELL_THRESHOLD`` (#2540 slice 2).`
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' - Spend authority: an active membership at tier <= spend_rank_max.`
-- `collect_and_distribute(*, organization: 'Organization', character) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
+- `collect_and_distribute(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' - One active collection of a personal asset's accumulated income (#2294).`
 - `collect_org_income(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' - Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' - Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
+- `distribute_material_allowance(*, organization: 'Organization', landed_by_category: 'list[tuple[MaterialCategory, int]]') -> 'MaterialAllowanceResult' - Auto-split a share of newly landed materials among active piloted members (#2540 slice 2).`
 - `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' - Create a loan: principal moves creditor→debtor, instrument records it (#927).`
 - `format_coppers(amount: int) -> str - Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`
 - `fund_fame_display(persona: 'Persona', *, amount: 'int') -> 'int' - Spend money maintaining fame against decay (#932 fame churn).`
@@ -4154,11 +4164,6 @@
   - claim -> items.ReclamationClaim [FK]
   - ownership_event -> items.OwnershipEvent [FK]
 
-### CommonGemBucket
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - tier -> items.MaterialCategory [FK]
-
 ### CraftedItemRecipe
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [FK]
@@ -4321,6 +4326,8 @@
 **Pointed to by:**
   - building_permit_details <- buildings.BuildingPermitDetails
   - placed_as_decoration <- buildings.RoomDecoration
+  - clues_about <- clues.Clue
+  - codex_entries_about <- codex.CodexEntry
   - currency_instrument <- currency.CurrencyInstrumentDetails
   - favor_token <- currency.FavorTokenDetails
   - bequests <- estates.Bequest
@@ -4355,6 +4362,7 @@
   - reclamation_claims <- items.ReclamationClaim
   - crime_evidence <- justice.CrimeEvidence
   - project_contributions <- projects.Contribution
+  - secrets_about <- secrets.Secret
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -4389,7 +4397,9 @@
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
   - furniture_decoration_kinds <- buildings.DecorationKind
+  - clues_about <- clues.Clue
   - clue_triggers <- clues.ItemClueTrigger
+  - codex_entries_about <- codex.CodexEntry
   - class_level_item_requirements <- progression.ItemRequirement
   - ritual_requirements <- magic.RitualComponentRequirement
   - technique_grants <- magic.TechniqueGrant
@@ -4403,6 +4413,7 @@
   - garment_mitigations <- items.GarmentMitigation
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
+  - secrets_about <- secrets.Secret
 
 ### ItemTemplateAppearanceEffect
 **Foreign Keys:**
@@ -4460,15 +4471,20 @@
   - stock_listings <- items.StockListing
   - ware_listings <- items.WareListing
 
+### MaterialBucket
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - material_category -> items.MaterialCategory [FK]
+
 ### MaterialCategory
 **Pointed to by:**
   - templates <- items.ItemTemplate
-  - common_gem_buckets <- items.CommonGemBucket
+  - material_buckets <- items.MaterialBucket
 
-### OrgGemStock
+### OrgMaterialStock
 **Foreign Keys:**
   - organization -> societies.Organization [FK]
-  - tier -> items.MaterialCategory [FK]
+  - material_category -> items.MaterialCategory [FK]
 
 ### OrgVaultEvent
 **Foreign Keys:**
@@ -4569,10 +4585,10 @@
   - stall -> items.MarketStall [FK]
   - template -> items.ItemTemplate [FK]
 
-### StreamCommonGemPool
+### StreamMaterialPool
 **Foreign Keys:**
   - income_stream -> currency.OrgIncomeStream [FK]
-  - tier -> items.MaterialCategory [FK]
+  - material_category -> items.MaterialCategory [FK]
 
 ### Style
 **Foreign Keys:**
@@ -4746,6 +4762,13 @@
   - case -> justice.JusticeCase [FK]
   - submitter_persona -> scenes.Persona [FK]
 
+### ExileDecree
+**Foreign Keys:**
+  - case -> justice.JusticeCase [FK] (nullable)
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+
 ### FrameJobDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
@@ -4771,6 +4794,7 @@
   - captivity -> captivity.Captivity [FK] (nullable)
 **Pointed to by:**
   - exculpatory_evidence <- justice.ExculpatoryEvidence
+  - exile_decrees <- justice.ExileDecree
 
 ### LieLowState
 **Foreign Keys:**
@@ -4791,6 +4815,10 @@
   - society -> societies.Society [FK]
 **Pointed to by:**
   - sources <- justice.HeatSource
+
+### SentenceLadderRung
+**Foreign Keys:**
+  - society -> societies.Society [FK]
 
 ### Service Functions
 - `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' - Mint pursuit heat on an accusation's subject, where the allegation landed.`
@@ -7905,6 +7933,7 @@
 **Foreign Keys:**
   - action_request -> scenes.SceneActionRequest [OneToOne]
   - item_instance -> items.ItemInstance [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
 **Pointed to by:**
   - affection_shift <- relationships.AffectionShift
 
@@ -8092,6 +8121,7 @@
   - guard_encounters <- justice.GuardEncounter
   - justice_cases <- justice.JusticeCase
   - exculpatory_submissions <- justice.ExculpatoryEvidence
+  - exile_decrees <- justice.ExileDecree
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - mission_invites_received <- missions.MissionInvite
@@ -8389,6 +8419,8 @@
   - legend_deed -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - subject_item_template -> items.ItemTemplate [FK] (nullable)
+  - subject_item_instance -> items.ItemInstance [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
   - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**
@@ -8658,8 +8690,8 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
-  - common_gem_tier -> items.MaterialCategory [FK] (nullable)
 **Pointed to by:**
+  - material_sources <- societies.HoldingMaterialSource
   - improvement_details <- societies.DomainImprovementDetails
 
 ### DomainImprovementDetails
@@ -8700,6 +8732,11 @@
 **Pointed to by:**
   - holdings <- societies.DomainHolding
   - house_templates <- societies.HouseTemplate
+
+### HoldingMaterialSource
+**Foreign Keys:**
+  - holding -> societies.DomainHolding [FK]
+  - material_category -> items.MaterialCategory [FK]
 
 ### HouseAspectDefinition
 **Foreign Keys:**
@@ -8918,11 +8955,11 @@
   - estate_claims <- estates.EstateClaim
   - event_invitations <- events.EventInvitation
   - vault_access_entries <- room_features.VaultAccessEntry
-  - gem_stocks <- items.OrgGemStock
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
   - regards_as_target <- npc_services.NpcRegard
   - hosted_stalls <- items.MarketStall
+  - material_stocks <- items.OrgMaterialStock
   - item_vault <- items.OrganizationVault
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
@@ -9082,6 +9119,8 @@
   - heat_rows <- justice.PersonaHeat
   - pardons <- justice.PardonGrant
   - justice_cases <- justice.JusticeCase
+  - exile_decrees <- justice.ExileDecree
+  - sentence_ladder <- justice.SentenceLadderRung
   - gemits <- narrative.Gemit
   - exposed_secrets <- secrets.Secret
 

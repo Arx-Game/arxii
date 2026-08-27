@@ -12,7 +12,7 @@ class SecretCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Secret)
 class SecretAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["scene"]
+    autocomplete_fields = ["scene", "subject_item_instance"]
     list_display = ["__str__", "level", "category", "provenance", "created_date"]
     list_filter = ["level", "provenance", "category"]
     search_fields = ["content", "consequences"]

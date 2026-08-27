@@ -111,6 +111,15 @@ class CodexEntryAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Item Pointer",
+            {
+                "fields": ("subject_item_template", "subject_item_instance"),
+                "description": "Optional: this entry is about an item kind/instance "
+                "(#2540 exact-pointer ruling).",
+                "classes": ["collapse"],
+            },
+        ),
+        (
             "Display",
             {
                 "fields": ("display_order", "is_public", "is_featured", "featured_order"),
@@ -119,7 +128,7 @@ class CodexEntryAdmin(admin.ModelAdmin):
         ),
         CREDIT_FIELDSET,
     )
-    autocomplete_fields = ["modifier_target", "art"]
+    autocomplete_fields = ["modifier_target", "art", "subject_item_instance"]
 
     def prerequisite_count(self, obj: CodexEntry) -> int:
         return obj.prerequisites.count()

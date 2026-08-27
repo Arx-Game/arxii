@@ -17,6 +17,8 @@ from django.utils import timezone
 from world.justice.constants import (
     ADVOCACY_CHECK_TYPE_NAME,
     ADVOCACY_WEIGHT_PER_LEVEL,
+    BREACH_OF_EXILE_CRIME_SLUG,
+    BREACH_WEIGHT_BONUS,
     BRIG_DAYS_PER_WEIGHT,
     EVASION_BOTCH_LEVEL,
     EVASION_CHECK_TYPE_NAME,
@@ -26,6 +28,8 @@ from world.justice.constants import (
     EVIDENCE_WEIGHT_MANUFACTURED_MAX,
     EVIDENCE_WEIGHT_REAL,
     EXECUTION_MIN_FAILED_OUTS,
+    EXILE_TERM_DAYS_MIN,
+    EXILE_TERM_DAYS_PER_WEIGHT_DIV,
     FINE_COPPERS_PER_WEIGHT,
     GUARD_ENCOUNTER_PCT_NPC_TRANSACTION,
     GUARD_ENCOUNTER_PCT_PUBLIC_INTERACTION,
@@ -45,11 +49,24 @@ from world.justice.constants import (
 from world.justice.models import (
     CrimeKind,
     ExculpatoryEvidence,
+    ExileDecree,
     GuardEncounter,
     JusticeCase,
     PersonaHeat,
+    SentenceLadderRung,
+)
+from world.justice.notifications import notify_verdict_safely
+from world.justice.sentences import (
+    end_captivity,
+    is_magically_concealed,
+    schedule_sentence,
+    terminal_kind_for,
 )
 from world.justice.services import enforcing_society_for
+
+# Import shim: relocated to sentences.py (#2378) — kept so `_release` and existing
+# tests that reach into `pipeline._end_captivity` keep working.
+_end_captivity = end_captivity
 
 if TYPE_CHECKING:
     from world.areas.models import Area
@@ -104,12 +121,16 @@ def maybe_guard_encounter(
 ) -> GuardEncounter | None:
     """Roll the trigger ladder. Only fires against active play in public space.
 
-    Below each trigger's tier floor: nothing. An already-open encounter or an
-    open case suppresses new pressure (they're already caught or cornered).
+    Below each trigger's tier floor: nothing, UNLESS an active exile decree
+    covers this persona/area — a breach is always pressure-eligible regardless
+    of current heat (#2378 Task 3). An already-open encounter or an open case
+    still suppresses new pressure either way (they're already caught or
+    cornered).
     """
     if area is None:
         return None
-    if heat_value_for(persona, area) < _TRIGGER_FLOOR.get(trigger, MAX_VALUE_FLOOR):
+    below_floor = heat_value_for(persona, area) < _TRIGGER_FLOOR.get(trigger, MAX_VALUE_FLOOR)
+    if below_floor and ExileDecree.active_for(persona, area) is None:
         return None
     if GuardEncounter.objects.filter(persona=persona, area=area, resolved_at__isnull=True).exists():
         return None
@@ -134,10 +155,20 @@ def maybe_guard_encounter(
 def _resolve_evasion_level(encounter: GuardEncounter, check_level: int | None) -> int:
     """Determine the evasion check success level for an encounter.
 
-    ``check_level`` injects a band for tests; otherwise the evasion check type
-    rolls (degrading to a plain escape when unseeded — pressure never lands
-    without the content in place).
+    An active, still-pinned exile decree on this persona/area forces a near-auto
+    botch (mundane evasion vs a pinned warrant) — UNLESS the persona is magically
+    concealed, in which case the existing rolled level (below) applies untouched
+    (#2378 Task 3). Otherwise ``check_level`` injects a band for tests; unset, the
+    evasion check type rolls (degrading to a plain escape when unseeded — pressure
+    never lands without the content in place).
     """
+    decree = ExileDecree.active_for(encounter.persona, encounter.area)
+    if (
+        decree is not None
+        and decree.pin_until > timezone.now()
+        and not is_magically_concealed(encounter.persona)
+    ):
+        return EVASION_BOTCH_LEVEL
     if check_level is not None:
         return check_level
     from world.checks.models import CheckType  # noqa: PLC0415
@@ -202,11 +233,14 @@ def _open_case_for_capture(encounter: GuardEncounter) -> JusticeCase | None:
     if society is None:
         return None
     weight = heat_value_for(encounter.persona, encounter.area)
+    if ExileDecree.active_for(encounter.persona, encounter.area) is not None:
+        weight += _mint_breach_heat(encounter)
     case = JusticeCase.objects.create(
         persona=encounter.persona,
         area=encounter.area,
         society=society,
         prosecution_weight=weight,
+        failed_outs=_prior_conviction_count(encounter.persona, encounter.area),
     )
     case.captivity = _take_into_custody(encounter, society)
     if case.captivity is not None:
@@ -214,10 +248,58 @@ def _open_case_for_capture(encounter: GuardEncounter) -> JusticeCase | None:
     return case
 
 
+def _prior_conviction_count(persona: Persona, area: Area) -> int:
+    """Seed a freshly captured case's ``failed_outs`` from the persona's history.
+
+    Fix (#2378 final review): every case previously opened at ``failed_outs=0``
+    regardless of history — the field only ever incremented once per case (the
+    +1 in :func:`initiate_trial`), so organically it was always 0→1. That made
+    the sentence ladder's rungs above level 0, breach-of-exile escalation past
+    re-exile, and both terminal kinds (``EXECUTION_MIN_FAILED_OUTS``) reachable
+    only when a test injected ``failed_outs`` by hand. Counting prior TRIED,
+    non-acquitted cases in this area gives each repeat offense its own out spent
+    — an acquittal never counts against the accused.
+    """
+    return (
+        JusticeCase.objects.filter(persona=persona, area=area, status=CaseStatus.TRIED)
+        .exclude(verdict=Verdict.ACQUITTED)
+        .count()
+    )
+
+
+def _mint_breach_heat(encounter: GuardEncounter) -> int:
+    """Breach of Exile: mint its own crime heat and return the ladder-climbing bonus.
+
+    Returning to an area under an active decree is its own offense — a higher
+    prosecution weight (``BREACH_WEIGHT_BONUS``) plus the incremented
+    ``failed_outs`` at the next trial climbs the sentencing ladder naturally.
+    """
+    from world.justice.services import accrue_heat  # noqa: PLC0415
+
+    kind, _ = CrimeKind.objects.get_or_create(
+        slug=BREACH_OF_EXILE_CRIME_SLUG,
+        defaults={
+            "name": "Breach of Exile",
+            "description": "PLACEHOLDER: returning to an area under an active decree.",
+        },
+    )
+    accrue_heat(persona=encounter.persona, crime_kind=kind, area=encounter.area)
+    return BREACH_WEIGHT_BONUS
+
+
 def _take_into_custody(encounter: GuardEncounter, society):
     """Brig the captive via the existing captivity machinery. Best-effort:
-    a bodiless persona (no character) stays uncaptured but the case opens."""
+    a bodiless persona (no character) stays uncaptured but the case opens.
+
+    Routes to the area's Brig room feature when one exists with capacity
+    (#2378 Task 4, mirrors the CAPTURE consequence-effect's #1862 routing) —
+    falls back to the instanced-cell default (``holding_room=None``) otherwise.
+    """
     from world.captivity.services import capture_character  # noqa: PLC0415
+    from world.room_features.brig_services import (  # noqa: PLC0415
+        brig_has_capacity,
+        find_brig_for_area,
+    )
     from world.societies.models import Organization  # noqa: PLC0415
 
     sheet = encounter.persona.character_sheet
@@ -226,8 +308,13 @@ def _take_into_custody(encounter: GuardEncounter, society):
     captor = Organization.objects.filter(society=society).first()
     from world.captivity.services import AlreadyCapturedError  # noqa: PLC0415
 
+    brig_room = find_brig_for_area(encounter.area)
+    holding_room = brig_room if brig_room is not None and brig_has_capacity(brig_room) else None
+
     try:
-        return capture_character(captive=sheet, captor_organization=captor)
+        return capture_character(
+            captive=sheet, captor_organization=captor, holding_room=holding_room
+        )
     except AlreadyCapturedError:
         return None
 
@@ -302,20 +389,6 @@ def _release(case: JusticeCase, status: str) -> None:
     _end_captivity(case)
 
 
-def _end_captivity(case: JusticeCase) -> None:
-    if case.captivity is None:
-        return
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
-    from world.captivity.services import resolve_captivity  # noqa: PLC0415
-
-    try:
-        resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
-    except (ObjectDoesNotExist, ValueError):
-        return
-
-
 # ---------------------------------------------------------------------------
 # Trial — captive-initiated, defense-only agency
 # ---------------------------------------------------------------------------
@@ -359,6 +432,7 @@ def initiate_trial(
     if case.verdict == Verdict.ACQUITTED:
         case.save(update_fields=["status", "verdict", "resolved_at"])
         _end_captivity(case)
+        notify_verdict_safely(case)
         return case
 
     case.failed_outs += 1
@@ -373,7 +447,8 @@ def initiate_trial(
             "sentence_amount",
         ]
     )
-    _end_captivity(case)
+    schedule_sentence(case)
+    notify_verdict_safely(case)
     return case
 
 
@@ -416,17 +491,104 @@ def _apply_sentence(case: JusticeCase) -> None:
         _collect_fine(case)
         return
 
-    # Full verdict.
-    if weight >= MAX_VALUE_FLOOR and _execution_reachable(case):
-        case.sentence_kind = SentenceKind.EXECUTION
-        case.sentence_amount = 0
-    elif weight >= HUNTED_VALUE_FLOOR:
-        case.sentence_kind = SentenceKind.BRIG_TERM
-        case.sentence_amount = max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
-    else:
-        case.sentence_kind = SentenceKind.FINE
-        case.sentence_amount = weight * FINE_COPPERS_PER_WEIGHT * 2
+    # Full verdict — ladder rung (Task 4) overrides the default kind, subject to
+    # the lethal wall; see _ladder_kind_and_amount's docstring.
+    case.sentence_kind, case.sentence_amount = _ladder_kind_and_amount(case, weight)
     _collect_fine(case)
+
+
+def _default_kind_and_amount(case: JusticeCase, weight: int) -> tuple[str, int]:
+    """Pure kind/amount selection for a FULL verdict — no saves inside.
+
+    Terminal (EXECUTION/BANISHMENT) requires BOTH max weight AND an exhausted
+    case (spec #2378 §9: a terminal sentence is never a surprise from a single
+    catastrophic roll — it needs weight AND spent chances). Max weight alone,
+    with outs not yet exhausted, falls through to the EXILE/BRIG band below
+    (treated as weight >= HUNTED). Task 4's ladder consult wraps this helper.
+    """
+    if weight >= MAX_VALUE_FLOOR and case.failed_outs >= EXECUTION_MIN_FAILED_OUTS:
+        return terminal_kind_for(case), 0
+    if weight >= HUNTED_VALUE_FLOOR:
+        if case.failed_outs <= 1:
+            term = max(EXILE_TERM_DAYS_MIN, weight // EXILE_TERM_DAYS_PER_WEIGHT_DIV)
+            return SentenceKind.EXILE, term
+        return SentenceKind.BRIG_TERM, max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
+    return SentenceKind.FINE, weight * FINE_COPPERS_PER_WEIGHT * 2
+
+
+def _amount_for_kind(weight: int, kind: str) -> int:
+    """Per-kind amount formula, mirroring :func:`_default_kind_and_amount`'s bands.
+
+    Task 4's ladder consult: once a rung has decided the FINAL kind, the amount
+    still comes from the same magnitude a default sentence of that kind would
+    carry — never a fresh formula per rung. HUMILIATION/EXECUTION/BANISHMENT/
+    CONFISCATION carry no numeric term (0); ARENA_TRIAL is never passed in here
+    (the caller substitutes it for BRIG_TERM first).
+    """
+    if kind == SentenceKind.EXILE:
+        return max(EXILE_TERM_DAYS_MIN, weight // EXILE_TERM_DAYS_PER_WEIGHT_DIV)
+    if kind == SentenceKind.BRIG_TERM:
+        return max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
+    if kind == SentenceKind.FINE:
+        return weight * FINE_COPPERS_PER_WEIGHT * 2
+    return 0
+
+
+def _ladder_kind(case: JusticeCase) -> str | None:
+    """The society's highest sentence-ladder rung at/under the case's failed-outs.
+
+    ``level`` is matched against ``failed_outs - 1`` (SentenceLadderRung's own
+    convention): each additional failed-out climbs toward the next authored
+    rung. Returns ``None`` when the society has no matching rung — the default
+    band stands untouched.
+    """
+    rung = (
+        SentenceLadderRung.objects.filter(
+            society=case.society,
+            level__lte=max(0, case.failed_outs - 1),
+        )
+        .order_by("-level")
+        .first()
+    )
+    return rung.sentence_kind if rung else None
+
+
+def _ladder_kind_and_amount(case: JusticeCase, weight: int) -> tuple[str, int]:
+    """FULL-verdict kind/amount: the default band, overridden by a ladder rung.
+
+    A matching rung overrides the default sentence kind EXCEPT the lethal wall
+    (ADR-0023) — a rung can NEVER produce EXECUTION/BANISHMENT unless the
+    Task 2 terminal conditions independently hold (``weight >= MAX_VALUE_FLOOR``
+    AND ``failed_outs >= EXECUTION_MIN_FAILED_OUTS``); when they don't, the rung
+    is ignored outright and the default band stands. When they DO hold, a rung
+    naming EXECUTION still runs through :func:`terminal_kind_for` — a PC who
+    hasn't opted into lethal consequences gets BANISHMENT instead, same as the
+    Task 2 default path; a rung naming BANISHMENT needs no opt-in and applies
+    directly. ARENA_TRIAL rungs are INERT — a schema stub pending the combat
+    substrate (spec §8) — and are substituted with BRIG_TERM unconditionally
+    (not gated behind the wall; it's not lethal). Amounts come from
+    :func:`_amount_for_kind` so an overridden kind lands the same magnitude a
+    default sentence of that kind would.
+    """
+    default_kind, default_amount = _default_kind_and_amount(case, weight)
+    ladder_kind = _ladder_kind(case)
+    if ladder_kind is None:
+        return default_kind, default_amount
+
+    if ladder_kind == SentenceKind.ARENA_TRIAL:
+        # ARENA_TRIAL is a schema stub pending the combat substrate (spec §8).
+        ladder_kind = SentenceKind.BRIG_TERM
+
+    if ladder_kind in (SentenceKind.EXECUTION, SentenceKind.BANISHMENT):
+        terminal_reachable = (
+            weight >= MAX_VALUE_FLOOR and case.failed_outs >= EXECUTION_MIN_FAILED_OUTS
+        )
+        if not terminal_reachable:
+            return default_kind, default_amount
+        if ladder_kind == SentenceKind.EXECUTION:
+            ladder_kind = terminal_kind_for(case)  # opt-in check may downgrade to BANISHMENT
+
+    return ladder_kind, _amount_for_kind(weight, ladder_kind)
 
 
 def _execution_reachable(case: JusticeCase) -> bool:

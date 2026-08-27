@@ -42,11 +42,25 @@ export interface HeldRow {
   persona_name: string;
 }
 
+/**
+ * One row of the wanted board's public record (#2378 Task 5/8) — a standing
+ * sentence still in effect: an active humiliation mark, an exile/banishment
+ * decree, or a pending terminal sentence's visible countdown. `until=null`
+ * means permanent (an unbounded banishment decree).
+ */
+export interface PublicMarkRow {
+  kind: string;
+  persona_name: string;
+  until: string | null;
+}
+
 export interface WantedBoardData {
   wanted: WantedRow[];
   held: HeldRow[];
   /** Whether the viewer holds pardon power here (magistrate office / org leadership). */
   viewer_can_pardon: boolean;
+  /** The area's standing sentences (#2378 Task 5) — derived on read, not stored rows. */
+  records: PublicMarkRow[];
 }
 
 /** The public wanted board for an area (#1826) — tiers, never numbers. */
@@ -60,7 +74,15 @@ export async function fetchWantedList(
   return (await res.json()) as WantedBoardData;
 }
 
-/** The captive's own case picture (#2378). */
+/**
+ * The captive's own case picture (#2378).
+ *
+ * `sentence_kind` is blank until a verdict is reached; once tried, the
+ * my-case endpoint keeps surfacing the case as long as it still has an
+ * active countdown — `sentence_ends_at` (brig_term serving a term, or exile
+ * pinned until a date) or `terminal_due_at` (execution/banishment's rescue
+ * window, still open) — Task 8's countdown source (#2378 Task 5/8).
+ */
 export interface MyCase {
   id: number;
   area_name: string;
@@ -69,6 +91,10 @@ export interface MyCase {
   evidence_total: number;
   release_threshold: number;
   failed_outs: number;
+  sentence_kind: string;
+  sentence_amount: number;
+  sentence_ends_at: string | null;
+  terminal_due_at: string | null;
 }
 
 /** GET /api/justice/my-case/ — null when the viewer has no open case. */

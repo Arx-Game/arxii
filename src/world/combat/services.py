@@ -241,6 +241,27 @@ def accumulate_threat(
     record.save(update_fields=["threat_value"])
 
 
+def finalize_new_encounter(encounter: CombatEncounter) -> None:
+    """Apply the post-creation defaults every "scene-anchored, no explicit room" creation
+    caller needs (#3388).
+
+    Extracted from the web ViewSet's ``perform_create`` (#3067) so telnet's
+    ``CreateEncounterAction`` gets identical defaulting behavior instead of a second,
+    drifting copy. Defaults ``room`` from ``encounter.scene.location`` when the caller
+    didn't supply one — every OTHER encounter-creation call site (world.combat.duels,
+    world.combat.cast_seed) always threads an explicit room; this is the one shape where
+    the caller doesn't have one yet — then assigns the default EscalationCurve via
+    ``assign_default_escalation_curve``. An explicit room already set on ``encounter``
+    before this call always wins (unchanged from the pre-extraction behavior).
+    """
+    from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+
+    if encounter.room_id is None and encounter.scene.location_id is not None:
+        encounter.room = encounter.scene.location
+        encounter.save(update_fields=["room"])
+    assign_default_escalation_curve(encounter)
+
+
 # ---------------------------------------------------------------------------
 # Identity guard helpers
 # ---------------------------------------------------------------------------
@@ -7907,6 +7928,18 @@ def _resolve_flee(
     if escaped:
         participant.status = ParticipantStatus.FLED
         participant.save(update_fields=["status"])
+
+        # Release any active engagement lock the fleeing PC held (#3386):
+        # fleeing shouldn't leave a phantom pairing behind.
+        from world.combat.constants import LockBreakReason  # noqa: PLC0415
+        from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
+
+        active_lock = EngagementLock.objects.filter(
+            participant=participant,
+            status=EngagementLockStatus.ACTIVE,
+        ).first()
+        if active_lock is not None:
+            break_engagement_lock(active_lock, reason=LockBreakReason.FLEE)
 
         # Combat-owned engagement teardown on successful flee (#872).
         from world.mechanics.constants import EngagementType  # noqa: PLC0415

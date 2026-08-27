@@ -148,9 +148,6 @@ def contribute_sacrifice(  # noqa: PLR0913 — commit seam mirrors feed_anima's 
         raise RitualPoolError(msg)
     with transaction.atomic():
         take = victim_anima.current
-        victim_anima.current = 0
-        victim_anima.save(update_fields=["current"])
-        _apply_contributor_fatigue(victim_sheet, take)
 
         was_lethal = False
         if lethal:
@@ -165,6 +162,14 @@ def contribute_sacrifice(  # noqa: PLR0913 — commit seam mirrors feed_anima's 
         if amount <= 0:
             msg = "The victim has nothing left to give."
             raise RitualPoolError(msg)
+
+        # Idmapper rollback staleness (django_notes.md): validation above is
+        # complete before this point, so the mutation below can never be
+        # followed by a raise inside this block.
+        victim_anima.current = 0
+        victim_anima.save(update_fields=["current"])
+        _apply_contributor_fatigue(victim_sheet, take)
+
         return _record(
             session,
             ritual,

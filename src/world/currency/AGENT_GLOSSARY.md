@@ -24,6 +24,14 @@ _Avoid_: wallet, personal account
 The ledger holding one organization's money as a copper balance, with rank-gated spend authority controlling which members may draw from it.
 _Avoid_: org bank, org wallet
 
+**Treasury Withdrawal**:
+A member's discretionary, player-initiated draw from the org treasury into their own purse (`withdraw_from_treasury`, `TreasuryWithdrawAction`, key `treasury_withdraw`) — gated by `can_spend_treasury` (active membership at rank tier <= `spend_rank_max`) and, since #2540, by the same **BANK** room-feature access surface as the org vault's item actions. Action-driven and therefore inherently piloted-only; distinct from the non-discretionary **Allowance** (`distribute_allowance`), which auto-splits treasury surplus to every active piloted member without a per-draw decision.
+_Avoid_: allowance (that's the automatic split), withdrawal (ambiguous with a personal-purse `withdraw_coins`)
+
+**Materials Allowance** ("the crafting draw", #2540 slice 2):
+The non-discretionary materials analogue of the coin **Allowance**: `distribute_material_allowance` auto-splits a PLACEHOLDER share of what a collection just landed, per `MaterialCategory`, across the same active-piloted population (`_active_allowance_sheets`, shared with the coin leg) into each member's `MaterialBucket` — the head cannot withhold it, and nobody has to manually spend down `OrgMaterialStock` to reach it. Rides `collect_and_distribute` right after the coin `Allowance`; the un-shared remainder stays in `OrgMaterialStock` for discretionary crafting spend.
+_Avoid_: material withdrawal, stock draw, bucket allowance
+
 **Graft**:
 A never-zero percentage leak skimmed off the top of every organizational income flow, driven by NPC servant dissatisfaction and floored above zero by doctrine. It can be bought down by treating servants but never eliminated, and is deliberately distinct from magic's Corruption. Since #930 it bites the *collected* aggregate at dispatch time, so a hoarded pool pays a bigger absolute leak.
 _Avoid_: tax, corruption, skim

@@ -33,6 +33,9 @@ class SecretFactory(factory_django.DjangoModelFactory):
     provenance = SecretProvenance.GM_AUTHORED
     level = SecretLevel.UNCOMMON_KNOWLEDGE
     content = factory.Faker("sentence")
+    # Item pointer (#2540): override to point this secret at an item kind/instance.
+    subject_item_template = None
+    subject_item_instance = None
 
 
 class SecretKnowledgeFactory(factory_django.DjangoModelFactory):

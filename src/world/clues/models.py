@@ -43,6 +43,12 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, CreditedContent, SharedMemoryMod
         # clean() below folds in the second FK's requirement, per
         # DiscriminatorMixin's own multi-discriminator override guidance.
         ClueTargetKind.PERSONA_LINK: "target_persona",
+        # ITEM is a second documented multi-discriminator exception (2026-08-27
+        # exact-pointer ruling, #2540): target_item_template is the required
+        # discriminator target; target_item_instance is an OPTIONAL narrowing
+        # (null = "any of this kind", set = "this exact one") folded in by
+        # clean() below, same shape as PERSONA_LINK's second FK.
+        ClueTargetKind.ITEM: "target_item_template",
     }
 
     slug = models.SlugField(
@@ -114,6 +120,30 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, CreditedContent, SharedMemoryMod
             "(target_kind=PERSONA_LINK, #2120). See target_persona."
         ),
     )
+    target_item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="clues_about",
+        help_text=(
+            "The item kind this clue points at (target_kind=ITEM, #2540). Required for "
+            "ITEM; template-only means 'any of this kind'. PROTECT so a clue never "
+            "outlives a deleted-in-error template."
+        ),
+    )
+    target_item_instance = models.ForeignKey(
+        "arxii.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="clues_about",
+        help_text=(
+            "Optional exact instance this clue names (target_kind=ITEM, #2540) — "
+            "'this exact one', narrowing target_item_template. SET_NULL so a destroyed "
+            "instance degrades the clue to template-only rather than deleting it."
+        ),
+    )
 
     name = models.CharField(
         max_length=200,
@@ -154,6 +184,19 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, CreditedContent, SharedMemoryMod
                 errors["target_persona_linked"] = "Required when target_kind is persona_link."
         elif not self._is_unset(self.target_persona_linked_id):
             errors["target_persona_linked"] = "Must be null when target_kind is not persona_link."
+        # ITEM multi-discriminator exception (#2540) -- target_item_template is already
+        # validated by _validate_discriminator; fold in target_item_instance's narrower
+        # requirement here (optional, but must name an instance of the same template).
+        if self.target_kind == ClueTargetKind.ITEM:
+            if (
+                self.target_item_instance_id is not None
+                and self.target_item_instance.template_id != self.target_item_template_id
+            ):
+                errors["target_item_instance"] = (
+                    "Must be an instance of target_item_template when both are set."
+                )
+        elif not self._is_unset(self.target_item_instance_id):
+            errors["target_item_instance"] = "Must be null when target_kind is not item."
         if errors:
             raise ValidationError(errors)
 

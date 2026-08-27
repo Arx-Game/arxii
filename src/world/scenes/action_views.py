@@ -9,8 +9,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Exists, OuterRef, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status, viewsets
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -50,6 +50,7 @@ from world.scenes.place_models import InteractionReceiver
 from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
+    from world.magic.models import Technique
     from world.scenes.boon_services import BoonAsk
 
 # Repeated API error detail strings. Centralized to avoid the duplicated-literal
@@ -93,6 +94,7 @@ def _build_boon_from_validated(validated_data: dict) -> BoonAsk | None:
         sum_tier=boon_payload.get("sum_tier", ""),
         item_instance_id=boon_payload.get("item_instance_id"),
         deed_text=boon_payload.get("deed_text", ""),
+        material_category_id=boon_payload.get("material_category_id"),
     )
 
 
@@ -320,7 +322,23 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         return kwargs
 
     @extend_schema(
-        request=SceneActionRequestCreateSerializer, responses=SceneActionRequestSerializer
+        request=SceneActionRequestCreateSerializer,
+        responses={
+            201: SceneActionRequestSerializer,
+            200: inline_serializer(
+                name="BoonRefusalResponse",
+                fields={
+                    "boon_refused": serializers.BooleanField(),
+                    "detail": serializers.CharField(),
+                },
+            ),
+        },
+        description=(
+            "Normally returns 201 with the created action request. A well-formed"
+            " MATERIAL boon ask naming a category the target's bucket is empty of is"
+            " instead honestly refused with 200 `{boon_refused: true, detail: ...}` —"
+            " no row is created, no error occurred (#2540 slice 3)."
+        ),
     )
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
         """Create a new action request."""
@@ -417,8 +435,67 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             target_effect_type=target_effect_type,
         )
 
+        action_request_or_error = self._create_action_request_or_error(
+            scene=scene,
+            initiator_persona=initiator_persona,
+            target_persona=target_persona,
+            action_key=action_key,
+            effort_level=effort_level,
+            technique=technique,
+            strain_commitment=strain_commitment,
+            delivery=delivery,
+            delivery_receivers=delivery_receivers,
+            additional=additional,
+            pull=_build_pull_from_validated(serializer.validated_data),
+            boon=_build_boon_from_validated(serializer.validated_data),
+            treat_condition_kwargs=treat_condition_kwargs,
+        )
+        if isinstance(action_request_or_error, Response):
+            return action_request_or_error
+        action_request = action_request_or_error
+
+        response_data = SceneActionRequestSerializer(action_request).data
+        auto_resolve_result = action_request._auto_resolve_result  # noqa: SLF001
+        if auto_resolve_result is not None:
+            response_data["result"] = EnhancedSceneActionResultSerializer(
+                auto_resolve_result,
+                context={"request": request, "action_request": action_request},
+            ).data
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    def _create_action_request_or_error(  # noqa: PLR0913
+        self,
+        *,
+        scene: Scene,
+        initiator_persona: Persona,
+        target_persona: Persona | None,
+        action_key: str,
+        effort_level: str,
+        technique: Technique | None,
+        strain_commitment: int,
+        delivery: str,
+        delivery_receivers: list[Persona],
+        additional: list[Persona],
+        pull: CastPullDeclaration | None,
+        boon: BoonAsk | None,
+        treat_condition_kwargs: dict[str, Any],
+    ) -> SceneActionRequest | Response:
+        """Call ``create_action_request``, mapping its two failure exceptions to a
+        ``Response`` instead of letting ``create()`` carry the branching (#2540 slice 3
+        — keeps ``create()`` under the mccabe complexity gate).
+
+        ``BoonUnavailable`` (honest unavailability, #2540 slice 3) maps to a 200
+        "refusal" — see the comment at the call site's former location, preserved here:
+        this is NOT a client error, the ask was well-formed and the target just can't
+        grant it, no row was created, and this shape keeps it in the mutation's
+        success flow rather than its error flow — unlike the payload-less-boon guard's
+        400 (which the ask UI has no visible error surface for today). Any other
+        ``ValidationError`` maps to the existing 400 shape unchanged.
+        """
+        from world.scenes.boon_services import BoonUnavailable  # noqa: PLC0415
+
         try:
-            action_request = create_action_request(
+            return create_action_request(
                 scene=scene,
                 initiator_persona=initiator_persona,
                 target_persona=target_persona,
@@ -429,9 +506,14 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 delivery=delivery,
                 delivery_receivers=delivery_receivers,
                 additional_target_personas=additional,
-                pull=_build_pull_from_validated(serializer.validated_data),
-                boon=_build_boon_from_validated(serializer.validated_data),
+                pull=pull,
+                boon=boon,
                 **treat_condition_kwargs,
+            )
+        except BoonUnavailable as exc:
+            return Response(
+                {"boon_refused": True, "detail": exc.refusal_text},
+                status=status.HTTP_200_OK,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]
@@ -439,15 +521,6 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 {"detail": messages},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        response_data = SceneActionRequestSerializer(action_request).data
-        auto_resolve_result = action_request._auto_resolve_result  # noqa: SLF001
-        if auto_resolve_result is not None:
-            response_data["result"] = EnhancedSceneActionResultSerializer(
-                auto_resolve_result,
-                context={"request": request, "action_request": action_request},
-            ).data
-        return Response(response_data, status=status.HTTP_201_CREATED)
 
     def _create_technique_entrance(
         self, request: Request, serializer: SceneActionRequestCreateSerializer
@@ -820,6 +893,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
     @extend_schema(
         parameters=[
             OpenApiParameter(name="target_persona", type=int, required=True),
+            OpenApiParameter(name="initiator_persona", type=int, required=True),
         ],
         responses={200: BoonOptionsSerializer},
     )
@@ -830,36 +904,84 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         pagination_class=None,
     )
     def boon_options(self, request: Request) -> Response:
-        """Boon money-sum options against a prospective target (#2540 ruling display seam).
+        """Boon ask options against a prospective target (#2540 ruling display seam).
 
-        Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
-        target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+        ``sum_tiers``: each ``BoonSumTier`` with the concrete coppers it means against
+        THIS target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
         An empty list means the target presents no money-boon option at all (a
         penniless target — the option never shows, so 'no because I can't' never
         happens). The OOC reveal of these values is accepted per the ruling.
+
+        ``material_categories`` (#2540 slice 3): the STATIC public ``MaterialCategory``
+        list, ``[{id, name}]`` — deliberately NEVER filtered by this target's actual
+        holdings (that would leak wealth OOC); an ask against an empty bucket is
+        instead honestly refused at request-creation time (``BoonUnavailable``). No
+        computed value accompanies these — material asks show tier LABELS only.
+
+        ``pointer_items`` (#2540 slice 3, 2026-08-27 exact-pointer ruling): the
+        CALLER's (``initiator_persona``'s) pointer-known items relevant to THIS
+        target — held by them, or sitting in a vault they can withdraw from —
+        ``[{item_instance_id, name, source: "held"|"vault"}]``. Computed from the
+        caller's own pointers only; requires ``initiator_persona`` to be one of the
+        requesting account's own personas (mirrors ``castable_techniques``'
+        ownership gate — this reveals what a character privately knows).
         """
-        from world.scenes.boon_services import boon_sum_values  # noqa: PLC0415
+        from world.items.models import MaterialCategory  # noqa: PLC0415
+        from world.scenes.boon_services import (  # noqa: PLC0415
+            boon_sum_values,
+            pointer_known_items_for_target,
+        )
 
         target_id_str = request.query_params.get("target_persona")  # noqa: USE_FILTERSET
-        if not target_id_str:
+        initiator_id_str = request.query_params.get("initiator_persona")  # noqa: USE_FILTERSET
+        if not target_id_str or not initiator_id_str:
             return Response(
-                {"detail": "target_persona query parameter is required."},
+                {"detail": "target_persona and initiator_persona query parameters are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
             target_id = int(target_id_str)
+            initiator_id = int(initiator_id_str)
         except (TypeError, ValueError):
             return Response(
-                {"detail": "target_persona must be an integer."},
+                {"detail": "target_persona and initiator_persona must be integers."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        persona_ids = get_account_personas(request)
+        if initiator_id not in persona_ids:
+            return Response(
+                {"detail": _INITIATOR_NOT_FOUND_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         target = get_object_or_404(Persona, pk=target_id)
+        initiator = get_object_or_404(Persona, pk=initiator_id)
         values = boon_sum_values(target.character_sheet)
         sum_tiers = [
             {"tier": tier, "label": BoonSumTier(tier).label, "coppers": coppers}
             for tier, coppers in values.items()
         ]
-        return Response({"sum_tiers": sum_tiers})
+        material_categories = [
+            {"id": category.id, "name": category.name}
+            for category in MaterialCategory.objects.order_by("sort_order", "name")
+        ]
+        pointer_items = [
+            {
+                "item_instance_id": option.item_instance_id,
+                "name": option.name,
+                "source": option.source,
+            }
+            for option in pointer_known_items_for_target(
+                asker_sheet=initiator.character_sheet, target_persona=target
+            )
+        ]
+        return Response(
+            {
+                "sum_tiers": sum_tiers,
+                "material_categories": material_categories,
+                "pointer_items": pointer_items,
+            }
+        )
 
 
 class SceneActionTargetViewSet(viewsets.ReadOnlyModelViewSet):

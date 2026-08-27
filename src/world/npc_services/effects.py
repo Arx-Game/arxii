@@ -397,13 +397,17 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     """COLLECTION effect handler (#930): dispatch a collector across the org's pools.
 
     The graded outcome (Tax Collection check + band table + graft) lives in
-    ``currency.collect_org_income``; this handler resolves the org, runs the
-    dispatch, and phrases the toast. Copy approved by Apostate (2026-07-03).
+    ``currency.collect_org_income``; the debt-first + member-allowance +
+    materials-allowance legs ride along via ``currency.collect_and_distribute``
+    (#2540) so a collection also services the org's debt principal and pays its
+    active members coin and (per category) raw materials before the remainders
+    settle in the treasury / ``OrgMaterialStock``. This handler resolves the org,
+    runs the dispatch, and phrases the toast. Copy approved by Apostate (2026-07-03).
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
     from world.currency.constants import format_coppers  # noqa: PLC0415
-    from world.currency.services import collect_org_income  # noqa: PLC0415
+    from world.currency.services import collect_and_distribute  # noqa: PLC0415
 
     try:
         organization = _resolve_authority_org(persona)
@@ -415,13 +419,14 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         )
     character = persona.character_sheet.character
     try:
-        result = collect_org_income(organization=organization, character=character)
+        dispatch = collect_and_distribute(organization=organization, character=character)
     except ValidationError:
         return EffectResult(
             kind=OfferKind.COLLECTION.value,
             message="The strongboxes hold nothing worth a collector's boots.",
             payload={"offer_pk": offer.pk, "organization_pk": organization.pk},
         )
+    result = dispatch.collection
     if result.catastrophe:
         # The collector-incident encounter is a combat-domain follow-up seam.
         message = (
@@ -438,6 +443,24 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             f"The rounds went smoothly: {format_coppers(result.landed)} "
             "banked after the usual leakage."
         )
+    if dispatch.debt_principal_paid > 0:
+        message += (
+            f" PLACEHOLDER: {format_coppers(dispatch.debt_principal_paid)} "
+            "went to the house's creditors."
+        )
+    if dispatch.allowance.member_count > 0:
+        message += (
+            f" PLACEHOLDER: allowances went out to {dispatch.allowance.member_count} members."
+        )
+    if dispatch.material_allowance.total_by_category:
+        message += (
+            " PLACEHOLDER: raw materials were shared out to "
+            f"{dispatch.material_allowance.member_count} members."
+        )
+    if dispatch.auto_sold > 0:
+        message += (
+            f" PLACEHOLDER: surplus stores were sold off for {format_coppers(dispatch.auto_sold)}."
+        )
     return EffectResult(
         kind=OfferKind.COLLECTION.value,
         object_label=f"Collection for {organization.name}",
@@ -447,6 +470,10 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             "gathered": result.gathered,
             "landed": result.landed,
             "catastrophe": result.catastrophe,
+            "debt_principal_paid": dispatch.debt_principal_paid,
+            "allowance_member_count": dispatch.allowance.member_count,
+            "material_allowance_member_count": dispatch.material_allowance.member_count,
+            "auto_sold": dispatch.auto_sold,
         },
     )
 

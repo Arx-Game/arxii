@@ -104,3 +104,52 @@ class SocialActionSeedTests(TestCase):
             ).count(),
             2,
         )
+        # #2540 slice 3: the ask flavors converge too — no duplicate templates/pools.
+        for name in ("Con a Boon", "Charm a Boon", "Menace a Boon"):
+            self.assertEqual(ActionTemplate.objects.filter(name=name).count(), 1, name)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class BoonAskFlavorSeedTests(TestCase):
+    """#2540 slice 3 — the three ask-flavor sibling templates each roll their own check."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_check_resolution_tables()
+        seed_social_check_content()
+        seed_social_relationship_content()
+        seed_social_action_content()
+
+    def test_each_flavor_rolls_its_own_check_type(self) -> None:
+        from actions.models import ActionTemplate
+
+        expected = {
+            "Con a Boon": "Con",
+            "Charm a Boon": "Seduction",
+            "Menace a Boon": "Intimidation",
+        }
+        for name, check_type_name in expected.items():
+            template = ActionTemplate.objects.get(name=name)
+            self.assertEqual(template.check_type.name, check_type_name, name)
+
+    def test_menace_carries_the_intimidation_difficulty_bump(self) -> None:
+        from actions.models import ActionTemplate
+
+        menace = ActionTemplate.objects.get(name="Menace a Boon")
+        self.assertEqual(menace.difficulty_tier_modifier, 1)
+        con = ActionTemplate.objects.get(name="Con a Boon")
+        charm = ActionTemplate.objects.get(name="Charm a Boon")
+        self.assertEqual(con.difficulty_tier_modifier, 0)
+        self.assertEqual(charm.difficulty_tier_modifier, 0)
+
+    def test_flavors_reuse_the_boon_outcome_pool_labels(self) -> None:
+        from actions.models import ActionTemplate
+
+        boon_labels = {
+            e.consequence.label
+            for e in ActionTemplate.objects.get(name="Boon").consequence_pool.entries.all()
+        }
+        for name in ("Con a Boon", "Charm a Boon", "Menace a Boon"):
+            template = ActionTemplate.objects.get(name=name)
+            labels = {e.consequence.label for e in template.consequence_pool.entries.all()}
+            self.assertEqual(labels, boon_labels, name)

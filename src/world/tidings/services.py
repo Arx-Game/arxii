@@ -129,12 +129,14 @@ def public_feed_for_societies(
     pardons = _pardon_items(society_ids, limit=limit)
     repricings = _band_change_items(limit=limit)
     menaces = _menace_items(limit=limit)
+    verdicts = _verdict_items(society_ids, limit=limit)
     items = (
         [_deed_item(entry) for entry in deeds]
         + [_scandal_item(secret) for secret in scandals]
         + pardons
         + repricings
         + menaces
+        + verdicts
     )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
@@ -227,6 +229,42 @@ def _pardon_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
             category="pardon",
         )
         for grant in grants
+    ]
+
+
+def _verdict_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
+    """Sentenced verdicts (#2378 Task 5) — public acts, surfaced to the enforcing scope.
+
+    Neutral procedural wording ONLY: the headline names the sentence kind (a
+    fixed, non-narrative label — "Imprisonment", "Public Humiliation", …), never
+    what a humiliation sentence specifically consisted of. There is no such
+    narrative data on ``JusticeCase`` to leak; Dan authors any real humiliation
+    copy personally, outside this mechanical feed row.
+    """
+    from world.justice.constants import CaseStatus, SentenceKind, Verdict  # noqa: PLC0415
+    from world.justice.models import JusticeCase  # noqa: PLC0415
+
+    cases = (
+        JusticeCase.objects.filter(society_id__in=society_ids, status=CaseStatus.TRIED)
+        .exclude(verdict=Verdict.ACQUITTED)
+        .select_related("persona")
+        .order_by("-resolved_at")[:limit]
+    )
+    return [
+        PublicFeedItem(
+            kind=FeedItemKind.VERDICT,
+            headline=(
+                f"PLACEHOLDER: {case.persona.name} sentenced "
+                # JusticeCase.sentence_kind carries no `choices=` (unlike
+                # SentenceLadderRung's), so get_FOO_display() doesn't exist —
+                # the TextChoices member's own .label is the display string.
+                f"({SentenceKind(case.sentence_kind).label})"
+            ),
+            subject=case.persona.name,
+            occurred_at=case.resolved_at,
+            category="justice",
+        )
+        for case in cases
     ]
 
 
