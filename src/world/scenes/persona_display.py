@@ -104,15 +104,26 @@ def _resolve_single_display(
     revealed: dict[int, Persona],
     *,
     is_staff: bool = False,
-) -> tuple[str, bool]:
-    """Return ``(display_name, is_discovered)`` for one persona given the revealed map."""
+) -> tuple[str, bool, bool]:
+    """Return ``(display_name, is_discovered, reveal_allowed)`` for one persona.
+
+    ``reveal_allowed`` is the identity-reveal predicate (#2378): True whenever the viewer may
+    know who is really behind this persona — their own face, a barefaced (non-anonymous)
+    persona, staff, or a discovered mask — and False only for the composed-sdesc fallback
+    (an undiscovered mask to a non-staff, non-owning viewer). Consumers that need to gate a
+    *different* piece of identity-linked data (e.g. the shared character-sheet id behind an
+    endorsement target) key off this flag rather than ``is_discovered``, since a barefaced
+    persona is revealed (``reveal_allowed=True``) without ever going through discovery
+    (``is_discovered=False``).
+    """
     if persona.pk in viewer_persona_ids or not persona.is_fake_name:
-        return persona.name, False
+        return persona.name, False, True
     if is_staff:
-        return _staff_reveal(persona)
+        name, is_discovered = _staff_reveal(persona)
+        return name, is_discovered, True
     if persona.pk in revealed:
-        return f"{persona.name} ({revealed[persona.pk].name})", True
-    return compose_sdesc(persona), False
+        return f"{persona.name} ({revealed[persona.pk].name})", True, True
+    return compose_sdesc(persona), False, False
 
 
 def build_persona_display_map(
@@ -121,12 +132,14 @@ def build_persona_display_map(
     viewer_persona_ids: set[int],
     viewer_sheet_ids: set[int],
     is_staff: bool = False,
-) -> dict[int, tuple[str, bool]]:
-    """Map each persona's pk -> ``(display_name, is_discovered)`` for one viewer (#1109).
+) -> dict[int, tuple[str, bool, bool]]:
+    """Map each persona's pk -> ``(display_name, is_discovered, reveal_allowed)`` (#1109, #2378).
 
     One discovery query covers every anonymous, non-owned persona in ``personas``. Owned and
     named-public personas resolve to their real name with no query. When ``is_staff`` is True,
     the discovery query is skipped entirely — staff are universal discoverers (#1279).
+    ``reveal_allowed`` (see ``_resolve_single_display``) is the shared per-viewer identity-reveal
+    predicate — reuse it instead of re-deriving reveal logic for any other identity-linked field.
     """
     unique = {p.pk: p for p in personas}
     # Owned faces are never restricted — resolved as the real name without a discovery lookup.

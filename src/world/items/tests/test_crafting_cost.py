@@ -218,7 +218,7 @@ class ConsumeCostNoneTests(_CraftingCostBase):
         )
 
         self.assertEqual(
-            result, {"action_points": 0, "anima": 0, "materials": 0, "common_gem_value": 0}
+            result, {"action_points": 0, "anima": 0, "materials": 0, "material_value": 0}
         )
         # AP pool unchanged.
         self.pool.refresh_from_db()

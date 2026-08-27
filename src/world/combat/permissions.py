@@ -16,6 +16,20 @@ _CREATE_ACTION = "create"
 _SCENE_GATED_ACTIONS = frozenset({_CREATE_ACTION, "propose_lethal_duel"})
 
 
+def can_create_encounter_for_scene(account: object, scene: object) -> bool:
+    """True iff *account* may create a CombatEncounter anchored to *scene*.
+
+    Staff, the scene's GM, or the scene's co-owner — mirrors
+    ``SceneSerializer.get_viewer_can_gm`` exactly (world/scenes/serializers.py:272-277) so
+    the web "Start encounter" button's visibility and this create gate never diverge, and
+    so telnet `encounter create` (#3388) accepts precisely the accounts the web button
+    would show. Shared by ``IsEncounterGMOrStaff.has_permission``'s SCENE_GATED_ACTIONS
+    branch (web) and ``actions.definitions.gm_combat._actor_may_start_encounter`` (telnet)
+    — do not re-derive this OR chain a third time.
+    """
+    return bool(account.is_staff or scene.is_gm(account) or scene.is_owner(account))
+
+
 def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool:
     """Return True iff ``user`` may view an encounter's effect details.
 
@@ -100,7 +114,7 @@ class IsEncounterGMOrStaff(BasePermission):
         scene = Scene.objects.filter(pk=scene_id).first()
         if scene is None:
             return False
-        return scene.is_gm(request.user) or scene.is_owner(request.user)
+        return can_create_encounter_for_scene(request.user, scene)
 
     def has_object_permission(
         self,

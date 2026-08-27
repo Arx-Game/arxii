@@ -7,7 +7,7 @@ import type {
   ActionRequest,
   ActionRequestResponse,
   BoonAskPayload,
-  BoonSumOption,
+  BoonOptions,
   IncomingConsentRequest,
   Place,
   CastableTechnique,
@@ -188,17 +188,21 @@ export function toastDispositionMessage(data: ActionRequestResponse) {
 }
 
 /**
- * The boon ask UI's display seam (#2540): each money sum tier with the concrete
- * coppers it means against THIS target — renders as 'Minor (50)' / 'Fair (200)' /
- * 'Great (500)'. An empty list means the target presents no money option at all.
+ * The boon ask UI's display seam (#2540, #2540 slice 3): money sum tiers (concrete
+ * coppers against THIS target — renders as 'Minor (50)' / 'Fair (200)' / 'Great
+ * (500)'; empty means the target presents no money option at all), the static
+ * material-category picker, and the asker's (`initiatorPersonaId`'s) pointer-known
+ * items relevant to this target — held or in an accessible vault.
  */
-export async function fetchBoonOptions(targetPersonaId: number): Promise<BoonSumOption[]> {
+export async function fetchBoonOptions(
+  targetPersonaId: number,
+  initiatorPersonaId: number
+): Promise<BoonOptions> {
   const res = await apiFetch(
-    `/api/action-requests/boon-options/?target_persona=${targetPersonaId}`
+    `/api/action-requests/boon-options/?target_persona=${targetPersonaId}&initiator_persona=${initiatorPersonaId}`
   );
   if (!res.ok) await readErrorDetail(res, 'Failed to load boon options');
-  const data = (await res.json()) as { sum_tiers: BoonSumOption[] };
-  return data.sum_tiers;
+  return (await res.json()) as BoonOptions;
 }
 
 export async function fetchPendingRequests(sceneId: string): Promise<{ results: ActionRequest[] }> {

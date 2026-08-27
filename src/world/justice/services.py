@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.db.models import F
 from django.db.models.functions import Greatest
+from django.utils import timezone
 
 from world.justice.constants import (
     DISPOSED_EVIDENCE_HEAT_FACTOR,
@@ -257,9 +258,17 @@ def heat_decay_tick() -> int:
 
     Registered as a ``game_clock`` CronDefinition (clone of the gossip decay
     shape). Returns rows touched. Decay magnitude is PLACEHOLDER.
+
+    Rows currently pinned (``pinned_until`` in the future — an exile decree's
+    heat floor, #2378) are excluded from decay AND from the zero-delete: the
+    pin holds the value, so it is never zero while pinned. A row whose pin has
+    expired decays normally again on the next tick.
     """
-    touched = PersonaHeat.objects.filter(value__gt=0).update(
-        value=Greatest(F("value") - HEAT_DECAY_PER_DAY, 0)
+    now = timezone.now()
+    touched = (
+        PersonaHeat.objects.filter(value__gt=0)
+        .exclude(pinned_until__gt=now)
+        .update(value=Greatest(F("value") - HEAT_DECAY_PER_DAY, 0))
     )
     # Lying low (#1826): declared go-to-ground rows cool faster in that area.
     from world.justice.constants import LIE_LOW_DECAY_MULT  # noqa: PLC0415
@@ -269,10 +278,12 @@ def heat_decay_tick() -> int:
     extra = lie_low_extra_decay(base_decay=HEAT_DECAY_PER_DAY, multiplier=LIE_LOW_DECAY_MULT)
     if extra:
         for state in LieLowState.objects.filter(ended_at__isnull=True):
-            PersonaHeat.objects.filter(persona=state.persona, area=state.area, value__gt=0).update(
-                value=Greatest(F("value") - extra, 0)
+            (
+                PersonaHeat.objects.filter(persona=state.persona, area=state.area, value__gt=0)
+                .exclude(pinned_until__gt=now)
+                .update(value=Greatest(F("value") - extra, 0))
             )
-    PersonaHeat.objects.filter(value=0).delete()
+    PersonaHeat.objects.filter(value=0).exclude(pinned_until__gt=now).delete()
     return touched
 
 

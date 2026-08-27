@@ -23,6 +23,11 @@
  * (derived by CombatTurnPanel from `is_participant && status === 'declaring'`
  * — GM/observer rows never get the menu) and a `characterId` to dispatch as.
  *
+ * Engagement-lock badge (#3386): an opponent row shows "Locked: <PC name>" when
+ * an active EngagementLock names them — read-only visibility only, no click
+ * handling or dispatch. The row's kebab menu is #3381's scope; engage and
+ * disengage are not offered there yet.
+ *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
@@ -188,6 +193,8 @@ interface OpponentRowProps {
   encounterId: number;
   characterId?: number;
   canDeclareManeuvers?: boolean;
+  /** Name of the PC this opponent is engagement-locked to, if any (#3386). */
+  lockedToName?: string;
 }
 
 /** One opponent-targeted maneuver offered by the click-menu (#3381). */
@@ -205,6 +212,7 @@ function OpponentRow({
   encounterId,
   characterId,
   canDeclareManeuvers = false,
+  lockedToName,
 }: OpponentRowProps) {
   const showMenu = canDeclareManeuvers && characterId != null;
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
@@ -249,6 +257,14 @@ function OpponentRow({
               className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
             >
               {opponent.current_position.name}
+            </span>
+          )}
+          {lockedToName && (
+            <span
+              data-testid="engagement-lock-badge"
+              className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary"
+            >
+              Locked: {lockedToName}
             </span>
           )}
         </div>
@@ -303,7 +319,16 @@ export function CombatantsList({
   characterId,
   canDeclareManeuvers = false,
 }: CombatantsListProps) {
-  const { participants, opponents } = encounter;
+  const { participants, opponents, engagement_locks: engagementLocks } = encounter;
+
+  // Map opponent id -> locked PC's display name (#3386, read-only visibility).
+  const lockedOpponentNames = new Map<number, string>();
+  for (const lock of engagementLocks ?? []) {
+    const pc = participants.find((p) => p.id === lock.participant_id);
+    if (pc) {
+      lockedOpponentNames.set(lock.opponent_id, pc.character_name);
+    }
+  }
 
   return (
     <div className="rounded-md border border-border bg-card" data-testid="combatants-list-section">
@@ -357,6 +382,7 @@ export function CombatantsList({
                   encounterId={encounter.id}
                   characterId={characterId}
                   canDeclareManeuvers={canDeclareManeuvers}
+                  lockedToName={lockedOpponentNames.get(o.id)}
                 />
               ))}
             </div>

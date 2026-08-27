@@ -16,6 +16,7 @@ const CATEGORY_LABELS: Record<NarrativeCategory, string> = {
   renown: 'Renown',
   weather: 'Weather',
   ability: 'Ability',
+  justice: 'Justice',
 };
 
 const CATEGORY_CLASSES: Record<NarrativeCategory, string> = {
@@ -28,6 +29,7 @@ const CATEGORY_CLASSES: Record<NarrativeCategory, string> = {
   renown: 'bg-red-700 text-white border-transparent',
   weather: 'bg-sky-600 text-white border-transparent',
   ability: 'bg-indigo-600 text-white border-transparent',
+  justice: 'bg-stone-700 text-white border-transparent',
 };
 
 interface CategoryBadgeProps {

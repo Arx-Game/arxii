@@ -2452,13 +2452,10 @@ from world.items.crafting.models import (  # noqa: E402,F401
 # ---------------------------------------------------------------------------
 from world.items.gems.models import (  # noqa: E402,F401
     Adornment,
-    CommonGemBucket,
     GemDetails,
     GemGrade,
     GemInstanceDetails,
-    OrgGemStock,
     PendingRareFind,
-    StreamCommonGemPool,
 )
 
 # ---------------------------------------------------------------------------
@@ -2472,6 +2469,15 @@ from world.items.market.models import (  # noqa: E402,F401
     MarketStall,
     StockListing,
     WareListing,
+)
+
+# ---------------------------------------------------------------------------
+# Materials submodule (#2540 slice 2) — general material stock model
+# ---------------------------------------------------------------------------
+from world.items.materials_models import (  # noqa: E402,F401
+    MaterialBucket,
+    OrgMaterialStock,
+    StreamMaterialPool,
 )
 
 # ---------------------------------------------------------------------------

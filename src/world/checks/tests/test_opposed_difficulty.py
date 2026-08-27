@@ -16,6 +16,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.checks.factories import (
@@ -33,7 +34,12 @@ from world.classes.factories import (
     PathAspectFactory,
     PathFactory,
 )
-from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionCheckModifierFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.factories import CharacterPathHistoryFactory
 from world.skills.factories import CharacterSpecializationValueFactory, SpecializationFactory
@@ -169,6 +175,44 @@ class OpposedDifficultyTests(TestCase):
     def test_level_opposition_without_a_character_is_level_alone(self):
         """An ephemeral NPC with no sheet contributes level and nothing else."""
         self.assertEqual(level_opposition(self.check_type, level=4), LEVEL_POINTS_PER_LEVEL * 4)
+
+    def test_level_opposition_folds_in_the_opposed_entitys_conditions(self):
+        """#3384: a penalty condition on the opposed entity LOWERS the total --
+        no sign flip, summed as-authored (ADR-0166's additive opposing-side shape)."""
+        opponent = ObjectDBFactory(db_key="OpposedDifficultyConditionTarget")
+        staggered = ConditionTemplateFactory(name="OpposedDifficultyStaggered")
+        ConditionCheckModifierFactory(
+            condition=staggered,
+            check_type=self.check_type,
+            modifier_value=-15,
+        )
+
+        without_condition = level_opposition(self.check_type, level=5, character=opponent)
+
+        ConditionInstanceFactory(target=opponent, condition=staggered)
+        with_condition = level_opposition(self.check_type, level=5, character=opponent)
+
+        self.assertEqual(without_condition - with_condition, 15)
+
+    def test_level_opposition_condition_composes_additively_with_level_and_aspect(self):
+        """The condition term is a THIRD additive term alongside level points and the
+        aspect bonus, not a replacement for either."""
+        staggered = ConditionTemplateFactory(name="OpposedDifficultyComposesStaggered")
+        ConditionCheckModifierFactory(
+            condition=staggered,
+            check_type=self.check_type,
+            modifier_value=-15,
+        )
+
+        # level points + aspect bonus, no condition yet
+        with_aspect_only = level_opposition(self.check_type, level=5, character=self.voice_adept)
+
+        ConditionInstanceFactory(target=self.voice_adept, condition=staggered)
+        with_aspect_and_condition = level_opposition(
+            self.check_type, level=5, character=self.voice_adept
+        )
+
+        self.assertEqual(with_aspect_and_condition, with_aspect_only - 15)
 
     def test_resist_increment_now_carries_aspect_specialization_and_capability(self):
         """Gap 1: the resist side was trait-points-only."""

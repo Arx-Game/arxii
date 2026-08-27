@@ -54,7 +54,7 @@ magnitude curve" section.
 _Avoid_: "the capability system" (there are two oracles, not one; name which)
 
 **Check effect channel**:
-The condition effect that modifies check rolls (`ConditionCheckModifier`: per-check-type modifier value, optionally scaling with severity), folded into a check's extra modifiers by the modifier seam.
+The condition effect that modifies check rolls (`ConditionCheckModifier`: per-check-type modifier value, optionally scaling with severity), folded into a check's extra modifiers by the modifier seam. Since #3384 it also reaches an opposing entity with no `CharacterSheet` (an ephemeral `CombatOpponent`) via `opponent_condition_opposition`, folded into `level_opposition`.
 _Avoid_: roll bonus, skill modifier
 
 **Resist-check gate**:

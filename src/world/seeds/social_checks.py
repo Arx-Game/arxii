@@ -53,6 +53,9 @@ _SOCIAL_SPECIALIZATIONS: list[tuple[str, str]] = [
 # A None spec means the spec is runtime-chosen (Performance: which art) or unused (Persuasion base).
 _SOCIAL_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None]] = {
     "Intimidation": ("presence", "Persuasion", "Intimidation"),
+    # #2540 — a boon patronage-petition ask (persuade a target to grant a favor)
+    # rolls bare Persuasion: no existing spec fits a patronage petition —
+    # FLAGGED as a possible spec-list hole for the skills audit.
     "Persuasion": ("charm", "Persuasion", None),
     # Apostate 2026-07-03: deception splits by stat — presence = Deceive
     # (fooling people in the moment, incl. under a disguise), charm = Con

@@ -151,20 +151,199 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def _boon_options(self, extra: dict | None = None) -> object:
+        url = reverse("sceneactionrequest-boon-options")
+        params = {"target_persona": self.target_persona.pk, "initiator_persona": self.persona.pk}
+        params.update(extra or {})
+        return self.client.get(url, params)
+
     def test_boon_options_lists_tier_values_for_target(self) -> None:
         """The ask UI's display seam: tier → concrete coppers against THIS target."""
         self._fund_target(1000)
-        url = reverse("sceneactionrequest-boon-options")
-        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        response = self._boon_options()
         assert response.status_code == status.HTTP_200_OK
         by_tier = {row["tier"]: row["coppers"] for row in response.data["sum_tiers"]}
         assert by_tier == {"minor": 50, "fair": 200, "great": 500}
 
     def test_boon_options_empty_for_penniless_target(self) -> None:
-        url = reverse("sceneactionrequest-boon-options")
-        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        response = self._boon_options()
         assert response.status_code == status.HTTP_200_OK
         assert response.data["sum_tiers"] == []  # the option never shows
+
+    def test_boon_options_material_categories_are_never_holdings_filtered(self) -> None:
+        """#2540 slice 3 ruling: the STATIC public category list, regardless of the
+        target's actual bucket — a holdings-filtered picker would leak wealth OOC."""
+        from world.items.factories import MaterialCategoryFactory
+
+        MaterialCategoryFactory(name="Precious Gemstones")
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        names = {row["name"] for row in response.data["material_categories"]}
+        assert "Precious Gemstones" in names  # present even though the target holds none
+
+    def test_boon_options_requires_initiator_persona(self) -> None:
+        url = reverse("sceneactionrequest-boon-options")
+        response = self.client.get(url, {"target_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_boon_options_rejects_initiator_not_owned_by_caller(self) -> None:
+        """#2540 slice 3: pointer knowledge is private — can't probe as another persona."""
+        response = self._boon_options({"initiator_persona": self.target_persona.pk})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_boon_options_pointer_items_empty_with_no_knowledge(self) -> None:
+        from world.items.factories import ItemInstanceFactory
+
+        ItemInstanceFactory(holder_character_sheet=self.target_identity)
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == []
+
+    def _co_locate_asker_and_target(self) -> None:
+        """2026-08-27 co-presence ruling (#2540 slice 3 fix wave 3): ``pointer_items``
+        is only ever computed when the asker and target currently share an active
+        scene — puts both characters in the same room under the class's existing
+        ``self.scene``."""
+        room = RoomProfileFactory().objectdb
+        self.character.move_to(room, quiet=True)
+        self.target_character.move_to(room, quiet=True)
+        self.scene.location = room
+        self.scene.save(update_fields=["location"])
+
+    def test_boon_options_pointer_items_lists_held_item_the_asker_knows_of(self) -> None:
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+
+        self._co_locate_asker_and_target()
+        item = ItemInstanceFactory(holder_character_sheet=self.target_identity)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=self.roster_entry, clue=clue)
+
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == [
+            {"item_instance_id": item.pk, "name": str(item), "source": "held"}
+        ]
+
+    def test_boon_options_pointer_items_empty_without_a_shared_scene(self) -> None:
+        """2026-08-27 co-presence ruling: a valid pointer to a currently-held item is
+        not enough on its own — ``pointer_items`` stays empty (never an error, 200)
+        without the asker and target sharing an active scene."""
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target_identity)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=self.roster_entry, clue=clue)
+        # Deliberately no _co_locate_asker_and_target() call.
+
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == []
+
+    def test_boon_options_pointer_items_never_lists_a_held_item_the_asker_has_no_pointer_to(
+        self,
+    ) -> None:
+        """#2540 slice 3: NEVER a browse of target inventory — a pointer is the only window."""
+        from world.items.factories import ItemInstanceFactory
+
+        self._co_locate_asker_and_target()
+        ItemInstanceFactory(holder_character_sheet=self.target_identity)  # no pointer granted
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == []
+
+    def test_material_boon_dispatch_succeeds_when_target_holds_any(self) -> None:
+        from world.items.factories import MaterialCategoryFactory
+        from world.items.gems.buckets import credit_materials
+
+        category = MaterialCategoryFactory()
+        credit_materials(self.target_identity, category, 100)
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {
+                "kind": "material",
+                "sum_tier": "fair",
+                "material_category_id": category.pk,
+            },
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        boon = response.data["boon"]
+        assert boon["kind"] == "material"
+        assert boon["sum_tier"] == "fair"
+        assert boon["material_category_name"] == category.name
+        assert boon["amount"] == 0  # no computed value shown for material
+
+    def test_material_boon_dispatch_to_piloted_target_stays_pending(self) -> None:
+        """#2540 slice 3 review fold-in: a funded PILOTED target's material ask must
+        create a normal PENDING request — never auto-resolved (auto-resolve only
+        fires for NPC targets, and this target is explicitly given a db_account) and
+        never honestly refused (their bucket is funded)."""
+        from world.items.factories import MaterialCategoryFactory
+        from world.items.gems.buckets import credit_materials
+
+        self.target_character.db_account = AccountFactory()
+        self.target_character.save(update_fields=["db_account"])
+        category = MaterialCategoryFactory()
+        credit_materials(self.target_identity, category, 100)
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {
+                "kind": "material",
+                "sum_tier": "fair",
+                "material_category_id": category.pk,
+            },
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data["status"] == ActionRequestStatus.PENDING
+        assert "result" not in response.data  # never auto-resolved
+        assert response.data.get("boon_refused") is None  # never refused
+        assert SceneActionRequest.objects.filter(pk=response.data["id"]).exists()
+
+    def test_material_boon_dispatch_honestly_refuses_an_empty_bucket(self) -> None:
+        """#2540 slice 3: an honest refusal is a 200, not a 400 — the ask was
+        well-formed, the target just can't grant it (never a client error)."""
+        from world.items.factories import MaterialCategoryFactory
+
+        category = MaterialCategoryFactory()  # target's bucket is empty
+        url = reverse("sceneactionrequest-list")
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "target_persona": self.target_persona.pk,
+            "action_key": "boon",
+            "boon": {
+                "kind": "material",
+                "sum_tier": "fair",
+                "material_category_id": category.pk,
+            },
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["boon_refused"] is True
+        assert not SceneActionRequest.objects.exists()  # no orphan row
 
     @patch("world.scenes.action_views.respond_to_action_request")
     def test_respond_accept(self, mock_respond: MagicMock) -> None:

@@ -13,7 +13,7 @@ from world.clues.models import (
 class ClueAdmin(admin.ModelAdmin):
     """Authoring surface for clues — add/remove/rename freely (data, not code)."""
 
-    autocomplete_fields = ["target_persona", "target_persona_linked"]
+    autocomplete_fields = ["target_persona", "target_persona_linked", "target_item_instance"]
 
     list_display = ["name", "target_kind", "get_active_target_name", "resolution_mode"]
     list_filter = ["target_kind", "resolution_mode"]

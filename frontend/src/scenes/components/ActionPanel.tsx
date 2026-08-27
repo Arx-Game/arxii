@@ -29,13 +29,14 @@ import { extractErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { magicKeys } from '@/magic/queries';
-import type {
-  PlayerAction,
-  AvailableEnhancement,
-  BoonAskPayload,
-  CastableTechnique,
-  CastResponse,
-  CastPullRequestBody,
+import {
+  BOON_ACTION_KEYS,
+  type PlayerAction,
+  type AvailableEnhancement,
+  type BoonAskPayload,
+  type CastableTechnique,
+  type CastResponse,
+  type CastPullRequestBody,
 } from '../actionTypes';
 import type { SceneDetail, SceneParticipant } from '../types';
 import { SoulfrayWarning } from './SoulfrayWarning';
@@ -278,6 +279,22 @@ export function ActionPanel({ sceneId }: Props) {
       boon?: BoonAskPayload;
     }) => createActionRequest(sceneId, params),
     onSuccess: (data) => {
+      if (data.boon_refused) {
+        // #2540 slice 3 honest unavailability: the ask was well-formed (a real
+        // category, a real tier) but the target's bucket is empty — the server
+        // returns 200 (not an error; nothing was mis-sent) with NO
+        // SceneActionRequest row created. The refusal text is diegetic and MUST
+        // reach the player, so it can't just fall through the ordinary
+        // dispositionMessage path (which reads a different, always-absent field
+        // here) and get silently swallowed. Close the panel exactly like an
+        // ordinary dispatch — there is no pending request to leave the ask form
+        // open against.
+        toast(data.detail ?? 'They cannot grant that.');
+        setOpen(false);
+        setTargetingAction(null);
+        setStrainByAction({});
+        return;
+      }
       invalidateActionOutcomeQueries();
       toastDispositionMessage(data);
       setOpen(false);
@@ -382,7 +399,16 @@ export function ActionPanel({ sceneId }: Props) {
     if (!targetingAction || ids.length === 0) return;
     // #2540: a boon needs its structured ask specified before dispatch — hold the
     // action and open the ask form instead of committing on target pick.
-    if ((targetingAction.ref.registry_key ?? '') === 'boon' && ids.length === 1) {
+    if (BOON_ACTION_KEYS.includes(targetingAction.ref.registry_key ?? '')) {
+      if (ids.length !== 1) {
+        // A boon asks exactly one target for a specific thing — a multi-select
+        // has no single ask form to open, so block instead of falling through
+        // to a payload-less dispatch (the server-side guard would reject it
+        // anyway, but this avoids a round trip for a request that can never
+        // succeed).
+        toast.error('A boon can only be asked of one target at a time.');
+        return;
+      }
       setBoonAskState({ action: targetingAction, targetId: ids[0] });
       setTargetingAction(null);
       return;
@@ -871,10 +897,11 @@ export function ActionPanel({ sceneId }: Props) {
         />
       )}
 
-      {boonAskState && (
+      {boonAskState && initiatorPersonaId !== null && (
         <BoonAskForm
           targetPersonaId={boonAskState.targetId}
           targetName={candidates.find((c) => c.id === boonAskState.targetId)?.name}
+          initiatorPersonaId={initiatorPersonaId}
           onConfirm={handleBoonConfirm}
           onCancel={() => setBoonAskState(null)}
         />
