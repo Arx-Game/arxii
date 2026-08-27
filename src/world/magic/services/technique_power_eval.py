@@ -33,7 +33,6 @@ enumeration over the same tables — see that function's docstring.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -287,7 +286,14 @@ def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
         expected_shift += band.probability * (shift or 0.0)
 
     shifted_roll_modifier = context.roll_modifier + round(expected_shift)
-    shifted_context = replace(context, roll_modifier=shifted_roll_modifier)
+    shifted_context = EvalContext(
+        level=context.level,
+        thread_level=context.thread_level,
+        roller_points=context.roller_points,
+        target_difficulty=context.target_difficulty,
+        roll_modifier=shifted_roll_modifier,
+        passive=context.passive,
+    )
     shifted_bands = _matchup_bands(shifted_context)
     base_de = _reference_attack_de(
         bands, effective_power=context.level, multiplier_cache=multiplier_cache
@@ -398,6 +404,89 @@ def _unpriceable_valuation(*, label: str, kind: str) -> PayloadValuation:
     )
 
 
+def _routed_condition_valuation(  # noqa: PLR0913 - cohesive per-row valuation params
+    row: AbstractAppliedCondition,
+    *,
+    is_enemy: bool,
+    power: int,
+    bands: list[_MatchupBand],
+    context: EvalContext,
+    duration: float,
+    reference: ReferenceFrame,
+    multiplier_cache: dict[int, Decimal],
+) -> PayloadValuation:
+    """Route one ``TechniqueAppliedCondition`` row to its valuator (#3279 Task 2).
+
+    Per-row routing (see module docstring + ``docs/plans/3279-technique-power-eval-
+    plan.md``):
+
+    - Team-damage-percent lane (any target_kind) -> :func:`_team_lane_valuation`.
+    - ENEMY + damage-over-time -> :func:`_dot_valuation`.
+    - Non-team-lane ``ConditionModifierEffect`` (any target_kind) ->
+      :func:`_generic_modifier_valuation`.
+    - SELF/ALLY with none of the above -> :func:`_mitigation_valuation`, else
+      UNPRICEABLE.
+    - ENEMY with none of the above -> UNPRICEABLE.
+    """
+    if _is_team_lane_condition(row.condition):
+        return _team_lane_valuation(
+            row, power=power, context=context, duration=duration, reference=reference
+        )
+
+    if is_enemy:
+        dot = _dot_valuation(row, power=power, bands=bands, duration=duration)
+        if dot is not None:
+            return dot
+
+    modifier = _generic_modifier_valuation(
+        row,
+        power=power,
+        bands=bands,
+        context=context,
+        duration=duration,
+        multiplier_cache=multiplier_cache,
+    )
+    if modifier is not None:
+        return modifier
+
+    if not is_enemy:
+        mitigation = _mitigation_valuation(row, duration=duration, reference=reference)
+        if mitigation is not None:
+            return mitigation
+
+    return _unpriceable_valuation(
+        label=row.condition.name, kind="mitigation" if not is_enemy else "debuff"
+    )
+
+
+def _hard_control_valuation(
+    technique: Technique, *, enemy_durations: list[float], reference: ReferenceFrame
+) -> PayloadValuation | None:
+    """One technique-level "hard control" row, or ``None`` (#3279 Task 2).
+
+    Appended when the technique carries a HOLD/FEAR/DISTRACTION function tag AND
+    at least one ENEMY applied-condition row exists — valued at the longest
+    expected duration among the technique's ENEMY rows times
+    ``reference.incoming_dpr`` (#3279's currency spec; deliberately per-technique,
+    not per-row).
+    """
+    has_hard_control_tag = any(
+        tag.function in _HARD_CONTROL_FUNCTIONS for tag in technique.cached_function_tags
+    )
+    if not has_hard_control_tag or not enemy_durations:
+        return None
+
+    control_duration = max(enemy_durations)
+    value = control_duration * reference.incoming_dpr
+    return PayloadValuation(
+        kind="control",
+        label="hard control",
+        value=value,
+        provenance=ValuationProvenance.ESTIMATE,
+        detail=f"{control_duration:.2f} expected rounds x incoming_dpr (HOLD/FEAR/DISTRACTION)",
+    )
+
+
 def _condition_application_valuations(  # noqa: PLR0913 - cohesive per-technique valuation params
     technique: Technique,
     *,
@@ -410,22 +499,8 @@ def _condition_application_valuations(  # noqa: PLR0913 - cohesive per-technique
     """Value every ``TechniqueAppliedCondition`` row plus the technique-level control
     estimate (#3279 Task 2).
 
-    Per-row routing (see module docstring + ``docs/plans/3279-technique-power-eval-
-    plan.md``):
-
-    - Team-damage-percent lane (any target_kind) -> :func:`_team_lane_valuation`.
-    - ENEMY + damage-over-time -> :func:`_dot_valuation`.
-    - Non-team-lane ``ConditionModifierEffect`` (any target_kind) ->
-      :func:`_generic_modifier_valuation`.
-    - SELF/ALLY with none of the above -> :func:`_mitigation_valuation`, else
-      UNPRICEABLE.
-    - ENEMY with none of the above -> UNPRICEABLE.
-
-    Separately, ONE technique-level "hard control" row is appended when the
-    technique carries a HOLD/FEAR/DISTRACTION function tag AND at least one
-    ENEMY applied-condition row exists — valued at the longest expected duration
-    among the technique's ENEMY rows times ``reference.incoming_dpr`` (#3279's
-    currency spec; deliberately per-technique, not per-row).
+    Per-row routing lives in :func:`_routed_condition_valuation`; the technique-level
+    hard-control row lives in :func:`_hard_control_valuation`.
     """
     valuations: list[PayloadValuation] = []
     enemy_durations: list[float] = []
@@ -436,61 +511,24 @@ def _condition_application_valuations(  # noqa: PLR0913 - cohesive per-technique
         if is_enemy:
             enemy_durations.append(duration)
 
-        if _is_team_lane_condition(row.condition):
-            valuations.append(
-                _team_lane_valuation(
-                    row, power=power, context=context, duration=duration, reference=reference
-                )
-            )
-            continue
-
-        if is_enemy:
-            dot = _dot_valuation(row, power=power, bands=bands, duration=duration)
-            if dot is not None:
-                valuations.append(dot)
-                continue
-
-        modifier = _generic_modifier_valuation(
-            row,
-            power=power,
-            bands=bands,
-            context=context,
-            duration=duration,
-            multiplier_cache=multiplier_cache,
-        )
-        if modifier is not None:
-            valuations.append(modifier)
-            continue
-
-        if not is_enemy:
-            mitigation = _mitigation_valuation(row, duration=duration, reference=reference)
-            if mitigation is not None:
-                valuations.append(mitigation)
-                continue
-
         valuations.append(
-            _unpriceable_valuation(
-                label=row.condition.name, kind="mitigation" if not is_enemy else "debuff"
+            _routed_condition_valuation(
+                row,
+                is_enemy=is_enemy,
+                power=power,
+                bands=bands,
+                context=context,
+                duration=duration,
+                reference=reference,
+                multiplier_cache=multiplier_cache,
             )
         )
 
-    has_hard_control_tag = any(
-        tag.function in _HARD_CONTROL_FUNCTIONS for tag in technique.cached_function_tags
+    control = _hard_control_valuation(
+        technique, enemy_durations=enemy_durations, reference=reference
     )
-    if has_hard_control_tag and enemy_durations:
-        control_duration = max(enemy_durations)
-        value = control_duration * reference.incoming_dpr
-        valuations.append(
-            PayloadValuation(
-                kind="control",
-                label="hard control",
-                value=value,
-                provenance=ValuationProvenance.ESTIMATE,
-                detail=(
-                    f"{control_duration:.2f} expected rounds x incoming_dpr (HOLD/FEAR/DISTRACTION)"
-                ),
-            )
-        )
+    if control is not None:
+        valuations.append(control)
 
     return valuations
 

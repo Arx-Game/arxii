@@ -359,8 +359,99 @@ def _apply_sineater_corruption_resistance(
     return math.ceil(amount * multiplier)
 
 
+def _read_corruption_totals(
+    character_sheet: CharacterSheet, resonance: Resonance
+) -> tuple[int, int]:
+    """Read (corruption_current, corruption_lifetime) for (sheet, resonance); (0, 0) if absent."""
+    try:
+        cr = CharacterResonance.objects.get(character_sheet=character_sheet, resonance=resonance)
+    except CharacterResonance.DoesNotExist:
+        return 0, 0
+    return cr.corruption_current, cr.corruption_lifetime
+
+
+def _increment_corruption_totals(
+    character_sheet: CharacterSheet, resonance: Resonance, amount: int
+) -> tuple[CharacterResonance, int, int]:
+    """Increment corruption_current/lifetime for (sheet, resonance); return (row, befores)."""
+    char_resonance, _ = CharacterResonance.objects.select_for_update().get_or_create(
+        character_sheet=character_sheet,
+        resonance=resonance,
+    )
+    current_before = char_resonance.corruption_current
+    lifetime_before = char_resonance.corruption_lifetime
+    char_resonance.corruption_current = current_before + amount
+    char_resonance.corruption_lifetime = lifetime_before + amount
+    char_resonance.save(update_fields=["corruption_current", "corruption_lifetime"])
+    return char_resonance, current_before, lifetime_before
+
+
+def _finalize_no_op_accrual(  # noqa: PLR0913 - cohesive no-op result params
+    *,
+    resonance: Resonance,
+    amount: int,
+    current_before: int,
+    current_after: int,
+    lifetime_before: int,
+    lifetime_after: int,
+    location: object,
+) -> CorruptionAccrualResult:
+    """Build a no-op CorruptionAccrualResult, emit CORRUPTION_ACCRUED, and return it."""
+    result = _make_no_op_result(
+        resonance=resonance,
+        amount=amount,
+        current_before=current_before,
+        current_after=current_after,
+        lifetime_before=lifetime_before,
+        lifetime_after=lifetime_after,
+    )
+    if location is not None:
+        emit_event(
+            EventName.CORRUPTION_ACCRUED,
+            CorruptionAccruedPayload(result=result),
+            location=location,
+        )
+    return result
+
+
+def _lazy_create_condition_instance(
+    *, character: object, template: ConditionTemplate, char_resonance: CharacterResonance
+) -> ConditionInstance | None:
+    """Create the stage-1 ConditionInstance once corruption_current crosses the threshold.
+
+    Returns ``None`` when the stage-1 threshold isn't authored yet or hasn't been
+    crossed — a sub-threshold accrual that creates no condition.
+    """
+    stage_1 = template.stages.filter(stage_order=1).first()
+    stage_1_threshold = stage_1.severity_threshold if stage_1 else None
+    if stage_1_threshold is None or char_resonance.corruption_current < stage_1_threshold:
+        return None
+    return ConditionInstance.objects.create(
+        target=character,
+        condition=template,
+        current_stage=stage_1,
+        severity=char_resonance.corruption_current,
+    )
+
+
+def _advance_condition_instance(
+    instance: ConditionInstance, char_resonance: CharacterResonance
+) -> tuple[int, int, AdvancementOutcome]:
+    """Sync an existing ConditionInstance's severity and advance its stage (Scope 3+6 path).
+
+    Returns ``(stage_before, stage_after, outcome)``.
+    """
+    stage_before = instance.current_stage.stage_order if instance.current_stage else 0
+    delta = char_resonance.corruption_current - instance.severity
+    if delta <= 0:
+        return stage_before, stage_before, AdvancementOutcome.NO_CHANGE
+    advance_result = advance_condition_severity(instance, delta)
+    stage_after = advance_result.new_stage.stage_order if advance_result.new_stage else 0
+    return stage_before, stage_after, advance_result.outcome
+
+
 @transaction.atomic
-def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
+def accrue_corruption(  # noqa: PLR0913 - cohesive accrual-context params
     *,
     character_sheet: CharacterSheet,
     resonance: Resonance,
@@ -408,22 +499,15 @@ def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
     # zeroed pre_payload.amount to signal full absorption.  Read the current
     # CharacterResonance state for an accurate no-op result.
     if pre_payload.amount <= 0:
-        try:
-            _cr = CharacterResonance.objects.get(
-                character_sheet=character_sheet, resonance=resonance
-            )
-            _current = _cr.corruption_current
-            _lifetime = _cr.corruption_lifetime
-        except CharacterResonance.DoesNotExist:
-            _current = 0
-            _lifetime = 0
-        return _make_no_op_result(
+        current, lifetime = _read_corruption_totals(character_sheet, resonance)
+        return _finalize_no_op_accrual(
             resonance=resonance,
             amount=0,
-            current_before=_current,
-            current_after=_current,
-            lifetime_before=_lifetime,
-            lifetime_after=_lifetime,
+            current_before=current,
+            current_after=current,
+            lifetime_before=lifetime,
+            lifetime_after=lifetime,
+            location=location,
         )
 
     # Re-read amount in case a subscriber reduced it (partial absorption).
@@ -437,37 +521,24 @@ def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
         character_sheet, resonance, amount, redirect_origin
     )
 
-    # Increment fields
-    char_resonance, _ = CharacterResonance.objects.select_for_update().get_or_create(
-        character_sheet=character_sheet,
-        resonance=resonance,
+    char_resonance, current_before, lifetime_before = _increment_corruption_totals(
+        character_sheet, resonance, amount
     )
-    current_before = char_resonance.corruption_current
-    lifetime_before = char_resonance.corruption_lifetime
-    char_resonance.corruption_current = current_before + amount
-    char_resonance.corruption_lifetime = lifetime_before + amount
-    char_resonance.save(update_fields=["corruption_current", "corruption_lifetime"])
 
     # Look up the per-resonance Corruption ConditionTemplate
     template = ConditionTemplate.objects.filter(corruption_resonance=resonance).first()
 
     # No-op when no Corruption content authored for this resonance
     if template is None:
-        result = _make_no_op_result(
+        return _finalize_no_op_accrual(
             resonance=resonance,
             amount=amount,
             current_before=current_before,
             current_after=char_resonance.corruption_current,
             lifetime_before=lifetime_before,
             lifetime_after=char_resonance.corruption_lifetime,
+            location=location,
         )
-        if location is not None:
-            emit_event(
-                EventName.CORRUPTION_ACCRUED,
-                CorruptionAccruedPayload(result=result),
-                location=location,
-            )
-        return result
 
     # Find or lazy-create the ConditionInstance
     character = _resolve_character(character_sheet)
@@ -476,52 +547,24 @@ def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
         condition=template,
     ).first()
 
-    stage_1 = template.stages.filter(stage_order=1).first()
-    stage_1_threshold = stage_1.severity_threshold if stage_1 else None
-
-    stage_before = 0
-    stage_after = 0
-    outcome = AdvancementOutcome.NO_CHANGE
-
     if instance is None:
-        if stage_1_threshold is not None and char_resonance.corruption_current >= stage_1_threshold:
-            # Lazy-create at stage 1
-            instance = ConditionInstance.objects.create(
-                target=character,
-                condition=template,
-                current_stage=stage_1,
-                severity=char_resonance.corruption_current,
-            )
-            stage_after = 1
-            outcome = AdvancementOutcome.ADVANCED
-            stage_before = 0
-        else:
+        instance = _lazy_create_condition_instance(
+            character=character, template=template, char_resonance=char_resonance
+        )
+        if instance is None:
             # Sub-threshold accrual — no condition created yet
-            result = _make_no_op_result(
+            return _finalize_no_op_accrual(
                 resonance=resonance,
                 amount=amount,
                 current_before=current_before,
                 current_after=char_resonance.corruption_current,
                 lifetime_before=lifetime_before,
                 lifetime_after=char_resonance.corruption_lifetime,
+                location=location,
             )
-            if location is not None:
-                emit_event(
-                    EventName.CORRUPTION_ACCRUED,
-                    CorruptionAccruedPayload(result=result),
-                    location=location,
-                )
-            return result
+        stage_before, stage_after, outcome = 0, 1, AdvancementOutcome.ADVANCED
     else:
-        # Sync severity with corruption_current and advance via Scope 3+6 path
-        stage_before = instance.current_stage.stage_order if instance.current_stage else 0
-        delta = char_resonance.corruption_current - instance.severity
-        if delta > 0:
-            advance_result = advance_condition_severity(instance, delta)
-            stage_after = advance_result.new_stage.stage_order if advance_result.new_stage else 0
-            outcome = advance_result.outcome
-        else:
-            stage_after = stage_before
+        stage_before, stage_after, outcome = _advance_condition_instance(instance, char_resonance)
 
     _emit_risk_transparency_events(
         outcome=outcome,
