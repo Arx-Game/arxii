@@ -25,6 +25,7 @@ vi.mock('@/combat/queries', () => ({
   useFleeMutation: vi.fn(),
   useCoverMutation: vi.fn(),
   useGuardMutation: vi.fn(),
+  useRegistryDispatch: vi.fn(),
   combatKeys: {
     all: ['combat'],
     encounter: (id: number) => ['combat', 'encounter', id],
@@ -34,6 +35,10 @@ vi.mock('@/combat/queries', () => ({
 
 vi.mock('@/scenes/actionQueries', () => ({
   fetchAvailableActions: vi.fn(),
+}));
+
+vi.mock('@/inventory/hooks/useInventory', () => ({
+  useInventory: vi.fn(),
 }));
 
 // Stub ThreadPullDialog — exposes a "simulate select" button so tests can
@@ -142,9 +147,10 @@ vi.mock('@/magic/queries', async (importOriginal) => {
 });
 
 import * as combatQueries from '@/combat/queries';
+import * as inventoryHooks from '@/inventory/hooks/useInventory';
 import { YourTurn } from '../sections/YourTurn';
 import type { YourTurnProps } from '../sections/YourTurn';
-import type { AvailableCombo, EncounterDetail, Participant } from '../types';
+import type { AvailableCombo, EncounterDetail, Opponent, Participant } from '../types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -173,17 +179,22 @@ const mockedUseDispatchPlayerAction = combatQueries.useDispatchPlayerAction as R
 const mockedUseFleeMutation = combatQueries.useFleeMutation as ReturnType<typeof vi.fn>;
 const mockedUseCoverMutation = combatQueries.useCoverMutation as ReturnType<typeof vi.fn>;
 const mockedUseGuardMutation = combatQueries.useGuardMutation as ReturnType<typeof vi.fn>;
+const mockedUseRegistryDispatch = combatQueries.useRegistryDispatch as ReturnType<typeof vi.fn>;
+const mockedUseInventory = inventoryHooks.useInventory as ReturnType<typeof vi.fn>;
 
 const mockMutate = vi.fn();
 const mockFleeMutate = vi.fn();
 const mockCoverMutate = vi.fn();
 const mockGuardMutate = vi.fn();
 const mockMutateAsync = vi.fn();
+/** #3381 — shared mutateAsync for useRegistryDispatch (rally/succor/use-item/revert/charge/joust). */
+const mockManeuverMutateAsync = vi.fn();
 
 function setupMocks(
   options: {
     combos?: AvailableCombo[];
     combosLoading?: boolean;
+    inventory?: Array<{ id: number; display_name: string; is_usable: boolean }>;
   } = {}
 ) {
   mockedUseAvailableCombos.mockReturnValue({
@@ -210,6 +221,15 @@ function setupMocks(
   mockedUseGuardMutation.mockReturnValue({
     mutate: mockGuardMutate,
     isPending: false,
+  });
+  mockedUseRegistryDispatch.mockReturnValue({
+    mutateAsync: mockManeuverMutateAsync,
+    isPending: false,
+  });
+  mockedUseInventory.mockReturnValue({
+    data: options.inventory ?? [],
+    isLoading: false,
+    isError: false,
   });
 }
 
@@ -330,6 +350,7 @@ function makeCastPlayerAction(
 beforeEach(() => {
   vi.clearAllMocks();
   mockMutateAsync.mockResolvedValue({ backend: 'COMBAT', deferred: true });
+  mockManeuverMutateAsync.mockResolvedValue({ success: true });
   mockFleeMutate.mockImplementation((_arg: unknown, opts?: { onError?: (e: Error) => void }) => {
     void opts;
   });
@@ -1947,5 +1968,294 @@ describe('YourTurn — round-advance clash reset (#2423 finding 4)', () => {
     >;
     const staleClashCall = calls.find((c) => c[0].ref.clash_id === 42);
     expect(staleClashCall).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #3381 — rally/succor pickers, use item, revert combo, mounted maneuvers
+// ---------------------------------------------------------------------------
+
+function makeOpponentFixture(overrides: Partial<Opponent> = {}): Opponent {
+  return {
+    id: 20,
+    objectdb_id: null,
+    name: 'Bandit',
+    tier: 'mook',
+    health: 5,
+    max_health: 10,
+    soak_value: null,
+    probing_threshold: null,
+    active_conditions: [],
+    thumbnail_url: '',
+    thumbnail_media_url: null,
+    current_position: null,
+    mirrors_participant_id: null,
+    status: 'active',
+    ...overrides,
+  } as Opponent;
+}
+
+describe('YourTurn — rally/succor maneuver pickers (#3381)', () => {
+  it('renders rally and succor controls with the coverable-allies list', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(1, 'Ally One')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('rally-control')).toBeInTheDocument();
+    expect(screen.getByTestId('succor-control')).toBeInTheDocument();
+  });
+
+  it('rally confirm dispatches combat_rally with the selected ally_participant_id', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(4, 'Ally Four')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('rally-ally-select'));
+    await userEvent.click(await screen.findByText('Ally Four'));
+
+    const confirmBtn = screen.getByTestId('rally-confirm-btn');
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    await userEvent.click(confirmBtn);
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_rally',
+      kwargs: { ally_participant_id: 4 },
+    });
+  });
+
+  it('succor confirm dispatches combat_succor with the selected ally_participant_id', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(5, 'Ally Five')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('succor-ally-select'));
+    await userEvent.click(await screen.findByText('Ally Five'));
+
+    const confirmBtn = screen.getByTestId('succor-confirm-btn');
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    await userEvent.click(confirmBtn);
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_succor',
+      kwargs: { ally_participant_id: 5 },
+    });
+  });
+});
+
+describe('YourTurn — use item maneuver (#3381)', () => {
+  it('does not render the section when no held item is usable', () => {
+    setupMocks({ inventory: [{ id: 1, display_name: 'Rusty Sword', is_usable: false }] });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('use-item-section')).not.toBeInTheDocument();
+  });
+
+  it('filters the item picker to is_usable items', async () => {
+    setupMocks({
+      inventory: [
+        { id: 1, display_name: 'Healing Potion', is_usable: true },
+        { id: 2, display_name: 'Rusty Sword', is_usable: false },
+      ],
+    });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('use-item-select'));
+    expect(await screen.findByText('Healing Potion')).toBeInTheDocument();
+    expect(screen.queryByText('Rusty Sword')).not.toBeInTheDocument();
+  });
+
+  it('dispatches combat_use with only item_instance_id when no target is chosen', async () => {
+    setupMocks({ inventory: [{ id: 9, display_name: 'Healing Potion', is_usable: true }] });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('use-item-select'));
+    await userEvent.click(await screen.findByText('Healing Potion'));
+
+    const confirmBtn = screen.getByTestId('use-item-confirm-btn');
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    await userEvent.click(confirmBtn);
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_use',
+      kwargs: { item_instance_id: 9 },
+    });
+  });
+
+  it('dispatches ally_participant_id when an ally target is chosen', async () => {
+    setupMocks({ inventory: [{ id: 9, display_name: 'Healing Potion', is_usable: true }] });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeParticipant(6, 'Ally Six')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('use-item-select'));
+    await userEvent.click(await screen.findByText('Healing Potion'));
+
+    await userEvent.click(screen.getByTestId('use-item-target-select'));
+    await userEvent.click(await screen.findByText('Ally Six'));
+
+    await userEvent.click(screen.getByTestId('use-item-confirm-btn'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_use',
+      kwargs: { item_instance_id: 9, ally_participant_id: 6 },
+    });
+  });
+});
+
+describe('YourTurn — revert combo (#3381)', () => {
+  it('does not render when no combo upgrade is active this round', () => {
+    setupMocks();
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('revert-combo-btn')).not.toBeInTheDocument();
+  });
+
+  it('renders and dispatches combat_revert with no kwargs when a combo upgrade is active', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: null,
+          is_ready: false,
+          focused_ally_target: null,
+          combo_upgrade: 42,
+        },
+      ],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('revert-combo-btn'));
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({ registryKey: 'combat_revert' });
+  });
+});
+
+describe('YourTurn — mounted maneuvers panel (#3381)', () => {
+  function makeMountedSelfParticipant(id: number) {
+    return {
+      ...makeSelfParticipant(id),
+      active_conditions: [{ id: 1, name: 'Mounted', display_priority: 1 }],
+    };
+  }
+
+  it('does not render when the viewer is not Mounted', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('mounted-maneuvers-section')).not.toBeInTheDocument();
+  });
+
+  it('renders Charge but not Joust outside a duel encounter', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      encounter_type: 'open_encounter',
+      participants: [makeMountedSelfParticipant(5)],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('mounted-maneuvers-section')).toBeInTheDocument();
+    expect(screen.getByTestId('charge-control')).toBeInTheDocument();
+    expect(screen.queryByTestId('joust-control')).not.toBeInTheDocument();
+  });
+
+  it('renders Joust when the encounter is a duel', () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      status: 'declaring',
+      encounter_type: 'duel',
+      participants: [makeMountedSelfParticipant(5)],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('joust-control')).toBeInTheDocument();
+  });
+
+  it('charge dispatches combat_charge with opponent_id and technique_id', async () => {
+    setupMocks();
+    const technique = makeCastPlayerAction(77, 'Lance Strike', { action_category: 'physical' });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeMountedSelfParticipant(5)],
+      opponents: [makeOpponentFixture()],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter, availableActions: [technique] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('charge-opponent-select'));
+    await userEvent.click(await screen.findByText('Bandit'));
+
+    await userEvent.click(screen.getByTestId('charge-technique-select'));
+    await userEvent.click(await screen.findByText('Lance Strike'));
+
+    const confirmBtn = screen.getByTestId('charge-confirm-btn');
+    await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    await userEvent.click(confirmBtn);
+
+    expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+      registryKey: 'combat_charge',
+      kwargs: { opponent_id: 20, technique_id: 77 },
+    });
+  });
+
+  it('surfaces a rejected charge dispatch inline via result.message', async () => {
+    setupMocks();
+    mockManeuverMutateAsync.mockResolvedValueOnce({ success: false, message: 'Not mounted.' });
+    const technique = makeCastPlayerAction(77, 'Lance Strike', { action_category: 'physical' });
+    const encounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeMountedSelfParticipant(5)],
+      opponents: [makeOpponentFixture()],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter, availableActions: [technique] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('charge-opponent-select'));
+    await userEvent.click(await screen.findByText('Bandit'));
+    await userEvent.click(screen.getByTestId('charge-technique-select'));
+    await userEvent.click(await screen.findByText('Lance Strike'));
+
+    await userEvent.click(screen.getByTestId('charge-confirm-btn'));
+
+    expect(await screen.findByTestId('charge-error')).toHaveTextContent('Not mounted.');
   });
 });

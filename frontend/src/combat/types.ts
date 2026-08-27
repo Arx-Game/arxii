@@ -70,6 +70,8 @@ export interface RoundActionTyped extends RoundAction {
   is_ready: boolean;
   maneuver: 'flee' | 'cover' | 'interpose' | null;
   focused_ally_target: number | null;
+  /** ComboDefinition PK when this round's action has been upgraded to a combo, else null (#3381). */
+  combo_upgrade: number | null;
 }
 
 // ---------------------------------------------------------------------------
