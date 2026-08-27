@@ -149,10 +149,18 @@ class SelectEntryRequestSerializer(serializers.Serializer):
 
 class SelectedEntryResultSerializer(serializers.Serializer):
     """Result of the #3412 select/clear endpoint — the updated selection
-    fragment, in the same shape ``/api/user/`` exposes it in."""
+    fragment, in the same shape ``/api/user/`` exposes it in.
 
-    selected_entry_id = serializers.IntegerField(read_only=True)
-    selected_entry = MyRosterEntrySerializer(read_only=True)
+    Both fields are ``allow_null`` because a clear (``entry_id: null``) returns
+    ``player_data.selected_entry_id``/``selected_entry`` as ``None`` — DRF's
+    ``Serializer.to_representation`` already emits ``null`` for a ``None``
+    attribute regardless of this flag, but omitting it left drf-spectacular
+    generating a non-nullable schema/TS type for a field that is genuinely
+    nullable at runtime.
+    """
+
+    selected_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
+    selected_entry = MyRosterEntrySerializer(read_only=True, allow_null=True)
 
 
 class RosterEntryListSerializer(serializers.ModelSerializer):

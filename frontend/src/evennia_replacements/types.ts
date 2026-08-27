@@ -47,9 +47,13 @@ export interface AccountData {
    * `PlayerData.selected_entry_id`/`selected_entry`. Selection is NOT
    * presence; this is just the persisted "who am I browsing as" fact, read
    * by `useAccountQuery` to hydrate `gameSlice.active`/`activeEntryId` so a
-   * hard reload doesn't lose the active character. Not yet regenerated into
-   * the generated API types (that regen happens once, in a later task) —
-   * hand-added here in the same pattern as the rest of this hand-rolled type.
+   * hard reload doesn't lose the active character. Confirmed (api-types
+   * regen, #3412 slice 1 task 5) that this stays hand-rolled permanently, not
+   * just "until a later regen": `CurrentUserAPIView` is a plain `APIView`
+   * with no `serializer_class`/`@extend_schema`, so drf-spectacular can't
+   * introspect `/api/user/`'s response and `AccountData` never enters the
+   * generated schema at all, unlike `SelectedEntryResult`
+   * (`roster/types.ts`), whose serializer IS spectacular-wired.
    */
   selected_entry_id: number | null;
   selected_entry: MyRosterEntry | null;

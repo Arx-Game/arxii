@@ -1,4 +1,5 @@
 import type { Gender } from '@/world/character_sheets/types';
+import type { components } from '@/generated/api';
 
 export interface MyRosterEntry {
   id: number;
@@ -20,11 +21,13 @@ export interface MyRosterEntry {
  * `GET /api/user/`'s `selected_entry_id`/`selected_entry` fields exactly, so
  * the mutation result can hydrate the same slice state the account query does.
  * `entry_id: null` clears the selection, in which case both fields come back null.
+ *
+ * Sourced from the generated schema (drf-spectacular introspects
+ * `SelectedEntryResultSerializer`, unlike the hand-rolled `AccountData` in
+ * `evennia_replacements/types.ts` — that endpoint is a plain `APIView` with no
+ * `serializer_class`/`@extend_schema`, so it stays out of the schema entirely).
  */
-export interface SelectedEntryResult {
-  selected_entry_id: number | null;
-  selected_entry: MyRosterEntry | null;
-}
+export type SelectedEntryResult = components['schemas']['SelectedEntryResult'];
 
 export interface CharacterGallery {
   name: string;

@@ -103,3 +103,22 @@ _Avoid_: consort (that is the official institution), affair record.
 **gifted_rating (Kinsperson)**:
 Staff-authored 0–5 Gifted weight for kin WITHOUT sheets (#3091). Sparse by design: only PCs and staff-defined significant figures are Gifted; the wider population stays 0. Sheet-bound kin rate from their sheet (best class level). Feeds house stature renown and the `MOST_POWERFUL_GIFTED` succession rater; a PC adopted from a kin stub enters at level 1.
 _Avoid_: power level, magic score.
+
+**Selection**:
+The durable server-side fact of which `RosterEntry` an account is currently
+browsing as (state 2.5 in the four-state model: logged out / logged in-no-selection
+/ selected / puppeting) — `PlayerData.selected_entry`, mutated only through
+`world.roster.services.selection.set_selected_entry`, mirrored client-side by
+`gameSlice` (#3412). Selection is a fact, not an action: it carries zero
+lifecycle, session, or puppeting side effects — see ADR-0241. PLACEHOLDER: the
+player-facing name for this state (currently spelled out in UI copy, e.g. "Taken
+Up" below) is Apostate's to finalize before it ships broadly.
+_Avoid_: active character (ambiguous with puppeting/session state); current
+character (same ambiguity).
+
+**Taken Up**:
+PLACEHOLDER player-facing label for Selection (state 2.5) — "you have taken up
+[Character]," distinct from actively playing them. Apostate's call to finalize;
+not yet load-bearing anywhere except descriptive code comments/help text.
+_Avoid_: treating this as settled terminology — it is a working label, not a
+ratified one.

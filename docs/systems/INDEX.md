@@ -2137,6 +2137,14 @@ Character lifecycle management with web-first applications and player anonymity.
   (detail, approve/deny), linked from the staff hub's "Roster Character
   Applications" card; the pre-existing hub card was retitled "Character
   Applications" to disambiguate from CG's DraftApplication queue.
+- **Durable character selection (#3412 slice 1, ADR-0241):** `PlayerData.selected_entry`
+  is the account's server-side "who am I browsing as" fact (state 2.5 — selected but
+  not necessarily puppeting). Sole mutator `world.roster.services.selection.set_selected_entry`;
+  `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
+  `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
+  presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
+  and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
+  [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

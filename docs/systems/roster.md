@@ -407,6 +407,44 @@ shelf, not new player-made characters going through CG.
 
 ---
 
+## Frontend: Selection Chrome (#3412 slice 1, ADR-0241)
+
+Web-only; no telnet surface (selection is a web-first state substrate, not a
+command). Client state mirrors the server; nothing here is a source of truth.
+
+- **`gameSlice`** (`frontend/src/store/gameSlice.ts`) mirrors
+  `PlayerData.selected_entry_id`/`selected_entry` alongside the existing
+  `active`/`activeEntryId` puppeting fields — hydrated from `useAccountQuery`'s
+  `GET /api/user/` response on every fetch, so a hard reload or a second device
+  reproduces the same selection. **Known wart:** the slice keys by character
+  *name*, not `RosterEntry` id, a pre-existing shape deliberately not refactored
+  here (25-surface change, out of slice scope — see the #3412 roadmap entry's
+  "known seams").
+- **`SelectedCharacterChip`** (`frontend/src/components/SelectedCharacterChip.tsx`)
+  — docked-portrait chip in `Header`, rendered app-wide (not just inside
+  `/game`) whenever a selection exists. Shows portrait + name, reuses the same
+  `PersonaSwitcher` `GameTopBar` mounts in-game (re-mounted here so
+  identity-switching works before entering `/game`), an "Enter the world" link,
+  and a "step away" control that clears the selection via
+  `useSelectCharacterMutation`. PLACEHOLDER copy throughout — final wording is
+  a separate pass; see the "Taken Up" glossary entry.
+- **`RequireCharacter`** (`frontend/src/components/RequireCharacter.tsx`) — route
+  guard gaining a second remedy (#3412 hygiene fold-in): offers both "Browse the
+  roster" and "Create a character," mirroring `WelcomePanel`'s zero-character
+  card instead of offering only one path.
+- **Enter-the-world auto-start** — the one deliberate selection→presence
+  crossing. `SelectedCharacterChip`'s "Enter the world" link never puppets
+  anything itself; `GamePage`'s own mount-path effect (`frontend/src/game/GamePage.tsx`)
+  auto-starts the session on arrival when a selection exists but no session is
+  live yet, keeping the selection/puppeting distinction intact even at the one
+  place they meet.
+- **Degradation sweep (#3412 hygiene fold-in):** loading states for tidings and
+  wardrobe panels, a mute-settings link, three message-tab fixes, notification
+  badge routing corrections, nine feed-kind labels, and consent-notifier gating
+  — all pre-existing gaps surfaced while wiring selection-aware chrome, fixed in
+  the same slice rather than filed separately (repo convention: fold in, don't
+  file).
+
 ## Admin
 
 - `RosterAdmin` - List/filter by active status and application permission
