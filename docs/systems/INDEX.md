@@ -2566,7 +2566,12 @@ action consent flow, and a three-mode non-combat round framework.
   seam: the asker's pointer-known items relevant to one target (held or vault-accessible),
   batched from the asker's own pointers, never a browse of the target's holdings — surfaced as
   `boon-options`' `pointer_items` (requires an `initiator_persona` query param owned by the
-  caller, since this reveals private knowledge).
+  caller, since this reveals private knowledge). **Co-presence gate (2026-08-27 fix wave 3):**
+  returns `[]` (200, never an error) unless the asker and target currently share an active scene
+  (`_asker_and_target_share_an_active_scene`, reusing `interaction_services.get_active_scene`) —
+  `pointer_items` must not become a remote discovery surface for holder identity. Named-item ask
+  validation is unaffected; the action-dispatch flow itself does not enforce scene co-presence on
+  `target_persona` (verified, not fixed — see `world/scenes/CLAUDE.md`).
   Slice 2 wired the full loop (`boon_services`):
   `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
   grant never exists: penniless-target money, unheld item, empty deed rejected before any row).

@@ -9,6 +9,7 @@ instance or "any instance of this template".
 from django.test import TestCase
 from django.utils import timezone
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.clues.constants import ClueTargetKind
 from world.clues.factories import CharacterClueFactory, ClueFactory
 from world.clues.models import CharacterClue, Clue
@@ -26,7 +27,7 @@ from world.scenes.boon_services import (
     character_has_item_pointer,
     pointer_known_items_for_target,
 )
-from world.scenes.factories import PersonaFactory
+from world.scenes.factories import PersonaFactory, SceneFactory
 from world.secrets.factories import SecretFactory, SecretKnowledgeFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
@@ -157,6 +158,32 @@ class PointerKnownItemsForTargetTests(TestCase):
         cls.asker_sheet = cls.asker_roster_entry.character_sheet
         cls.target = PersonaFactory()
         cls.template = ItemTemplateFactory()
+
+    def setUp(self) -> None:
+        # 2026-08-27 co-presence ruling (#2540 slice 3 fix wave 3): pointer_items is
+        # only ever computed when the asker and target currently share an active
+        # scene — establish that baseline for every positive test in this class; the
+        # dedicated negative test below explicitly breaks it instead.
+        room = RoomProfileFactory().objectdb
+        self.asker_sheet.character.move_to(room, quiet=True)
+        self.target.character_sheet.character.move_to(room, quiet=True)
+        SceneFactory(location=room)
+
+    def test_empty_without_a_shared_scene(self) -> None:
+        """The co-presence gate, not the pointer, is what's missing here — a valid
+        pointer to a currently-held item is not enough on its own."""
+        other_room = RoomProfileFactory().objectdb
+        self.target.character_sheet.character.move_to(other_room, quiet=True)
+        item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.target.character_sheet
+        )
+        grant_item_pointer_clue(self.asker_roster_entry, item)
+        self.assertEqual(
+            pointer_known_items_for_target(
+                asker_sheet=self.asker_sheet, target_persona=self.target
+            ),
+            [],
+        )
 
     def test_empty_with_no_asker_pointers(self) -> None:
         ItemInstanceFactory(

@@ -199,11 +199,23 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["pointer_items"] == []
 
+    def _co_locate_asker_and_target(self) -> None:
+        """2026-08-27 co-presence ruling (#2540 slice 3 fix wave 3): ``pointer_items``
+        is only ever computed when the asker and target currently share an active
+        scene — puts both characters in the same room under the class's existing
+        ``self.scene``."""
+        room = RoomProfileFactory().objectdb
+        self.character.move_to(room, quiet=True)
+        self.target_character.move_to(room, quiet=True)
+        self.scene.location = room
+        self.scene.save(update_fields=["location"])
+
     def test_boon_options_pointer_items_lists_held_item_the_asker_knows_of(self) -> None:
         from world.clues.constants import ClueTargetKind
         from world.clues.factories import CharacterClueFactory, ClueFactory
         from world.items.factories import ItemInstanceFactory
 
+        self._co_locate_asker_and_target()
         item = ItemInstanceFactory(holder_character_sheet=self.target_identity)
         clue = ClueFactory(
             target_kind=ClueTargetKind.ITEM,
@@ -219,12 +231,35 @@ class SceneActionRequestViewSetTestCase(APITestCase):
             {"item_instance_id": item.pk, "name": str(item), "source": "held"}
         ]
 
+    def test_boon_options_pointer_items_empty_without_a_shared_scene(self) -> None:
+        """2026-08-27 co-presence ruling: a valid pointer to a currently-held item is
+        not enough on its own — ``pointer_items`` stays empty (never an error, 200)
+        without the asker and target sharing an active scene."""
+        from world.clues.constants import ClueTargetKind
+        from world.clues.factories import CharacterClueFactory, ClueFactory
+        from world.items.factories import ItemInstanceFactory
+
+        item = ItemInstanceFactory(holder_character_sheet=self.target_identity)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=item.template,
+            target_item_instance=item,
+        )
+        CharacterClueFactory(roster_entry=self.roster_entry, clue=clue)
+        # Deliberately no _co_locate_asker_and_target() call.
+
+        response = self._boon_options()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["pointer_items"] == []
+
     def test_boon_options_pointer_items_never_lists_a_held_item_the_asker_has_no_pointer_to(
         self,
     ) -> None:
         """#2540 slice 3: NEVER a browse of target inventory — a pointer is the only window."""
         from world.items.factories import ItemInstanceFactory
 
+        self._co_locate_asker_and_target()
         ItemInstanceFactory(holder_character_sheet=self.target_identity)  # no pointer granted
         response = self._boon_options()
         assert response.status_code == status.HTTP_200_OK

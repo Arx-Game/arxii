@@ -766,6 +766,43 @@ def _target_accessible_vault_ids(target_persona: Persona) -> list[int]:
     )
 
 
+def _asker_and_target_share_an_active_scene(
+    *, asker_sheet: CharacterSheet, target_persona: Persona
+) -> bool:
+    """2026-08-27 co-presence ruling (#2540 slice 3 fix wave 3): gates
+    ``pointer_known_items_for_target`` on physical, in-the-moment co-presence.
+
+    ``pointer_items`` must NOT become a discovery surface: holder-identity is story
+    knowledge the game already grants deliberately (a discovered ``Clue``/
+    ``CodexEntry`` can target a PERSONA directly, revealing who holds something), so
+    letting the boon-options endpoint answer "what does Persona X hold" from
+    anywhere in the game — for any target the asker merely has an item pointer
+    about — would let it silently double as that same reveal, uninvited. Example:
+    a masked noble across the ballroom from the asker must not leak the ring they
+    hold just because the asker once picked up a template-only clue about a signet
+    ring — the ask only makes sense once asker and target are actually standing in
+    the same scene together, narrowing a vague pointer to a concrete item in
+    person. Named-item ask VALIDATION (``character_has_item_pointer``, called from
+    ``_validate_held_item_ask``/``_validate_vault_item_ask``) is UNCHANGED by this
+    ruling — an ask itself already targets someone via the action-dispatch flow,
+    which is a separate question from whether this DISPLAY seam should proactively
+    list what a distant persona holds.
+
+    Reuses the canonical location -> active-scene resolver
+    (``world.scenes.interaction_services.get_active_scene`` — "the single public
+    entry point for deriving the scene at a room", per its own docstring) rather
+    than inventing a new co-presence query: both characters must occupy the SAME
+    room, and that room must currently host an active (non-battle) scene.
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    asker_character = asker_sheet.character
+    target_character = target_persona.character_sheet.character
+    if asker_character.location is None or asker_character.location != target_character.location:
+        return False
+    return get_active_scene(asker_character.location) is not None
+
+
 def pointer_known_items_for_target(
     *, asker_sheet: CharacterSheet, target_persona: Persona
 ) -> list[PointerItemOption]:
@@ -776,7 +813,17 @@ def pointer_known_items_for_target(
     window (visibility = eligibility, one predicate — the same rule
     ``character_has_item_pointer`` enforces at ask time). Batched: a handful of
     queries total, never a query per candidate item.
+
+    2026-08-27 co-presence ruling: returns ``[]`` (never an error — the rest of
+    boon-options, ``sum_tiers``/``material_categories``, is unaffected) unless the
+    asker and target currently share an active scene — see
+    ``_asker_and_target_share_an_active_scene`` for why.
     """
+    if not _asker_and_target_share_an_active_scene(
+        asker_sheet=asker_sheet, target_persona=target_persona
+    ):
+        return []
+
     from django.db.models import Q  # noqa: PLC0415
 
     from world.items.models import ItemInstance  # noqa: PLC0415

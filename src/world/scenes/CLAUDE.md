@@ -157,6 +157,20 @@ the unified Persona identity system, and non-combat scene rounds.
   of the target's actual holdings; surfaced as `boon-options`' `pointer_items` field
   (`[{item_instance_id, name, source: "held"|"vault"}]`), which requires an `initiator_persona`
   query param owned by the caller (pointer knowledge is private).
+  **Co-presence gate (2026-08-27 fix wave 3 ruling):** `pointer_known_items_for_target` returns
+  `[]` (never an error — `sum_tiers`/`material_categories` stay unaffected) unless the asker's
+  active persona and the target persona currently share an active scene
+  (`_asker_and_target_share_an_active_scene`, reusing the canonical
+  `interaction_services.get_active_scene` location→scene resolver — same room + a currently-active
+  non-battle scene there). `pointer_items` must not become a remote discovery surface: holder
+  identity is story knowledge (a `Clue`/`CodexEntry` can already target a persona directly); this
+  endpoint's legitimate case is narrowing a vague pointer to a concrete item IN PERSON, not
+  answering "what does Persona X hold" from anywhere in the game. Named-item ask VALIDATION
+  (`character_has_item_pointer`, above) is unaffected — a boon ask itself already goes through the
+  action-dispatch flow, which does **not** currently enforce that `target_persona` shares a scene
+  with the asker (verified 2026-08-27 — a caller can still dispatch `create_action_request` at an
+  out-of-scene persona; the FE candidate list narrows to `scene.participants` but nothing
+  server-side blocks it — flagged, not fixed, per the ruling's scope).
   **MATERIAL kind (slice 3, #2540):** `BoonAsk.material_category_id` + `sum_tier` (reuses money's
   MINOR/FAIR/GREAT labels — but NEVER a computed value, deliberate money asymmetry). The
   boon-options endpoint's `material_categories` is the STATIC public `MaterialCategory` list,
