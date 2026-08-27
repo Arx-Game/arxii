@@ -124,6 +124,27 @@ class ConditionHandler:
         self.__dict__.pop("_active", None)
 
 
+def _sum_matching_modifiers(modifiers: Any, damage_type: DamageType) -> int:
+    """Sum ConditionResistanceModifier values matching *damage_type* or type-agnostic."""
+    total = 0
+    for mod in modifiers:
+        if mod.damage_type_id in (damage_type.pk, None):
+            total += mod.modifier_value
+    return total
+
+
+def _instance_resistance_modifier(instance: ConditionInstance, damage_type: DamageType) -> int:
+    """Sum template + stage resistance modifiers for one active condition instance."""
+    total = _sum_matching_modifiers(
+        instance.condition.template_resistance_modifiers_cached, damage_type
+    )
+    if instance.current_stage_id:
+        total += _sum_matching_modifiers(
+            instance.current_stage.stage_resistance_modifiers_cached, damage_type
+        )
+    return total
+
+
 class CharacterConditionHandler(ConditionHandler):
     """Character-specific extension of ConditionHandler.
 
@@ -166,16 +187,9 @@ class CharacterConditionHandler(ConditionHandler):
         """
         if damage_type is None:
             return 0
-        total = 0
-        for instance in self._active:
-            for mod in instance.condition.template_resistance_modifiers_cached:
-                if mod.damage_type_id in (damage_type.pk, None):
-                    total += mod.modifier_value
-            if instance.current_stage_id:
-                for mod in instance.current_stage.stage_resistance_modifiers_cached:
-                    if mod.damage_type_id in (damage_type.pk, None):
-                        total += mod.modifier_value
-        return total
+        return sum(
+            _instance_resistance_modifier(instance, damage_type) for instance in self._active
+        )
 
 
 class ConditionTemplateReactiveHandler:
