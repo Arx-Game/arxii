@@ -547,6 +547,12 @@ dropdb -h db -U arxii arxiidev
 createdb -h db -U arxii arxiidev
 ```
 
+This is the **devcontainer's own bootstrap database** (`-h db`, `arxiidev`) and it is
+the only database in this repo's docs that is ever dropped. It is not a template for
+any other database: production holds the only copy of our authored content and is never
+dropped (ADR-0237), and a dev database with real work in it is refilled with
+`just pull-prod`, not recreated.
+
 This is deliberate, not a bug - CLAUDE.md's "preserve the dev database" rule means
 tooling never drops a developer's database automatically, even a stale one.
 

@@ -309,11 +309,16 @@ export function CombatTurnPanel({
         data-testid="section-vital-pools"
       />
 
-      {/* 4. CombatantsList */}
+      {/* 4. CombatantsList — opponent click-menu (#3381) only for a declaring-phase
+          participant; canDeclareManeuvers mirrors YourTurn's own isDeclaringPhase
+          gate, threaded down from this shared parent so a GM/observer row never
+          renders the menu. */}
       <CombatantsList
         encounter={encounter}
         collapsed={collapsed.combatantsList}
         onToggleCollapse={() => toggleSection('combatantsList')}
+        characterId={characterId}
+        canDeclareManeuvers={isParticipant && encounter.status === 'declaring'}
         data-testid="section-combatants-list"
       />
 

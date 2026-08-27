@@ -344,6 +344,31 @@ Bumping the version is deliberate work: change both `base_awscli_version` and
 
 Installed once by the converge, then running unattended on the box:
 
+- **Pre-migration dump** (`app_deploy`, ADR-0237). Every converge applies whatever
+  migration reached `main`, unattended, with no operator in the loop. Since alpha the
+  database holds authored content that exists in no other copy, so a `RemoveField` or
+  `DeleteModel` merged into `main` is a permanent loss the moment this runs. The deploy
+  therefore takes a local `pg_dump` immediately **before** `migrate`, and only when
+  `migrate --check` says there is something to apply (code-only deploys pay nothing).
+
+  It **fails closed**: a dump that cannot be written, cannot be verified, or would fill
+  the disk aborts the play with the migration *unapplied*. A dump that is not verified
+  complete is deleted rather than left looking legitimate. It never uploads and never
+  restores; it is a short-horizon net (`app_premigrate_keep`, default 5 migrating
+  deploys) against the mistake you just shipped, and it is deliberately the one guard
+  in the chain that does not depend on anyone having anticipated the failure. Long-
+  horizon durability stays the nightly + offsite chain's job.
+
+  **To restore from one** (`/var/backups/arxii-premigrate/premigrate-<UTC ts>.sql.gz`,
+  root-only): these are plain-SQL dumps in the same format `restore.sh` consumes, but
+  `restore.sh` fetches from the bucket and has no local-file mode, so a pre-migration
+  dump is applied by hand. Piping plain SQL into an existing schema aborts on the first
+  object collision, so the target database must be dropped and recreated first — the
+  same reasoning as `restore.sh`'s own drop/recreate step, and the same reason a bare
+  "has tables" check is not proof of a good restore. Stop `arxii.service`, drop and
+  recreate the database, `gunzip -c … | psql -v ON_ERROR_STOP=1`, then verify
+  `django_migrations` has rows before starting the service back up.
+
 - **Portal/Server watchdog** (`arxii-watchdog.timer`, every minute). Evennia runs Server +
   Portal as two separate processes; if the unit's supervised process (Server) stays up but
   the Portal alone dies, systemd sees the unit as "active" and does nothing while players
@@ -755,8 +780,11 @@ the R2 offsite copy is a genuinely independent second copy — separate provider
 account, separate out-of-band credential — so a compromise of one copy's credential cannot
 reach or delete the other. Neither backstop is immutability against a compromised credential
 with delete rights on *its own* bucket, which is the residual risk Object Lock would close.
-Tracked in #2236; revisit when either provider pin is deliberately bumped past the versions
-above.
+Tracked in **#3410** (split out of #2236 when ADR-0237 made the backups the corpus's only
+redundancy); revisit when either provider pin is deliberately bumped past the versions above.
+Note what the compensating posture does *not* cover: it defends against a compromised
+credential, not against a stronger-than-intended credential being handed over by mistake, for
+which immutability is the only remaining control.
 
 ## Layout
 

@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0177_justicecase_humiliation_prestige_hit")]
+    dependencies = [("arxii", "0178_cast_power_scale_dispel_treatment")]
 
     operations = [
         migrations.AlterField(

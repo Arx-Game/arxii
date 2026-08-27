@@ -196,3 +196,134 @@ class WoundTreatmentMendTests(TestCase):
 
         self.assertEqual(result.health_mended, 1)
         self.assertEqual(target_sheet.vitals.health, 100)
+
+
+class WoundTreatmentPowerLegTests(TestCase):
+    """#3391 — power (eff_intensity) leg on the treatment mend amount.
+
+    ``mend_intensity_multiplier`` (default 0 on every existing row) scales the
+    outcome-tier mend amount by the caster's ``power_intensity`` before
+    ``mend_wound()``'s never-to-full fraction cap is applied. The default-0
+    back-compat invariant is the spec's primary correctness bar (Decision 4).
+    """
+
+    def _setup(self, *, damage_taken: int = 40, severity: int = 2, **extra_treatment_kwargs):
+        helper_sheet = CharacterSheetFactory()
+        target_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=target_sheet, health=20, max_health=100)
+        scene = SceneFactory(is_active=True)
+        wound_template = ConditionTemplateFactory(name=f"TestWoundPower_{id(object())}")
+        treatment_kwargs = {
+            "target_kind": TreatmentTargetKind.PRIMARY,
+            "target_condition": wound_template,
+            "check_type": CheckTypeFactory(),
+            "requires_bond": False,
+            "scene_required": False,
+            "once_per_scene_per_helper": False,
+            "once_per_wound_per_helper": True,
+            "mend_on_crit": 20,
+            "mend_on_success": 10,
+            "mend_on_partial": 5,
+        }
+        treatment_kwargs.update(extra_treatment_kwargs)
+        treatment = TreatmentTemplateFactory(**treatment_kwargs)
+        target_effect = ConditionInstanceFactory(
+            target=target_sheet.character,
+            condition=wound_template,
+            severity=severity,
+        )
+        WoundDetails.objects.create(condition_instance=target_effect, damage_taken=damage_taken)
+        return helper_sheet, target_sheet, scene, treatment, target_effect
+
+    @patch("world.checks.services.perform_check")
+    def test_default_multiplier_is_power_invariant(self, mock_check) -> None:
+        """mend_intensity_multiplier=0 (the field default) — power_intensity has zero
+        effect on the mend amount, across a matrix of values, matching the pre-#3391
+        (no power_intensity argument at all) result exactly.
+
+        Each variant gets its own fresh wound/helper so mend_wound()'s cumulative
+        never-to-full cap on one WoundDetails row can't mask the comparison.
+        """
+        mock_check.return_value = _make_check_result(success_level=1)
+        helper_sheet, target_sheet, scene, treatment, target_effect = self._setup()
+        baseline = perform_treatment(
+            helper_sheet=helper_sheet,
+            target_sheet=target_sheet,
+            scene=scene,
+            treatment=treatment,
+            target_effect=target_effect,
+        )
+        self.assertEqual(baseline.health_mended, 10)
+
+        for power_intensity in (0, 10, 100):
+            with self.subTest(power_intensity=power_intensity):
+                h_sheet, t_sheet, scn, trt, effect = self._setup()
+                result = perform_treatment(
+                    helper_sheet=h_sheet,
+                    target_sheet=t_sheet,
+                    scene=scn,
+                    treatment=trt,
+                    target_effect=effect,
+                    power_intensity=power_intensity,
+                )
+                self.assertEqual(result.health_mended, baseline.health_mended)
+
+    @patch("world.checks.services.perform_check")
+    def test_power_intensity_increases_mend_amount(self, mock_check) -> None:
+        """A nonzero mend_intensity_multiplier scales the mend amount by power_intensity."""
+        mock_check.return_value = _make_check_result(success_level=1)
+        helper_sheet, target_sheet, scene, treatment, target_effect = self._setup(
+            mend_intensity_multiplier=2,
+        )
+
+        result = perform_treatment(
+            helper_sheet=helper_sheet,
+            target_sheet=target_sheet,
+            scene=scene,
+            treatment=treatment,
+            target_effect=target_effect,
+            power_intensity=5,
+        )
+
+        # base mend_on_success=10 + floor(2 * 5) = 10 -> 20 total (well under the
+        # damage_taken=40 -> cap=30 fraction cap, so the cap doesn't mask this).
+        self.assertEqual(result.health_mended, 20)
+
+    @patch("world.checks.services.perform_check")
+    def test_power_still_capped_by_never_to_full_fraction(self, mock_check) -> None:
+        """A large power contribution still gets clamped by mend_wound()'s cap (ADR-0156)."""
+        # damage_taken=40 -> cap = floor(0.75 * 40) = 30.
+        mock_check.return_value = _make_check_result(success_level=1)
+        helper_sheet, target_sheet, scene, treatment, target_effect = self._setup(
+            mend_intensity_multiplier=5,
+        )
+
+        result = perform_treatment(
+            helper_sheet=helper_sheet,
+            target_sheet=target_sheet,
+            scene=scene,
+            treatment=treatment,
+            target_effect=target_effect,
+            power_intensity=1000,
+        )
+
+        self.assertEqual(result.health_mended, 30)
+
+    @patch("world.checks.services.perform_check")
+    def test_failure_mends_nothing_regardless_of_power(self, mock_check) -> None:
+        """A failed outcome still mends 0 no matter how much power is thrown at it."""
+        mock_check.return_value = _make_check_result(success_level=-1)
+        helper_sheet, target_sheet, scene, treatment, target_effect = self._setup(
+            mend_intensity_multiplier=5,
+        )
+
+        result = perform_treatment(
+            helper_sheet=helper_sheet,
+            target_sheet=target_sheet,
+            scene=scene,
+            treatment=treatment,
+            target_effect=target_effect,
+            power_intensity=1000,
+        )
+
+        self.assertEqual(result.health_mended, 0)

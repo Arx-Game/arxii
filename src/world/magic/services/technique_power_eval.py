@@ -33,9 +33,8 @@ enumeration over the same tables — see that function's docstring.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from decimal import Decimal
-import statistics
 from typing import TYPE_CHECKING
 
 from world.magic.constants import (
@@ -44,6 +43,7 @@ from world.magic.constants import (
     TechniqueFunction,
 )
 from world.magic.models.techniques import ConditionTargetKind, Technique
+from world.magic.services import de_valuation
 from world.magic.services.power_terms import (
     blend_power_contribution,
     get_covenant_role_blend_config,
@@ -58,7 +58,6 @@ from world.magic.types.technique_power import (
 )
 
 if TYPE_CHECKING:
-    from world.conditions.models import ConditionTemplate
     from world.magic.models.techniques import (
         AbstractAppliedCondition,
         AbstractDamageProfile,
@@ -82,78 +81,17 @@ _HARD_CONTROL_FUNCTIONS = frozenset(
     {TechniqueFunction.HOLD, TechniqueFunction.FEAR, TechniqueFunction.DISTRACTION}
 )
 
-#: The synthetic "reference attack" profile used by the generic-modifier SL-shift
-#: valuator (#3279 Task 2) to measure how much a non-team-lane
-#: ``ConditionModifierEffect`` moves a nominal attack's expected damage when its
-#: ``roll_modifier`` shifts by the condition's expected severity. A fixed synthetic
-#: profile (rather than the technique's own, possibly non-attack, payload) avoids
-#: circularity — see ``_reference_attack_de``.
-_MITIGATION_REFERENCE_BASE_DAMAGE = 5
-_MITIGATION_REFERENCE_MULTIPLIER = Decimal("1.00")
-_MITIGATION_REFERENCE_PER_EXTRA_SL = 2
-_MITIGATION_REFERENCE_MIN_SL = 1
+#: The synthetic reference-attack profile constants that back ``_reference_attack_de``
+#: now live in ``de_valuation.py`` (#3390) — see the alias block below.
 
 
-@dataclass(frozen=True, slots=True)
-class _MatchupBand:
-    """One outcome's share of the 1-100 roll space (#3279).
-
-    Local stand-in for ``web.admin.tuning.checks_analytics.OutcomeBand`` — only
-    the two fields this evaluator reads (``success_level``, ``probability``).
-    """
-
-    success_level: int
-    probability: float
-
-
-def _matchup_bands(context: EvalContext) -> list[_MatchupBand]:
-    """Replicate ``checks_analytics.compute_matchup`` locally (see module docstring).
-
-    Derives the roller-minus-target rank difference exactly as
-    ``world.checks.services._compute_check_breakdown`` does (a missing rank —
-    below every ``CheckRank.min_points`` — contributes 0), selects the nearest
-    seeded ``ResultChart`` for that difference, then walks every possible roll
-    1..100 applying the same clamp the check engine applies
-    (``effective = max(1, min(100, roll + roll_modifier))``) and tallies which
-    ``ResultChartOutcome`` row each lands in. Returns ``[]`` when no
-    ``ResultChart`` has been seeded at all (no rank difference to fall back to).
-    """
-    from world.traits.models import CheckRank, ResultChart, ResultChartOutcome  # noqa: PLC0415
-
-    roller_rank = CheckRank.get_rank_for_points(context.roller_points)
-    target_rank = CheckRank.get_rank_for_points(context.target_difficulty)
-    rank_difference = (roller_rank.rank if roller_rank else 0) - (
-        target_rank.rank if target_rank else 0
-    )
-
-    chart = ResultChart.get_chart_for_difference(rank_difference)
-    if chart is None:
-        return []
-
-    outcome_rows = list(
-        ResultChartOutcome.objects.filter(chart=chart)
-        .select_related("outcome")
-        .order_by("min_roll")
-    )
-
-    counts: dict[int, int] = {}
-    levels: dict[int, int] = {}
-    for roll in range(1, 101):
-        effective = max(1, min(100, roll + context.roll_modifier))
-        matched = next(
-            (row for row in outcome_rows if row.min_roll <= effective <= row.max_roll),
-            None,
-        )
-        if matched is None:
-            continue
-        key = matched.outcome_id
-        counts[key] = counts.get(key, 0) + 1
-        levels[key] = matched.outcome.success_level
-
-    return [
-        _MatchupBand(success_level=levels[key], probability=count / 100.0)
-        for key, count in counts.items()
-    ]
+#: Aliases onto the shared core (#3390) — ``de_valuation.py`` now owns these bodies
+#: verbatim; kept under the pre-#3390 private names here so every existing call site
+#: in this module (and every existing test importing this module) stays byte-identical.
+_MatchupBand = de_valuation.MatchupBand
+_matchup_bands = de_valuation.matchup_bands
+_reference_attack_de = de_valuation.reference_attack_de
+_cached_damage_multiplier = de_valuation.cached_damage_multiplier
 
 
 def _amplified_power_delta(context: EvalContext) -> int:
@@ -175,21 +113,6 @@ def _amplified_power_delta(context: EvalContext) -> int:
         specialty_power_contribution(context.thread_level, _ANCHOR_SPECIALTY_MULTIPLIER_TENTHS)
     )
     return blend + specialty
-
-
-def _cached_damage_multiplier(success_level: int, cache: dict[int, Decimal]) -> Decimal:
-    """DB-backed ``get_damage_multiplier`` lookup, memoized per evaluation run.
-
-    ``cache`` is owned by the caller (fresh per ``evaluate_all`` run, or per
-    standalone ``evaluate_technique`` call) so a staff tuning edit to
-    ``DamageSuccessLevelMultiplier`` is always picked up by the NEXT run —
-    never stale across runs, only de-duplicated within one.
-    """
-    if success_level not in cache:
-        from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
-
-        cache[success_level] = get_damage_multiplier(success_level)
-    return cache[success_level]
 
 
 def _damage_row_valuation(
@@ -279,23 +202,8 @@ def _expected_severity(
     return total
 
 
-def _is_team_lane_condition(condition: ConditionTemplate) -> bool:
-    """True if *condition* rides the bounded team-damage-percent lane (#2643).
-
-    Byte-identical detection to ``world.magic.services.condition_application``'s
-    own check — a condition whose template carries a
-    ``ConditionModifierEffect(modifier_target__name="team_damage_percent",
-    scales_with_severity=True)`` row prices its severity via
-    ``priced_percent_severity`` instead of its own authored formula.
-    """
-    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
-    from world.mechanics.constants import TEAM_DAMAGE_PERCENT_TARGET_NAME  # noqa: PLC0415
-
-    return ConditionModifierEffect.objects.filter(
-        condition=condition,
-        modifier_target__name=TEAM_DAMAGE_PERCENT_TARGET_NAME,
-        scales_with_severity=True,
-    ).exists()
+#: Alias onto the shared core (#3390) — see ``de_valuation.is_team_lane_condition``.
+_is_team_lane_condition = de_valuation.is_team_lane_condition
 
 
 def _team_lane_percent(power: int, context: EvalContext) -> int:
@@ -337,35 +245,6 @@ def _team_lane_valuation(
     )
 
 
-def _reference_attack_de(
-    bands: list[_MatchupBand],
-    *,
-    effective_power: int,
-    multiplier_cache: dict[int, Decimal],
-) -> float:
-    """DE of the synthetic nominal reference-attack profile at *bands* (#3279 Task 2).
-
-    ``base_damage=5, multiplier=1, per_extra_sl=2, min_sl=1`` — the same
-    ``_scale_by_power_and_sl``-shaped formula the damage valuator uses, inlined
-    here (rather than a real ``TechniqueDamageProfile`` row) so the generic-
-    modifier valuator can measure a roll_modifier shift's DE impact without
-    depending on the technique's own (possibly non-attack) payload.
-    """
-    expected = 0.0
-    for band in bands:
-        if band.success_level < _MITIGATION_REFERENCE_MIN_SL:
-            continue
-        budget = (
-            _MITIGATION_REFERENCE_BASE_DAMAGE
-            + int(_MITIGATION_REFERENCE_MULTIPLIER * effective_power)
-            + _MITIGATION_REFERENCE_PER_EXTRA_SL
-            * max(0, band.success_level - _MITIGATION_REFERENCE_MIN_SL)
-        )
-        multiplier = _cached_damage_multiplier(band.success_level, multiplier_cache)
-        expected += band.probability * float(budget) * float(multiplier)
-    return expected
-
-
 def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation params
     row: AbstractAppliedCondition,
     *,
@@ -388,16 +267,15 @@ def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
     Returns ``None`` when *row*'s condition carries no (non-team-lane)
     ``ConditionModifierEffect`` row — the caller falls through to the mitigation
     parse (SELF/ALLY) or leaves the row for the caller's own fallback (ENEMY).
-    """
-    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
-    from world.mechanics.constants import TEAM_DAMAGE_PERCENT_TARGET_NAME  # noqa: PLC0415
 
-    effects = list(
-        ConditionModifierEffect.objects.filter(condition=row.condition).exclude(
-            modifier_target__name=TEAM_DAMAGE_PERCENT_TARGET_NAME
-        )
-    )
-    if not effects:
+    The row-independent per-severity shift arithmetic is
+    ``de_valuation.modifier_effect_shift`` (#3390); an upfront probe call detects
+    "no qualifying effects at all" (independent of which bands happen to clear
+    ``row.minimum_success_level``) so a condition with effects but only
+    below-minimum bands still prices at shift=0 rather than falling through, matching
+    pre-#3390 behavior exactly.
+    """
+    if de_valuation.modifier_effect_shift(row.condition, severity=0) is None:
         return None
 
     expected_shift = 0.0
@@ -405,11 +283,8 @@ def _generic_modifier_valuation(  # noqa: PLR0913 - cohesive per-row valuation p
         if band.success_level < row.minimum_success_level:
             continue
         severity = row.compute_severity(effective_power=power, success_level=band.success_level)
-        total = sum(
-            (effect.value * severity if effect.scales_with_severity else effect.value)
-            for effect in effects
-        )
-        expected_shift += band.probability * total
+        shift = de_valuation.modifier_effect_shift(row.condition, severity=severity)
+        expected_shift += band.probability * (shift or 0.0)
 
     shifted_roll_modifier = context.roll_modifier + round(expected_shift)
     shifted_context = replace(context, roll_modifier=shifted_roll_modifier)
@@ -457,20 +332,16 @@ def _dot_valuation(
     condition template (stage-specific DoT rows are not walked — a deliberate
     best-guess simplification; most authored DoT lives at the condition level).
     Returns ``None`` when the condition carries no such row.
-    """
-    from world.conditions.models import ConditionDamageOverTime  # noqa: PLC0415
 
-    dot_rows = list(ConditionDamageOverTime.objects.filter(condition=row.condition))
-    if not dot_rows:
+    Row-independent arithmetic delegates to ``de_valuation.dot_per_round`` (#3390).
+    """
+    expected_severity = _expected_severity(row, power=power, bands=bands)
+    per_round = de_valuation.dot_per_round(
+        row.condition, severity=expected_severity, stack_count=row.stack_count
+    )
+    if per_round is None:
         return None
 
-    expected_severity = _expected_severity(row, power=power, bands=bands)
-    per_round = sum(
-        dot.base_damage
-        * (expected_severity if dot.scales_with_severity else 1)
-        * (row.stack_count if dot.scales_with_stacks else 1)
-        for dot in dot_rows
-    )
     value = per_round * duration
     return PayloadValuation(
         kind="debuff",
@@ -496,21 +367,16 @@ def _mitigation_valuation(
     reduction can't logically mitigate more than the reference hit itself would
     have dealt). Returns ``None`` when the condition's protective family (if any)
     isn't a recognized MODIFY_PAYLOAD shape — the caller falls back to UNPRICEABLE.
+
+    Row-independent arithmetic delegates to ``de_valuation.mitigation_value`` (#3390) —
+    THE regression tripwire: ``test_defend_content_parses_to_multiply_half_regression``
+    and ``test_defend_content_values_as_50_percent_mitigation`` must still pass
+    byte-identically after this delegation.
     """
-    from world.magic.services import targeting  # noqa: PLC0415
-
-    magnitude = targeting.protective_magnitude(row.condition)
-    if magnitude is None:
+    result = de_valuation.mitigation_value(row.condition, duration=duration, reference=reference)
+    if result is None:
         return None
-
-    if magnitude.mode == targeting.PROTECTIVE_MAGNITUDE_MULTIPLY:
-        value = (1 - magnitude.factor) * reference.incoming_dpr * duration
-        detail = f"(1 - {magnitude.factor}) x incoming_dpr x {duration:.2f} expected rounds"
-    else:
-        cap = reference.incoming_dpr * duration
-        raw = magnitude.amount * duration
-        value = min(raw, cap) if cap > 0 else raw
-        detail = f"{magnitude.amount} x {duration:.2f} expected rounds, capped at {cap:.2f}"
+    value, detail = result
 
     return PayloadValuation(
         kind="mitigation",
@@ -889,41 +755,16 @@ def evaluate_all_with_reference(
     ``ReferenceFrame`` the two-pass bootstrap computed, for the Techniques tuning
     panel's "Reference DPR" line (`web.admin.tuning.technique_analytics`) - the only
     consumer of the reference frame outside this module.
+
+    As of #3390, pass 1's bootstrap is extracted into
+    ``de_valuation.compute_reference_frame`` (shared by the standalone condition and
+    capability evaluators, so all three instruments anchor on the exact same median) -
+    this function is now a thin wrapper: call that, then pass 2 as before.
     """
+    reference = de_valuation.compute_reference_frame(context)
+
     multiplier_cache: dict[int, Decimal] = {}
     bands = _matchup_bands(context)
-
-    attack_techniques = (
-        Technique.objects.filter(damage_profiles__isnull=False)
-        .distinct()
-        .select_related("gift", "effect_type")
-    )
-    placeholder_reference = ReferenceFrame(
-        outgoing_dpr=0.0, incoming_dpr=0.0, source_label="pending"
-    )
-    baseline_des = [
-        evaluate_technique(
-            technique,
-            context,
-            placeholder_reference,
-            _multiplier_cache=multiplier_cache,
-            _bands=bands,
-        ).baseline_de
-        for technique in attack_techniques
-    ]
-
-    if baseline_des:
-        median = statistics.median(baseline_des)
-        reference = ReferenceFrame(
-            outgoing_dpr=median,
-            incoming_dpr=median,
-            source_label="median-attack estimate",
-        )
-    else:
-        reference = ReferenceFrame(
-            outgoing_dpr=0.0, incoming_dpr=0.0, source_label="no attack techniques"
-        )
-
     all_techniques = Technique.objects.all().select_related("gift", "effect_type")
     reports = [
         evaluate_technique(

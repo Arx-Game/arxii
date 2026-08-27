@@ -2245,6 +2245,19 @@ All other bounds (per-healer-once, never-to-full fraction, costs, check roll,
 `TechniqueTreatment` rows. Draft workbench: `TechniqueDraftTreatment` +
 `add_draft_treatment` / `remove_draft_treatment` / `draft_to_design` conversion.
 
+**Power leg (#3391) [BUILT & WIRED]:** `TreatmentTemplate.mend_intensity_multiplier`
+(`DecimalField`, default 0) scales the mend amount by the caster's effective intensity, so a
+stronger cast heals more. `apply_technique_treatments` gained a required `eff_intensity: int`
+kwarg, forwarded to `perform_treatment` as `power_intensity` (default 0 for the mundane
+`treat_condition` caller, which has no power concept). Inside `perform_treatment`, once
+`_map_outcome_to_mend` returns a nonzero base (a failed/unmended-tier outcome still mends 0
+regardless of power), `mend_amount += int(treatment.mend_intensity_multiplier *
+power_intensity)` — strictly before `mend_wound()`, whose never-to-full fraction cap and
+`max_health` clamp (ADR-0156) remain the final, untouched word on what actually lands. At the
+field's default 0 (every pre-#3391 row), the added term is exactly 0 — byte-identical to
+before. Dispel's sibling power leg is `TechniqueRemovedCondition.cure_power_multiplier` — see
+"Dispel / Cleanse" in `world/magic/CLAUDE.md`.
+
 ### Effect Palette (#1584) [BUILT & PROVEN]
 
 Nine castable effects seeded idempotently by `ensure_effect_palette_content()`

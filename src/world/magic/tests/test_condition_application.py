@@ -397,6 +397,7 @@ class RemoveTechniqueConditionsTest(TestCase):
         result = remove_technique_conditions(
             technique=self.technique,
             success_level=2,
+            eff_intensity=5,
             targets_by_kind={},
             source_character=self.caster_od,
         )
@@ -422,6 +423,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             result = remove_technique_conditions(
                 technique=self.technique,
                 success_level=2,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
                 source_character=self.caster_od,
             )
@@ -448,6 +450,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             result = remove_technique_conditions(
                 technique=self.technique,
                 success_level=1,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
                 source_character=self.caster_od,
             )
@@ -476,6 +479,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             result = remove_technique_conditions(
                 technique=self.technique,
                 success_level=1,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
                 source_character=self.caster_od,
             )
@@ -516,6 +520,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             result = remove_technique_conditions(
                 technique=self.technique,
                 success_level=1,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
                 source_character=self.caster_od,
             )
@@ -558,6 +563,7 @@ class RemoveTechniqueConditionsTest(TestCase):
             result = remove_technique_conditions(
                 technique=self.technique,
                 success_level=1,
+                eff_intensity=5,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
                 source_character=self.caster_od,
             )
@@ -589,6 +595,155 @@ class RemoveTechniqueConditionsTest(TestCase):
             result = remove_technique_conditions(
                 technique=self.technique,
                 success_level=1,
+                eff_intensity=5,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].success)
+        mock_check.assert_not_called()
+
+    def test_cure_power_multiplier_default_is_power_invariant(self) -> None:
+        """cure_power_multiplier=0 (the field default) — extra_modifiers is 0 regardless
+        of eff_intensity, matching pre-#3391 (no extra_modifiers kwarg at all) exactly.
+        """
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cure_check = CheckTypeFactory()
+        cond = ConditionTemplateFactory(
+            name="PowerInvariantDispel",
+            can_be_dispelled=True,
+            cure_check_type=cure_check,
+            cure_difficulty=15,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        fake_result = SimpleNamespace(success_level=2)
+        for eff_intensity in (0, 10, 100):
+            with self.subTest(eff_intensity=eff_intensity):
+                with (
+                    patch(
+                        "world.magic.services.condition_application.perform_check_with_modifiers",
+                        return_value=fake_result,
+                    ) as mock_check,
+                    patch("world.magic.services.condition_application.remove_condition"),
+                    patch(
+                        "world.magic.services.condition_application.get_condition_instance"
+                    ) as mock_get,
+                ):
+                    mock_get.return_value = object()
+                    remove_technique_conditions(
+                        technique=self.technique,
+                        success_level=1,
+                        eff_intensity=eff_intensity,
+                        targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                        source_character=self.caster_od,
+                    )
+                self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], 0)
+
+    def test_cure_power_multiplier_raises_extra_modifiers(self) -> None:
+        """A nonzero cure_power_multiplier scales extra_modifiers by eff_intensity."""
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cure_check = CheckTypeFactory()
+        cond = ConditionTemplateFactory(
+            name="PowerScaledDispel",
+            can_be_dispelled=True,
+            cure_check_type=cure_check,
+            cure_difficulty=15,
+        )
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+            cure_power_multiplier=Decimal(2),
+        )
+        fake_result = SimpleNamespace(success_level=2)
+        with (
+            patch(
+                "world.magic.services.condition_application.perform_check_with_modifiers",
+                return_value=fake_result,
+            ) as mock_check,
+            patch("world.magic.services.condition_application.remove_condition"),
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()
+            remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                eff_intensity=10,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], 20)
+
+    def test_can_be_dispelled_false_unaffected_by_power(self) -> None:
+        """Power never overrides the can_be_dispelled hard gate (Decision 2)."""
+        from unittest.mock import patch
+
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cond = ConditionTemplateFactory(name="PlotLockedByPower", can_be_dispelled=False)
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+            cure_power_multiplier=Decimal(99),
+        )
+        with (
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()  # condition is present
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                eff_intensity=1000,
+                targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
+                source_character=self.caster_od,
+            )
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result[0].success)
+        self.assertEqual(result[0].skipped_reason, "not_dispellable")
+        mock_remove.assert_not_called()
+
+    def test_null_cure_check_unaffected_by_power(self) -> None:
+        """A null cure_check_type keeps removing unconditionally, even with power set
+        and a high eff_intensity — power scaling only ever modifies a real cure check.
+        """
+        from unittest.mock import patch
+
+        from world.magic.services.condition_application import remove_technique_conditions
+
+        cond = ConditionTemplateFactory(name="UncontestedDispelPower", can_be_dispelled=True)
+        TechniqueRemovedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ALLY,
+            cure_power_multiplier=Decimal(99),
+        )
+        with (
+            patch(
+                "world.magic.services.condition_application.perform_check_with_modifiers"
+            ) as mock_check,
+            patch("world.magic.services.condition_application.remove_condition") as mock_remove,
+            patch("world.magic.services.condition_application.get_condition_instance") as mock_get,
+        ):
+            mock_get.return_value = object()
+            mock_remove.return_value = True
+            result = remove_technique_conditions(
+                technique=self.technique,
+                success_level=1,
+                eff_intensity=1000,
                 targets_by_kind={ConditionTargetKind.ALLY: [self.caster_od]},
                 source_character=self.caster_od,
             )
