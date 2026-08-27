@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0174_material_economy_schema_rename"),
-    ]
+    dependencies = [("arxii", "0176_alter_boon_kind")]
 
     operations = [
         migrations.AddField(

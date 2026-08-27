@@ -200,7 +200,7 @@ opted into lethal consequences (ADR-0233 amends ADR-0023's scope note for this f
 path: FINE/HUMILIATION release outright (`apply_humiliation` — a deed-prestige hit,
 clamped at zero, persisted onto `JusticeCase.humiliation_prestige_hit`; NO prose
 beyond neutral procedural strings — Dan authors the real humiliation copy
-personally). **Humiliation is two-layered (#2378 follow-up, ADR-0235, 2026-08-27
+personally). **Humiliation is two-layered (#2378 follow-up, ADR-0236, 2026-08-27
 design call):** a PERMANENT physical brand (`mint_humiliation_brand` — a
 documented no-op seam; the brand itself is scar substrate, TehomCD's domain, wired
 here when the scar system exposes a minting API) atop a TEMPORARY reputational
@@ -235,7 +235,7 @@ exact stored `humiliation_prestige_hit` for every TRIED HUMILIATION case whose
 (idempotent — a restored or never-debited case never matches again). This reads
 like the automatic-gain shape ADR-0081 forbids, but isn't one: it reverses a loss
 `apply_humiliation` itself inflicted automatically, closing a debt the system
-created against itself (ADR-0235). `_sweep_terminals` carries out (or voids) every
+created against itself (ADR-0236). `_sweep_terminals` carries out (or voids) every
 terminal sentence whose rescue window has closed — a rescue or an escape (captivity
 no longer HELD by sweep time) voids it (`notify_verdict_safely(reason=VOIDED)`,
 never the CARRIED_OUT copy); otherwise `_carry_out_execution` re-judges the lethal
@@ -278,7 +278,7 @@ naming only the sentence kind, never humiliation specifics: there is no narrativ
 data on `JusticeCase` to leak).
 
 **Verdict-notification audience and records permanence, ratified (#2378 follow-up,
-ADR-0235):** `notify_verdict`'s existing reachable audience (accused + exculpatory
+ADR-0236):** `notify_verdict`'s existing reachable audience (accused + exculpatory
 submitters, direct narrative message) plus the area-scoped public record
 (`active_public_marks`, the wanted board, the `tidings` VERDICT item) is the
 INTENDED final shape — accusers/victims were never meant to get a direct push
@@ -329,7 +329,7 @@ slice itself (all #2378): **arena/trial-by-combat mechanics** — `ARENA_TRIAL` 
 seeded but INERT (substituted for `BRIG_TERM` at consult time) pending TehomCD's combat
 substrate; **magical-detection wiring** for `is_magically_concealed` (TehomCD, seam
 above); **the humiliation brand itself** — `mint_humiliation_brand` is a documented
-no-op seam pending TehomCD's scar-minting API (#2378 follow-up, ADR-0235); **realm
+no-op seam pending TehomCD's scar-minting API (#2378 follow-up, ADR-0236); **realm
 sentencing-ladder content, execution-method prose, and every PLACEHOLDER copy string
 in the sentencing paths above** (lore/Apostate pass); **humiliation prose
 specifically** stays Apostate-authored only — the mechanics hooks (`apply_humiliation`,

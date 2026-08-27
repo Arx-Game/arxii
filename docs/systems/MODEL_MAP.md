@@ -1931,6 +1931,8 @@
   - target_secret -> secrets.Secret [FK] (nullable)
   - target_persona -> scenes.Persona [FK] (nullable)
   - target_persona_linked -> scenes.Persona [FK] (nullable)
+  - target_item_template -> items.ItemTemplate [FK] (nullable)
+  - target_item_instance -> items.ItemInstance [FK] (nullable)
 **Pointed to by:**
   - pool_entries <- assets.CluePoolEntry
   - held_by <- clues.CharacterClue
@@ -1999,6 +2001,8 @@
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - art -> evennia_extensions.Media [FK] (nullable)
+  - subject_item_template -> items.ItemTemplate [FK] (nullable)
+  - subject_item_instance -> items.ItemInstance [FK] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
   - consequence_effects <- checks.ConsequenceEffect
@@ -4322,6 +4326,8 @@
 **Pointed to by:**
   - building_permit_details <- buildings.BuildingPermitDetails
   - placed_as_decoration <- buildings.RoomDecoration
+  - clues_about <- clues.Clue
+  - codex_entries_about <- codex.CodexEntry
   - currency_instrument <- currency.CurrencyInstrumentDetails
   - favor_token <- currency.FavorTokenDetails
   - bequests <- estates.Bequest
@@ -4356,6 +4362,7 @@
   - reclamation_claims <- items.ReclamationClaim
   - crime_evidence <- justice.CrimeEvidence
   - project_contributions <- projects.Contribution
+  - secrets_about <- secrets.Secret
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -4390,7 +4397,9 @@
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
   - furniture_decoration_kinds <- buildings.DecorationKind
+  - clues_about <- clues.Clue
   - clue_triggers <- clues.ItemClueTrigger
+  - codex_entries_about <- codex.CodexEntry
   - class_level_item_requirements <- progression.ItemRequirement
   - ritual_requirements <- magic.RitualComponentRequirement
   - technique_grants <- magic.TechniqueGrant
@@ -4404,6 +4413,7 @@
   - garment_mitigations <- items.GarmentMitigation
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
+  - secrets_about <- secrets.Secret
 
 ### ItemTemplateAppearanceEffect
 **Foreign Keys:**
@@ -7923,6 +7933,7 @@
 **Foreign Keys:**
   - action_request -> scenes.SceneActionRequest [OneToOne]
   - item_instance -> items.ItemInstance [FK] (nullable)
+  - material_category -> items.MaterialCategory [FK] (nullable)
 **Pointed to by:**
   - affection_shift <- relationships.AffectionShift
 
@@ -8408,6 +8419,8 @@
   - legend_deed -> societies.LegendEntry [FK] (nullable)
   - mission_deed -> missions.MissionDeedRecord [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - subject_item_template -> items.ItemTemplate [FK] (nullable)
+  - subject_item_instance -> items.ItemInstance [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
   - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**

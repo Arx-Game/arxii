@@ -1,4 +1,4 @@
-# ADR-0235: Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire
+# ADR-0236: Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire
 
 **Status:** accepted (2026-08-27, #2378 follow-up design call)
 

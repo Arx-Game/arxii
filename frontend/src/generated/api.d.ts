@@ -168,7 +168,7 @@ export interface paths {
     /** @description ViewSet for scene action requests with consent flow. */
     get: operations['action_requests_list'];
     put?: never;
-    /** @description Create a new action request. */
+    /** @description Normally returns 201 with the created action request. A well-formed MATERIAL boon ask naming a category the target's bucket is empty of is instead honestly refused with 200 `{boon_refused: true, detail: ...}` — no row is created, no error occurred (#2540 slice 3). */
     post: operations['action_requests_create'];
     delete?: never;
     options?: never;
@@ -228,13 +228,27 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Boon money-sum options against a prospective target (#2540 ruling display seam).
+     * @description Boon ask options against a prospective target (#2540 ruling display seam).
      *
-     *     Returns each ``BoonSumTier`` with the concrete coppers it means against THIS
-     *     target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
+     *     ``sum_tiers``: each ``BoonSumTier`` with the concrete coppers it means against
+     *     THIS target — the ask UI renders 'Minor (50g)' / 'Fair (200g)' / 'Great (500g)'.
      *     An empty list means the target presents no money-boon option at all (a
      *     penniless target — the option never shows, so 'no because I can't' never
      *     happens). The OOC reveal of these values is accepted per the ruling.
+     *
+     *     ``material_categories`` (#2540 slice 3): the STATIC public ``MaterialCategory``
+     *     list, ``[{id, name}]`` — deliberately NEVER filtered by this target's actual
+     *     holdings (that would leak wealth OOC); an ask against an empty bucket is
+     *     instead honestly refused at request-creation time (``BoonUnavailable``). No
+     *     computed value accompanies these — material asks show tier LABELS only.
+     *
+     *     ``pointer_items`` (#2540 slice 3, 2026-08-27 exact-pointer ruling): the
+     *     CALLER's (``initiator_persona``'s) pointer-known items relevant to THIS
+     *     target — held by them, or sitting in a vault they can withdraw from —
+     *     ``[{item_instance_id, name, source: "held"|"vault"}]``. Computed from the
+     *     caller's own pointers only; requires ``initiator_persona`` to be one of the
+     *     requesting account's own personas (mirrors ``castable_techniques``'
+     *     ownership gate — this reveals what a character privately knows).
      */
     get: operations['action_requests_boon_options_retrieve'];
     put?: never;
@@ -23937,17 +23951,20 @@ export interface components {
      *     * `held_item` - A held item
      *     * `vault_item` - A vault item
      *     * `deed` - A deed
+     *     * `material` - Material
      * @enum {string}
      */
-    BoonAskKindEnum: 'money' | 'held_item' | 'vault_item' | 'deed';
+    BoonAskKindEnum: 'money' | 'held_item' | 'vault_item' | 'deed' | 'material';
     /**
      * @description The structured-ask payload on a `boon` dispatch (#2540).
      *
      *     MONEY asks carry a ``sum_tier`` (never a raw amount — the concrete coppers derive
      *     from the target's purse server-side); item asks name an ``item_instance_id``; DEED
-     *     asks carry the deed text. Eligibility itself is validated by
-     *     ``validate_boon_ask`` inside ``create_action_request`` — this serializer only
-     *     shapes the payload.
+     *     asks carry the deed text; MATERIAL asks (#2540 slice 3) carry both a
+     *     ``material_category_id`` and a ``sum_tier`` (reusing money's MINOR/FAIR/GREAT
+     *     labels — no computed value is ever shown, unlike money's frozen coppers).
+     *     Eligibility itself is validated by ``validate_boon_ask`` inside
+     *     ``create_action_request`` — this serializer only shapes the payload.
      */
     BoonAskRequest: {
       kind: components['schemas']['BoonAskKindEnum'];
@@ -23956,10 +23973,46 @@ export interface components {
       item_instance_id?: number | null;
       /** @default  */
       deed_text: string;
+      material_category_id?: number | null;
     };
-    /** @description Schema shape for the boon-options read (empty list = no money option shown). */
+    /**
+     * @description One entry of the STATIC public material-category picker (#2540 slice 3).
+     *
+     *     Deliberately NEVER filtered by the target's actual holdings (that would leak
+     *     wealth OOC — the controller ruling accepts the honest-refusal reveal at ask time
+     *     instead, see ``BoonUnavailable``).
+     */
+    BoonMaterialCategory: {
+      id: number;
+      name: string;
+    };
+    /** @description Schema shape for the boon-options read (empty ``sum_tiers`` = no money option shown). */
     BoonOptions: {
       sum_tiers: components['schemas']['BoonSumOption'][];
+      material_categories: components['schemas']['BoonMaterialCategory'][];
+      pointer_items: components['schemas']['BoonPointerItem'][];
+    };
+    /**
+     * @description One of the asker's pointer-known items relevant to a target (#2540 slice 3).
+     *
+     *     Computed server-side from the asker's OWN pointers (clues/codex/secrets) — NEVER
+     *     a browse of the target's actual holdings; ``source`` distinguishes an item the
+     *     target physically holds from one sitting in a vault the target can withdraw from.
+     */
+    BoonPointerItem: {
+      item_instance_id: number;
+      name: string;
+      source: components['schemas']['BoonPointerItemSourceEnum'];
+    };
+    /**
+     * @description * `held` - held
+     *     * `vault` - vault
+     * @enum {string}
+     */
+    BoonPointerItemSourceEnum: 'held' | 'vault';
+    BoonRefusalResponse: {
+      boon_refused: boolean;
+      detail: string;
     };
     /** @description One money-sum option against a specific target (#2540 — 'Fair (200g)'). */
     BoonSumOption: {
@@ -38593,7 +38646,7 @@ export interface components {
        *     * `PENANCE` - Atonement resonance conversion
        *     * `FALL_CONVERSION` - Fall/Redemption conversion
        */
-      readonly source: components['schemas']['SourceEnum'];
+      readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
       readonly granted_at: string;
       readonly source_room_profile: number | null;
@@ -38601,6 +38654,50 @@ export interface components {
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
     };
+    /**
+     * @description * `POSE_ENDORSEMENT` - Pose endorsement
+     *     * `SCENE_ENTRY` - Scene entry endorsement
+     *     * `ROOM_RESIDENCE` - Room residence trickle
+     *     * `OUTFIT_TRICKLE` - Outfit trickle
+     *     * `STAFF_GRANT` - Staff grant
+     *     * `SANCTUM_WEAVING` - Sanctum weaving payout
+     *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
+     *     * `PROJECT_CONTRIBUTION` - Project contribution payout
+     *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
+     *     * `ENTRY_FLOURISH` - Entry flourishing
+     *     * `DRAMATIC_MOMENT` - Dramatic moment
+     *     * `STYLE_PRESENTATION` - Style presentation
+     *     * `MISSION_REWARD` - Mission reward
+     *     * `MISSION_REPORT` - Mission report style
+     *     * `STAKE_REWARD` - Stake reward
+     *     * `DISTINCTION` - Distinction
+     *     * `COMBO_DISCOVERY` - Combo discovery
+     *     * `COMPROMISE` - Moral compromise
+     *     * `PENANCE` - Atonement resonance conversion
+     *     * `FALL_CONVERSION` - Fall/Redemption conversion
+     * @enum {string}
+     */
+    ResonanceGrantSourceEnum:
+      | 'POSE_ENDORSEMENT'
+      | 'SCENE_ENTRY'
+      | 'ROOM_RESIDENCE'
+      | 'OUTFIT_TRICKLE'
+      | 'STAFF_GRANT'
+      | 'SANCTUM_WEAVING'
+      | 'SANCTUM_OWNER_BONUS'
+      | 'PROJECT_CONTRIBUTION'
+      | 'SANCTUM_DISSOLUTION_RECOVERY'
+      | 'ENTRY_FLOURISH'
+      | 'DRAMATIC_MOMENT'
+      | 'STYLE_PRESENTATION'
+      | 'MISSION_REWARD'
+      | 'MISSION_REPORT'
+      | 'STAKE_REWARD'
+      | 'DISTINCTION'
+      | 'COMBO_DISCOVERY'
+      | 'COMPROMISE'
+      | 'PENANCE'
+      | 'FALL_CONVERSION';
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -39212,7 +39309,9 @@ export interface components {
        *
        *     The specified-up-front payload is what lets a piloted target gauge whether it's
        *     an easy "just no": kind, the sum tier + frozen coppers for money, the item's
-       *     display name, or the deed text.
+       *     display name, the deed text, or (MATERIAL, #2540 slice 3) the category name +
+       *     tier — ``amount`` stays 0 for MATERIAL, same as the other non-money kinds; no
+       *     computed value is ever shown for it (deliberate money asymmetry).
        */
       readonly boon: {
         [key: string]: unknown;
@@ -40009,50 +40108,6 @@ export interface components {
       readonly stage_description: string;
       readonly has_death_risk: boolean;
     };
-    /**
-     * @description * `POSE_ENDORSEMENT` - Pose endorsement
-     *     * `SCENE_ENTRY` - Scene entry endorsement
-     *     * `ROOM_RESIDENCE` - Room residence trickle
-     *     * `OUTFIT_TRICKLE` - Outfit trickle
-     *     * `STAFF_GRANT` - Staff grant
-     *     * `SANCTUM_WEAVING` - Sanctum weaving payout
-     *     * `SANCTUM_OWNER_BONUS` - Sanctum owner/member bonus
-     *     * `PROJECT_CONTRIBUTION` - Project contribution payout
-     *     * `SANCTUM_DISSOLUTION_RECOVERY` - Sanctum dissolution recovery
-     *     * `ENTRY_FLOURISH` - Entry flourishing
-     *     * `DRAMATIC_MOMENT` - Dramatic moment
-     *     * `STYLE_PRESENTATION` - Style presentation
-     *     * `MISSION_REWARD` - Mission reward
-     *     * `MISSION_REPORT` - Mission report style
-     *     * `STAKE_REWARD` - Stake reward
-     *     * `DISTINCTION` - Distinction
-     *     * `COMBO_DISCOVERY` - Combo discovery
-     *     * `COMPROMISE` - Moral compromise
-     *     * `PENANCE` - Atonement resonance conversion
-     *     * `FALL_CONVERSION` - Fall/Redemption conversion
-     * @enum {string}
-     */
-    SourceEnum:
-      | 'POSE_ENDORSEMENT'
-      | 'SCENE_ENTRY'
-      | 'ROOM_RESIDENCE'
-      | 'OUTFIT_TRICKLE'
-      | 'STAFF_GRANT'
-      | 'SANCTUM_WEAVING'
-      | 'SANCTUM_OWNER_BONUS'
-      | 'PROJECT_CONTRIBUTION'
-      | 'SANCTUM_DISSOLUTION_RECOVERY'
-      | 'ENTRY_FLOURISH'
-      | 'DRAMATIC_MOMENT'
-      | 'STYLE_PRESENTATION'
-      | 'MISSION_REWARD'
-      | 'MISSION_REPORT'
-      | 'STAKE_REWARD'
-      | 'DISTINCTION'
-      | 'COMBO_DISCOVERY'
-      | 'COMPROMISE'
-      | 'PENANCE'
-      | 'FALL_CONVERSION';
     SpeakerQueue: {
       readonly id: number;
       /** @description Room the queue belongs to. */
@@ -43771,6 +43826,14 @@ export interface operations {
       };
     };
     responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoonRefusalResponse'];
+        };
+      };
       201: {
         headers: {
           [name: string]: unknown;
@@ -43832,6 +43895,7 @@ export interface operations {
   action_requests_boon_options_retrieve: {
     parameters: {
       query: {
+        initiator_persona: number;
         target_persona: number;
       };
       header?: never;

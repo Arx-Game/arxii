@@ -1445,9 +1445,15 @@ held captive to rescue, a character secret, or a masked identity); players acqui
 a collaborative **research project**.
 
 - **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
-  PERSONA_LINK + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is the
-  documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
-  FKs → `scenes.Persona`, required together. Also carries a `NaturalKeyMixin` `slug`
+  PERSONA_LINK / ITEM + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is
+  the documented multi-discriminator exception: `target_persona` + `target_persona_linked`, both
+  FKs → `scenes.Persona`, required together. ITEM (#2540 exact-pointer ruling) is a second such
+  exception: `target_item_template` (required, FK → `items.ItemTemplate`) + optional
+  `target_item_instance` (FK → `items.ItemInstance`, must match the template's instance when
+  both set) — template-only means "any of this kind", instance-pinned means "this exact one".
+  ITEM has no "already known"/AUTOMATIC-grant concept; the held `CharacterClue` row IS the
+  knowledge, read by `scenes.boon_services.character_has_item_pointer`. Also carries a
+  `NaturalKeyMixin` `slug`
   (#2451) and is a `CONTENT_MODELS` citizen — a `Clue` now exports/imports as
   lore-repo content, natural-keyed by slug), `CharacterClue` (held-clue, roster-scoped),
   `RoomClue` (search-anchored placement + `detect_difficulty` + `eligibility_rule` +
@@ -1498,7 +1504,11 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
 
 - **Models:** `Secret` (subject-anchored to a `CharacterSheet`, which **owns** it — single-owner,
   no shared/group rows; `level` 1–4 / `category` FK / `consequences` — each may be Unknown;
-  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution),
+  `provenance` ∈ GM / action / player-flavor; `author_persona` for OOC attribution;
+  `subject_item_template`/`subject_item_instance`, nullable FKs → `items.ItemTemplate`/
+  `ItemInstance` — #2540 exact-pointer ruling, an optional "this secret is about an item"
+  pointer, same shape as `Clue`'s ITEM target; dependency stays specific→general per
+  ADR-0010, `secrets` points items-ward, never the reverse),
   `SecretCategory` (staff-editable lookup; null category = Unknown), `SecretKnowledge`
   (roster-scoped held record with partial-knowledge layers — fact / `knows_category` /
   `knows_consequences`, monotonic; tracks *others* learning a secret),
@@ -2558,8 +2568,29 @@ action consent flow, and a three-mode non-combat round framework.
   `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
   cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`,
   `Boon` (#2540, `boon_models.py` — the payload of a structured social ask, 1:1 with its
-  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED), `amount`,
-  `item_instance`, `deed_text`, `fulfilled_at`. Slice 2 wired the full loop (`boon_services`):
+  `SceneActionRequest`: `kind` (`BoonKind`: MONEY/HELD_ITEM/VAULT_ITEM/DEED/MATERIAL), `amount`,
+  `item_instance`, `deed_text`, `fulfilled_at`, `material_category` (nullable FK →
+  `items.MaterialCategory`, MATERIAL asks only).
+  `character_has_item_pointer(*, sheet, item)` (`boon_services.py`) —
+  the exact-pointer predicate for a named-item ask: True when the roster entry holds a
+  discovered ITEM-target clue, a KNOWN codex entry, or known secret knowledge naming the
+  instance (or its template with no instance pinned) — see `ClueTargetKind.ITEM` and the
+  matching `CodexEntry`/`Secret` item-pointer FKs below. **Wired into `validate_boon_ask`
+  (2026-08-27 ruling, slice 3):** `_validate_held_item_ask`/`_validate_vault_item_ask` also
+  require `character_has_item_pointer(sheet=asker_sheet, item=item)` (`asker_sheet` threaded
+  from `create_action_request`'s `initiator_persona`) — a pointer-less ask on a valid,
+  target-held item id fails with a neutral message, never revealing whether the item exists.
+  `pointer_known_items_for_target(*, asker_sheet, target_persona)` is the boon-options display
+  seam: the asker's pointer-known items relevant to one target (held or vault-accessible),
+  batched from the asker's own pointers, never a browse of the target's holdings — surfaced as
+  `boon-options`' `pointer_items` (requires an `initiator_persona` query param owned by the
+  caller, since this reveals private knowledge). **Co-presence gate (2026-08-27 fix wave 3):**
+  returns `[]` (200, never an error) unless the asker and target currently share an active scene
+  (`_asker_and_target_share_an_active_scene`, reusing `interaction_services.get_active_scene`) —
+  `pointer_items` must not become a remote discovery surface for holder identity. Named-item ask
+  validation is unaffected; the action-dispatch flow itself does not enforce scene co-presence on
+  `target_persona` (verified, not fixed — see `world/scenes/CLAUDE.md`).
+  Slice 2 wired the full loop (`boon_services`):
   `BoonAsk` + `validate_boon_ask` (dial-1 ask-time eligibility — an ask the target could not
   grant never exists: penniless-target money, unheld item, empty deed rejected before any row).
   **Money asks are relative sum tiers (#2540 ruling): `BoonSumTier` MINOR/FAIR/GREAT *to the
@@ -2567,15 +2598,47 @@ action consent flow, and a three-mode non-combat round framework.
   `boon_sum_values` is the UI display seam (tier → concrete coppers, OOC reveal accepted) and
   the coppers freeze onto `Boon.amount` at ask time.** The `boon` action key on
   `BoonAction` (`actions/definitions/social.py`) + `ActionTemplate`/`boon`-consent-category seeds,
-  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money, the chosen tier IS the band,
-  fed into
+  `npc_boon_tier_shift` (the mandatory dial-2 NPC band — for money and material, the chosen tier
+  IS the band, fed into
   `resolved_base_difficulty(extra_tier_modifier=…)`; piloted defenders are never band-shifted),
   and the `boon` resolver (`register_resolver`) — fulfillment + the per-Boon stacking affection
   cost (`BOON_AFFECTION_COST`, PLACEHOLDER) fire on BOTH consent paths, never via `execute()`.
   Every kind fulfills: MONEY via `currency.transfer`, VAULT_ITEM via the org vault's audited
   withdraw (target as authority, asker as recipient), HELD_ITEM via a lean sheet-level
   hand-over — unequip → object move/dematerialize → holder switch → `OwnershipEvent(TRANSFERRED)`
-  snapshotting the scene's presented personas — and DEED RP-only)
+  snapshotting the scene's presented personas, MATERIAL via `world.items.gems.buckets`'
+  spend/credit pair (amount computed fresh AT FULFILLMENT — tier pct of the target's bucket,
+  min 1, never frozen at ask time like money) — and DEED RP-only.
+  **MATERIAL kind + honest unavailability (slice 3, #2540):** `BoonAsk.material_category_id` +
+  `sum_tier` (reuses money's tier labels; NEVER a computed value — deliberate money asymmetry).
+  The boon-options endpoint's `material_categories` is the STATIC public `MaterialCategory` list
+  (`[{id, name}]`), never filtered by the target's holdings (a filtered picker would leak wealth
+  OOC — the ruling accepts the honest-refusal boolean reveal at ask time instead).
+  `check_boon_availability`, called right after `validate_boon_ask`, raises `BoonUnavailable`
+  (distinct from `ValidationError`) when a well-formed MATERIAL ask names an empty bucket — for
+  BOTH NPC and piloted targets, before any request row exists (no roll, no consent burn, no
+  affection drain). `SceneActionRequestViewSet.create` maps `BoonUnavailable` to a 200
+  `{"boon_refused": true, "detail": ...}` (non-error UX; chosen over a 400 since the existing
+  payload-less-boon guard's 400 has no FE error surface today). **Explicit dispatch (recon trap
+  fix):** `validate_boon_ask`/`fulfill_boon` dispatch on `kind` through explicit per-kind tables
+  (`_BOON_ASK_VALIDATORS`/`_BOON_FULFILLERS`) — an unhandled kind raises `ValueError` loudly
+  instead of silently falling through to DEED's handling (the original if/elif chains' trap).
+  **Ask flavors (slice 3, #2540):** three sibling `ActionTemplate` singletons over the same
+  Boon payload — Con a Boon (`boon_con`, Con check), Charm a Boon (`boon_charm`, Seduction
+  check), Menace a Boon (`boon_menace`, Intimidation check, +1 tier like Seduce-harder-than-
+  Flirt) — join plain `boon` in `BOON_ACTION_KEYS` (the frozenset replacing the old single
+  `BOON_ACTION_KEY` everywhere: the server payload guard, the resolver registration loop, and
+  the FE `ActionPanel` gate). All four share the `boon` consent category and one resolver
+  registration loop — one opt-in, one fulfillment path; only the check type differs per
+  flavor (rejected: a `flavor` payload field selecting the check type at resolution time — the
+  check type belongs on the template, ADR-0235).
+  **Standing-gap audacity shift (slice 3, #2540):** `npc_boon_tier_shift` (dial 2's NPC band)
+  now sums the existing relative-cost band with `_rank_gap_shift`, one difficulty tier per
+  `RANK_GAP_TIER_BANDS` (PLACEHOLDER magnitudes) threshold crossed by how far the asker's
+  inverted `social_rank` sits below the target's — asking a much higher-standing NPC is
+  harder; punching down or asking an equal never adds a tier. NPC-only: a piloted target's own
+  `difficulty_choice` always rules (`action_services.py`'s piloted call site omits
+  `extra_tier_modifier` by design, per the July piloted-consent ruling). See ADR-0235.
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).

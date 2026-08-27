@@ -51,6 +51,8 @@ class TestClusterRegistry(TestCase):
                 "civic_hubs",
                 "counterplay",
                 "bank",
+                "command_center",
+                "brig",
                 "building_condition",
                 "property_grants",
                 "building_listings",
@@ -132,6 +134,52 @@ class TestClusterRegistry(TestCase):
         self.assertEqual(
             RoomFeatureKind.objects.filter(
                 service_strategy=RoomFeatureServiceStrategy.BANK
+            ).count(),
+            1,
+        )
+
+    def test_command_center_cluster_seeds_the_command_center_kind(self) -> None:
+        # 2026-08-27 final-review ruling (#2540): ensure_command_center_kind existed
+        # but was never registered in any production seed cluster — the mirror of
+        # the "bank" orphan-seed fix above, same deployment-blocker shape.
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.models import RoomFeatureKind
+
+        CLUSTER_SEEDERS["command_center"]()
+        self.assertTrue(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.COMMAND_CENTER
+            ).exists()
+        )
+        # Idempotent on re-run: no duplicate kind row.
+        CLUSTER_SEEDERS["command_center"]()
+        self.assertEqual(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.COMMAND_CENTER
+            ).count(),
+            1,
+        )
+
+    def test_brig_cluster_seeds_the_brig_kind(self) -> None:
+        # 2026-08-27 final-review ruling (#2540): ensure_brig_kind existed but was
+        # never registered in any production seed cluster — same orphan-seed fix
+        # shape as "bank"/"command_center" above.
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.models import RoomFeatureKind
+
+        CLUSTER_SEEDERS["brig"]()
+        self.assertTrue(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.BRIG
+            ).exists()
+        )
+        # Idempotent on re-run: no duplicate kind row (also proves ensure_ship_kind's
+        # side-effect BuildingKind creation and the allowed_building_kinds.add() are
+        # idempotent).
+        CLUSTER_SEEDERS["brig"]()
+        self.assertEqual(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.BRIG
             ).count(),
             1,
         )

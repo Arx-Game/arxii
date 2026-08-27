@@ -240,7 +240,8 @@ treat those names as hints to confirm, not gospel.
 - [0232 - The Arx I archive is gated on Arx II accounts, not a shared password](0232-arx1-archive-gated-on-arx-ii-accounts.md) (#3320)
 - [0233 - Sentences are enforced by a daily sweep, and exile rides the existing heat ladder](0233-sentences-are-swept-and-exile-rides-the-heat-ladder.md) (#2378; amends ADR-0023's scope note; humiliation model extended by 0235)
 - [0234 - Material economy renames stocks over duplicating them, keeps per-category stock, drives crafting via allowance, and sells only at collection time](0234-material-economy-generalizes-stocks-allowance-driven-draw-and-selling.md) (#2540 slice 2; extends ADR-0081, ADR-0150; related ADR-0008)
-- [0235 - Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire](0235-humiliation-brand-plus-fading-explanation-and-prestige.md) (#2378 follow-up; extends ADR-0233; related ADR-0081)
+- [0235 - Boon completion: knowledge-side item pointers, honest material refusal, sibling ask flavors, NPC-only standing-gap shift](0235-boon-completion-item-pointers-material-honesty-flavors-standing-gap.md) (#2540 slice 3; refines the visibility-=-eligibility tenet; extends ADR-0234)
+- [0236 - Humiliation is a permanent brand under a fading reputational layer; its verdict notice stays narrow; public records never expire](0236-humiliation-brand-plus-fading-explanation-and-prestige.md) (#2378 follow-up; extends ADR-0233; related ADR-0081)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -1,5 +1,33 @@
 # Crafting, Fashion & Economy
 
+## #2540 — all three slices complete pending content passes (2026-08-27)
+
+Distribution wiring (slice 1), the generalized material economy (slice 2), and Boon
+completion (slice 3, `scenes/CLAUDE.md` — item pointers, `MATERIAL` boon kind + honest
+unavailability, ask flavors, the standing-gap audacity shift; ADR-0235) are all built and
+tested. What remains is content/tuning, not code:
+
+- **Minister seam (#2239)** — the domain-cron `minister_bonus` passthrough on
+  `roll_gem_haul` stays schema-only; wiring an appointed Minister's Stewardship into the
+  improvement/production check is a separate future increment (see "Remaining domain-cron
+  sub-slices" below).
+- **Patronage-petition specialization hole** — the plain `Boon` template still rolls bare
+  `Persuasion` with no specialization (`seeds/social_actions.py`'s `("Boon", "Persuasion",
+  ...)` row); the #2540 spec ruled every boon ask should carry the closest thematic
+  specialization, and if none fits the "asking a patron/superior for something" flavor,
+  that's a flagged skill-list hole, not a force-fit (see
+  `feedback_persuasion_checks_carry_specialization`). Slice 3's three named flavors (Con /
+  Charm / Menace) each roll a composed CheckType that already carries a specialization
+  (e.g. Con = Persuasion + Manipulation spec); the plain `Boon` template is the one
+  remaining unaddressed case, and — per the originating spec review — this gap is still
+  **unflagged** in the skills-list audit. Filing that flag (not building a new
+  specialization) is the next actionable step.
+- **PLACEHOLDER magnitudes awaiting Apostate's tuning pass**: `BOON_AFFECTION_COST` (15),
+  `RANK_GAP_TIER_BANDS` (`((5, 1), (10, 2))`), `BOON_SUM_TIERS`' pcts/shifts, `BOON_HELD_ITEM_TIER_SHIFT`/
+  `BOON_DEED_TIER_SHIFT`, and the material economy's `MATERIALS_ALLOWANCE_PCT`/
+  `MATERIAL_SALE_RATE_PCT`/`MATERIAL_AUTO_SELL_THRESHOLD` — all functionally complete,
+  none tuned against real play data.
+
 ## Built (2026-08-26, #2540 slice 2 — personal + org material selling, Task 5)
 
 Closes the loop on the crafting draw: material value can now leave the economy as coppers on
