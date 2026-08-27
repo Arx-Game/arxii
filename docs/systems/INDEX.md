@@ -6180,6 +6180,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
   - `ThreatPoolEntry.requires_steady` (bool, default False, #2015) — skipped when the
     opponent is faltering; lets designers author "weakened" entries.
+  - `CombatOpponent.status` gains `OpponentStatus.REMOVED` (#3382) — a GM pull, distinct
+    from `DEFEATED`/`FLED`. `world.combat.services.remove_opponent(opponent)` reuses the
+    defeat teardown seam minus defeat consequences (no legend/loot/aftermath): breaks the
+    opponent's active `EngagementLock` (`LockBreakReason.REMOVED`), fizzles any
+    `PendingOpponentAttack` of its own via `_broadcast_windup_fizzled`, and re-checks
+    `_check_encounter_completion`/`_classify_encounter_outcome` the same way
+    `resolve_round`'s tail does — removing the last ACTIVE `ENEMY` opponent completes the
+    encounter as VICTORY. `CombatOpponent` rows are never hard-deleted (status flip only,
+    same historical-record invariant as a defeat). Surfaced by
+    `CombatEncounterViewSet.remove_opponent` (`opponent_id`, gated `IsEncounterGMOrStaff`),
+    `RemoveOpponentAction` (`actions/definitions/gm_combat.py`, key `remove_opponent`), and
+    telnet `encounter removenpc <opponent>` — symmetric with `add_opponent`/`remove_participant`.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.

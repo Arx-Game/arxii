@@ -206,6 +206,7 @@ from actions.definitions.gm_combat import (
     PauseEncounterAction,
     PreviewOpponentDefaultsAction,
     RemoveEncounterParticipantAction,
+    RemoveOpponentAction,
     ResolveEncounterRoundAction,
 )
 from actions.definitions.gm_props import StagePropAction, StagePropertyAction
@@ -770,6 +771,7 @@ _ALL_ACTIONS: list[Action] = [
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),
+    RemoveOpponentAction(),
     AddEncounterParticipantAction(),
     RemoveEncounterParticipantAction(),
     PauseEncounterAction(),

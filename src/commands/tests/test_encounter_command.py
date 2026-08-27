@@ -218,6 +218,23 @@ class CmdEncounterSubverbTests(TestCase):
             f"Expected usage error; got {messages}",
         )
 
+    @patch("actions.definitions.gm_combat.RemoveOpponentAction.run")
+    def test_removenpc_dispatches_opponent_id(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Opponent removed.")
+        messages = self._run("removenpc 9")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["opponent_id"], "9")
+        self.assertIn("Opponent removed.", messages)
+
+    def test_removenpc_requires_opponent(self) -> None:
+        messages = self._run("removenpc")
+        self.assertTrue(
+            any("Usage" in m or "opponent" in m.lower() for m in messages),
+            f"Expected usage error; got {messages}",
+        )
+
     @patch("actions.definitions.gm_combat.PauseEncounterAction.run")
     def test_pause_dispatches_action(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Encounter paused.")

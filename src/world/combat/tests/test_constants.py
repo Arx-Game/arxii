@@ -42,7 +42,7 @@ class FoilDuelConstantsTests(SimpleTestCase):
     def test_lock_break_reason_choices(self):
         self.assertEqual(
             {c[0] for c in LockBreakReason.choices},
-            {"defeat", "flee", "disengage", "interference", "expired"},
+            {"defeat", "flee", "disengage", "interference", "expired", "removed"},
         )
 
     def test_flow_events_exist(self):

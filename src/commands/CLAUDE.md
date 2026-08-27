@@ -155,7 +155,9 @@ actions, backends, and service functions.
 - **`encounter.py`**: `CmdEncounter` (`encounter`, #1494, create #3388) — the GM
   combat-encounter lifecycle namespace, thin over the Actions in
   `actions/definitions/gm_combat.py` (`create`/alias `start`/`begin`/`resolve`/`add`/`default`/
-  `addpc`/`removepc`/`pause`/`end`). `encounter create [pace]` (#3388, alias `start`) dispatches
+  `addpc`/`removepc`/`removenpc`/`pause`/`end`; `removenpc` added #3382 — pull a live
+  `CombatOpponent` out of the fight without a defeat/flee, symmetric with `removepc`).
+  `encounter create [pace]` (#3388, alias `start`) dispatches
   `CreateEncounterAction` — the telnet parity gap this closed (every other lifecycle verb already
   had a telnet face; only starting the fight didn't). It resolves the actor's room's active
   scene via `get_active_scene()` and is gated by the shared
