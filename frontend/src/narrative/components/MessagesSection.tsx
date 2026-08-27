@@ -23,6 +23,11 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'covenant', label: 'Covenant' },
   { value: 'renown', label: 'Renown' },
+  // #3412 hygiene fold-in: NarrativeCategoryEnum also carries these three —
+  // the tab list had silently drifted behind the generated schema.
+  { value: 'justice', label: 'Justice' },
+  { value: 'weather', label: 'Weather' },
+  { value: 'ability', label: 'Ability' },
 ];
 
 function isNarrativeCategory(value: FilterTab): value is NarrativeCategory {
@@ -57,7 +62,7 @@ export function MessagesSection() {
           Messages
         </h3>
         <Link
-          to="/profile/mute-settings"
+          to="/narrative/mute-settings"
           className="text-sm text-muted-foreground hover:text-foreground"
           data-testid="manage-mutes-link"
         >

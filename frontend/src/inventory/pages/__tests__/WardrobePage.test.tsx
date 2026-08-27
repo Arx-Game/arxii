@@ -29,6 +29,14 @@ vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(),
 }));
 
+// #3412 review fix: WardrobePage now reads `useAuthStatus` to distinguish "still
+// hydrating" from "genuinely no active character" — mocked here (real fetchAccount
+// would hit the network) and defaulted to resolved so every pre-existing test in
+// this file, which exercises the resolved state, is unaffected.
+vi.mock('@/evennia_replacements/queries', () => ({
+  useAuthStatus: vi.fn(() => ({ isLoading: false, account: null })),
+}));
+
 vi.mock('../../hooks/useOutfits', () => ({
   useOutfits: vi.fn(),
   useCreateOutfit: vi.fn(),
@@ -72,6 +80,7 @@ vi.mock('sonner', () => ({
 }));
 
 import * as rosterQueries from '@/roster/queries';
+import * as authQueries from '@/evennia_replacements/queries';
 import * as outfitsHooks from '../../hooks/useOutfits';
 import * as inventoryHooks from '../../hooks/useInventory';
 import { toast } from 'sonner';
@@ -257,6 +266,16 @@ describe('WardrobePage', () => {
     setupHooks({ active: null });
     renderWithProviders(<WardrobePage />);
     expect(screen.getByText(/pick a character/i)).toBeInTheDocument();
+  });
+
+  // #3412 review fix: `!activeCharacter` is ambiguous during the account-hydration
+  // window — show a skeleton there, never the "pick a character" empty-state.
+  it('shows a loading skeleton, not the no-active-character state, while resolving', () => {
+    vi.mocked(authQueries.useAuthStatus).mockReturnValue({ isLoading: true, account: null });
+    setupHooks({ active: null });
+    renderWithProviders(<WardrobePage />);
+    expect(screen.queryByText(/pick a character/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('wardrobe-loading-skeleton')).toBeInTheDocument();
   });
 
   it('renders the empty outfits state with a wardrobe-available CTA when inventory has items', () => {

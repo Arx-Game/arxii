@@ -21,6 +21,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { fetchPendingPrecaptureConsents, respondToPrecaptureConsent } from '../precaptureQueries';
 import type { PrecaptureConsentRequest } from '../types';
+import { useAccount } from '@/store/hooks';
 
 interface ToastBodyProps {
   toastId: string | number;
@@ -101,9 +102,15 @@ function PrecaptureConsentToastBody({ toastId, request, onResolved }: ToastBodyP
 
 export function PrecaptureConsentNotifier() {
   const queryClient = useQueryClient();
+  // Gated on account (#3412 hygiene fold-in), mirroring DuelChallengeNotifier/
+  // ConsentAttentionNotifier: mounted once at the app root (unconditionally, for
+  // every visitor), so without this an unauthenticated page load fired the fetch,
+  // got a 401/403, and polled it every 15s for a page nobody is logged into.
+  const account = useAccount();
   const { data: pendingRequests = [] } = useQuery({
     queryKey: ['precapture-consent-requests'],
     queryFn: fetchPendingPrecaptureConsents,
+    enabled: !!account,
     refetchInterval: 15_000,
     staleTime: 10_000,
   });

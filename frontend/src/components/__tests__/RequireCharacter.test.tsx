@@ -64,6 +64,9 @@ describe('RequireCharacter', () => {
     expect(screen.queryByText('Page content')).not.toBeInTheDocument();
     expect(screen.getByText('You need a character first')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /browse the roster/i })).toBeInTheDocument();
+    // #3412 hygiene fold-in: offer both remedies, matching WelcomePanel's
+    // zero-character card (browse vs. create).
+    expect(screen.getByRole('link', { name: /create a character/i })).toBeInTheDocument();
   });
 
   it('shows message when account is null', () => {
