@@ -320,6 +320,11 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 
 **#3412 status: slices 1-4 all complete.** Remaining scope is phased seams only,
 carried forward as future work rather than blocking anything in this issue:
+  - **No web-native exit from state 3** (slice-4 final review): with the `/`
+    redirect live, leaving the world back to the Hall takes logout, telnet
+    `quit`, or closing the tab — a deliberate structural gap until a web "quit"
+    affordance exists (its label is already ruled: the exit triad's `quit` =
+    leave the world, stay selected).
   - **Smuggle channel (CAPTURED)** has zero substrate today — needs real
     check-design (perform_check philosophy: no flat probability) before it can be
     scoped.
