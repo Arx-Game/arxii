@@ -95,6 +95,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     profile_picture_url = serializers.SerializerMethodField()
     primary_persona_id = serializers.SerializerMethodField()
     active_persona_id = serializers.SerializerMethodField()
+    unread_narrative_count = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -105,6 +106,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "profile_picture_url",
             "primary_persona_id",
             "active_persona_id",
+            "unread_narrative_count",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
@@ -133,6 +135,28 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         if obj.character_sheet.active_persona_id is not None:
             return obj.character_sheet.active_persona_id
         return self.get_primary_persona_id(obj)
+
+    def get_unread_narrative_count(self, obj: RosterEntry) -> int:
+        """Unread narrative tidings for this character (#3412 — the Hall).
+
+        ``RosterEntryViewSet.mine`` annotates this via one aggregated query for
+        the whole list; that annotation lands as a plain instance attribute, so
+        prefer it when present (``obj.__dict__`` avoids GETATTR_LITERAL — see
+        `OrgAppealViewSet._refetch` for the same idiom). Other callers (e.g. the
+        #3412 ``select`` endpoint's ``selected_entry`` fragment) serialize a
+        plain, unannotated ``RosterEntry`` — fall back to a direct count there,
+        a single extra query on that single-object path only.
+        """
+        annotated = obj.__dict__.get("unread_narrative_count")
+        if annotated is not None:
+            return annotated
+
+        from world.narrative.models import NarrativeMessageDelivery  # noqa: PLC0415
+
+        return NarrativeMessageDelivery.objects.filter(
+            recipient_character_sheet_id=obj.character_sheet_id,
+            acknowledged_at__isnull=True,
+        ).count()
 
 
 class SelectEntryRequestSerializer(serializers.Serializer):
