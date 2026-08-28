@@ -63,7 +63,14 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   character), else a muted dot for _ambient_ (any other unseen activity in
   that session), else nothing. The active character is structurally excluded
   (this bar only ever renders alts) — its own attention lives in
-  `ConversationTabStrip`'s per-tab badges, not here.
+  `ConversationTabStrip`'s per-tab badges, not here. Also renders (#3412 S4,
+  ADR-0246), for the active character: an own-sheet link (`/characters/:id`,
+  `RosterEntry.id`-keyed, opens in a new tab so the live session is never
+  disturbed) and a compact `ClockReadout` (season + paused indicator only,
+  full date/time/phase in the title tooltip) reusing the Hall's
+  `useClockQuery` directly — deliberately NOT `hh:mm`, since `WeatherWidget`
+  (also rendered here) already surfaces `phase + hh:mm` from the same
+  `game_clock` backend and a second hh:mm would just duplicate it.
 - **`ConversationSidebar.tsx`**: Left sidebar. Renders the scene's
   `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
   threading state for an active scene; otherwise falls back to a static

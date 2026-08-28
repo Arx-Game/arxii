@@ -173,7 +173,7 @@ describe('GameTopBar', () => {
   });
 
   describe('clock readout (#3412 S4)', () => {
-    it('renders season + hh:mm, with the full date/phase in the title tooltip', () => {
+    it('renders season only (WeatherWidget already shows hh:mm), full date/time/phase in the title tooltip', () => {
       mockUseClockQuery.mockReturnValue({
         data: {
           ic_datetime: '2026-08-20T12:00:00Z',
@@ -191,8 +191,9 @@ describe('GameTopBar', () => {
       renderWithProviders(<GameTopBar characters={[]} />);
 
       const readout = screen.getByLabelText('The world clock');
-      expect(readout).toHaveTextContent('Summer · 14:05');
-      expect(readout).toHaveAttribute('title', 'Year 1247, Month 3, Day 12 — Day');
+      expect(readout).toHaveTextContent('Summer');
+      expect(readout).not.toHaveTextContent('14:05');
+      expect(readout).toHaveAttribute('title', 'Year 1247, Month 3, Day 12, 14:05 — Day');
       expect(screen.queryByText('(Paused)')).not.toBeInTheDocument();
     });
 

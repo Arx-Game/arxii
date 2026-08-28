@@ -30,19 +30,24 @@ function capitalize(s: string): string {
 }
 
 /**
- * Compact IC-time readout (#3412 S4) — season + hh:mm beside the WeatherWidget,
- * full date/phase in a title tooltip, `paused` surfaced inline. Mirrors
- * WeatherWidget's own hide-until-resolved shape: renders nothing while
- * loading or on error (no `throwOnError` on `useClockQuery` — an errored
- * fetch just resolves `data: undefined`), so there's no layout jump.
+ * Compact IC-season readout (#3412 S4) beside the WeatherWidget. Deliberately
+ * NOT hh:mm — WeatherWidget already surfaces `phase + hh:mm` from the same
+ * game_clock backend (`get_ic_now`) via its own `ic_time` field, so a second
+ * clock readout duplicating that number would just be visual noise (review
+ * finding, folded in-branch rather than filed). ClockReadout shows what
+ * WeatherWidget lacks — season, plus the paused indicator — and keeps the
+ * full date/time/phase in the title tooltip. Mirrors WeatherWidget's own
+ * hide-until-resolved shape: renders nothing while loading or on error (no
+ * `throwOnError` on `useClockQuery` — an errored fetch just resolves
+ * `data: undefined`), so there's no layout jump.
  */
 function ClockReadout() {
   const { data: clock } = useClockQuery();
   if (!clock) return null;
 
-  const timeLabel = `${capitalize(clock.season)} · ${pad(clock.hour)}:${pad(clock.minute)}`;
+  const seasonLabel = capitalize(clock.season);
   const tooltip = [
-    `Year ${clock.year}, Month ${clock.month}, Day ${clock.day}`,
+    `Year ${clock.year}, Month ${clock.month}, Day ${clock.day}, ${pad(clock.hour)}:${pad(clock.minute)}`,
     capitalize(clock.phase),
   ]
     .filter(Boolean)
@@ -54,7 +59,7 @@ function ClockReadout() {
       title={tooltip}
       aria-label="The world clock"
     >
-      <span className="tabular-nums">{timeLabel}</span>
+      <span>{seasonLabel}</span>
       {/* PLACEHOLDER copy */}
       {clock.paused && <span className="text-muted-foreground/70">(Paused)</span>}
     </div>

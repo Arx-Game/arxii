@@ -295,26 +295,61 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   gate reason instead of a fixed generic message. See ADR-0245 for the
   extend-the-dead-gate architecture, the rejected `CharacterCapabilities`-facade-now
   and DB-config-table-now alternatives, and the COMA-is-unwritten finding.
-  - **Remaining #3412 scope (deferred to a later slice or explicitly out of
-    scope):** the smuggle channel mechanic (CAPTURED) has zero substrate today —
-    needs real check-design (perform_check philosophy: no flat probability) before
-    it can be scoped; the dream channel (unconscious) needs a one-way variant of
-    whatever dream-contact mechanics magic builds — Tehom coordination
-    (combat/soulfray/scars/zones/magic is his domain); messenger gating with
-    #3289's not-yet-built IC messaging system (the séance/smuggle/dream channels
-    are conceptually adjacent to that system but not wired to it); DB
-    authorability of the `OFFSCREEN_ACT_KEYS`/`OFFSCREEN_LIFECYCLE_DISPOSITIONS`
+- **State-3 mode coherence (#3412 slice 4, complete, ADR-0246):** the final slice —
+  closes the loop between "logged in, browsing" (state 2, the Hall) and "live in the
+  world" (state 3, `/game`). `GatefoldPage` now redirects an authed account straight
+  to `/game` when its active character has a **live connection**
+  (`active && sessions[active].isConnected`) — the same selection-is-not-presence
+  distinction ADR-0241 drew; a selected-but-unconnected account still gets the Hall,
+  since there's nothing live to jump back into. `GameTopBar` gained an own-sheet link
+  (new tab, `RosterEntry.id`-keyed, mode-preserving — leaving the live session
+  untouched in the background) and a compact IC clock readout reusing the Hall's
+  `useClockQuery` directly (no import-boundary rule blocks `game/` importing from
+  `home/`). Review fold-in: the new clock readout initially duplicated
+  `WeatherWidget`'s existing `hh:mm` (both trace to `game_clock`'s `get_ic_now`) —
+  narrowed to show only what weather lacks (season + paused indicator), full
+  date/time/phase moved into the tooltip; `WeatherWidget` itself untouched. The
+  composer-consolidation item from #3412's original scope was verified rather than
+  rebuilt: one shared `CommandInput` has served every composer since #2156/#2166,
+  and #2197 already folded the standalone `CombatScenePage` into `SceneDetailPage`
+  (carrying `speakingAs` along) — the one real gap (`speakingAs` not threaded
+  through `SceneDetailPage`'s composer call site) was fixed in task 1, closing the
+  item by verification (Apostate's 2026-08-28 ruling). Zero backend changes this
+  slice. See ADR-0246 for the rejected selection-keyed-redirect and
+  in-client-sheet-drawer alternatives.
+
+**#3412 status: slices 1-4 all complete.** Remaining scope is phased seams only,
+carried forward as future work rather than blocking anything in this issue:
+  - **Smuggle channel (CAPTURED)** has zero substrate today — needs real
+    check-design (perform_check philosophy: no flat probability) before it can be
+    scoped.
+  - **Dream channel (unconscious)** needs a one-way variant of whatever
+    dream-contact mechanics magic builds — Tehom coordination
+    (combat/soulfray/scars/zones/magic is his domain); canonically the unconscious
+    character can be reached but should not be able to reach back the same way a
+    waking character would.
+  - **Messenger gating with #3289's** not-yet-built IC messaging system — the
+    séance/smuggle/dream channels are conceptually adjacent to that system but not
+    wired to it.
+  - **DB authorability** of the `OFFSCREEN_ACT_KEYS`/`OFFSCREEN_LIFECYCLE_DISPOSITIONS`
     tables (currently Python constants — a config-table facade was explicitly
-    rejected for this slice, ADR-0245); the unconscious display-state overlay is
-    NOT exposed on `MyRosterEntry` (it's a conditions-system read, not a sheet
-    column — recorded as a seam, not built, to avoid a new per-row query on a
-    payload every Hall visit fetches); a proclamation FE compose surface (no
-    existing surface to route the Hall's Offscreen Acts plate through — the
-    boards-row precedent: never ship a link to nothing); **slice 4** (small,
-    tracked but not started): a `/` → `/game` route redirect when a session is
-    already live, a sheet link from `/game`, the clock in the top bar, and
-    `CombatScenePage`'s composer threading the `speakingAs` prop (#2166) the way
-    `GamePage`'s composer already does.
+    rejected for slice 3, ADR-0245).
+  - **Unconscious display-state overlay** is NOT exposed on `MyRosterEntry` (it's a
+    conditions-system read, not a sheet column — recorded as a seam, not built, to
+    avoid a new per-row query on a payload every Hall visit fetches).
+  - **Proclamation FE compose surface** — no existing surface to route the Hall's
+    Offscreen Acts plate through (the boards-row precedent: never ship a link to
+    nothing).
+  - **Boards surface** — no boards-index page exists anywhere in the app
+    (`src/boards/` only mounts a `BoardPanel` at a room/org); the Hall's "Your
+    Attention" ships with no boards row at all, deliberately (a `/game` placeholder
+    link was tried during slice-2 review and ruled out as a false affordance).
+  - **Gemit archive** — the Hall's Crier plate ends at its last gemit with no "full
+    record" link; same ruling as boards.
+  - **Name-keyed `gameSlice` refactor** — `gameSlice` mirrors sessions by character
+    name rather than `RosterEntry` id, a deliberately deferred wart from slice 1
+    (ADR-0241); an entry-id refactor touches an estimated 25 call sites and stays
+    out of scope for every slice of this issue.
 
 ### Critical Infrastructure Gap: Reactive Layer Activation
 
