@@ -15,11 +15,11 @@ Database-driven game logic engine. Two layers live here:
 
 ```python
 from flows.emit import emit_event
-from flows.events.names import EventNames
+from flows.constants import EventName
 from flows.events.payloads import DamageAppliedPayload
 
 emit_event(
-    EventNames.DAMAGE_APPLIED,
+    EventName.DAMAGE_APPLIED,
     DamageAppliedPayload(
         target=character,
         amount_dealt=12,
@@ -130,7 +130,10 @@ Area-of-effect events carry a `targets: list` field on the payload (e.g. `Attack
 
 ## Event Catalog (MVP)
 
-All names live in `flows.events.names.EventNames`; payload dataclasses in `flows.events.payloads`; mapping in `PAYLOAD_FOR_EVENT`.
+All names live in `flows.constants.EventName` (a `TextChoices`, growing as new domains wire in
+events — includes the generic `ACTION_INTENT`/`ACTION_RESULT` pair every `Action.run()` emits,
+#3418/ADR-0243); payload dataclasses in `flows.events.payloads`; mapping in `PAYLOAD_FOR_EVENT`.
+This table documents the originally-shipped MVP subset, not the full current enum.
 
 | Event | Payload | Location | Cancellable |
 |-------|---------|----------|-------------|
@@ -196,7 +199,7 @@ All three reactive-layer definition models (`FlowDefinition`, `FlowStepDefinitio
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Event` | Catalog row matching an `EventNames` constant | `name`, `description` |
+| `Event` | Catalog row matching an `EventName` constant | `name`, `description` |
 | `TriggerDefinition` | Reusable template (event + flow + base filter + priority) | `name`, `event`, `flow_definition`, `base_filter_condition`, `priority` |
 | `Trigger` | Installed instance on a typeclass owner | `obj`, `trigger_definition`, `source_condition` (required), `source_stage`, `additional_filter_condition`, `priority` |
 | `TriggerData` | Per-trigger runtime data (e.g. usage counters — fields pending) | `trigger`, `key`, `value` |
