@@ -49,7 +49,7 @@ import type { MyRosterEntry } from '@/roster/types';
 const ALLOWED_LIFECYCLE_STATES = new Set(['ALIVE', 'COMA']);
 
 /**
- * PLACEHOLDER world-voice copy (Garamond/serif body voice, ADR-0243) — final
+ * PLACEHOLDER world-voice copy (Garamond/serif body voice, ADR-0244) — final
  * author pass is Dan's to finalize, per the "placeholders now, passes later"
  * project pattern. Deliberately independent of the backend's
  * `OFFSCREEN_REASON_*` strings (`actions/constants.py`): those are told to

@@ -279,3 +279,58 @@ class IssueProclamationActionDirectRunTests(TestCase):
         self.assertTrue(result.success)
         self.assertIn("proclamation", result.data)
         self.assertEqual(result.data["proclamation"].issuer_id, sheet.primary_persona.pk)
+
+    def test_foreign_persona_id_refused_not_impersonated(self) -> None:
+        """CRITICAL-1 (final review): a client-suppliable ``persona_id`` that
+        belongs to a DIFFERENT actor's sheet must be refused, not honored —
+        otherwise any actor could proclaim as anyone's persona. The action
+        must resolve/validate the acting persona against the ACTOR, mirroring
+        every sibling org action's ``_actor_persona``/ownership convention."""
+        CheckTypeFactory(name="Persuasion")
+        win = CheckOutcomeFactory(name="foreign persona win", success_level=1)
+        victim_character = CharacterFactory()
+        victim_sheet = CharacterSheetFactory(character=victim_character)
+        attacker_character = CharacterFactory()
+        CharacterSheetFactory(character=attacker_character)
+        stance = _stance(mercy_delta=1)
+
+        with force_check_outcome(win):
+            result = IssueProclamationAction().run(
+                actor=attacker_character,
+                persona_id=victim_sheet.primary_persona.pk,
+                stance_id=stance.pk,
+            )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No active persona.")
+        self.assertEqual(Proclamation.objects.count(), 0)
+
+    def test_captured_leader_cannot_be_proxied_by_alive_co_member(self) -> None:
+        """Gate-bypass case: an ALIVE co-member actor supplying a CAPTURED
+        leader's persona_id must not be able to smuggle the act past the
+        offscreen-act gate (which keys on the ACTOR's own sheet). With the
+        ownership fix, persona resolution fails before the gate is even
+        relevant — the CAPTURED leader's authority can never be borrowed."""
+        org = OrganizationFactory(name="Proxy-Bypass House")
+        leader_character = CharacterFactory()
+        leader_sheet = CharacterSheetFactory(character=leader_character)
+        leader_sheet.lifecycle_state = LifecycleState.CAPTURED
+        leader_sheet.save(update_fields=["lifecycle_state"])
+        OrganizationMembershipFactory(
+            organization=org, persona=leader_sheet.primary_persona, rank=1
+        )
+
+        accomplice_character = CharacterFactory()
+        CharacterSheetFactory(character=accomplice_character)
+        stance = _stance(power_delta=1)
+
+        result = IssueProclamationAction().run(
+            actor=accomplice_character,
+            persona_id=leader_sheet.primary_persona.pk,
+            stance_id=stance.pk,
+            org_id=org.pk,
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No active persona.")
+        self.assertEqual(Proclamation.objects.count(), 0)

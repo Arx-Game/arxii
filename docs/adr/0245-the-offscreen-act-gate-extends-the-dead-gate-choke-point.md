@@ -1,15 +1,9 @@
 # ADR-0245: The offscreen-act gate extends the dead-gate choke point
 
 <!--
-Numbering note (#3412 slice 3 task 5): this worktree's docs/adr/ topped out at
-0243 (the-commonplace-book-is-the-logged-in-container-idiom, #3412 slice 2,
-already on this branch's history) at task-5 time. `git ls-tree origin/main
-docs/adr/` shows main's tip at 0242 (movement-redirection-is-authored-not-
-modeled) — 0243 has not landed on main yet, only on this stacked branch.
-Checked both open PRs in this stack for ADR additions: #3420
-("Four-state rulings") touches no `docs/adr/` files; #3421 ("The Hall") is the
-PR that adds 0243 itself. 0244 is the next number clear of this worktree's
-local tip; re-verify at enqueue in case another PR claims it in the meantime.
+Numbering note (final, post-renumber): main took 0243 via #3418; the
+Commonplace Book (formerly 0243 on this stack) is 0244 on this branch; this
+ADR is 0245.
 -->
 
 **Status:** Accepted (2026-08-28, #3412 slice 3)
@@ -142,5 +136,5 @@ conditions-system-backed field this task deliberately did not add) until a
 real display need justifies the extra query.
 
 > Status: accepted · Source: issue #3412 (slice 3), `src/actions/offscreen_gate.py`,
-> `src/actions/base.py`'s `check_availability`, ADR-0243 (the Hall's visual
+> `src/actions/base.py`'s `check_availability`, ADR-0244 (the Hall's visual
 > idiom this gate's refusal prose renders inside).

@@ -167,7 +167,7 @@ disposition names *how* word could still travel for a degraded-lifecycle
 character — `OFFSCREEN_CHANNEL_SMUGGLE` (CAPTURED) and
 `OFFSCREEN_CHANNEL_DREAM` (unconscious) are the two implemented channel
 constants (`actions/constants.py`); séance (DEAD) is named in prose and ADR-
-0244 but has no channel constant yet. This slice (#3412 slice 3) ships zero
+0245 but has no channel constant yet. This slice (#3412 slice 3) ships zero
 delivery mechanics for any channel — `ROUTED` is refusal-with-API-room, not a
 working feature; the channel name is currently only ever seen in refusal
 text (backend `OFFSCREEN_REASON_*` strings, and separately the Hall's own

@@ -513,7 +513,15 @@ class IssueProclamationAction(Action):
             issue_proclamation,
         )
 
-        persona = Persona.objects.filter(pk=kwargs.get("persona_id")).first()
+        # character_sheet_id=actor.pk validates the persona belongs to the ACTOR's
+        # own sheet (CharacterSheet shares ObjectDB's pk, see CLAUDE.md) — mirrors
+        # the sibling convention (`_actor_persona`/`SetActivePersonaAction`) instead
+        # of trusting a client-suppliable persona_id unowned-checked (#3412 review
+        # CRITICAL-1): without this, any actor could proclaim/enact as any other
+        # persona, including proxying an ALIVE actor for a CAPTURED/DEAD leader.
+        persona = Persona.objects.filter(
+            pk=kwargs.get("persona_id"), character_sheet_id=actor.pk
+        ).first()
         if persona is None:
             return ActionResult(success=False, message=_MSG_NO_ACTIVE_PERSONA)
 

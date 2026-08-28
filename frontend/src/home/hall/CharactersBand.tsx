@@ -2,14 +2,25 @@
  * "Your Characters" band (#3412 slice 2) — the Hall's portrait-forward roster
  * of the account's playable characters. Clicking a card sets the account's
  * durable server-side selection (`useSelectCharacterMutation`); the docked
- * card gets a primary top rule + "Playing: Currently Offscreen" meta
- * (PLACEHOLDER — presence isn't wired yet, mirrors `SelectedCharacterChip`).
+ * card gets a primary top rule + a "Playing: …" meta line (PLACEHOLDER —
+ * presence isn't wired yet, mirrors `SelectedCharacterChip`).
  * "Clear Active Character" lives once, bottom-right of the whole band —
  * disabled (not hidden) when nothing is docked, so the control stays
  * discoverable per the ruling.
  *
  * Selection is NOT presence (ruled): this band never starts/stops a `/game`
  * session — Enter-the-world stays the header chip's job.
+ *
+ * Degraded-state meta line (#3412 final review, IMPORTANT-1): a docked
+ * character whose `lifecycle_state` is CAPTURED/DEAD/RETIRED/UNKNOWN used to
+ * assert "Playing: Currently Offscreen" unconditionally — a factual
+ * contradiction with `OffscreenActsPlate`'s death/captivity prose shown right
+ * below it on the same screen. The meta line now branches the same way the
+ * plate does (mirrors its `ALLOWED_LIFECYCLE_STATES` set: ALIVE and the
+ * unwritten COMA member still read "Currently Offscreen"; everything else
+ * gets a short PLACEHOLDER state label instead). "Clear Active Character"
+ * and card selection stay unaffected — this is a display-only fix, same as
+ * the plate's own gate/display split.
  */
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -19,6 +30,29 @@ import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { hydrateActiveCharacter } from '@/store/gameSlice';
+
+/**
+ * `lifecycle_state` values that still read as "Currently Offscreen" — mirrors
+ * `OffscreenActsPlate`'s `ALLOWED_LIFECYCLE_STATES` (COMA is unwritten
+ * anywhere in the codebase today but included to match the backend gate's
+ * own fall-through).
+ */
+const ALLOWED_LIFECYCLE_STATES = new Set(['ALIVE', 'COMA']);
+
+/** PLACEHOLDER short state labels for the docked meta line — condensed
+ * form of the plate's `DEGRADED_STATE_COPY` prose (full sentences don't fit
+ * a one-line card meta). */
+const DEGRADED_STATE_LABELS: Record<string, string> = {
+  CAPTURED: 'Held captive',
+  DEAD: 'Dead',
+  RETIRED: 'Retired',
+  UNKNOWN: 'Whereabouts unknown',
+};
+
+function dockedStateLabel(lifecycleState: string): string {
+  if (ALLOWED_LIFECYCLE_STATES.has(lifecycleState)) return 'Currently Offscreen';
+  return DEGRADED_STATE_LABELS[lifecycleState] ?? 'Currently Offscreen';
+}
 
 function getInitials(name: string): string {
   return name
@@ -62,7 +96,7 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
         {/* PLACEHOLDER copy — presence state isn't wired yet, mirrors SelectedCharacterChip */}
         {isDocked && (
           <span className="font-body text-xs text-muted-foreground">
-            Playing: Currently Offscreen
+            Playing: {dockedStateLabel(entry.lifecycle_state)}
           </span>
         )}
       </button>

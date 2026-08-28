@@ -12,6 +12,29 @@ interface SelectedCharacterChipProps {
   entry: MyRosterEntry;
 }
 
+/**
+ * `lifecycle_state` values that still read as "Currently Offscreen" — mirrors
+ * `OffscreenActsPlate`'s `ALLOWED_LIFECYCLE_STATES` (COMA is unwritten
+ * anywhere in the codebase today but included to match the backend gate's
+ * own fall-through).
+ */
+const ALLOWED_LIFECYCLE_STATES = new Set(['ALIVE', 'COMA']);
+
+/** PLACEHOLDER short state labels — condensed form of
+ * `OffscreenActsPlate`'s `DEGRADED_STATE_COPY` prose (full sentences don't
+ * fit this one-line sub-line). */
+const DEGRADED_STATE_LABELS: Record<string, string> = {
+  CAPTURED: 'Held captive',
+  DEAD: 'Dead',
+  RETIRED: 'Retired',
+  UNKNOWN: 'Whereabouts unknown',
+};
+
+function dockedStateLabel(lifecycleState: string): string {
+  if (ALLOWED_LIFECYCLE_STATES.has(lifecycleState)) return 'Currently Offscreen';
+  return DEGRADED_STATE_LABELS[lifecycleState] ?? 'Currently Offscreen';
+}
+
 function getInitials(name: string): string {
   return name
     .split(' ')
@@ -56,6 +79,17 @@ function getInitials(name: string): string {
  * PLACEHOLDER copy: "Playing: Currently Offscreen" is a stand-in for real
  * presence state (not wired to the WebSocket session yet — this chip still
  * never starts/stops a session on its own, see above).
+ *
+ * Degraded-state sub-line (#3412 final review, IMPORTANT-1): a docked
+ * character whose `lifecycle_state` is CAPTURED/DEAD/RETIRED/UNKNOWN used to
+ * assert "Playing: Currently Offscreen" on every non-`/game` page — a
+ * factual contradiction with the Hall's `OffscreenActsPlate` death/captivity
+ * prose shown for the same character. The sub-line now branches the same way
+ * the plate does (mirrors its `ALLOWED_LIFECYCLE_STATES` set) and shows a
+ * short PLACEHOLDER state label instead. "Enter the world" stays rendered in
+ * every state deliberately — a dead character's player legitimately enters
+ * as a spectator/ghost (the dead-gate whitelist exists for exactly that,
+ * #2287) — only the sub-line's wording changes.
  */
 export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
   const { data: personas = [] } = useCharacterPersonasQuery(entry.character_id);
@@ -88,7 +122,7 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
         {/* PLACEHOLDER copy — presence state isn't wired yet */}
         <span className="font-body text-xs text-muted-foreground">
           as {wornName}
-          {inWorld ? '' : ' · Playing: Currently Offscreen'}
+          {inWorld ? '' : ` · Playing: ${dockedStateLabel(entry.lifecycle_state)}`}
         </span>
         <PersonaSwitcher
           characterSheetId={entry.character_id}
