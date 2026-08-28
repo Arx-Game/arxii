@@ -12,10 +12,11 @@ from django.db.models import Prefetch, Q, QuerySet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from flows.models.triggers import TriggerDefinition
 from web.api.mixins import CharacterContextMixin
 from world.conditions.constants import (
     TARGET_EFFECT_ALTERATION,
@@ -150,6 +151,34 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             }
 
         return Response(result)
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        permission_classes=[IsAuthenticated, IsAdminUser],
+    )
+    def set_reactive_triggers(self, request: Request, pk: str | None = None) -> Response:
+        """Replace the set of TriggerDefinitions installed when this condition applies.
+
+        Staff-only wiring endpoint for the flows authoring UI (#3417): body
+        ``{"trigger_definition_ids": [int, ...]}`` becomes the new complete set
+        (``.set()`` semantics, not additive).
+        """
+        template = self.get_object()
+        ids = request.data.get("trigger_definition_ids")
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            return Response(
+                {"trigger_definition_ids": "Expected a list of integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        found = TriggerDefinition.objects.filter(pk__in=ids)
+        if found.count() != len(set(ids)):
+            return Response(
+                {"trigger_definition_ids": "One or more trigger definitions do not exist."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        template.reactive_triggers.set(found)
+        return Response({"trigger_definition_ids": sorted(set(ids))})
 
 
 # =============================================================================

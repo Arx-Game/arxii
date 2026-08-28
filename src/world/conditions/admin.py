@@ -117,6 +117,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         "draws_aggro",
     ]
     search_fields = ["name", "description"]
+    filter_horizontal = ["reactive_triggers"]
 
     fieldsets = [
         (None, {"fields": ["name", "category", "description"]}),
@@ -174,6 +175,17 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
                     "is_visible_to_others",
                     "thumbnail",
                 ],
+            },
+        ),
+        (
+            "Reactive Behavior",
+            {
+                "fields": ["reactive_triggers"],
+                "description": (
+                    "TriggerDefinitions installed as Trigger rows on the bearer "
+                    "when this condition is applied."
+                ),
+                "classes": ["collapse"],
             },
         ),
         CREDIT_FIELDSET,
