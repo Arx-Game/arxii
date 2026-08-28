@@ -9,7 +9,13 @@
  * `RoleFieldsCard` in `npc_services/pages/NPCRoleEditorPage.tsx` — so a
  * successful save's query invalidation naturally refreshes the editor with
  * the authoritative saved steps (real pks replacing client-generated ids)
- * instead of the page re-deriving that itself.
+ * instead of the page re-deriving that itself. That resync is gated on
+ * `isDirty` (see the effect below): a background refetch (react-query's
+ * default `refetchOnWindowFocus`, or the 5-minute global staleTime expiring
+ * mid-edit) must never silently clobber unsaved authoring work. `save()`
+ * marks the editor clean immediately with the exact payload it sent, so the
+ * invalidation-triggered refetch that follows a save lands on a clean editor
+ * and syncs as normal.
  *
  * CRITICAL save order (#3417 task 10 review): `coerceParams` runs on every
  * step first (raw editor strings -> typed values per that step's action
@@ -63,13 +69,28 @@ export function FlowEditorPage() {
   const [savedSnapshot, setSavedSnapshot] = useState<string>(serialize(EMPTY_STATE));
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
+  const isDirty = serialize(state) !== savedSnapshot;
+
   // Re-sync local editor state from the authoritative server row whenever it
   // changes — on first load, and again after a save's query invalidation
   // refetches. No-op in create mode (the query is disabled, so data stays
   // undefined).
+  //
+  // Guarded by `isDirty`: with the global 5-minute staleTime plus
+  // react-query's default refetchOnWindowFocus, a background refetch can
+  // land at any point (e.g. a window blur/refocus mid-edit) — it must never
+  // silently clobber a hand-built, not-yet-saved step tree. `isDirty` is
+  // deliberately left out of the dependency array: this effect should only
+  // re-run when the *server* row changes, not on every keystroke that flips
+  // dirty state; it reads the current `isDirty` from the closure instead.
+  // Skipping the resync while dirty is safe because `save()` resets both
+  // `state` and `savedSnapshot` to the just-sent payload on success (see
+  // below), so by the time the save's own invalidation-triggered refetch
+  // lands, nothing is dirty and the sync proceeds normally, picking up
+  // server-assigned pks.
   useEffect(() => {
     const flow = flowQuery.data;
-    if (!flow) return;
+    if (!flow || isDirty) return;
     const next: EditorState = {
       name: flow.name,
       description: flow.description ?? '',
@@ -77,6 +98,7 @@ export function FlowEditorPage() {
     };
     setState(next);
     setSavedSnapshot(serialize(next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowQuery.data]);
 
   if (!isCreate && flowQuery.isLoading) {
@@ -90,7 +112,6 @@ export function FlowEditorPage() {
     return <div className="p-6 text-sm text-destructive">Failed to load this flow.</div>;
   }
 
-  const isDirty = serialize(state) !== savedSnapshot;
   const busy = createFlow.isPending || updateFlow.isPending;
   const mutationError = isCreate ? createFlow.error : updateFlow.error;
 
@@ -113,17 +134,33 @@ export function FlowEditorPage() {
     setValidationErrors(errors);
     if (errors.length > 0) return;
 
-    const payload = {
+    const nextState: EditorState = {
       name: state.name.trim(),
       description: state.description,
       steps: coercedSteps,
+    };
+    const payload = {
+      name: nextState.name,
+      description: nextState.description,
+      steps: nextState.steps,
     };
     if (isCreate) {
       createFlow.mutate(payload, {
         onSuccess: (result) => navigate(`/staff/flows-builder/flows/${result.id}`),
       });
     } else if (flowId !== undefined) {
-      updateFlow.mutate({ id: flowId, payload });
+      updateFlow.mutate(
+        { id: flowId, payload },
+        {
+          // Mark the editor clean with the exact payload just sent — this is
+          // what lets the resync effect above accept the invalidation-
+          // triggered refetch that follows (see that effect's comment).
+          onSuccess: () => {
+            setState(nextState);
+            setSavedSnapshot(serialize(nextState));
+          },
+        }
+      );
     }
   };
 
