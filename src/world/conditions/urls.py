@@ -1,9 +1,10 @@
 """
 URL configuration for conditions API.
 
-Endpoints are read-only for regular play — conditions are applied through game
-logic, not directly through the API — except ``ConditionTemplateViewSet``'s
-staff-only ``set_reactive_triggers`` write action (#3417).
+Endpoints are read-only for regular play; conditions are applied through game
+logic, not directly through the API. The one exception is
+``ConditionTemplateViewSet``'s staff-only ``set_reactive_triggers`` write
+action (#3417).
 """
 
 from django.urls import include, path
