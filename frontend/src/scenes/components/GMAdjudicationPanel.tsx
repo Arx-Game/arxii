@@ -883,9 +883,9 @@ function SummonTab({ characterId, targetCharacterId }: TabProps) {
 // resolves its target by NAME (`actor.search(target_name, ...)`, a telnet-era
 // convention — #2117) rather than by pk, so this reuses the panel's shared
 // participant picker but sends the selected participant's display name, not
-// their character id. `reason` has no consuming kwarg on the action today (it
-// has no note/description field) — included for GM bookkeeping parity with
-// the other award-shaped tabs; harmless if unused server-side.
+// their character id. No reason field: `GrantItemAction` consumes only
+// `target_name`/`template_name`, and a field the server silently drops would
+// mislead GMs into thinking provenance was recorded.
 // ---------------------------------------------------------------------------
 
 function GrantItemTab({
@@ -895,7 +895,6 @@ function GrantItemTab({
 }: TabProps & { personas: ScenePersona[] }) {
   const [search, setSearch] = useState('');
   const [templateName, setTemplateName] = useState('');
-  const [reason, setReason] = useState('');
   const { data: templates = [] } = useItemTemplateCatalog(search, true);
   const dispatch = useDispatchPlayerAction(characterId);
 
@@ -910,7 +909,6 @@ function GrantItemTab({
         kwargs: {
           target_name: targetName,
           template_name: templateName,
-          reason: reason || undefined,
         },
       })
       .then((result) => reportResult(result, 'Item granted.'))
@@ -940,15 +938,6 @@ function GrantItemTab({
             </option>
           ))}
         </select>
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="gm-grantitem-reason">Reason</Label>
-        <Input
-          id="gm-grantitem-reason"
-          placeholder="Why this award?"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
       </div>
       <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-grantitem-submit">
         {dispatch.isPending ? 'Granting…' : 'Grant Item'}

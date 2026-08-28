@@ -309,7 +309,6 @@ test('Grant Item tab dispatches grant_item with the target persona name (#3431)'
   await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
   await user.click(screen.getByTestId('gm-tab-grantitem'));
   await user.selectOptions(screen.getByTestId('gm-grantitem-template-select'), 'Silver Locket');
-  await user.type(screen.getByLabelText('Reason'), 'a story-earned keepsake');
   await user.click(screen.getByTestId('gm-grantitem-submit'));
 
   await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
@@ -318,7 +317,6 @@ test('Grant Item tab dispatches grant_item with the target persona name (#3431)'
     kwargs: {
       target_name: 'Target Persona',
       template_name: 'Silver Locket',
-      reason: 'a story-earned keepsake',
     },
   });
 });
