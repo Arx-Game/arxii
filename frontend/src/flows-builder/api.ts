@@ -53,7 +53,14 @@ function buildQueryString(params: object): string {
   return s ? `?${s}` : '';
 }
 
-function toApiStep(step: ClientStep): Record<string, unknown> {
+/**
+ * Client-step -> wire-shape mapping. Exported so `stepTree.ts`'s
+ * `toWirePayload` can reuse it instead of duplicating the field-name
+ * mapping (`stepTree.ts` operates on a bare `ClientStep[]`, not a full
+ * `FlowWritePayload`, so it calls this directly rather than
+ * `toApiFlowPayload`).
+ */
+export function toApiStep(step: ClientStep): Record<string, unknown> {
   return {
     client_id: step.clientId,
     parent_client_id: step.parentClientId,
