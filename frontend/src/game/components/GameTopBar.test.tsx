@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
 import { GameTopBar } from './GameTopBar';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -20,6 +20,14 @@ import type { InteractionWsPayload } from '@/hooks/types';
 // renders the same component tree without mocking either. WeatherWidget/
 // ComfortWidget's queries are `enabled: false` when there's no active
 // room/character, so no network calls fire.
+
+// #3412 S4 — GameTopBar's ClockReadout reuses the Hall's useClockQuery
+// directly (no relocation needed — see the import comment in GameTopBar.tsx),
+// so the mock target is the Hall's queries module, mirroring WorldBand.test.tsx.
+const mockUseClockQuery = vi.fn();
+vi.mock('@/home/hall/queries', () => ({
+  useClockQuery: () => mockUseClockQuery(),
+}));
 
 const rosterEntry: MyRosterEntry = {
   id: 1,
@@ -64,8 +72,16 @@ function makeWhisperInteraction(
 }
 
 describe('GameTopBar', () => {
+  beforeEach(() => {
+    // Default: no clock resolved yet (loading/disabled) — matches
+    // WeatherWidget's own hide-until-resolved default so unrelated tests
+    // aren't tripped up by a stray clock readout.
+    mockUseClockQuery.mockReturnValue({ data: undefined });
+  });
+
   afterEach(() => {
     store.dispatch(resetGame());
+    vi.clearAllMocks();
   });
 
   it('shows the "No characters yet" message with both links when the account has zero characters', () => {
@@ -135,6 +151,83 @@ describe('GameTopBar', () => {
       expect(within(biancaButton).queryByText(/[0-9]/)).not.toBeInTheDocument();
       expect(biancaButton.querySelector('.bg-muted-foreground\\/60')).toBeNull();
       expect(biancaButton.querySelector('.bg-red-500')).toBeNull();
+    });
+  });
+
+  describe('own-sheet link (#3412 S4)', () => {
+    it('renders the sheet link for the active entry, pointing at its RosterEntry id in a new tab', () => {
+      store.dispatch(startSession('Aria'));
+      renderWithProviders(<GameTopBar characters={[rosterEntry]} />);
+
+      const link = screen.getByRole('link', { name: 'Your character sheet' });
+      expect(link).toHaveAttribute('href', '/characters/1');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener');
+    });
+
+    it('omits the sheet link when there is no active entry', () => {
+      renderWithProviders(<GameTopBar characters={[rosterEntry]} />);
+
+      expect(screen.queryByRole('link', { name: 'Your character sheet' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('clock readout (#3412 S4)', () => {
+    it('renders season + hh:mm, with the full date/phase in the title tooltip', () => {
+      mockUseClockQuery.mockReturnValue({
+        data: {
+          ic_datetime: '2026-08-20T12:00:00Z',
+          year: 1247,
+          month: 3,
+          day: 12,
+          hour: 14,
+          minute: 5,
+          phase: 'day',
+          season: 'summer',
+          light_level: 1,
+          paused: false,
+        },
+      });
+      renderWithProviders(<GameTopBar characters={[]} />);
+
+      const readout = screen.getByLabelText('The world clock');
+      expect(readout).toHaveTextContent('Summer · 14:05');
+      expect(readout).toHaveAttribute('title', 'Year 1247, Month 3, Day 12 — Day');
+      expect(screen.queryByText('(Paused)')).not.toBeInTheDocument();
+    });
+
+    it('shows a paused indicator when the clock is paused', () => {
+      mockUseClockQuery.mockReturnValue({
+        data: {
+          ic_datetime: '2026-08-20T12:00:00Z',
+          year: 1247,
+          month: 3,
+          day: 12,
+          hour: 14,
+          minute: 5,
+          phase: 'day',
+          season: 'summer',
+          light_level: 1,
+          paused: true,
+        },
+      });
+      renderWithProviders(<GameTopBar characters={[]} />);
+
+      expect(screen.getByText('(Paused)')).toBeInTheDocument();
+    });
+
+    it('hides entirely while loading (no layout jump)', () => {
+      mockUseClockQuery.mockReturnValue({ data: undefined });
+      renderWithProviders(<GameTopBar characters={[]} />);
+
+      expect(screen.queryByLabelText('The world clock')).not.toBeInTheDocument();
+    });
+
+    it('hides entirely on error — no throwOnError, data resolves undefined', () => {
+      mockUseClockQuery.mockReturnValue({ data: undefined, isError: true });
+      renderWithProviders(<GameTopBar characters={[]} />);
+
+      expect(screen.queryByLabelText('The world clock')).not.toBeInTheDocument();
     });
   });
 });

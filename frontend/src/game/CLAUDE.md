@@ -98,9 +98,11 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   now" identity marker on the composer, shown even for single-character
   players. Always renders when supplied; renders nothing when omitted
   (legacy callers unaffected). `GamePage` supplies it from `activeEntry`;
-  `SceneDetailPage`'s record-page composer supplies the same shape from its
-  own roster lookup. `CombatScenePage`'s composer does not yet thread this
-  prop (out of scope for #2166).
+  `SceneDetailPage`'s composer supplies the same shape from its own roster
+  lookup — this covers combat too, since #2197 folded the standalone
+  `CombatScenePage` into `SceneDetailPage`'s single composer (verified #3412
+  S4: no separate combat composer remains; the fold-in already carries
+  `speakingAs`).
 - **`EvenniaMessage.tsx`**: Game message display and formatting
 
 ### Room Panel (`components/room-panel/`)
