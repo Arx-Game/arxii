@@ -201,7 +201,7 @@ describe('Header', () => {
       expect(screen.queryByText(/enter the world/i)).not.toBeInTheDocument();
     });
 
-    it('renders the chip (portrait, name, persona switcher, enter-the-world, step-away) when a selection exists', () => {
+    it('renders the chip (portrait, name, persona switcher, enter-the-world) when a selection exists', () => {
       mockRosterEntries.mockReturnValue({ data: [aria] });
       const store = makeStore();
       store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
@@ -216,26 +216,11 @@ describe('Header', () => {
       expect(screen.getByTestId('persona-switcher-stub')).toBeInTheDocument();
       const enterLink = screen.getByRole('link', { name: /enter the world/i });
       expect(enterLink).toHaveAttribute('href', '/game');
-      expect(screen.getByTitle('Step away')).toBeInTheDocument();
-    });
-
-    it('clicking "Step away" clears the selection via the select-character mutation', async () => {
-      const { user } = setupUser();
-      mockRosterEntries.mockReturnValue({ data: [aria] });
-      const store = makeStore();
-      store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
-
-      render(
-        <Wrapper store={store}>
-          <Header />
-        </Wrapper>
-      );
-
-      await user.click(screen.getByTitle('Step away'));
-
-      expect(mockSelectMutate).toHaveBeenCalledWith(null);
-      // Never touches a live session — selection isn't presence (#3412).
-      expect(store.getState().game.sessions).toEqual({});
+      // No clear-selection control in the chip (Apostate ruling 2026-08-28 —
+      // "step away" read as logout; "Clear Active Character" lands in the
+      // Hall's "Your Characters" band in slice 2).
+      expect(screen.queryByTitle('Step away')).not.toBeInTheDocument();
+      expect(mockSelectMutate).not.toHaveBeenCalled();
     });
 
     it('does not render the chip when the roster entry for the active name has not loaded yet', () => {

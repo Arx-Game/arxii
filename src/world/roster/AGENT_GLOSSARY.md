@@ -111,20 +111,36 @@ browsing as (state 2.5 in the four-state model: logged out / logged in-no-select
 `world.roster.services.selection.set_selected_entry`, mirrored client-side by
 `gameSlice` (#3412). Selection is a fact, not an action: it carries zero
 lifecycle, session, or puppeting side effects — see ADR-0241. Player-facing
-state label ratified by Apostate 2026-08-27: **Playing: Not In World** (see
-below).
+state label ratified by Apostate (refined 2026-08-28): **Playing: Currently
+Offscreen** (see below).
 _Avoid_: active character (ambiguous with puppeting/session state); current
-character (same ambiguity); taken up (retired working label, superseded by the
-ratified term).
+character (same ambiguity); taken up (retired working label); Playing: Not In
+World (first-pass label, refined same session — "offscreen" is the established
+project word for this).
 
-**Playing: Not In World**:
-Ratified player-facing label for Selection (state 2.5), by Apostate 2026-08-27 —
-a character is being played but is not in the world (vs. state 3, puppeted play).
-The ratification carries a UI ruling with it: the load-bearing state signal is the
-**selected character's portrait, prominently displayed** — played-by portraits are
-one of the game's most popular features and effectively every player sets them, so
-the docked portrait itself tells the player who they are playing; the text label is
-supporting copy and the accessible equivalent (some blind players skip portraits —
-the label/alt text must always carry the same fact). Design chrome around the
-portrait, not around a subtle text badge.
-_Avoid_: taken up (retired); subtle text-only state indicators.
+**Playing: Currently Offscreen**:
+Ratified player-facing label for Selection (state 2.5), by Apostate 2026-08-28 —
+a character is being played but is not in the world (vs. state 3, in-world play).
+Chosen over "Not In World" for consistency with the project's established
+"offscreen" vocabulary (offscreen acts, IC-but-offscreen). The ratification
+carries a UI ruling with it: the load-bearing state signal is the **selected
+character's portrait, prominently displayed** — played-by portraits are one of
+the game's most popular features and effectively every player sets them, so the
+docked portrait itself tells the player who they are playing; the text label is
+supporting copy and the accessible equivalent (some blind players skip
+portraits — the label/alt text must always carry the same fact). Design chrome
+around the portrait, not a subtle text badge.
+_Avoid_: taken up (retired); Playing: Not In World (superseded); subtle
+text-only state indicators.
+
+**Log out / quit / Clear Active Character** (the exit triad, Apostate
+2026-08-28): three distinct exits that must never share a label. **Log out** =
+leave the ACCOUNT (site logout; lives in the account menu). **quit** = the
+standard-MU telnet verb: the character stops being actively in the world
+(state 3 → 2.5) but STAYS selected on the website. **Clear Active Character** =
+drop the selection entirely (state 2.5 → 2): logged in on the account with no
+character — the control lives with the character list (the Hall's "Your
+Characters" band), NOT in the header chip. Use case: browsing journals/events
+while certain nothing gets posted as the wrong character.
+_Avoid_: step away (retired — read as logout when placed next to "Enter the
+world"); using any one of the three where another is meant.
