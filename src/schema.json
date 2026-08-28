@@ -31834,7 +31834,14 @@ paths:
   /api/societies/proclamations/proclaim/:
     post:
       operationId: societies_proclamations_proclaim_create
-      description: Issue a proclamation (optionally enacting a domain edict).
+      description: |-
+        Issue a proclamation (optionally enacting a domain edict).
+
+        Dispatches through ``IssueProclamationAction.run()`` (#3412 slice 3)
+        instead of calling the ``proclamations`` service functions directly —
+        this is the choke point the offscreen-act gate consults, so a
+        captured/unconscious/dead leader is now refused before the service
+        layer's own leadership/domain-authority checks ever run.
       tags:
       - societies
       requestBody:
@@ -54722,10 +54729,14 @@ components:
             plain, unannotated ``RosterEntry`` — fall back to a direct count there,
             a single extra query on that single-object path only.
           readOnly: true
+        lifecycle_state:
+          type: string
+          readOnly: true
       required:
       - active_persona_id
       - character_id
       - id
+      - lifecycle_state
       - name
       - primary_persona_id
       - profile_picture_url

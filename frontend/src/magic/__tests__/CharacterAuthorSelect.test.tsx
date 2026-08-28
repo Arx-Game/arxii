@@ -12,6 +12,7 @@ function makeEntry(overrides: Partial<MyRosterEntry> & { character_id: number })
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,
+    lifecycle_state: 'ALIVE',
     ...overrides,
   };
 }

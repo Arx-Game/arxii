@@ -269,6 +269,53 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     the actual bug) rather than replacing it with a live presence read; presence
     wiring for that label stays open for a future slice.
 
+- **The offscreen-act gate (#3412 slice 3, complete, ADR-0245):** the "2.5 acts" a
+  player can still do on a degraded-lifecycle character's behalf without that
+  character being onscreen. Backend: `actions.offscreen_gate.offscreen_act_state`
+  (`OFFSCREEN_ACT_KEYS`: journal entries, character goals, persona swaps,
+  proclamations) runs inside `Action.check_availability()` immediately after the
+  existing #2287 dead gate and before `get_prerequisites()` — a pure predicate keyed
+  on `CharacterSheet.lifecycle_state` plus one cheap unconscious-overlay query,
+  resolving ALLOWED/ROUTED/BLOCKED; a degraded character (CAPTURED, unconscious,
+  DEAD, RETIRED, UNKNOWN) gets refused (ROUTED refusals name a rescue channel,
+  BLOCKED do not), everything else passes untouched with zero lifecycle read.
+  End-to-end web coverage: journals/goals/persona all gate-covered with a
+  standardized `{"detail"}` refusal payload (fixed a persona-endpoint bare-list
+  coercion bug in the process); proclamations now route through a new
+  `issue_proclamation` action (`IssueProclamationAction`,
+  `actions/definitions/organizations.py`) instead of calling the `proclamations`
+  service functions directly, gate-covered with a byte-identical happy path.
+  Frontend: the Hall's `OffscreenActsPlate` (journal/goals link-out for the docked
+  character); `MyRosterEntrySerializer` gained `lifecycle_state` (plain read-only
+  mirror of the sheet column, no migration) so the plate can render world-voice
+  refusal prose (Garamond/serif body voice, PLACEHOLDER copy) for a
+  CAPTURED/DEAD/RETIRED/UNKNOWN docked character instead of the act rows; the
+  persona-switcher's `setActivePersona` fetcher now surfaces the response's
+  `{"detail"}` (via `readErrorDetail`) so a failed switch's toast carries the real
+  gate reason instead of a fixed generic message. See ADR-0245 for the
+  extend-the-dead-gate architecture, the rejected `CharacterCapabilities`-facade-now
+  and DB-config-table-now alternatives, and the COMA-is-unwritten finding.
+  - **Remaining #3412 scope (deferred to a later slice or explicitly out of
+    scope):** the smuggle channel mechanic (CAPTURED) has zero substrate today —
+    needs real check-design (perform_check philosophy: no flat probability) before
+    it can be scoped; the dream channel (unconscious) needs a one-way variant of
+    whatever dream-contact mechanics magic builds — Tehom coordination
+    (combat/soulfray/scars/zones/magic is his domain); messenger gating with
+    #3289's not-yet-built IC messaging system (the séance/smuggle/dream channels
+    are conceptually adjacent to that system but not wired to it); DB
+    authorability of the `OFFSCREEN_ACT_KEYS`/`OFFSCREEN_LIFECYCLE_DISPOSITIONS`
+    tables (currently Python constants — a config-table facade was explicitly
+    rejected for this slice, ADR-0245); the unconscious display-state overlay is
+    NOT exposed on `MyRosterEntry` (it's a conditions-system read, not a sheet
+    column — recorded as a seam, not built, to avoid a new per-row query on a
+    payload every Hall visit fetches); a proclamation FE compose surface (no
+    existing surface to route the Hall's Offscreen Acts plate through — the
+    boards-row precedent: never ship a link to nothing); **slice 4** (small,
+    tracked but not started): a `/` → `/game` route redirect when a session is
+    already live, a sheet link from `/game`, the clock in the top bar, and
+    `CombatScenePage`'s composer threading the `speakingAs` prop (#2166) the way
+    `GamePage`'s composer already does.
+
 ### Critical Infrastructure Gap: Reactive Layer Activation
 
 The flows/triggers system in `src/flows/` is a fully-implemented reactive engine —

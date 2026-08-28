@@ -69,6 +69,7 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
 };
 
 describe('SelectedCharacterChip (#3412)', () => {

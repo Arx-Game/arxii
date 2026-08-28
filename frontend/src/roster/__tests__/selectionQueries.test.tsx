@@ -45,6 +45,7 @@ describe('postSelectEntry', () => {
         primary_persona_id: 1,
         active_persona_id: 1,
         unread_narrative_count: 0,
+        lifecycle_state: 'ALIVE',
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
@@ -104,6 +105,7 @@ describe('useSelectCharacterMutation', () => {
         primary_persona_id: 1,
         active_persona_id: 1,
         unread_narrative_count: 0,
+        lifecycle_state: 'ALIVE',
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));

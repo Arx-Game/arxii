@@ -96,6 +96,19 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     primary_persona_id = serializers.SerializerMethodField()
     active_persona_id = serializers.SerializerMethodField()
     unread_narrative_count = serializers.SerializerMethodField()
+    # #3412 slice 3 task 5 — display-only lifecycle state, the seam T4 left
+    # open ("the exposure seam ... is left for a follow-up task"). A plain
+    # CharField source, not an annotation — ``lifecycle_state`` is already a
+    # real column on ``CharacterSheet`` (no query beyond the existing
+    # ``character_sheet`` traversal every other field on this serializer
+    # already does), unlike ``unread_narrative_count`` above which aggregates
+    # a related table. Lets the Hall's OffscreenActsPlate branch on
+    # CAPTURED/DEAD/RETIRED/UNKNOWN without a new endpoint. Deliberately does
+    # NOT surface the unconscious overlay (that reads the conditions system,
+    # not a sheet column) — recorded as a seam, not built here.
+    lifecycle_state = serializers.CharField(
+        source="character_sheet.lifecycle_state", read_only=True
+    )
 
     class Meta:
         model = RosterEntry
@@ -107,6 +120,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "primary_persona_id",
             "active_persona_id",
             "unread_narrative_count",
+            "lifecycle_state",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 

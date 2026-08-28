@@ -76,6 +76,7 @@ describe('useAccountQuery hydration (#3412)', () => {
         primary_persona_id: 1,
         active_persona_id: 1,
         unread_narrative_count: 0,
+        lifecycle_state: 'ALIVE',
       },
     });
 
@@ -140,6 +141,7 @@ describe('useAccountQuery hydration (#3412)', () => {
         primary_persona_id: 1,
         active_persona_id: 1,
         unread_narrative_count: 0,
+        lifecycle_state: 'ALIVE',
       },
     });
 

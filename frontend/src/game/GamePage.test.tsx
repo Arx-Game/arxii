@@ -43,6 +43,7 @@ const rosterEntry: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
 };
 
 // A second puppet (#2156 review fix — multi-puppet threading/baseline tests
@@ -56,6 +57,7 @@ const rosterEntry2: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
 };
 
 vi.mock('@/roster/queries', () => ({

@@ -19906,7 +19906,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Issue a proclamation (optionally enacting a domain edict). */
+    /**
+     * @description Issue a proclamation (optionally enacting a domain edict).
+     *
+     *     Dispatches through ``IssueProclamationAction.run()`` (#3412 slice 3)
+     *     instead of calling the ``proclamations`` service functions directly —
+     *     this is the choke point the offscreen-act gate consults, so a
+     *     captured/unconscious/dead leader is now refused before the service
+     *     layer's own leadership/domain-authority checks ever run.
+     */
     post: operations['societies_proclamations_proclaim_create'];
     delete?: never;
     options?: never;
@@ -31260,6 +31268,7 @@ export interface components {
        *     a single extra query on that single-object path only.
        */
       readonly unread_narrative_count: number;
+      readonly lifecycle_state: string;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).

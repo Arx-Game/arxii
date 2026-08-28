@@ -1,8 +1,10 @@
 /**
- * OffscreenActsPlate tests (#3412 slice 3, task 4) — renders only for a
- * docked character, links to the journal/goals surfaces, and never renders a
+ * OffscreenActsPlate tests (#3412 slice 3, tasks 4/5) — renders only for a
+ * docked character, links to the journal/goals surfaces, never renders a
  * proclamation row (no FE compose surface exists — see the component's doc
- * comment).
+ * comment), and (task 5) branches on `lifecycle_state`: ALIVE/COMA keep the
+ * act rows, CAPTURED/DEAD/RETIRED/UNKNOWN show world-voice refusal prose
+ * instead.
  */
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,6 +23,7 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
 };
 
 const bianca: MyRosterEntry = {
@@ -31,6 +34,7 @@ const bianca: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
 };
 
 describe('OffscreenActsPlate', () => {
@@ -77,4 +81,30 @@ describe('OffscreenActsPlate', () => {
 
     expect(screen.queryByRole('tablist', { name: 'Personas' })).not.toBeInTheDocument();
   });
+
+  it('renders the act rows for a COMA docked character (the unwritten fall-through state)', () => {
+    const inComa = { ...aria, lifecycle_state: 'COMA' };
+    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    renderWithProviders(<OffscreenActsPlate characters={[inComa]} />);
+
+    expect(screen.getByRole('link', { name: 'Write in your journal' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['CAPTURED', /smuggled out/i],
+    ['DEAD', /séance/i],
+    ['RETIRED', /stepped away/i],
+    ['UNKNOWN', /whereabouts are unknown/i],
+  ])(
+    'renders world-voice refusal prose instead of the act rows for %s',
+    (lifecycle_state, expectedText) => {
+      const degraded = { ...aria, lifecycle_state };
+      store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+      renderWithProviders(<OffscreenActsPlate characters={[degraded]} />);
+
+      expect(screen.getByText(expectedText)).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Write in your journal' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Set your goals' })).not.toBeInTheDocument();
+    }
+  );
 });

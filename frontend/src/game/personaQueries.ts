@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 
 export type PersonaType = 'primary' | 'established' | 'temporary' | 'alternate';
 
@@ -84,7 +85,13 @@ async function setActivePersona(personaId: number): Promise<number> {
     body: JSON.stringify({ persona_id: personaId }),
   });
   if (!res.ok) {
-    throw new Error('Could not switch to that identity.');
+    // #3412 slice 3 task 5 — was a fixed generic message; now surfaces the
+    // response's `{"detail"}` (e.g. an offscreen-gate refusal reason) when
+    // present, falling back to the same generic copy otherwise. Mirrors the
+    // journals/goals composers' `readErrorDetail` convention (`lib/errors.ts`)
+    // rather than `postSelectEntry`'s fixed-message pattern this fetcher
+    // previously copied — see task-4-report's "known limitation" note.
+    await readErrorDetail(res, 'Could not switch to that identity.');
   }
   const data = (await res.json()) as { active_persona_id: number };
   return data.active_persona_id;
