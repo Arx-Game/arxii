@@ -26,14 +26,14 @@ so ``.value`` type-checks as non-``str`` here; ``str(action)`` is exact
 ``.label`` is unaffected and used directly.
 """
 
-import dataclasses as _dc
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import StrEnum
 
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.events.payloads import PAYLOAD_FOR_EVENT
 from flows.filters import evaluator
+from flows.models.flows import CONDITIONAL_ACTIONS
 
 
 class VariableNameRole(StrEnum):
@@ -515,17 +515,8 @@ _NON_CONDITIONAL_SPECS: tuple[StepActionSpec, ...] = (
     _prompt_player(FlowActionChoices.PROMPT_PLAYER),
 )
 
-_CONDITIONAL_ACTIONS: tuple[FlowActionChoices, ...] = (
-    FlowActionChoices.EVALUATE_EQUALS,
-    FlowActionChoices.EVALUATE_NOT_EQUALS,
-    FlowActionChoices.EVALUATE_LESS_THAN,
-    FlowActionChoices.EVALUATE_GREATER_THAN,
-    FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS,
-    FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS,
-)
-
 STEP_ACTION_SPECS: dict[str, StepActionSpec] = {
-    **{str(a): _conditional(a) for a in _CONDITIONAL_ACTIONS},
+    **{str(a): _conditional(a) for a in CONDITIONAL_ACTIONS},
     **{spec.action: spec for spec in _NON_CONDITIONAL_SPECS},
 }
 
@@ -555,6 +546,6 @@ def event_catalog() -> list[dict]:
         payload_cls = PAYLOAD_FOR_EVENT.get(name)
         fields_out = None
         if payload_cls is not None:
-            fields_out = [{"name": f.name, "type": str(f.type)} for f in _dc.fields(payload_cls)]
+            fields_out = [{"name": f.name, "type": str(f.type)} for f in fields(payload_cls)]
         entries.append({"name": name, "label": label, "payload_fields": fields_out})
     return entries
