@@ -60,6 +60,16 @@ vi.mock('@/game/components/PersonaSwitcher', () => ({
   PersonaSwitcher: () => <span data-testid="persona-switcher-stub" />,
 }));
 
+// SelectedCharacterChip (#3412 slice 2 restyle) also reads
+// `useCharacterPersonasQuery` directly now (to resolve the worn persona's
+// name for its sub-line) — same QueryClientProvider-less-Wrapper reason as
+// PersonaSwitcher above. Empty by default; falls back to the entry's own
+// name (`SelectedCharacterChip`'s `wornName` fallback), which is what these
+// tests assert on.
+vi.mock('@/game/personaQueries', () => ({
+  useCharacterPersonasQuery: () => ({ data: [] }),
+}));
+
 function makeStore() {
   return configureStore({
     reducer: {
