@@ -119,7 +119,14 @@ class EjectTests(_DecreeFixtureMixin, TestCase):
 
         case = self._case()
         sheet_pk = self.persona.character_sheet.pk
-        before_location = self.persona.character_sheet.character.location
+        # Read the BEFORE value the same way as the after value: through a
+        # flushed identity map. A sibling test in this class moves the
+        # class-level persona, and while its DB write rolls back, the idmapper
+        # cache does not - so a plain read here returns that stale location and
+        # the assertion below ends up comparing a cached read against a
+        # post-flush one. It only agreed by coincidence.
+        flush_cache()
+        before_location = CharacterSheet.objects.get(pk=sheet_pk).character.location
 
         moved = eject(case)
 

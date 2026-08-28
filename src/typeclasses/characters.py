@@ -701,11 +701,92 @@ class Character(ObjectParent, DefaultCharacter):
             location=self.location,
         )
 
+    def move_to(  # noqa: PLR0913 - mirrors Evennia's move_to signature exactly
+        self,
+        destination,
+        quiet=False,
+        emit_to_obj=None,
+        use_destination=True,
+        to_none=False,
+        move_hooks=True,
+        move_type="move",
+        **kwargs,
+    ):
+        """Move, letting an authored flow redirect where the move lands (#3416).
+
+        Evennia binds ``destination`` as a local in ``move_to`` before calling
+        ``at_pre_move``, so that hook can veto a move but can never change
+        where it goes. MOVE_PRE_DEPART is therefore dispatched *here*, while
+        the destination is still ours to change: a flow step can
+        ``MODIFY_PAYLOAD`` the payload's ``destination`` (the dataclass is
+        deliberately unfrozen, unlike ``MovedPayload``) and this honors it.
+
+        That is the whole mechanism behind authored special movement -
+        labyrinths, one-way thresholds, doors that lead elsewhere by time of
+        day. None of it needs a bespoke model; see #3416.
+
+        ``at_pre_move`` still emits for every *direct* caller, so its contract
+        is unchanged. A one-shot ndb flag suppresses the duplicate emission
+        that would otherwise fire when ``super().move_to`` calls the hook -
+        without it every trigger would run twice per move.
+        """
+        if move_hooks and self.location is not None:
+            target = destination
+            # Mirror Evennia's own exit resolution so the payload carries the
+            # room a flow would expect, not the exit object.
+            if use_destination and target is not None:
+                # Every ObjectDB carries `destination` (the db_destination
+                # alias); it is set only on exits and None everywhere else, so
+                # this resolves an exit to the room it leads to and leaves a
+                # room untouched - the same thing Evennia's own move_to does.
+                target = target.destination or target
+            if target is not None:
+                resolved = self._dispatch_move_pre_depart(target, move_type=move_type, **kwargs)
+                if resolved is None:
+                    return False
+                destination = resolved
+
+        self.ndb.suppress_move_pre_depart = True
+        try:
+            return super().move_to(
+                destination,
+                quiet=quiet,
+                emit_to_obj=emit_to_obj,
+                use_destination=use_destination,
+                to_none=to_none,
+                move_hooks=move_hooks,
+                move_type=move_type,
+                **kwargs,
+            )
+        finally:
+            self.ndb.suppress_move_pre_depart = False
+
+    def _dispatch_move_pre_depart(self, destination, move_type="move", **kwargs):
+        """Emit MOVE_PRE_DEPART; return the (possibly redirected) destination.
+
+        Returns ``None`` when a reactive listener cancelled the move.
+        """
+        payload = MovePreDepartPayload(
+            character=self,
+            origin=self.location,
+            destination=destination,
+            # move_type is a named parameter here, so it is NOT in kwargs -
+            # read it directly rather than kwargs.get (which is always None).
+            exit_used=kwargs.get("exit_used") or kwargs.get("exit_obj") or move_type,
+        )
+        stack = emit_event(EventName.MOVE_PRE_DEPART, payload, location=self.location)
+        if stack.was_cancelled():
+            return None
+        return payload.destination
+
     def at_pre_move(self, destination, move_type="move", **kwargs):
         """Called just before moving to destination.
 
         Emits MOVE_PRE_DEPART and returns False if a reactive listener
         cancels the event, allowing conditions/triggers to block movement.
+
+        When reached through ``move_to`` the emission already happened there
+        (so the destination could be redirected), and is suppressed here.
         """
         origin = self.location
         result = super().at_pre_move(destination, move_type=move_type, **kwargs)
@@ -719,6 +800,8 @@ class Character(ObjectParent, DefaultCharacter):
                 clear_resonance_alignment(character_sheet=self.sheet_data)
         if origin is None:
             return True  # No location to dispatch from; allow the move.
+        if self.ndb.suppress_move_pre_depart:
+            return True  # move_to already dispatched this move's MOVE_PRE_DEPART.
         payload = MovePreDepartPayload(
             character=self,
             origin=origin,
