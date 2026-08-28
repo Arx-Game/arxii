@@ -2,6 +2,8 @@
 
 import logging
 
+from evennia.objects.models import ObjectDB
+
 from commands.exceptions import CommandError
 from flows.object_states.base_state import BaseState
 
@@ -175,8 +177,96 @@ def traverse_exit(
         charge_move_fatigue(caller.obj)
 
 
+def redirect_move_to_bearer_at_stage(
+    *,
+    payload: object,
+    condition_name: str,
+    stage_order: object,
+    **kwargs: object,
+) -> int | None:
+    """Redirect an in-flight move to a random room bearing a condition at a stage.
+
+    General-purpose ``CALL_SERVICE_FUNCTION`` target for authored special
+    movement (#3416). Rooms are grouped by putting a condition on them -
+    ``ConditionInstance.target`` accepts a room, not just a character - so
+    "every room at depth 2 of this labyrinth" is an ordinary queryset over
+    authored rows, with no bespoke grouping model.
+
+    Only meaningful on a ``MOVE_PRE_DEPART`` payload, whose ``destination``
+    is deliberately mutable; ``Character.move_to`` reads it back and honors
+    it. No-ops (leaving the move alone) when nothing matches, so a
+    misconfigured stage can never strand a character.
+
+    The bearer's current room is excluded, so a move always *moves*.
+
+    Args:
+        payload: The event payload; needs ``character`` and ``destination``.
+        condition_name: Condition marking rooms as members of the space.
+        stage_order: Which stage (depth) to land in. Usually a flow variable
+            (``"@depth"``) produced by ``advance_condition_stage``.
+
+    Returns:
+        The chosen room's pk, or ``None`` if the move was left untouched.
+    """
+    import random  # noqa: PLC0415 - only needed on this path
+
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    if stage_order is None:
+        return None
+    try:
+        stage_value = int(stage_order)  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        return None
+
+    character = payload.character
+    here = character.location
+
+    candidate_ids = list(
+        ConditionInstance.objects.filter(
+            condition__name=condition_name,
+            current_stage__stage_order=stage_value,
+        )
+        .exclude(target_id=here.pk if here is not None else None)
+        .values_list("target_id", flat=True)
+    )
+    if not candidate_ids:
+        return None
+
+    # S311 is suppressed deliberately: this is flavour randomness for authored
+    # spaces, never a security or fairness boundary. Tests seed `random` so
+    # failures reproduce.
+    chosen_id = random.choice(candidate_ids)  # noqa: S311
+    chosen = ObjectDB.objects.filter(pk=chosen_id).first()
+    if chosen is None:
+        return None
+
+    payload.destination = chosen
+    return chosen_id
+
+
+def redirect_move(*, payload: object, room_id: object, **kwargs: object) -> bool:
+    """Redirect an in-flight move to one specific room (#3416).
+
+    The blunt counterpart to ``redirect_move_to_bearer_at_stage`` - used for
+    the "and you are simply out" case (a retreat, an ejection, a threshold
+    that always lands somewhere fixed). No-ops if the room can't be resolved.
+    """
+    try:
+        pk = int(room_id)  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        return False
+    room = ObjectDB.objects.filter(pk=pk).first()
+    if room is None:
+        return False
+    payload.destination = room
+    return True
+
+
 hooks = {
     "move_object": move_object,
     "check_exit_traversal": check_exit_traversal,
     "traverse_exit": traverse_exit,
+    "redirect_move_to_bearer_at_stage": redirect_move_to_bearer_at_stage,
+    "redirect_move": redirect_move,
 }

@@ -1062,6 +1062,100 @@ def _bulk_apply_one(  # noqa: PLR0913
     return result
 
 
+def advance_condition_stage(*, payload: object, condition_name: str) -> int | None:
+    """Advance the bearer's condition by one stage *now*, on this event (#3416).
+
+    General-purpose ``CALL_SERVICE_FUNCTION`` target. Stage progression is
+    otherwise driven only by the round tick
+    (``_process_duration_and_progression``); this is the event-driven
+    counterpart, for anything that should progress when something *happens*
+    rather than when time passes.
+
+    The condition is applied first if the bearer doesn't have it, so authored
+    content needs no separate "apply on first entry" step - the same flow
+    handles entry and every subsequent advance.
+
+    ``payload`` must carry a ``character`` attribute (e.g.
+    ``MovePreDepartPayload``). Silently no-ops on an unknown condition name,
+    matching ``apply_condition_by_name``.
+
+    Returns the resulting ``stage_order``, or ``None`` if nothing happened -
+    the caller captures it into a flow variable via ``result_variable`` and
+    later steps read it with ``@<name>``.
+
+    Usage in a FlowStepDefinition::
+
+        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+        variable_name="world.conditions.services.advance_condition_stage",
+        parameters={
+            "payload": "@payload",
+            "condition_name": "<name>",
+            "result_variable": "depth",
+        },
+    """
+    try:
+        template = ConditionTemplate.get_by_name(condition_name)
+    except ConditionTemplate.DoesNotExist:
+        return None
+
+    target = payload.character  # type: ignore[union-attr]
+    instance = get_condition_instance(target, template)
+    if instance is None:
+        apply_condition(target=target, condition=template)
+        instance = get_condition_instance(target, template)
+        if instance is None:
+            return None  # application was cancelled or resisted
+        # A freshly applied progressive condition already sits on its first
+        # stage; entering the space IS the first step, so don't advance again.
+        return instance.current_stage.stage_order if instance.current_stage else None
+
+    next_stage = _get_next_stage(instance)
+    if next_stage is None:
+        # Already at the final stage - the bearer has arrived. Leave the
+        # instance alone; the authored flow decides what arrival means.
+        return instance.current_stage.stage_order if instance.current_stage else None
+
+    previous_stage = instance.current_stage
+    instance.current_stage = next_stage
+    instance.stage_rounds_remaining = next_stage.rounds_to_next
+    instance.save(update_fields=["current_stage", "stage_rounds_remaining"])
+    _invalidate_condition_handler(target)
+
+    stage_change_payload = ConditionStageChangedPayload(
+        target=target,
+        instance=instance,
+        old_stage=previous_stage,
+        new_stage=next_stage,
+    )
+    target_location = target.location
+    if target_location is not None:
+        emit_event(
+            EventName.CONDITION_STAGE_CHANGED,
+            stage_change_payload,
+            location=target_location,
+        )
+    # Same inline-dispatch pattern the severity path uses (see
+    # advance_condition_severity): the reactive layer only dispatches to DB
+    # Trigger rows, so on-entry effects are invoked directly.
+    apply_stage_entry_aftermath(stage_change_payload)
+
+    return next_stage.stage_order
+
+
+def remove_condition_by_name(*, payload: object, condition_name: str) -> bool:
+    """Remove a named condition from the character carried by the payload.
+
+    The counterpart to ``apply_condition_by_name`` - a general-purpose
+    ``CALL_SERVICE_FUNCTION`` target so authored flows can end a state they
+    started. Silently no-ops on an unknown condition name.
+    """
+    try:
+        template = ConditionTemplate.get_by_name(condition_name)
+    except ConditionTemplate.DoesNotExist:
+        return False
+    return remove_condition(payload.character, template)  # type: ignore[union-attr]
+
+
 @transaction.atomic
 def bulk_apply_conditions(
     applications: list[BulkConditionApplication],
