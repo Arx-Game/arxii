@@ -1873,6 +1873,90 @@ class FinalizeGMCharacterTests(TestCase):
         assert progress.current_episode is None, "current_episode should be None at CG time"
 
 
+class FinalizeGMCharacterClaimAsNpcTests(TestCase):
+    """``claim_as_npc`` keyword — the heavyweight full-CG NPC hand-off (#3426)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.constants import GMLevel
+        from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
+
+        ensure_rosters()
+        seed_default_gm_level_caps()
+        cls.gm = GMProfileFactory(level=GMLevel.JUNIOR)
+        cls.table = GMTableFactory(gm=cls.gm)
+
+    def _make_gm_draft(self, **overrides) -> CharacterDraft:
+        from world.character_creation.factories import CharacterDraftFactory
+
+        defaults = {
+            "account": self.gm.account,
+            "is_gm_creation": True,
+            "target_table": self.table,
+            "story_title": "The Antagonist's Debut",
+            "story_description": "A recurring villain, played by the table's GM.",
+            "selected_tradition": TraditionFactory(),
+            "draft_data": {"first_name": "Aurelius"},
+        }
+        defaults.update(overrides)
+        return CharacterDraftFactory(**defaults)
+
+    def test_claim_as_npc_lands_on_npc_shelf(self) -> None:
+        from world.character_creation.services import finalize_gm_character
+        from world.roster.models.choices import RosterType
+
+        draft = self._make_gm_draft()
+        entry, _story = finalize_gm_character(draft, claim_as_npc=True)
+        assert entry.roster.roster_type == RosterType.NPC
+
+    def test_claim_as_npc_creates_an_active_tenure_to_the_gm(self) -> None:
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft()
+        entry, _story = finalize_gm_character(draft, claim_as_npc=True)
+        tenure = entry.tenures.get()
+        assert tenure.player_data.account_id == self.gm.account_id
+        assert tenure.end_date is None
+
+    def test_default_still_lands_on_available_with_no_tenure(self) -> None:
+        """Omitting claim_as_npc preserves the pre-#3426 default (Available, tenure-less)."""
+        from world.character_creation.services import finalize_gm_character
+        from world.roster.models.choices import RosterType
+
+        draft = self._make_gm_draft()
+        entry, _story = finalize_gm_character(draft)
+        assert entry.roster.roster_type == RosterType.AVAILABLE
+        assert entry.tenures.count() == 0
+
+    def test_claim_as_npc_refused_below_junior(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.services import finalize_gm_character
+        from world.gm.constants import GMLevel
+
+        self.gm.level = GMLevel.STARTING
+        self.gm.save(update_fields=["level"])
+        draft = self._make_gm_draft()
+        with self.assertRaises(ValidationError):
+            finalize_gm_character(draft, claim_as_npc=True)
+
+    def test_claim_as_npc_respects_the_cap(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.services import finalize_gm_character
+
+        # JUNIOR's seeded cap is 2 -- fill it via the lightweight mint path so
+        # this test doesn't need two full CG drafts.
+        from world.roster.services.staff_characters import mint_story_npc
+
+        mint_story_npc(gm_account=self.gm.account, name="Filler NPC 1")
+        mint_story_npc(gm_account=self.gm.account, name="Filler NPC 2")
+
+        draft = self._make_gm_draft()
+        with self.assertRaises(ValidationError):
+            finalize_gm_character(draft, claim_as_npc=True)
+
+
 class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
     """Tests for ritual knowledge reconciliation during character finalization (Phase 8)."""
 

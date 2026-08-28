@@ -486,6 +486,44 @@ shape above; both surfaces independently land on the same consent-first
 principle, just for different questions ("can I move you" vs "can you enter
 my story area").
 
+### Phase 8 — GM Story-NPC On-Ramp ✅ (#3426)
+A JUNIOR+ GM stands up a Story NPC before a session and can immediately speak, emote,
+and act as it in scenes — web persona picker and telnet `@ic` alike — with no admin
+intervention. Closes the gap `staff_characters.py`'s docstring flagged as a deliberate
+follow-on: `mint_staff_character` (#3283) was staff-only, with no GM-gated sibling and
+no path granting a GM a tenure on their own NPC.
+
+Delivered:
+- **Service**: `mint_story_npc` (`world.roster.services.staff_characters`) — JUNIOR+
+  `GMProfile` (staff bypass) + `GMLevelCap.max_story_npcs` (new per-level cap column,
+  most-restrictive/refuse when unconfigured), delegating to `mint_staff_character`'s
+  working set (Character + sheet + PRIMARY persona + NPC-shelf `RosterEntry` + active
+  `RosterTenure`). `check_story_npc_cap` is the shared authorization seam both mint
+  paths call. In-scope bugfix: `mint_staff_character`'s shelf lookup was keyed on
+  `name="NPC"`, but the seeded shelf is named "NPCs" (`roster/seeds.py`) — re-keyed on
+  `roster_type` (unique), matching seeds.py's own pattern.
+- **Heavyweight sibling**: `finalize_gm_character(draft, claim_as_npc=True)` — a GM
+  runs a recurring antagonist through full CG, then claims it as their own NPC at
+  finalize instead of landing it tenure-less on Available. Same cap check.
+- **Action + telnet**: `MintStoryNPCAction` (key `mint_story_npc`,
+  `actions/definitions/gm_npcs.py`, `MinimumGMLevelPrerequisite(JUNIOR)`); telnet
+  `gm npc <name>[=<description>]` (`CmdGMDashboard`, `commands/gm_ops.py`).
+  `CharacterDraftViewSet.finalize_gm` gained the `claim_as_npc` body flag;
+  `FinalizeForTableDialog` gained the matching checkbox.
+- **Leak fix**: `RosterEntryViewSet` (`AllowAny`) was listing NPC-shelf entries
+  individually even though `RosterViewSet` already hid the *shelf* from non-staff —
+  now excludes `RosterType.NPC` entries from the general queryset (staff and the
+  entry's own tenure holder still see them).
+- **Frontend**: a "My NPCs" block on `GMDashboardPage` (own NPC tenures, name + sheet
+  link) plus a mint dialog dispatching `mint_story_npc`.
+- **Deferred** (stated, not an oversight): no self-service release/retire action to
+  free a cap slot yet — staff ends the `RosterTenure` in admin. Mid-weight statting
+  presets and a cross-story NPC library are a separate `needs-design` question (#3427).
+
+See `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
+service/action/API rundown and how this relates to (but bypasses) the ambient-NPC
+ladder.
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows

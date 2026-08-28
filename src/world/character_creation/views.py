@@ -782,7 +782,10 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
         viewable quality/trust signal (the GM vouches for it for their table; apping is
         never gated by it). Body: ``target_table`` (id, required), ``story_title``
-        (required), optional ``story_description``.
+        (required), optional ``story_description``, optional ``claim_as_npc`` (bool,
+        #3426 — land the entry on the NPC shelf, tenure-bound to the requester, instead
+        of tenure-less on Available; same JUNIOR+/cap authorization ``mint_story_npc``
+        enforces).
         """
         from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
 
@@ -826,8 +829,10 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             update_fields=["is_gm_creation", "target_table", "story_title", "story_description"]
         )
 
+        claim_as_npc = bool(request.data.get("claim_as_npc", False))
+
         try:
-            entry, story = finalize_gm_character(draft)
+            entry, story = finalize_gm_character(draft, claim_as_npc=claim_as_npc)
         except (DjangoValidationError, GiftResonanceUnresolvable) as exc:
             if isinstance(exc, DjangoValidationError):
                 detail = "; ".join(exc.messages)
@@ -835,12 +840,17 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 logger.exception("GM character finalize failed while resolving gift resonance.")
                 detail = "Character creation failed."
             return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
+        message = (
+            "Story NPC created and bound to your account."
+            if claim_as_npc
+            else "GM character created on the Available roster."
+        )
         return Response(
             {
                 "character_id": entry.character_sheet.pk,
                 "roster_entry_id": entry.pk,
                 "story_id": story.pk,
-                "message": "GM character created on the Available roster.",
+                "message": message,
             },
             status=status.HTTP_201_CREATED,
         )

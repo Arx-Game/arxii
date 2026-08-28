@@ -488,6 +488,8 @@ class ActionRegistryTests(TestCase):
             # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
             "gm_find_situation",
             "gm_submit_catalog_suggestion",
+            # #3426 — GM story-NPC on-ramp: mint a Story NPC tenure-bound to the GM's account.
+            "mint_story_npc",
             # #3295 — scene check invocation: player self-checks, GM calls, proposals.
             "scene_self_check",
             "call_for_check",
