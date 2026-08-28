@@ -9,6 +9,7 @@ rows, with step-tree writes delegated to ``flows.serializers``.
 import dataclasses
 
 from django.db.models import Count, Prefetch, QuerySet
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.filters import SearchFilter
 from rest_framework.pagination import PageNumberPagination
@@ -25,11 +26,13 @@ from flows.catalog import (
     service_function_catalog,
 )
 from flows.consts import FlowActionChoices
-from flows.models import FlowDefinition, FlowStepDefinition
+from flows.models import FlowDefinition, FlowStepDefinition, Trigger, TriggerDefinition
 from flows.serializers import (
     FlowDefinitionDetailSerializer,
     FlowDefinitionListSerializer,
     FlowDefinitionWriteSerializer,
+    TriggerDefinitionSerializer,
+    TriggerSerializer,
 )
 from world.gm.permissions import IsGMOrStaff
 
@@ -118,3 +121,28 @@ class FlowDefinitionViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewS
         if self.action == "list":
             return FlowDefinitionListSerializer
         return FlowDefinitionWriteSerializer
+
+
+class TriggerDefinitionViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewSet):
+    """Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417 task 6)."""
+
+    queryset = TriggerDefinition.objects.all().order_by("pk")
+    serializer_class = TriggerDefinitionSerializer
+    pagination_class = FlowAuthoringPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["event_name"]
+    search_fields = ["name"]
+
+
+class TriggerViewSet(StaffWriteGMReadPermissionMixin, viewsets.ModelViewSet):
+    """Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+    A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+    """
+
+    queryset = Trigger.objects.all().select_related("trigger_definition").order_by("pk")
+    serializer_class = TriggerSerializer
+    pagination_class = FlowAuthoringPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["trigger_definition", "obj"]
+    search_fields = ["trigger_definition__name"]

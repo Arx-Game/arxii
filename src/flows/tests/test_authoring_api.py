@@ -1,10 +1,11 @@
-"""Tests for the flows authoring API (#3417 task 4): catalog + FlowDefinition CRUD."""
+"""Tests for the flows authoring API: catalog + FlowDefinition CRUD (#3417 task 4)
+and TriggerDefinition + Trigger CRUD (#3417 task 6)."""
 
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.factories import (
@@ -12,12 +13,18 @@ from flows.factories import (
     FlowStepDefinitionFactory,
     TriggerDefinitionFactory,
 )
-from flows.models import FlowDefinition, FlowStepDefinition
-from world.conditions.factories import ConditionTemplateFactory
+from flows.models import FlowDefinition, FlowStepDefinition, Trigger, TriggerDefinition
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+)
 from world.gm.factories import GMProfileFactory
 
 CATALOG_URL = "/api/flows/catalog/"
 FLOWS_URL = "/api/flows/flows/"
+TRIGGER_DEFINITIONS_URL = "/api/flows/trigger-definitions/"
+TRIGGERS_URL = "/api/flows/triggers/"
 
 
 def _flow_detail_url(pk):
@@ -321,3 +328,136 @@ class FlowDefinitionApiTests(TestCase):
             ],
         )
         self.assertEqual(interactions["calls"], ["do_the_thing"])
+
+
+class TriggerDefinitionApiTests(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=self.staff)
+
+    def test_create_with_valid_filter(self):
+        flow = FlowDefinitionFactory()
+        payload = {
+            "name": "OnExamineAtMe",
+            "event_name": EventName.EXAMINED,
+            "flow_definition": flow.pk,
+            "base_filter_condition": {"path": "target", "op": "==", "value": "self"},
+            "description": "",
+            "priority": 0,
+        }
+
+        response = self.client.post(TRIGGER_DEFINITIONS_URL, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(TriggerDefinition.objects.filter(name="OnExamineAtMe").exists())
+
+    def test_create_with_bogus_filter_path_rejected(self):
+        flow = FlowDefinitionFactory()
+        payload = {
+            "name": "BogusFilterTrigger",
+            "event_name": EventName.EXAMINED,
+            "flow_definition": flow.pk,
+            "base_filter_condition": {"path": "not_a_real_field", "op": "==", "value": "x"},
+        }
+
+        response = self.client.post(TRIGGER_DEFINITIONS_URL, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("base_filter_condition", response.data)
+
+    def test_gm_can_read_but_not_write(self):
+        gm_profile = GMProfileFactory()
+        self.client.force_authenticate(user=gm_profile.account)
+        TriggerDefinitionFactory()
+
+        list_response = self.client.get(TRIGGER_DEFINITIONS_URL)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+
+        write_response = self.client.post(
+            TRIGGER_DEFINITIONS_URL,
+            {
+                "name": "GmCannotWriteDefinition",
+                "event_name": EventName.EXAMINED,
+                "flow_definition": FlowDefinitionFactory().pk,
+            },
+            format="json",
+        )
+        self.assertEqual(write_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_staff_can_write(self):
+        flow = FlowDefinitionFactory()
+
+        response = self.client.post(
+            TRIGGER_DEFINITIONS_URL,
+            {
+                "name": "StaffCanWriteDefinition",
+                "event_name": EventName.EXAMINED,
+                "flow_definition": flow.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+
+class TriggerApiTests(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=self.staff)
+        self.trigger_definition = TriggerDefinitionFactory(event_name=EventName.EXAMINED)
+        self.room = ObjectDBFactory(db_key="TriggerRoom")
+
+    def test_install_trigger_with_matched_template_stage(self):
+        template = ConditionTemplateFactory(has_progression=True)
+        stage = ConditionStageFactory(condition=template)
+        instance = ConditionInstanceFactory(condition=template)
+
+        payload = {
+            "trigger_definition": self.trigger_definition.pk,
+            "obj": self.room.pk,
+            "source_condition": instance.pk,
+            "source_stage": stage.pk,
+        }
+
+        response = self.client.post(TRIGGERS_URL, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Trigger.objects.filter(
+                trigger_definition=self.trigger_definition, obj=self.room
+            ).exists()
+        )
+
+    def test_install_trigger_with_mismatched_template_stage_rejected(self):
+        template_a = ConditionTemplateFactory(has_progression=True)
+        template_b = ConditionTemplateFactory(has_progression=True)
+        stage = ConditionStageFactory(condition=template_a)
+        instance = ConditionInstanceFactory(condition=template_b)
+
+        payload = {
+            "trigger_definition": self.trigger_definition.pk,
+            "obj": self.room.pk,
+            "source_condition": instance.pk,
+            "source_stage": stage.pk,
+        }
+
+        response = self.client.post(TRIGGERS_URL, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("source_stage", response.data)
+
+    def test_gm_can_read_but_not_write(self):
+        gm_profile = GMProfileFactory()
+        self.client.force_authenticate(user=gm_profile.account)
+
+        list_response = self.client.get(TRIGGERS_URL)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+
+        write_response = self.client.post(
+            TRIGGERS_URL,
+            {"trigger_definition": self.trigger_definition.pk, "obj": self.room.pk},
+            format="json",
+        )
+        self.assertEqual(write_response.status_code, status.HTTP_403_FORBIDDEN)
