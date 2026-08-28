@@ -275,10 +275,45 @@ class ActionResultEventTests(TestCase):
 
         self.assertEqual(self._counts(), (0, 0))
 
+    def test_result_fires_on_cost_failure(self) -> None:
+        """An unaffordable AP cost fails before execute(); ACTION_RESULT still fires.
+
+        ``self.char`` (a bare ``CharacterFactory``) has no ``character_sheet``, so
+        ``ActionPointPool.get_or_create_for_character`` returns ``None`` and
+        ``_charge_costs`` returns the AP-failure ``ActionResult`` without ever
+        reaching ``execute()`` — no intent-cancel trigger is involved here.
+        """
+        probe = _ProbeAction(ap_cost=10_000_000)
+
+        result = probe.run(self.char)
+
+        self.assertFalse(result.success)
+        self.assertFalse(probe.executed)
+        self.assertEqual(self._counts(), (0, 1))
+
     def test_none_result_message_coerced_to_empty_string(self) -> None:
         """GetAction returns ActionResult(success=True) with message=None on
         success; a bare success=True filter still fires without a TypeError
-        from a None message reaching comparison operators."""
+        from a None message reaching comparison operators.
+
+        The additional ``message contains ""`` trigger below is the load-bearing
+        assertion: ``"" in None`` raises ``TypeError`` while ``"" in "<any str>"``
+        is always ``True``, so this trigger only fires (without the whole
+        ``emit_event`` call blowing up with an uncaught ``TypeError``) if
+        ``_emit_result`` actually coerced ``result.message`` to ``""`` before
+        building the payload.
+        """
+        message_probe_def = TriggerDefinitionFactory(
+            event_name=EventName.ACTION_RESULT,
+            flow_definition=_noop_flow(),
+            base_filter_condition={
+                "and": [
+                    {"path": "success", "op": "==", "value": True},
+                    {"path": "message", "op": "contains", "value": ""},
+                ]
+            },
+        )
+        message_probe_trig = TriggerFactory(trigger_definition=message_probe_def, obj=self.room)
 
         @dataclass
         class _NoMessageProbe(_ProbeAction):
@@ -287,3 +322,4 @@ class ActionResultEventTests(TestCase):
 
         _NoMessageProbe().run(self.char)
         self.assertEqual(self._counts(), (1, 0))
+        self.assertEqual(self.room.trigger_handler.fire_count(message_probe_trig.pk), 1)

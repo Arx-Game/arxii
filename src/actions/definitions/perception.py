@@ -46,9 +46,6 @@ class LookAction(Action):
     category: str = "perception"
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_look"
-    result_event: str | None = "look"
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(

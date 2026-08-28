@@ -655,14 +655,35 @@ lives on the config model rows attached to the `ActionEnhancement`, not on the s
 1. Build `ActionContext` with SceneDataManager
 2. Apply voluntary enhancements via `enh.apply(context)` → dispatches to handlers
 3. Query and apply involuntary enhancements via `enh.apply(context)`
-4. **Enforce prerequisites** — `check_availability()` is called against the
-   post-enhancement kwargs; if any prerequisite is unmet, `run()` returns a failure
-   `ActionResult` immediately (never reaches `execute()`). This is a hard gate, not
-   advisory. See "Prerequisites" below for the kwargs-via-context convention.
-5. Charge declarative AP + fatigue costs (`_charge_costs`) — fails if AP cannot be
+4. **Emit `EventName.ACTION_INTENT`** (#3418; skipped when `actor is None`) — fires
+   BEFORE the prerequisite gate, since intent means "the actor wants to do this,"
+   not "the actor can." A trigger that cancels the flow (`stack.was_cancelled()`)
+   short-circuits `run()` with a failure `ActionResult` right here, using the
+   flow's `cancel_message` or a generic fallback — no prerequisite check, no AP
+   charge, no `execute()`. A `MODIFY_PAYLOAD` step on the `target` field redirects
+   `context.kwargs["target"]` before prerequisites/`execute()` see it (the
+   movement-redirect pattern, ADR-0242).
+5. **Enforce prerequisites** — `check_availability()` is called against the
+   post-enhancement (and post-redirect) kwargs; if any prerequisite is unmet, `run()`
+   returns a failure `ActionResult` immediately (never reaches `execute()`). This is
+   a hard gate, not advisory. See "Prerequisites" below for the kwargs-via-context
+   convention.
+6. Charge declarative AP + fatigue costs (`_charge_costs`) — fails if AP cannot be
    afforded.
-6. Call `execute()` with context and kwargs
-7. Run post-effects
+7. Call `execute()` with context and kwargs
+8. Run post-effects
+9. **Emit `EventName.ACTION_RESULT`** (`_emit_result`, #3418; skipped when `actor is
+   None`) — fires for every concluded attempt that reached this point, success or
+   failure alike (a prerequisite-gate or AP-cost failure still emits; only the
+   intent-cancel path in step 4 returns before any result event). `message` is
+   coerced to `""` so authored comparison filters (e.g. `contains`) never receive
+   `None`.
+
+Generic per-action event declarations (`intent_event`/`result_event` fields on
+`Action`) were removed in #3418 — every `Action` now goes through this same
+`ACTION_INTENT`/`ACTION_RESULT` pair; author triggers filtered on `action_key`
+(see `flows/events/payloads.py`'s `ActionIntentPayload`/`ActionResultPayload`)
+instead of a per-action event name.
 
 ## Social Template Actions Return an Honest `ActionResult`
 
@@ -690,10 +711,6 @@ base `execute()` bypasses it.
 ### SyntheticAction Model
 Wholly new actions granted by database entities. Uses parameterized templates
 or flow definitions for execution. Same source contract as enhancements.
-
-### Event Emission
-`Action.run()` has TODOs for emitting intent/result events. When implemented,
-the action will emit events that triggers can respond to.
 
 ### CharacterCapabilities Facade
 Unified query interface for checking character capabilities. Used by

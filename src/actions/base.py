@@ -41,8 +41,6 @@ class Action:
         icon: Icon identifier for frontend context menus.
         category: Grouping category (e.g., "perception", "combat").
         target_type: What kind of target this action operates on.
-        intent_event: Event name emitted before execution (e.g., "before_look").
-        result_event: Event name emitted after execution (e.g., "look").
         objectdb_target_kwargs: Names of kwargs whose ``*_id`` form (e.g., ``target_id``)
             should be resolved by the ``execute_action`` inputfunc from int → ObjectDB
             before dispatch. Names listed here are the *resolved* names — the inputfunc
@@ -75,9 +73,6 @@ class Action:
     ap_cost: int = 0
     fatigue_cost: int = 0
     fatigue_category: str | None = None
-
-    intent_event: str | None = None
-    result_event: str | None = None
 
     # Name of the ActionTemplate this action resolves through, if any. Set by
     # registry-backed, data-driven actions (the social actions) so the scene
@@ -257,7 +252,7 @@ class Action:
             return "The dead cannot do that."
         return ""
 
-    def run(  # noqa: C901 — linear lifecycle gates (enhancements/intent/prereqs/costs/execute/result)
+    def run(  # noqa: C901
         self,
         actor: ObjectDB | None,
         enhancements: list[ActionEnhancement] | None = None,
@@ -267,6 +262,11 @@ class Action:
 
         This is the primary entry point. Both commands (telnet) and the
         web action dispatcher call this method.
+
+        High C901 complexity is expected here and not a sign to split the
+        method: it is a linear lifecycle of gates (enhancements, intent
+        event, prerequisites, costs, execute, result event) that reads
+        clearest as one straight-line sequence.
 
         ``actor`` is the character performing the action and may be ``None``
         for **account-authorized** actions that need no character context —

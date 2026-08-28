@@ -42,16 +42,6 @@ class EventName(models.TextChoices):
     # Soul Tether (Resonance Pivot Spec B)
     SOUL_TETHER_FORMED = "soul_tether_formed", "Soul Tether formed"
     SOUL_TETHER_DISSOLVED = "soul_tether_dissolved", "Soul Tether dissolved"
-    # Outfit actions (Items / Outfits Phase A)
-    BEFORE_APPLY_OUTFIT = "before_apply_outfit", "Before Apply Outfit"
-    APPLY_OUTFIT = "apply_outfit", "Apply Outfit"
-    BEFORE_UNDRESS = "before_undress", "Before Undress"
-    UNDRESS = "undress", "Undress"
-    # Fashion presentation actions (Outfits Phase C, #514)
-    BEFORE_PRESENT_OUTFIT = "before_present_outfit", "Before Present Outfit"
-    PRESENT_OUTFIT = "present_outfit", "Present Outfit"
-    BEFORE_JUDGE_PRESENTATION = "before_judge_presentation", "Before Judge Presentation"
-    JUDGE_PRESENTATION = "judge_presentation", "Judge Presentation"
     # Combat encounter lifecycle (#876)
     ENCOUNTER_COMPLETED = "encounter_completed", "Encounter Completed"
     # Vertical positioning (#1018): emitted when an entity enters a CHASM position.

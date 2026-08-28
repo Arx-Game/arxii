@@ -245,9 +245,6 @@ class SayAction(Action):
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
 
-    intent_event: str | None = "before_say"
-    result_event: str | None = "say"
-
     def execute(
         self,
         actor: ObjectDB,
@@ -307,9 +304,6 @@ class PoseAction(Action):
     category: str = "communication"
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
-
-    intent_event: str | None = "before_pose"
-    result_event: str | None = "pose"
 
     def get_prerequisites(self) -> list[Prerequisite]:
         # #2287 — a dead poser is bounded to the ghost emit window.
@@ -372,9 +366,6 @@ class EmitAction(Action):
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
 
-    intent_event: str | None = "before_emit"
-    result_event: str | None = "emit"
-
     def get_prerequisites(self) -> list[Prerequisite]:
         # #2287 — a dead emitter is bounded to the ghost emit window.
         return [GhostWindowPrerequisite()]
@@ -425,9 +416,6 @@ class MutterAction(Action):
     category: str = "communication"
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
-
-    intent_event: str | None = "before_mutter"
-    result_event: str | None = "mutter"
 
     def execute(
         self,
@@ -499,9 +487,6 @@ class PemitAction(Action):
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.AREA
 
-    intent_event: str | None = "before_pemit"
-    result_event: str | None = "pemit"
-
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.STARTING)]
 
@@ -551,9 +536,6 @@ class WhisperAction(Action):
     target_type: TargetType = TargetType.SINGLE
     target_kind: TargetKind | None = TargetKind.PERSONA
     target_filters: TargetFilters | None = _WHISPER_TARGET_FILTERS
-
-    intent_event: str | None = "before_whisper"
-    result_event: str | None = "whisper"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
