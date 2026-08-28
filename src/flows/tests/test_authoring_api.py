@@ -5,9 +5,15 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
-from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowStepDefinitionFactory,
+    TriggerDefinitionFactory,
+)
 from flows.models import FlowDefinition, FlowStepDefinition
+from world.conditions.factories import ConditionTemplateFactory
 from world.gm.factories import GMProfileFactory
 
 CATALOG_URL = "/api/flows/catalog/"
@@ -29,9 +35,8 @@ class CatalogEndpointTests(TestCase):
         response = self.client.get(CATALOG_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        expected_actions = {value for value, _label in FlowActionChoices.choices}
-        actual_actions = {entry["action"] for entry in response.data["actions"]}
-        self.assertEqual(actual_actions, expected_actions)
+        actual_actions = [entry["action"] for entry in response.data["actions"]]
+        self.assertEqual(actual_actions, list(FlowActionChoices.values))
         self.assertIn("events", response.data)
         self.assertIn("service_functions", response.data)
         self.assertIn("filter_ops", response.data)
@@ -205,3 +210,114 @@ class FlowDefinitionApiTests(TestCase):
             format="json",
         )
         self.assertEqual(write_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_omitting_steps_leaves_tree_untouched(self):
+        """Task 4 review fold-in: PATCH with no ``steps`` key preserves the tree."""
+        flow = FlowDefinitionFactory(name="UntouchedTreeFlow", description="before")
+        root = FlowStepDefinitionFactory(
+            flow=flow, action=FlowActionChoices.CANCEL_EVENT, parameters={}, parent_id=None
+        )
+        child = FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CANCEL_EVENT,
+            parameters={},
+            parent_id=root.pk,
+        )
+
+        response = self.client.patch(
+            _flow_detail_url(flow.pk), {"description": "after"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        flow.refresh_from_db()
+        self.assertEqual(flow.description, "after")
+        remaining_pks = set(
+            FlowStepDefinition.objects.filter(flow=flow).values_list("pk", flat=True)
+        )
+        self.assertEqual(remaining_pks, {root.pk, child.pk})
+
+    def test_non_dict_parameters_rejected_with_400(self):
+        """Task 4 review fold-in: a list ``parameters`` payload is a 400, not a 500."""
+        payload = {
+            "name": "BadParametersFlow",
+            "steps": [
+                {
+                    "client_id": "a",
+                    "parent_client_id": None,
+                    "action": FlowActionChoices.CANCEL_EVENT,
+                    "parameters": [1, 2],
+                },
+            ],
+        }
+
+        response = self.client.post(FLOWS_URL, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("parameters", str(response.data).lower())
+
+    def test_interactions_block_on_retrieve(self):
+        flow = FlowDefinitionFactory(name="InteractionsFlow")
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.EMIT_FLOW_EVENT,
+            variable_name="",
+            parameters={"event_type": EventName.EXAMINED},
+            parent_id=None,
+        )
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="do_the_thing",
+            parameters={},
+            parent_id=None,
+        )
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="do_the_thing",
+            parameters={},
+            parent_id=None,
+        )
+
+        run_by_trigger = TriggerDefinitionFactory(
+            name="RunsInteractionsFlow",
+            flow_definition=flow,
+            event_name=EventName.MOVED,
+        )
+        listener_trigger = TriggerDefinitionFactory(
+            name="ListensForExamined",
+            event_name=EventName.EXAMINED,
+        )
+        template = ConditionTemplateFactory(name="InstallsRunByTrigger")
+        template.reactive_triggers.add(run_by_trigger)
+
+        response = self.client.get(_flow_detail_url(flow.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        interactions = response.data["interactions"]
+
+        self.assertEqual(
+            interactions["run_by"],
+            [
+                {
+                    "id": run_by_trigger.pk,
+                    "name": run_by_trigger.name,
+                    "event_name": run_by_trigger.event_name,
+                    "installing_templates": [
+                        {"id": template.pk, "name": template.name},
+                    ],
+                },
+            ],
+        )
+        self.assertEqual(
+            interactions["emits"],
+            [
+                {
+                    "event_name": EventName.EXAMINED,
+                    "listeners": [
+                        {"id": listener_trigger.pk, "name": listener_trigger.name},
+                    ],
+                },
+            ],
+        )
+        self.assertEqual(interactions["calls"], ["do_the_thing"])

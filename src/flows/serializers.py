@@ -15,6 +15,7 @@ from typing import Any
 from rest_framework import serializers
 
 from flows.consts import FlowActionChoices
+from flows.interactions import flow_interactions
 from flows.models import FlowDefinition, FlowStepDefinition
 from flows.step_validation import validate_step_tree
 
@@ -137,11 +138,17 @@ class FlowDefinitionDetailSerializer(serializers.ModelSerializer):
     viewset's queryset populates, explicitly ordered by pk so this always
     reflects the depth-first authored order ``_replace_steps`` inserted in)
     rather than the bare ``steps`` related manager, which would re-query with
-    no explicit ordering.
+    no explicit ordering. ``interactions`` cross-references what runs this
+    flow, what it emits (and who listens), and what it calls — see
+    ``flows.interactions.flow_interactions``.
     """
 
     steps = FlowStepReadSerializer(many=True, read_only=True, source="prefetched_steps")
+    interactions = serializers.SerializerMethodField()
 
     class Meta:
         model = FlowDefinition
-        fields = ["id", "name", "description", "steps"]
+        fields = ["id", "name", "description", "steps", "interactions"]
+
+    def get_interactions(self, instance: FlowDefinition) -> dict[str, Any]:
+        return flow_interactions(instance)
