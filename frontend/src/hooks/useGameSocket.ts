@@ -86,73 +86,82 @@ interface IncomingMessageContext {
 
 type IncomingMessageHandler = (ctx: IncomingMessageContext) => void;
 
-// One entry per control message type the server can push; anything absent
-// from this table falls through to parseGameMessage as a regular game
-// message. Keeping this as a lookup table (rather than an if-chain) is what
-// keeps the socket message listener's cognitive complexity in check.
-const INCOMING_MESSAGE_HANDLER_TABLE: Partial<Record<SocketMessageType, IncomingMessageHandler>> = {
-  [WS_MESSAGE_TYPE.ROOM_STATE]: ({ character, kwargs, dispatch }) =>
-    handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch),
+// One case per control message type the server can push; anything not matched
+// here falls through to parseGameMessage as a regular game message. A switch on
+// the literal type constants keeps this dispatch's cognitive complexity in check
+// the way the old if-chain did not, while keeping the chosen handler a matter of
+// explicit control flow. An object/Map lookup keyed by the wire-supplied type
+// reads the same but makes the call target a value derived from user input,
+// which is exactly what CodeQL js/unvalidated-dynamic-method-call flags.
+function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefined {
+  switch (msgType) {
+    case WS_MESSAGE_TYPE.ROOM_STATE:
+      return ({ character, kwargs, dispatch }) =>
+        handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch);
 
-  [WS_MESSAGE_TYPE.SCENE]: ({ character, kwargs, dispatch }) =>
-    handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch),
+    case WS_MESSAGE_TYPE.SCENE:
+      return ({ character, kwargs, dispatch }) =>
+        handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
 
-  [WS_MESSAGE_TYPE.COMMAND_ERROR]: ({ kwargs }) => {
-    const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
-    toast.error(error, { description: command });
-  },
+    case WS_MESSAGE_TYPE.COMMAND_ERROR:
+      return ({ kwargs }) => {
+        const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
+        toast.error(error, { description: command });
+      };
 
-  [WS_MESSAGE_TYPE.KUDOS_RECEIVED]: ({ kwargs }) =>
-    handleKudosReceivedPayload(kwargs as unknown as KudosReceivedPayload | undefined),
+    case WS_MESSAGE_TYPE.KUDOS_RECEIVED:
+      return ({ kwargs }) =>
+        handleKudosReceivedPayload(kwargs as unknown as KudosReceivedPayload | undefined);
 
-  // Defensive: kwargs may be undefined if the server sends a malformed frame.
-  // emitActionResult is a side-effecting bus call only - every listener is
-  // responsible for its own toast/UX.
-  [WS_MESSAGE_TYPE.ACTION_RESULT]: ({ kwargs }) =>
-    emitActionResult(
-      (kwargs as unknown as ActionResultPayload) ?? { success: false, message: null, data: null }
-    ),
+    // Defensive: kwargs may be undefined if the server sends a malformed frame.
+    // emitActionResult is a side-effecting bus call only - every listener is
+    // responsible for its own toast/UX.
+    case WS_MESSAGE_TYPE.ACTION_RESULT:
+      return ({ kwargs }) =>
+        emitActionResult(
+          (kwargs as unknown as ActionResultPayload) ?? {
+            success: false,
+            message: null,
+            data: null,
+          }
+        );
 
-  [WS_MESSAGE_TYPE.ROULETTE_RESULT]: ({ kwargs, dispatch }) =>
-    handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch),
+    case WS_MESSAGE_TYPE.ROULETTE_RESULT:
+      return ({ kwargs, dispatch }) =>
+        handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
 
-  [WS_MESSAGE_TYPE.BATTLE_STATE]: ({ kwargs }) =>
-    handleBattleStatePayload(kwargs as unknown as BattleStatePayload),
+    case WS_MESSAGE_TYPE.BATTLE_STATE:
+      return ({ kwargs }) => handleBattleStatePayload(kwargs as unknown as BattleStatePayload);
 
-  [WS_MESSAGE_TYPE.MAIL_ARRIVED]: ({ kwargs }) =>
-    handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload),
+    case WS_MESSAGE_TYPE.MAIL_ARRIVED:
+      return ({ kwargs }) => handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
 
-  [WS_MESSAGE_TYPE.HAZARD_PROMPT]: ({ kwargs }) =>
-    emitHazardPrompt(kwargs as unknown as HazardPromptPayload),
+    case WS_MESSAGE_TYPE.HAZARD_PROMPT:
+      return ({ kwargs }) => emitHazardPrompt(kwargs as unknown as HazardPromptPayload);
 
-  [WS_MESSAGE_TYPE.INTERACTION]: ({ character, kwargs, dispatch, navigate }) =>
-    handleInteractionPayload(
-      character,
-      kwargs as unknown as InteractionWsPayload,
-      dispatch,
-      navigate
-    ),
+    case WS_MESSAGE_TYPE.INTERACTION:
+      return ({ character, kwargs, dispatch, navigate }) =>
+        handleInteractionPayload(
+          character,
+          kwargs as unknown as InteractionWsPayload,
+          dispatch,
+          navigate
+        );
 
-  [WS_MESSAGE_TYPE.COMMANDS]: ({ character, args }) =>
-    handleCommandPayload(character, args as CommandSpec[]),
+    case WS_MESSAGE_TYPE.COMMANDS:
+      return ({ character, args }) => handleCommandPayload(character, args as CommandSpec[]);
 
-  // Broadcast to every account session on each successful puppet - nothing to
-  // do client-side (the open handler already re-puppets), but without this
-  // entry the frame fell through to parseGameMessage and rendered as raw
-  // JSON noise in the system lane (2026-07 audit).
-  [WS_MESSAGE_TYPE.PUPPET_CHANGED]: () => {
-    return undefined;
-  },
-};
+    // Broadcast to every account session on each successful puppet - nothing to
+    // do client-side (the open handler already re-puppets), but without this
+    // case the frame fell through to parseGameMessage and rendered as raw
+    // JSON noise in the system lane (2026-07 audit).
+    case WS_MESSAGE_TYPE.PUPPET_CHANGED:
+      return () => undefined;
 
-// Dispatch goes through a Map rather than indexing the object above. The key
-// arrives off the wire, and a Map holds no prototype chain, so a frame typed
-// "constructor" or "__proto__" simply misses instead of resolving to an
-// inherited Object.prototype member that would then be invoked as a handler.
-const INCOMING_MESSAGE_HANDLERS = new Map<SocketMessageType, IncomingMessageHandler>(
-  Object.entries(INCOMING_MESSAGE_HANDLER_TABLE) as [SocketMessageType, IncomingMessageHandler][]
-);
-
+    default:
+      return undefined;
+  }
+}
 /** Routes one parsed incoming websocket frame to its handler, or renders it as a plain game message. */
 function dispatchIncomingMessage(
   character: MyRosterEntry['name'],
@@ -161,7 +170,7 @@ function dispatchIncomingMessage(
   navigate: NavigateFunction
 ): void {
   const [msgType, args, kwargs] = parsed;
-  const handler = INCOMING_MESSAGE_HANDLERS.get(msgType);
+  const handler = handlerFor(msgType);
   if (handler) {
     handler({ character, args, kwargs, dispatch, navigate });
     return;
