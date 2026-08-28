@@ -120,6 +120,16 @@ describe('WorldBand', () => {
     expect(screen.getByText('A tower falls in the Ward.')).toBeInTheDocument();
   });
 
+  it('the Crier plate ends with the last gemit — no "full record" affordance (review fix, no archive page exists)', () => {
+    setDefaultMocks();
+    mockUseGemits.mockReturnValue({
+      data: { count: 1, next: null, previous: null, results: [gemit] },
+    });
+    renderWithProviders(<WorldBand />);
+
+    expect(screen.queryByText(/full record/i)).not.toBeInTheDocument();
+  });
+
   it('omits the persona tidings digest plate when no character is docked', () => {
     setDefaultMocks();
     renderWithProviders(<WorldBand />);

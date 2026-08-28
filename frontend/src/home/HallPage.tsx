@@ -12,22 +12,51 @@
  * band ambiance is account-independent) — only the character grid itself is
  * swapped out.
  *
+ * Loading vs. empty (review fix): the zero-character remedy is a real
+ * degradation state, not a loading placeholder — showing it while
+ * `useMyRosterEntriesQuery` is still resolving would flash the "you have no
+ * characters" copy at an account that actually has some, on every `/` load.
+ * Gated on the query's own `isLoading` with a quiet skeleton in between,
+ * mirroring the skeleton-not-empty-state pattern `TidingsPage`/`WardrobePage`
+ * already use for this exact race.
+ *
  * Uses the viewer's own realm/mode tokens (NOT the Gatefold's forced-arx —
  * that's a visitor-advertisement rule, ADR-0227, not a logged-in rule).
  */
 import { Plate, PlateHead } from '@/components/folio';
+import { Skeleton } from '@/components/ui/skeleton';
 import { WelcomePanel } from '@/components/WelcomePanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { CharactersBand } from './hall/CharactersBand';
 import { AttentionBand } from './hall/AttentionBand';
 import { WorldBand } from './hall/WorldBand';
 
+function CharactersLoadingSkeleton() {
+  return (
+    <div
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+      data-testid="characters-loading-skeleton"
+    >
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-32 w-full" />
+    </div>
+  );
+}
+
 export function HallPage() {
-  const { data: characters = [] } = useMyRosterEntriesQuery();
+  const { data: characters = [], isLoading } = useMyRosterEntriesQuery();
 
   return (
     <div className="container mx-auto space-y-4 px-4 py-6">
-      {characters.length === 0 ? (
+      {isLoading ? (
+        <Plate className="p-4">
+          <PlateHead as="h2" className="mb-3">
+            Your Characters
+          </PlateHead>
+          <CharactersLoadingSkeleton />
+        </Plate>
+      ) : characters.length === 0 ? (
         <Plate className="p-4">
           <PlateHead as="h2" className="mb-3">
             Your Characters

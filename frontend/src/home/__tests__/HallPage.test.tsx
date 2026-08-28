@@ -51,6 +51,15 @@ const aria: MyRosterEntry = {
 };
 
 describe('HallPage', () => {
+  it('renders a loading skeleton (not the zero-character remedy) while the roster query is loading (review fix)', () => {
+    mockUseMyRosterEntriesQuery.mockReturnValue({ data: undefined, isLoading: true });
+    renderWithProviders(<HallPage />);
+
+    expect(screen.getByTestId('characters-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByTestId('welcome-panel-stub')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('characters-band-stub')).not.toBeInTheDocument();
+  });
+
   it('renders the WelcomePanel remedy in place of the character grid for a zero-character account', () => {
     mockUseMyRosterEntriesQuery.mockReturnValue({ data: [] });
     renderWithProviders(<HallPage />);

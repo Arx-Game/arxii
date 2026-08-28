@@ -91,12 +91,19 @@ describe('AttentionBand', () => {
     vi.clearAllMocks();
   });
 
-  it('always renders the OOC group (Mail + boards row) regardless of pending items', async () => {
+  it('always renders the OOC group (Mail row) regardless of pending items', async () => {
     setDefaultMocks();
     renderWithProviders(<AttentionBand characters={[]} />);
 
     expect(screen.getByRole('link', { name: 'Mail' })).toHaveAttribute('href', '/profile/mail');
-    expect(screen.getByText('The boards')).toBeInTheDocument();
+  });
+
+  it('renders no boards row (review fix — no boards-index surface exists; a link to /game was a false affordance)', async () => {
+    setDefaultMocks();
+    renderWithProviders(<AttentionBand characters={[]} />);
+
+    expect(screen.queryByText('The boards')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /boards/i })).not.toBeInTheDocument();
   });
 
   it('shows the unread-mail CountChip when there is unread mail', async () => {

@@ -1,9 +1,16 @@
 /**
  * "Your Attention" band (#3412 slice 2) — grouped by relatedness (see
  * MEMORY: notifications route by relatedness, never merge). An OOC group
- * (Mail, Boards) always shows first; a per-character group renders only for
+ * (Mail) always shows first; a per-character group renders only for
  * a character with something pending (tidings, an event invitation, an org
  * membership offer) — a character with nothing pending gets no group at all.
+ *
+ * No "boards" row (review fix, ruled, not negotiable): there is no global
+ * boards-index surface anywhere in the app (boards only mount in-room/in-org
+ * via `BoardPanel`) — a link to `/game` was a false affordance (it isn't a
+ * boards surface), so the row was removed rather than pointed at a
+ * substitute. The absent-boards-surface seam is recorded at the plan level;
+ * do not re-add a link here without a real destination.
  *
  * Invitation/offer "mine" matching mirrors `EventInvitations.tsx`'s own
  * persona-matching approach (`active_persona_id`/`primary_persona_id`,
@@ -171,13 +178,6 @@ export function AttentionBand({ characters }: { characters: MyRosterEntry[] }) {
             Mail
           </Link>
           <CountChip count={unreadMail} label="unread messages" />
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          {/* PLACEHOLDER destination — no global boards index exists yet; boards live
-              in-world (room/org boards), so this points there for now (#3412 T3 flag). */}
-          <Link to="/game" className="hover:underline">
-            The boards
-          </Link>
         </div>
       </div>
 

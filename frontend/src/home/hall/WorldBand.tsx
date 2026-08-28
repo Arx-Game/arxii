@@ -108,12 +108,6 @@ function CrierPlate() {
           ))}
         </ul>
       )}
-      {/* PLACEHOLDER: no full gemit-archive page exists yet (#3412 T3 flag) —
-          this plate already shows the first page, which by ruling IS the
-          state-2 general skim, so this stays inert rather than a dead link. */}
-      <p className="mt-2 text-sm text-muted-foreground">
-        The full record circulates beyond this page.
-      </p>
     </Plate>
   );
 }
