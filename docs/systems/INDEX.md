@@ -6255,6 +6255,23 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `CombatEncounterViewSet.remove_opponent` (`opponent_id`, gated `IsEncounterGMOrStaff`),
     `RemoveOpponentAction` (`actions/definitions/gm_combat.py`, key `remove_opponent`), and
     telnet `encounter removenpc <opponent>` — symmetric with `add_opponent`/`remove_participant`.
+  - **Bestiary spawn (#3424):** `world.combat.services.spawn_from_creature_template(encounter,
+    template, *, position=None, acting_account=None)` — previously built but zero-caller
+    (Django-admin-only) — is now GM-reachable: `SpawnCreatureAction` (key `spawn_creature`,
+    `actions/definitions/gm_combat.py`) mirrors `AddOpponentAction`'s shape exactly (same
+    `_active_encounter_for_gm` resolution, same `acting_account` custody threading), resolving
+    `template` pk-or-name via `resolve_model_by_pk_or_name(CreatureTemplate, ...)` and
+    `position_id` as a pk. Telnet: `encounter spawn <template name> [at <position>]`
+    (`commands/encounter.py`) resolves the position name to a pk in the command layer, exactly
+    as `_handle_add` does. Web: `CreatureTemplateViewSet` (`GET
+    /api/combat/creature-templates/`, read-only, `IsGMOrStaff`, `search`/`tier` filters) feeds
+    the GM `AddOpponentDialog`'s "From Bestiary" tab
+    (`frontend/src/combat/sections/GMEncounterControls.tsx`), which dispatches `spawn_creature`
+    over the generic REGISTRY dispatch seam. The catalog serializer is deliberately thin (`name`/
+    `tier`/`description`/`has_phases`/`threat_pool_name` — no phase or break-bar internals) so
+    browsing it never spoils a boss's authored phases ahead of Consider/weakness-research
+    discovery. `spawn_from_creature_template` clones any authored `CreaturePhaseTemplate` rows
+    into `BossPhase` rows and stamps `BreakBarConfig` onto the spawned opponent when present.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.

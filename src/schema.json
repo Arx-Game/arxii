@@ -7163,6 +7163,80 @@ paths:
                 items:
                   $ref: '#/components/schemas/OutcomeDetail'
           description: ''
+  /api/combat/creature-templates/:
+    get:
+      operationId: combat_creature_templates_list
+      description: |-
+        Read-only bestiary catalog browse for the GM spawn-from-template picker (#3424).
+
+        Mirrors ``checks.CheckTypeViewSet``'s shape (django-filter ``search`` +
+        exact-field filter, ``IsGMOrStaff``, standard pagination). Unlike
+        ``ThreatPoolViewSet`` (open to any authenticated user — that catalog carries
+        no spoiler-sensitive content), the bestiary names authored encounter design
+        (boss identity, phase presence) a player shouldn't browse ahead of Consider
+        readings / weakness research — see the #3424 spec's leak table.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: tier
+        schema:
+          type: string
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCreatureTemplateList'
+          description: ''
+  /api/combat/creature-templates/{id}/:
+    get:
+      operationId: combat_creature_templates_retrieve
+      description: |-
+        Read-only bestiary catalog browse for the GM spawn-from-template picker (#3424).
+
+        Mirrors ``checks.CheckTypeViewSet``'s shape (django-filter ``search`` +
+        exact-field filter, ``IsGMOrStaff``, standard pagination). Unlike
+        ``ThreatPoolViewSet`` (open to any authenticated user — that catalog carries
+        no spoiler-sensitive content), the bestiary names authored encounter design
+        (boss identity, phase presence) a player shouldn't browse ahead of Consider
+        readings / weakness research — see the #3424 spec's leak table.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this creature template.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatureTemplate'
+          description: ''
   /api/combat/duel-challenges/:
     get:
       operationId: combat_duel_challenges_list
@@ -44269,6 +44343,43 @@ components:
         * `staff` - Staff-created
         * `gm_table` - GM-created (for a table)
         * `player` - Player-created
+    CreatureTemplate:
+      type: object
+      description: |-
+        Read-only bestiary catalog listing for the GM spawn-from-template picker (#3424).
+
+        Deliberately thin — no phase/break-bar internals (leak table in the #3424
+        spec: a player reading this payload would learn boss-phase mechanics and
+        weakness windows ahead of Consider/weakness-research discovery). ``has_phases``
+        only signals presence, never the phase count or triggers.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        tier:
+          allOf:
+          - $ref: '#/components/schemas/Tier756Enum'
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        has_phases:
+          type: boolean
+          readOnly: true
+        threat_pool_name:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - description
+      - has_phases
+      - id
+      - name
+      - threat_pool_name
+      - tier
     CrossXPLockRequest:
       type: object
       description: Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A
@@ -57701,6 +57812,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CovenantRite'
+    PaginatedCreatureTemplateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreatureTemplate'
     PaginatedCrossoverInviteList:
       type: object
       required:

@@ -312,6 +312,7 @@ class ActionRegistryTests(TestCase):
             "truncate_precapture",
             "add_encounter_participant",
             "add_opponent",
+            "spawn_creature",
             "remove_opponent",
             "begin_encounter_round",
             "create_encounter",
