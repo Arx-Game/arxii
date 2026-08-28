@@ -386,6 +386,9 @@ class SpawnCreatureActionTests(GMCombatActionTestBase):
 
         # A round resolves cleanly with the spawned bestiary opponent present
         # -- covers web and telnet identically (both converge on action.run()).
+        # A living PC participant keeps the encounter running after the round
+        # (with none, resolution completes the encounter instead).
+        self._add_participant()
         self.encounter.refresh_from_db()
         self.encounter.status = RoundStatus.DECLARING
         self.encounter.round_number = 1
