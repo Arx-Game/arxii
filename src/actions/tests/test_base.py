@@ -481,6 +481,9 @@ class ActionRegistryTests(TestCase):
             "gm_invoke_check",
             "gm_award_progression",
             "gm_apply_condition",
+            # #3431 — GM web parity: condition removal + the read seam that feeds its picker.
+            "gm_remove_condition",
+            "gm_list_conditions",
             # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
             "summon_player",
             "accept_gm_summon",

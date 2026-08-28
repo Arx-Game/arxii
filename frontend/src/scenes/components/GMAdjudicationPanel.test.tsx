@@ -62,6 +62,9 @@ vi.mock('@/gm-adjudication/queries', () => ({
   useChallengeTemplateCatalog: vi.fn((_enabled: boolean) => ({
     data: [{ id: 9, name: 'Locked Gate', category: 1, category_name: 'Exploration' }],
   })),
+  useItemTemplateCatalog: vi.fn((_search: string, _enabled: boolean) => ({
+    data: [{ id: 21, name: 'Silver Locket' }],
+  })),
 }));
 
 vi.mock('sonner', () => ({
@@ -286,4 +289,154 @@ test('a failed dispatch surfaces the refusal message via toast.error', async () 
 test('useDispatchPlayerAction is called with the resolved active character id', () => {
   render(<GMAdjudicationPanel scene={makeScene()} />);
   expect(useDispatchPlayerAction).toHaveBeenCalledWith(42);
+});
+
+// ---------------------------------------------------------------------------
+// #3431 — Grant Item, Stage, Traps tabs + Condition tab Remove mode.
+// ---------------------------------------------------------------------------
+
+test('renders the three new #3431 tabs', () => {
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  expect(screen.getByTestId('gm-tab-grantitem')).toBeInTheDocument();
+  expect(screen.getByTestId('gm-tab-stage')).toBeInTheDocument();
+  expect(screen.getByTestId('gm-tab-traps')).toBeInTheDocument();
+});
+
+test('Grant Item tab dispatches grant_item with the target persona name (#3431)', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-grantitem'));
+  await user.selectOptions(screen.getByTestId('gm-grantitem-template-select'), 'Silver Locket');
+  await user.type(screen.getByLabelText('Reason'), 'a story-earned keepsake');
+  await user.click(screen.getByTestId('gm-grantitem-submit'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'grant_item' },
+    kwargs: {
+      target_name: 'Target Persona',
+      template_name: 'Silver Locket',
+      reason: 'a story-earned keepsake',
+    },
+  });
+});
+
+test('Stage tab in Prop mode dispatches stage_prop with item_template (#3431)', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.click(screen.getByTestId('gm-tab-stage'));
+  await user.selectOptions(screen.getByTestId('gm-stage-template-select'), 'Silver Locket');
+  await user.click(screen.getByTestId('gm-stage-submit'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'stage_prop' },
+    kwargs: { item_template: 'Silver Locket' },
+  });
+});
+
+test('Stage tab in Property mode dispatches stage_property with target_id (#3431)', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-stage'));
+  await user.selectOptions(screen.getByTestId('gm-stage-mode-select'), 'property');
+  await user.type(screen.getByTestId('gm-stage-property-name'), 'dark');
+  await user.click(screen.getByTestId('gm-stage-submit'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'stage_property' },
+    kwargs: { property: 'dark', target_id: 55 },
+  });
+});
+
+test('Traps tab lists traps on open, and Arm dispatches + refreshes the list (#3431)', async () => {
+  mutateAsync
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: { traps: [{ id: 5, name: 'Pit Trap', is_armed: false, position: 'Doorway' }] },
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'You arm Pit Trap.',
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: { traps: [{ id: 5, name: 'Pit Trap', is_armed: true, position: 'Doorway' }] },
+    });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-traps'));
+
+  await waitFor(() => expect(screen.getByTestId('gm-trap-row-5')).toBeInTheDocument());
+  expect(mutateAsync).toHaveBeenNthCalledWith(1, {
+    ref: { backend: 'registry', registry_key: 'list_room_traps' },
+    kwargs: {},
+  });
+
+  await user.click(screen.getByTestId('gm-trap-arm-5'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      ref: { backend: 'registry', registry_key: 'arm_trap' },
+      kwargs: { trap_id: 5 },
+    })
+  );
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+  expect(mutateAsync).toHaveBeenNthCalledWith(3, {
+    ref: { backend: 'registry', registry_key: 'list_room_traps' },
+    kwargs: {},
+  });
+});
+
+test('Condition tab Remove mode lists active instances then dispatches gm_remove_condition (#3431)', async () => {
+  mutateAsync.mockResolvedValueOnce({
+    backend: 'registry',
+    deferred: false,
+    success: true,
+    message: 'listed',
+    data: {
+      conditions: [{ id: 8, name: 'Winded', severity: 1, rounds_remaining: 3, expires_at: null }],
+    },
+  });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-condition'));
+  await user.selectOptions(screen.getByTestId('gm-condition-mode-select'), 'remove');
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'gm_list_conditions' },
+      kwargs: { target: 55 },
+    })
+  );
+  await waitFor(() => expect(screen.getByText('Winded (severity 1)')).toBeInTheDocument());
+
+  await user.selectOptions(screen.getByTestId('gm-condition-remove-select'), 'Winded');
+  await user.type(screen.getByTestId('gm-condition-remove-reason'), 'served its purpose');
+  await user.click(screen.getByTestId('gm-condition-remove-submit'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'gm_remove_condition' },
+      kwargs: { target: 55, condition: 'Winded', reason: 'served its purpose' },
+    })
+  );
 });

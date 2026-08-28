@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
+from actions.definitions.gm_adjudication import GMApplyConditionAction
 from commands.gm_ops import CmdGMDashboard
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -287,6 +288,70 @@ class CmdGMConditionTests(GMOpsAdjudicationTestBase):
             ).exists()
         )
         self.assertTrue(len(messages) > 0)
+
+
+class CmdGMConditionRemoveTests(GMOpsAdjudicationTestBase):
+    """``gm condition remove <character> condition=<name> reason=<text>`` (#3431)
+    -- the referee off-switch, dispatching ``GMRemoveConditionAction``."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+        )
+        assert result.success, result.message
+
+    def test_remove_condition(self) -> None:
+        messages = _run_cmd(
+            self.gm_actor,
+            f"condition remove {self.target.key} condition={self.condition_template.name}"
+            " reason=scene wrapped up",
+        )
+        self.assertTrue(any(self.condition_template.name in m for m in messages))
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+    def test_remove_missing_reason_shows_usage(self) -> None:
+        messages = _run_cmd(
+            self.gm_actor,
+            f"condition remove {self.target.key} condition={self.condition_template.name}",
+        )
+        self.assertTrue(any("Usage: gm condition" in m for m in messages))
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+    def test_remove_missing_condition_shows_usage(self) -> None:
+        messages = _run_cmd(
+            self.gm_actor,
+            f"condition remove {self.target.key} reason=scene wrapped up",
+        )
+        self.assertTrue(any("Usage: gm condition" in m for m in messages))
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+    def test_non_gm_is_refused(self) -> None:
+        messages = _run_cmd(
+            self.player_actor,
+            f"condition remove {self.target.key} condition={self.condition_template.name}"
+            " reason=scene wrapped up",
+        )
+        self.assertTrue(len(messages) > 0)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
 
 
 class CmdGMDramaticTests(GMOpsAdjudicationTestBase):

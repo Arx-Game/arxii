@@ -15,6 +15,8 @@ from django.test import TestCase
 from actions.definitions.gm_adjudication import (
     GMApplyConditionAction,
     GMAwardAction,
+    GMListConditionsAction,
+    GMRemoveConditionAction,
     InvokeCatalogCheckAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
@@ -870,3 +872,193 @@ class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):
             target=self.target, condition=self.condition_template
         )
         self.assertEqual(instance.rounds_remaining, self.condition_template.default_duration_value)
+
+
+class GMRemoveConditionActionTests(GMAdjudicationActionsTestBase):
+    """``gm_remove_condition`` (#3431) -- the referee off-switch ``GMApplyConditionAction``
+    never got. Mirrors ``GMApplyConditionActionTests``'s permission-journey shape."""
+
+    def _apply(self) -> None:
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+        )
+        assert result.success, result.message
+
+    def test_non_gm_is_refused(self) -> None:
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.player_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+            reason="scene wrapped up",
+        )
+        self.assertFalse(result.success)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+    def test_junior_floor_enforced(self) -> None:
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.starting_gm_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+            reason="scene wrapped up",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("Junior GM", result.message)
+
+    def test_staff_bypasses_junior_floor(self) -> None:
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.staff_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+            reason="scene wrapped up",
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+    def test_removes_active_instance_and_echoes_reason(self) -> None:
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+            reason="the consequence served its purpose",
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+        self.assertIn("the consequence served its purpose", result.message)
+
+    def test_reason_is_required(self) -> None:
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+        )
+        self.assertFalse(result.success)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+    def test_target_without_the_condition_is_refused(self) -> None:
+        """Catalog-bounded to ACTIVE instances -- refuses rather than silently
+        no-opping like ``remove_condition_by_name`` (#3431)."""
+        result = GMRemoveConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+            reason="never applied",
+        )
+        self.assertFalse(result.success)
+        self.assertIn(self.condition_template.name, result.message)
+
+    def test_unknown_condition_name_is_refused(self) -> None:
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition="No Such Condition",
+            reason="scene wrapped up",
+        )
+        self.assertFalse(result.success)
+
+    def test_rest_target_resolution_accepts_int_pk(self) -> None:
+        """See ``RESTTargetResolutionTests`` -- the REST dispatch path sends a
+        plain int, resolved by ``_resolve_gm_target`` (#3431)."""
+        self._apply()
+        result = GMRemoveConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target.pk,
+            condition=self.condition_template.name,
+            reason="scene wrapped up",
+        )
+        self.assertTrue(result.success, result.message)
+
+
+class GMListConditionsActionTests(GMAdjudicationActionsTestBase):
+    """``gm_list_conditions`` (#3431) -- feeds the web Remove-Condition picker; no
+    ViewSet read exposes a target's hidden active conditions to their GM."""
+
+    def test_non_gm_is_refused(self) -> None:
+        result = GMListConditionsAction().run(actor=self.player_actor, target=self.target)
+        self.assertFalse(result.success)
+
+    def test_junior_floor_enforced(self) -> None:
+        result = GMListConditionsAction().run(actor=self.starting_gm_actor, target=self.target)
+        self.assertFalse(result.success)
+        self.assertIn("Junior GM", result.message)
+
+    def test_lists_active_instance_with_template_name_severity_and_duration(self) -> None:
+        apply_result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+            severity=2,
+            duration_rounds=5,
+        )
+        assert apply_result.success, apply_result.message
+
+        result = GMListConditionsAction().run(actor=self.gm_actor, target=self.target)
+        self.assertTrue(result.success, result.message)
+        rows = result.data["conditions"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["name"], self.condition_template.name)
+        self.assertEqual(row["severity"], 2)
+        self.assertEqual(row["rounds_remaining"], 5)
+
+    def test_empty_when_target_has_no_active_conditions(self) -> None:
+        result = GMListConditionsAction().run(actor=self.gm_actor, target=self.target)
+        self.assertTrue(result.success)
+        self.assertEqual(result.data["conditions"], [])
+
+
+class GMRemoveConditionActionJourneyTests(GMAdjudicationActionsTestBase):
+    """End-to-end: GM applies, then lists, then removes a condition on a scene
+    participant -- the #3431 spec's headline test seam."""
+
+    def test_apply_then_list_then_remove_journey(self) -> None:
+        apply_result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+        )
+        self.assertTrue(apply_result.success, apply_result.message)
+
+        list_result = GMListConditionsAction().run(actor=self.gm_actor, target=self.target)
+        self.assertTrue(list_result.success)
+        self.assertEqual(len(list_result.data["conditions"]), 1)
+        self.assertEqual(list_result.data["conditions"][0]["name"], self.condition_template.name)
+
+        remove_result = GMRemoveConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition=self.condition_template.name,
+            reason="the scene's over",
+        )
+        self.assertTrue(remove_result.success, remove_result.message)
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+        final_list = GMListConditionsAction().run(actor=self.gm_actor, target=self.target)
+        self.assertEqual(final_list.data["conditions"], [])

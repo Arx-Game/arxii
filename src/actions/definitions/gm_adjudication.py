@@ -661,6 +661,162 @@ class GMApplyConditionAction(Action):
         return ActionResult(success=True, message=f"{target.key} is now {template.name}.")
 
 
+def _resolve_active_condition_instance(kwargs: dict[str, Any]) -> tuple[Any, Any] | ActionResult:
+    """Return ``(target, instance)`` for ``gm_remove_condition``/``gm_list_conditions``.
+
+    Stricter than ``_resolve_condition_target``'s bare catalog lookup (which
+    ``GMApplyConditionAction`` uses -- applying doesn't presuppose an existing
+    instance): this resolves against the target's own ACTIVE ``ConditionInstance``s
+    via ``get_active_conditions`` and refuses when the target doesn't currently
+    carry the named condition, rather than silently no-opping like
+    ``remove_condition_by_name`` (the flow-layer ``CALL_SERVICE_FUNCTION`` target).
+    The kwarg is named ``condition`` (not ``condition_ref``, unlike its sibling
+    catalog-name kwargs elsewhere in this module) precisely to signal this
+    narrower active-instance-only resolution.
+    """
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+    target = _resolve_gm_target(kwargs)
+    if target is None:
+        return ActionResult(success=False, message=MSG_TARGET_REQUIRED)
+
+    condition_ref = str(kwargs.get("condition") or "").strip()
+    if not condition_ref:
+        return ActionResult(success=False, message="A condition name is required.")
+
+    try:
+        template = ConditionTemplate.get_by_name(condition_ref)
+    except ConditionTemplate.DoesNotExist:
+        return ActionResult(success=False, message=f"No condition named {condition_ref!r}.")
+
+    instance = get_active_conditions(target, condition=template).first()
+    if instance is None:
+        return ActionResult(
+            success=False,
+            message=f"{target.key} does not have {template.name} active.",
+        )
+
+    return target, instance
+
+
+@dataclass
+class GMRemoveConditionAction(Action):
+    """JUNIOR-tier GM action: remove an active ``ConditionTemplate`` by fiat (#3431).
+
+    The referee off-switch ``GMApplyConditionAction`` never got:
+    ``remove_condition``/``clear_all_conditions`` (``world/conditions/services.py``)
+    were previously called only by expiry, treatment, and internal flows. Catalog-
+    bounded to the target's own active instances -- see
+    ``_resolve_active_condition_instance``. ``reason`` is required and echoed in
+    the result message; unlike ``GMApplyConditionAction``'s ``note`` (persisted as
+    ``source_description``), ``remove_condition`` has no note field of its own to
+    carry it into, so this is audit-visible only in the returned message, not a
+    stored field (matches the apply action's "echoed in the result" shape, Decision
+    2). Gated on ``IsSceneGMPrerequisite`` + ``MinimumGMLevelPrerequisite(GMLevel.
+    JUNIOR)`` -- mirrors ``GMApplyConditionAction`` exactly (same trust bar to
+    switch a fiat condition off as to switch one on).
+    """
+
+    key: str = "gm_remove_condition"
+    name: str = "Remove Condition"
+    icon: str = "sparkles"
+    category: str = "gm"
+    target_type: TargetType = TargetType.SINGLE
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.conditions.services import remove_condition  # noqa: PLC0415
+
+        reason = str(kwargs.get("reason") or "").strip()
+        if not reason:
+            return ActionResult(
+                success=False, message="A reason is required to remove a condition."
+            )
+
+        resolved = _resolve_active_condition_instance(kwargs)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        target, instance = resolved
+        template = instance.condition
+
+        removed = remove_condition(target, template)
+        if not removed:
+            # Race: the instance resolved above vanished before this call (e.g. it
+            # expired mid-request). Fail loud rather than reporting a false success.
+            return ActionResult(
+                success=False,
+                message=f"{target.key} does not have {template.name} active.",
+            )
+        return ActionResult(
+            success=True,
+            message=f"{template.name} removed from {target.key} ({reason}).",
+        )
+
+
+@dataclass
+class GMListConditionsAction(Action):
+    """JUNIOR-tier GM action: list a target's active conditions (#3431).
+
+    Feeds ``GMRemoveConditionAction``'s web picker -- no existing read path serves
+    this: ``CharacterConditionsViewSet`` is self-only, and its ``observed`` action
+    filters to ``is_visible_to_others=True``, which would hide a GM's own
+    fiat-applied hidden condition from the GM who applied it. Mirrors
+    ``ListRoomTrapsAction``'s shape (``actions/definitions/traps.py``): result data
+    is the payload, the rendered message a human-readable fallback. Same gates as
+    ``GMRemoveConditionAction`` -- listing is no more sensitive than removing.
+    """
+
+    key: str = "gm_list_conditions"
+    name: str = "List Conditions"
+    icon: str = "list"
+    category: str = "gm"
+    target_type: TargetType = TargetType.SINGLE
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.conditions.services import get_active_conditions  # noqa: PLC0415
+
+        target = _resolve_gm_target(kwargs)
+        if target is None:
+            return ActionResult(success=False, message=MSG_TARGET_REQUIRED)
+
+        rows = [
+            {
+                "id": instance.pk,
+                "name": instance.condition.name,
+                "severity": instance.severity,
+                "rounds_remaining": instance.rounds_remaining,
+                "expires_at": instance.expires_at.isoformat() if instance.expires_at else None,
+            }
+            for instance in get_active_conditions(target)
+        ]
+        if not rows:
+            return ActionResult(
+                success=True,
+                message=f"{target.key} has no active conditions.",
+                data={"conditions": []},
+            )
+        lines = [f"[{row['id']}] {row['name']} (severity {row['severity']})" for row in rows]
+        return ActionResult(success=True, message="\n".join(lines), data={"conditions": rows})
+
+
 @dataclass
 class SummonPlayerAction(Action):
     """Consent-prompted GM summon: invite a player to the GM's scene room (#3071).

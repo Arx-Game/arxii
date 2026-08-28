@@ -25,6 +25,38 @@ export type SituationTemplateCatalogEntry = components['schemas']['SituationTemp
 /** Challenge catalog row (GET /api/mechanics/challenge-templates/). */
 export type ChallengeTemplateCatalogEntry = components['schemas']['ChallengeTemplateList'];
 
+/**
+ * Item template catalog row for the Grant Item / Stage Prop pickers (#3431),
+ * GET /api/items/templates/ (`ItemTemplateViewSet`, `name` icontains filter) —
+ * the existing catalog endpoint, no new one added (Decision 3).
+ */
+export type ItemTemplateCatalogEntry = components['schemas']['ItemTemplateList'];
+
+/**
+ * One row of `gm_list_conditions`'s result data (#3431) — a target's active
+ * `ConditionInstance`s, feeding the Condition tab's Remove-mode picker. Not a
+ * generated schema type: this is `ActionResult.data` from a REGISTRY dispatch,
+ * not a ViewSet response (see `GMListConditionsAction`,
+ * `actions/definitions/gm_adjudication.py`).
+ */
+export interface ActiveConditionEntry {
+  id: number;
+  name: string;
+  severity: number;
+  rounds_remaining: number | null;
+  expires_at: string | null;
+}
+
+/** One row of `list_room_traps`'s result data (#3002/#3431). Same non-ViewSet
+ *  shape as `ActiveConditionEntry` — see `ListRoomTrapsAction`,
+ *  `actions/definitions/traps.py`. */
+export interface RoomTrapEntry {
+  id: number;
+  name: string;
+  is_armed: boolean;
+  position: string | null;
+}
+
 /** Mirrors `world.scenes.action_constants.DifficultyChoice` — the only bands
  *  `gm_invoke_check` accepts (never a free integer). */
 export const DIFFICULTY_BANDS = [

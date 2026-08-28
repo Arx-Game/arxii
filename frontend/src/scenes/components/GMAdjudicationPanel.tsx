@@ -32,9 +32,20 @@
  * only reach a scene participant from this picker today (#3071) — an
  * arbitrary off-scene target needs a global character-search affordance this
  * panel doesn't have yet; telnet's `gm summon <character>` has no such limit.
+ *
+ * #3431 rounds out web/telnet parity with four more tabs, all thin dispatches
+ * over pre-existing telnet-only actions plus one new backend pair:
+ * Grant Item (`grant_item`, `GrantItemAction` — `actions/definitions/items.py`),
+ * Stage (`stage_prop`/`stage_property`, `actions/definitions/gm_props.py`, #2503),
+ * Traps (`list_room_traps`/`arm_trap`/`gm_disarm_trap`, `actions/definitions/
+ * traps.py`, #3002), and the Condition tab's new Remove mode
+ * (`gm_remove_condition`/`gm_list_conditions`, `actions/definitions/
+ * gm_adjudication.py` — the referee off-switch `GMApplyConditionAction` never
+ * got; `gm_list_conditions` feeds the Remove picker since no ViewSet read
+ * exposes a target's hidden active conditions to their GM).
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -52,9 +63,15 @@ import {
   useConditionTemplateCatalog,
   useSituationTemplateCatalog,
   useChallengeTemplateCatalog,
+  useItemTemplateCatalog,
 } from '@/gm-adjudication/queries';
 import { AWARD_KINDS, DIFFICULTY_BANDS } from '@/gm-adjudication/types';
-import type { AwardKind, DifficultyBand } from '@/gm-adjudication/types';
+import type {
+  ActiveConditionEntry,
+  AwardKind,
+  DifficultyBand,
+  RoomTrapEntry,
+} from '@/gm-adjudication/types';
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -418,15 +435,75 @@ function AwardTab({ characterId, targetCharacterId }: TabProps) {
 // ---------------------------------------------------------------------------
 
 function ConditionTab({ characterId, targetCharacterId }: TabProps) {
+  const [mode, setMode] = useState<'apply' | 'remove'>('apply');
   const [conditionName, setConditionName] = useState('');
   const [severity, setSeverity] = useState('');
   const [durationRounds, setDurationRounds] = useState('');
   const [note, setNote] = useState('');
-  const { data: conditions = [] } = useConditionTemplateCatalog(true);
+  const [activeConditions, setActiveConditions] = useState<ActiveConditionEntry[]>([]);
+  const [removeConditionName, setRemoveConditionName] = useState('');
+  const [removeReason, setRemoveReason] = useState('');
+  const { data: conditions = [] } = useConditionTemplateCatalog(mode === 'apply');
   const dispatch = useDispatchPlayerAction(characterId);
 
   const canSubmit = targetCharacterId !== null && conditionName !== '' && !dispatch.isPending;
   const canQuickApply = targetCharacterId !== null && !dispatch.isPending;
+
+  // Remove mode: fetch the target's active instances via gm_list_conditions (#3431)
+  // whenever the picker opens on a target — there is no ViewSet read for this
+  // (CharacterConditionsViewSet.observed hides fiat-applied hidden conditions from
+  // the GM who applied them), so the picker is fed by a registry dispatch, not a query.
+  useEffect(() => {
+    if (mode !== 'remove' || targetCharacterId === null) {
+      setActiveConditions([]);
+      setRemoveConditionName('');
+      return;
+    }
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'gm_list_conditions' },
+        kwargs: { target: targetCharacterId },
+      })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not list active conditions.');
+          setActiveConditions([]);
+          return;
+        }
+        const data = result.data as { conditions?: ActiveConditionEntry[] } | null | undefined;
+        setActiveConditions(data?.conditions ?? []);
+      })
+      .catch(() => toast.error('Could not list active conditions.'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, targetCharacterId]);
+
+  const canRemove =
+    targetCharacterId !== null &&
+    removeConditionName !== '' &&
+    removeReason.trim() !== '' &&
+    !dispatch.isPending;
+
+  function handleRemove() {
+    if (!canRemove) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'gm_remove_condition' },
+        kwargs: {
+          target: targetCharacterId,
+          condition: removeConditionName,
+          reason: removeReason.trim(),
+        },
+      })
+      .then((result) => {
+        reportResult(result, 'Condition removed.');
+        if (!isDispatchFailure(result)) {
+          setActiveConditions((prev) => prev.filter((c) => c.name !== removeConditionName));
+          setRemoveConditionName('');
+          setRemoveReason('');
+        }
+      })
+      .catch(() => toast.error('Could not remove the condition.'));
+  }
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -459,73 +536,127 @@ function ConditionTab({ characterId, targetCharacterId }: TabProps) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-condition-tab">
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          disabled={!canQuickApply}
-          onClick={() => quickApply('Edge')}
-          data-testid="gm-condition-quick-edge"
-        >
-          Quick Edge
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!canQuickApply}
-          onClick={() => quickApply('Setback')}
-          data-testid="gm-condition-quick-setback"
-        >
-          Quick Setback
-        </Button>
-      </div>
       <div className="space-y-1">
-        <Label htmlFor="gm-condition-select">Condition</Label>
+        <Label htmlFor="gm-condition-mode">Mode</Label>
         <select
-          id="gm-condition-select"
+          id="gm-condition-mode"
           className={SELECT_CLASS}
-          value={conditionName}
-          onChange={(e) => setConditionName(e.target.value)}
-          data-testid="gm-condition-select"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'apply' | 'remove')}
+          data-testid="gm-condition-mode-select"
         >
-          <option value="">Select a condition…</option>
-          {conditions.map((c) => (
-            <option key={c.id} value={c.name}>
-              {c.name}
-            </option>
-          ))}
+          <option value="apply">Apply</option>
+          <option value="remove">Remove (#3431)</option>
         </select>
       </div>
-      <div className="space-y-1">
-        <Label htmlFor="gm-condition-severity">Severity (optional)</Label>
-        <Input
-          id="gm-condition-severity"
-          type="number"
-          min={1}
-          value={severity}
-          onChange={(e) => setSeverity(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="gm-condition-duration">Duration in rounds (optional)</Label>
-        <Input
-          id="gm-condition-duration"
-          type="number"
-          min={1}
-          value={durationRounds}
-          onChange={(e) => setDurationRounds(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="gm-condition-note">Note</Label>
-        <Input
-          id="gm-condition-note"
-          placeholder="Narration only — never a mechanical effect"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-      </div>
-      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-condition-submit">
-        {dispatch.isPending ? 'Applying…' : 'Apply Condition'}
-      </Button>
+      {mode === 'apply' ? (
+        <>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={!canQuickApply}
+              onClick={() => quickApply('Edge')}
+              data-testid="gm-condition-quick-edge"
+            >
+              Quick Edge
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!canQuickApply}
+              onClick={() => quickApply('Setback')}
+              data-testid="gm-condition-quick-setback"
+            >
+              Quick Setback
+            </Button>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gm-condition-select">Condition</Label>
+            <select
+              id="gm-condition-select"
+              className={SELECT_CLASS}
+              value={conditionName}
+              onChange={(e) => setConditionName(e.target.value)}
+              data-testid="gm-condition-select"
+            >
+              <option value="">Select a condition…</option>
+              {conditions.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gm-condition-severity">Severity (optional)</Label>
+            <Input
+              id="gm-condition-severity"
+              type="number"
+              min={1}
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gm-condition-duration">Duration in rounds (optional)</Label>
+            <Input
+              id="gm-condition-duration"
+              type="number"
+              min={1}
+              value={durationRounds}
+              onChange={(e) => setDurationRounds(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gm-condition-note">Note</Label>
+            <Input
+              id="gm-condition-note"
+              placeholder="Narration only — never a mechanical effect"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+          <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-condition-submit">
+            {dispatch.isPending ? 'Applying…' : 'Apply Condition'}
+          </Button>
+        </>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <Label htmlFor="gm-condition-remove-select">Active condition</Label>
+            <select
+              id="gm-condition-remove-select"
+              className={SELECT_CLASS}
+              value={removeConditionName}
+              onChange={(e) => setRemoveConditionName(e.target.value)}
+              data-testid="gm-condition-remove-select"
+            >
+              <option value="">Select an active condition…</option>
+              {activeConditions.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name} (severity {c.severity})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gm-condition-remove-reason">Reason</Label>
+            <Input
+              id="gm-condition-remove-reason"
+              placeholder="Why does this end now?"
+              value={removeReason}
+              onChange={(e) => setRemoveReason(e.target.value)}
+              data-testid="gm-condition-remove-reason"
+            />
+          </div>
+          <Button
+            disabled={!canRemove}
+            onClick={handleRemove}
+            data-testid="gm-condition-remove-submit"
+          >
+            {dispatch.isPending ? 'Removing…' : 'Remove Condition'}
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -747,6 +878,303 @@ function SummonTab({ characterId, targetCharacterId }: TabProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Grant Item tab (#3431) — dispatches `grant_item` (`GrantItemAction`,
+// `actions/definitions/items.py:538`). Unlike every other tab, that action
+// resolves its target by NAME (`actor.search(target_name, ...)`, a telnet-era
+// convention — #2117) rather than by pk, so this reuses the panel's shared
+// participant picker but sends the selected participant's display name, not
+// their character id. `reason` has no consuming kwarg on the action today (it
+// has no note/description field) — included for GM bookkeeping parity with
+// the other award-shaped tabs; harmless if unused server-side.
+// ---------------------------------------------------------------------------
+
+function GrantItemTab({
+  characterId,
+  targetCharacterId,
+  personas,
+}: TabProps & { personas: ScenePersona[] }) {
+  const [search, setSearch] = useState('');
+  const [templateName, setTemplateName] = useState('');
+  const [reason, setReason] = useState('');
+  const { data: templates = [] } = useItemTemplateCatalog(search, true);
+  const dispatch = useDispatchPlayerAction(characterId);
+
+  const targetName = personas.find((p) => p.character_sheet === targetCharacterId)?.name ?? '';
+  const canSubmit = targetName !== '' && templateName !== '' && !dispatch.isPending;
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'grant_item' },
+        kwargs: {
+          target_name: targetName,
+          template_name: templateName,
+          reason: reason || undefined,
+        },
+      })
+      .then((result) => reportResult(result, 'Item granted.'))
+      .catch(() => toast.error('Could not grant the item.'));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-grantitem-tab">
+      <div className="space-y-1">
+        <Label htmlFor="gm-grantitem-search">Item template</Label>
+        <Input
+          id="gm-grantitem-search"
+          placeholder="Search item templates…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className={SELECT_CLASS}
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          data-testid="gm-grantitem-template-select"
+        >
+          <option value="">Select an item template…</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="gm-grantitem-reason">Reason</Label>
+        <Input
+          id="gm-grantitem-reason"
+          placeholder="Why this award?"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </div>
+      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-grantitem-submit">
+        {dispatch.isPending ? 'Granting…' : 'Grant Item'}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stage tab (#3431, #2503) — two modes over `actions/definitions/gm_props.py`:
+// prop = `stage_prop` (materialize a curated ItemTemplate in the GM's room, no
+// target — `target_type=SELF`); property = `stage_property` (tag an object with
+// a curated `Property`, free-text name resolved server-side by the action's own
+// pk-or-name lookup, Decision 4 — no Property enumeration endpoint exists and
+// this doesn't add one). "Target object" for property mode reuses the panel's
+// shared participant picker (`targetCharacterId` -> `target_id`); leaving no
+// participant selected tags the room itself (`StagePropertyAction`'s own
+// actor.location fallback when neither `target`/`target_id` is supplied).
+// ---------------------------------------------------------------------------
+
+function StageTab({ characterId, targetCharacterId }: TabProps) {
+  const [mode, setMode] = useState<'prop' | 'property'>('prop');
+  const [search, setSearch] = useState('');
+  const [templateName, setTemplateName] = useState('');
+  const [propertyName, setPropertyName] = useState('');
+  const [value, setValue] = useState('');
+  const { data: templates = [] } = useItemTemplateCatalog(search, mode === 'prop');
+  const dispatch = useDispatchPlayerAction(characterId);
+
+  const canSubmit =
+    !dispatch.isPending && (mode === 'prop' ? templateName !== '' : propertyName.trim() !== '');
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    if (mode === 'prop') {
+      dispatch
+        .mutateAsync({
+          ref: { backend: 'registry', registry_key: 'stage_prop' },
+          kwargs: { item_template: templateName },
+        })
+        .then((result) => reportResult(result, 'Prop staged.'))
+        .catch(() => toast.error('Could not stage the prop.'));
+      return;
+    }
+    const kwargs: Record<string, unknown> = { property: propertyName.trim() };
+    if (targetCharacterId !== null) kwargs.target_id = targetCharacterId;
+    if (value) kwargs.value = Number(value);
+    dispatch
+      .mutateAsync({ ref: { backend: 'registry', registry_key: 'stage_property' }, kwargs })
+      .then((result) => reportResult(result, 'Property staged.'))
+      .catch(() => toast.error('Could not stage the property.'));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-stage-tab">
+      <div className="space-y-1">
+        <Label htmlFor="gm-stage-mode">Mode</Label>
+        <select
+          id="gm-stage-mode"
+          className={SELECT_CLASS}
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'prop' | 'property')}
+          data-testid="gm-stage-mode-select"
+        >
+          <option value="prop">Prop</option>
+          <option value="property">Property</option>
+        </select>
+      </div>
+      {mode === 'prop' ? (
+        <div className="space-y-1">
+          <Label htmlFor="gm-stage-search">Item template</Label>
+          <Input
+            id="gm-stage-search"
+            placeholder="Search item templates…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className={SELECT_CLASS}
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            data-testid="gm-stage-template-select"
+          >
+            <option value="">Select an item template…</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.name}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Tags the selected participant, or the room itself when no participant is selected above.
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor="gm-stage-property-name">Property</Label>
+            <Input
+              id="gm-stage-property-name"
+              placeholder="e.g. dark"
+              value={propertyName}
+              onChange={(e) => setPropertyName(e.target.value)}
+              data-testid="gm-stage-property-name"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gm-stage-value">Value (optional)</Label>
+            <Input
+              id="gm-stage-value"
+              type="number"
+              min={1}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-stage-submit">
+        {dispatch.isPending ? 'Staging…' : mode === 'prop' ? 'Stage Prop' : 'Stage Property'}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Traps tab (#3431, #3002) — the GM half of the trap loop (list/arm/disarm),
+// the web player-facing `TrapsBlock` (#3011) never got. Radix `Tabs.Content`
+// only mounts its children while selected (no `forceMount` here), so fetching
+// on mount IS fetching on open — this component doesn't exist in the DOM until
+// the GM clicks the Traps tab. Reads `list_room_traps`'s result data — the same
+// non-ViewSet pattern `gm_list_conditions` uses; there's no trap-listing
+// endpoint. Arm/Disarm re-fetch the list so the row reflects the new state
+// immediately.
+// ---------------------------------------------------------------------------
+
+function TrapsTab({ characterId }: { characterId: number }) {
+  const [traps, setTraps] = useState<RoomTrapEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const dispatch = useDispatchPlayerAction(characterId);
+
+  function loadTraps() {
+    setLoading(true);
+    dispatch
+      .mutateAsync({ ref: { backend: 'registry', registry_key: 'list_room_traps' }, kwargs: {} })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not list traps.');
+          setTraps([]);
+          return;
+        }
+        const data = result.data as { traps?: RoomTrapEntry[] } | null | undefined;
+        setTraps(data?.traps ?? []);
+      })
+      .catch(() => toast.error('Could not list traps.'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadTraps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function actOnTrap(trapId: number, registryKey: 'arm_trap' | 'gm_disarm_trap') {
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: registryKey },
+        kwargs: { trap_id: trapId },
+      })
+      .then((result) => {
+        reportResult(result, registryKey === 'arm_trap' ? 'Trap armed.' : 'Trap disarmed.');
+        if (!isDispatchFailure(result)) loadTraps();
+      })
+      .catch(() => toast.error('Could not update the trap.'));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-traps-tab">
+      <Button
+        variant="outline"
+        disabled={dispatch.isPending}
+        onClick={loadTraps}
+        data-testid="gm-traps-refresh"
+      >
+        {loading ? 'Loading…' : 'Refresh'}
+      </Button>
+      <div className="space-y-1" data-testid="gm-traps-list">
+        {traps.length === 0 && <p className="text-xs text-muted-foreground">No traps here.</p>}
+        {traps.map((trap) => (
+          <div
+            key={trap.id}
+            className="flex items-center justify-between gap-2 rounded-md border p-2"
+            data-testid={`gm-trap-row-${trap.id}`}
+          >
+            <span className="text-sm">
+              {trap.name} — {trap.is_armed ? 'armed' : 'disarmed'}
+              {trap.position ? ` @ ${trap.position}` : ''}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={trap.is_armed || dispatch.isPending}
+                onClick={() => actOnTrap(trap.id, 'arm_trap')}
+                data-testid={`gm-trap-arm-${trap.id}`}
+              >
+                Arm
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!trap.is_armed || dispatch.isPending}
+                onClick={() => actOnTrap(trap.id, 'gm_disarm_trap')}
+                data-testid={`gm-trap-disarm-${trap.id}`}
+              >
+                Disarm
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Panel shell
 // ---------------------------------------------------------------------------
 
@@ -803,6 +1231,15 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <TabsTrigger value="summon" data-testid="gm-tab-summon">
               Summon
             </TabsTrigger>
+            <TabsTrigger value="grantitem" data-testid="gm-tab-grantitem">
+              Grant Item
+            </TabsTrigger>
+            <TabsTrigger value="stage" data-testid="gm-tab-stage">
+              Stage
+            </TabsTrigger>
+            <TabsTrigger value="traps" data-testid="gm-tab-traps">
+              Traps
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="check">
             <CallCheckTab characterId={characterId} targetCharacterId={targetCharacterId} />
@@ -824,6 +1261,19 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
           </TabsContent>
           <TabsContent value="summon">
             <SummonTab characterId={characterId} targetCharacterId={targetCharacterId} />
+          </TabsContent>
+          <TabsContent value="grantitem">
+            <GrantItemTab
+              characterId={characterId}
+              targetCharacterId={targetCharacterId}
+              personas={personas}
+            />
+          </TabsContent>
+          <TabsContent value="stage">
+            <StageTab characterId={characterId} targetCharacterId={targetCharacterId} />
+          </TabsContent>
+          <TabsContent value="traps">
+            <TrapsTab characterId={characterId} />
           </TabsContent>
         </Tabs>
       </CardContent>
