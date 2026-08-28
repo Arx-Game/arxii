@@ -14,6 +14,13 @@ export interface MyRosterEntry {
   primary_persona_id: number | null;
   /** The face currently worn (durable active_persona, else primary) — #981/#1043. */
   active_persona_id: number | null;
+  /**
+   * Unacknowledged narrative-message count for this character (#3412) — the
+   * "N tidings waiting" badge in the Hall's "Your Characters" band. Always
+   * present on `RosterEntryViewSet.mine`'s annotated queryset (see
+   * `MyRosterEntrySerializer.get_unread_narrative_count`).
+   */
+  unread_narrative_count: number;
 }
 
 /**

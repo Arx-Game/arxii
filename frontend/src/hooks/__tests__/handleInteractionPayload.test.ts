@@ -41,6 +41,7 @@ function makeRosterEntries(): MyRosterEntry[] {
       profile_picture_url: null,
       primary_persona_id: 11,
       active_persona_id: 11,
+      unread_narrative_count: 0,
     },
     {
       id: 2,
@@ -49,6 +50,7 @@ function makeRosterEntries(): MyRosterEntry[] {
       profile_picture_url: null,
       primary_persona_id: 22,
       active_persona_id: 22,
+      unread_narrative_count: 0,
     },
   ];
 }

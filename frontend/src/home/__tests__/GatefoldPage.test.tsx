@@ -7,7 +7,7 @@
  * the network layer.
  */
 
-import { screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { GatefoldPage } from '../GatefoldPage';
@@ -17,6 +17,14 @@ import { setAccount } from '@/store/authSlice';
 import { mockAccount } from '@/test/mocks/account';
 import type { StartingArea } from '@/character-creation/types';
 import type { CodexEntryListItem } from '@/codex/types';
+
+// #3412 slice 2 — GatefoldPage now mounts HallPage (instead of the gatefold
+// chapters) for an authenticated account. HallPage's own content is covered
+// by its own test suite; this file only needs to assert the mount split, so
+// HallPage is stubbed to a marker.
+vi.mock('../HallPage', () => ({
+  HallPage: () => <div data-testid="hall-page-stub" />,
+}));
 
 const mockUsePublicStartingAreas = vi.fn();
 const mockUsePublicBeginnings = vi.fn();
@@ -103,6 +111,14 @@ function setDefaultMocks() {
 
 describe('GatefoldPage', () => {
   afterEach(() => {
+    // Unmount BEFORE mutating the store (#3412 fix): GatefoldPage's
+    // forced-realm effect now depends on `account`, so a store mutation
+    // while the previous test's tree is still mounted (RTL's own cleanup
+    // hasn't fired yet) re-renders it and fires an un-`act()`-wrapped effect
+    // that leaks a stray `setForcedRealm` call into the NEXT test's mock
+    // call log. Explicit `cleanup()` first removes that live tree before
+    // the store mutation has anything left to re-render.
+    cleanup();
     store.dispatch(setAccount(null));
     vi.clearAllMocks();
   });
@@ -177,13 +193,31 @@ describe('GatefoldPage', () => {
     );
   });
 
-  it('renders WelcomePanel instead of the CTA row for an authenticated account', () => {
+  it('renders HallPage instead of the gatefold chapters for an authenticated account (#3412)', () => {
     setDefaultMocks();
     store.dispatch(setAccount({ ...mockAccount }));
     renderWithProviders(<GatefoldPage />);
 
+    expect(screen.getByTestId('hall-page-stub')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Begin' })).not.toBeInTheDocument();
-    expect(screen.getByText(`Welcome back, ${mockAccount.display_name}`)).toBeInTheDocument();
+    expect(screen.queryByText('The Ward of the Compact')).not.toBeInTheDocument();
+    expect(screen.queryByText(/How One Enters/)).not.toBeInTheDocument();
+  });
+
+  it('does not force the arx realm theme for an authenticated account (#3412 — Hall uses its own realm)', () => {
+    setDefaultMocks();
+    store.dispatch(setAccount({ ...mockAccount }));
+    renderWithProviders(<GatefoldPage />);
+
+    expect(mockSetForcedRealm).not.toHaveBeenCalledWith('arx');
+  });
+
+  it('renders the gatefold chapters unchanged for a visitor (byte-identical mount split)', () => {
+    setDefaultMocks();
+    renderWithProviders(<GatefoldPage />);
+
+    expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
+    expect(screen.getByText('The Ward of the Compact')).toBeInTheDocument();
   });
 
   it('does not blank the page when the featured-entries query errors', () => {

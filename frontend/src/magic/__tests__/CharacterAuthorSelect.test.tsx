@@ -11,6 +11,7 @@ function makeEntry(overrides: Partial<MyRosterEntry> & { character_id: number })
     profile_picture_url: null,
     primary_persona_id: null,
     active_persona_id: null,
+    unread_narrative_count: 0,
     ...overrides,
   };
 }

@@ -195,6 +195,7 @@ describe('Header', () => {
       profile_picture_url: null,
       primary_persona_id: 7,
       active_persona_id: 7,
+      unread_narrative_count: 0,
     };
 
     it("renders no chip when there is no selection (byte-for-byte today's header)", () => {

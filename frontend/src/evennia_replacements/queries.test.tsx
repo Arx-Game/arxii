@@ -75,6 +75,7 @@ describe('useAccountQuery hydration (#3412)', () => {
         profile_picture_url: null,
         primary_persona_id: 1,
         active_persona_id: 1,
+        unread_narrative_count: 0,
       },
     });
 
@@ -138,6 +139,7 @@ describe('useAccountQuery hydration (#3412)', () => {
         profile_picture_url: null,
         primary_persona_id: 1,
         active_persona_id: 1,
+        unread_narrative_count: 0,
       },
     });
 
