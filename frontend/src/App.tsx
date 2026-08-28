@@ -102,6 +102,11 @@ const FlowEditorPage = lazy(() =>
     default: m.FlowEditorPage,
   }))
 );
+const TriggerDefinitionEditorPage = lazy(() =>
+  import('@/flows-builder/pages/TriggerDefinitionEditorPage').then((m) => ({
+    default: m.TriggerDefinitionEditorPage,
+  }))
+);
 const StoryBuilderPage = lazy(() =>
   import('@/story-builder/pages/StoryBuilderPage').then((m) => ({
     default: m.StoryBuilderPage,
@@ -615,6 +620,16 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <FlowEditorPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/flows-builder/trigger-definitions/:tdId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <TriggerDefinitionEditorPage />
                 </Suspense>
               </StaffRoute>
             }

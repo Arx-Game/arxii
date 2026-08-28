@@ -102,7 +102,7 @@ export function setChild(
 }
 
 /** Replace a `not` group's single operand. */
-export function setNotChild(node: FilterNot, child: FilterNode): FilterNot {
+export function setNotChild(_node: FilterNot, child: FilterNode): FilterNot {
   return { not: child };
 }
 
