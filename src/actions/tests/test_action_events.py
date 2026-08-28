@@ -166,7 +166,17 @@ class ActionIntentEventTests(TestCase):
 
         self.assertEqual(result.message, "Halt.")  # not the AP-failure message
 
-    def test_modify_payload_redirects_target(self) -> None:
+    def test_modify_payload_writes_a_pk_shaped_kwarg(self) -> None:
+        """MODIFY_PAYLOAD's raw JSON ``value`` lands in ``execute()`` unresolved.
+
+        ``target`` arrives as a raw pk int, not an ``ObjectDB`` instance — the
+        same shape REST dispatch already sends for ``objectdb_target_kwargs``
+        actions that resolve the id themselves (see ``actions/CLAUDE.md``'s
+        ``objectdb_target_kwargs`` note). An action whose ``execute()`` expects
+        a real object (e.g. calling ``target.location``) needs
+        ``redirect_action_target`` instead — see
+        ``test_call_service_function_redirects_to_a_real_object`` below.
+        """
         decoy = ObjectDBFactory(db_key="decoy")
         real = ObjectDBFactory(db_key="real")
         flow = FlowDefinitionFactory()
@@ -186,6 +196,34 @@ class ActionIntentEventTests(TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(probe.seen_kwargs["target"], decoy.pk)
+
+    def test_call_service_function_redirects_to_a_real_object(self) -> None:
+        """A real-object redirect goes through ``redirect_action_target``.
+
+        The movement-redirect pattern (ADR-0242/0243) instead of
+        ``MODIFY_PAYLOAD`` — ``execute()`` receives the actual ``ObjectDB``
+        instance, not a pk.
+        """
+        decoy = ObjectDBFactory(db_key="decoy")
+        real = ObjectDBFactory(db_key="real")
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="flows.service_functions.actions.redirect_action_target",
+            parameters={"payload": "@payload", "object_id": decoy.pk},
+        )
+        trig_def = TriggerDefinitionFactory(
+            event_name=EventName.ACTION_INTENT, flow_definition=flow
+        )
+        TriggerFactory(trigger_definition=trig_def, obj=self.room)
+        probe = _ProbeAction()
+
+        result = probe.run(self.char, target=real)
+
+        self.assertTrue(result.success)
+        self.assertEqual(probe.seen_kwargs["target"], decoy)
 
     def test_action_key_filter_discriminates_verbs(self) -> None:
         get_def = TriggerDefinitionFactory(

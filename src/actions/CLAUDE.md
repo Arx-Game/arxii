@@ -660,9 +660,15 @@ lives on the config model rows attached to the `ActionEnhancement`, not on the s
    not "the actor can." A trigger that cancels the flow (`stack.was_cancelled()`)
    short-circuits `run()` with a failure `ActionResult` right here, using the
    flow's `cancel_message` or a generic fallback — no prerequisite check, no AP
-   charge, no `execute()`. A `MODIFY_PAYLOAD` step on the `target` field redirects
-   `context.kwargs["target"]` before prerequisites/`execute()` see it (the
-   movement-redirect pattern, ADR-0242).
+   charge, no `execute()`. A `MODIFY_PAYLOAD` step on the `target` field writes
+   `context.kwargs["target"]` straight from the step's JSON `value` — correct
+   only for a pk-shaped kwarg the action itself resolves (the
+   `objectdb_target_kwargs` REST-dispatch shape, see above). Redirecting
+   `target` to a real `ObjectDB` instance (so a real `execute()` body can call
+   `target.location` etc.) goes through the resolving service function
+   instead — `redirect_action_target`
+   (`flows/service_functions/actions.py`), the action-layer counterpart of
+   the movement-redirect pattern's `redirect_move` (ADR-0242/0243).
 5. **Enforce prerequisites** — `check_availability()` is called against the
    post-enhancement (and post-redirect) kwargs; if any prerequisite is unmet, `run()`
    returns a failure `ActionResult` immediately (never reaches `execute()`). This is
@@ -677,7 +683,9 @@ lives on the config model rows attached to the `ActionEnhancement`, not on the s
    failure alike (a prerequisite-gate or AP-cost failure still emits; only the
    intent-cancel path in step 4 returns before any result event). `message` is
    coerced to `""` so authored comparison filters (e.g. `contains`) never receive
-   `None`.
+   `None`. Gathered at the actor's location **after** `execute()` and post-effects
+   run — a successful `traverse` fires `ACTION_RESULT` in the destination room,
+   not the room the actor departed from.
 
 Generic per-action event declarations (`intent_event`/`result_event` fields on
 `Action`) were removed in #3418 — every `Action` now goes through this same

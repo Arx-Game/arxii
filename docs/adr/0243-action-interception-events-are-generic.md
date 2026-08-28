@@ -8,8 +8,9 @@ Every `Action` declared `intent_event`/`result_event` names (`before_get`,
 `before_say`, ...) and nothing ever emitted them; the placeholders waited on a
 per-verb `EventName` vocabulary that would grow by two members (plus a
 choices migration on `TriggerDefinition.event_name`) for every action added.
-Four years of actions landed without anyone paying that toll — which is how
-the action layer stayed invisible to the reactive layer since #395.
+Every action since the system landed (#319, 2026-03) shipped without anyone
+paying that toll — which is how the action layer stayed invisible to the
+reactive layer since #395, roughly six months.
 
 ## Decision
 
@@ -39,4 +40,11 @@ Domain events (`MOVE_PRE_DEPART`, `EXAMINE_PRE`, `TECHNIQUE_PRE_CAST`, ...)
 keep their deeper seams and richer typed payloads; `look`/`traverse` fire
 both layers. Deep kwarg mutation is not supported — the filter DSL and
 MODIFY_PAYLOAD walk attributes only, so the mutable knobs are the typed
-payload fields (`target`, `cancel_message`).
+payload fields (`target`, `cancel_message`). `MODIFY_PAYLOAD`'s `value` is a
+JSON step parameter, so it can only write pk-shaped or scalar kwargs — the
+same constraint ADR-0242 already hit for movement `destination`. Redirecting
+`target` to a real `ObjectDB` instance goes through a resolving service
+function instead (`redirect_action_target`,
+`flows/service_functions/actions.py`, mirroring `redirect_move`); a bare
+`MODIFY_PAYLOAD` on `target` is only correct when the action itself resolves
+the pk (as `objectdb_target_kwargs` actions already do for REST dispatch).

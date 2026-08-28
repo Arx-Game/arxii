@@ -191,7 +191,9 @@ class ActionResultPayload:
     """An action attempt concluded (frozen POST payload).
 
     Emitted for successes and failed attempts alike (``success``
-    discriminates); never emitted when the intent was flow-cancelled.
+    discriminates); never emitted when the intent was flow-cancelled (nor
+    when an exception escapes ``execute()`` or post-effects — ``run()``
+    doesn't catch it, so no ``ACTION_RESULT`` fires for that attempt at all).
     ``message`` is always a str — ``run()`` coerces a None result message
     to "" so authored comparison filters can never hit None.
     """
