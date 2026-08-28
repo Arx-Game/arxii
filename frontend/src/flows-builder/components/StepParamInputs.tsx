@@ -198,14 +198,44 @@ function FieldShell({
   );
 }
 
-/** Key/value row editor for a `dict`-typed param (e.g. `emit_flow_event`'s `data`). */
+/**
+ * Key/value row editor for a `dict`-typed param (e.g. `emit_flow_event`'s
+ * `data`) — or, when the author passes the whole dict via a flow variable
+ * (e.g. `data: "@vars"`), a free-text reference input instead. The mode
+ * follows the current value's shape (string -> reference, object -> table);
+ * each "use X instead" control both flips the mode and resets the value to
+ * that mode's empty form, so switching is an explicit discard rather than a
+ * silent one (the original bug: a string value got coerced to `{}` on
+ * every render just by opening this editor).
+ */
 function DictEditor({
   value,
   onChange,
 }: {
   value: unknown;
-  onChange: (next: Record<string, unknown>) => void;
+  onChange: (next: unknown) => void;
 }) {
+  if (typeof value === 'string') {
+    return (
+      <div className="space-y-1">
+        <Input
+          aria-label="Reference"
+          placeholder="@some_variable"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Button
+          size="sm"
+          variant="link"
+          className="h-auto p-0 text-xs"
+          onClick={() => onChange({})}
+        >
+          Use key/value entries instead
+        </Button>
+      </div>
+    );
+  }
+
   const dict: Record<string, unknown> =
     value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
@@ -258,9 +288,19 @@ function DictEditor({
           </Button>
         </div>
       ))}
-      <Button size="sm" variant="outline" onClick={addEntry}>
-        + Add entry
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={addEntry}>
+          + Add entry
+        </Button>
+        <Button
+          size="sm"
+          variant="link"
+          className="h-auto p-0 text-xs"
+          onClick={() => onChange('')}
+        >
+          Use a reference instead
+        </Button>
+      </div>
     </div>
   );
 }
