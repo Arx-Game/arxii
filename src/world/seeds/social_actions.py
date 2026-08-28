@@ -20,6 +20,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_OUTCOME_PARTIAL_SUCCESS = "Partial Success"
+
 # (template_name, check_type_name, target_type, icon, difficulty_tier_modifier).
 # Seduce reuses the Seduction check but rolls one tier harder than Flirt (#1697).
 _SOCIAL_ACTION_TEMPLATES = [
@@ -65,79 +67,79 @@ _POOL_PREFIX = "Social"
 _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
     "Intimidate": [
         ("Failure", "Intimidation falls flat", 1),
-        ("Partial Success", "Target rattled but holds firm", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Target rattled but holds firm", 2),
         ("Success", "Target cowed and compliant", 1),
     ],
     "Blackmail": [
         ("Failure", "The threat rings hollow", 1),
-        ("Partial Success", "They waver, but call your bluff", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "They waver, but call your bluff", 2),
         ("Success", "They fold under the threat", 1),
     ],
     "Persuade": [
         ("Failure", "Argument dismissed outright", 1),
-        ("Partial Success", "Target intrigued but unconvinced", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Target intrigued but unconvinced", 2),
         ("Success", "Target fully persuaded", 1),
     ],
     "Boon": [
         ("Failure", "The ask lands badly", 1),
-        ("Partial Success", "They hesitate, unmoved", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
         ("Success", "They grant the boon", 1),
     ],
     # #2540 slice 3 — the ask flavors reuse the Boon triple verbatim (flavor-neutral
     # labels; the check type carries the flavor, not the outcome text).
     "Con a Boon": [
         ("Failure", "The ask lands badly", 1),
-        ("Partial Success", "They hesitate, unmoved", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
         ("Success", "They grant the boon", 1),
     ],
     "Charm a Boon": [
         ("Failure", "The ask lands badly", 1),
-        ("Partial Success", "They hesitate, unmoved", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
         ("Success", "They grant the boon", 1),
     ],
     "Menace a Boon": [
         ("Failure", "The ask lands badly", 1),
-        ("Partial Success", "They hesitate, unmoved", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
         ("Success", "They grant the boon", 1),
     ],
     "Deceive": [
         ("Failure", "Lie detected immediately", 1),
-        ("Partial Success", "Partial deception holds", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Partial deception holds", 2),
         ("Success", "Target completely deceived", 1),
     ],
     "Feed": [
         ("Failure", "They pull away before the hunger finds purchase", 1),
-        ("Partial Success", "A shallow taste, quickly broken", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "A shallow taste, quickly broken", 2),
         ("Success", "The feeding takes hold", 1),
     ],
     "Drain": [
         ("Failure", "The warmth slips through your fingers", 1),
-        ("Partial Success", "A thin sip of essence", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "A thin sip of essence", 2),
         ("Success", "Their vitality flows into you", 1),
     ],
     "Flirt": [
         ("Failure", "Advance rebuffed", 1),
-        ("Partial Success", "Interest piqued but guarded", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Interest piqued but guarded", 2),
         ("Success", "Charm lands completely", 1),
     ],
     "Restore to Sense": [
         ("Failure", "The beast does not hear you", 1),
-        ("Partial Success", "A flicker of the person behind the rage", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "A flicker of the person behind the rage", 2),
         ("Success", "Sense restored — the rage lets go", 1),
     ],
     "Seduce": [
         ("Failure", "Seduction rebuffed", 1),
-        ("Partial Success", "Tempted but resistant", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Tempted but resistant", 2),
         ("Success", "Swept off their feet", 1),
     ],
     "Perform": [
         ("Failure", "Performance falls flat", 1),
-        ("Partial Success", "Audience politely attentive", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Audience politely attentive", 2),
         ("Success", "Audience captivated", 1),
     ],
     "Entrance": [
         ("Failure", "Entrance goes unnoticed", 1),
-        ("Partial Success", "Attention caught briefly", 2),
+        (_OUTCOME_PARTIAL_SUCCESS, "Attention caught briefly", 2),
         ("Success", "All eyes arrested", 1),
     ],
 }

@@ -81,6 +81,7 @@ OBJECTS_OBJECTDB_MODEL = "objects.ObjectDB"
 
 _MUST_BE_NULL_FOR_KIND = "Must be null for this kind."
 POSITION_MODEL = "arxii.Position"
+_MUST_BE_NULL_FOR_NARRATIVE_ONLY = "Must be null for NARRATIVE_ONLY."
 
 
 class CombatEncounter(AbstractRound):
@@ -2083,13 +2084,13 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         if not self.narrative_snippet.strip():
             raise ValidationError({"narrative_snippet": "NARRATIVE_ONLY requires snippet."})
         if self.scaled_value is not None:
-            raise ValidationError({"scaled_value": "Must be null for NARRATIVE_ONLY."})
+            raise ValidationError({"scaled_value": _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
         if self.granted_capability is not None:
-            raise ValidationError({"granted_capability": "Must be null for NARRATIVE_ONLY."})
+            raise ValidationError({"granted_capability": _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
         if self.capability_grant_value is not None:
-            raise ValidationError({"capability_grant_value": "Must be null for NARRATIVE_ONLY."})
+            raise ValidationError({"capability_grant_value": _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
         if self.vital_target:
-            raise ValidationError({"vital_target": "Must be null for NARRATIVE_ONLY."})
+            raise ValidationError({"vital_target": _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
 
     def _clean_resistance(self) -> None:
         # RESISTANCE shape mirrors FLAT_BONUS (scaled_value only); resistance_damage_type

@@ -258,6 +258,37 @@ def broadcast_gemit(  # noqa: PLR0913
     return gemit
 
 
+def _character_scope_story_participants(story: Story) -> Generator[CharacterSheet]:
+    """Yield the CHARACTER-scope story's owning CharacterSheet, if any."""
+    if story.character_sheet_id is not None:
+        yield story.character_sheet
+
+
+def _group_scope_story_participants(story: Story) -> Generator[CharacterSheet]:
+    """Yield CharacterSheets for active memberships of a GROUP-scope story's primary_table."""
+    if story.primary_table_id is None:
+        return
+    memberships = story.primary_table.memberships.filter(left_at__isnull=True).select_related(
+        "persona__character_sheet"
+    )
+    for membership in memberships:
+        persona = membership.persona
+        if persona.character_sheet_id is not None:
+            yield persona.character_sheet
+
+
+def _global_scope_story_participants(story: Story) -> Generator[CharacterSheet]:
+    """Yield CharacterSheets for a GLOBAL-scope story's active StoryParticipation members."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    participations = story.participants.filter(is_active=True).select_related("character")
+    for participation in participations:
+        try:
+            yield participation.character.sheet_data
+        except CharacterSheet.DoesNotExist:
+            continue
+
+
 def _resolve_story_participants(story: Story) -> Generator[CharacterSheet]:
     """Yield CharacterSheet for every active participant of the story.
 
@@ -266,31 +297,15 @@ def _resolve_story_participants(story: Story) -> Generator[CharacterSheet]:
                  story.primary_table.
     GLOBAL scope: active StoryParticipation members' character sheets.
     """
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.stories.constants import StoryScope  # noqa: PLC0415
 
     match story.scope:
         case StoryScope.CHARACTER:
-            if story.character_sheet_id is not None:
-                yield story.character_sheet
+            yield from _character_scope_story_participants(story)
         case StoryScope.GROUP:
-            if story.primary_table_id is not None:
-                memberships = story.primary_table.memberships.filter(
-                    left_at__isnull=True
-                ).select_related("persona__character_sheet")
-                for membership in memberships:
-                    persona = membership.persona
-                    if persona.character_sheet_id is not None:
-                        yield persona.character_sheet
+            yield from _group_scope_story_participants(story)
         case StoryScope.GLOBAL:
-            participations = story.participants.filter(is_active=True).select_related(
-                "character",
-            )
-            for participation in participations:
-                try:
-                    yield participation.character.sheet_data
-                except CharacterSheet.DoesNotExist:
-                    continue
+            yield from _global_scope_story_participants(story)
 
 
 def deliver_queued_messages(character_sheet: CharacterSheet) -> int:

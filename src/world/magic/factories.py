@@ -126,6 +126,9 @@ _PAYLOAD_PARAM = "@payload"
 _MAGIC_PROGRESSION_PATH = "/magic/progression"
 # SubFactory import paths, extracted to satisfy S1192.
 _DISTINCTION_FACTORY = "world.distinctions.factories.DistinctionFactory"
+_CONDITION_CATEGORY_FACTORY = "world.conditions.factories.ConditionCategoryFactory"
+_CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+_CONDITION_TEMPLATE_FACTORY = "world.conditions.factories.ConditionTemplateFactory"
 # Lazy model references (Django app_label.ModelName) used as factory Meta.model
 # strings, extracted to satisfy S1192.
 _RITUAL_MODEL = "arxii.Ritual"
@@ -289,7 +292,7 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterAura
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     celestial = Decimal("10.00")
     primal = Decimal("70.00")
     abyssal = Decimal("20.00")
@@ -450,7 +453,7 @@ class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):
         model = TechniqueAppliedCondition
 
     technique = factory.SubFactory(TechniqueFactory)
-    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    condition = factory.SubFactory(_CONDITION_TEMPLATE_FACTORY)
     target_kind = "enemy"
     minimum_success_level = 1
     base_severity = 1
@@ -469,7 +472,7 @@ class TechniqueRemovedConditionFactory(factory.django.DjangoModelFactory):
         model = TechniqueRemovedCondition
 
     technique = factory.SubFactory(TechniqueFactory)
-    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    condition = factory.SubFactory(_CONDITION_TEMPLATE_FACTORY)
     target_kind = "enemy"
     minimum_success_level = 1
     remove_all_stacks = True
@@ -770,7 +773,7 @@ class CharacterGiftFactory(factory.django.DjangoModelFactory):
         model = CharacterGift
         django_get_or_create = ("character", "gift")
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     gift = factory.SubFactory(GiftFactory)
 
 
@@ -814,7 +817,7 @@ class CharacterTraditionFactory(factory.django.DjangoModelFactory):
         model = CharacterTradition
         django_get_or_create = ("character", "tradition")
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     tradition = factory.SubFactory(TraditionFactory)
 
 
@@ -823,7 +826,7 @@ class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
         model = CharacterTechnique
         django_get_or_create = ("character", "technique")
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     technique = factory.SubFactory(TechniqueFactory)
 
 
@@ -836,7 +839,7 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterAnima
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     current = 10
     maximum = 10
 
@@ -852,7 +855,7 @@ class MotifFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Motif
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     description = factory.Faker("paragraph")
 
 
@@ -922,7 +925,7 @@ class PendingAudereOfferFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = PendingAudereOffer
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     fired_intensity = 20
     soulfray_stage_order = 2
 
@@ -1283,7 +1286,7 @@ class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
         service_function_path="",
         flow=None,
     )
-    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    target_character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     was_successful = True
     anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
@@ -1757,8 +1760,8 @@ class PoseEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.PoseEndorsement"
 
-    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorser_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    endorsee_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     interaction = factory.SubFactory("world.scenes.factories.InteractionFactory")
     timestamp = factory.LazyAttribute(lambda o: o.interaction.timestamp)
     resonance = factory.SubFactory(ResonanceFactory)
@@ -1768,8 +1771,8 @@ class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.SceneEntryEndorsement"
 
-    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorser_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    endorsee_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     scene = factory.SubFactory("world.scenes.factories.SceneFactory")
     resonance = factory.SubFactory(ResonanceFactory)
     granted_amount = 4
@@ -1786,8 +1789,8 @@ class StylePresentationEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.StylePresentationEndorsement"
 
-    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorser_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    endorsee_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     scene = factory.SubFactory("world.scenes.factories.SceneFactory")
     resonance = factory.SubFactory(ResonanceFactory)
     granted_amount = 4
@@ -1797,8 +1800,8 @@ class PresentationEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.PresentationEndorsement"
 
-    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorser_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    endorsee_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     presentation = factory.SubFactory("world.items.factories.FashionPresentationFactory")
     weight = 1
 
@@ -1807,7 +1810,7 @@ class EntryFlourishRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.EntryFlourishRecord"
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     resonance = factory.SubFactory(ResonanceFactory)
     scene = None
     granted_amount = 10
@@ -1833,7 +1836,7 @@ class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
         model = "arxii.DramaticMomentTag"
 
     moment_type = factory.SubFactory(DramaticMomentTypeFactory)
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     scene = None
     tagged_by = factory.SubFactory("evennia_extensions.factories.AccountFactory")
     interaction = None
@@ -1845,7 +1848,7 @@ class DramaticMomentSuggestionFactory(factory.django.DjangoModelFactory):
         model = "arxii.DramaticMomentSuggestion"
 
     moment_type = factory.SubFactory(DramaticMomentTypeFactory)
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     scene = None
     interaction = None
     interaction_timestamp = None
@@ -2118,7 +2121,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("corruption_resonance",)
 
     name = factory.LazyAttribute(lambda o: f"Corrupted by {o.corruption_resonance.name}")
-    category = factory.SubFactory("world.conditions.factories.ConditionCategoryFactory")
+    category = factory.SubFactory(_CONDITION_CATEGORY_FACTORY)
     description = factory.LazyAttribute(
         lambda o: f"Corruption from the {o.corruption_resonance.name} resonance."
     )
@@ -2190,7 +2193,7 @@ class CorruptionTwistTemplateFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = MagicalAlterationTemplate
 
-    condition_template = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    condition_template = factory.SubFactory(_CONDITION_TEMPLATE_FACTORY)
     tier = AlterationTier.MARKED
     origin_affinity = factory.LazyAttribute(lambda o: o.resonance.affinity)
     origin_resonance = factory.SubFactory(ResonanceFactory)
@@ -2228,8 +2231,8 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.Sineating"
 
-    sinner_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    sinner_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    sineater_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
     scene = None
     resonance = factory.SubFactory(ResonanceFactory)
@@ -2245,8 +2248,8 @@ class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.SoulTetherRescue"
 
-    sinner_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    sinner_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    sineater_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
     scene = None
     resonance = factory.SubFactory(ResonanceFactory)
@@ -2283,7 +2286,7 @@ class TetherStrainTemplateFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = "Tether Strain"
-    category = factory.SubFactory("world.conditions.factories.ConditionCategoryFactory")
+    category = factory.SubFactory(_CONDITION_CATEGORY_FACTORY)
     description = "The wear of carrying another soul's sins. Decays with rest."
     has_progression = True
     passive_decay_per_day = 1
@@ -2342,7 +2345,7 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = "Soul Tether Active"
-    category = factory.SubFactory("world.conditions.factories.ConditionCategoryFactory")
+    category = factory.SubFactory(_CONDITION_CATEGORY_FACTORY)
     description = (
         "Marker condition installed on Sinners with an active Soul Tether. "
         "Carries the reactive subscriber triggers."

@@ -41,6 +41,9 @@ _TECHNIQUE_MODEL = "arxii.Technique"
 _CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
 _CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
 
+# Inert-apply-only-knob validation message, extracted to satisfy S1192.
+_INERT_FOR_REMOVAL_ROW = "Inert for a removal row; leave at 0."
+
 # Sentinel distinguishing "no config argument passed" (self-fetch) from an explicit
 # ``config=None`` (caller already established no row exists — skip the fetch). Lets a
 # sweep over many grants fetch CapabilityPowerConfig once and hand it to every
@@ -1338,11 +1341,11 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         # so the check stays a single loop instead of seven near-identical blocks.
         inert_defaults: list[tuple[str, object, str]] = [
             ("base_severity", 1, "Severity is inert for a removal row; leave at default 1."),
-            ("severity_intensity_multiplier", Decimal(0), "Inert for a removal row; leave at 0."),
-            ("severity_per_extra_sl", 0, "Inert for a removal row; leave at 0."),
+            ("severity_intensity_multiplier", Decimal(0), _INERT_FOR_REMOVAL_ROW),
+            ("severity_per_extra_sl", 0, _INERT_FOR_REMOVAL_ROW),
             ("base_duration_rounds", None, "Duration is inert for a removal row; leave null."),
-            ("duration_intensity_multiplier", Decimal(0), "Inert for a removal row; leave at 0."),
-            ("duration_per_extra_sl", 0, "Inert for a removal row; leave at 0."),
+            ("duration_intensity_multiplier", Decimal(0), _INERT_FOR_REMOVAL_ROW),
+            ("duration_per_extra_sl", 0, _INERT_FOR_REMOVAL_ROW),
             ("stack_count", 1, "Stack count is inert for a removal row; leave at default 1."),
         ]
         for field_name, expected, message in inert_defaults:

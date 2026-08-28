@@ -121,80 +121,69 @@ def _alteration_tier_label(value: object) -> str:
         return str(value)
 
 
-def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901
+def _library_entry_mismatch_errors(
+    library_entry: MagicalAlterationTemplate,
+    *,
+    pending_tier: int,
+    pending_affinity_id: int,
+    pending_resonance_id: int,
+) -> list[str]:
+    """Tier/affinity/resonance mismatches between a library entry and its pending alteration."""
+    errors: list[str] = []
+    if library_entry.tier != pending_tier:
+        errors.append(
+            f"Library entry tier {_alteration_tier_label(library_entry.tier)} "
+            f"does not match pending tier {_alteration_tier_label(pending_tier)}."
+        )
+    if library_entry.origin_affinity_id != pending_affinity_id:
+        errors.append("Library entry origin affinity does not match the pending alteration.")
+    if library_entry.origin_resonance_id != pending_resonance_id:
+        errors.append("Library entry origin resonance does not match the pending alteration.")
+    return errors
+
+
+def _validate_library_alteration_resolution(
     *,
     pending_tier: int,
     pending_affinity_id: int,
     pending_resonance_id: int,
     payload: dict,
-    is_staff: bool,
-    character_sheet: CharacterSheet | None = None,
+    character_sheet: CharacterSheet | None,
 ) -> list[str]:
-    """Validate a resolution payload against the pending's tier and origin.
+    """Library use-as-is resolution path — minimal checks only.
 
-    Returns a list of error strings. Empty list = valid.
-    character_sheet is required for library duplicate checks.
-
-    Two distinct paths:
-    - Library path (library_entry_pk present): validates tier/affinity/resonance match and
-      duplicate check only. All scratch-path checks are skipped — the library entry was
-      already validated when authored.
-    - Scratch path (no library_entry_pk): validates all tier, magnitude, description, and
-      visibility constraints.
+    All scratch-path checks are skipped — the library entry was already validated
+    when authored.
     """
+    if character_sheet is None:
+        return ["character_sheet is required to validate library_entry_pk."]
+
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    library_entry = MagicalAlterationTemplate.objects.filter(
+        pk=payload.get("library_entry_pk"),
+        is_library_entry=True,
+    ).first()
+    if library_entry is None:
+        return ["Library entry not found or not a library entry."]
+
+    errors = _library_entry_mismatch_errors(
+        library_entry,
+        pending_tier=pending_tier,
+        pending_affinity_id=pending_affinity_id,
+        pending_resonance_id=pending_resonance_id,
+    )
+    if ConditionInstance.objects.filter(
+        target=character_sheet.character,
+        condition=library_entry.condition_template,
+    ).exists():
+        errors.append("Character already has this condition active.")
+    return errors
+
+
+def _scratch_magnitude_cap_errors(*, pending_tier: int, payload: dict, caps: dict) -> list[str]:
+    """Weakness/resonance/social magnitude-cap errors for the scratch resolution path."""
     errors: list[str] = []
-    library_pk = payload.get("library_entry_pk")
-
-    if library_pk:
-        # Library use-as-is path — minimal checks only.
-        if character_sheet is None:
-            errors.append("character_sheet is required to validate library_entry_pk.")
-        else:
-            from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-            library_entry = MagicalAlterationTemplate.objects.filter(
-                pk=library_pk,
-                is_library_entry=True,
-            ).first()
-            if library_entry is None:
-                errors.append("Library entry not found or not a library entry.")
-            else:
-                if library_entry.tier != pending_tier:
-                    errors.append(
-                        f"Library entry tier {_alteration_tier_label(library_entry.tier)} "
-                        f"does not match pending tier {_alteration_tier_label(pending_tier)}."
-                    )
-                if library_entry.origin_affinity_id != pending_affinity_id:
-                    errors.append(
-                        "Library entry origin affinity does not match the pending alteration."
-                    )
-                if library_entry.origin_resonance_id != pending_resonance_id:
-                    errors.append(
-                        "Library entry origin resonance does not match the pending alteration."
-                    )
-                if ConditionInstance.objects.filter(
-                    target=character_sheet.character,
-                    condition=library_entry.condition_template,
-                ).exists():
-                    errors.append("Character already has this condition active.")
-        return errors
-
-    # Scratch path — validate all tier, magnitude, description, and visibility constraints.
-    tier = payload.get("tier")
-    caps = ALTERATION_TIER_CAPS.get(pending_tier, {})
-
-    if tier != pending_tier:
-        errors.append(
-            f"Tier mismatch: payload tier {_alteration_tier_label(tier)} "
-            f"!= pending tier {_alteration_tier_label(pending_tier)}."
-        )
-
-    if payload.get("origin_affinity_id") != pending_affinity_id:
-        errors.append("Origin affinity does not match the pending alteration.")
-
-    if payload.get("origin_resonance_id") != pending_resonance_id:
-        errors.append("Origin resonance does not match the pending alteration.")
-
     weakness = payload.get("weakness_magnitude", 0)
     if weakness > caps.get("weakness_cap", 0):
         errors.append(
@@ -217,10 +206,12 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901
             f"Social reactivity magnitude {social} exceeds tier {pending_tier} cap "
             f"of {caps.get('social_cap', 0)}."
         )
+    return errors
 
-    if caps.get("visibility_required") and not payload.get("is_visible_at_rest"):
-        errors.append(f"is_visible_at_rest must be True at tier {pending_tier}.")
 
+def _scratch_description_errors(payload: dict) -> list[str]:
+    """Minimum-length errors for the scratch resolution path's description fields."""
+    errors: list[str] = []
     for field in ("player_description", "observer_description"):
         value = payload.get(field, "")
         if len(value) < MIN_ALTERATION_DESCRIPTION_LENGTH:
@@ -228,11 +219,85 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901
                 f"{field} must be at least {MIN_ALTERATION_DESCRIPTION_LENGTH} characters "
                 f"(got {len(value)})."
             )
+    return errors
+
+
+def _validate_scratch_alteration_resolution(
+    *,
+    pending_tier: int,
+    pending_affinity_id: int,
+    pending_resonance_id: int,
+    payload: dict,
+    is_staff: bool,
+) -> list[str]:
+    """Scratch-authored resolution path — tier, magnitude, description, and visibility checks."""
+    errors: list[str] = []
+    caps = ALTERATION_TIER_CAPS.get(pending_tier, {})
+
+    tier = payload.get("tier")
+    if tier != pending_tier:
+        errors.append(
+            f"Tier mismatch: payload tier {_alteration_tier_label(tier)} "
+            f"!= pending tier {_alteration_tier_label(pending_tier)}."
+        )
+
+    if payload.get("origin_affinity_id") != pending_affinity_id:
+        errors.append("Origin affinity does not match the pending alteration.")
+
+    if payload.get("origin_resonance_id") != pending_resonance_id:
+        errors.append("Origin resonance does not match the pending alteration.")
+
+    errors.extend(
+        _scratch_magnitude_cap_errors(pending_tier=pending_tier, payload=payload, caps=caps)
+    )
+    errors.extend(_scratch_description_errors(payload))
+
+    if caps.get("visibility_required") and not payload.get("is_visible_at_rest"):
+        errors.append(f"is_visible_at_rest must be True at tier {pending_tier}.")
 
     if payload.get("is_library_entry") and not is_staff:
         errors.append("Only staff can create library entries.")
 
     return errors
+
+
+def validate_alteration_resolution(  # noqa: PLR0913 - cohesive validation-context params
+    *,
+    pending_tier: int,
+    pending_affinity_id: int,
+    pending_resonance_id: int,
+    payload: dict,
+    is_staff: bool,
+    character_sheet: CharacterSheet | None = None,
+) -> list[str]:
+    """Validate a resolution payload against the pending's tier and origin.
+
+    Returns a list of error strings. Empty list = valid.
+    character_sheet is required for library duplicate checks.
+
+    Two distinct paths:
+    - Library path (library_entry_pk present): validates tier/affinity/resonance match and
+      duplicate check only. All scratch-path checks are skipped — the library entry was
+      already validated when authored.
+    - Scratch path (no library_entry_pk): validates all tier, magnitude, description, and
+      visibility constraints.
+    """
+    if payload.get("library_entry_pk"):
+        return _validate_library_alteration_resolution(
+            pending_tier=pending_tier,
+            pending_affinity_id=pending_affinity_id,
+            pending_resonance_id=pending_resonance_id,
+            payload=payload,
+            character_sheet=character_sheet,
+        )
+
+    return _validate_scratch_alteration_resolution(
+        pending_tier=pending_tier,
+        pending_affinity_id=pending_affinity_id,
+        pending_resonance_id=pending_resonance_id,
+        payload=payload,
+        is_staff=is_staff,
+    )
 
 
 def get_library_entries(

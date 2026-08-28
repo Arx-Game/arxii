@@ -18,6 +18,7 @@ import type {
   OutgoingMessage,
   RoomStatePayload,
   ScenePayload,
+  SocketMessageType,
 } from './types';
 import type { CommandSpec } from '@/game/types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
@@ -33,7 +34,9 @@ import { handleMailArrivedPayload } from './handleMailArrivedPayload';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { NavigateFunction } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
+import type { AppDispatch } from '@/store/store';
 import { getWebSocketUrl } from '@/config';
 import { toast } from 'sonner';
 import { fetchAccount } from '@/evennia_replacements/api';
@@ -61,6 +64,121 @@ function clearReconnect(character: string) {
     clearTimeout(timer);
     delete reconnectTimers[character];
   }
+}
+
+/** A plain system message shown when a frame is malformed or unrecognized. */
+function buildSystemFallbackMessage(content: string): GameMessage {
+  return { content, timestamp: Date.now(), type: GAME_MESSAGE_TYPE.SYSTEM };
+}
+
+/** Narrows a parsed frame to the `[type, args, kwargs?]` wire shape. */
+function isIncomingMessage(value: unknown): value is IncomingMessage {
+  return Array.isArray(value) && value.length >= 2;
+}
+
+interface IncomingMessageContext {
+  character: MyRosterEntry['name'];
+  args: unknown[];
+  kwargs: Record<string, unknown> | undefined;
+  dispatch: AppDispatch;
+  navigate: NavigateFunction;
+}
+
+type IncomingMessageHandler = (ctx: IncomingMessageContext) => void;
+
+// One case per control message type the server can push; anything not matched
+// here falls through to parseGameMessage as a regular game message. A switch on
+// the literal type constants keeps this dispatch's cognitive complexity in check
+// the way the old if-chain did not, while keeping the chosen handler a matter of
+// explicit control flow. An object/Map lookup keyed by the wire-supplied type
+// reads the same but makes the call target a value derived from user input,
+// which is exactly what CodeQL js/unvalidated-dynamic-method-call flags.
+function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefined {
+  switch (msgType) {
+    case WS_MESSAGE_TYPE.ROOM_STATE:
+      return ({ character, kwargs, dispatch }) =>
+        handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch);
+
+    case WS_MESSAGE_TYPE.SCENE:
+      return ({ character, kwargs, dispatch }) =>
+        handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
+
+    case WS_MESSAGE_TYPE.COMMAND_ERROR:
+      return ({ kwargs }) => {
+        const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
+        toast.error(error, { description: command });
+      };
+
+    case WS_MESSAGE_TYPE.KUDOS_RECEIVED:
+      return ({ kwargs }) =>
+        handleKudosReceivedPayload(kwargs as unknown as KudosReceivedPayload | undefined);
+
+    // Defensive: kwargs may be undefined if the server sends a malformed frame.
+    // emitActionResult is a side-effecting bus call only - every listener is
+    // responsible for its own toast/UX.
+    case WS_MESSAGE_TYPE.ACTION_RESULT:
+      return ({ kwargs }) =>
+        emitActionResult(
+          (kwargs as unknown as ActionResultPayload) ?? {
+            success: false,
+            message: null,
+            data: null,
+          }
+        );
+
+    case WS_MESSAGE_TYPE.ROULETTE_RESULT:
+      return ({ kwargs, dispatch }) =>
+        handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
+
+    case WS_MESSAGE_TYPE.BATTLE_STATE:
+      return ({ kwargs }) => handleBattleStatePayload(kwargs as unknown as BattleStatePayload);
+
+    case WS_MESSAGE_TYPE.MAIL_ARRIVED:
+      return ({ kwargs }) => handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
+
+    case WS_MESSAGE_TYPE.HAZARD_PROMPT:
+      return ({ kwargs }) => emitHazardPrompt(kwargs as unknown as HazardPromptPayload);
+
+    case WS_MESSAGE_TYPE.INTERACTION:
+      return ({ character, kwargs, dispatch, navigate }) =>
+        handleInteractionPayload(
+          character,
+          kwargs as unknown as InteractionWsPayload,
+          dispatch,
+          navigate
+        );
+
+    case WS_MESSAGE_TYPE.COMMANDS:
+      return ({ character, args }) => handleCommandPayload(character, args as CommandSpec[]);
+
+    // Broadcast to every account session on each successful puppet - nothing to
+    // do client-side (the open handler already re-puppets), but without this
+    // case the frame fell through to parseGameMessage and rendered as raw
+    // JSON noise in the system lane (2026-07 audit).
+    case WS_MESSAGE_TYPE.PUPPET_CHANGED:
+      return () => undefined;
+
+    default:
+      return undefined;
+  }
+}
+/** Routes one parsed incoming websocket frame to its handler, or renders it as a plain game message. */
+function dispatchIncomingMessage(
+  character: MyRosterEntry['name'],
+  parsed: IncomingMessage,
+  dispatch: AppDispatch,
+  navigate: NavigateFunction
+): void {
+  const [msgType, args, kwargs] = parsed;
+  const handler = handlerFor(msgType);
+  if (handler) {
+    handler({ character, args, kwargs, dispatch, navigate });
+    return;
+  }
+
+  // Regular game message
+  const message = parseGameMessage(parsed);
+  dispatch(addSessionMessage({ character, message }));
 }
 
 export function useGameSocket() {
@@ -146,111 +264,27 @@ export function useGameSocket() {
           parsed = JSON.parse(event.data);
         } catch {
           // Bad JSON frame: surface as a system message and bail.
-          const fallback = {
-            content: String(event.data),
-            timestamp: Date.now(),
-            type: GAME_MESSAGE_TYPE.SYSTEM,
-          } as GameMessage;
-          dispatch(addSessionMessage({ character, message: fallback }));
-          return;
-        }
-
-        if (Array.isArray(parsed) && parsed.length >= 2) {
-          const [msgType, args, kwargs] = parsed as IncomingMessage;
-
-          // Control message: ROOM_STATE
-          if (msgType === WS_MESSAGE_TYPE.ROOM_STATE) {
-            handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.SCENE) {
-            handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.COMMAND_ERROR) {
-            const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
-            toast.error(error, { description: command });
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.KUDOS_RECEIVED) {
-            handleKudosReceivedPayload(kwargs as unknown as KudosReceivedPayload | undefined);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.ACTION_RESULT) {
-            // Defensive: kwargs may be undefined if the server sends a malformed
-            // frame. emitActionResult is a side-effecting bus call only — every
-            // listener is responsible for its own toast/UX.
-            emitActionResult(
-              (kwargs as unknown as ActionResultPayload) ?? {
-                success: false,
-                message: null,
-                data: null,
-              }
-            );
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.ROULETTE_RESULT) {
-            handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.BATTLE_STATE) {
-            handleBattleStatePayload(kwargs as unknown as BattleStatePayload);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.MAIL_ARRIVED) {
-            handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.HAZARD_PROMPT) {
-            emitHazardPrompt(kwargs as unknown as HazardPromptPayload);
-            return;
-          }
-
-          if (msgType === WS_MESSAGE_TYPE.INTERACTION) {
-            handleInteractionPayload(
+          dispatch(
+            addSessionMessage({
               character,
-              kwargs as unknown as InteractionWsPayload,
-              dispatch,
-              navigate
-            );
-            return;
-          }
-
-          // Control message: COMMANDS
-          if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
-            handleCommandPayload(character, args as CommandSpec[]);
-            return;
-          }
-
-          // Broadcast to every account session on each successful puppet —
-          // nothing to do client-side (the open handler already re-puppets),
-          // but without this branch the frame fell through to parseGameMessage
-          // and rendered as raw JSON noise in the system lane (2026-07 audit).
-          if (msgType === WS_MESSAGE_TYPE.PUPPET_CHANGED) {
-            return;
-          }
-
-          // Regular game message
-          const message = parseGameMessage(parsed as IncomingMessage);
-          dispatch(addSessionMessage({ character, message }));
+              message: buildSystemFallbackMessage(String(event.data)),
+            })
+          );
           return;
         }
 
-        // Unexpected structure: stringify and show
-        const fallback = {
-          content: JSON.stringify(parsed),
-          timestamp: Date.now(),
-          type: GAME_MESSAGE_TYPE.SYSTEM,
-        } as GameMessage;
-        dispatch(addSessionMessage({ character, message: fallback }));
+        if (!isIncomingMessage(parsed)) {
+          // Unexpected structure: stringify and show
+          dispatch(
+            addSessionMessage({
+              character,
+              message: buildSystemFallbackMessage(JSON.stringify(parsed)),
+            })
+          );
+          return;
+        }
+
+        dispatchIncomingMessage(character, parsed, dispatch, navigate);
       });
     },
     [account, dispatch, navigate]

@@ -76,6 +76,7 @@ from world.roster.models import RosterEntry
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
 _ERR_CHARACTER_SHEET_NOT_OWNED = "character_sheet_id does not belong to the requesting account."
 _ERR_CHARACTER_SHEET_NOT_FOUND = "CharacterSheet not found."
+_SOURCE_RESONANCE_NAME = "resonance.name"
 
 
 def _resolve_sheet_pk(value: int) -> CharacterSheet:
@@ -511,7 +512,7 @@ class CharacterResonanceSerializer(serializers.ModelSerializer):
     """Serializer for CharacterResonance records."""
 
     resonance_name = serializers.CharField(
-        source="resonance.name",
+        source=_SOURCE_RESONANCE_NAME,
         read_only=True,
     )
     resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
@@ -640,7 +641,7 @@ class MotifResonanceStyleSerializer(serializers.ModelSerializer):
 class MotifResonanceSerializer(serializers.ModelSerializer):
     """Serializer for MotifResonance records with nested facet and style assignments."""
 
-    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
     facet_assignments = MotifResonanceAssociationSerializer(many=True, read_only=True)
     style_assignments = MotifResonanceStyleSerializer(many=True, read_only=True)
 
@@ -865,7 +866,7 @@ class ThreadSerializer(serializers.ModelSerializer):
     - effective_cap: min(path_cap, anchor_cap)
     """
 
-    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    resonance_name = serializers.CharField(source=_SOURCE_RESONANCE_NAME, read_only=True)
     target_id = serializers.IntegerField(write_only=True, required=True)
     # RELATIONSHIP_TRACK only (#2159): names the partner persona. target_id for that
     # kind is the RelationshipTrack CATALOG id (not a RelationshipTrackProgress pk —

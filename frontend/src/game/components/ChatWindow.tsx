@@ -1,12 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { GameMessage } from '@/hooks/types';
+import type { GameMessage, GameMessageType } from '@/hooks/types';
 import { EvenniaMessage } from './EvenniaMessage';
 import { GAME_MESSAGE_TYPE } from '@/hooks/types';
 import { gemitKeys, narrativeKeys } from '@/narrative/queries';
 
 interface ChatWindowProps {
   messages: Array<GameMessage & { id: string }>;
+}
+
+const ROW_CLASS_BY_TYPE: Partial<Record<GameMessageType, string>> = {
+  [GAME_MESSAGE_TYPE.NARRATIVE]: 'mb-2 border-l-2 border-red-500 bg-red-950/20 px-2',
+  [GAME_MESSAGE_TYPE.GEMIT]: 'mb-2 border-l-2 border-green-500 bg-green-950/20 px-2',
+};
+
+/** Row wrapper className for a message, keyed by message type. */
+function getRowClassName(type: GameMessageType): string {
+  return ROW_CLASS_BY_TYPE[type] ?? 'mb-2';
+}
+
+const TEXT_CLASS_BY_TYPE: Partial<Record<GameMessageType, string>> = {
+  [GAME_MESSAGE_TYPE.NARRATIVE]: 'text-red-300',
+  [GAME_MESSAGE_TYPE.GEMIT]: 'text-green-300',
+  [GAME_MESSAGE_TYPE.SYSTEM]: 'text-blue-400',
+  [GAME_MESSAGE_TYPE.ACTION]: 'text-green-400',
+  [GAME_MESSAGE_TYPE.CHANNEL]: 'text-purple-400',
+  [GAME_MESSAGE_TYPE.ERROR]: 'text-red-400',
+};
+
+/** Message text className, keyed by message type. */
+function getMessageTextClassName(type: GameMessageType): string {
+  return TEXT_CLASS_BY_TYPE[type] ?? 'text-white';
 }
 
 export function ChatWindow({ messages }: ChatWindowProps) {
@@ -58,36 +82,13 @@ export function ChatWindow({ messages }: ChatWindowProps) {
         <p className="text-muted-foreground">No messages yet...</p>
       ) : (
         messages.map((message) => (
-          <div
-            key={message.id}
-            className={
-              message.type === GAME_MESSAGE_TYPE.NARRATIVE
-                ? 'mb-2 border-l-2 border-red-500 bg-red-950/20 px-2'
-                : message.type === GAME_MESSAGE_TYPE.GEMIT
-                  ? 'mb-2 border-l-2 border-green-500 bg-green-950/20 px-2'
-                  : 'mb-2'
-            }
-          >
+          <div key={message.id} className={getRowClassName(message.type)}>
             <span className="text-xs text-muted-foreground">
               {new Date(message.timestamp).toLocaleTimeString()}
             </span>
             <EvenniaMessage
               content={message.content}
-              className={
-                message.type === GAME_MESSAGE_TYPE.NARRATIVE
-                  ? 'text-red-300'
-                  : message.type === GAME_MESSAGE_TYPE.GEMIT
-                    ? 'text-green-300'
-                    : message.type === GAME_MESSAGE_TYPE.SYSTEM
-                      ? 'text-blue-400'
-                      : message.type === GAME_MESSAGE_TYPE.ACTION
-                        ? 'text-green-400'
-                        : message.type === GAME_MESSAGE_TYPE.CHANNEL
-                          ? 'text-purple-400'
-                          : message.type === GAME_MESSAGE_TYPE.ERROR
-                            ? 'text-red-400'
-                            : 'text-white'
-              }
+              className={getMessageTextClassName(message.type)}
             />
           </div>
         ))

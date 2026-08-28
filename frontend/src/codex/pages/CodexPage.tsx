@@ -15,25 +15,25 @@ import { useCodexTree, useCodexSearch } from '../queries';
 import { CodexTree } from '../components/CodexTree';
 import { CodexContent } from '../components/CodexContent';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import type { CodexEntryListItem } from '../types';
+import type { CodexCategoryTree, CodexEntryListItem } from '../types';
 
 const ALL_CHARACTERS = 'all';
+
+/** Reads an integer route param, or undefined when absent. */
+function getIntParam(searchParams: URLSearchParams, key: string): number | undefined {
+  const value = searchParams.get(key);
+  return value ? parseInt(value, 10) : undefined;
+}
 
 export function CodexPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 300);
 
-  const categoryId = searchParams.get('category')
-    ? parseInt(searchParams.get('category')!, 10)
-    : undefined;
-  const subjectId = searchParams.get('subject')
-    ? parseInt(searchParams.get('subject')!, 10)
-    : undefined;
-  const entryId = searchParams.get('entry') ? parseInt(searchParams.get('entry')!, 10) : undefined;
-  const characterId = searchParams.get('character')
-    ? parseInt(searchParams.get('character')!, 10)
-    : undefined;
+  const categoryId = getIntParam(searchParams, 'category');
+  const subjectId = getIntParam(searchParams, 'subject');
+  const entryId = getIntParam(searchParams, 'entry');
+  const characterId = getIntParam(searchParams, 'character');
 
   const { data: myCharacters } = useMyRosterEntriesQuery();
   const { data: tree, isLoading: treeLoading } = useCodexTree(characterId);
@@ -82,11 +82,10 @@ export function CodexPage() {
     (type: 'home' | 'category' | 'subject', id?: number) => {
       if (type === 'home') {
         updateParams({});
-      } else if (type === 'category' && id) {
-        updateParams({ category: id.toString() });
-      } else if (type === 'subject' && id) {
-        updateParams({ subject: id.toString() });
+        return;
       }
+      if (id === undefined) return;
+      updateParams({ [type]: id.toString() });
     },
     [updateParams]
   );
@@ -145,42 +144,19 @@ export function CodexPage() {
           </div>
 
           {/* Search Results or Tree */}
-          {showSearchResults ? (
-            <div className="space-y-1">
-              <div className="text-sm font-medium text-muted-foreground">Search Results</div>
-              {searchLoading ? (
-                <div className="flex items-center gap-2 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Searching...</span>
-                </div>
-              ) : searchResults?.length === 0 ? (
-                <div className="py-2 text-sm text-muted-foreground">No results found</div>
-              ) : (
-                searchResults?.map((entry) => (
-                  <SearchResultItem
-                    key={entry.id}
-                    entry={entry}
-                    onClick={() => handleSelectEntry(entry.id)}
-                  />
-                ))
-              )}
-            </div>
-          ) : treeLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-6 w-full" />
-              <Skeleton className="ml-4 h-6 w-3/4" />
-              <Skeleton className="ml-4 h-6 w-3/4" />
-            </div>
-          ) : tree ? (
-            <CodexTree
-              categories={tree}
-              characterId={characterId}
-              selectedCategoryId={categoryId}
-              selectedSubjectId={subjectId}
-              onSelectCategory={handleSelectCategory}
-              onSelectSubject={handleSelectSubject}
-            />
-          ) : null}
+          <CodexSidebarResults
+            showSearchResults={showSearchResults}
+            searchLoading={searchLoading}
+            searchResults={searchResults}
+            treeLoading={treeLoading}
+            tree={tree}
+            characterId={characterId}
+            categoryId={categoryId}
+            subjectId={subjectId}
+            onSelectCategory={handleSelectCategory}
+            onSelectSubject={handleSelectSubject}
+            onSelectEntry={handleSelectEntry}
+          />
         </div>
       </aside>
 
@@ -197,6 +173,79 @@ export function CodexPage() {
         />
       </main>
     </div>
+  );
+}
+
+function CodexSidebarResults({
+  showSearchResults,
+  searchLoading,
+  searchResults,
+  treeLoading,
+  tree,
+  characterId,
+  categoryId,
+  subjectId,
+  onSelectCategory,
+  onSelectSubject,
+  onSelectEntry,
+}: {
+  showSearchResults: boolean;
+  searchLoading: boolean;
+  searchResults: CodexEntryListItem[] | undefined;
+  treeLoading: boolean;
+  tree: CodexCategoryTree[] | undefined;
+  characterId?: number;
+  categoryId?: number;
+  subjectId?: number;
+  onSelectCategory: (id: number) => void;
+  onSelectSubject: (id: number) => void;
+  onSelectEntry: (id: number) => void;
+}) {
+  if (showSearchResults) {
+    return (
+      <div className="space-y-1">
+        <div className="text-sm font-medium text-muted-foreground">Search Results</div>
+        {searchLoading ? (
+          <div className="flex items-center gap-2 py-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Searching...</span>
+          </div>
+        ) : searchResults?.length === 0 ? (
+          <div className="py-2 text-sm text-muted-foreground">No results found</div>
+        ) : (
+          searchResults?.map((entry) => (
+            <SearchResultItem
+              key={entry.id}
+              entry={entry}
+              onClick={() => onSelectEntry(entry.id)}
+            />
+          ))
+        )}
+      </div>
+    );
+  }
+
+  if (treeLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-full" />
+        <Skeleton className="ml-4 h-6 w-3/4" />
+        <Skeleton className="ml-4 h-6 w-3/4" />
+      </div>
+    );
+  }
+
+  if (!tree) return null;
+
+  return (
+    <CodexTree
+      categories={tree}
+      characterId={characterId}
+      selectedCategoryId={categoryId}
+      selectedSubjectId={subjectId}
+      onSelectCategory={onSelectCategory}
+      onSelectSubject={onSelectSubject}
+    />
   );
 }
 

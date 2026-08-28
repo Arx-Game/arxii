@@ -85,6 +85,7 @@ from world.stories.types import (
 )
 
 _STAKES_LOCKED_MESSAGE = "This beat's stakes contract is locked by an open activation."
+_REQUEST_CONTEXT_REQUIRED_MESSAGE = "Request context is required."
 
 
 def _custody_blocked_message(verdict: Any) -> str:
@@ -1981,7 +1982,7 @@ class AssignStoryToTableInputSerializer(serializers.Serializer):
         """Verify the requesting user can assign stories to this table."""
         request = self.context.get("request")
         if request is None:
-            msg = "Request context is required."
+            msg = _REQUEST_CONTEXT_REQUIRED_MESSAGE
             raise serializers.ValidationError(msg)
         user = request.user
         if user.is_staff:
@@ -2445,7 +2446,7 @@ def resolve_own_bulletin_persona(request: Any, supplied: Persona | None) -> Pers
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     if request is None:
-        msg = "Request context is required."
+        msg = _REQUEST_CONTEXT_REQUIRED_MESSAGE
         raise serializers.ValidationError(msg)
 
     if supplied is not None:
@@ -2504,7 +2505,7 @@ class CreateBulletinPostInputSerializer(serializers.Serializer):
         """User must be the Lead GM of the table (or staff)."""
         request = self.context.get("request")
         if request is None:
-            msg = "Request context is required."
+            msg = _REQUEST_CONTEXT_REQUIRED_MESSAGE
             raise serializers.ValidationError(msg)
         if request.user.is_staff:
             return table
@@ -2567,7 +2568,7 @@ class CreateBulletinReplyInputSerializer(serializers.Serializer):
         """Verify replies are enabled on this post (staff bypass)."""
         request = self.context.get("request")
         if request is None:
-            msg = "Request context is required."
+            msg = _REQUEST_CONTEXT_REQUIRED_MESSAGE
             raise serializers.ValidationError(msg)
         if not post.allow_replies and not request.user.is_staff:
             msg = "Replies are disabled on this post."

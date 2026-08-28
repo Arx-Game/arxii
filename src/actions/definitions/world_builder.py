@@ -43,6 +43,7 @@ from actions.types import ActionResult, TargetType
 # Shared error messages.
 _NO_SUCH_AREA = "No such area."
 _NO_SUCH_ROOM_MSG = "No such room."
+_NO_SUCH_EXIT_MSG = "No such exit."
 
 # Batch-dig corridor bounds (#3269): 1 is a plain dig; >20 deserves deliberate strokes.
 _BATCH_DIG_MIN = 2
@@ -748,7 +749,7 @@ class StaffUnlinkRoomsAction(_WorldBuilderAction):
     ) -> ActionResult:
         exit_obj = _resolve_exit(kwargs.get("exit_id"))
         if exit_obj is None:
-            return ActionResult(success=False, message="No such exit.")
+            return ActionResult(success=False, message=_NO_SUCH_EXIT_MSG)
         pair = _exit_pair(exit_obj)
         rooms = {exit_obj.db_location, exit_obj.db_destination}
         stranded = _stranded_occupied_room(rooms, {e.pk for e in pair})
@@ -779,7 +780,7 @@ class StaffRenameExitAction(_WorldBuilderAction):
     ) -> ActionResult:
         exit_obj = _resolve_exit(kwargs.get("exit_id"))
         if exit_obj is None:
-            return ActionResult(success=False, message="No such exit.")
+            return ActionResult(success=False, message=_NO_SUCH_EXIT_MSG)
         new_name = (kwargs.get("name") or "").strip()
         if not new_name:
             return ActionResult(success=False, message="The exit needs a name.")
@@ -1652,7 +1653,7 @@ class StaffSetExitDetailAction(_WorldBuilderAction):
 
         exit_obj = _resolve_exit(kwargs.get("exit_id"))
         if exit_obj is None:
-            return ActionResult(success=False, message="No such exit.")
+            return ActionResult(success=False, message=_NO_SUCH_EXIT_MSG)
         exit_profile, _ = ExitProfile.objects.get_or_create(objectdb=exit_obj)
         notes = []
         kind = (kwargs.get("kind") or "").strip().lower()
@@ -1765,6 +1766,79 @@ class StaffDuplicateRoomAction(_WorldBuilderAction):
         )
 
 
+def _batch_dig_cells(
+    area: Any, anchor: Any, spec: Any, count: int
+) -> tuple[list[tuple[int, int, int]], str | None]:
+    """Walk *count* cells from *anchor* along *spec*, refusing any occupied cell (#3269).
+
+    Returns ``(cells, error)`` - an empty list with a message on the first
+    occupied cell, otherwise the full list of ``(x, y, floor)`` targets.
+    """
+    from world.areas.grid_services import cell_occupied  # noqa: PLC0415
+
+    cells: list[tuple[int, int, int]] = []
+    x, y, floor = anchor.grid_x, anchor.grid_y, anchor.floor
+    for _step in range(count):
+        x, y, floor = x + spec.dx, y + spec.dy, floor + spec.dfloor
+        if cell_occupied(area, x, y, floor):
+            return [], f"Cell ({x}, {y}) floor {floor} is occupied."
+        cells.append((x, y, floor))
+    return cells, None
+
+
+def _dig_batch_rooms(  # noqa: PLR0913 - split from the batch-dig execute() (#3269)
+    area: Any,
+    base_name: str,
+    cells: list[tuple[int, int, int]],
+    direction_name: str,
+    spec: Any,
+    anchor: Any,
+) -> tuple[list[str], str | None]:
+    """Create + link the batch-dig rooms, stopping loud on a fixture-key collision (#3269).
+
+    Returns ``(made_room_names, error)`` - rooms already dug before a
+    mid-batch failure are kept in *made_room_names* for the error message.
+    """
+    from world.areas.constants import DIRECTIONS, GridOrigin  # noqa: PLC0415
+    from world.areas.grid_services import (  # noqa: PLC0415
+        GridServiceError,
+        create_exit_pair,
+        create_room,
+        suggest_fixture_key,
+    )
+
+    previous = anchor.objectdb
+    made: list[str] = []
+    for index, (cx, cy, cfloor) in enumerate(cells, start=1):
+        room_name = f"{base_name} {index}"
+        try:
+            fixture_key = suggest_fixture_key(area, room_name)
+        except GridServiceError as exc:
+            return made, (
+                f"Stopped at {room_name}: {exc.user_message} ({len(made)} room(s) already dug)."
+            )
+        profile = create_room(
+            area=area,
+            name=room_name,
+            grid_x=cx,
+            grid_y=cy,
+            floor=cfloor,
+            origin=GridOrigin.AUTHORED,
+            fixture_key=fixture_key,
+        )
+        create_exit_pair(
+            name=direction_name,
+            aliases=spec.aliases,
+            reverse_name=spec.opposite,
+            reverse_aliases=DIRECTIONS[spec.opposite].aliases,
+            room_a=previous,
+            room_b=profile.objectdb,
+        )
+        previous = profile.objectdb
+        made.append(room_name)
+    return made, None
+
+
 @dataclass
 class StaffBatchDigAction(_WorldBuilderAction):
     """Dig a corridor of linked rooms in one stroke (#3269 Phase B bulk).
@@ -1784,15 +1858,6 @@ class StaffBatchDigAction(_WorldBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.areas.constants import DIRECTIONS, GridOrigin  # noqa: PLC0415
-        from world.areas.grid_services import (  # noqa: PLC0415
-            GridServiceError,
-            cell_occupied,
-            create_exit_pair,
-            create_room,
-            suggest_fixture_key,
-        )
-
         area, area_error = _resolve_authored_area(kwargs.get("area_id"))
         if area_error is not None:
             return ActionResult(success=False, message=area_error)
@@ -1813,47 +1878,13 @@ class StaffBatchDigAction(_WorldBuilderAction):
             return ActionResult(
                 success=False, message=rel_error or "Batch digs need an anchor + direction."
             )
-        cells = []
-        x, y, floor = anchor.grid_x, anchor.grid_y, anchor.floor
-        for _step in range(count):
-            x, y, floor = x + spec.dx, y + spec.dy, floor + spec.dfloor
-            if cell_occupied(area, x, y, floor):
-                return ActionResult(
-                    success=False, message=f"Cell ({x}, {y}) floor {floor} is occupied."
-                )
-            cells.append((x, y, floor))
+        cells, cells_error = _batch_dig_cells(area, anchor, spec, count)
+        if cells_error is not None:
+            return ActionResult(success=False, message=cells_error)
         direction_name = (kwargs.get("direction") or "").strip().lower()
-        previous = anchor.objectdb
-        made = []
-        for index, (cx, cy, cfloor) in enumerate(cells, start=1):
-            room_name = f"{base_name} {index}"
-            try:
-                fixture_key = suggest_fixture_key(area, room_name)
-            except GridServiceError as exc:
-                return ActionResult(
-                    success=False,
-                    message=f"Stopped at {room_name}: {exc.user_message} "
-                    f"({len(made)} room(s) already dug).",
-                )
-            profile = create_room(
-                area=area,
-                name=room_name,
-                grid_x=cx,
-                grid_y=cy,
-                floor=cfloor,
-                origin=GridOrigin.AUTHORED,
-                fixture_key=fixture_key,
-            )
-            create_exit_pair(
-                name=direction_name,
-                aliases=spec.aliases,
-                reverse_name=spec.opposite,
-                reverse_aliases=DIRECTIONS[spec.opposite].aliases,
-                room_a=previous,
-                room_b=profile.objectdb,
-            )
-            previous = profile.objectdb
-            made.append(room_name)
+        made, dig_error = _dig_batch_rooms(area, base_name, cells, direction_name, spec, anchor)
+        if dig_error is not None:
+            return ActionResult(success=False, message=dig_error)
         return ActionResult(
             success=True,
             message=f"Dug {len(made)} linked rooms {direction_name} of "

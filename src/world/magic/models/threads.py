@@ -25,6 +25,11 @@ from world.magic.constants import (
 if TYPE_CHECKING:
     from world.conditions.models import CapabilityType
 
+# Per-effect-kind clean() validation messages, extracted to satisfy S1192.
+_MUST_BE_NULL_FOR_NARRATIVE_ONLY = "Must be null for NARRATIVE_ONLY."
+_MUST_BE_NULL_FOR_ASSUME_ALTERNATE_SELF = "Must be null for ASSUME_ALTERNATE_SELF."
+_MUST_BE_NULL_FOR_RESISTANCE = "Must be null for RESISTANCE."
+
 
 class ThreadPullCost(SharedMemoryModel):
     """Per-tier pull cost. Three rows at launch (tier 1/2/3).
@@ -396,36 +401,36 @@ class ThreadPullEffect(SharedMemoryModel):
         if not self.narrative_snippet.strip():
             raise ValidationError({"narrative_snippet": "NARRATIVE_ONLY requires snippet."})
         if self.capability_grant is not None:
-            raise ValidationError({"capability_grant": "Must be null for NARRATIVE_ONLY."})
+            raise ValidationError({"capability_grant": _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
         for name, val in numeric_fields.items():
             if val is not None:
-                raise ValidationError({name: "Must be null for NARRATIVE_ONLY."})
+                raise ValidationError({name: _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
         if self.resistance_amount is not None:
-            raise ValidationError({"resistance_amount": "Must be null for NARRATIVE_ONLY."})
+            raise ValidationError({"resistance_amount": _MUST_BE_NULL_FOR_NARRATIVE_ONLY})
 
     def _clean_assume_alternate_self(self, numeric_fields: dict[str, int | None]) -> None:
         if self.target_form is None:
             raise ValidationError({"target_form": "ASSUME_ALTERNATE_SELF requires target_form."})
         if self.capability_grant is not None:
-            raise ValidationError({"capability_grant": "Must be null for ASSUME_ALTERNATE_SELF."})
+            raise ValidationError({"capability_grant": _MUST_BE_NULL_FOR_ASSUME_ALTERNATE_SELF})
         if self.narrative_snippet.strip():
             raise ValidationError({"narrative_snippet": "Must be blank for ASSUME_ALTERNATE_SELF."})
         for name, val in numeric_fields.items():
             if val is not None:
-                raise ValidationError({name: "Must be null for ASSUME_ALTERNATE_SELF."})
+                raise ValidationError({name: _MUST_BE_NULL_FOR_ASSUME_ALTERNATE_SELF})
         if self.resistance_amount is not None:
-            raise ValidationError({"resistance_amount": "Must be null for ASSUME_ALTERNATE_SELF."})
+            raise ValidationError({"resistance_amount": _MUST_BE_NULL_FOR_ASSUME_ALTERNATE_SELF})
 
     def _clean_resistance(self, numeric_fields: dict[str, int | None]) -> None:
         if self.resistance_amount is None:
             raise ValidationError({"resistance_amount": "RESISTANCE requires resistance_amount."})
         for name, val in numeric_fields.items():
             if val is not None:
-                raise ValidationError({name: "Must be null for RESISTANCE."})
+                raise ValidationError({name: _MUST_BE_NULL_FOR_RESISTANCE})
         if self.capability_grant is not None:
-            raise ValidationError({"capability_grant": "Must be null for RESISTANCE."})
+            raise ValidationError({"capability_grant": _MUST_BE_NULL_FOR_RESISTANCE})
         if self.target_form is not None:
-            raise ValidationError({"target_form": "Must be null for RESISTANCE."})
+            raise ValidationError({"target_form": _MUST_BE_NULL_FOR_RESISTANCE})
         # resistance_damage_type is optional (null = all damage types) — no check needed.
 
     @staticmethod

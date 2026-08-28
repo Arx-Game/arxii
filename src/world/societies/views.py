@@ -45,6 +45,8 @@ from world.societies.serializers import (
 )
 from world.tidings.serializers import PublicFeedItemSerializer
 
+_NO_ACTIVE_PERSONA_MESSAGE = "No active persona."
+
 
 def _active_persona_for_request(request):
     """Resolve the request user's ACTIVE persona, or None.
@@ -248,7 +250,7 @@ class ProclamationViewSet(viewsets.ReadOnlyModelViewSet):
         data = payload.validated_data
         persona = Persona.objects.filter(pk__in=get_account_personas(request)).first()
         if persona is None:
-            return Response({"detail": "No active persona."}, status=400)
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
         try:
             if data.get("domain"):
                 domain = Domain.objects.filter(pk=data["domain"]).first()
@@ -462,7 +464,7 @@ class OrgAppealViewSet(
 
         persona = _active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active persona."}, status=400)
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
 
         payload = OrgAppealCreateSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
@@ -487,7 +489,7 @@ class OrgAppealViewSet(
         appeal = self.get_object()
         persona = _active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active persona."}, status=400)
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
 
         payload = OrgAppealSignonInputSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
@@ -509,7 +511,7 @@ class OrgAppealViewSet(
         appeal = self.get_object()
         persona = _active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active persona."}, status=400)
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
 
         payload = OrgAppealResolveInputSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
@@ -533,7 +535,7 @@ class OrgAppealViewSet(
         appeal = self.get_object()
         persona = _active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active persona."}, status=400)
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
 
         result = get_action("org_appeal_withdraw").run(
             persona.character_sheet.character,

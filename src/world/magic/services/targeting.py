@@ -291,15 +291,36 @@ class ProtectiveMagnitude:
     amount: int | None = None
 
 
+def _protective_magnitude_from_step(step: FlowStepDefinition) -> ProtectiveMagnitude | None:
+    """Parse one MODIFY_PAYLOAD step into a ProtectiveMagnitude, or None if it doesn't match.
+
+    Recognizes the shape ``world.combat.defend_content.ensure_defend_content`` seeds
+    for the shipped Defend technique — ``{"field": "amount", "op": "multiply", "value":
+    0.5}`` (or an ``"add"`` of a negative value for a flat reduction). Any other shape
+    (wrong field, non-numeric value, unrecognized op) returns ``None``.
+    """
+    params = step.parameters or {}
+    if params.get("field") != _MODIFY_PAYLOAD_AMOUNT_FIELD:
+        return None
+    op = params.get("op")
+    value = params.get("value")
+    if not isinstance(value, (int, float)):
+        return None
+    if op == _MODIFY_PAYLOAD_OP_MULTIPLY:
+        return ProtectiveMagnitude(mode=PROTECTIVE_MAGNITUDE_MULTIPLY, factor=float(value))
+    if op == _MODIFY_PAYLOAD_OP_ADD and value < 0:
+        return ProtectiveMagnitude(mode=PROTECTIVE_MAGNITUDE_FLAT, amount=int(abs(value)))
+    return None
+
+
 def protective_magnitude(condition_template: ConditionTemplate) -> ProtectiveMagnitude | None:
     """Extract a parseable damage-mitigation magnitude from a protective condition (#3279).
 
     Sibling to :func:`protective_flavor` for the technique combat-power evaluator's
     mitigation valuator (``world.magic.services.technique_power_eval``): walks
     *condition_template*'s ``reactive_triggers -> flow_definition -> steps`` looking
-    for a ``MODIFY_PAYLOAD`` step on the ``"amount"`` field (the shape
-    ``world.combat.defend_content.ensure_defend_content`` seeds for the shipped
-    Defend technique — ``{"field": "amount", "op": "multiply", "value": 0.5}``):
+    for a ``MODIFY_PAYLOAD`` step on the ``"amount"`` field — see
+    :func:`_protective_magnitude_from_step` for the recognized shapes:
 
     - ``op == "multiply"`` -> ``ProtectiveMagnitude(mode="multiply", factor=value)``
       (percentage mitigation — Defend's 0.5 halves incoming damage).
@@ -327,17 +348,9 @@ def protective_magnitude(condition_template: ConditionTemplate) -> ProtectiveMag
     )
     for trigger in triggers:
         for step in trigger.flow_definition.cached_modify_payload_steps:
-            params = step.parameters or {}
-            if params.get("field") != _MODIFY_PAYLOAD_AMOUNT_FIELD:
-                continue
-            op = params.get("op")
-            value = params.get("value")
-            if not isinstance(value, (int, float)):
-                continue
-            if op == _MODIFY_PAYLOAD_OP_MULTIPLY:
-                return ProtectiveMagnitude(mode=PROTECTIVE_MAGNITUDE_MULTIPLY, factor=float(value))
-            if op == _MODIFY_PAYLOAD_OP_ADD and value < 0:
-                return ProtectiveMagnitude(mode=PROTECTIVE_MAGNITUDE_FLAT, amount=int(abs(value)))
+            magnitude = _protective_magnitude_from_step(step)
+            if magnitude is not None:
+                return magnitude
     return None
 
 

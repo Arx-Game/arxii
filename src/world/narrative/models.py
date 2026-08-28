@@ -19,6 +19,7 @@ from world.societies.constants import FameTier
 _STR_PREVIEW_LEN = 40
 _GEMIT_PREVIEW_LEN = 60
 _STORY_FK = "arxii.Story"
+_ACCOUNT_DB_FK = "accounts.AccountDB"
 
 
 class NarrativeMessage(SharedMemoryModel):
@@ -44,7 +45,7 @@ class NarrativeMessage(SharedMemoryModel):
         choices=NarrativeCategory.choices,
     )
     sender_account = models.ForeignKey(
-        "accounts.AccountDB",
+        _ACCOUNT_DB_FK,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -217,7 +218,7 @@ class Gemit(SharedMemoryModel):
         help_text="For SPECIFIED reach, organizations whose members receive this gemit (may mix).",
     )
     sender_account = models.ForeignKey(
-        "accounts.AccountDB",
+        _ACCOUNT_DB_FK,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -263,7 +264,7 @@ class UserStoryMute(SharedMemoryModel):
     """
 
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        _ACCOUNT_DB_FK,
         on_delete=models.CASCADE,
         related_name="story_mutes",
     )
@@ -298,7 +299,7 @@ class UserCategoryMute(SharedMemoryModel):
     """
 
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        _ACCOUNT_DB_FK,
         on_delete=models.CASCADE,
         related_name="category_mutes",
     )
