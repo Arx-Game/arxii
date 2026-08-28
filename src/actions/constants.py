@@ -38,9 +38,10 @@ OFFSCREEN_ACT_KEYS: frozenset[str] = frozenset(
         "set_character_goals",
         "log_goal_progress",
         "set_active_persona",
-        # #3412 slice 3 task 3 introduces IssueProclamationAction — the key
-        # is reserved here now so this table needs no edit when it lands.
-        # Inert until that action exists and registers the key.
+        # #3412 slice 3 task 3 — IssueProclamationAction
+        # (actions/definitions/organizations.py), shared by
+        # ProclamationViewSet.proclaim (plain/org stance + domain-edict
+        # enactment).
         "issue_proclamation",
     }
 )

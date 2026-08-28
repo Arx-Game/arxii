@@ -333,6 +333,7 @@ from actions.definitions.org_vault import (
     vault_withdraw,
 )
 from actions.definitions.organizations import (
+    issue_proclamation_action,
     org_apply_action,
     org_demote_action,
     org_expel_action,
@@ -848,6 +849,7 @@ _ALL_ACTIONS: list[Action] = [
     org_promote_action,
     org_demote_action,
     org_expel_action,
+    issue_proclamation_action,
     declare_standing_action,
     org_appeal_lodge_action,
     org_appeal_signon_action,

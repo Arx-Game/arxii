@@ -361,6 +361,7 @@ class ActionRegistryTests(TestCase):
             "org_promote",
             "org_demote",
             "org_expel",
+            "issue_proclamation",
             "declare_standing",
             "org_appeal_lodge",
             "org_appeal_signon",
