@@ -22,6 +22,12 @@ import { throwApiError } from '@/lib/errors';
 export interface DispatchResult {
   message: string;
   success: boolean | null;
+  /**
+   * `ActionResult.data` from the server (#3432) — a nullable minimal jsonable dict of
+   * action-specific identifying fields (e.g. `author_clue`'s new `{slug}`). `null`/absent
+   * for actions that don't populate it; most callers can ignore this field entirely.
+   */
+  data?: Record<string, unknown> | null;
 }
 
 /**
@@ -42,6 +48,10 @@ export async function dispatchCanvasAction(
     body: JSON.stringify({ ref: { backend: 'registry', registry_key: registryKey }, kwargs }),
   });
   if (!res.ok) await throwApiError(res, 'The action failed.');
-  const data = (await res.json()) as { message?: string | null; success?: boolean | null };
-  return { message: data.message ?? 'Done.', success: data.success ?? null };
+  const body = (await res.json()) as {
+    message?: string | null;
+    success?: boolean | null;
+    data?: Record<string, unknown> | null;
+  };
+  return { message: body.message ?? 'Done.', success: body.success ?? null, data: body.data };
 }

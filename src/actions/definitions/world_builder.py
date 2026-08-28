@@ -1,14 +1,18 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Thirty-nine REGISTRY actions (eleven original + six discovery/portal-authoring
+Forty REGISTRY actions (eleven original + six discovery/portal-authoring
 #2451, plus the #3269 recoverability pair, the Phase B room-authoring set:
 stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
-blueprint, starting-room bindings, exit detail, duplicate, batch dig, and the
-#3291 description-variant pair), all ``category="world_builder"``, ``target_type=SELF``,
-gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
-staff tooling, not a player-facing builder). Each is a thin wrapper over the
-Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid primitives +
-``promote_to_authored``/``suggest_fixture_key``) and
+blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
+#3291 description-variant pair, and ``author_clue``, #3432), all
+``category="world_builder"``, ``target_type=SELF``. Every one of them except
+``author_clue`` is gated by ``StaffOnlyPrerequisite`` alone (no
+ownership/tenancy standing — this is staff tooling, not a player-facing
+builder); ``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)``
+instead (staff bypass built in) — canon-creating clue authorship is a SENIOR+
+GM power, not staff-only, per the #3432 owner ruling. Each is a thin wrapper
+over the Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid
+primitives + ``promote_to_authored``/``suggest_fixture_key``) and
 ``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
 
 Unlike the owner-facing Room Builder (``locations.py``), there is no "anchor
@@ -37,8 +41,9 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
+from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite, StaffOnlyPrerequisite
 from actions.types import ActionResult, TargetType
+from world.gm.constants import GMLevel
 
 # Shared error messages.
 _NO_SUCH_AREA = "No such area."
@@ -53,7 +58,7 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
-    from world.clues.models import ClueTrigger, RoomClue
+    from world.clues.models import Clue, ClueTrigger, RoomClue
     from world.magic.models import PortalAnchor
 
 _EXIT_TYPECLASS = "typeclasses.exits.Exit"
@@ -1959,6 +1964,151 @@ class PromoteAreaAction(_WorldBuilderAction):
         except GridServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message=f"{area.name} promoted as {slug}.")
+
+
+def _unique_clue_slug(base_slug: str) -> str:
+    """Uniquify ``base_slug`` against ``Clue.slug`` with a numeric suffix on collision.
+
+    ``Clue.slug`` is a plain nullable ``SlugField`` with no auto-populate (#2451) —
+    unlike ``PromoteAreaAction``'s bare ``slugify()``, minting a fresh clue always
+    needs a slug (both place actions resolve a clue by slug, so a null slug would
+    silently break the placement handoff), and two clues can share a name.
+    """
+    from world.clues.models import Clue  # noqa: PLC0415
+
+    slug = base_slug
+    suffix = 2
+    while Clue.objects.filter(slug=slug).exists():
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+    return slug
+
+
+# Multi-discriminator clue kinds (#2120 PERSONA_LINK, #2540 ITEM) need a second
+# target ref beyond the one ``Clue.DISCRIMINATOR_MAP`` tracks as primary --
+# mirrors the model's own documented exception, see ``world.clues.models.Clue``.
+_CLUE_TARGET_SECONDARY_FIELD = {
+    "persona_link": "target_persona_linked",
+    "item": "target_item_instance",
+}
+_CLUE_NAME_REQUIRED_MSG = "Name is required."
+_CLUE_TEXT_REQUIRED_MSG = "Clue text is required."
+_NO_SUCH_CLUE_TARGET_MSG = "No such target."
+# Refusal message about SECRET-kind clue targets, not a credential (S105 false positive).
+_SECRET_CLUE_STAFF_ONLY_MSG = "Secret-target clues are staff-authored for now (#3432 Decision 1a)."  # noqa: S105
+
+
+@dataclass
+class AuthorClueAction(_WorldBuilderAction):
+    """Mint a new ``Clue`` pointer (#3432) — SENIOR GM or staff.
+
+    Kwargs: ``name``, ``description`` (the clue text — player-visible),
+    ``target_kind`` (one of ``ClueTargetKind``), ``target_id`` (pk of the
+    primary target for that kind, per ``Clue.DISCRIMINATOR_MAP``), optional
+    ``target_secondary_id`` (the second FK the two documented
+    multi-discriminator kinds need: the paired persona for PERSONA_LINK --
+    required by ``clean()`` -- or the narrowing item instance for ITEM --
+    optional).
+
+    Gate (owner ruling, #3432 Decision 1, verbatim rationale recorded on the
+    issue): lore invention is "-much- more dangerous than most other things"
+    -- unlike the JUNIOR tier most GM-authoring verbs use (``situations.py``),
+    a canon-creating surface like this one gates at SENIOR+ (staff bypass
+    built into the prerequisite, see ``get_prerequisites`` below).
+    **SECRET-target clues are additionally staff-only** (Decision 1a): no
+    GM-scoped secrets listing exists yet (``AuthoredSecretViewSet`` is
+    ``IsAdminUser``-only and ``Secret`` records no authoring GM account), and
+    the "author a clue to this secret" entry point lives on the staff-only
+    ``StaffSecretsPanel`` anyway. Opening SECRET targets to SENIOR GMs would
+    need a new scoped-secrets surface -- deliberately not built here.
+
+    Validation delegates entirely to ``Clue.clean()`` (the target-kind/FK
+    discriminator invariants) -- this action does not duplicate those rules;
+    it only resolves each target id against the model's own FK relation
+    (via ``Clue.DISCRIMINATOR_MAP``/the secondary-field map above) so a
+    dangling pk fails with a clean "No such target." instead of an
+    ``IntegrityError`` at save time. ``slug`` is generated explicitly (see
+    ``_unique_clue_slug``) via ``slugify(name)``, mirroring
+    ``PromoteAreaAction``'s slugify pattern above plus a collision uniquify.
+    Result is actor-only (no room emit, mirrors ``staff_place_clue``) and
+    returns the new clue's slug in ``data["slug"]`` for the frontend's
+    mint-then-place handoff.
+    """
+
+    key: str = "author_clue"
+    name: str = "Author Clue"
+    icon: str = "book-plus"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [MinimumGMLevelPrerequisite(GMLevel.SENIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+        from django.utils.text import slugify  # noqa: PLC0415
+
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.clues.constants import ClueTargetKind  # noqa: PLC0415
+        from world.clues.models import Clue  # noqa: PLC0415
+
+        clue_name = (kwargs.get("name") or "").strip()
+        if not clue_name:
+            return ActionResult(success=False, message=_CLUE_NAME_REQUIRED_MSG)
+        description = (kwargs.get("description") or "").strip()
+        if not description:
+            return ActionResult(success=False, message=_CLUE_TEXT_REQUIRED_MSG)
+        target_kind = (kwargs.get("target_kind") or "").strip()
+
+        if target_kind == ClueTargetKind.SECRET and not is_staff_observer(actor):
+            return ActionResult(success=False, message=_SECRET_CLUE_STAFF_ONLY_MSG)
+
+        clue = Clue(name=clue_name, description=description, target_kind=target_kind)
+        primary_field = Clue.DISCRIMINATOR_MAP.get(target_kind)
+        error = _set_clue_target(clue, primary_field, kwargs.get("target_id"))
+        if error is None:
+            secondary_field = _CLUE_TARGET_SECONDARY_FIELD.get(target_kind)
+            error = _set_clue_target(clue, secondary_field, kwargs.get("target_secondary_id"))
+        if error is not None:
+            return ActionResult(success=False, message=error)
+
+        try:
+            clue.clean()
+        except ValidationError as exc:
+            message = "; ".join(
+                f"{field}: {detail}"
+                for field, details in exc.message_dict.items()
+                for detail in details
+            )
+            return ActionResult(success=False, message=message)
+
+        clue.slug = _unique_clue_slug(slugify(clue_name))
+        clue.save()
+        return ActionResult(
+            success=True,
+            message=f"Clue '{clue.name}' authored (slug: {clue.slug}).",
+            data={"slug": clue.slug},
+        )
+
+
+def _set_clue_target(clue: Clue, field_name: str | None, target_id: Any) -> str | None:
+    """Resolve ``target_id`` against ``field_name``'s FK relation and set it on ``clue``.
+
+    Returns an error message on a dangling pk, else ``None``. A no-op (returns ``None``
+    without touching ``clue``) when ``field_name`` is unrecognized (unknown target_kind --
+    left for ``Clue.clean()`` to reject) or ``target_id`` is not given (left for
+    ``Clue.clean()`` to reject as a missing required discriminator target).
+    """
+    if field_name is None or target_id is None:
+        return None
+    related_model = Clue._meta.get_field(field_name).related_model  # noqa: SLF001
+    if related_model is None or not related_model.objects.filter(pk=target_id).exists():
+        return _NO_SUCH_CLUE_TARGET_MSG
+    setattr(clue, f"{field_name}_id", target_id)
+    return None
 
 
 @dataclass

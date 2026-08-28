@@ -25,11 +25,17 @@ from world.areas.factories import AreaFactory
 from world.areas.grid_services import create_exit_pair
 from world.areas.models import Area
 from world.character_sheets.factories import CharacterSheetFactory
+from world.clues.constants import ClueTargetKind
 from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFactory
-from world.clues.models import ClueTrigger, RoomClue
+from world.clues.models import Clue, ClueTrigger, RoomClue
+from world.codex.factories import CodexEntryFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 from world.magic.factories import PortalAnchorFactory, PortalAnchorKindFactory
 from world.magic.models import PortalAnchor
 from world.room_features.factories import RoomFeatureInstanceFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.secrets.factories import SecretFactory
 
 
 def _staff_actor(db_key: str) -> ObjectDB:
@@ -48,6 +54,24 @@ def _player_actor(db_key: str) -> ObjectDB:
     account = AccountFactory(username=f"acct_{db_key}", is_staff=False)
     char.db_account = account
     char.save()
+    return char
+
+
+def _gm_actor(level: str, db_key: str) -> ObjectDB:
+    """A non-staff Character with a live roster tenure + GMProfile at ``level``.
+
+    Mirrors ``GMCatalogActionsTestBase._gm_character`` (``test_gm_catalog_actions.py``):
+    ``active_account`` (what ``MinimumGMLevelPrerequisite`` gates on) resolves via
+    ``sheet_data.roster_entry.current_tenure.player_data.account``, not the bare
+    ``db_account`` the staff/player helpers above set -- a GM-tier actor needs the
+    full tenure chain.
+    """
+    char = CharacterFactory(db_key=db_key)
+    CharacterSheetFactory(character=char)
+    entry = RosterEntryFactory(character_sheet__character=char)
+    tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+    GMProfileFactory(account=tenure.player_data.account, level=level)
+    char.db_account = tenure.player_data.account
     return char
 
 
@@ -587,6 +611,149 @@ class PromoteAreaActionTests(TestCase):
         assert not result.success
         self.area.refresh_from_db()
         assert self.area.slug is None
+
+
+class AuthorClueActionTests(TestCase):
+    """``author_clue`` (#3432): SENIOR-GM/staff mint, staff-only SECRET targets."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("AuthorClueStaff")
+        self.senior_gm = _gm_actor(GMLevel.SENIOR, "AuthorClueSenior")
+        self.junior_gm = _gm_actor(GMLevel.JUNIOR, "AuthorClueJunior")
+        self.player = _player_actor("AuthorCluePlayer")
+        self.codex_entry = CodexEntryFactory()
+        self.secret = SecretFactory()
+
+    def test_junior_gm_refused_outright(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.junior_gm,
+            name="Torn Page",
+            description="A page torn from a diary.",
+            target_kind=ClueTargetKind.CODEX,
+            target_id=self.codex_entry.pk,
+        )
+
+        assert not result.success
+        assert not Clue.objects.filter(name="Torn Page").exists()
+
+    def test_plain_player_refused_outright(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.player,
+            name="Torn Page",
+            description="A page torn from a diary.",
+            target_kind=ClueTargetKind.CODEX,
+            target_id=self.codex_entry.pk,
+        )
+
+        assert not result.success
+        assert not Clue.objects.filter(name="Torn Page").exists()
+
+    def test_senior_gm_succeeds_for_a_codex_target(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.senior_gm,
+            name="Torn Page",
+            description="A page torn from a diary.",
+            target_kind=ClueTargetKind.CODEX,
+            target_id=self.codex_entry.pk,
+        )
+
+        assert result.success, result.message
+        assert result.broadcast is None
+        clue = Clue.objects.get(name="Torn Page")
+        assert clue.target_codex_entry_id == self.codex_entry.pk
+        assert clue.slug == "torn-page"
+        assert result.data["slug"] == "torn-page"
+
+    def test_senior_gm_refused_for_a_secret_target(self) -> None:
+        """Decision 1a (#3432): SECRET-target clues are staff-only for now."""
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.senior_gm,
+            name="A Dark Rumor",
+            description="Something whispered near the well.",
+            target_kind=ClueTargetKind.SECRET,
+            target_id=self.secret.pk,
+        )
+
+        assert not result.success
+        assert "staff" in result.message.lower()
+        assert not Clue.objects.filter(name="A Dark Rumor").exists()
+
+    def test_staff_succeeds_for_a_secret_target(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.staff,
+            name="A Dark Rumor",
+            description="Something whispered near the well.",
+            target_kind=ClueTargetKind.SECRET,
+            target_id=self.secret.pk,
+        )
+
+        assert result.success, result.message
+        clue = Clue.objects.get(name="A Dark Rumor")
+        assert clue.target_secret_id == self.secret.pk
+
+    def test_missing_target_surfaces_the_model_validation_message(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.staff,
+            name="Bad Clue",
+            description="No target given.",
+            target_kind=ClueTargetKind.CODEX,
+        )
+
+        assert not result.success
+        assert "target_codex_entry" in result.message
+        assert not Clue.objects.filter(name="Bad Clue").exists()
+
+    def test_dangling_target_id_is_refused_cleanly(self) -> None:
+        from actions.registry import get_action
+
+        result = get_action("author_clue").run(
+            self.staff,
+            name="Dangling",
+            description="Points at nothing.",
+            target_kind=ClueTargetKind.CODEX,
+            target_id=999999,
+        )
+
+        assert not result.success
+        assert "no such target" in result.message.lower()
+        assert not Clue.objects.filter(name="Dangling").exists()
+
+    def test_slug_collision_gets_a_distinct_numeric_suffix(self) -> None:
+        from actions.registry import get_action
+
+        second_entry = CodexEntryFactory()
+
+        first = get_action("author_clue").run(
+            self.staff,
+            name="Duplicate Name",
+            description="First one.",
+            target_kind=ClueTargetKind.CODEX,
+            target_id=self.codex_entry.pk,
+        )
+        second = get_action("author_clue").run(
+            self.staff,
+            name="Duplicate Name",
+            description="Second one.",
+            target_kind=ClueTargetKind.CODEX,
+            target_id=second_entry.pk,
+        )
+
+        assert first.success, first.message
+        assert second.success, second.message
+        assert first.data["slug"] == "duplicate-name"
+        assert second.data["slug"] == "duplicate-name-2"
 
 
 class StaffPlaceClueActionTests(TestCase):
