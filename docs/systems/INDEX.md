@@ -1333,7 +1333,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
 - **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`, `declare_standing` (#3290 — direction kwarg picks FAVOR/DISFAVOR, shared by both telnet subverbs and the web dialog), `org_appeal_lodge`, `org_appeal_signon`, `org_appeal_resolve`, `org_appeal_withdraw` (#3293)
 - **Telnet:** `org <subverb>` command (`favor`/`disfavor <person> in <org>=<citation>` added #3290); `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
-- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet`, `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
+- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` (+ `respond` detail action, #3412 — `POST /offers/{id}/respond/` accept/decline via the existing `membership_services` functions, no staff bypass, matching telnet's `accept org`/`decline org`), `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
 - **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
@@ -2173,6 +2173,13 @@ Character lifecycle management with web-first applications and player anonymity.
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
   and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
   [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
+- **The Hall — logged-in home surface (#3412 slice 2, ADR-0243):** `GET
+  /api/roster/entries/mine/` annotates `unread_narrative_count` per character (one
+  aggregated JOIN/GROUP BY over unacknowledged `NarrativeMessageDelivery` rows, not
+  per-row queries); `MyRosterEntrySerializer.get_unread_narrative_count` reads the
+  annotation off `obj.__dict__` when present, falling back to a direct count on the
+  unannotated `select`-endpoint path. Drives the "Your Characters" band's tidings
+  `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

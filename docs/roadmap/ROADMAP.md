@@ -235,6 +235,40 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     per the standard recipe (`arx manage rebase_migration arxii` /
     renumber-at-merge) — not a defect of this slice.
 
+- **The Hall — logged-in home surface (#3412 slice 2, complete, ADR-0243):** ships
+  the page slice 1 deferred. Backend: `unread_narrative_count` annotated onto
+  `RosterEntryViewSet.mine`'s queryset (single aggregated JOIN/GROUP BY, not a
+  per-row query — closes the slice-1 seam below) and surfaced on
+  `MyRosterEntrySerializer`; `POST /api/societies/offers/{id}/respond/` (accept/decline
+  an org membership offer through the existing `membership_services` functions,
+  telnet parity — no staff bypass). Frontend: `frontend/src/components/folio/`
+  primitives (`Plate`/`PlateHead`/`CountChip`/`PersonaTiles`) establish the
+  Commonplace Book idiom (ADR-0243); `SelectedCharacterChip` restyled
+  portrait-forward. The Hall mounts at `/` for any authed account (visitors keep the
+  Gatefold byte-identical; the zero-character remedy reuses `WelcomePanel` behind an
+  `isLoading` gate so it never flashes for a character-having account): **Your
+  Characters** (portrait cards, tidings `CountChip`s, `PersonaTiles`, select-on-click,
+  "Clear Active Character" disabled when empty), **Your Attention** (OOC mail group +
+  per-character pending groups: tidings, event-invitation respond, org-offer respond —
+  **no boards row**, see seams below), **The World** (clock plate rendered plainly,
+  upcoming occasions, the Crier as the state-2 tidings skim with no archive
+  affordance, persona tidings digest plate docked-only). See
+  [roster.md](../systems/roster.md) and ADR-0243.
+  - **Seams closed this slice:** per-character narrative unread counts — **DONE**
+    (was the top slice-1 seam).
+  - **Seams still open:** no boards-index surface exists anywhere in the app
+    (`src/boards/` only mounts a `BoardPanel` at a room/org) — "Your Attention" ships
+    with **no boards row at all**, deliberately; a `/game` placeholder link was tried
+    during review and ruled out as a false affordance, so the seam stays unbuilt
+    rather than patched over. A full gemit-archive page is likewise absent, so the
+    Crier plate ends at its last gemit with no "full record" link — same ruling.
+    `gameSlice`'s name-keyed shape (not `RosterEntry` id) remains deferred, unchanged
+    from slice 1 (~25 call sites). The header chip's "Playing: Currently Offscreen"
+    sub-line still has no real presence wiring — slice 2 dropped it entirely on
+    `/game` (stating an offscreen fact while the character is actually in-world was
+    the actual bug) rather than replacing it with a live presence read; presence
+    wiring for that label stays open for a future slice.
+
 ### Critical Infrastructure Gap: Reactive Layer Activation
 
 The flows/triggers system in `src/flows/` is a fully-implemented reactive engine —

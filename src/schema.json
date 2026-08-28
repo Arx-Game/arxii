@@ -29149,7 +29149,12 @@ paths:
   /api/roster/entries/mine/:
     get:
       operationId: roster_entries_mine_retrieve
-      description: Return roster entries for characters owned by the account.
+      description: |-
+        Return roster entries for characters owned by the account.
+
+        Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
+        ``NarrativeMessageDelivery`` rows per character, via a single aggregated
+        JOIN/GROUP BY rather than a per-row query.
       tags:
       - roster
       security:
@@ -31533,6 +31538,54 @@ paths:
         required: true
       tags:
       - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMembershipOffer'
+          description: ''
+  /api/societies/offers/{id}/respond/:
+    post:
+      operationId: societies_offers_respond_create
+      description: |-
+        Accept or decline a membership offer (#3412 — the Hall).
+
+        Body: ``{"response": "accept"|"decline"}``.
+
+        INVITE offers are directed at a specific persona (``to_persona``): the
+        responder must own that persona — mirrors ``OrgInviteHandler`` (telnet
+        `accept org`/`decline org`, `offer_handlers.py`), which resolves the
+        responding persona from the caller's own identity, not a dispatch-time
+        argument. APPLICATION offers have no invitee (the applicant is
+        ``from_persona``); the responder must own a persona holding an active,
+        invite-authorized membership in the offer's organization — this mirrors
+        ``accept_application``/``decline_application``'s own authority check
+        (``actor_membership.rank.can_invite``), performed here up front so an
+        unauthorized member gets a 403 rather than the service's 400.
+
+        Returns the updated offer (mirrors ``OrgAppealViewSet``'s
+        signon/resolve/withdraw actions, which return the updated resource
+        rather than an Action-result envelope — there is no ``Action`` here,
+        only the raw ``membership_services`` functions per the #3412 brief).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization membership
+          offer.
+        required: true
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationMembershipOfferRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -54656,6 +54709,19 @@ components:
             The face currently worn — the durable ``active_persona`` (#981) if set,
             else the PRIMARY. Lets the top-bar switcher highlight the worn identity.
           readOnly: true
+        unread_narrative_count:
+          type: integer
+          description: |-
+            Unread narrative tidings for this character (#3412 — the Hall).
+
+            ``RosterEntryViewSet.mine`` annotates this via one aggregated query for
+            the whole list; that annotation lands as a plain instance attribute, so
+            prefer it when present (``obj.__dict__`` avoids GETATTR_LITERAL — see
+            `OrgAppealViewSet._refetch` for the same idiom). Other callers (e.g. the
+            #3412 ``select`` endpoint's ``selected_entry`` fragment) serialize a
+            plain, unannotated ``RosterEntry`` — fall back to a direct count there,
+            a single extra query on that single-object path only.
+          readOnly: true
       required:
       - active_persona_id
       - character_id
@@ -54663,6 +54729,7 @@ components:
       - name
       - primary_persona_id
       - profile_picture_url
+      - unread_narrative_count
     MyStoryGrant:
       type: object
       description: |-
@@ -56422,6 +56489,30 @@ components:
       description: |-
         * `invite` - Invite
         * `application` - Application
+    OrganizationMembershipOfferRequest:
+      type: object
+      properties:
+        organization:
+          type: integer
+        from_persona:
+          type: integer
+        to_persona:
+          type: integer
+          nullable: true
+        kind:
+          $ref: '#/components/schemas/OrganizationMembershipOfferKindEnum'
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationMembershipOfferStatusEnum'
+          default: pending
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - from_persona
+      - kind
+      - organization
     OrganizationMembershipOfferStatusEnum:
       enum:
       - pending

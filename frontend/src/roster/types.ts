@@ -1,27 +1,22 @@
 import type { Gender } from '@/world/character_sheets/types';
 import type { components } from '@/generated/api';
 
-export interface MyRosterEntry {
-  id: number;
-  name: CharacterData['name'];
-  /**
-   * The underlying ObjectDB pk for the character. Doubles as the
-   * character_sheet pk because CharacterSheet uses primary_key=True
-   * on its OneToOne to ObjectDB.
-   */
-  character_id: number;
-  profile_picture_url: string | null;
-  primary_persona_id: number | null;
-  /** The face currently worn (durable active_persona, else primary) — #981/#1043. */
-  active_persona_id: number | null;
-  /**
-   * Unacknowledged narrative-message count for this character (#3412) — the
-   * "N tidings waiting" badge in the Hall's "Your Characters" band. Always
-   * present on `RosterEntryViewSet.mine`'s annotated queryset (see
-   * `MyRosterEntrySerializer.get_unread_narrative_count`).
-   */
-  unread_narrative_count: number;
-}
+/**
+ * Sourced from the generated schema (drf-spectacular introspects
+ * `MyRosterEntrySerializer`, used by `RosterEntryViewSet.mine`/`select` — same
+ * serializer backs both `unread_narrative_count`'s annotated-list path and its
+ * unannotated single-object fallback; see the field's own doc comment on the
+ * generated type). This is pre-existing legacy hand-rolled duplication, not a
+ * new-this-slice one — reconciled here (#3412 task 4, api-types regen) rather
+ * than left drifting: `unread_narrative_count` (#3412) is the only field this
+ * type gained since the schema already covered the rest, so keeping it a
+ * second hand declaration would just be duplicate-of-generated per "generated
+ * wins" (contrast `AccountData` in `evennia_replacements/types.ts`, which
+ * stays genuinely hand-rolled because `CurrentUserAPIView` is a plain
+ * `APIView` with no `serializer_class`/`@extend_schema` and never enters the
+ * generated schema at all).
+ */
+export type MyRosterEntry = components['schemas']['MyRosterEntry'];
 
 /**
  * Response body of `POST /api/roster/entries/select/` (#3412) — mirrors
