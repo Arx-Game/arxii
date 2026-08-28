@@ -114,7 +114,7 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
     # semantics there replace the whole set, so building the next set safely
     # requires reading this one first) — no endpoint exposed it before this.
     reactive_trigger_ids = serializers.PrimaryKeyRelatedField(
-        source="reactive_triggers", many=True, read_only=True
+        source="cached_reactive_triggers", many=True, read_only=True
     )
 
     class Meta:

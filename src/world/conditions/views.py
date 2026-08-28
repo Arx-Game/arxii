@@ -118,9 +118,13 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             to_attr="cached_stages",
         ),
         # Backs ConditionTemplateSerializer.reactive_trigger_ids (#3417 task
-        # 12) — this list endpoint is unpaginated, so every row serializes;
+        # 12) - this list endpoint is unpaginated, so every row serializes;
         # without the prefetch that's an N+1 across the whole template table.
-        "reactive_triggers",
+        Prefetch(
+            "reactive_triggers",
+            queryset=TriggerDefinition.objects.all(),
+            to_attr="cached_reactive_triggers",
+        ),
     )
     permission_classes = [IsAuthenticated]
     pagination_class = None
@@ -141,7 +145,16 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         categories = ConditionCategory.objects.prefetch_related(
             Prefetch(
                 "conditions",
-                queryset=ConditionTemplate.objects.all(),
+                # ConditionTemplateSerializer.reactive_trigger_ids needs this
+                # prefetched too (#3417 task 12), same reasoning as the
+                # queryset-level Prefetch above.
+                queryset=ConditionTemplate.objects.prefetch_related(
+                    Prefetch(
+                        "reactive_triggers",
+                        queryset=TriggerDefinition.objects.all(),
+                        to_attr="cached_reactive_triggers",
+                    )
+                ),
                 to_attr="cached_conditions",
             )
         ).order_by("display_order")
