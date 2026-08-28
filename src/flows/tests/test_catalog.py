@@ -2,7 +2,13 @@
 
 from django.test import SimpleTestCase
 
-from flows.catalog import FILTER_OPS, STEP_ACTION_SPECS, VariableNameRole, event_catalog
+from flows.catalog import (
+    FILTER_OPS,
+    STEP_ACTION_SPECS,
+    VariableNameRole,
+    event_catalog,
+    service_function_catalog,
+)
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.models.flows import CONDITIONAL_ACTIONS
@@ -51,3 +57,25 @@ class EventCatalogTests(SimpleTestCase):
     def test_filter_ops_exported(self):
         self.assertIn("==", FILTER_OPS)
         self.assertIn("has_capability", FILTER_OPS)
+
+
+class ServiceFunctionCatalogTests(SimpleTestCase):
+    def test_catalog_includes_registered_world_verbs(self):
+        # world/apps.py ready() registration ran at test bootstrap
+        names = {e["name"] for e in service_function_catalog()}
+        self.assertIn("advance_condition_stage", names)
+        self.assertIn("redirect_move", names)
+
+    def test_params_have_type_tags(self):
+        entry = next(e for e in service_function_catalog() if e["name"] == "redirect_move")
+        params = {p["name"]: p["type"] for p in entry["params"]}
+        # redirect_move(*, payload: object, room_id: object, **kwargs: object) — both
+        # keyword-only params are annotated `object`, not a concrete int/bool/str/float,
+        # so both fall back to the catalog's "json" tag. Verified against the actual
+        # signature in src/flows/service_functions/movement.py before asserting here.
+        self.assertEqual(params.get("room_id"), "json")
+        self.assertEqual(params.get("payload"), "json")
+
+    def test_entries_sorted_by_name(self):
+        names = [e["name"] for e in service_function_catalog()]
+        self.assertEqual(names, sorted(names))

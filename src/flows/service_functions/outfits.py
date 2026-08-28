@@ -252,3 +252,9 @@ def _invalidate_outfit_slot_caches(outfit: Outfit) -> None:
     if hasattr(outfit, "cached_outfit_slots"):
         del outfit.cached_outfit_slots
     outfit.character_sheet.saved_outfits.invalidate()
+
+
+hooks = {
+    "apply_outfit": apply_outfit,
+    "undress": undress,
+}

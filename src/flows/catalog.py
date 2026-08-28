@@ -26,8 +26,11 @@ so ``.value`` type-checks as non-``str`` here; ``str(action)`` is exact
 ``.label`` is unaffected and used directly.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from enum import StrEnum
+import inspect
+import typing
 
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
@@ -548,4 +551,88 @@ def event_catalog() -> list[dict]:
         if payload_cls is not None:
             fields_out = [{"name": f.name, "type": str(f.type)} for f in fields(payload_cls)]
         entries.append({"name": name, "label": label, "payload_fields": fields_out})
+    return entries
+
+
+_SERVICE_FUNCTION_JSON_TAG = "json"
+
+_SERVICE_FUNCTION_TYPE_TAGS: dict[type, str] = {
+    int: "int",
+    bool: "bool",
+    str: "str",
+    float: "float",
+}
+
+
+def _service_function_annotation_tag(annotation: object) -> str:
+    """Map a service-function param annotation to a string tag the FE can switch on.
+
+    Unknown / unannotated / unresolvable params fall back to the JSON tag —
+    the catalog would rather hand the authoring UI a free-text/JSON field
+    than guess wrong and coerce a value into the wrong Python type at call
+    time.
+    """
+    if not isinstance(annotation, type):
+        return _SERVICE_FUNCTION_JSON_TAG
+    return _SERVICE_FUNCTION_TYPE_TAGS.get(annotation, _SERVICE_FUNCTION_JSON_TAG)
+
+
+def _service_function_params(func: Callable) -> list[dict[str, str]]:
+    """Return ``func``'s keyword-capable param names + type tags.
+
+    Same inspect-signature + ``typing.get_type_hints`` technique as
+    ``world/predicates/catalog.py:leaf_params`` (re-implemented here rather
+    than shared, since ``flows`` must not import ``world.*`` — see this
+    module's docstring on ``str(action)`` vs ``.value`` for the sibling
+    "small deliberate duplication vs. a cross-app import" trade-off this
+    module already makes). A resolver whose module uses
+    ``from __future__ import annotations`` stringifies every annotation, so
+    if ANY param on the function has an unresolvable forward reference (e.g.
+    a name only imported under ``TYPE_CHECKING``), ``get_type_hints`` raises
+    for the whole function and every param on it falls back to ``"json"``.
+    """
+    sig = inspect.signature(func)
+    try:
+        hints = typing.get_type_hints(func)
+    except (NameError, AttributeError, TypeError):
+        hints = {}
+    return [
+        {
+            "name": name,
+            "type": _service_function_annotation_tag(hints.get(name, param.annotation)),
+        }
+        for name, param in sig.parameters.items()
+        if param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
+    ]
+
+
+def service_function_catalog() -> list[dict]:
+    """Every registered service function, with its params' names and type tags.
+
+    Enumerates ``flows.service_functions.list_service_functions()`` — the
+    ``SERVICE_MODULES`` hooks dicts plus anything registered out-of-app via
+    ``register_service_function`` (e.g. the world-side condition verbs
+    ``world.apps.ready()`` registers). Consumed by the CALL_SERVICE_FUNCTION
+    step editor so authors can pick a verb and see its parameters without
+    reading source.
+
+    Returns:
+        A list of ``{"name", "description", "params": [{"name", "type"}]}``
+        dicts, sorted by ``name``. ``description`` is the first line of the
+        function's docstring (``""`` if it has none).
+    """
+    from flows.service_functions import list_service_functions  # noqa: PLC0415
+
+    entries = []
+    for name, func in list_service_functions().items():
+        doc = inspect.getdoc(func)
+        description = doc.splitlines()[0] if doc else ""
+        entries.append(
+            {
+                "name": name,
+                "description": description,
+                "params": _service_function_params(func),
+            }
+        )
+    entries.sort(key=lambda entry: entry["name"])
     return entries
