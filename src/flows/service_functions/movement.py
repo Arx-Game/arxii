@@ -236,7 +236,7 @@ def redirect_move_to_bearer_at_stage(
     # S311 is suppressed deliberately: this is flavour randomness for authored
     # spaces, never a security or fairness boundary. Tests seed `random` so
     # failures reproduce.
-    chosen_id = random.choice(candidate_ids)  # noqa: S311
+    chosen_id = random.choice(candidate_ids)  # noqa: S311 # NOSONAR game RNG, not crypto
     chosen = ObjectDB.objects.filter(pk=chosen_id).first()
     if chosen is None:
         return None
