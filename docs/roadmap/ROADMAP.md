@@ -205,12 +205,25 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   link, three message-tab fixes, notification badge routing, nine feed-kind labels,
   consent-notifier gating, and a second remedy on `RequireCharacter`'s zero-character
   guard. Slice 1 is deliberately chrome + substrate only — **no Hall page, no 2.5 act
-  gates, no offscreen acts** (those are slices 2-3). Naming + chrome ruling (Apostate,
-  2026-08-27): the state's player-facing label is **"Playing: Not In World"**, and the
-  load-bearing state signal is the selected character's portrait displayed prominently
-  (played-by portraits are near-universal among players) with the text label as the
-  accessible equivalent — slice 2's chrome/Hall design leans on the portrait, not a
-  subtle badge. See
+  gates, no offscreen acts** (those are slices 2-3). Rulings for slice 2 (Apostate,
+  2026-08-27/28): the state's player-facing label is **"Playing: Currently Offscreen"**
+  (refined from "Not In World" for consistency with the project's offscreen vocabulary);
+  the load-bearing state signal is the selected character's portrait displayed
+  prominently (played-by portraits are near-universal) with the text label as the
+  accessible equivalent; the Hall's visual direction is **Direction B, the Commonplace
+  Book** (folio typography + squared hairline plates + modern scanning affordances —
+  see the Three Halls comparison, session 2026-08-27); the character band is titled
+  **"Your Characters"** (not "Your People" — mixed OOC/IC terminology is deliberate,
+  playing to player familiarity with MU conventions); the exit triad is Log out (account)
+  / quit (telnet, leave world but stay selected) / **Clear Active Character** (drop
+  selection, control lives bottom-right of the Your Characters band — the header chip
+  deliberately carries no clear control); characters with multiple personas show
+  **persona tiles beneath the portrait** (players correctly assume personas nest under
+  characters — match that mental model, don't hide it behind a bare switch button);
+  tidings split ratified — state 2 shows the general skim only, the persona-scoped
+  digest unlocks at 2.5, and the state-2 screen must still SIGNAL waiting per-character
+  tidings (the portrait badge), which needs the per-character unread-count backend
+  filter already ledgered as a slice-2 seam. See
   [roster.md](../systems/roster.md) for full model/service/endpoint/frontend detail and
   ADR-0241 for the rejected alternatives.
   - **Known seams for slice 2/3:** per-character narrative unread counts need a new

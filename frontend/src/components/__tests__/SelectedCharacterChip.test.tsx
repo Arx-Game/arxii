@@ -1,9 +1,10 @@
 /**
  * SelectedCharacterChip (#3412) — the docked-portrait chip's own contract in
  * isolation: portrait/name render, the real `PersonaSwitcher` works from this
- * mount point (not just inside `/game`'s `GameTopBar`), "Enter the world"
- * links to `/game`, and "Step away" clears the selection via
- * `useSelectCharacterMutation(null)` without touching any session.
+ * mount point (not just inside `/game`'s `GameTopBar`), and "Enter the world"
+ * links to `/game`. The chip deliberately has NO clear-selection control
+ * (Apostate ruling 2026-08-28 — "step away" read as logout; "Clear Active
+ * Character" lands in the Hall's "Your Characters" band in slice 2).
  *
  * `PersonaSwitcher`'s OWN underlying queries (`@/game/personaQueries`) are
  * mocked here — same technique as `PersonaSwitcher.test.tsx` — so this test
@@ -105,9 +106,8 @@ describe('SelectedCharacterChip (#3412)', () => {
     expect(setActiveMutate).toHaveBeenCalledWith(8);
   });
 
-  it('"Step away" clears the selection via the select-character mutation with null', async () => {
+  it('carries no clear-selection control (ruled: clearing lives with the character list)', () => {
     state.personas = [persona(7, 'Aria', 'primary')];
-    const user = userEvent.setup();
 
     render(
       <MemoryRouter>
@@ -115,8 +115,7 @@ describe('SelectedCharacterChip (#3412)', () => {
       </MemoryRouter>
     );
 
-    await user.click(screen.getByTitle('Step away'));
-
-    expect(selectMutate).toHaveBeenCalledWith(null);
+    expect(screen.queryByTitle('Step away')).not.toBeInTheDocument();
+    expect(selectMutate).not.toHaveBeenCalled();
   });
 });

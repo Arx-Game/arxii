@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
-import { DoorOpen, X } from 'lucide-react';
+import { DoorOpen } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PersonaSwitcher } from '@/game/components/PersonaSwitcher';
-import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
 
 interface SelectedCharacterChipProps {
@@ -31,18 +30,23 @@ function getInitials(name: string): string {
  * Selection is NOT presence: this chip never starts or stops a `/game`
  * session on its own. It shows the portrait + name, the same `PersonaSwitcher`
  * `GameTopBar` mounts inside `/game` (re-mounted here so identity-switching
- * works app-wide, not just once you're already in the game), an "Enter the
+ * works app-wide, not just once you're already in the game), and an "Enter the
  * world" link into `/game` (the ONE deliberate selection->presence crossing —
  * `GamePage`'s own mount-path effect does the actual auto-puppeting, not this
- * component), and a quiet "step away" that clears the selection.
+ * component).
+ *
+ * The chip deliberately carries NO clear-selection control (Apostate ruling,
+ * 2026-08-28: "step away" next to Enter-the-world read as logout). Clearing
+ * lives with the character list — the Hall's "Your Characters" band gains a
+ * "Clear Active Character" control in slice 2. Ruled vocabulary: "Log out" =
+ * account; "quit" (telnet) = leave the world but stay selected; "Clear Active
+ * Character" = no selection, still logged in.
  *
  * PLACEHOLDER copy throughout — final chrome wording/visual design is a
- * separate pass; this markup stays plain shadcn primitives on purpose so
- * restyling later is cheap.
+ * separate pass (Direction B, Commonplace Book); this markup stays plain
+ * shadcn primitives on purpose so restyling later is cheap.
  */
 export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
-  const selectCharacter = useSelectCharacterMutation();
-
   return (
     <div className="flex items-center gap-2 rounded-md border px-2 py-1">
       <Avatar className="h-8 w-8">
@@ -60,18 +64,6 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
           <DoorOpen className="h-3.5 w-3.5" />
           Enter the world
         </Link>
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 text-muted-foreground"
-        title="Step away"
-        disabled={selectCharacter.isPending}
-        onClick={() => selectCharacter.mutate(null)}
-      >
-        <X className="h-3.5 w-3.5" />
-        {/* PLACEHOLDER copy */}
-        <span className="sr-only">Step away</span>
       </Button>
     </div>
   );
