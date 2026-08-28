@@ -205,7 +205,12 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   link, three message-tab fixes, notification badge routing, nine feed-kind labels,
   consent-notifier gating, and a second remedy on `RequireCharacter`'s zero-character
   guard. Slice 1 is deliberately chrome + substrate only — **no Hall page, no 2.5 act
-  gates, no offscreen acts** (those are slices 2-3). See
+  gates, no offscreen acts** (those are slices 2-3). Naming + chrome ruling (Apostate,
+  2026-08-27): the state's player-facing label is **"Playing: Not In World"**, and the
+  load-bearing state signal is the selected character's portrait displayed prominently
+  (played-by portraits are near-universal among players) with the text label as the
+  accessible equivalent — slice 2's chrome/Hall design leans on the portrait, not a
+  subtle badge. See
   [roster.md](../systems/roster.md) for full model/service/endpoint/frontend detail and
   ADR-0241 for the rejected alternatives.
   - **Known seams for slice 2/3:** per-character narrative unread counts need a new
