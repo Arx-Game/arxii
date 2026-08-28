@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/justice/", include("world.justice.urls")),
     path("api/clues/", include("world.clues.urls")),
     path("api/fatigue/", include("world.fatigue.urls")),
+    path("api/flows/", include("flows.urls")),
     path("api/agriculture/", include("world.agriculture.urls")),
     path("api/vitals/", include("world.vitals.urls")),
     path("api/dreams/", include("world.dreams.urls")),
