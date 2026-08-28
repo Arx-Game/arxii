@@ -106,6 +106,28 @@ describe('SelectedCharacterChip (#3412)', () => {
     expect(setActiveMutate).toHaveBeenCalledWith(8);
   });
 
+  it('shows the offscreen state label off /game, and drops it while in the world', () => {
+    state.personas = [persona(7, 'Aria', 'primary')];
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/tidings']}>
+        <SelectedCharacterChip entry={aria} />
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/Playing: Currently Offscreen/)).toBeInTheDocument();
+    unmount();
+
+    // On /game the player IS in the world — the chip must not assert an
+    // offscreen fact there; only the worn-persona line remains.
+    render(
+      <MemoryRouter initialEntries={['/game']}>
+        <SelectedCharacterChip entry={aria} />
+      </MemoryRouter>
+    );
+    expect(screen.queryByText(/Playing: Currently Offscreen/)).not.toBeInTheDocument();
+    expect(screen.getByText(/as Aria/)).toBeInTheDocument();
+  });
+
   it('carries no clear-selection control (ruled: clearing lives with the character list)', () => {
     state.personas = [persona(7, 'Aria', 'primary')];
 

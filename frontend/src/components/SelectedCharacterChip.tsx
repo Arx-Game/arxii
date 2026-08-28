@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { DoorOpen } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -64,6 +64,11 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
     personas.find((p) => p.persona_type === 'primary') ??
     personas[0];
   const wornName = worn?.name ?? entry.name;
+  // On /game the player IS in the world — asserting "Currently Offscreen"
+  // there would be a false fact, so the state fragment drops and only the
+  // worn-persona line remains. Real presence wiring is a later slice.
+  const { pathname } = useLocation();
+  const inWorld = pathname.startsWith('/game');
 
   return (
     <div
@@ -82,7 +87,8 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
         </span>
         {/* PLACEHOLDER copy — presence state isn't wired yet */}
         <span className="font-body text-xs text-muted-foreground">
-          as {wornName} · Playing: Currently Offscreen
+          as {wornName}
+          {inWorld ? '' : ' · Playing: Currently Offscreen'}
         </span>
         <PersonaSwitcher
           characterSheetId={entry.character_id}
