@@ -23635,7 +23635,7 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
-      /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
+      /** @description Optional: a MissionTemplate this beat requires. The completion engine (#1757) flips this beat when a launched instance terminates. SET_NULL on template delete. */
       required_mission?: number | null;
       /** Format: date-time */
       readonly created_at: string;
@@ -23753,7 +23753,7 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
-      /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
+      /** @description Optional: a MissionTemplate this beat requires. The completion engine (#1757) flips this beat when a launched instance terminates. SET_NULL on template delete. */
       required_mission?: number | null;
     };
     /** @description POST body for the #885 resolve endpoint. */
@@ -30676,9 +30676,9 @@ export interface components {
       route: number;
       target_node: number;
       weight?: number;
-      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. STORED BUT UNCONSUMED in Phase B — Phase D wires per-candidate emission. */
+      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. WIRED by #941 — checked first when this candidate fires. */
       consequence?: number | null;
-      /** @description Optional per-candidate outcome text shown to the player. STORED BUT UNCONSUMED in Phase B — Phase D wires it. */
+      /** @description Optional per-candidate outcome text shown to the player. WIRED by #941 — used first when this candidate fires. */
       outcome_text?: string;
       /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
       outcome_text_needs_rewrite?: boolean;
@@ -30688,9 +30688,9 @@ export interface components {
       route: number;
       target_node: number;
       weight?: number;
-      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. STORED BUT UNCONSUMED in Phase B — Phase D wires per-candidate emission. */
+      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. WIRED by #941 — checked first when this candidate fires. */
       consequence?: number | null;
-      /** @description Optional per-candidate outcome text shown to the player. STORED BUT UNCONSUMED in Phase B — Phase D wires it. */
+      /** @description Optional per-candidate outcome text shown to the player. WIRED by #941 — used first when this candidate fires. */
       outcome_text?: string;
       /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
       outcome_text_needs_rewrite?: boolean;
@@ -30723,7 +30723,7 @@ export interface components {
       readonly id: number;
       /** @description Parent route (route-level reward). Exactly one of route / candidate must be set; enforced in clean(). */
       route?: number | null;
-      /** @description Parent candidate (per-candidate reward bundle — design §8.3). STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random candidate fires. Exactly one of route / candidate must be set. */
+      /** @description Parent candidate (per-candidate reward bundle — design §8.3). WIRED by #941 — emitted when this candidate fires. Exactly one of route / candidate must be set. */
       candidate?: number | null;
       /**
        * @description When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).
@@ -30776,7 +30776,7 @@ export interface components {
     MissionOptionRouteRewardRequest: {
       /** @description Parent route (route-level reward). Exactly one of route / candidate must be set; enforced in clean(). */
       route?: number | null;
-      /** @description Parent candidate (per-candidate reward bundle — design §8.3). STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random candidate fires. Exactly one of route / candidate must be set. */
+      /** @description Parent candidate (per-candidate reward bundle — design §8.3). WIRED by #941 — emitted when this candidate fires. Exactly one of route / candidate must be set. */
       candidate?: number | null;
       /**
        * @description When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).
@@ -35540,7 +35540,7 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
-      /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
+      /** @description Optional: a MissionTemplate this beat requires. The completion engine (#1757) flips this beat when a launched instance terminates. SET_NULL on template delete. */
       required_mission?: number | null;
     };
     PatchedBequestRequest: {
@@ -36013,9 +36013,9 @@ export interface components {
       route?: number;
       target_node?: number;
       weight?: number;
-      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. STORED BUT UNCONSUMED in Phase B — Phase D wires per-candidate emission. */
+      /** @description Optional per-candidate consequence override; falls back to the parent route's consequence when null. WIRED by #941 — checked first when this candidate fires. */
       consequence?: number | null;
-      /** @description Optional per-candidate outcome text shown to the player. STORED BUT UNCONSUMED in Phase B — Phase D wires it. */
+      /** @description Optional per-candidate outcome text shown to the player. WIRED by #941 — used first when this candidate fires. */
       outcome_text?: string;
       /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
       outcome_text_needs_rewrite?: boolean;
@@ -36047,7 +36047,7 @@ export interface components {
     PatchedMissionOptionRouteRewardRequest: {
       /** @description Parent route (route-level reward). Exactly one of route / candidate must be set; enforced in clean(). */
       route?: number | null;
-      /** @description Parent candidate (per-candidate reward bundle — design §8.3). STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random candidate fires. Exactly one of route / candidate must be set. */
+      /** @description Parent candidate (per-candidate reward bundle — design §8.3). WIRED by #941 — emitted when this candidate fires. Exactly one of route / candidate must be set. */
       candidate?: number | null;
       /**
        * @description When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).
