@@ -7671,10 +7671,10 @@ Self-contained game actions that own prerequisites, execution, and events.
   `target_object_id` instead of `challenge_instance_id`; `dispatch_player_action` re-validates
   the pair, mints a `ChallengeInstance` via `instantiate_challenge`, then resolves through the
   unchanged `resolve_challenge()`. See `docs/architecture/action-template-pipeline.md`.
-- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
+- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → emits `EventName.ACTION_INTENT` (cancellable, skipped when `actor is None`) → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → runs post-effects → emits `EventName.ACTION_RESULT` → returns `ActionResult` (#3418, ADR-0243)
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
-- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
-- **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (the generic `ACTION_INTENT`/`ACTION_RESULT` pair, #3418 — authored triggers filter on `payload.action_key`)
+- **Not Yet Built:** `SyntheticAction` model, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Telnet convergence convention (ratified #1337):** the three player-action dispatch
   families and the seam each telnet command must converge on with the web — Family 1
   `dispatch_player_action()`, Family 2 consent services, Family 3 a real `Action` on
