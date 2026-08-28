@@ -164,7 +164,9 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             conditions = category.cached_conditions
             result[category.name] = {
                 "category": ConditionCategorySerializer(category).data,
-                "conditions": ConditionTemplateSerializer(conditions, many=True).data,
+                "conditions": ConditionTemplateSerializer(
+                    conditions, many=True, context={"request": request}
+                ).data,
             }
 
         return Response(result)

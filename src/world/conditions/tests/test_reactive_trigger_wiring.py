@@ -15,6 +15,7 @@ from rest_framework.test import APIClient
 from evennia_extensions.factories import AccountFactory
 from flows.factories import TriggerDefinitionFactory
 from world.conditions.factories import ConditionTemplateFactory
+from world.gm.factories import GMProfileFactory
 
 
 class SetReactiveTriggersTests(TestCase):
@@ -98,3 +99,68 @@ class SetReactiveTriggersTests(TestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+class ReactiveTriggerIdsFieldGatingTests(TestCase):
+    """`reactive_trigger_ids` on ConditionTemplateSerializer is GM/staff-only.
+
+    ``ConditionTemplateViewSet`` is deliberately player-facing
+    (``IsAuthenticated`` -- TechniqueBuilderPage reads it), but the #3417
+    spec's leak-analysis table commits to no player-facing serializer
+    exposing flow wiring metadata. The field must gate to `[]` for a plain
+    authenticated player even when the template has triggers wired, while
+    staff and GM-profile accounts see the real ids.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(is_staff=True)
+        cls.player = AccountFactory(is_staff=False)
+        cls.gm_account = AccountFactory(is_staff=False)
+        GMProfileFactory(account=cls.gm_account)
+        cls.template = ConditionTemplateFactory()
+        cls.trigger_a = TriggerDefinitionFactory()
+        cls.trigger_b = TriggerDefinitionFactory()
+        cls.template.reactive_triggers.set([cls.trigger_a, cls.trigger_b])
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _list_url(self) -> str:
+        return "/api/conditions/templates/"
+
+    def _detail_url(self, template_id: int) -> str:
+        return f"/api/conditions/templates/{template_id}/"
+
+    def _wired_row(self, response) -> dict:
+        return next(row for row in response.data if row["id"] == self.template.id)
+
+    def test_plain_player_sees_empty_list_even_when_wired(self) -> None:
+        self.client.force_authenticate(user=self.player)
+        response = self.client.get(self._list_url())
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert self._wired_row(response)["reactive_trigger_ids"] == []
+
+    def test_plain_player_sees_empty_on_detail_too(self) -> None:
+        self.client.force_authenticate(user=self.player)
+        response = self.client.get(self._detail_url(self.template.id))
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert response.data["reactive_trigger_ids"] == []
+
+    def test_staff_sees_real_ids(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(self._list_url())
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert set(self._wired_row(response)["reactive_trigger_ids"]) == {
+            self.trigger_a.id,
+            self.trigger_b.id,
+        }
+
+    def test_gm_profile_non_staff_sees_real_ids(self) -> None:
+        self.client.force_authenticate(user=self.gm_account)
+        response = self.client.get(self._list_url())
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert set(self._wired_row(response)["reactive_trigger_ids"]) == {
+            self.trigger_a.id,
+            self.trigger_b.id,
+        }

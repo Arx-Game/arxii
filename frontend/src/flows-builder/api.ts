@@ -4,7 +4,10 @@
  * Pure functions — pair with React Query hooks in queries.ts. Use the
  * shared `apiFetch` for cookie/CSRF and base-URL handling. Every endpoint
  * here is staff/GM-only (`IsGMOrStaff` read, `IsAdminUser` write on the
- * backend), matching `flows.views`.
+ * backend), matching `flows.views` — except the conditions templates
+ * endpoint this module also reads, which is `IsAuthenticated` (player-facing
+ * for TechniqueBuilderPage); its `reactive_trigger_ids` field is gated
+ * server-side to staff/GM requesters instead (#3417 leak analysis).
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
