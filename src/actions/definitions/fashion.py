@@ -9,7 +9,6 @@ from django.db.models import Prefetch
 
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
-from flows.constants import EventName
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.events.models import Event
@@ -42,9 +41,6 @@ class PresentOutfitAction(Action):
     icon: str = "runway"
     category: str = "items"
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = EventName.BEFORE_PRESENT_OUTFIT.value
-    result_event: str | None = EventName.PRESENT_OUTFIT.value
 
     def execute(
         self,
@@ -98,9 +94,6 @@ class JudgePresentationAction(Action):
     icon: str = "gavel"
     category: str = "items"
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = EventName.BEFORE_JUDGE_PRESENTATION.value
-    result_event: str | None = EventName.JUDGE_PRESENTATION.value
 
     def execute(
         self,

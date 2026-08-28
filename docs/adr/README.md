@@ -248,6 +248,7 @@ treat those names as hints to confirm, not gospel.
 - [0239 - One shared DE currency and reference frame across techniques, conditions, and capabilities](0239-shared-de-currency-across-techniques-conditions-capabilities.md) (#3390; extends ADR-0223)
 - [0240 - Situation declaration has no GM override — GMs make it true, not assert it](0240-situations-are-state-driven-no-gm-override.md) (#3387; extends ADR-0151, ADR-0153)
 - [0242 - Special movement is authored in the flows DSL, never modeled per space](0242-movement-redirection-is-authored-not-modeled.md) (#3416; the anti-`LordFluffwinkleOrbOfAnnihilation` rule)
+- [0243 - Action interception events are generic, not per-verb](0243-action-interception-events-are-generic.md) (#3418; extends ADR-0005's reactive engine boundary)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

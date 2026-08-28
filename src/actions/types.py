@@ -69,7 +69,9 @@ class ActionContext:
         action: The action being executed.
         actor: The character performing the action, or ``None`` for
             account-authorized actions with no character context.
-        target: Optional target of the action.
+        target: Optional target of the action, as dispatched. NOT rewritten
+            when an intent flow redirects the target — read
+            ``kwargs["target"]`` for the live value (#3418).
         kwargs: The action's keyword arguments — enhancements can modify these.
         scene_data: Full scene state access.
         modifiers: Unstructured modifier bag — actions interpret specific keys.

@@ -183,9 +183,6 @@ class PickLockAction(Action):
     category: str = "locations"
     target_type: TargetType = TargetType.SELF
 
-    intent_event: str | None = "before_pick_lock"
-    result_event: str | None = "pick_lock"
-
     def get_prerequisites(self) -> list[Prerequisite]:
         return [HasCharacterSheetPrerequisite()]
 
@@ -256,9 +253,6 @@ class BreakExitAction(Action):
     icon: str = "hammer"
     category: str = "locations"
     target_type: TargetType = TargetType.SELF
-
-    intent_event: str | None = "before_break_exit"
-    result_event: str | None = "break_exit"
 
     def get_prerequisites(self) -> list[Prerequisite]:
         return [HasCharacterSheetPrerequisite()]

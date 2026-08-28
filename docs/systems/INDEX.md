@@ -7671,10 +7671,10 @@ Self-contained game actions that own prerequisites, execution, and events.
   `target_object_id` instead of `challenge_instance_id`; `dispatch_player_action` re-validates
   the pair, mints a `ChallengeInstance` via `instantiate_challenge`, then resolves through the
   unchanged `resolve_challenge()`. See `docs/architecture/action-template-pipeline.md`.
-- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
+- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → emits `EventName.ACTION_INTENT` (cancellable, skipped when `actor is None`) → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → runs post-effects → emits `EventName.ACTION_RESULT` → returns `ActionResult` (#3418, ADR-0243)
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
-- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
-- **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (the generic `ACTION_INTENT`/`ACTION_RESULT` pair, #3418 — authored triggers filter on `payload.action_key`)
+- **Not Yet Built:** `SyntheticAction` model, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Telnet convergence convention (ratified #1337):** the three player-action dispatch
   families and the seam each telnet command must converge on with the web — Family 1
   `dispatch_player_action()`, Family 2 consent services, Family 3 a real `Action` on
@@ -7689,7 +7689,9 @@ Database-driven game logic engine for complex branching sequences, plus the reac
 - **Key Classes:** `FlowStack` (with depth cap + cancellation), `FlowExecution`, `FlowEvent`, `SceneDataManager`, `TriggerHandler` (per-owner cached_property; pure provider — its sole public method is `triggers_for(event_name) -> list[Trigger]`)
 - **Reactive Entry Points:**
   - `emit_event(event_name, payload, location, *, parent_stack=None)` (`flows/emit.py`) — **single unified dispatch path**. Walks `[location, *location.contents]`, calls `triggers_for(event_name)` on each owner, priority-sorts the combined list globally (descending), dispatches synchronously on one `FlowStack`, stops on `CANCEL_EVENT`. Used by service functions, typeclass hooks, and `EMIT_FLOW_EVENT` flow steps alike
-  - `EventNames` (`flows/events/names.py`) — canonical string constants for the 18 MVP events
+  - `EventName` (`flows/constants.py`, a `TextChoices`) — canonical event-name constants for the
+    reactive layer; grows as new domains wire in events (see `docs/systems/flows.md`'s Event
+    Catalog for the documented MVP subset)
   - `PAYLOAD_FOR_EVENT` (`flows/events/payloads.py`) — event-name → payload dataclass map; PRE payloads are mutable, POST payloads frozen. AE payloads use `targets: list`
   - `evaluate_filter(spec, payload, *, self_ref)` (`flows/filters/evaluator.py`) — JSON filter DSL: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, `has_capability`, plus `and`/`or`/`not`. Bare `"self"` (and `self.<attr>`) resolves to the trigger's owner
   - **Filter idioms** (see `docs/systems/flows.md` for details): `{"path": "target", "op": "==", "value": "self"}` = self-only (replaces `scope=SELF`); `{"path": "target", "op": "!=", "value": "self"}` = bystander-only; no target filter = room-wide (replaces `scope=ROOM`/`ANY`)

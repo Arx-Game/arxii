@@ -47,9 +47,6 @@ class EquipAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_equip"
-    result_event: str | None = "equip"
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
@@ -95,9 +92,6 @@ class UnequipAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_unequip"
-    result_event: str | None = "unequip"
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
@@ -142,9 +136,6 @@ class PutInAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = "before_put_in"
-    result_event: str | None = "put_in"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target", "container"})
 
@@ -199,9 +190,6 @@ class TakeOutAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = "before_take_out"
-    result_event: str | None = "take_out"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
@@ -264,9 +252,6 @@ class StealAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = "before_steal"
-    result_event: str | None = "steal"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
@@ -378,9 +363,6 @@ class ActivatePermitAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_activate_permit"
-    result_event: str | None = "activate_permit"
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(  # noqa: PLR0911
@@ -455,9 +437,6 @@ class UseItemAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = "before_use"
-    result_event: str | None = "use"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"item", "target"})
 
