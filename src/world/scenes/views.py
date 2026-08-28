@@ -577,7 +577,14 @@ class PersonaViewSet(
         sheet = puppeted_sheet_for(request.user)
         if puppet is None or sheet is None:
             msg = "You must be playing a character to switch identities."
-            raise serializers.ValidationError(msg)
+            # #3412 task 2 — dict payload so DRF's exception handler emits
+            # {"detail": msg} (400) instead of a bare [msg] list. A plain
+            # string here gets list-coerced by DRF's ValidationError
+            # (`elif not isinstance(detail, (dict, list)): detail = [detail]`),
+            # which would diverge from the journals/goals viewsets' identical
+            # {"detail": result.message} shape for the same offscreen-act
+            # gate refusal reaching this same endpoint below.
+            raise serializers.ValidationError({"detail": msg})
         from actions.constants import ActionBackend  # noqa: PLC0415
         from actions.player_interface import dispatch_player_action  # noqa: PLC0415
         from actions.types import ActionRef  # noqa: PLC0415
@@ -588,7 +595,11 @@ class PersonaViewSet(
         )
         detail = result.detail  # ActionResult (REGISTRY dispatch is never deferred)
         if not detail.success:
-            raise serializers.ValidationError(detail.message)
+            # #3412 task 2 — same dict-payload standardization: this is the
+            # seam a gate refusal (CAPTURED/unconscious/DEAD/RETIRED) reaches
+            # the web client through, and it must match
+            # {"detail": <reason>} exactly, like the journals/goals viewsets.
+            raise serializers.ValidationError({"detail": detail.message})
         return Response(
             ActivePersonaResultSerializer(
                 {"active_persona_id": detail.data["active_persona_id"]}
