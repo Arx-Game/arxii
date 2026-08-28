@@ -758,6 +758,34 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
+### Authored Movement Redirection (#3416, ADR-0242)
+Special movement (labyrinths, one-way thresholds, doors that lead elsewhere by time of
+day) is **authored as rows, never modeled per space.** There is deliberately no
+`Labyrinth` model and no model naming any particular space - see ADR-0242.
+
+- **The seam:** `Character.move_to` (`typeclasses/characters.py`) dispatches
+  `MOVE_PRE_DEPART` itself and honors the payload's (possibly redirected)
+  `destination`. It must happen there, not in `at_pre_move`: Evennia binds
+  `destination` as a local in `move_to` before calling the hook, so `at_pre_move`
+  can veto a move but can never change where it goes. `MovePreDepartPayload` is
+  deliberately unfrozen for this (`MovedPayload` beside it is `frozen=True`); a
+  one-shot `ndb.suppress_move_pre_depart` flag stops `at_pre_move` re-emitting for
+  the same move and running every trigger twice.
+- **Generic verbs:** `flows.service_functions.movement.redirect_move_to_bearer_at_stage`
+  (land in a random object bearing condition X at stage N) and `redirect_move` (land
+  somewhere fixed); `world.conditions.services.advance_condition_stage` (event-driven
+  stage progression - the round tick is the only other driver) and
+  `remove_condition_by_name`.
+- **How a space is expressed:** depth is `ConditionInstance.current_stage`; the dwell
+  budget per depth is `ConditionStage.rounds_to_next`, so **the arrival bound is the
+  authored sum of that field, not a rule in Python**; per-depth effects are
+  `ConditionStage.on_entry_conditions`; room-to-depth grouping is a condition on the
+  **room** (`ConditionInstance.target` accepts rooms). Logic is a `TriggerDefinition`
+  + `FlowDefinition`, discriminated by `Trigger.additional_filter_condition`.
+- **Worked example:** `flows/tests/test_authored_movement_redirection.py` builds a
+  complete labyrinth from rows and asserts no `Labyrinth*` model exists.
+- **Authoring gap:** flows/triggers are only editable in raw Django admin today - #3417.
+
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
