@@ -208,6 +208,34 @@ class Action:
                 apply_fatigue(sheet, self.fatigue_category, self.fatigue_cost, EffortLevel.MEDIUM)
         return None
 
+    def _emit_result(
+        self,
+        actor: ObjectDB | None,
+        context: ActionContext,
+        result: ActionResult,
+    ) -> ActionResult:
+        """Emit ACTION_RESULT for a concluded attempt and return ``result`` (#3418).
+
+        Fires for successes and failed attempts alike; the intent-cancel path
+        returns before reaching any caller of this. ``message`` is coerced to
+        "" so authored comparison filters never receive None.
+        """
+        if actor is None:
+            return result
+        from flows.constants import EventName  # noqa: PLC0415
+        from flows.emit import emit_event  # noqa: PLC0415
+        from flows.events.payloads import ActionResultPayload  # noqa: PLC0415
+
+        payload = ActionResultPayload(
+            actor=actor,
+            action_key=self.key,
+            target=context.kwargs.get("target"),
+            success=result.success,
+            message=result.message or "",
+        )
+        emit_event(EventName.ACTION_RESULT, payload, location=actor.location)
+        return result
+
     def _dead_gate_reason(self, actor: ObjectDB | None) -> str:
         """Refusal reason for dead actors on non-whitelisted actions (#2287).
 
@@ -229,7 +257,7 @@ class Action:
             return "The dead cannot do that."
         return ""
 
-    def run(
+    def run(  # noqa: C901 — linear lifecycle gates (enhancements/intent/prereqs/costs/execute/result)
         self,
         actor: ObjectDB | None,
         enhancements: list[ActionEnhancement] | None = None,
@@ -283,7 +311,33 @@ class Action:
             for enh in get_involuntary_enhancements(self.key, actor):
                 enh.apply(context)
 
-        # TODO: emit intent event and check for trigger interruption
+        # Emit the intent event BEFORE the prerequisite gate (#3418): intent
+        # means "the actor wants to do this" and fires even when they can't.
+        # A cancelling flow refuses the attempt before anything is charged.
+        # Account-authorized calls (actor is None) have no scene context and
+        # emit nothing.
+        if actor is not None:
+            from flows.constants import EventName  # noqa: PLC0415
+            from flows.emit import emit_event  # noqa: PLC0415
+            from flows.events.payloads import ActionIntentPayload  # noqa: PLC0415
+
+            original_target = context.kwargs.get("target")
+            intent = ActionIntentPayload(
+                actor=actor,
+                action_key=self.key,
+                target=original_target,
+            )
+            stack = emit_event(EventName.ACTION_INTENT, intent, location=actor.location)
+            if stack.was_cancelled():
+                return ActionResult(
+                    success=False,
+                    message=intent.cancel_message or "Something prevents you.",
+                )
+            if intent.target is not original_target:
+                # Redirect written back so prerequisites and execute() see it
+                # (the movement-redirect pattern, ADR-0242). context.target is
+                # deliberately left as-dispatched.
+                context.kwargs["target"] = intent.target
 
         # Enforce prerequisites against the final (post-enhancement) kwargs.
         # run() is the single telnet+web chokepoint; prerequisites read kwargs
@@ -297,9 +351,13 @@ class Action:
                 context={"kwargs": context.kwargs, "scene_data": sdm},
             )
             if not availability.available:
-                return ActionResult(
-                    success=False,
-                    message="; ".join(availability.reasons) or "You can't do that right now.",
+                return self._emit_result(
+                    actor,
+                    context,
+                    ActionResult(
+                        success=False,
+                        message="; ".join(availability.reasons) or "You can't do that right now.",
+                    ),
                 )
 
         # Charge the action's declarative AP + fatigue cost before executing (#1154).
@@ -308,7 +366,7 @@ class Action:
         if actor is not None:
             cost_failure = self._charge_costs(actor)
             if cost_failure is not None:
-                return cost_failure
+                return self._emit_result(actor, context, cost_failure)
 
         # Execute with potentially modified kwargs
         context.result = self.execute(actor, context=context, **context.kwargs)
@@ -317,6 +375,4 @@ class Action:
         for effect in context.post_effects:
             effect(context)
 
-        # TODO: emit result event for trigger reactions
-
-        return context.result
+        return self._emit_result(actor, context, context.result)
