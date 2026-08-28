@@ -148,7 +148,7 @@ world"); using any one of the three where another is meant.
 **the Hall**:
 PLACEHOLDER name for the state-2 logged-in home surface — mounts at `/` for any
 authed account (visitors keep the pre-login Gatefold, byte-identical). Built in
-the Commonplace Book idiom (ADR-0243): the "Your Characters" band (portrait
+the Commonplace Book idiom (ADR-0244): the "Your Characters" band (portrait
 cards, per-character tidings `CountChip`s, `PersonaTiles`, select-on-click,
 "Clear Active Character"), "Your Attention" (OOC mail + per-character pending
 groups), and "The World" (clock, upcoming occasions, the Crier tidings skim).

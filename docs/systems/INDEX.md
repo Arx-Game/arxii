@@ -2173,7 +2173,7 @@ Character lifecycle management with web-first applications and player anonymity.
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
   and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
   [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
-- **The Hall — logged-in home surface (#3412 slice 2, ADR-0243):** `GET
+- **The Hall — logged-in home surface (#3412 slice 2, ADR-0244):** `GET
   /api/roster/entries/mine/` annotates `unread_narrative_count` per character (one
   aggregated JOIN/GROUP BY over unacknowledged `NarrativeMessageDelivery` rows, not
   per-row queries); `MyRosterEntrySerializer.get_unread_narrative_count` reads the
