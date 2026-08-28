@@ -1512,7 +1512,9 @@ a collaborative **research project**.
   `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
   `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
   (on room entry), `plant_rescue_clue` / `clear_rescue_clues` (#931), `start_research_project`
-  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler)
+  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler —
+  CODEX/SECRET/MISSION targets grant to every distinct contributor; MISSION grants via
+  `staff_assign_mission`, log-and-continue per contributor, #3429)
 - **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
   via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
 - **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
@@ -1522,10 +1524,11 @@ a collaborative **research project**.
   (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
   only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
-  (`grant_rescue_mission`, mission target), projects (RESEARCH kind), captivity (RESCUE
-  clues planted on capture / cleared on resolution), predicates (eligibility), checks
-  (`perform_check`), actions (search), narrative (trigger notification), typeclasses
-  (`Character.at_post_move` trigger hook)
+  (`grant_rescue_mission` for RESCUE's AUTOMATIC mission target; `staff_assign_mission`
+  for a RESEARCH-resolved MISSION target, #3429), projects (RESEARCH kind), captivity
+  (RESCUE clues planted on capture / cleared on resolution), predicates (eligibility),
+  checks (`perform_check`), actions (search), narrative (trigger notification + RESEARCH
+  MISSION-grant story text), typeclasses (`Character.at_post_move` trigger hook)
 - **Source:** `src/world/clues/`
 - **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
 
