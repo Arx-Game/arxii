@@ -40,6 +40,7 @@ function setupMocks(options?: {
   goals?: (typeof goal)[];
   pointsRemaining?: number;
   isLoading?: boolean;
+  logProgressError?: Error;
 }) {
   const logMutate = vi.fn();
 
@@ -61,6 +62,8 @@ function setupMocks(options?: {
   vi.mocked(goalsQueries.useCreateGoalJournalMutation).mockReturnValue({
     mutate: logMutate,
     isPending: false,
+    isError: !!options?.logProgressError,
+    error: options?.logProgressError ?? null,
   } as unknown as ReturnType<typeof useCreateGoalJournalMutation>);
 
   return { logMutate };
@@ -120,5 +123,27 @@ describe('GoalsPanel', () => {
 
     await userEvent.type(screen.getByTestId('goals-log-title-input'), 'Title only');
     expect(screen.getByTestId('goals-log-submit')).toBeDisabled();
+  });
+
+  it('renders a gate refusal reason inline (not just a toast) — #3412 T4', async () => {
+    setupMocks({
+      logProgressError: new Error('You are captured; smuggle a message out to reach the world.'),
+    });
+    renderWithProviders(<GoalsPanel />);
+
+    await userEvent.click(screen.getByTestId('goals-log-progress-trigger'));
+
+    expect(screen.getByTestId('goals-log-progress-error')).toHaveTextContent(
+      'You are captured; smuggle a message out to reach the world.'
+    );
+  });
+
+  it('renders no inline error block when the log-progress mutation has not errored', async () => {
+    setupMocks();
+    renderWithProviders(<GoalsPanel />);
+
+    await userEvent.click(screen.getByTestId('goals-log-progress-trigger'));
+
+    expect(screen.queryByTestId('goals-log-progress-error')).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 import { apiFetch } from '@/evennia_replacements/api';
 
@@ -89,7 +90,16 @@ async function setActivePersona(personaId: number): Promise<number> {
   return data.active_persona_id;
 }
 
-/** Switch the worn face. Invalidates the roster bootstrap so the bar re-reads it. */
+/**
+ * Switch the worn face. Invalidates the roster bootstrap so the bar re-reads it.
+ *
+ * `onError` (#3412 T4 folded-in review finding) — previously errors here (including
+ * an offscreen-gate refusal on a CAPTURED/unconscious/DEAD/RETIRED character, #3412
+ * slice 3) rendered NOWHERE: both `PersonaSwitcher` and `PersonaTiles` call `.mutate()`
+ * without a per-call `onError`, so a failed switch silently did nothing. Mirrors
+ * `useSelectCharacterMutation`'s exact onError/toast pattern
+ * (`frontend/src/roster/queries.ts`) — PLACEHOLDER copy.
+ */
 export function useSetActivePersonaMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -97,6 +107,8 @@ export function useSetActivePersonaMutation() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['my-roster-entries'] });
     },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : 'Could not switch to that identity.'),
   });
 }
 
