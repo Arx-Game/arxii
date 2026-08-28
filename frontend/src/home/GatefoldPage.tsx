@@ -17,7 +17,7 @@
 
 import { useEffect } from 'react';
 import { useRealmTheme } from '@/components/realm-theme-provider';
-import { useAccount } from '@/store/hooks';
+import { useAuthStatus } from '@/evennia_replacements/queries';
 import { Cover } from './Cover';
 import { RealmsChapter } from './RealmsChapter';
 import { CodexChapter } from './CodexChapter';
@@ -28,13 +28,28 @@ import './home.css';
 
 export function GatefoldPage() {
   const { setForcedRealm } = useRealmTheme();
-  const account = useAccount();
+  // Gate the visitor/Hall split on the resolved account query, not the Redux
+  // mirror: Redux is null until /api/user/ answers, so gating on it painted
+  // every logged-in player the full visitor Gatefold (and forced the arx
+  // realm, 0.8s color churn included) for one roundtrip on each hard load of
+  // `/`. Deliberate tradeoff: a visitor's very first paint is now a quiet
+  // blank beat instead of the instant advertisement — players load `/` many
+  // times a day, visitors see it once, so the flash lands on the rarer
+  // audience. useAuthStatus shares the ['account'] key (no extra request)
+  // and reads isPending/data from one atomic snapshot.
+  const { isLoading, account } = useAuthStatus();
 
   useEffect(() => {
-    if (account) return; // the Hall uses the viewer's own realm — never forced arx
+    // Resolve before forcing: while loading we don't yet know this isn't a
+    // player, and the Hall must never render under forced arx (ADR-0227).
+    if (isLoading || account) return;
     setForcedRealm('arx');
     return () => setForcedRealm(undefined);
-  }, [setForcedRealm, account]);
+  }, [setForcedRealm, isLoading, account]);
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-background" aria-busy="true" />;
+  }
 
   if (account) {
     return <HallPage />;

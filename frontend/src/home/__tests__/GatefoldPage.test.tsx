@@ -40,8 +40,13 @@ vi.mock('../queries', () => ({
 }));
 
 const mockUseRegistrationStatus = vi.fn();
+// The visitor/Hall split gates on the resolved account QUERY (final-review
+// fix — Redux is null for one roundtrip on every cold load, which painted
+// players the visitor Gatefold + forced-arx churn before swapping).
+const mockUseAuthStatus = vi.fn();
 vi.mock('@/evennia_replacements/queries', () => ({
   useRegistrationStatus: () => mockUseRegistrationStatus(),
+  useAuthStatus: () => mockUseAuthStatus(),
 }));
 
 const mockUsePageBackgrounds = vi.fn();
@@ -105,6 +110,7 @@ function setDefaultMocks() {
   mockUseMonthlySceneCount.mockReturnValue({ data: undefined });
   mockUseFeaturedLore.mockReturnValue({ data: codexEntries, isLoading: false });
   mockUseRegistrationStatus.mockReturnValue({ data: { open: true } });
+  mockUseAuthStatus.mockReturnValue({ isLoading: false, account: null });
   mockUsePageBackgrounds.mockReturnValue({ data: [] });
   mockUseDraft.mockReturnValue({ data: null });
 }
@@ -195,6 +201,7 @@ describe('GatefoldPage', () => {
 
   it('renders HallPage instead of the gatefold chapters for an authenticated account (#3412)', () => {
     setDefaultMocks();
+    mockUseAuthStatus.mockReturnValue({ isLoading: false, account: mockAccount });
     store.dispatch(setAccount({ ...mockAccount }));
     renderWithProviders(<GatefoldPage />);
 
@@ -206,10 +213,24 @@ describe('GatefoldPage', () => {
 
   it('does not force the arx realm theme for an authenticated account (#3412 — Hall uses its own realm)', () => {
     setDefaultMocks();
+    mockUseAuthStatus.mockReturnValue({ isLoading: false, account: mockAccount });
     store.dispatch(setAccount({ ...mockAccount }));
     renderWithProviders(<GatefoldPage />);
 
     expect(mockSetForcedRealm).not.toHaveBeenCalledWith('arx');
+  });
+
+  it('renders a quiet neutral beat while the account query resolves — no Gatefold flash, no forced realm', () => {
+    // The cold-load case (final-review Important): a logged-in player's hard
+    // load of `/` must never paint the visitor advertisement (or force arx,
+    // 0.8s realm churn) for the roundtrip before /api/user/ answers.
+    setDefaultMocks();
+    mockUseAuthStatus.mockReturnValue({ isLoading: true, account: null });
+    renderWithProviders(<GatefoldPage />);
+
+    expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
+    expect(screen.queryByText('The Ward of the Compact')).not.toBeInTheDocument();
+    expect(mockSetForcedRealm).not.toHaveBeenCalled();
   });
 
   it('renders the gatefold chapters unchanged for a visitor (byte-identical mount split)', () => {
