@@ -147,7 +147,13 @@ function NodeView({
     );
   }
   return (
-    <LeafView value={value} onChange={onChange} filterOps={filterOps} pathFields={pathFields} builderId={builderId} />
+    <LeafView
+      value={value}
+      onChange={onChange}
+      filterOps={filterOps}
+      pathFields={pathFields}
+      builderId={builderId}
+    />
   );
 }
 
@@ -394,7 +400,9 @@ function LeafView({
         </div>
       </div>
       {empty ? <div className="text-xs text-destructive">Path is required.</div> : null}
-      {opInvalid ? <div className="text-xs text-destructive">Unknown operator '{value.op}'.</div> : null}
+      {opInvalid ? (
+        <div className="text-xs text-destructive">Unknown operator '{value.op}'.</div>
+      ) : null}
     </div>
   );
 }

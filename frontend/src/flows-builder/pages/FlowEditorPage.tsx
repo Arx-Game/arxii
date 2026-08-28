@@ -234,8 +234,8 @@ export function FlowEditorPage() {
         <div>
           {isCreate ? (
             <p className="text-sm text-muted-foreground">
-              Interactions (what runs this flow, what it emits, what it calls) appear once the
-              flow is saved.
+              Interactions (what runs this flow, what it emits, what it calls) appear once the flow
+              is saved.
             </p>
           ) : (
             <InteractionsPanel interactions={flowQuery.data?.interactions ?? EMPTY_INTERACTIONS} />

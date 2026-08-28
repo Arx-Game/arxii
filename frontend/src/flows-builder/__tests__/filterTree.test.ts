@@ -73,7 +73,9 @@ describe('group add/remove', () => {
   });
 
   it('removeChild drops the child at the given index from AND', () => {
-    const group: FilterAnd = { and: [leaf({ path: 'a' }), leaf({ path: 'b' }), leaf({ path: 'c' })] };
+    const group: FilterAnd = {
+      and: [leaf({ path: 'a' }), leaf({ path: 'b' }), leaf({ path: 'c' })],
+    };
     const next = removeChild(group, 1);
     expect((next as FilterAnd).and.map((c) => (isLeaf(c) ? c.path : null))).toEqual(['a', 'c']);
   });
@@ -110,7 +112,9 @@ describe('group add/remove', () => {
 
 describe('NOT arity', () => {
   it('converting AND -> NOT keeps only the first child', () => {
-    const group: FilterAnd = { and: [leaf({ path: 'a' }), leaf({ path: 'b' }), leaf({ path: 'c' })] };
+    const group: FilterAnd = {
+      and: [leaf({ path: 'a' }), leaf({ path: 'b' }), leaf({ path: 'c' })],
+    };
     const next = changeOperator(group, 'not');
     expect(isNot(next)).toBe(true);
     expect((next as FilterNot).not).toEqual(leaf({ path: 'a' }));

@@ -122,10 +122,7 @@ export async function createFlow(payload: FlowWritePayload): Promise<FlowWriteRe
   return res.json();
 }
 
-export async function updateFlow(
-  id: number,
-  payload: FlowWritePayload
-): Promise<FlowWriteResult> {
+export async function updateFlow(id: number, payload: FlowWritePayload): Promise<FlowWriteResult> {
   const res = await apiFetch(`${BASE_URL}/flows/${id}/`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -222,10 +219,7 @@ export async function createTrigger(payload: TriggerWritePayload): Promise<Trigg
   return res.json();
 }
 
-export async function updateTrigger(
-  id: number,
-  payload: TriggerWritePayload
-): Promise<TriggerRow> {
+export async function updateTrigger(id: number, payload: TriggerWritePayload): Promise<TriggerRow> {
   const res = await apiFetch(`${BASE_URL}/triggers/${id}/`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

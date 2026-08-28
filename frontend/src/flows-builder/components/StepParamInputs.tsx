@@ -208,13 +208,7 @@ function FieldShell({
  * silent one (the original bug: a string value got coerced to `{}` on
  * every render just by opening this editor).
  */
-function DictEditor({
-  value,
-  onChange,
-}: {
-  value: unknown;
-  onChange: (next: unknown) => void;
-}) {
+function DictEditor({ value, onChange }: { value: unknown; onChange: (next: unknown) => void }) {
   if (typeof value === 'string') {
     return (
       <div className="space-y-1">
@@ -283,7 +277,12 @@ function DictEditor({
             value={val === undefined || val === null ? '' : String(val)}
             onChange={(e) => setValue(index, e.target.value)}
           />
-          <Button size="sm" variant="ghost" onClick={() => removeEntry(index)} aria-label="Remove entry">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => removeEntry(index)}
+            aria-label="Remove entry"
+          >
             −
           </Button>
         </div>
@@ -339,7 +338,12 @@ function ExtraParamsEditor({
             value={value === undefined || value === null ? '' : String(value)}
             onChange={(e) => onSet(key, e.target.value)}
           />
-          <Button size="sm" variant="ghost" onClick={() => onRemove(key)} aria-label="Remove parameter">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onRemove(key)}
+            aria-label="Remove parameter"
+          >
             −
           </Button>
         </div>

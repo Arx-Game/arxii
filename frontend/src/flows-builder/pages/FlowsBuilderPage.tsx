@@ -44,8 +44,8 @@ export function FlowsBuilderPage() {
       <div>
         <h1 className="text-2xl font-semibold">Flows Builder</h1>
         <p className="text-sm text-muted-foreground">
-          Author flow definitions, the trigger definitions that run them, and the triggers
-          installed on specific objects.
+          Author flow definitions, the trigger definitions that run them, and the triggers installed
+          on specific objects.
         </p>
       </div>
 

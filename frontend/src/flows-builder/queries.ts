@@ -136,9 +136,7 @@ export function useTriggerDefinitions(
   });
 }
 
-export function useTriggerDefinition(
-  id: number | undefined
-): UseQueryResult<TriggerDefinition> {
+export function useTriggerDefinition(id: number | undefined): UseQueryResult<TriggerDefinition> {
   return useQuery({
     queryKey: flowsBuilderKeys.triggerDefinitionDetail(id ?? 0),
     queryFn: () => getTriggerDefinition(id as number),

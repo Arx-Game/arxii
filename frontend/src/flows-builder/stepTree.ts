@@ -199,9 +199,7 @@ function checkParamValue(
 
 function checkStepAgainstSpec(errors: string[], step: ClientStep, spec: StepActionSpec): void {
   if (spec.variable_name_required && !step.variableName.trim()) {
-    errors.push(
-      `Step '${step.clientId}': variable_name is required for action '${spec.action}'.`
-    );
+    errors.push(`Step '${step.clientId}': variable_name is required for action '${spec.action}'.`);
   }
   const declared = new Map(spec.params.map((param) => [param.name, param]));
   for (const [name, paramSpec] of declared) {
@@ -227,10 +225,7 @@ function checkStepAgainstSpec(errors: string[], step: ClientStep, spec: StepActi
  * this collects every problem it finds so the editor can surface them all
  * at once.
  */
-export function validateSteps(
-  steps: ClientStep[],
-  specs: Map<string, StepActionSpec>
-): string[] {
+export function validateSteps(steps: ClientStep[], specs: Map<string, StepActionSpec>): string[] {
   const errors: string[] = [];
   if (steps.length === 0) return errors;
 

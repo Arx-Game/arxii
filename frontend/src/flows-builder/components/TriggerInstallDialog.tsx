@@ -180,8 +180,8 @@ export function TriggerInstallDialog({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            If both source ids are given, the stage must belong to the source condition's
-            template — the server rejects a mismatch.
+            If both source ids are given, the stage must belong to the source condition's template —
+            the server rejects a mismatch.
           </p>
           {createTrigger.isError ? (
             <p className="text-sm text-destructive">

@@ -20,7 +20,9 @@ import {
 } from '../stepTree';
 import type { ClientStep, FlowStep, ParamSpec, StepActionSpec } from '../types';
 
-function paramSpec(overrides: Partial<ParamSpec> & { name: string; type: ParamSpec['type'] }): ParamSpec {
+function paramSpec(
+  overrides: Partial<ParamSpec> & { name: string; type: ParamSpec['type'] }
+): ParamSpec {
   return {
     required: false,
     description: '',
@@ -236,10 +238,7 @@ describe('coerceParams', () => {
       action: 'x',
       params: [paramSpec({ name: 'count', type: 'int', accepts_reference: true })],
     });
-    const result = coerceParams(
-      step({ clientId: 'a', parameters: { count: '@some_var' } }),
-      spec
-    );
+    const result = coerceParams(step({ clientId: 'a', parameters: { count: '@some_var' } }), spec);
     expect(result.parameters.count).toBe('@some_var');
   });
 
@@ -248,10 +247,7 @@ describe('coerceParams', () => {
       action: 'x',
       params: [paramSpec({ name: 'data', type: 'dict', accepts_reference: false })],
     });
-    const good = coerceParams(
-      step({ clientId: 'a', parameters: { data: '{"k": 1}' } }),
-      spec
-    );
+    const good = coerceParams(step({ clientId: 'a', parameters: { data: '{"k": 1}' } }), spec);
     expect(good.parameters.data).toEqual({ k: 1 });
     const bad = coerceParams(step({ clientId: 'a', parameters: { data: 'not json' } }), spec);
     expect(bad.parameters.data).toBe('not json');
@@ -259,10 +255,7 @@ describe('coerceParams', () => {
 
   it('leaves parameters not declared on the spec untouched', () => {
     const spec = actionSpec({ action: 'x', allows_extra_params: true, params: [] });
-    const result = coerceParams(
-      step({ clientId: 'a', parameters: { extra: 'literal' } }),
-      spec
-    );
+    const result = coerceParams(step({ clientId: 'a', parameters: { extra: 'literal' } }), spec);
     expect(result.parameters.extra).toBe('literal');
   });
 });
@@ -398,9 +391,7 @@ describe('validateSteps', () => {
       ],
     ]);
     const bad = [step({ clientId: 'root', action: 'x', parameters: { count: 'nope' } })];
-    expect(validateSteps(bad, spec).some((e) => e.includes("not a valid 'int' value"))).toBe(
-      true
-    );
+    expect(validateSteps(bad, spec).some((e) => e.includes("not a valid 'int' value"))).toBe(true);
     const okRef = [step({ clientId: 'root', action: 'x', parameters: { count: '@some_var' } })];
     expect(validateSteps(okRef, spec)).toEqual([]);
   });
@@ -415,15 +406,27 @@ describe('validateSteps', () => {
       }),
     ];
     const errors = validateSteps(steps, specs);
-    expect(errors.some((e) => e.includes("must be one of"))).toBe(true);
+    expect(errors.some((e) => e.includes('must be one of'))).toBe(true);
   });
 });
 
 describe('fromServerSteps / toWirePayload round-trip', () => {
   it('maps server pks to clientId strings and back to the wire shape', () => {
     const serverSteps: FlowStep[] = [
-      { id: 10, parent: null, action: 'set_context_value', variable_name: 'root_var', parameters: { attribute: 'hp' } },
-      { id: 11, parent: 10, action: 'evaluate_equals', variable_name: 'root_var', parameters: { value: '5' } },
+      {
+        id: 10,
+        parent: null,
+        action: 'set_context_value',
+        variable_name: 'root_var',
+        parameters: { attribute: 'hp' },
+      },
+      {
+        id: 11,
+        parent: 10,
+        action: 'evaluate_equals',
+        variable_name: 'root_var',
+        parameters: { value: '5' },
+      },
     ];
     const clientSteps = fromServerSteps(serverSteps);
     expect(clientSteps).toHaveLength(2);
