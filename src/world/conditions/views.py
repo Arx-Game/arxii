@@ -116,7 +116,11 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             "stages",
             queryset=ConditionStage.objects.all(),
             to_attr="cached_stages",
-        )
+        ),
+        # Backs ConditionTemplateSerializer.reactive_trigger_ids (#3417 task
+        # 12) — this list endpoint is unpaginated, so every row serializes;
+        # without the prefetch that's an N+1 across the whole template table.
+        "reactive_triggers",
     )
     permission_classes = [IsAuthenticated]
     pagination_class = None

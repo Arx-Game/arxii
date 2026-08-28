@@ -245,6 +245,36 @@ export async function deleteTrigger(id: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Minimal summary of a `ConditionTemplate` for the condition-wiring picker
+ * (#3417 task 12). No existing frontend fetcher covers
+ * `/api/conditions/templates/` — `conditions/api.ts` only has
+ * instance/damage-type/treatment fetchers — so this is added here rather
+ * than there, next to the `setReactiveTriggers` call it exists to support.
+ * `reactive_trigger_ids` is the read-only exposure of the
+ * `ConditionTemplate.reactive_triggers` M2M (`ConditionTemplateSerializer`,
+ * `src/world/conditions/serializers.py`) added alongside this task: the
+ * wiring UI needs a template's CURRENT full set before calling
+ * `setReactiveTriggers`, since that endpoint replaces the whole set rather
+ * than adding/removing one id.
+ */
+export interface ConditionTemplateSummary {
+  id: number;
+  name: string;
+  reactive_trigger_ids: number[];
+}
+
+/**
+ * List every condition template (staff/GM picker data).
+ * GET /api/conditions/templates/ — UNPAGINATED (`pagination_class = None`
+ * on `ConditionTemplateViewSet`), so this returns a plain array.
+ */
+export async function listConditionTemplates(): Promise<ConditionTemplateSummary[]> {
+  const res = await apiFetch(`${CONDITIONS_BASE_URL}/templates/`);
+  if (!res.ok) throw new Error('Failed to load condition templates');
+  return res.json();
+}
+
+/**
  * Replace the complete set of TriggerDefinitions a ConditionTemplate installs
  * when it applies (`.set()` semantics — this is not additive).
  */

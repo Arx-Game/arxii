@@ -19,6 +19,7 @@ import {
   getFlow,
   getTrigger,
   getTriggerDefinition,
+  listConditionTemplates,
   listFlows,
   listTriggerDefinitions,
   listTriggers,
@@ -26,6 +27,7 @@ import {
   updateFlow,
   updateTrigger,
   updateTriggerDefinition,
+  type ConditionTemplateSummary,
 } from './api';
 import type {
   DslCatalog,
@@ -55,6 +57,7 @@ export const flowsBuilderKeys = {
   triggers: () => [...flowsBuilderKeys.all, 'triggers'] as const,
   triggerList: (filters: object) => [...flowsBuilderKeys.triggers(), 'list', filters] as const,
   triggerDetail: (id: number) => [...flowsBuilderKeys.triggers(), 'detail', id] as const,
+  conditionTemplates: () => [...flowsBuilderKeys.all, 'condition-templates'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -230,6 +233,15 @@ export function useDeleteTrigger() {
 // ConditionTemplate reactive-trigger wiring
 // ---------------------------------------------------------------------------
 
+/** All condition templates (staff/GM picker data) — see `ConditionTemplateSummary`'s docstring. */
+export function useConditionTemplates(): UseQueryResult<ConditionTemplateSummary[]> {
+  return useQuery({
+    queryKey: flowsBuilderKeys.conditionTemplates(),
+    queryFn: listConditionTemplates,
+    staleTime: FIVE_MINUTES,
+  });
+}
+
 export function useSetReactiveTriggers() {
   const qc = useQueryClient();
   return useMutation({
@@ -241,6 +253,8 @@ export function useSetReactiveTriggers() {
       // safest invalidation is the trigger-definition namespace, since a
       // ConditionTemplate's authoring UI reads that list to build its picker.
       qc.invalidateQueries({ queryKey: flowsBuilderKeys.triggerDefinitions() });
+      // The template's own reactive_trigger_ids just changed too.
+      qc.invalidateQueries({ queryKey: flowsBuilderKeys.conditionTemplates() });
     },
   });
 }

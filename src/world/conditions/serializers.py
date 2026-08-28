@@ -108,6 +108,14 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
 
     category_name = serializers.CharField(source="category.name", read_only=True)
     is_negative = serializers.BooleanField(source="category.is_negative", read_only=True)
+    # Read-only exposure of the reactive-trigger wiring M2M (#3417 task 12):
+    # the flows authoring UI's "wire to template" picker needs the template's
+    # CURRENT full set before calling `set_reactive_triggers` (`.set()`
+    # semantics there replace the whole set, so building the next set safely
+    # requires reading this one first) — no endpoint exposed it before this.
+    reactive_trigger_ids = serializers.PrimaryKeyRelatedField(
+        source="reactive_triggers", many=True, read_only=True
+    )
 
     class Meta:
         model = ConditionTemplate
@@ -129,6 +137,7 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
             "color_hex",
             "display_priority",
             "is_visible_to_others",
+            "reactive_trigger_ids",
         ]
         read_only_fields = fields
 

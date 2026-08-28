@@ -4,11 +4,9 @@
  *
  * Three tabs mirror the three rows flows-builder authors: FlowDefinition
  * ("Flows"), TriggerDefinition ("Trigger Definitions" — the reusable
- * event -> flow wiring), and Trigger ("Installed Triggers" — a
- * TriggerDefinition attached to one specific game object). Only the Flows
- * tab has a working editor today (`FlowEditorPage`); the trigger tabs are
- * read-only lists here — Task 12 adds their editors and create flows, so no
- * create button is offered on them yet.
+ * event -> flow wiring, created via `TriggerDefinitionEditorPage`), and
+ * Trigger ("Installed Triggers" — a TriggerDefinition attached to one
+ * specific game object, created via `TriggerInstallDialog`) (#3417 task 12).
  */
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -30,7 +28,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { ApiValidationError } from '../api';
-import { useCreateFlow, useFlows, useTriggerDefinitions, useTriggers } from '../queries';
+import { TriggerInstallDialog } from '../components/TriggerInstallDialog';
+import {
+  useCreateFlow,
+  useDeleteTrigger,
+  useDeleteTriggerDefinition,
+  useFlows,
+  useTriggerDefinitions,
+  useTriggers,
+} from '../queries';
 
 export function FlowsBuilderPage() {
   return (
@@ -173,18 +179,26 @@ function TriggerDefinitionsTab() {
   const [search, setSearch] = useState('');
   const { data, isLoading } = useTriggerDefinitions({ search: search || undefined });
   const rows = data?.results ?? [];
+  const deleteTd = useDeleteTriggerDefinition();
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-4 pt-4">
-      <Input
-        placeholder="Search trigger definitions by name…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        aria-label="Search trigger definitions"
-      />
-      <p className="text-xs text-muted-foreground">
-        Read-only for now — the trigger definition editor lands in a follow-up task.
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <Input
+          placeholder="Search trigger definitions by name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search trigger definitions"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate('/staff/flows-builder/trigger-definitions/new')}
+        >
+          New trigger definition
+        </Button>
+      </div>
       {isLoading ? (
         <div className="flex justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -201,12 +215,20 @@ function TriggerDefinitionsTab() {
               <TableHead>Event</TableHead>
               <TableHead>Flow</TableHead>
               <TableHead>Priority</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((trigger) => (
               <TableRow key={trigger.id}>
-                <TableCell className="font-medium">{trigger.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    to={`/staff/flows-builder/trigger-definitions/${trigger.id}`}
+                    className="underline underline-offset-2"
+                  >
+                    {trigger.name}
+                  </Link>
+                </TableCell>
                 <TableCell>{trigger.event_name}</TableCell>
                 <TableCell>
                   <Link
@@ -217,6 +239,19 @@ function TriggerDefinitionsTab() {
                   </Link>
                 </TableCell>
                 <TableCell>{trigger.priority}</TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (window.confirm(`Delete trigger definition "${trigger.name}"?`)) {
+                        deleteTd.mutate(trigger.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -228,20 +263,25 @@ function TriggerDefinitionsTab() {
 
 function InstalledTriggersTab() {
   const [search, setSearch] = useState('');
+  const [installOpen, setInstallOpen] = useState(false);
   const { data, isLoading } = useTriggers({ search: search || undefined });
   const rows = data?.results ?? [];
+  const deleteTrigger = useDeleteTrigger();
 
   return (
     <div className="space-y-4 pt-4">
-      <Input
-        placeholder="Search installed triggers…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        aria-label="Search installed triggers"
-      />
-      <p className="text-xs text-muted-foreground">
-        Read-only for now — the installed-trigger editor lands in a follow-up task.
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <Input
+          placeholder="Search installed triggers…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search installed triggers"
+        />
+        <Button size="sm" variant="outline" onClick={() => setInstallOpen(true)}>
+          Install trigger
+        </Button>
+      </div>
+      <TriggerInstallDialog open={installOpen} onOpenChange={setInstallOpen} />
       {isLoading ? (
         <div className="flex justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -258,15 +298,36 @@ function InstalledTriggersTab() {
               <TableHead>Object</TableHead>
               <TableHead>Source condition</TableHead>
               <TableHead>Source stage</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>#{row.trigger_definition}</TableCell>
+                <TableCell>
+                  <Link
+                    to={`/staff/flows-builder/trigger-definitions/${row.trigger_definition}`}
+                    className="underline underline-offset-2"
+                  >
+                    #{row.trigger_definition}
+                  </Link>
+                </TableCell>
                 <TableCell>#{row.obj}</TableCell>
                 <TableCell>{row.source_condition ?? '—'}</TableCell>
                 <TableCell>{row.source_stage ?? '—'}</TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (window.confirm('Delete this installed trigger?')) {
+                        deleteTrigger.mutate(row.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

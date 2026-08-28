@@ -16,10 +16,15 @@
  * (`validate_filter_schema` checks paths against the NEW event's payload
  * dataclass, so a stale filter would just 400 on save).
  *
- * The "Installed by condition templates" wiring card is added by the next
- * commit (task 12 step 3) once `TriggerInstallDialog`'s condition-templates
- * fetcher exists.
+ * The "Installed by condition templates" card reads `installing_templates`
+ * off the OWNING FLOW's `interactions.run_by` entry for this trigger
+ * definition (`FlowDefinitionDetailSerializer` /
+ * `flows/interactions.py`) rather than a dedicated endpoint — no such
+ * endpoint exists, and the flow-detail payload already carries exactly
+ * this (`InteractionsPanel.tsx` renders the same data the other way
+ * around: per-trigger, not per-template).
  */
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -41,15 +46,20 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { ApiValidationError } from '../api';
 import { FilterConditionBuilder } from '../components/FilterConditionBuilder';
+import { TriggerInstallDialog } from '../components/TriggerInstallDialog';
 import { validateFilter, type FilterNode } from '../filterTree';
 import {
+  flowsBuilderKeys,
+  useConditionTemplates,
   useCreateTriggerDefinition,
   useDslCatalog,
+  useFlow,
   useFlows,
+  useSetReactiveTriggers,
   useTriggerDefinition,
   useUpdateTriggerDefinition,
 } from '../queries';
-import type { TriggerDefinition, TriggerDefinitionWritePayload } from '../types';
+import type { FlowInteractions, TriggerDefinition, TriggerDefinitionWritePayload } from '../types';
 
 interface EditorState {
   name: string;
@@ -100,8 +110,14 @@ export function TriggerDefinitionEditorPage() {
   const [state, setState] = useState<EditorState>(EMPTY_STATE);
   const [savedSnapshot, setSavedSnapshot] = useState<string>(serialize(EMPTY_STATE));
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [installOpen, setInstallOpen] = useState(false);
 
   const isDirty = serialize(state) !== savedSnapshot;
+
+  // The owning flow's interactions carry this trigger definition's
+  // installing templates (see the module docstring) — fetched once the
+  // flow is known, whether from the loaded row or the in-progress edit.
+  const flowDetailQuery = useFlow(state.flowDefinition ?? undefined);
 
   // Re-sync from the authoritative server row on load and after a save's
   // invalidation-triggered refetch — see the module docstring and
@@ -297,9 +313,147 @@ export function TriggerDefinitionEditorPage() {
         </p>
       ) : null}
 
-      <Button onClick={save} disabled={!state.name.trim() || busy || !catalog}>
-        {busy ? 'Saving…' : 'Save trigger definition'}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button onClick={save} disabled={!state.name.trim() || busy || !catalog}>
+          {busy ? 'Saving…' : 'Save trigger definition'}
+        </Button>
+        {!isCreate && tdId !== undefined ? (
+          <Button variant="outline" onClick={() => setInstallOpen(true)}>
+            Install on an object…
+          </Button>
+        ) : null}
+      </div>
+
+      {!isCreate && tdId !== undefined && state.flowDefinition !== null ? (
+        <InstallingTemplatesCard
+          triggerDefinitionId={tdId}
+          flowId={state.flowDefinition}
+          interactions={flowDetailQuery.data?.interactions}
+        />
+      ) : null}
+
+      {!isCreate && tdId !== undefined ? (
+        <TriggerInstallDialog
+          open={installOpen}
+          onOpenChange={setInstallOpen}
+          fixedTriggerDefinitionId={tdId}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * "Installed by condition templates" — read-only list of the templates that
+ * already install this trigger definition (from the owning flow's
+ * interactions, see the module docstring) plus a picker to wire another
+ * template to it and an unwire button per row.
+ *
+ * `setReactiveTriggers` has `.set()` semantics (it replaces a template's
+ * WHOLE `reactive_triggers` set, not just this one id) — safe wiring
+ * therefore needs the template's CURRENT full id list, which
+ * `ConditionTemplateSummary.reactive_trigger_ids` exposes
+ * (`ConditionTemplateSerializer`, added alongside this task). Wiring or
+ * unwiring reads that list, adds/removes this trigger definition's id, and
+ * sends the whole thing back — never a partial list.
+ */
+function InstallingTemplatesCard({
+  triggerDefinitionId,
+  flowId,
+  interactions,
+}: {
+  triggerDefinitionId: number;
+  /** The trigger definition's owning flow — its cached interactions go stale after a wire/unwire. */
+  flowId: number;
+  interactions: FlowInteractions | undefined;
+}) {
+  const [pickedTemplateId, setPickedTemplateId] = useState('');
+  const templatesQuery = useConditionTemplates();
+  const setReactive = useSetReactiveTriggers();
+  const qc = useQueryClient();
+
+  const installing =
+    interactions?.run_by.find((t) => t.id === triggerDefinitionId)?.installing_templates ?? [];
+  const installingIds = new Set(installing.map((t) => t.id));
+
+  const wireItems: ComboboxItem[] = (templatesQuery.data ?? [])
+    .filter((t) => !installingIds.has(t.id))
+    .map((t) => ({ value: String(t.id), label: t.name }));
+
+  const invalidateFlow = () =>
+    qc.invalidateQueries({ queryKey: flowsBuilderKeys.flowDetail(flowId) });
+
+  const wire = () => {
+    if (!pickedTemplateId) return;
+    const templateId = Number(pickedTemplateId);
+    const template = templatesQuery.data?.find((t) => t.id === templateId);
+    if (!template) return;
+    const nextIds = Array.from(new Set([...template.reactive_trigger_ids, triggerDefinitionId]));
+    setReactive.mutate(
+      { templateId, ids: nextIds },
+      {
+        onSuccess: () => {
+          setPickedTemplateId('');
+          invalidateFlow();
+        },
+      }
+    );
+  };
+
+  const unwire = (templateId: number) => {
+    const template = templatesQuery.data?.find((t) => t.id === templateId);
+    if (!template) return;
+    const nextIds = template.reactive_trigger_ids.filter((id) => id !== triggerDefinitionId);
+    setReactive.mutate({ templateId, ids: nextIds }, { onSuccess: invalidateFlow });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Installed by condition templates</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {installing.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No condition template installs this trigger when it applies.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {installing.map((template) => (
+              <li key={template.id} className="flex items-center justify-between text-sm">
+                <span>{template.name}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => unwire(template.id)}
+                  disabled={setReactive.isPending}
+                >
+                  Unwire
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex items-center gap-2">
+          <Combobox
+            items={wireItems}
+            value={pickedTemplateId}
+            onValueChange={setPickedTemplateId}
+            placeholder="Pick a condition template…"
+            className="max-w-xs"
+          />
+          <Button size="sm" onClick={wire} disabled={!pickedTemplateId || setReactive.isPending}>
+            Wire
+          </Button>
+        </div>
+        {setReactive.isError ? (
+          <p className="text-sm text-destructive">
+            {setReactive.error instanceof ApiValidationError
+              ? flattenErrorMessage(setReactive.error.fieldErrors)
+              : 'Could not update the wiring.'}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

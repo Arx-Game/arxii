@@ -54,6 +54,8 @@ PRE-event payloads are mutable dataclasses. `MODIFY_PAYLOAD` flow steps can amen
 
 Service functions install triggers from `ConditionTemplate.reactive_triggers` (M2M to `TriggerDefinition`) when `apply_condition` runs and call `handler.on_trigger_added(...)` to invalidate the cached handler (on commit) so the next read re-picks up the new row.
 
+Staff wire this M2M from the flows authoring UI's TriggerDefinition editor via `PATCH /api/conditions/templates/{id}/set_reactive_triggers/` (`.set()` semantics — replaces the whole set). `ConditionTemplateSerializer.reactive_trigger_ids` (read-only, #3417 task 12) exposes a template's current set so the picker can read-modify-write it safely instead of clobbering a template's other wired triggers.
+
 ### TriggerHandler (per-owner cache)
 
 Installed as `cached_property` on Character/Room/Object via `ObjectParent`. First access populates from the DB once and joins event/flow/condition/stage in a single query. Subsequent calls are O(active triggers for event_name) with zero queries.
