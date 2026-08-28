@@ -72,3 +72,8 @@ class EventName(models.TextChoices):
     ASSET_COMPROMISED = "asset_compromised", "Asset Compromised"
     ASSET_LOST = "asset_lost", "Asset Lost"
     ASSET_DISMISSED = "asset_dismissed", "Asset Dismissed"
+    # Action interception (#3418): a generic pair for the action layer. The
+    # verb is discriminated by the payload's ``action_key``, never by new
+    # per-action event names — see the ADR added by that PR.
+    ACTION_INTENT = "action_intent", "Action Intent"
+    ACTION_RESULT = "action_result", "Action Result"

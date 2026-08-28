@@ -166,6 +166,43 @@ class MovedPayload:
     exit_used: Exit | str | None
 
 
+# ---- Actions (#3418) ----
+
+
+@dataclass
+class ActionIntentPayload:
+    """A character wants to perform an action (mutable PRE payload).
+
+    Emitted by ``Action.run()`` BEFORE the prerequisite gate — intent means
+    "the actor wants to do this", which fires even when they can't. Flows
+    cancel via CANCEL_EVENT and may explain the refusal by setting
+    ``cancel_message``; a changed ``target`` is written back into the
+    action's kwargs by ``run()`` (the movement-redirect pattern, ADR-0242).
+    """
+
+    actor: Character
+    action_key: str
+    target: ObjectDB | None
+    cancel_message: str = ""
+
+
+@dataclass(frozen=True)
+class ActionResultPayload:
+    """An action attempt concluded (frozen POST payload).
+
+    Emitted for successes and failed attempts alike (``success``
+    discriminates); never emitted when the intent was flow-cancelled.
+    ``message`` is always a str — ``run()`` coerces a None result message
+    to "" so authored comparison filters can never hit None.
+    """
+
+    actor: Character
+    action_key: str
+    target: ObjectDB | None
+    success: bool
+    message: str
+
+
 # ---- Perception ----
 
 
@@ -386,4 +423,6 @@ PAYLOAD_FOR_EVENT: dict[str, type] = {
     "food_collected": FoodCollectedPayload,
     "food_pre_transfer": FoodPreTransferPayload,
     "food_transferred": FoodTransferredPayload,
+    "action_intent": ActionIntentPayload,
+    "action_result": ActionResultPayload,
 }

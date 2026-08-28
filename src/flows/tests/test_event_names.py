@@ -1,6 +1,8 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from flows.constants import EventName
+from flows.filters.validator import validate_filter_schema
 
 
 class EventNameTests(TestCase):
@@ -59,5 +61,28 @@ class EventNameTests(TestCase):
             "asset_compromised",
             "asset_lost",
             "asset_dismissed",
+            "action_intent",
+            "action_result",
         }
         self.assertEqual(set(EventName.values), expected)
+
+
+class ActionEventFilterValidationTests(TestCase):
+    def test_action_intent_filter_on_action_key_validates(self) -> None:
+        validate_filter_schema(
+            {"path": "action_key", "op": "==", "value": "get"},
+            event_name="action_intent",
+        )
+
+    def test_action_result_filter_on_success_validates(self) -> None:
+        validate_filter_schema(
+            {"path": "success", "op": "==", "value": True},
+            event_name="action_result",
+        )
+
+    def test_action_intent_filter_unknown_field_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            validate_filter_schema(
+                {"path": "verb", "op": "==", "value": "get"},
+                event_name="action_intent",
+            )
