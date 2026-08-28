@@ -79,3 +79,14 @@ class ServiceFunctionCatalogTests(SimpleTestCase):
     def test_entries_sorted_by_name(self):
         names = [e["name"] for e in service_function_catalog()]
         self.assertEqual(names, sorted(names))
+
+    def test_builtin_param_tags_survive_a_sibling_unresolvable_annotation(self):
+        # flow_apply_condition(*, target: ObjectDB, condition_name: str) — the
+        # module uses `from __future__ import annotations` and only imports
+        # ObjectDB under TYPE_CHECKING, so `typing.get_type_hints` raises for
+        # the whole function. condition_name's plain-string "str" annotation
+        # must still tag "str" rather than being dragged down to "json" by
+        # the unresolvable `target` param on the same function.
+        entry = next(e for e in service_function_catalog() if e["name"] == "flow_apply_condition")
+        params = {p["name"]: p["type"] for p in entry["params"]}
+        self.assertEqual(params.get("condition_name"), "str")

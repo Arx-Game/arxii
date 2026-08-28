@@ -563,6 +563,20 @@ _SERVICE_FUNCTION_TYPE_TAGS: dict[type, str] = {
     float: "float",
 }
 
+# A module using `from __future__ import annotations` stringifies every
+# annotation, so `param.annotation` is the literal source text (e.g. "str"),
+# not the `str` type object. When `typing.get_type_hints` can't resolve the
+# WHOLE function (e.g. a TYPE_CHECKING-only forward reference on a sibling
+# param), this lets the still-plain-text builtin annotations on OTHER params
+# resolve correctly instead of every param on the function falling back to
+# the JSON tag together.
+_SERVICE_FUNCTION_STRING_ANNOTATION_TAGS: dict[str, str] = {
+    "int": "int",
+    "bool": "bool",
+    "str": "str",
+    "float": "float",
+}
+
 
 def _service_function_annotation_tag(annotation: object) -> str:
     """Map a service-function param annotation to a string tag the FE can switch on.
@@ -572,9 +586,11 @@ def _service_function_annotation_tag(annotation: object) -> str:
     than guess wrong and coerce a value into the wrong Python type at call
     time.
     """
-    if not isinstance(annotation, type):
-        return _SERVICE_FUNCTION_JSON_TAG
-    return _SERVICE_FUNCTION_TYPE_TAGS.get(annotation, _SERVICE_FUNCTION_JSON_TAG)
+    if isinstance(annotation, type):
+        return _SERVICE_FUNCTION_TYPE_TAGS.get(annotation, _SERVICE_FUNCTION_JSON_TAG)
+    if isinstance(annotation, str):
+        return _SERVICE_FUNCTION_STRING_ANNOTATION_TAGS.get(annotation, _SERVICE_FUNCTION_JSON_TAG)
+    return _SERVICE_FUNCTION_JSON_TAG
 
 
 def _service_function_params(func: Callable) -> list[dict[str, str]]:
@@ -585,11 +601,17 @@ def _service_function_params(func: Callable) -> list[dict[str, str]]:
     than shared, since ``flows`` must not import ``world.*`` — see this
     module's docstring on ``str(action)`` vs ``.value`` for the sibling
     "small deliberate duplication vs. a cross-app import" trade-off this
-    module already makes). A resolver whose module uses
-    ``from __future__ import annotations`` stringifies every annotation, so
-    if ANY param on the function has an unresolvable forward reference (e.g.
-    a name only imported under ``TYPE_CHECKING``), ``get_type_hints`` raises
-    for the whole function and every param on it falls back to ``"json"``.
+    module already makes). A module using ``from __future__ import
+    annotations`` stringifies every annotation, so if ANY param on the
+    function has an unresolvable forward reference (e.g. a name only
+    imported under ``TYPE_CHECKING``), ``get_type_hints`` raises for the
+    WHOLE function and every param falls back to the raw (string)
+    annotation from ``inspect.signature``. ``_service_function_annotation_tag``
+    still recovers the concrete tag for a builtin-named param in that
+    situation (e.g. ``condition_name: str`` tags ``"str"`` even when a
+    sibling ``target: ObjectDB`` param can't resolve) — only a param whose
+    raw annotation isn't a literal ``"int"``/``"bool"``/``"str"``/``"float"``
+    falls all the way back to ``"json"``.
     """
     sig = inspect.signature(func)
     try:
