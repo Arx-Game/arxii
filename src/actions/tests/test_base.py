@@ -641,6 +641,8 @@ class ActionRegistryTests(TestCase):
             "promote_room",
             "promote_area",
             # #2451 — staff clue placement.
+            # #3432 — SENIOR-GM/staff clue authoring (mints the Clue row itself).
+            "author_clue",
             "staff_place_clue",
             "staff_remove_clue",
             "staff_place_clue_trigger",

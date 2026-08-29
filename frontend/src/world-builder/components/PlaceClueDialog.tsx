@@ -4,9 +4,15 @@
  * between the two placement kinds; they share the room + clue-slug fields,
  * only the active kind also carries a `detect_difficulty` (`ClueTrigger` has
  * no such field, see `world.clues.models.ClueTrigger`).
+ *
+ * "New clue…" (#3432) opens `AuthorClueDialog` alongside the slug field —
+ * minting a clue is a separate SENIOR-GM/staff-gated dispatch
+ * (`author_clue`), so on success this only pre-fills the slug field here;
+ * placement itself still goes through the normal submit below.
  */
 import { useEffect, useState } from 'react';
 
+import { AuthorClueDialog } from '@/clues/components/AuthorClueDialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -75,7 +81,17 @@ export function PlaceClueDialog({ roomId, open, onOpenChange, runAction }: Place
             </TabsList>
           </Tabs>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="place-clue-slug">Clue slug</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="place-clue-slug">Clue slug</Label>
+              <AuthorClueDialog
+                trigger={
+                  <Button variant="link" size="sm" className="h-auto p-0">
+                    New clue…
+                  </Button>
+                }
+                onCreated={(slug) => setClueSlug(slug)}
+              />
+            </div>
             <Input
               id="place-clue-slug"
               value={clueSlug}

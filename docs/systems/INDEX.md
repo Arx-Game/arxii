@@ -1506,6 +1506,16 @@ a collaborative **research project**.
   referencing rooms by their `fixture_key` and the clue by its `slug`), upserted
   by `grid_import.load_grid_bundles()`'s 5th pass and report-never-deleted when a
   fixture-keyed row is absent from a reimported bundle.
+- **Authoring the clue itself (#3432):** `author_clue`
+  (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+  `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` — staff bypass built in) mints the `Clue`
+  row (name/description/target_kind/target ids; `slug` generated + uniquified), closing the
+  admin-only gap the staff-authoring canvas above left. **SECRET-target clues are
+  additionally staff-only** (no GM-scoped secrets listing exists yet) — canon-creating
+  surfaces gate hard by owner ruling; see the system doc's "Authoring the clue itself"
+  section. Frontend: the shared `AuthorClueDialog`
+  (`frontend/src/clues/components/`), reached from `PlaceClueDialog`'s "New clue…" and
+  `StaffSecretsPanel`'s "Author a clue to this secret".
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link

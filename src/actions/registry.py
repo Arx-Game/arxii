@@ -552,6 +552,7 @@ from actions.definitions.voyages import (
 )
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.definitions.world_builder import (
+    AuthorClueAction,
     CreateAreaAction,
     EditAreaAction,
     PromoteAreaAction,
@@ -1107,6 +1108,7 @@ _ALL_ACTIONS: list[Action] = [
     StaffBatchDigAction(),
     PromoteRoomAction(),
     PromoteAreaAction(),
+    AuthorClueAction(),
     StaffPlaceClueAction(),
     StaffRemoveClueAction(),
     StaffPlaceClueTriggerAction(),

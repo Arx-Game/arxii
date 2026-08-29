@@ -34,6 +34,12 @@ Every player-facing detail — clue text, difficulties, eligibility, research ma
   the finder's `PersonaDiscovery` (the only in-game producer — no "study persona" roll,
   per ADR-0033). Journey test: plant → search → per-viewer reveal, with a non-discoverer
   negative (`world/clues/tests/test_persona_link_clue.py`).
+- **`author_clue` authoring surface** (#3432) — the last gap in the self-service authoring
+  loop: minting the `Clue` row itself, previously Django-admin-only. `author_clue`
+  (SENIOR GM or staff, staff-only for SECRET targets — canon-creating surfaces gate hard)
+  + the shared `AuthorClueDialog` reached from `PlaceClueDialog` ("New clue…") and
+  `StaffSecretsPanel` ("Author a clue to this secret"). See the system doc's "Authoring
+  the clue itself" section.
 
 ## Remaining
 

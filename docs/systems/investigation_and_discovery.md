@@ -122,6 +122,47 @@ detect difficulty + the rescue mission template (override-then-default). On capt
 the capture site; allies who `search` there are handed the rescue. `resolve_captivity` calls
 `clear_rescue_clues` when the captive is freed.
 
+## Authoring the clue itself (#3432)
+
+Minting the `Clue` row (as opposed to placing an existing one, see "Acquisition
+surfaces" above) is `author_clue` (`actions/definitions/world_builder.py`, beside
+the placement actions), the last piece of the self-service authoring loop: write
+the secret (`StaffSecretsPanel`/`AuthorSecretDialog`), mint the clue pointing at it,
+place it, players discover it — no Django admin round-trip.
+
+**Gate: SENIOR GM or staff** (`MinimumGMLevelPrerequisite(GMLevel.SENIOR)`, staff
+bypass built in) — one tier above the JUNIOR trust most GM-authoring verbs use.
+Lore invention is treated as the single most dangerous GM power (owner ruling,
+2026-08-28): a canon-creating surface like this — a clue can point at any codex
+entry, mission, secret, or masked identity, and once discovered its target is
+*granted* — gates harder than a mechanical GM verb, not the same tier. **SECRET-target
+clues are additionally staff-only** (Decision 1a): no GM-scoped secrets listing
+exists (`AuthoredSecretViewSet` is `IsAdminUser`-only, and `Secret` records no
+authoring GM account), and the entry point ("Author a clue to this secret") lives
+on the already staff-only `StaffSecretsPanel`. CODEX / MISSION / RESCUE / ITEM /
+PERSONA_LINK targets are open to SENIOR GMs. When in doubt on this axis, the rule
+is to gate harder, not looser.
+
+Kwargs: `name`, `description` (the clue text), `target_kind`, `target_id` (the
+primary target pk per `Clue.DISCRIMINATOR_MAP`), optional `target_secondary_id`
+(the paired persona for PERSONA_LINK — required — or the narrowing item instance
+for ITEM — optional). Validation delegates entirely to `Clue.clean()` (the
+target-kind/FK discriminator invariants); the action only resolves each id against
+the model's own FK relation first so a dangling pk fails cleanly rather than an
+`IntegrityError` at save time. `slug` is generated explicitly (`slugify(name)` +
+numeric-suffix uniquify on collision) — `Clue.slug` has no auto-populate, and both
+place actions resolve a clue by slug, so a null slug would silently break the
+placement handoff. Result returns the new slug (actor-only, no room emit).
+Acquisition tuning (detect difficulty, eligibility) stays at placement, not
+authoring — no new target kinds or resolution modes.
+
+Frontend: `PlaceClueDialog`'s "New clue…" affordance and `StaffSecretsPanel`'s
+"Author a clue to this secret" both open the shared `AuthorClueDialog`
+(`frontend/src/clues/components/`); on success the returned slug pre-fills the
+placement flow. The frontend hides the SECRET target kind from a non-staff
+account, but this is show/disable only — the server refusal above is the
+authority. No telnet verb — authoring tools are web-only by standing rule.
+
 ## Build constraint (authoring vs. mechanism)
 
 Everything player-facing is **authored data**, never agent-generated: clue text, detect
@@ -147,6 +188,7 @@ passes.
 
 Shipped: clue model, Investigation skill + CheckTypes (seed), search action + declarative
 cost, eligibility gating, RESEARCH kind, rescue-as-clue (closes #931), passive enter-room
-triggers. Remaining (see `docs/roadmap/investigation-discovery.md`): more trigger sources
-(item / resonance / soul-tie), the clue journal UI, and the error-handling service (#1164)
-that replaces the interim log-and-continue in the trigger hooks.
+triggers, and the `author_clue` mint-then-place authoring loop (closes #3432 — no more
+Django admin round-trip). Remaining (see `docs/roadmap/investigation-discovery.md`): more
+trigger sources (item / resonance / soul-tie), the clue journal UI, and the error-handling
+service (#1164) that replaces the interim log-and-continue in the trigger hooks.
