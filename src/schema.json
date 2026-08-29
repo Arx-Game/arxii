@@ -4147,7 +4147,10 @@ paths:
         Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
         viewable quality/trust signal (the GM vouches for it for their table; apping is
         never gated by it). Body: ``target_table`` (id, required), ``story_title``
-        (required), optional ``story_description``.
+        (required), optional ``story_description``, optional ``claim_as_npc`` (bool,
+        #3426 — land the entry on the NPC shelf, tenure-bound to the requester, instead
+        of tenure-less on Available; same JUNIOR+/cap authorization ``mint_story_npc``
+        enforces).
       parameters:
       - in: path
         name: id
@@ -54656,6 +54659,9 @@ components:
             The face currently worn — the durable ``active_persona`` (#981) if set,
             else the PRIMARY. Lets the top-bar switcher highlight the worn identity.
           readOnly: true
+        roster_type:
+          type: string
+          readOnly: true
       required:
       - active_persona_id
       - character_id
@@ -54663,6 +54669,7 @@ components:
       - name
       - primary_persona_id
       - profile_picture_url
+      - roster_type
     MyStoryGrant:
       type: object
       description: |-

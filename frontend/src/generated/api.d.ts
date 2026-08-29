@@ -2664,7 +2664,10 @@ export interface paths {
      *     Story tied to the table, and stamps the roster entry with GM_TABLE provenance — a
      *     viewable quality/trust signal (the GM vouches for it for their table; apping is
      *     never gated by it). Body: ``target_table`` (id, required), ``story_title``
-     *     (required), optional ``story_description``.
+     *     (required), optional ``story_description``, optional ``claim_as_npc`` (bool,
+     *     #3426 — land the entry on the NPC shelf, tenure-bound to the requester, instead
+     *     of tenure-less on Available; same JUNIOR+/cap authorization ``mint_story_npc``
+     *     enforces).
      */
     post: operations['character_creation_drafts_finalize_gm_create'];
     delete?: never;
@@ -31205,6 +31208,7 @@ export interface components {
        *     else the PRIMARY. Lets the top-bar switcher highlight the worn identity.
        */
       readonly active_persona_id: number | null;
+      readonly roster_type: string;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
