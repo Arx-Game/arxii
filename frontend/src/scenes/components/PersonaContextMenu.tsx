@@ -11,7 +11,17 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Ban, HeartPulse, Swords, VolumeX, Zap, ScrollText, Eye } from 'lucide-react';
+import {
+  Ban,
+  HeartPulse,
+  Shield,
+  Swords,
+  Umbrella,
+  VolumeX,
+  Zap,
+  ScrollText,
+  Eye,
+} from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
@@ -136,6 +146,16 @@ export function PersonaContextMenu({
   // target's social-consent preference, only presence + self-exclusion.
   const canIdentify = characterId !== null && targetPersona !== null && !isSelfTarget;
 
+  // #3448 — scene-round guarding (Succor/Interpose). Registry dispatch like
+  // Challenge/Identify: the actions carry no ActionTemplate, so they're absent
+  // from the available-actions list. No client-side round-state re-validation —
+  // a rejection (no active STRICT round, ally not a participant) surfaces the
+  // backend's own message, per the #3381 pattern.
+  const { mutateAsync: dispatchGuard, isPending: isGuardPending } = useDispatchPlayerAction(
+    characterId ?? 0
+  );
+  const canGuard = characterId !== null && targetPersona !== null && !isSelfTarget;
+
   const [pendingWhisper, setPendingWhisper] = useState<PendingWhisper | null>(null);
 
   // #1278 — block/mute. The viewer's own face in this scene is the blocker persona; a block needs
@@ -203,9 +223,32 @@ export function PersonaContextMenu({
   const canTreat = characterId !== null && !isSelfTarget;
 
   // The menu is worth showing if there are targeted actions, a challenge, identify,
-  // treat, or block/mute.
-  if (targetedActions.length === 0 && !canChallenge && !canIdentify && !canTreat && !canModerate) {
+  // guard, treat, or block/mute.
+  if (
+    targetedActions.length === 0 &&
+    !canChallenge &&
+    !canIdentify &&
+    !canGuard &&
+    !canTreat &&
+    !canModerate
+  ) {
     return <>{children}</>;
+  }
+
+  function handleGuard(registryKey: 'scene_succor' | 'scene_interpose') {
+    dispatchGuard({
+      ref: { backend: 'registry', registry_key: registryKey },
+      kwargs: { ally_name: personaName },
+    })
+      .then((result) => {
+        if (!result.message) return;
+        if (result.success) {
+          toast.success(result.message);
+        } else {
+          toast.error(result.message);
+        }
+      })
+      .catch(() => {});
   }
 
   function handleChallenge() {
@@ -262,7 +305,7 @@ export function PersonaContextMenu({
                 <Swords className="mr-2 h-4 w-4" />
                 Challenge to a duel
               </DropdownMenuItem>
-              {(canIdentify || targetedActions.length > 0) && <DropdownMenuSeparator />}
+              {(canIdentify || canGuard || targetedActions.length > 0) && <DropdownMenuSeparator />}
             </>
           )}
           {canIdentify && (
@@ -274,6 +317,27 @@ export function PersonaContextMenu({
               >
                 <Eye className="mr-2 h-4 w-4" />
                 Identify
+              </DropdownMenuItem>
+              {(canGuard || targetedActions.length > 0) && <DropdownMenuSeparator />}
+            </>
+          )}
+          {canGuard && (
+            <>
+              <DropdownMenuItem
+                disabled={isGuardPending}
+                data-testid="scene-succor-item"
+                onClick={() => handleGuard('scene_succor')}
+              >
+                <Umbrella className="mr-2 h-4 w-4" />
+                Succor (shelter from hazards)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isGuardPending}
+                data-testid="scene-interpose-item"
+                onClick={() => handleGuard('scene_interpose')}
+              >
+                <Shield className="mr-2 h-4 w-4" />
+                Interpose (guard from harm)
               </DropdownMenuItem>
               {targetedActions.length > 0 && <DropdownMenuSeparator />}
             </>

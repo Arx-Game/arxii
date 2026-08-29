@@ -69,6 +69,46 @@ def invalidate_active_scene_cache(location: ObjectDB) -> None:
         del location._active_scene_cache  # noqa: SLF001
 
 
+def broadcast_scene_emit(character: ObjectDB, text: str) -> None:
+    """Broadcast ``text`` as a system EMIT to the active scene at ``character``'s location.
+
+    The shared system-announcement seam for character-anchored magic beats (the
+    Audere Majora manifestation, the Audere surge line, #3451). No-ops silently
+    when: no active scene at the character's location, or the character has no
+    primary persona (a plain ObjectDB, or a sheet with no PRIMARY row).
+
+    Queries the scene uncached on purpose: ``get_active_scene``'s per-location
+    cache is only invalidated by the scene start/end services, and this seam is
+    reached from cast/accept paths where a scene may have opened through other
+    routes since the location was last resolved.
+    """
+    # No None-guard on location: a location-less character can still share a
+    # location-less scene (active_for_room(None) matches it) — the pre-#3451
+    # inline behavior, load-bearing for factory-built worlds.
+    scene = Scene.objects.active_for_room(character.location).first()
+    if scene is None:
+        return
+
+    try:
+        # sheet_data is CharacterSheet's OneToOne reverse accessor.
+        persona = character.sheet_data.primary_persona
+    except (AttributeError, Persona.DoesNotExist):
+        return
+
+    interaction = create_interaction(
+        persona=persona,
+        content=text,
+        mode=InteractionMode.EMIT,
+        scene=scene,
+    )
+    push_interaction(
+        interaction,
+        receiver_persona_ids=[],
+        target_persona_ids=[],
+        receiver_characters=[],
+    )
+
+
 def reassign_persona_interactions(
     *,
     source_persona: Persona,
