@@ -33,6 +33,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [boundaries](src/world/boundaries/AGENT_GLOSSARY.md)
 - [companions](src/world/companions/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
+- [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md)
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)

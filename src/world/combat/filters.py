@@ -1,9 +1,9 @@
 """Filters for combat API endpoints."""
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 import django_filters
 
-from world.combat.models import CombatEncounter, DuelChallenge
+from world.combat.models import CombatEncounter, CreatureTemplate, DuelChallenge
 
 # Duel-inbox direction filter values (relative to the requesting player).
 _ROLE_INCOMING = "incoming"
@@ -48,3 +48,28 @@ class DuelChallengeFilter(django_filters.FilterSet):
         if value == _ROLE_OUTGOING:
             return queryset.filter(challenger_sheet_id__in=played_ids)
         return queryset
+
+
+class CreatureTemplateFilter(django_filters.FilterSet):
+    """Filter for the bestiary catalog browse endpoint (#3424).
+
+    ``search`` mirrors ``CheckTypeFilter``'s shape (name/description icontains)
+    so the web picker and any future telnet browse verb stay consistent with
+    the GM catalog conventions elsewhere.
+    """
+
+    search = django_filters.CharFilter(method="filter_search")
+    tier = django_filters.CharFilter(field_name="tier", lookup_expr="iexact")
+
+    def filter_search(
+        self, queryset: QuerySet[CreatureTemplate], name: str, value: str
+    ) -> QuerySet[CreatureTemplate]:
+        del name
+        value = value.strip()
+        if not value:
+            return queryset
+        return queryset.filter(Q(name__icontains=value) | Q(description__icontains=value))
+
+    class Meta:
+        model = CreatureTemplate
+        fields = ["search", "tier"]

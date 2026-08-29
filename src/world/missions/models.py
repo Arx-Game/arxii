@@ -860,9 +860,13 @@ class MissionOptionRouteCandidate(NaturalKeyMixin, CreditedContent, SharedMemory
     ``consequence`` + ``outcome_text`` override so a random pool entry is
     a full self-contained outcome bundle (design §8.3 — destination +
     consequence + outcome text + (via :class:`MissionOptionRouteReward`
-    with ``candidate=`` set) reward lines). The overrides are STORED BUT
-    UNCONSUMED in Phase B; Phase D wires per-candidate emission. Until
-    then, null/blank values mean "fall back to the parent route's".
+    with ``candidate=`` set) reward lines). WIRED by #941: when a random
+    candidate fires, its ``consequence``/``outcome_text``/reward templates
+    override the parent route's (see ``services/resolution.py``'s
+    ``_select_route_consequence`` + ``services/play.py``'s
+    ``_story_text_for`` + ``services/rewards.py``'s
+    ``emit_candidate_rewards``). null/blank values still mean "fall back
+    to the parent route's".
     """
 
     route = models.ForeignKey(
@@ -884,15 +888,15 @@ class MissionOptionRouteCandidate(NaturalKeyMixin, CreditedContent, SharedMemory
         related_name="+",
         help_text=(
             "Optional per-candidate consequence override; falls back to "
-            "the parent route's consequence when null. STORED BUT "
-            "UNCONSUMED in Phase B — Phase D wires per-candidate emission."
+            "the parent route's consequence when null. WIRED by #941 — "
+            "checked first when this candidate fires."
         ),
     )
     outcome_text = models.TextField(
         blank=True,
         help_text=(
             "Optional per-candidate outcome text shown to the player. "
-            "STORED BUT UNCONSUMED in Phase B — Phase D wires it."
+            "WIRED by #941 — used first when this candidate fires."
         ),
     )
     outcome_text_needs_rewrite = models.BooleanField(
@@ -937,10 +941,14 @@ class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     structured rewards on routes. B4 extends the parent surface to also
     allow per-candidate reward bundles (design §8.3 self-contained
     outcome bundle) — exactly one of ``route``/``candidate`` is set.
-    Per-candidate rewards are STORED BUT UNCONSUMED in Phase B; Phase D
-    wires emission. The route-parented path is unchanged: when the engine
-    resolves a TERMINAL route (a route whose ``target_node`` is null), it
-    walks the route's ``reward_templates`` and emits one
+    Per-candidate rewards are WIRED (#941):
+    :func:`world.missions.services.rewards.emit_candidate_rewards` walks
+    the fired candidate's own ``reward_templates`` when a random-set
+    candidate is chosen (a candidate always advances, so this fires on
+    selection, not at the route's terminal gate). The route-parented path
+    is separate: when the engine resolves a TERMINAL route (a route whose
+    ``target_node`` is null), it walks the route's ``reward_templates``
+    and emits one
     :class:`MissionDeedRewardLine` per (template × participant)
     combination per the template's ``reward_group_rule``:
 
@@ -976,9 +984,8 @@ class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         related_name="reward_templates",
         help_text=(
             "Parent candidate (per-candidate reward bundle — design §8.3). "
-            "STORED BUT UNCONSUMED in Phase B; Phase D wires emission "
-            "when a random candidate fires. Exactly one of route / "
-            "candidate must be set."
+            "WIRED by #941 — emitted when this candidate fires. Exactly "
+            "one of route / candidate must be set."
         ),
     )
     kind = models.CharField(

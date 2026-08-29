@@ -11,6 +11,23 @@ import type { AuthoredSecret } from '../types';
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
+const authorClueMutate = vi.fn();
+
+// AuthorClueDialog (#3432, "Author a clue to this secret") is exercised in its own
+// test file — only its hook dependencies are mocked here so it renders for real and
+// this file can prove `lockedSecretId` reaches the dispatch as `target_id`.
+vi.mock('@/clues/queries', () => ({
+  useAuthorClueMutation: vi.fn(() => ({ mutate: authorClueMutate, isPending: false })),
+}));
+vi.mock('@/world-builder/useWorldBuilderActor', () => ({
+  useWorldBuilderActor: vi.fn(() => 42),
+}));
+vi.mock('@/store/hooks', () => ({
+  useAccount: vi.fn(() => ({ is_staff: true })),
+}));
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock('@/secrets/queries', () => ({
   useAuthoredSecretsQuery: vi.fn(),
@@ -130,6 +147,32 @@ describe('StaffSecretsPanel', () => {
           consequences: 'Execution if proven.',
           subject_aware: true,
         },
+      },
+      expect.anything()
+    );
+  });
+
+  it('pre-targets AuthorClueDialog at the row secret via "Author a clue to this secret"', () => {
+    mockResults([authoredSecret({ id: 42 })]);
+    render(<StaffSecretsPanel subjectId={5} />);
+
+    fireEvent.click(screen.getByText('Author a clue to this secret'));
+
+    expect(screen.queryByLabelText('Target kind')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Target id')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Whispers by the Well' } });
+    fireEvent.change(screen.getByLabelText('Clue text'), {
+      target: { value: 'Overheard near the well at dusk.' },
+    });
+    fireEvent.click(screen.getByTestId('author-clue-submit'));
+
+    expect(authorClueMutate).toHaveBeenCalledWith(
+      {
+        name: 'Whispers by the Well',
+        description: 'Overheard near the well at dusk.',
+        target_kind: 'secret',
+        target_id: 42,
       },
       expect.anything()
     );

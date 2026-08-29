@@ -296,6 +296,22 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   clamps a boss's authored threshold to the Soulfray staging depth so the anima → Soulfray →
   audere arc has room to play out; BOSS-tier opponents resist a decisive Parley calm by one
   success-level step; the break broadcasts a celebration naming every distinct contributor.
+- **Wire the bestiary: GM spawn-from-CreatureTemplate (#3424).** The pre-authorable bestiary
+  (`CreatureTemplate`/`CreaturePhaseTemplate`/`BreakBarConfig`, #2016) was `[BUILT, NOT
+  WIRED]` — Django-admin-only, zero non-test callers of
+  `spawn_from_creature_template`, even the #2095 boss-fight journey built its `BossPhase`
+  rows via raw factories instead of the template path. Now GM-reachable: `SpawnCreatureAction`
+  (key `spawn_creature`) mirrors `AddOpponentAction`'s shape (same encounter resolution +
+  custody threading); telnet `encounter spawn <template name> [at <position>]`; web
+  `CreatureTemplateViewSet` (`GET /api/combat/creature-templates/`, GM/staff-only, thin
+  leak-safe payload — no phase/break-bar internals) feeds the `AddOpponentDialog`'s new "From
+  Bestiary" tab. A GM prepping an encounter now instantiates an authored creature — phases and
+  break bar cloned intact — instead of inventing a name+tier on the spot; the freehand
+  formula-scaled path stays for genuine improv. Journey-tested at the registry-dispatch seam
+  (`actions/tests/test_gm_combat_actions.py::SpawnCreatureActionTests
+  .test_journey_authored_phases_and_break_bar_then_round_resolves`): spawn a template with
+  authored phases + break bar via `action.run()` → cloned `BossPhase` rows + break-bar stamps
+  on the opponent → a round resolves.
 - **Combat offense standalone-cast flavor catalog (#1995).** A PHYSICAL technique's
   standalone cast (not a combat round) can pick a curated consequence-pool flavor
   ("Brutal"/"Precise") off the "Melee Attack" `ActionTemplate`, mirroring magic's

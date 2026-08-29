@@ -30,9 +30,11 @@
  * force this open.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import { toast } from 'sonner';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -51,6 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
 import type { LethalDuelTier, OpponentTier, PaceMode, RiskLevel, StakesLevel } from '../api';
 import {
@@ -58,15 +61,18 @@ import {
   useAddParticipant,
   useBeginRound,
   useCreateEncounter,
+  useCreatureTemplates,
   useOpponentDefaults,
   usePauseEncounter,
   useProposeLethalDuel,
   useRemoveOpponent,
   useRemoveParticipant,
   useResolveRound,
+  useSpawnCreature,
   useThreatPools,
   useUpdateEncounterSettings,
 } from '../queries';
+import { isDispatchFailure } from '../types';
 import type { EncounterDetail, PositionNode } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -468,6 +474,13 @@ function EncounterSettingsRow({ encounter }: { encounter: EncounterDetail }) {
 // Add opponent dialog
 // ---------------------------------------------------------------------------
 
+// Native <select> styling shared by the bestiary picker below — mirrors
+// GMAdjudicationPanel's SELECT_CLASS (Call Check CheckType picker pattern,
+// #3424 spec), not re-exported from there since it's a one-line Tailwind
+// string, not worth a shared module yet.
+const NATIVE_SELECT_CLASS =
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+
 function AddOpponentDialog({
   encounterId,
   positions,
@@ -476,45 +489,9 @@ function AddOpponentDialog({
   positions: PositionNode[];
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [tier, setTier] = useState<OpponentTier>('mook');
-  const [threatPoolId, setThreatPoolId] = useState<number | null>(null);
-  const [positionId, setPositionId] = useState<number | null>(null);
-
-  const { data: pools = [] } = useThreatPools();
-  // Only fetch the scaling preview while the dialog is open — avoids a
-  // background poll for a picker nobody's looking at.
-  const { data: defaults } = useOpponentDefaults(encounterId, open ? tier : null);
-  const { mutate, isPending, error, isError } = useAddOpponent(encounterId);
-
-  function reset() {
-    setName('');
-    setTier('mook');
-    setThreatPoolId(null);
-    setPositionId(null);
-  }
-
-  function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) reset();
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || threatPoolId === null) return;
-    mutate(
-      { name: name.trim(), tier, threatPoolId, positionId },
-      {
-        onSuccess: () => handleOpenChange(false),
-        onError: () => {
-          /* surfaced inline below via isError */
-        },
-      }
-    );
-  }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" data-testid="add-opponent-trigger">
           Add Opponent
@@ -524,119 +501,305 @@ function AddOpponentDialog({
         <DialogHeader>
           <DialogTitle>Add Opponent</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="opponent-name">Name</Label>
-            <Input
-              id="opponent-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Goblin Raider"
-              data-testid="add-opponent-name"
+        {/* Two modes (#3424): Freehand (formula-scaled, on-the-spot invention)
+            stays the default; From Bestiary spawns an authored CreatureTemplate
+            with its cloned phases/break-bar intact. Each tab's form only mounts
+            (and only calls its own hooks) while active — Radix Tabs unmounts
+            inactive content by default. */}
+        <Tabs defaultValue="freehand">
+          <TabsList>
+            <TabsTrigger value="freehand" data-testid="add-opponent-mode-freehand">
+              Freehand
+            </TabsTrigger>
+            <TabsTrigger value="bestiary" data-testid="add-opponent-mode-bestiary">
+              From Bestiary
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="freehand">
+            <FreehandOpponentForm
+              encounterId={encounterId}
+              positions={positions}
+              onDone={() => setOpen(false)}
             />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Tier</Label>
-            <Select value={tier} onValueChange={(v) => setTier(v as OpponentTier)}>
-              <SelectTrigger data-testid="add-opponent-tier-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIER_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {defaults && (
-            <div
-              className="rounded border border-border bg-muted/30 p-2 text-xs"
-              data-testid="add-opponent-defaults-preview"
-            >
-              <p>
-                Health {defaults.max_health} · Soak {defaults.soak_value}
-                {defaults.probing_threshold !== null
-                  ? ` · Probing ${defaults.probing_threshold}`
-                  : ''}
-              </p>
-              {!defaults.stakes_ok && (
-                <p className="mt-1 text-amber-500" data-testid="add-opponent-stakes-warning">
-                  {defaults.stakes_message}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Threat Pool</Label>
-            <Select
-              value={threatPoolId !== null ? String(threatPoolId) : ''}
-              onValueChange={(v) => setThreatPoolId(Number(v))}
-            >
-              <SelectTrigger data-testid="add-opponent-pool-select">
-                <SelectValue placeholder="Select a threat pool…" />
-              </SelectTrigger>
-              <SelectContent>
-                {pools.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {positions.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Position (optional)</Label>
-              <Select
-                value={positionId !== null ? String(positionId) : ''}
-                onValueChange={(v) => setPositionId(v === '' ? null : Number(v))}
-              >
-                <SelectTrigger data-testid="add-opponent-position-select">
-                  <SelectValue placeholder="Unplaced" />
-                </SelectTrigger>
-                <SelectContent>
-                  {positions.map((pos) => (
-                    <SelectItem key={pos.id} value={String(pos.id)}>
-                      {pos.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {isError && (
-            <p role="alert" className="text-sm text-destructive" data-testid="add-opponent-error">
-              {error instanceof Error ? error.message : 'Failed to add opponent.'}
-            </p>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={isPending || !name.trim() || threatPoolId === null}
-              data-testid="add-opponent-submit"
-            >
-              {isPending ? 'Adding…' : 'Add'}
-            </Button>
-          </DialogFooter>
-        </form>
+          </TabsContent>
+          <TabsContent value="bestiary">
+            <BestiarySpawnForm
+              encounterId={encounterId}
+              positions={positions}
+              onDone={() => setOpen(false)}
+            />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FreehandOpponentForm({
+  encounterId,
+  positions,
+  onDone,
+}: {
+  encounterId: number;
+  positions: PositionNode[];
+  onDone: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [tier, setTier] = useState<OpponentTier>('mook');
+  const [threatPoolId, setThreatPoolId] = useState<number | null>(null);
+  const [positionId, setPositionId] = useState<number | null>(null);
+
+  const { data: pools = [] } = useThreatPools();
+  const { data: defaults } = useOpponentDefaults(encounterId, tier);
+  const { mutate, isPending, error, isError } = useAddOpponent(encounterId);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || threatPoolId === null) return;
+    mutate(
+      { name: name.trim(), tier, threatPoolId, positionId },
+      {
+        onSuccess: onDone,
+        onError: () => {
+          /* surfaced inline below via isError */
+        },
+      }
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="opponent-name">Name</Label>
+        <Input
+          id="opponent-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Goblin Raider"
+          data-testid="add-opponent-name"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Tier</Label>
+        <Select value={tier} onValueChange={(v) => setTier(v as OpponentTier)}>
+          <SelectTrigger data-testid="add-opponent-tier-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIER_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {defaults && (
+        <div
+          className="rounded border border-border bg-muted/30 p-2 text-xs"
+          data-testid="add-opponent-defaults-preview"
+        >
+          <p>
+            Health {defaults.max_health} · Soak {defaults.soak_value}
+            {defaults.probing_threshold !== null ? ` · Probing ${defaults.probing_threshold}` : ''}
+          </p>
+          {!defaults.stakes_ok && (
+            <p className="mt-1 text-amber-500" data-testid="add-opponent-stakes-warning">
+              {defaults.stakes_message}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label>Threat Pool</Label>
+        <Select
+          value={threatPoolId !== null ? String(threatPoolId) : ''}
+          onValueChange={(v) => setThreatPoolId(Number(v))}
+        >
+          <SelectTrigger data-testid="add-opponent-pool-select">
+            <SelectValue placeholder="Select a threat pool…" />
+          </SelectTrigger>
+          <SelectContent>
+            {pools.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {positions.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Position (optional)</Label>
+          <Select
+            value={positionId !== null ? String(positionId) : ''}
+            onValueChange={(v) => setPositionId(v === '' ? null : Number(v))}
+          >
+            <SelectTrigger data-testid="add-opponent-position-select">
+              <SelectValue placeholder="Unplaced" />
+            </SelectTrigger>
+            <SelectContent>
+              {positions.map((pos) => (
+                <SelectItem key={pos.id} value={String(pos.id)}>
+                  {pos.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {isError && (
+        <p role="alert" className="text-sm text-destructive" data-testid="add-opponent-error">
+          {error instanceof Error ? error.message : 'Failed to add opponent.'}
+        </p>
+      )}
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onDone} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={isPending || !name.trim() || threatPoolId === null}
+          data-testid="add-opponent-submit"
+        >
+          {isPending ? 'Adding…' : 'Add'}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Spawn from bestiary (#3424) — the authored-CreatureTemplate sibling of the
+// freehand form above. Rides the generic REGISTRY dispatch seam
+// (spawn_creature) rather than a bespoke REST verb, so it needs the caller's
+// own characterId (mirrors GMAdjudicationPanel's active-character resolution).
+// ---------------------------------------------------------------------------
+
+function BestiarySpawnForm({
+  encounterId,
+  positions,
+  onDone,
+}: {
+  encounterId: number;
+  positions: PositionNode[];
+  onDone: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [templateName, setTemplateName] = useState<string | null>(null);
+  const [positionId, setPositionId] = useState<number | null>(null);
+
+  const { data: templates = [] } = useCreatureTemplates(search);
+
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+
+  const { mutate, isPending, error, isError } = useSpawnCreature(encounterId, characterId ?? 0);
+
+  const canSubmit = templateName !== null && characterId !== null && !isPending;
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit || templateName === null) return;
+    mutate(
+      { template: templateName, positionId },
+      {
+        onSuccess: (result) => {
+          if (isDispatchFailure(result)) {
+            toast.error(result.message ?? 'Failed to spawn creature.');
+            return;
+          }
+          onDone();
+        },
+        onError: () => {
+          /* surfaced inline below via isError */
+        },
+      }
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="spawn-creature-search">Creature</Label>
+        <Input
+          id="spawn-creature-search"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setTemplateName(null);
+          }}
+          placeholder="Search the bestiary…"
+          data-testid="spawn-creature-search"
+        />
+        <select
+          className={NATIVE_SELECT_CLASS}
+          value={templateName ?? ''}
+          onChange={(e) => setTemplateName(e.target.value || null)}
+          data-testid="spawn-creature-select"
+        >
+          <option value="">Select a creature…</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.name}>
+              {t.name} ({t.tier}
+              {t.has_phases ? ', phases' : ''})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {positions.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Position (optional)</Label>
+          <Select
+            value={positionId !== null ? String(positionId) : ''}
+            onValueChange={(v) => setPositionId(v === '' ? null : Number(v))}
+          >
+            <SelectTrigger data-testid="spawn-creature-position-select">
+              <SelectValue placeholder="Unplaced" />
+            </SelectTrigger>
+            <SelectContent>
+              {positions.map((pos) => (
+                <SelectItem key={pos.id} value={String(pos.id)}>
+                  {pos.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {characterId === null && (
+        <p className="text-xs text-muted-foreground" data-testid="spawn-creature-no-character">
+          No active character to spawn as.
+        </p>
+      )}
+
+      {isError && (
+        <p role="alert" className="text-sm text-destructive" data-testid="spawn-creature-error">
+          {error instanceof Error ? error.message : 'Failed to spawn creature.'}
+        </p>
+      )}
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onDone} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!canSubmit} data-testid="spawn-creature-submit">
+          {isPending ? 'Spawning…' : 'Spawn'}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 

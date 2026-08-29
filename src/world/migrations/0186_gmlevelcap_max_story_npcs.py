@@ -29,9 +29,7 @@ def _noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0183_alter_triggerdefinition_event_name"),
-    ]
+    dependencies = [("arxii", "0185_alter_beat_required_mission_and_more")]
 
     operations = [
         migrations.AddField(

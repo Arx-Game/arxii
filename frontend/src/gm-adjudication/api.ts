@@ -14,6 +14,7 @@ import type {
   CheckTypeCatalogEntry,
   ConditionTemplateCatalogEntry,
   GMSummonOfferEntry,
+  ItemTemplateCatalogEntry,
   SituationTemplateCatalogEntry,
 } from './types';
 
@@ -49,6 +50,21 @@ export async function getChallengeTemplateCatalog(): Promise<ChallengeTemplateCa
   const res = await apiFetch('/api/mechanics/challenge-templates/?page_size=100');
   await throwOnBadResponse(res, 'Failed to load challenge catalog');
   const data = (await res.json()) as { results?: ChallengeTemplateCatalogEntry[] };
+  return data.results ?? [];
+}
+
+/**
+ * Item template catalog for the Grant Item / Stage Prop pickers (#3431).
+ * Reuses `ItemTemplateViewSet` (`items/views.py:265`) — `name` is its
+ * `django_filters.CharFilter(lookup_expr="icontains")`, not a generic
+ * DRF `search` param (Decision 3, no new endpoint).
+ */
+export async function getItemTemplateCatalog(search?: string): Promise<ItemTemplateCatalogEntry[]> {
+  const params = new URLSearchParams({ page_size: '50' });
+  if (search) params.set('name', search);
+  const res = await apiFetch(`/api/items/templates/?${params.toString()}`);
+  await throwOnBadResponse(res, 'Failed to load item template catalog');
+  const data = (await res.json()) as { results?: ItemTemplateCatalogEntry[] };
   return data.results ?? [];
 }
 

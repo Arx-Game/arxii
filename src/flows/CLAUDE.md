@@ -12,6 +12,17 @@ Database-driven workflow engine that replaces hardcoded command logic. All game 
   (#3418, ADR-0243) - authored triggers discriminate the verb via a `payload.action_key` filter
   clause, not a per-action event name
 
+### Authoring API (#3417)
+- **`catalog.py`**: `StepActionSpec`/`ParamSpec` dataclasses, `STEP_ACTION_SPECS` - hand-declared
+  per-action parameter schemas (the runtime has no way to introspect them from handler bodies);
+  also `event_catalog()`, `service_function_catalog()`, `FILTER_OPS`. Single source of truth shared
+  by server-side validation and the frontend palette.
+- **`step_validation.py`**: `validate_step_tree()` - catalog-driven validation of an authored
+  (unsaved) step tree; no DRF import.
+- **`serializers.py`** / **`views.py`** / **`urls.py`**: DRF CRUD for `FlowDefinition` (full-tree
+  step replace), `TriggerDefinition`, `Trigger`, plus the read-only `DslCatalogViewSet`. Mounted at
+  `api/flows/`. See `docs/systems/flows.md#authoring-api-3417`.
+
 ### `object_states/`
 - **`base_state.py`**: `BaseState` - mutable wrapper for Evennia objects during flows
 - **`character_state.py`**: `CharacterState` - character permissions and state (`can_move`, `can_see`)
