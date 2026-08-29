@@ -436,15 +436,35 @@ class FlowStepDefinition(NaturalKeyMixin, SharedMemoryModel):
     def _resolve_service_param(flow_execution: "FlowExecution", val: object) -> object:
         """Resolve a single service function parameter.
 
-        For ``@variable`` references that resolve to objects, returns a
-        BaseState. For all other values, returns the resolved value as-is.
+        A ``@variable`` reference resolves to a BaseState when it holds one, a
+        game object (ObjectDB, wrapped on the spot), or the pk of a state
+        ALREADY REGISTERED in the current scene context. Any other value —
+        including a bare int that merely collides with some object's pk — is
+        passed as-is. The registered-only rule is the load-bearing part: an
+        int flow variable (e.g. a stage number) must never be pk-guessed into
+        a state conjured from the database, which is how the labyrinth
+        redirect (#3416) silently no-opped in any database where object pks
+        1-3 exist — every production database, and CI parallel workers via
+        idmapper zombies of rolled-back rows.
         """
-        if isinstance(val, str) and val.startswith("@"):
-            # This is a flow variable reference — try to resolve as object state
-            state = flow_execution.get_object_state(val)
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        from flows.object_states.base_state import BaseState  # noqa: PLC0415
+
+        if not (isinstance(val, str) and val.startswith("@")):
+            return flow_execution.resolve_flow_reference(val)
+        resolved = flow_execution.resolve_flow_reference(val)
+        if isinstance(resolved, BaseState):
+            return resolved
+        if isinstance(resolved, ObjectDB):
+            state = flow_execution.get_object_state(resolved)
             if state is not None:
                 return state
-        return flow_execution.resolve_flow_reference(val)
+        elif isinstance(resolved, int) and not isinstance(resolved, bool):
+            state = flow_execution.context.states.get(resolved)
+            if state is not None:
+                return state
+        return resolved
 
     def _execute_emit_flow_event(
         self, flow_execution: "FlowExecution"
