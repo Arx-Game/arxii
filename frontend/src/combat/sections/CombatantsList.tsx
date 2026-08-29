@@ -24,9 +24,10 @@
  * — GM/observer rows never get the menu) and a `characterId` to dispatch as.
  *
  * Engagement-lock badge (#3386): an opponent row shows "Locked: <PC name>" when
- * an active EngagementLock names them — read-only visibility only, no click
- * handling or dispatch. The row's kebab menu is #3381's scope; engage and
- * disengage are not offered there yet.
+ * an active EngagementLock names them. The kebab menu additionally offers
+ * "Engage in a duel" (hidden while anyone holds the lock) and "Disengage"
+ * (only when the viewer's own participant holds it) since #3447 — dispatching
+ * combat_engage/combat_disengage through the same generic registry seam.
  *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
@@ -195,6 +196,8 @@ interface OpponentRowProps {
   canDeclareManeuvers?: boolean;
   /** Name of the PC this opponent is engagement-locked to, if any (#3386). */
   lockedToName?: string;
+  /** True when the active lock on this opponent belongs to the viewer (#3447). */
+  lockedToViewer?: boolean;
 }
 
 /** One opponent-targeted maneuver offered by the click-menu (#3381). */
@@ -213,6 +216,7 @@ function OpponentRow({
   characterId,
   canDeclareManeuvers = false,
   lockedToName,
+  lockedToViewer = false,
 }: OpponentRowProps) {
   const showMenu = canDeclareManeuvers && characterId != null;
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
@@ -301,6 +305,32 @@ function OpponentRow({
                 {label}
               </DropdownMenuItem>
             ))}
+            {/* Engagement lock (#2020/#3447) — the web half #3396 deferred.
+             * Engage offers when nobody holds the lock; Disengage when the
+             * viewer holds it. A locked-to-someone-else opponent gets neither
+             * (the backend would reject Engage with its own message anyway). */}
+            {!lockedToName && (
+              <DropdownMenuItem
+                disabled={isPending}
+                data-testid={`opponent-combat_engage-${opponent.id}`}
+                onClick={() => {
+                  handleManeuver('combat_engage', 'Engage').catch(() => {});
+                }}
+              >
+                Engage in a duel
+              </DropdownMenuItem>
+            )}
+            {lockedToViewer && (
+              <DropdownMenuItem
+                disabled={isPending}
+                data-testid={`opponent-combat_disengage-${opponent.id}`}
+                onClick={() => {
+                  handleManeuver('combat_disengage', 'Disengage').catch(() => {});
+                }}
+              >
+                Disengage
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -329,6 +359,19 @@ export function CombatantsList({
       lockedOpponentNames.set(lock.opponent_id, pc.character_name);
     }
   }
+
+  // #3447 — the viewer's own participant (CharacterSheet shares ObjectDB's pk,
+  // so character_sheet_id compares directly against the characterId prop) and
+  // the opponent ids whose active lock the viewer holds, for the Disengage item.
+  const viewerParticipantId =
+    characterId != null
+      ? (participants.find((p) => p.character_sheet_id === characterId)?.id ?? null)
+      : null;
+  const viewerLockedOpponentIds = new Set<number>(
+    (engagementLocks ?? [])
+      .filter((lock) => viewerParticipantId !== null && lock.participant_id === viewerParticipantId)
+      .map((lock) => lock.opponent_id)
+  );
 
   return (
     <div className="rounded-md border border-border bg-card" data-testid="combatants-list-section">
@@ -383,6 +426,7 @@ export function CombatantsList({
                   characterId={characterId}
                   canDeclareManeuvers={canDeclareManeuvers}
                   lockedToName={lockedOpponentNames.get(o.id)}
+                  lockedToViewer={viewerLockedOpponentIds.has(o.id)}
                 />
               ))}
             </div>
