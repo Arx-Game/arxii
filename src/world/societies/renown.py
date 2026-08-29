@@ -349,6 +349,8 @@ def fire_renown_award(  # noqa: PLR0913
     reach: str | None = None,
     society_overrides: dict | None = None,
     title: str = "Renown deed",
+    settled_risk: str | None = None,
+    station: int = 0,
 ) -> RenownAwardResult:
     """Thin wrapper around :func:`_apply_renown_award` that fires the
     #743 narrative notification post-commit.
@@ -368,6 +370,8 @@ def fire_renown_award(  # noqa: PLR0913
         reach=reach,
         society_overrides=society_overrides,
         title=title,
+        settled_risk=settled_risk,
+        station=station,
     )
     try:
         from world.societies.notifications import notify_renown_event  # noqa: PLC0415
@@ -401,6 +405,39 @@ class _AwardInputs:
     aware_realm_ids: tuple[int, ...]
     overrides: dict
     title: str
+    station: int = 0
+
+
+def _priced_legend(declared_risk: str | None, settled_risk: str | None, station: int) -> int:
+    """What this award actually pays in Legend (#3463, ADR-0245).
+
+    ``declared_risk`` is the authored wager on the ``RenownAwardConfig`` — the
+    ceiling on how legendary this event type may be. ``settled_risk`` is the
+    level-priced effective risk of a real stakes contract, and ``station`` is
+    ``min(earner level, threat level)``. Legend pays on the *weaker* of the
+    declaration and the settled reality, scaled by station, and only when that
+    reaches the floor.
+
+    No settled context means no priced proof of peril, so it pays nothing. Fame,
+    prestige and reputation are untouched by this — a royal wedding is still
+    enormously fame-worthy and still mints no legend, which is exactly what
+    ``RenownRisk``'s docstring has said since #676.
+    """
+    from world.societies.constants import (  # noqa: PLC0415
+        RenownRisk,
+        risk_meets_legend_floor,
+    )
+
+    if not declared_risk or not settled_risk or station <= 0:
+        return 0
+    ladder = list(RenownRisk.values)
+    try:
+        effective = min(declared_risk, settled_risk, key=ladder.index)
+    except ValueError:
+        return 0
+    if not risk_meets_legend_floor(effective):
+        return 0
+    return round(RISK_LEGEND_AWARDS.get(effective, 0) * station)
 
 
 def _resolve_award_inputs(  # noqa: PLR0913
@@ -413,6 +450,8 @@ def _resolve_award_inputs(  # noqa: PLR0913
     reach: str | None,
     society_overrides: dict | None,
     title: str,
+    settled_risk: str | None = None,
+    station: int = 0,
 ) -> _AwardInputs:
     """Compute the normalized inputs once so the apply-phase helpers stay focused."""
     effective_reach = (
@@ -425,7 +464,8 @@ def _resolve_award_inputs(  # noqa: PLR0913
         persona=persona,
         fame_awarded=MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0,
         prestige_awarded=MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0,
-        legend_awarded=RISK_LEGEND_AWARDS.get(risk, 0) if risk else 0,
+        legend_awarded=_priced_legend(risk, settled_risk, station),
+        station=station,
         archetype_list=list(archetypes),
         aware_realm_ids=tuple(r.pk for r in aware_realms),
         overrides=society_overrides or {},
@@ -478,7 +518,10 @@ def _create_legend_entry(inputs: _AwardInputs, aware_society_ids: list[int]) -> 
     from world.societies.models import LegendEntry  # noqa: PLC0415
 
     entry = LegendEntry.objects.create(
-        persona=inputs.persona, title=inputs.title, base_value=inputs.legend_awarded
+        persona=inputs.persona,
+        title=inputs.title,
+        base_value=inputs.legend_awarded,
+        earned_at_level=inputs.station,
     )
     if aware_society_ids:
         entry.societies_aware.set(aware_society_ids)
@@ -523,14 +566,26 @@ def _apply_renown_award(  # noqa: PLR0913
     reach: str | None = None,
     society_overrides: dict | None = None,
     title: str = "Renown deed",
+    settled_risk: str | None = None,
+    station: int = 0,
 ) -> RenownAwardResult:
     """Apply a Renown award bundle to ``persona``. Writes across every axis.
 
-    Composition: ``magnitude`` → fame + prestige_from_deeds; ``risk`` →
-    legend (creates LegendEntry when > 0); ``archetypes`` → per-society
-    reputation via dot product against principles; ``reach`` defaults
-    from magnitude; ``society_overrides`` overrides computed per-society
-    deltas. TEMPORARY personas skip reputation writes.
+    Composition (#676's three independent scales, preserved): ``magnitude`` →
+    fame + prestige_from_deeds; ``risk`` → legend; ``archetypes`` →
+    per-society reputation via dot product against principles; ``reach``
+    defaults from magnitude; ``society_overrides`` overrides computed
+    per-society deltas. TEMPORARY personas skip reputation writes.
+
+    **``risk`` is a declared wager, not a payout (#3463, ADR-0245).** It is
+    the author's ceiling on how legendary this event *type* can be. What
+    actually pays is ``settled_risk`` — the level-priced effective risk from a
+    real stakes contract — capped by the declaration. A caller with no staked
+    context behind it (a dramatic moment, a propaganda campaign) passes
+    neither, and its legend component prices to zero while fame, prestige and
+    reputation fire exactly as before. That is the safe-grind hole closed:
+    previously an author setting ``risk=EXTREME`` on any config paid 1500 to
+    anyone, at any level, with nothing at stake.
 
     Orchestration only — each phase lives in its own ``_apply_*`` /
     ``_create_*`` helper. Whole call runs in a single transaction.
@@ -544,6 +599,8 @@ def _apply_renown_award(  # noqa: PLR0913
         reach=reach,
         society_overrides=society_overrides,
         title=title,
+        settled_risk=settled_risk,
+        station=station,
     )
     fame_tier_changed = _apply_magnitude_writes(inputs)
     aware_society_ids, reputation_deltas = _apply_archetype_reputation(inputs)
