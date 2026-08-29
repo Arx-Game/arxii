@@ -1,13 +1,15 @@
 from datetime import timedelta
 from http import HTTPMethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.db.models import Count, Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from evennia.accounts.models import AccountDB
 from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import BasePermission, IsAuthenticatedOrReadOnly
 from rest_framework.request import Request
@@ -39,6 +41,8 @@ from world.scenes.permissions import (
     IsSceneOwnerOrStaff,
     ReadOnlyOrSceneParticipant,
 )
+from world.scenes.rail_serializers import GMStoryRailSerializer
+from world.scenes.rail_services import build_gm_story_rail_payload, viewer_qualifies_for_rail
 from world.scenes.scene_admin_services import finish_scene_full
 from world.scenes.serializers import (
     ActivePersonaResultSerializer,
@@ -397,6 +401,40 @@ class SceneViewSet(viewsets.ModelViewSet):
         scene = self.get_object()
         band = room_activity_band(scene.location)
         return Response(SceneActivitySerializer({"band": band.label}).data)
+
+    @extend_schema(responses=GMStoryRailSerializer, tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="gm-rail")
+    def gm_rail(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/scenes/{id}/gm-rail/ (#3434) — the running beat's authored
+        material, protected subjects, and room clue placements, gated per-viewer.
+
+        Composed read only -- no writes, no models, no migration. View-level gate
+        (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
+        the scene owner and is too broad -- see the #3434 spec's anti-reinvention
+        ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+        (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
+        ``CharacterVitalsView``, the scene itself is already visible through the
+        plain detail endpoint, so this gate is refusing a sub-resource, not hiding
+        the scene's existence.
+
+        Payload sections are gated further, per-viewer, inside
+        ``build_gm_story_rail_payload``: the beat summary for any qualifying
+        viewer; ``internal_description``/opponent-and-staged-line
+        details/protected subjects only for viewers with standing on the running
+        story; room clue placements staff-only. No secrets data at any tier.
+        """
+        scene = self.get_object()
+        if not viewer_qualifies_for_rail(request, self, scene):
+            detail = "You must be this scene's GM to see its story rail."
+            raise PermissionDenied(detail)
+        user = cast(AccountDB, request.user)
+        payload = build_gm_story_rail_payload(scene, user)
+        # payload's sub-sections are already `.data`-serialized dicts (built by
+        # build_gm_story_rail_payload via BeatOpponentLineSerializer /
+        # StoryProtectedSubjectSerializer) -- returned as-is. GMStoryRailSerializer
+        # is documentation-only (see its module docstring); re-running the payload
+        # through it here would double-serialize those already-flat dicts.
+        return Response(payload)
 
     @extend_schema(responses=HighlightReelSerializer, tags=["scenes"])
     @action(
