@@ -69,3 +69,9 @@ def flow_perform_check(
         target_difficulty=target_difficulty,
     )
     return result.outcome.name if result.outcome is not None else ""
+
+
+hooks = {
+    "flow_apply_condition": flow_apply_condition,
+    "flow_perform_check": flow_perform_check,
+}

@@ -7868,6 +7868,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConditionTemplateDetail'
           description: ''
+  /api/conditions/templates/{id}/set_reactive_triggers/:
+    patch:
+      operationId: conditions_templates_set_reactive_triggers_partial_update
+      description: |-
+        Replace the set of TriggerDefinitions installed when this condition applies.
+
+        Staff-only wiring endpoint for the flows authoring UI (#3417): body
+        ``{"trigger_definition_ids": [int, ...]}`` becomes the new complete set
+        (``.set()`` semantics, not additive).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this condition template.
+        required: true
+      tags:
+      - conditions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConditionTemplate'
+          description: ''
   /api/conditions/templates/by_category/:
     get:
       operationId: conditions_templates_by_category_retrieve
@@ -12336,6 +12363,635 @@ paths:
       - cookieAuth: []
       responses:
         '200':
+          description: No response body
+  /api/flows/catalog/:
+    get:
+      operationId: flows_catalog_retrieve
+      description: |-
+        Read-only DSL authoring catalog for the flows authoring palette.
+
+        Returns everything the frontend needs to render the step palette and
+        per-step editors without hard-coding the DSL surface: every step action
+        (with its param schema), every event (with its payload fields), every
+        registered service function (with its param types), the comparison
+        operators available to filter conditions, and the ``variable_name``
+        roles a step's action can assign.
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/flows/flows/:
+    get:
+      operationId: flows_flows_list
+      description: |-
+        Staff-write / GM-read CRUD on ``FlowDefinition`` rows.
+
+        List rows are lightweight (id/name/description/step_count, the latter
+        from an annotated ``Count`` rather than a per-row query); retrieve
+        returns the full step tree in depth-first authored order (steps are
+        always inserted depth-first by ``flows.serializers._replace_steps`, and
+        fetched here in explicit pk order for the same reason: stable ordering
+        should never depend on undocumented default-table-scan order).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFlowDefinitionListList'
+          description: ''
+    post:
+      operationId: flows_flows_create
+      description: |-
+        Staff-write / GM-read CRUD on ``FlowDefinition`` rows.
+
+        List rows are lightweight (id/name/description/step_count, the latter
+        from an annotated ``Count`` rather than a per-row query); retrieve
+        returns the full step tree in depth-first authored order (steps are
+        always inserted depth-first by ``flows.serializers._replace_steps`, and
+        fetched here in explicit pk order for the same reason: stable ordering
+        should never depend on undocumented default-table-scan order).
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlowDefinitionWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowDefinitionWrite'
+          description: ''
+  /api/flows/flows/{id}/:
+    get:
+      operationId: flows_flows_retrieve
+      description: |-
+        Staff-write / GM-read CRUD on ``FlowDefinition`` rows.
+
+        List rows are lightweight (id/name/description/step_count, the latter
+        from an annotated ``Count`` rather than a per-row query); retrieve
+        returns the full step tree in depth-first authored order (steps are
+        always inserted depth-first by ``flows.serializers._replace_steps`, and
+        fetched here in explicit pk order for the same reason: stable ordering
+        should never depend on undocumented default-table-scan order).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this flow definition.
+        required: true
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowDefinitionDetail'
+          description: ''
+    put:
+      operationId: flows_flows_update
+      description: |-
+        Staff-write / GM-read CRUD on ``FlowDefinition`` rows.
+
+        List rows are lightweight (id/name/description/step_count, the latter
+        from an annotated ``Count`` rather than a per-row query); retrieve
+        returns the full step tree in depth-first authored order (steps are
+        always inserted depth-first by ``flows.serializers._replace_steps`, and
+        fetched here in explicit pk order for the same reason: stable ordering
+        should never depend on undocumented default-table-scan order).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this flow definition.
+        required: true
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlowDefinitionWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowDefinitionWrite'
+          description: ''
+    patch:
+      operationId: flows_flows_partial_update
+      description: |-
+        Staff-write / GM-read CRUD on ``FlowDefinition`` rows.
+
+        List rows are lightweight (id/name/description/step_count, the latter
+        from an annotated ``Count`` rather than a per-row query); retrieve
+        returns the full step tree in depth-first authored order (steps are
+        always inserted depth-first by ``flows.serializers._replace_steps`, and
+        fetched here in explicit pk order for the same reason: stable ordering
+        should never depend on undocumented default-table-scan order).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this flow definition.
+        required: true
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedFlowDefinitionWriteRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowDefinitionWrite'
+          description: ''
+    delete:
+      operationId: flows_flows_destroy
+      description: |-
+        Staff-write / GM-read CRUD on ``FlowDefinition`` rows.
+
+        List rows are lightweight (id/name/description/step_count, the latter
+        from an annotated ``Count`` rather than a per-row query); retrieve
+        returns the full step tree in depth-first authored order (steps are
+        always inserted depth-first by ``flows.serializers._replace_steps`, and
+        fetched here in explicit pk order for the same reason: stable ordering
+        should never depend on undocumented default-table-scan order).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this flow definition.
+        required: true
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/flows/trigger-definitions/:
+    get:
+      operationId: flows_trigger_definitions_list
+      description: Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417
+        task 6).
+      parameters:
+      - in: query
+        name: event_name
+        schema:
+          type: string
+          enum:
+          - action_intent
+          - action_result
+          - asset_compromised
+          - asset_dismissed
+          - asset_lost
+          - attack_landed
+          - attack_missed
+          - attack_pre_resolve
+          - character_incapacitated
+          - character_killed
+          - combat_round_starting
+          - condition_applied
+          - condition_pre_apply
+          - condition_removed
+          - condition_stage_advance_check_about_to_fire
+          - condition_stage_changed
+          - corruption_accrued
+          - corruption_accruing
+          - corruption_reduced
+          - corruption_warning
+          - damage_applied
+          - damage_pre_apply
+          - encounter_completed
+          - engagement_lock_broken
+          - engagement_lock_formed
+          - examine_pre
+          - examined
+          - fell
+          - food_collected
+          - food_pre_collect
+          - food_pre_transfer
+          - food_shortage
+          - food_transferred
+          - move_pre_depart
+          - moved
+          - protagonism_locked
+          - protagonism_restored
+          - soul_tether_dissolved
+          - soul_tether_formed
+          - technique_affected
+          - technique_cast
+          - technique_pre_cast
+        description: |-
+          The event name this trigger listens for.
+
+          * `attack_pre_resolve` - Attack Pre-Resolve
+          * `attack_landed` - Attack Landed
+          * `attack_missed` - Attack Missed
+          * `damage_pre_apply` - Damage Pre-Apply
+          * `damage_applied` - Damage Applied
+          * `character_incapacitated` - Character Incapacitated
+          * `character_killed` - Character Killed
+          * `move_pre_depart` - Move: Pre-Depart
+          * `moved` - Moved
+          * `examine_pre` - Examine Pre
+          * `examined` - Examined
+          * `condition_pre_apply` - Condition Pre-Apply
+          * `condition_applied` - Condition Applied
+          * `condition_stage_changed` - Condition Stage Changed
+          * `condition_removed` - Condition Removed
+          * `technique_pre_cast` - Technique Pre-Cast
+          * `technique_cast` - Technique Cast
+          * `technique_affected` - Technique Affected
+          * `corruption_accruing` - Corruption accruing (pre-mutation)
+          * `corruption_accrued` - Corruption accrued (post-mutation)
+          * `corruption_warning` - Corruption warning (stage 3-4)
+          * `corruption_reduced` - Corruption reduced
+          * `protagonism_locked` - Protagonism locked (stage 5 entry)
+          * `protagonism_restored` - Protagonism restored (stage 5 exit)
+          * `condition_stage_advance_check_about_to_fire` - Condition stage advance resist check about to fire
+          * `soul_tether_formed` - Soul Tether formed
+          * `soul_tether_dissolved` - Soul Tether dissolved
+          * `encounter_completed` - Encounter Completed
+          * `fell` - Fell
+          * `combat_round_starting` - Combat Round Starting
+          * `engagement_lock_formed` - Engagement Lock Formed
+          * `engagement_lock_broken` - Engagement Lock Broken
+          * `food_pre_collect` - Food Pre-Collect
+          * `food_collected` - Food Collected
+          * `food_shortage` - Food Shortage
+          * `food_pre_transfer` - Food Pre-Transfer
+          * `food_transferred` - Food Transferred
+          * `asset_compromised` - Asset Compromised
+          * `asset_lost` - Asset Lost
+          * `asset_dismissed` - Asset Dismissed
+          * `action_intent` - Action Intent
+          * `action_result` - Action Result
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTriggerDefinitionList'
+          description: ''
+    post:
+      operationId: flows_trigger_definitions_create
+      description: Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417
+        task 6).
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerDefinitionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerDefinition'
+          description: ''
+  /api/flows/trigger-definitions/{id}/:
+    get:
+      operationId: flows_trigger_definitions_retrieve
+      description: Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417
+        task 6).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger definition.
+        required: true
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerDefinition'
+          description: ''
+    put:
+      operationId: flows_trigger_definitions_update
+      description: Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417
+        task 6).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger definition.
+        required: true
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerDefinitionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerDefinition'
+          description: ''
+    patch:
+      operationId: flows_trigger_definitions_partial_update
+      description: Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417
+        task 6).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger definition.
+        required: true
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTriggerDefinitionRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerDefinition'
+          description: ''
+    delete:
+      operationId: flows_trigger_definitions_destroy
+      description: Staff-write / GM-read CRUD on ``TriggerDefinition`` rows (#3417
+        task 6).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger definition.
+        required: true
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/flows/triggers/:
+    get:
+      operationId: flows_triggers_list
+      description: |-
+        Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+        A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+      parameters:
+      - in: query
+        name: obj
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: trigger_definition
+        schema:
+          type: integer
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTriggerList'
+          description: ''
+    post:
+      operationId: flows_triggers_create
+      description: |-
+        Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+        A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trigger'
+          description: ''
+  /api/flows/triggers/{id}/:
+    get:
+      operationId: flows_triggers_retrieve
+      description: |-
+        Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+        A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger.
+        required: true
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trigger'
+          description: ''
+    put:
+      operationId: flows_triggers_update
+      description: |-
+        Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+        A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger.
+        required: true
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trigger'
+          description: ''
+    patch:
+      operationId: flows_triggers_partial_update
+      description: |-
+        Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+        A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger.
+        required: true
+      tags:
+      - flows
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTriggerRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trigger'
+          description: ''
+    delete:
+      operationId: flows_triggers_destroy
+      description: |-
+        Staff-write / GM-read CRUD on ``Trigger`` rows (#3417 task 6).
+
+        A ``Trigger`` installs a ``TriggerDefinition`` on a specific object.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trigger.
+        required: true
+      tags:
+      - flows
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
           description: No response body
   /api/forms/alternate-selves/:
     get:
@@ -37342,6 +37998,48 @@ components:
       - reward_name
       - reward_type
       - reward_value
+    ActionB80Enum:
+      enum:
+      - set_context_value
+      - modify_context_value
+      - add_context_list_value
+      - remove_context_list_value
+      - set_context_dict_value
+      - remove_context_dict_value
+      - modify_context_dict_value
+      - evaluate_equals
+      - evaluate_not_equals
+      - evaluate_less_than
+      - evaluate_greater_than
+      - evaluate_less_than_or_equals
+      - evaluate_greater_than_or_equals
+      - call_service_function
+      - emit_flow_event
+      - emit_flow_event_for_each
+      - cancel_event
+      - modify_payload
+      - prompt_player
+      type: string
+      description: |-
+        * `set_context_value` - Set Context Value
+        * `modify_context_value` - Modify Context Value
+        * `add_context_list_value` - Add Context List Value
+        * `remove_context_list_value` - Remove Context List Value
+        * `set_context_dict_value` - Set Context Dict Value
+        * `remove_context_dict_value` - Remove Context Dict Value
+        * `modify_context_dict_value` - Modify Context Dict Value
+        * `evaluate_equals` - Evaluate Equals
+        * `evaluate_not_equals` - Evaluate Not Equals
+        * `evaluate_less_than` - Evaluate Less Than
+        * `evaluate_greater_than` - Evaluate Greater Than
+        * `evaluate_less_than_or_equals` - Evaluate Less Than or Equals
+        * `evaluate_greater_than_or_equals` - Evaluate Greater Than or Equals
+        * `call_service_function` - Call Service Function
+        * `emit_flow_event` - Emit Flow Event
+        * `emit_flow_event_for_each` - Emit Flow Event For Each
+        * `cancel_event` - Cancel Event
+        * `modify_payload` - Modify Payload
+        * `prompt_player` - Prompt Player
     ActionCategoryEnum:
       enum:
       - physical
@@ -43244,6 +43942,17 @@ components:
           type: boolean
           readOnly: true
           description: Can other characters see this condition?
+        reactive_trigger_ids:
+          type: array
+          items:
+            type: integer
+          description: |-
+            Return wired TriggerDefinition ids, staff/GM requesters only.
+
+            Mirrors ``IsGMOrStaff.has_permission`` (src/world/gm/permissions.py):
+            staff or a GMProfile qualifies; anyone else (including a plain
+            authenticated player) gets an empty list, never the real wiring.
+          readOnly: true
       required:
       - category
       - category_name
@@ -43262,6 +43971,7 @@ components:
       - name
       - observer_description
       - player_description
+      - reactive_trigger_ids
     ConditionTemplateDetail:
       type: object
       description: Detailed serializer including stages for progressive conditions.
@@ -43328,6 +44038,17 @@ components:
           type: boolean
           readOnly: true
           description: Can other characters see this condition?
+        reactive_trigger_ids:
+          type: array
+          items:
+            type: integer
+          description: |-
+            Return wired TriggerDefinition ids, staff/GM requesters only.
+
+            Mirrors ``IsGMOrStaff.has_permission`` (src/world/gm/permissions.py):
+            staff or a GMProfile qualifies; anyone else (including a plain
+            authenticated player) gets an empty list, never the real wiring.
+          readOnly: true
         stages:
           type: array
           items:
@@ -43351,6 +44072,7 @@ components:
       - name
       - observer_description
       - player_description
+      - reactive_trigger_ids
       - stages
     Conditions:
       type: object
@@ -47571,6 +48293,94 @@ components:
         room_description_overlay:
           type: string
           description: Text that augments the room description while event is active
+    EventNameEnum:
+      enum:
+      - attack_pre_resolve
+      - attack_landed
+      - attack_missed
+      - damage_pre_apply
+      - damage_applied
+      - character_incapacitated
+      - character_killed
+      - move_pre_depart
+      - moved
+      - examine_pre
+      - examined
+      - condition_pre_apply
+      - condition_applied
+      - condition_stage_changed
+      - condition_removed
+      - technique_pre_cast
+      - technique_cast
+      - technique_affected
+      - corruption_accruing
+      - corruption_accrued
+      - corruption_warning
+      - corruption_reduced
+      - protagonism_locked
+      - protagonism_restored
+      - condition_stage_advance_check_about_to_fire
+      - soul_tether_formed
+      - soul_tether_dissolved
+      - encounter_completed
+      - fell
+      - combat_round_starting
+      - engagement_lock_formed
+      - engagement_lock_broken
+      - food_pre_collect
+      - food_collected
+      - food_shortage
+      - food_pre_transfer
+      - food_transferred
+      - asset_compromised
+      - asset_lost
+      - asset_dismissed
+      - action_intent
+      - action_result
+      type: string
+      description: |-
+        * `attack_pre_resolve` - Attack Pre-Resolve
+        * `attack_landed` - Attack Landed
+        * `attack_missed` - Attack Missed
+        * `damage_pre_apply` - Damage Pre-Apply
+        * `damage_applied` - Damage Applied
+        * `character_incapacitated` - Character Incapacitated
+        * `character_killed` - Character Killed
+        * `move_pre_depart` - Move: Pre-Depart
+        * `moved` - Moved
+        * `examine_pre` - Examine Pre
+        * `examined` - Examined
+        * `condition_pre_apply` - Condition Pre-Apply
+        * `condition_applied` - Condition Applied
+        * `condition_stage_changed` - Condition Stage Changed
+        * `condition_removed` - Condition Removed
+        * `technique_pre_cast` - Technique Pre-Cast
+        * `technique_cast` - Technique Cast
+        * `technique_affected` - Technique Affected
+        * `corruption_accruing` - Corruption accruing (pre-mutation)
+        * `corruption_accrued` - Corruption accrued (post-mutation)
+        * `corruption_warning` - Corruption warning (stage 3-4)
+        * `corruption_reduced` - Corruption reduced
+        * `protagonism_locked` - Protagonism locked (stage 5 entry)
+        * `protagonism_restored` - Protagonism restored (stage 5 exit)
+        * `condition_stage_advance_check_about_to_fire` - Condition stage advance resist check about to fire
+        * `soul_tether_formed` - Soul Tether formed
+        * `soul_tether_dissolved` - Soul Tether dissolved
+        * `encounter_completed` - Encounter Completed
+        * `fell` - Fell
+        * `combat_round_starting` - Combat Round Starting
+        * `engagement_lock_formed` - Engagement Lock Formed
+        * `engagement_lock_broken` - Engagement Lock Broken
+        * `food_pre_collect` - Food Pre-Collect
+        * `food_collected` - Food Collected
+        * `food_shortage` - Food Shortage
+        * `food_pre_transfer` - Food Pre-Transfer
+        * `food_transferred` - Food Transferred
+        * `asset_compromised` - Asset Compromised
+        * `asset_lost` - Asset Lost
+        * `asset_dismissed` - Asset Dismissed
+        * `action_intent` - Action Intent
+        * `action_result` - Action Result
     EventUpdate:
       type: object
       description: Serializer for updating events. Only mutable fields are writable.
@@ -48148,6 +48958,205 @@ components:
         * `LOCK` - Lock
         * `WARD` - Ward
         * `BREAK` - Break
+    FlowDefinitionDetail:
+      type: object
+      description: |-
+        Row shape for ``FlowDefinitionViewSet.retrieve`` — full step tree.
+
+        Reads from ``prefetched_steps`` (the ``Prefetch(..., to_attr=...)`` the
+        viewset's queryset populates, explicitly ordered by pk so this always
+        reflects the depth-first authored order ``_replace_steps`` inserted in)
+        rather than the bare ``steps`` related manager, which would re-query with
+        no explicit ordering. ``interactions`` cross-references what runs this
+        flow, what it emits (and who listens), and what it calls — see
+        ``flows.interactions.flow_interactions``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlowStepRead'
+          readOnly: true
+        interactions:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+      required:
+      - id
+      - interactions
+      - name
+      - steps
+    FlowDefinitionList:
+      type: object
+      description: |-
+        Row shape for ``FlowDefinitionViewSet.list`` — no step bodies.
+
+        ``step_count`` is sourced from an ``annotate(step_count=Count("steps"))``
+        on the viewset's queryset rather than a per-row ``.steps.count()`` call,
+        per the no-queries-in-loops rule.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        step_count:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - name
+      - step_count
+    FlowDefinitionWrite:
+      type: object
+      description: |-
+        Create/update payload: flow fields plus an optional full step tree.
+
+        ``steps`` omitted from the request body means "leave the existing steps
+        untouched" (update only — create always starts from an empty tree);
+        ``steps: []`` or a populated list means "replace the entire tree with
+        this."
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+      required:
+      - id
+      - name
+    FlowDefinitionWriteRequest:
+      type: object
+      description: |-
+        Create/update payload: flow fields plus an optional full step tree.
+
+        ``steps`` omitted from the request body means "leave the existing steps
+        untouched" (update only — create always starts from an empty tree);
+        ``steps: []`` or a populated list means "replace the entire tree with
+        this."
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlowStepWriteRequest'
+          writeOnly: true
+      required:
+      - name
+    FlowStepRead:
+      type: object
+      description: One saved step, as returned by ``FlowDefinitionViewSet.retrieve``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        parent:
+          type: integer
+          nullable: true
+          description: The parent step of this step.
+        action:
+          allOf:
+          - $ref: '#/components/schemas/ActionB80Enum'
+          description: |-
+            The action this step performs.
+
+            * `set_context_value` - Set Context Value
+            * `modify_context_value` - Modify Context Value
+            * `add_context_list_value` - Add Context List Value
+            * `remove_context_list_value` - Remove Context List Value
+            * `set_context_dict_value` - Set Context Dict Value
+            * `remove_context_dict_value` - Remove Context Dict Value
+            * `modify_context_dict_value` - Modify Context Dict Value
+            * `evaluate_equals` - Evaluate Equals
+            * `evaluate_not_equals` - Evaluate Not Equals
+            * `evaluate_less_than` - Evaluate Less Than
+            * `evaluate_greater_than` - Evaluate Greater Than
+            * `evaluate_less_than_or_equals` - Evaluate Less Than or Equals
+            * `evaluate_greater_than_or_equals` - Evaluate Greater Than or Equals
+            * `call_service_function` - Call Service Function
+            * `emit_flow_event` - Emit Flow Event
+            * `emit_flow_event_for_each` - Emit Flow Event For Each
+            * `cancel_event` - Cancel Event
+            * `modify_payload` - Modify Payload
+            * `prompt_player` - Prompt Player
+        variable_name:
+          type: string
+          description: For conditions, the flow variable to evaluate; for service
+            functions, the target name.
+          maxLength: 255
+        parameters:
+          description: Additional parameters for this step.
+      required:
+      - action
+      - id
+    FlowStepWrite:
+      type: object
+      description: One authored step, addressed by a client-chosen id rather than
+        a pk.
+      properties:
+        client_id:
+          type: string
+          maxLength: 64
+        parent_client_id:
+          type: string
+          nullable: true
+          maxLength: 64
+        action:
+          $ref: '#/components/schemas/ActionB80Enum'
+        variable_name:
+          type: string
+          default: ''
+          maxLength: 255
+        parameters: {}
+      required:
+      - action
+      - client_id
+    FlowStepWriteRequest:
+      type: object
+      description: One authored step, addressed by a client-chosen id rather than
+        a pk.
+      properties:
+        client_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        parent_client_id:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 64
+        action:
+          $ref: '#/components/schemas/ActionB80Enum'
+        variable_name:
+          type: string
+          default: ''
+          maxLength: 255
+        parameters: {}
+      required:
+      - action
+      - client_id
     ForRoomResult:
       type: object
       description: 'Cheap RoomPanel resolver: which building, and what the viewer
@@ -58160,6 +59169,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FashionPresentation'
+    PaginatedFlowDefinitionListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlowDefinitionList'
     PaginatedFriendshipList:
       type: object
       required:
@@ -61348,6 +62380,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TreasuredSubject'
+    PaginatedTriggerDefinitionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerDefinition'
+    PaginatedTriggerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trigger'
     PaginatedUserCategoryMuteList:
       type: object
       required:
@@ -62377,6 +63455,28 @@ components:
             * `day` - Day
             * `dusk` - Dusk
             * `night` - Night
+    PatchedFlowDefinitionWriteRequest:
+      type: object
+      description: |-
+        Create/update payload: flow fields plus an optional full step tree.
+
+        ``steps`` omitted from the request body means "leave the existing steps
+        untouched" (update only — create always starts from an empty tree);
+        ``steps: []`` or a populated list means "replace the entire tree with
+        this."
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlowStepWriteRequest'
+          writeOnly: true
     PatchedGMApplicationDetailRequest:
       type: object
       description: For staff reviewing GM applications.
@@ -64246,6 +65346,115 @@ components:
           items:
             type: integer
           description: Tenures explicitly excluded even if otherwise visible.
+    PatchedTriggerDefinitionRequest:
+      type: object
+      description: |-
+        CRUD on ``TriggerDefinition`` rows (#3417 task 6).
+
+        ``validate()`` re-runs the same ``base_filter_condition`` schema check the
+        model's ``clean()`` performs (unknown payload paths for the chosen
+        ``event_name``), surfacing it as a ``base_filter_condition`` field error
+        instead of the 500 an unvalidated save would raise. On a partial update
+        ``event_name``/``base_filter_condition`` may be absent from ``attrs``, so
+        each falls back to the current instance's value.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        event_name:
+          allOf:
+          - $ref: '#/components/schemas/EventNameEnum'
+          description: |-
+            The event name this trigger listens for.
+
+            * `attack_pre_resolve` - Attack Pre-Resolve
+            * `attack_landed` - Attack Landed
+            * `attack_missed` - Attack Missed
+            * `damage_pre_apply` - Damage Pre-Apply
+            * `damage_applied` - Damage Applied
+            * `character_incapacitated` - Character Incapacitated
+            * `character_killed` - Character Killed
+            * `move_pre_depart` - Move: Pre-Depart
+            * `moved` - Moved
+            * `examine_pre` - Examine Pre
+            * `examined` - Examined
+            * `condition_pre_apply` - Condition Pre-Apply
+            * `condition_applied` - Condition Applied
+            * `condition_stage_changed` - Condition Stage Changed
+            * `condition_removed` - Condition Removed
+            * `technique_pre_cast` - Technique Pre-Cast
+            * `technique_cast` - Technique Cast
+            * `technique_affected` - Technique Affected
+            * `corruption_accruing` - Corruption accruing (pre-mutation)
+            * `corruption_accrued` - Corruption accrued (post-mutation)
+            * `corruption_warning` - Corruption warning (stage 3-4)
+            * `corruption_reduced` - Corruption reduced
+            * `protagonism_locked` - Protagonism locked (stage 5 entry)
+            * `protagonism_restored` - Protagonism restored (stage 5 exit)
+            * `condition_stage_advance_check_about_to_fire` - Condition stage advance resist check about to fire
+            * `soul_tether_formed` - Soul Tether formed
+            * `soul_tether_dissolved` - Soul Tether dissolved
+            * `encounter_completed` - Encounter Completed
+            * `fell` - Fell
+            * `combat_round_starting` - Combat Round Starting
+            * `engagement_lock_formed` - Engagement Lock Formed
+            * `engagement_lock_broken` - Engagement Lock Broken
+            * `food_pre_collect` - Food Pre-Collect
+            * `food_collected` - Food Collected
+            * `food_shortage` - Food Shortage
+            * `food_pre_transfer` - Food Pre-Transfer
+            * `food_transferred` - Food Transferred
+            * `asset_compromised` - Asset Compromised
+            * `asset_lost` - Asset Lost
+            * `asset_dismissed` - Asset Dismissed
+            * `action_intent` - Action Intent
+            * `action_result` - Action Result
+        flow_definition:
+          type: integer
+          description: The flow to execute when this trigger activates.
+        base_filter_condition:
+          nullable: true
+          description: Base JSON condition to filter when this trigger is valid.
+        description:
+          type: string
+          nullable: true
+          description: Optional description of the trigger.
+        priority:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Higher priority triggers fire first.
+    PatchedTriggerRequest:
+      type: object
+      description: |-
+        CRUD on ``Trigger`` rows: installing a ``TriggerDefinition`` on an object.
+
+        ``validate()`` builds an unsaved ``Trigger`` from the merged (existing
+        instance + incoming) attrs and calls its ``clean()`` directly, so both
+        checks it performs run here instead of only at the next full-clean save:
+        the ``additional_filter_condition`` schema check, and the
+        ``source_stage``/``source_condition`` same-``ConditionTemplate`` cross-check
+        (``flows/models/triggers.py`` ``Trigger.clean()``).
+      properties:
+        trigger_definition:
+          type: integer
+          description: The trigger template this is based on.
+        obj:
+          type: integer
+        additional_filter_condition:
+          nullable: true
+          description: Optional JSON condition to further refine when this trigger
+            activates.
+        source_condition:
+          type: integer
+          nullable: true
+          description: Condition that installed this trigger. Null for system-installed
+            triggers (e.g. combat escalation room triggers).
+        source_stage:
+          type: integer
+          nullable: true
+          description: If set, active only while source_condition is at this stage.
     PatchedUpdateBulletinPostInputRequest:
       type: object
       description: |-
@@ -76281,6 +77490,245 @@ components:
         * `primary` - Primary condition severity
         * `aftermath` - Aftermath child condition severity
         * `pending_alteration` - Pending alteration tier
+    Trigger:
+      type: object
+      description: |-
+        CRUD on ``Trigger`` rows: installing a ``TriggerDefinition`` on an object.
+
+        ``validate()`` builds an unsaved ``Trigger`` from the merged (existing
+        instance + incoming) attrs and calls its ``clean()`` directly, so both
+        checks it performs run here instead of only at the next full-clean save:
+        the ``additional_filter_condition`` schema check, and the
+        ``source_stage``/``source_condition`` same-``ConditionTemplate`` cross-check
+        (``flows/models/triggers.py`` ``Trigger.clean()``).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        trigger_definition:
+          type: integer
+          description: The trigger template this is based on.
+        obj:
+          type: integer
+        additional_filter_condition:
+          nullable: true
+          description: Optional JSON condition to further refine when this trigger
+            activates.
+        source_condition:
+          type: integer
+          nullable: true
+          description: Condition that installed this trigger. Null for system-installed
+            triggers (e.g. combat escalation room triggers).
+        source_stage:
+          type: integer
+          nullable: true
+          description: If set, active only while source_condition is at this stage.
+      required:
+      - id
+      - obj
+      - trigger_definition
+    TriggerDefinition:
+      type: object
+      description: |-
+        CRUD on ``TriggerDefinition`` rows (#3417 task 6).
+
+        ``validate()`` re-runs the same ``base_filter_condition`` schema check the
+        model's ``clean()`` performs (unknown payload paths for the chosen
+        ``event_name``), surfacing it as a ``base_filter_condition`` field error
+        instead of the 500 an unvalidated save would raise. On a partial update
+        ``event_name``/``base_filter_condition`` may be absent from ``attrs``, so
+        each falls back to the current instance's value.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        event_name:
+          allOf:
+          - $ref: '#/components/schemas/EventNameEnum'
+          description: |-
+            The event name this trigger listens for.
+
+            * `attack_pre_resolve` - Attack Pre-Resolve
+            * `attack_landed` - Attack Landed
+            * `attack_missed` - Attack Missed
+            * `damage_pre_apply` - Damage Pre-Apply
+            * `damage_applied` - Damage Applied
+            * `character_incapacitated` - Character Incapacitated
+            * `character_killed` - Character Killed
+            * `move_pre_depart` - Move: Pre-Depart
+            * `moved` - Moved
+            * `examine_pre` - Examine Pre
+            * `examined` - Examined
+            * `condition_pre_apply` - Condition Pre-Apply
+            * `condition_applied` - Condition Applied
+            * `condition_stage_changed` - Condition Stage Changed
+            * `condition_removed` - Condition Removed
+            * `technique_pre_cast` - Technique Pre-Cast
+            * `technique_cast` - Technique Cast
+            * `technique_affected` - Technique Affected
+            * `corruption_accruing` - Corruption accruing (pre-mutation)
+            * `corruption_accrued` - Corruption accrued (post-mutation)
+            * `corruption_warning` - Corruption warning (stage 3-4)
+            * `corruption_reduced` - Corruption reduced
+            * `protagonism_locked` - Protagonism locked (stage 5 entry)
+            * `protagonism_restored` - Protagonism restored (stage 5 exit)
+            * `condition_stage_advance_check_about_to_fire` - Condition stage advance resist check about to fire
+            * `soul_tether_formed` - Soul Tether formed
+            * `soul_tether_dissolved` - Soul Tether dissolved
+            * `encounter_completed` - Encounter Completed
+            * `fell` - Fell
+            * `combat_round_starting` - Combat Round Starting
+            * `engagement_lock_formed` - Engagement Lock Formed
+            * `engagement_lock_broken` - Engagement Lock Broken
+            * `food_pre_collect` - Food Pre-Collect
+            * `food_collected` - Food Collected
+            * `food_shortage` - Food Shortage
+            * `food_pre_transfer` - Food Pre-Transfer
+            * `food_transferred` - Food Transferred
+            * `asset_compromised` - Asset Compromised
+            * `asset_lost` - Asset Lost
+            * `asset_dismissed` - Asset Dismissed
+            * `action_intent` - Action Intent
+            * `action_result` - Action Result
+        flow_definition:
+          type: integer
+          description: The flow to execute when this trigger activates.
+        base_filter_condition:
+          nullable: true
+          description: Base JSON condition to filter when this trigger is valid.
+        description:
+          type: string
+          nullable: true
+          description: Optional description of the trigger.
+        priority:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Higher priority triggers fire first.
+      required:
+      - event_name
+      - flow_definition
+      - id
+      - name
+    TriggerDefinitionRequest:
+      type: object
+      description: |-
+        CRUD on ``TriggerDefinition`` rows (#3417 task 6).
+
+        ``validate()`` re-runs the same ``base_filter_condition`` schema check the
+        model's ``clean()`` performs (unknown payload paths for the chosen
+        ``event_name``), surfacing it as a ``base_filter_condition`` field error
+        instead of the 500 an unvalidated save would raise. On a partial update
+        ``event_name``/``base_filter_condition`` may be absent from ``attrs``, so
+        each falls back to the current instance's value.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        event_name:
+          allOf:
+          - $ref: '#/components/schemas/EventNameEnum'
+          description: |-
+            The event name this trigger listens for.
+
+            * `attack_pre_resolve` - Attack Pre-Resolve
+            * `attack_landed` - Attack Landed
+            * `attack_missed` - Attack Missed
+            * `damage_pre_apply` - Damage Pre-Apply
+            * `damage_applied` - Damage Applied
+            * `character_incapacitated` - Character Incapacitated
+            * `character_killed` - Character Killed
+            * `move_pre_depart` - Move: Pre-Depart
+            * `moved` - Moved
+            * `examine_pre` - Examine Pre
+            * `examined` - Examined
+            * `condition_pre_apply` - Condition Pre-Apply
+            * `condition_applied` - Condition Applied
+            * `condition_stage_changed` - Condition Stage Changed
+            * `condition_removed` - Condition Removed
+            * `technique_pre_cast` - Technique Pre-Cast
+            * `technique_cast` - Technique Cast
+            * `technique_affected` - Technique Affected
+            * `corruption_accruing` - Corruption accruing (pre-mutation)
+            * `corruption_accrued` - Corruption accrued (post-mutation)
+            * `corruption_warning` - Corruption warning (stage 3-4)
+            * `corruption_reduced` - Corruption reduced
+            * `protagonism_locked` - Protagonism locked (stage 5 entry)
+            * `protagonism_restored` - Protagonism restored (stage 5 exit)
+            * `condition_stage_advance_check_about_to_fire` - Condition stage advance resist check about to fire
+            * `soul_tether_formed` - Soul Tether formed
+            * `soul_tether_dissolved` - Soul Tether dissolved
+            * `encounter_completed` - Encounter Completed
+            * `fell` - Fell
+            * `combat_round_starting` - Combat Round Starting
+            * `engagement_lock_formed` - Engagement Lock Formed
+            * `engagement_lock_broken` - Engagement Lock Broken
+            * `food_pre_collect` - Food Pre-Collect
+            * `food_collected` - Food Collected
+            * `food_shortage` - Food Shortage
+            * `food_pre_transfer` - Food Pre-Transfer
+            * `food_transferred` - Food Transferred
+            * `asset_compromised` - Asset Compromised
+            * `asset_lost` - Asset Lost
+            * `asset_dismissed` - Asset Dismissed
+            * `action_intent` - Action Intent
+            * `action_result` - Action Result
+        flow_definition:
+          type: integer
+          description: The flow to execute when this trigger activates.
+        base_filter_condition:
+          nullable: true
+          description: Base JSON condition to filter when this trigger is valid.
+        description:
+          type: string
+          nullable: true
+          description: Optional description of the trigger.
+        priority:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: Higher priority triggers fire first.
+      required:
+      - event_name
+      - flow_definition
+      - name
+    TriggerRequest:
+      type: object
+      description: |-
+        CRUD on ``Trigger`` rows: installing a ``TriggerDefinition`` on an object.
+
+        ``validate()`` builds an unsaved ``Trigger`` from the merged (existing
+        instance + incoming) attrs and calls its ``clean()`` directly, so both
+        checks it performs run here instead of only at the next full-clean save:
+        the ``additional_filter_condition`` schema check, and the
+        ``source_stage``/``source_condition`` same-``ConditionTemplate`` cross-check
+        (``flows/models/triggers.py`` ``Trigger.clean()``).
+      properties:
+        trigger_definition:
+          type: integer
+          description: The trigger template this is based on.
+        obj:
+          type: integer
+        additional_filter_condition:
+          nullable: true
+          description: Optional JSON condition to further refine when this trigger
+            activates.
+        source_condition:
+          type: integer
+          nullable: true
+          description: Condition that installed this trigger. Null for system-installed
+            triggers (e.g. combat escalation room triggers).
+        source_stage:
+          type: integer
+          nullable: true
+          description: If set, active only while source_condition is at this stage.
+      required:
+      - obj
+      - trigger_definition
     TruncatePrecaptureRequestRequest:
       type: object
       description: |-
