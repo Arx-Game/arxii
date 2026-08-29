@@ -243,6 +243,76 @@ class UseItemTests(TestCase):
         self.assertEqual(inst.charges, 5)
 
 
+class UseItemAttunementTests(TestCase):
+    """Tests for use_item()'s requires_attunement guard (#3430): a flagged template
+    refuses on-use dispatch for a holder the instance isn't attuned to."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        cls.character = CharacterFactory(db_key="AttuneUseItemChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+    def _pool_with_condition_effect(self):
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.conditions.factories import ConditionTemplateFactory
+
+        pool = ConsequencePoolFactory()
+        consequence = ConsequenceFactory(label="AttuneItemEffect")
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type="apply_condition",
+            target="self",
+            condition_template=ConditionTemplateFactory(),
+        )
+        return pool
+
+    def _flagged_template(self):
+        from world.items.factories import ItemTemplateFactory
+
+        return ItemTemplateFactory(
+            is_consumable=False,
+            on_use_pool=self._pool_with_condition_effect(),
+            on_use_check_type=None,
+            requires_attunement=True,
+        )
+
+    def _instance(self, *, template, attuned_to=None):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.items.factories import ItemInstanceFactory
+
+        return ItemInstanceFactory(
+            template=template,
+            quality_tier=None,
+            game_object=ObjectDBFactory(),
+            attuned_to_character_sheet=attuned_to,
+        )
+
+    def test_unattuned_holder_refused(self):
+        from world.items.exceptions import ItemNotAttuned
+        from world.items.services.usage import use_item
+
+        template = self._flagged_template()
+        inst = self._instance(template=template)  # never attuned
+
+        with self.assertRaises(ItemNotAttuned):
+            use_item(item_instance=inst, user=self.character)
+
+    def test_attuned_holder_may_use(self):
+        from world.items.services.usage import use_item
+
+        template = self._flagged_template()
+        inst = self._instance(template=template, attuned_to=self.sheet)
+
+        result = use_item(item_instance=inst, user=self.character)
+
+        self.assertTrue(result.applied_effects)
+
+
 class ForfeitItemInstanceTests(TestCase):
     """forfeit_item_instance (#1770 PR2) — soft-forfeit for staked-and-lost items."""
 

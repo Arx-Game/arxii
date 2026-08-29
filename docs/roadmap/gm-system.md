@@ -199,6 +199,22 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   built:** a GM-declaration override for `Situation` evaluators — ruled deliberate
   (ADR-0240): GMs make a situation true (positioning, encounter settings), they don't
   assert it past the evaluators.
+- **GM web parity: Grant Item, Stage, Traps tabs + condition removal ✅ (#3431)** —
+  the 2026-08-28 GM storytelling-tools audit found three telnet-only action families
+  with zero web callers (`grant_item`, `stage_prop`/`stage_property`,
+  `list_room_traps`/`arm_trap`/`gm_disarm_trap`) plus one fully absent lever: GM
+  condition removal, since `GMApplyConditionAction` never got an off-switch. **Built:**
+  one new backend pair (`GMRemoveConditionAction`/`GMListConditionsAction`, keys
+  `gm_remove_condition`/`gm_list_conditions`, `actions/definitions/gm_adjudication.py`,
+  same `IsSceneGMPrerequisite` + JUNIOR gate as `gm_apply_condition`) — removal is
+  catalog-bounded to the target's own ACTIVE `ConditionInstance`s (refuses rather than
+  silently no-opping) and requires a `reason` echoed in the result; the list action
+  feeds the removal picker since no ViewSet exposes a target's hidden active
+  conditions to the GM who applied them. Telnet: `gm condition remove <character>
+  condition=<name> reason=<text>` extends the existing `gm condition` subverb.
+  `GMAdjudicationPanel` gained three tabs (Grant Item, Stage — prop/property modes,
+  Traps — list/arm/disarm) dispatching the pre-existing telnet-only actions, plus a
+  Remove mode on the Condition tab.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
@@ -436,6 +452,10 @@ detected by the viewer, `id`/`name`/`is_armed` only. `Trap.is_hidden=False` now 
 "no roll needed" on both detection paths (entry and search) — its first readers. Web:
 `TrapsBlock` in the room panel. Telnet: `disarm <trap name>`. See
 `docs/systems/INDEX.md`'s Traps entry for the full wiring.
+
+GM half ✅ web (#3431): the three GM management actions above were telnet-only until
+`GMAdjudicationPanel` gained a Traps tab dispatching `list_room_traps`/`arm_trap`/
+`gm_disarm_trap` — see the "GM web parity" bullet above.
 
 ### Phase 7 — Story Areas & Story Rooms ✅ (#2450, epic #2436 slice 3, ADR-0141)
 A GM's own build-and-run space, layered on the #2436/#2449 staff world-builder grid

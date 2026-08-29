@@ -9,20 +9,50 @@ SERVICE_MODULES = [
     "flows.service_functions.actions",
     "flows.service_functions.agriculture",
     "flows.service_functions.communication",
+    "flows.service_functions.conditions",
     "flows.service_functions.forms",
+    "flows.service_functions.inventory",
     "flows.service_functions.movement",
+    "flows.service_functions.outfits",
     "flows.service_functions.perception",
     "flows.service_functions.packages",
 ]
 
 SERVICE_FUNCTIONS: dict[str, Callable] = {}
 
+_loaded = False
+
 
 def _ensure_loaded() -> None:
-    if SERVICE_FUNCTIONS:
+    """Populate ``SERVICE_FUNCTIONS`` from ``SERVICE_MODULES`` hooks, once.
+
+    Uses ``setdefault`` (not ``update``) so a ``register_service_function``
+    call made before this first runs (e.g. ``world.apps.ready()`` at Django
+    startup) is never clobbered by a same-named hook-loaded entry.
+    """
+    global _loaded  # noqa: PLW0603 — module-level lazy-load flag
+    if _loaded:
         return
     for path in SERVICE_MODULES:
-        SERVICE_FUNCTIONS.update(get_package_hooks(path))
+        for key, value in get_package_hooks(path).items():
+            SERVICE_FUNCTIONS.setdefault(key, value)
+    _loaded = True
+
+
+def register_service_function(name: str, func: Callable) -> None:
+    """Register an out-of-app flow verb under a short name (idempotent).
+
+    Safe to call before or after ``_ensure_loaded`` has run: entries
+    registered first are preserved (never overwritten by hook loading);
+    entries registered after are inserted directly.
+    """
+    SERVICE_FUNCTIONS[name] = func
+
+
+def list_service_functions() -> dict[str, Callable]:
+    """Enumerable copy of the registry for the authoring catalog."""
+    _ensure_loaded()
+    return dict(SERVICE_FUNCTIONS)
 
 
 def _resolve_dotted_path(name: str) -> Callable:

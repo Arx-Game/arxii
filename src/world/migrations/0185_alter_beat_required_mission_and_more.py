@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0183_alter_triggerdefinition_event_name"),
-    ]
+    dependencies = [("arxii", "0184_itemtemplate_requires_attunement")]
 
     operations = [
         migrations.AlterField(

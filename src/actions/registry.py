@@ -193,6 +193,8 @@ from actions.definitions.gift_acquisition import (
 from actions.definitions.gm_adjudication import (
     GMApplyConditionAction,
     GMAwardAction,
+    GMListConditionsAction,
+    GMRemoveConditionAction,
     InvokeCatalogCheckAction,
     SummonPlayerAction,
 )
@@ -209,6 +211,7 @@ from actions.definitions.gm_combat import (
     RemoveEncounterParticipantAction,
     RemoveOpponentAction,
     ResolveEncounterRoundAction,
+    SpawnCreatureAction,
     UpdateEncounterSettingsAction,
 )
 from actions.definitions.gm_props import StagePropAction, StagePropertyAction
@@ -773,6 +776,7 @@ _ALL_ACTIONS: list[Action] = [
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),
+    SpawnCreatureAction(),
     RemoveOpponentAction(),
     AddEncounterParticipantAction(),
     RemoveEncounterParticipantAction(),
@@ -949,6 +953,9 @@ _ALL_ACTIONS: list[Action] = [
     InvokeCatalogCheckAction(),
     GMAwardAction(),
     GMApplyConditionAction(),
+    # #3431 — GM web parity: condition removal + the read seam that feeds its picker.
+    GMRemoveConditionAction(),
+    GMListConditionsAction(),
     # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
     SummonPlayerAction(),
     AcceptGMSummonAction(),

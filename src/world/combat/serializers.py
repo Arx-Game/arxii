@@ -36,6 +36,7 @@ from world.combat.models import (
     CombatParticipant,
     CombatRoundAction,
     ConsiderReading,
+    CreatureTemplate,
     DramaticSurgeRecord,
     DuelChallenge,
     EscalationCurve,
@@ -790,6 +791,37 @@ class ThreatPoolSerializer(serializers.ModelSerializer):
         model = ThreatPool
         fields = ["id", "name", "description"]
         read_only_fields = fields
+
+
+class CreatureTemplateSerializer(serializers.ModelSerializer):
+    """Read-only bestiary catalog listing for the GM spawn-from-template picker (#3424).
+
+    Deliberately thin — no phase/break-bar internals (leak table in the #3424
+    spec: a player reading this payload would learn boss-phase mechanics and
+    weakness windows ahead of Consider/weakness-research discovery). ``has_phases``
+    only signals presence, never the phase count or triggers.
+    """
+
+    has_phases = serializers.SerializerMethodField()
+    threat_pool_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CreatureTemplate
+        fields = ["id", "name", "tier", "description", "has_phases", "threat_pool_name"]
+        read_only_fields = fields
+
+    def get_has_phases(self, obj: CreatureTemplate) -> bool:
+        # Reads the ViewSet's Prefetch(to_attr="cached_phase_templates") cache
+        # (mirrors CheckTypeSerializer's cached_traits) to avoid an .exists()
+        # N+1 across a page of rows; falls back to a live query for a
+        # serializer used directly (e.g. a unit test) without that prefetch.
+        cached = getattr(obj, "cached_phase_templates", None)  # noqa: GETATTR_LITERAL
+        if cached is None:
+            return obj.phase_templates.exists()
+        return len(cached) > 0
+
+    def get_threat_pool_name(self, obj: CreatureTemplate) -> str | None:
+        return obj.threat_pool.name if obj.threat_pool_id else None
 
 
 # ---------------------------------------------------------------------------

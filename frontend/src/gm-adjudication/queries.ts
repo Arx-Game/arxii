@@ -11,6 +11,7 @@ export const gmAdjudicationKeys = {
   conditionTemplates: () => [...gmAdjudicationKeys.all, 'condition-templates'] as const,
   situationTemplates: () => [...gmAdjudicationKeys.all, 'situation-templates'] as const,
   challengeTemplates: () => [...gmAdjudicationKeys.all, 'challenge-templates'] as const,
+  itemTemplates: (search: string) => [...gmAdjudicationKeys.all, 'item-templates', search] as const,
   summonOffers: () => [...gmAdjudicationKeys.all, 'summon-offers'] as const,
 };
 
@@ -49,6 +50,16 @@ export function useChallengeTemplateCatalog(enabled: boolean) {
     queryFn: () => api.getChallengeTemplateCatalog(),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+/** Enabled only while the picker is open — mirrors `useCheckTypeCatalog` (#3431). */
+export function useItemTemplateCatalog(search: string, enabled: boolean) {
+  return useQuery({
+    queryKey: gmAdjudicationKeys.itemTemplates(search),
+    queryFn: () => api.getItemTemplateCatalog(search),
+    enabled,
+    staleTime: 30_000,
   });
 }
 

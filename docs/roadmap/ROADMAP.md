@@ -253,6 +253,18 @@ Magic Scope #5. Mage scars are the wedge consumer; the resulting plumbing is
 cross-cutting infrastructure that combat, items, environments, and missions all
 inherit. **This work needs to follow Scope 5 sooner rather than later.**
 
+**Update (#3416/#3417):** Scope 5.5 shipped the reactive engine itself (events
+emitted, triggers dispatched, `FlowExecution` runs steps). #3416 (ADR-0242)
+then established that new mechanics should be authored as
+Flow/Trigger/Condition rows rather than modeled as bespoke classes, and found
+that the only authoring surface was raw Django admin with no step inlines.
+#3417 closed that authoring gap: a staff-only DRF API
+(`docs/systems/flows.md#authoring-api-3417`, ADR-0244) plus a visual tree
+editor at `/staff/flows-builder`. What remains open is the original claim
+above, unchanged by #3417: still no `FlowDefinition`/`TriggerDefinition`
+content actually lives in the database. The authoring tool exists; the
+content does not yet.
+
 ### Status Key
 
 - **skeleton** — Core structure and models exist, but major features are still missing
