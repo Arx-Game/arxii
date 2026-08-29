@@ -4,6 +4,8 @@ import factory.fuzzy
 
 from world.boundaries.factories import TreasuredSubjectFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.factories import CreatureTemplateFactory
+from world.mechanics.factories import SituationTemplateFactory
 from world.roster.factories import PlayerDataFactory
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
@@ -31,6 +33,8 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     BeatCompletion,
+    BeatOpponentLine,
+    BeatStagedTemplate,
     Chapter,
     CustodyClearance,
     Episode,
@@ -389,6 +393,36 @@ class BeatFactory(factory_django.DjangoModelFactory):
     referenced_chapter = None
     referenced_episode = None
     required_points = None
+
+
+class BeatOpponentLineFactory(factory_django.DjangoModelFactory):
+    """Factory for creating BeatOpponentLine session-prep rows (#3425)."""
+
+    class Meta:
+        model = BeatOpponentLine
+
+    beat = factory.SubFactory(BeatFactory)
+    creature_template = factory.SubFactory(CreatureTemplateFactory)
+    count = 1
+    position_name = ""
+    order = 0
+
+
+class BeatStagedTemplateFactory(factory_django.DjangoModelFactory):
+    """Factory for creating BeatStagedTemplate session-prep rows (#3425).
+
+    Defaults to a situation_template row; pass ``situation_template=None,
+    challenge_template=<ChallengeTemplate>`` for the challenge-only shape (the
+    model's XOR constraint requires exactly one).
+    """
+
+    class Meta:
+        model = BeatStagedTemplate
+
+    beat = factory.SubFactory(BeatFactory)
+    situation_template = factory.SubFactory(SituationTemplateFactory)
+    challenge_template = None
+    order = 0
 
 
 class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):

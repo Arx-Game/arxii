@@ -57,6 +57,22 @@ export interface RoomTrapEntry {
   position: string | null;
 }
 
+/**
+ * One row of `gm_list_runnable_beats`'s result data (#3425) — an
+ * ENCOUNTER/SITUATION beat on the acting GM's currently-active episode, ready
+ * to run into the scene. Same non-ViewSet shape as `RoomTrapEntry` — see
+ * `GMListRunnableBeatsAction`, `actions/definitions/gm_story.py`.
+ */
+export interface RunnableBeatEntry {
+  id: number;
+  story_title: string;
+  episode_title: string;
+  kind: 'encounter' | 'situation';
+  risk: string;
+  opponent_line_count: number;
+  staged_template_count: number;
+}
+
 /** Mirrors `world.scenes.action_constants.DifficultyChoice` — the only bands
  *  `gm_invoke_check` accepts (never a free integer). */
 export const DIFFICULTY_BANDS = [

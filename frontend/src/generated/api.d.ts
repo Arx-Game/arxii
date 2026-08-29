@@ -24033,6 +24033,8 @@ export interface components {
        *     BeatViewSet.queryset already includes this chain.
        */
       readonly can_mark: boolean;
+      opponent_lines?: components['schemas']['BeatOpponentLine'][];
+      staged_templates?: components['schemas']['BeatStagedTemplate'][];
     };
     /**
      * @description * `situation` - Situation
@@ -24042,6 +24044,44 @@ export interface components {
      * @enum {string}
      */
     BeatKindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
+    /**
+     * @description One authored opponent line on an ENCOUNTER beat (#3425).
+     *
+     *     ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
+     *     .update()`` can diff incoming rows against the beat's existing lines by
+     *     id: an id present in the payload and on the beat is an edit, an id absent
+     *     is a new row, and an existing row whose id is missing from the payload is
+     *     deleted. See ``BeatSerializer._sync_children``.
+     */
+    BeatOpponentLine: {
+      id?: number;
+      /** @description The bestiary entry to spawn. */
+      creature_template: number;
+      /** @description How many of this creature to spawn. */
+      count?: number;
+      /** @description Authored position hint, resolved by name against the run-time room's Position set. Blank = no position. */
+      position_name?: string;
+      order?: number;
+    };
+    /**
+     * @description One authored opponent line on an ENCOUNTER beat (#3425).
+     *
+     *     ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
+     *     .update()`` can diff incoming rows against the beat's existing lines by
+     *     id: an id present in the payload and on the beat is an edit, an id absent
+     *     is a new row, and an existing row whose id is missing from the payload is
+     *     deleted. See ``BeatSerializer._sync_children``.
+     */
+    BeatOpponentLineRequest: {
+      id?: number;
+      /** @description The bestiary entry to spawn. */
+      creature_template: number;
+      /** @description How many of this creature to spawn. */
+      count?: number;
+      /** @description Authored position hint, resolved by name against the run-time room's Position set. Blank = no position. */
+      position_name?: string;
+      order?: number;
+    };
     /** @description Read-only mirror of :class:`world.missions.types.BeatOption`. */
     BeatOption: {
       option_id: number;
@@ -24136,11 +24176,41 @@ export interface components {
       expired_consequences?: number | null;
       /** @description Optional: a MissionTemplate this beat requires. The completion engine (#1757) flips this beat when a launched instance terminates. SET_NULL on template delete. */
       required_mission?: number | null;
+      opponent_lines?: components['schemas']['BeatOpponentLineRequest'][];
+      staged_templates?: components['schemas']['BeatStagedTemplateRequest'][];
     };
     /** @description POST body for the #885 resolve endpoint. */
     BeatResolveRequestRequest: {
       option_id: number;
       approach_id?: number | null;
+    };
+    /**
+     * @description One authored situation/challenge template on a SITUATION beat (#3425).
+     *
+     *     Exactly one of ``situation_template``/``challenge_template`` must be set
+     *     per row, mirroring the model's ``CheckConstraint``. See
+     *     ``BeatOpponentLineSerializer`` for the ``id`` writable-but-optional
+     *     convention this shares.
+     */
+    BeatStagedTemplate: {
+      id?: number;
+      situation_template?: number | null;
+      challenge_template?: number | null;
+      order?: number;
+    };
+    /**
+     * @description One authored situation/challenge template on a SITUATION beat (#3425).
+     *
+     *     Exactly one of ``situation_template``/``challenge_template`` must be set
+     *     per row, mirroring the model's ``CheckConstraint``. See
+     *     ``BeatOpponentLineSerializer`` for the ``id`` writable-but-optional
+     *     convention this shares.
+     */
+    BeatStagedTemplateRequest: {
+      id?: number;
+      situation_template?: number | null;
+      challenge_template?: number | null;
+      order?: number;
     };
     /** @description Read-only mirror of :class:`world.missions.types.BeatView`. */
     BeatView: {
@@ -36237,6 +36307,8 @@ export interface components {
       expired_consequences?: number | null;
       /** @description Optional: a MissionTemplate this beat requires. The completion engine (#1757) flips this beat when a launched instance terminates. SET_NULL on template delete. */
       required_mission?: number | null;
+      opponent_lines?: components['schemas']['BeatOpponentLineRequest'][];
+      staged_templates?: components['schemas']['BeatStagedTemplateRequest'][];
     };
     PatchedBequestRequest: {
       will?: number;
@@ -40288,6 +40360,7 @@ export interface components {
       readonly participants: string;
       readonly is_owner: string;
       readonly viewer_can_gm: boolean;
+      readonly running_beat: string;
       /** Format: date-time */
       date_finished?: string | null;
       is_active?: boolean;
@@ -40384,6 +40457,7 @@ export interface components {
       }[];
       readonly is_owner: string;
       readonly viewer_can_gm: boolean;
+      readonly running_beat: string;
     };
     /** @description Read-only view of a scene's active round, for the round-settings control (#1467). */
     SceneRound: {

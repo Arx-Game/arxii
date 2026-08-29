@@ -257,6 +257,44 @@ class FinishSceneFullTests(TestCase):
         scene.refresh_from_db()
         assert scene.date_finished == first_date_finished
 
+    def test_clears_running_beat(self):
+        """#3425: finish_scene_full clears a scene's running_beat pointer."""
+        from world.stories.factories import (
+            BeatFactory,
+            ChapterFactory,
+            EpisodeFactory,
+            StoryFactory,
+        )
+
+        story = StoryFactory()
+        episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+        beat = BeatFactory(episode=episode)
+        scene = SceneFactory(is_active=True, running_beat=beat)
+
+        with (
+            patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            finish_scene_full(scene)
+
+        scene.refresh_from_db()
+        assert scene.running_beat_id is None
+
+    def test_no_running_beat_is_a_no_op_for_that_field(self):
+        """A scene with no running_beat finishes cleanly (no save() called for it)."""
+        scene = SceneFactory(is_active=True, running_beat=None)
+
+        with (
+            patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            finish_scene_full(scene)
+
+        scene.refresh_from_db()
+        assert scene.running_beat_id is None
+
 
 class EnrollPresentTableGMsTests(TestCase):
     """Auto-``is_gm`` grant for a present table-owning GM (#2113)."""
