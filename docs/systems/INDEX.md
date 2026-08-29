@@ -2623,6 +2623,32 @@ GM at a given level may author (#2000, ADR-0097).
   dispatching the same `join_story_room`/`leave_story_room` REGISTRY actions
   telnet's `joinroom`/`leaveroom` already used; linked from
   `ProfileDropdown`'s general (non-staff) menu section.
+- **GM story-NPC on-ramp (#3426):** `mint_story_npc`
+  (`world.roster.services.staff_characters`) — JUNIOR+ `GMProfile` (staff bypass) +
+  the new `GMLevelCap.max_story_npcs` per-level cap (most-restrictive/refuse when
+  unconfigured; enforced by the shared `check_story_npc_cap`), delegating to
+  `mint_staff_character`'s working set (#3283 — Character + sheet + PRIMARY persona
+  + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to the GM's own
+  account, the same tenure the persona picker and telnet `@ic` key on).
+  `description` writes `CharacterSheet.additional_desc` via
+  `set_physical_description`. In-scope bugfix: `mint_staff_character`'s shelf
+  lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
+  `roster/seeds.py`'s seeded shelf is named "NPCs", so the old lookup missed it and
+  collided on create). Heavyweight sibling: `finalize_gm_character(draft,
+  claim_as_npc=True)` (`world.character_creation.services`) lands a full-CG
+  character on the NPC shelf with the same tenure hand-off instead of tenure-less
+  on Available, gated by the same `check_story_npc_cap`. **Action + telnet:**
+  `MintStoryNPCAction` (key `mint_story_npc`, `actions/definitions/gm_npcs.py`,
+  `MinimumGMLevelPrerequisite(JUNIOR)`); `gm npc <name>[=<description>]`
+  (`CmdGMDashboard`, `commands/gm_ops.py`). **API:**
+  `CharacterDraftViewSet.finalize_gm`'s `claim_as_npc` body flag;
+  `FinalizeForTableDialog`'s matching checkbox. **Leak fix:** `RosterEntryViewSet`
+  (`AllowAny`) now excludes `RosterType.NPC` entries from its general queryset
+  (staff and the entry's own tenure holder still see them) — previously
+  individually reachable even though `RosterViewSet` already hid the shelf itself.
+  Frontend: a "My NPCs" block on `GMDashboardPage` + a mint dialog. See
+  `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
+  rundown and how this relates to the ambient-NPC ladder.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`

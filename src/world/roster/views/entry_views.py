@@ -4,7 +4,7 @@ RosterEntry views and related functionality.
 
 from http import HTTPMethod
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status, viewsets
@@ -17,6 +17,7 @@ from rest_framework.serializers import BaseSerializer
 
 from world.roster.filters import RosterEntryFilterSet
 from world.roster.models import RosterEntry, RosterTenure, TenureMedia
+from world.roster.models.choices import RosterType
 from world.roster.permissions import IsPlayerOrStaff
 from world.roster.serializers import (
     MyRosterEntrySerializer,
@@ -47,12 +48,23 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = RosterEntryPagination
 
     def get_queryset(self) -> QuerySet[RosterEntry]:
-        """Return a queryset of roster entries."""
+        """Return a queryset of roster entries.
 
-        return (
+        NPC-shelf entries are excluded from general visibility (#3426): staff
+        always see every entry; a non-staff caller sees an NPC-shelf entry
+        only when they hold an active tenure on it (their own Story NPC).
+        ``RosterViewSet`` already hides the NPC *shelf itself*
+        (``Roster.is_public=False``) from anonymous/non-staff shelf listings
+        (#2728) -- this closes the companion gap where individual
+        ``RosterEntry`` rows on that shelf were still reachable regardless,
+        via this AllowAny viewset, outing an unrevealed story's cast.
+        """
+
+        queryset = (
             RosterEntry.objects.select_related(
                 "character_sheet",
                 "character_sheet__character",
+                "roster",
             )
             .prefetch_related(
                 Prefetch(
@@ -69,6 +81,25 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             )
             .order_by("character_sheet__character__db_key")
         )
+
+        user = self.request.user
+        if user.is_authenticated and user.is_staff:
+            return queryset
+
+        hidden_npc_entries = Q(roster__roster_type=RosterType.NPC)
+        if user.is_authenticated:
+            try:
+                player_data = user.player_data
+            except AttributeError:
+                player_data = None
+            if player_data is not None:
+                own_npc_entry_ids = RosterTenure.objects.filter(
+                    player_data=player_data,
+                    start_date__isnull=False,
+                    end_date__isnull=True,
+                ).values_list("roster_entry_id", flat=True)
+                hidden_npc_entries &= ~Q(pk__in=own_npc_entry_ids)
+        return queryset.exclude(hidden_npc_entries)
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "mine":
@@ -92,7 +123,9 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         except AttributeError:
             available_characters = []
 
-        entries = RosterEntry.objects.filter(character_sheet__character__in=available_characters)
+        entries = RosterEntry.objects.filter(
+            character_sheet__character__in=available_characters
+        ).select_related("roster")
         serializer = self.get_serializer(entries, many=True)
         return Response(serializer.data)
 

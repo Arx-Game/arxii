@@ -3,6 +3,7 @@ Tests for roster system permission enforcement.
 """
 
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -12,9 +13,11 @@ from world.roster.factories import (
     MediaFactory,
     PlayerDataFactory,
     RosterEntryFactory,
+    RosterFactory,
     RosterTenureFactory,
     TenureMediaFactory,
 )
+from world.roster.models.choices import RosterType
 
 
 class MediaPermissionsTestCase(APITestCase):
@@ -198,6 +201,64 @@ class RosterEntryPermissionsTestCase(APITestCase):
         url = reverse("roster:entries-detail", kwargs={"pk": self.roster_entry.pk})
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
+
+    def test_npc_shelf_entry_excluded_from_public_list(self):
+        """NPC-shelf entries never appear in the public/anonymous list (#3426)."""
+        npc_roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs")
+        npc_entry = RosterEntryFactory(roster=npc_roster)
+
+        url = reverse("roster:entries-list")
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        entry_ids = [row["id"] for row in response.json()["results"]]
+        assert npc_entry.pk not in entry_ids
+        assert self.roster_entry.pk in entry_ids
+
+    def test_npc_shelf_entry_excluded_from_public_detail(self):
+        """An anonymous caller can't reach an NPC-shelf entry by id either (#3426)."""
+        npc_roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs")
+        npc_entry = RosterEntryFactory(roster=npc_roster)
+
+        url = reverse("roster:entries-detail", kwargs={"pk": npc_entry.pk})
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_npc_shelf_entry_visible_to_staff(self):
+        """Staff still sees NPC-shelf entries (#3426)."""
+        npc_roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs")
+        npc_entry = RosterEntryFactory(roster=npc_roster)
+
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("roster:entries-detail", kwargs={"pk": npc_entry.pk})
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_npc_shelf_entry_visible_to_own_tenure_holder(self):
+        """A GM sees their own Story NPC's entry even though it's NPC-shelved (#3426)."""
+        npc_roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs")
+        npc_entry = RosterEntryFactory(roster=npc_roster)
+        RosterTenureFactory(
+            roster_entry=npc_entry,
+            player_data=self.player_data,
+            start_date=timezone.now(),
+            end_date=None,
+        )
+
+        self.client.force_authenticate(user=self.player)
+        url = reverse("roster:entries-detail", kwargs={"pk": npc_entry.pk})
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_npc_shelf_entry_hidden_from_other_players(self):
+        """A different player (not staff, no tenure) still can't see it (#3426)."""
+        npc_roster = RosterFactory(roster_type=RosterType.NPC, name="NPCs")
+        npc_entry = RosterEntryFactory(roster=npc_roster)
+
+        self.client.force_authenticate(user=self.other_player)
+        url = reverse("roster:entries-detail", kwargs={"pk": npc_entry.pk})
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @suppress_permission_errors
     def test_set_profile_picture_player_only(self):

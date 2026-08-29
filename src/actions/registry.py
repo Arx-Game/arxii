@@ -214,6 +214,7 @@ from actions.definitions.gm_combat import (
     SpawnCreatureAction,
     UpdateEncounterSettingsAction,
 )
+from actions.definitions.gm_npcs import MintStoryNPCAction
 from actions.definitions.gm_props import StagePropAction, StagePropertyAction
 from actions.definitions.gm_stories import (
     ClaimGroupStoryRequestAction,
@@ -964,6 +965,8 @@ _ALL_ACTIONS: list[Action] = [
     # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
     FindSituationAction(),
     SubmitCatalogSuggestionAction(),
+    # #3426 — GM story-NPC on-ramp: mint a Story NPC tenure-bound to the GM's account.
+    MintStoryNPCAction(),
     # #3295 — scene check invocation: player self-checks, GM calls, proposals.
     SceneSelfCheckAction(),
     CallForCheckAction(),

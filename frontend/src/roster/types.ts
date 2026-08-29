@@ -14,6 +14,13 @@ export interface MyRosterEntry {
   primary_persona_id: number | null;
   /** The face currently worn (durable active_persona, else primary) — #981/#1043. */
   active_persona_id: number | null;
+  /**
+   * The shelf this entry sits on (a `RosterType` value, e.g. "Active", "NPC").
+   * Lets callers split a GM's own Story NPCs out of the general list (#3426)
+   * without a second query. Optional so the many pre-existing test mocks of
+   * this type across the app don't all need updating for an unrelated field.
+   */
+  roster_type?: string;
 }
 
 /**

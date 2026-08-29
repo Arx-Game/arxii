@@ -95,6 +95,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     profile_picture_url = serializers.SerializerMethodField()
     primary_persona_id = serializers.SerializerMethodField()
     active_persona_id = serializers.SerializerMethodField()
+    # Lets the frontend split "My NPCs" (#3426) out of the general character
+    # list without a second query -- the value is one of world.roster.models
+    # .choices.RosterType (e.g. "NPC", "Active").
+    roster_type = serializers.CharField(source="roster.roster_type", read_only=True)
 
     class Meta:
         model = RosterEntry
@@ -105,6 +109,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "profile_picture_url",
             "primary_persona_id",
             "active_persona_id",
+            "roster_type",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 

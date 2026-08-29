@@ -44,6 +44,7 @@ describe('postSelectEntry', () => {
         profile_picture_url: null,
         primary_persona_id: 1,
         active_persona_id: 1,
+        roster_type: 'ACTIVE',
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
@@ -102,6 +103,7 @@ describe('useSelectCharacterMutation', () => {
         profile_picture_url: null,
         primary_persona_id: 1,
         active_persona_id: 1,
+        roster_type: 'ACTIVE',
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
