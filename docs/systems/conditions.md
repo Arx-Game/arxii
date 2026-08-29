@@ -452,6 +452,19 @@ instance.effective_severity # severity * stage.severity_multiplier
 
 Note: Conditions are applied through game logic, not directly through the API.
 
+**GM fiat apply/remove (#2118, #3431)** rides the REGISTRY action dispatch seam instead
+of a ViewSet: `GMApplyConditionAction`/`GMRemoveConditionAction`
+(`actions/definitions/gm_adjudication.py`, keys `gm_apply_condition`/
+`gm_remove_condition`) apply/remove an authored `ConditionTemplate` by fiat, gated
+`IsSceneGMPrerequisite` + JUNIOR GM trust. `GMListConditionsAction` (key
+`gm_list_conditions`) is the read counterpart that feeds the web removal picker —
+`CharacterConditionsViewSet.observed` above is self-only and filters to
+`is_visible_to_others=True`, which would hide a fiat-applied hidden condition from the
+GM who applied it, so this reads the target's full active-instance set instead. Web:
+`GMAdjudicationPanel`'s Condition tab (apply + Remove mode). Telnet: `gm condition
+<char> condition=<name> ...` / `gm condition remove <char> condition=<name>
+reason=<text>` on `CmdGMDashboard`.
+
 ---
 
 ## Treatment (player surface)

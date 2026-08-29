@@ -770,3 +770,16 @@ def set_container_policy(character: CharacterState, container: ItemState, policy
         raise NotInPossession
     container.instance.access_policy = ContainerAccessPolicy(policy)
     container.instance.save(update_fields=["access_policy"])
+
+
+hooks = {
+    "pick_up": pick_up,
+    "drop": drop,
+    "give": give,
+    "equip": equip,
+    "unequip": unequip,
+    "put_in": put_in,
+    "take_out": take_out,
+    "steal": steal,
+    "set_container_policy": set_container_policy,
+}

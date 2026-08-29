@@ -109,6 +109,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     lifecycle_state = serializers.CharField(
         source="character_sheet.lifecycle_state", read_only=True
     )
+    # Lets the frontend split "My NPCs" (#3426) out of the general character
+    # list without a second query -- the value is one of world.roster.models
+    # .choices.RosterType (e.g. "NPC", "Active").
+    roster_type = serializers.CharField(source="roster.roster_type", read_only=True)
 
     class Meta:
         model = RosterEntry
@@ -121,6 +125,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "active_persona_id",
             "unread_narrative_count",
             "lifecycle_state",
+            "roster_type",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 

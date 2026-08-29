@@ -37,9 +37,6 @@ class GetAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_get"
-    result_event: str | None = "get"
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
@@ -97,9 +94,6 @@ class DropAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_drop"
-    result_event: str | None = "drop"
-
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
@@ -144,9 +138,6 @@ class GiveAction(Action):
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = "before_give"
-    result_event: str | None = "give"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target", "recipient"})
 
@@ -198,9 +189,6 @@ class TraverseExitAction(Action):
     category: str = "movement"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SINGLE
-
-    intent_event: str | None = "before_traverse"
-    result_event: str | None = "traverse"
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 

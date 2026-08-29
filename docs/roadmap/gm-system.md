@@ -199,6 +199,22 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   built:** a GM-declaration override for `Situation` evaluators — ruled deliberate
   (ADR-0240): GMs make a situation true (positioning, encounter settings), they don't
   assert it past the evaluators.
+- **GM web parity: Grant Item, Stage, Traps tabs + condition removal ✅ (#3431)** —
+  the 2026-08-28 GM storytelling-tools audit found three telnet-only action families
+  with zero web callers (`grant_item`, `stage_prop`/`stage_property`,
+  `list_room_traps`/`arm_trap`/`gm_disarm_trap`) plus one fully absent lever: GM
+  condition removal, since `GMApplyConditionAction` never got an off-switch. **Built:**
+  one new backend pair (`GMRemoveConditionAction`/`GMListConditionsAction`, keys
+  `gm_remove_condition`/`gm_list_conditions`, `actions/definitions/gm_adjudication.py`,
+  same `IsSceneGMPrerequisite` + JUNIOR gate as `gm_apply_condition`) — removal is
+  catalog-bounded to the target's own ACTIVE `ConditionInstance`s (refuses rather than
+  silently no-opping) and requires a `reason` echoed in the result; the list action
+  feeds the removal picker since no ViewSet exposes a target's hidden active
+  conditions to the GM who applied them. Telnet: `gm condition remove <character>
+  condition=<name> reason=<text>` extends the existing `gm condition` subverb.
+  `GMAdjudicationPanel` gained three tabs (Grant Item, Stage — prop/property modes,
+  Traps — list/arm/disarm) dispatching the pre-existing telnet-only actions, plus a
+  Remove mode on the Condition tab.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
@@ -437,6 +453,10 @@ detected by the viewer, `id`/`name`/`is_armed` only. `Trap.is_hidden=False` now 
 `TrapsBlock` in the room panel. Telnet: `disarm <trap name>`. See
 `docs/systems/INDEX.md`'s Traps entry for the full wiring.
 
+GM half ✅ web (#3431): the three GM management actions above were telnet-only until
+`GMAdjudicationPanel` gained a Traps tab dispatching `list_room_traps`/`arm_trap`/
+`gm_disarm_trap` — see the "GM web parity" bullet above.
+
 ### Phase 7 — Story Areas & Story Rooms ✅ (#2450, epic #2436 slice 3, ADR-0141)
 A GM's own build-and-run space, layered on the #2436/#2449 staff world-builder grid
 substrate but gated by GM trust instead of the staff flag. A GM can author a private
@@ -485,6 +505,44 @@ touch story-room access, which stays the ADR-0141 self-service grant-and-join
 shape above; both surfaces independently land on the same consent-first
 principle, just for different questions ("can I move you" vs "can you enter
 my story area").
+
+### Phase 8 — GM Story-NPC On-Ramp ✅ (#3426)
+A JUNIOR+ GM stands up a Story NPC before a session and can immediately speak, emote,
+and act as it in scenes — web persona picker and telnet `@ic` alike — with no admin
+intervention. Closes the gap `staff_characters.py`'s docstring flagged as a deliberate
+follow-on: `mint_staff_character` (#3283) was staff-only, with no GM-gated sibling and
+no path granting a GM a tenure on their own NPC.
+
+Delivered:
+- **Service**: `mint_story_npc` (`world.roster.services.staff_characters`) — JUNIOR+
+  `GMProfile` (staff bypass) + `GMLevelCap.max_story_npcs` (new per-level cap column,
+  most-restrictive/refuse when unconfigured), delegating to `mint_staff_character`'s
+  working set (Character + sheet + PRIMARY persona + NPC-shelf `RosterEntry` + active
+  `RosterTenure`). `check_story_npc_cap` is the shared authorization seam both mint
+  paths call. In-scope bugfix: `mint_staff_character`'s shelf lookup was keyed on
+  `name="NPC"`, but the seeded shelf is named "NPCs" (`roster/seeds.py`) — re-keyed on
+  `roster_type` (unique), matching seeds.py's own pattern.
+- **Heavyweight sibling**: `finalize_gm_character(draft, claim_as_npc=True)` — a GM
+  runs a recurring antagonist through full CG, then claims it as their own NPC at
+  finalize instead of landing it tenure-less on Available. Same cap check.
+- **Action + telnet**: `MintStoryNPCAction` (key `mint_story_npc`,
+  `actions/definitions/gm_npcs.py`, `MinimumGMLevelPrerequisite(JUNIOR)`); telnet
+  `gm npc <name>[=<description>]` (`CmdGMDashboard`, `commands/gm_ops.py`).
+  `CharacterDraftViewSet.finalize_gm` gained the `claim_as_npc` body flag;
+  `FinalizeForTableDialog` gained the matching checkbox.
+- **Leak fix**: `RosterEntryViewSet` (`AllowAny`) was listing NPC-shelf entries
+  individually even though `RosterViewSet` already hid the *shelf* from non-staff —
+  now excludes `RosterType.NPC` entries from the general queryset (staff and the
+  entry's own tenure holder still see them).
+- **Frontend**: a "My NPCs" block on `GMDashboardPage` (own NPC tenures, name + sheet
+  link) plus a mint dialog dispatching `mint_story_npc`.
+- **Deferred** (stated, not an oversight): no self-service release/retire action to
+  free a cap slot yet — staff ends the `RosterTenure` in admin. Mid-weight statting
+  presets and a cross-story NPC library are a separate `needs-design` question (#3427).
+
+See `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
+service/action/API rundown and how this relates to (but bypasses) the ambient-NPC
+ladder.
 
 ## Cross-System Dependencies
 

@@ -10,32 +10,33 @@ mirroring ``world.mechanics.challenge_resolution`` (notably its
 Phase 3 is SINGLE-participant: ``viewer``/``actor`` is the one acting
 participant. Multi-participant union/arbitration is Phase 4.
 
-STORED-BUT-UNCONSUMED INVENTORY (Phase B end-of-batch-2 — Phase D must
-wire each of these or this list must explain why it stayed unconsumed):
+STORED-BUT-UNCONSUMED INVENTORY (Phase B end-of-batch-2 — kept as a
+historical checklist; each entry below is now WIRED, most by #941):
 
   * ``MissionGiverOffering.requirements_override`` (B2) —
     ``services.availability.offer_missions`` reads only the template's
     ``availability_rule`` today; Phase D AND-composes the override.
-  * ``MissionOptionRouteCandidate.consequence`` (B4) —
-    ``_select_route_consequence`` reads only ``route.consequence`` today;
-    Phase D checks the chosen candidate's override first when a random
-    candidate fires.
-  * ``MissionOptionRouteCandidate.outcome_text`` (B4) — Phase D emits it
-    to the player when a random candidate fires.
+  * ``MissionOptionRouteCandidate.consequence`` (B4) — WIRED by #941:
+    ``_select_route_consequence`` checks the fired candidate's override
+    first (``candidate.consequence_id``) before falling back to the
+    route's consequence.
+  * ``MissionOptionRouteCandidate.outcome_text`` (B4) — WIRED by #941:
+    ``services.play._story_text_for`` returns the fired candidate's
+    ``outcome_text`` when set, before the route's own outcome_text.
   * ``MissionOptionRouteReward.candidate`` (B4 polymorphic parent) —
-    :func:`world.missions.services.rewards.emit_terminal_rewards` walks
-    only ``route.reward_templates`` today; Phase D also walks the chosen
-    candidate's reward_templates when a random candidate fires terminal.
+    WIRED by #941: :func:`world.missions.services.rewards.emit_candidate_rewards`
+    (called from ``_resolve_check``/``_resolve_branch`` in this module,
+    right after a random-set candidate is chosen) walks the fired
+    candidate's own ``reward_templates`` — a candidate always advances,
+    so this fires on selection rather than at the route's terminal gate.
   * ``MissionNode.flavor_text`` (B6) — WIRED by #885: surfaced as the
     beat card's framing via ``services.play.beat_for``.
   * ``MissionOptionRoute.outcome_text`` (B6) — WIRED by #885: the actor's
     STORY prose on tier roll via ``services.play._story_text_for``
     (PLACEHOLDER template fallback when unauthored).
 
-Each of these is silently invisible to players until Phase D wires it.
-Studio authors may write content into these fields and see no effect
-in-game; the authoring tool should surface a "wires up in Phase D"
-caveat on the relevant input rows until then.
+The only entry left genuinely unconsumed is ``MissionGiverOffering.requirements_override``
+(B2); everything else on this list has a live caller today.
 
 Design invariants honored here:
   * difficulty for an AUTHORED CHECK is ``instance.template.risk_tier`` (the

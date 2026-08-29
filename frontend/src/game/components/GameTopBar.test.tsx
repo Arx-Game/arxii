@@ -30,6 +30,7 @@ const rosterEntry: MyRosterEntry = {
   active_persona_id: 7,
   unread_narrative_count: 0,
   lifecycle_state: 'ALIVE',
+  roster_type: 'Active',
 };
 
 // A second, background puppet (#2166) — Aria stays active; Bianca's session
@@ -43,6 +44,7 @@ const rosterEntry2: MyRosterEntry = {
   active_persona_id: 8,
   unread_narrative_count: 0,
   lifecycle_state: 'ALIVE',
+  roster_type: 'Active',
 };
 
 function makeWhisperInteraction(

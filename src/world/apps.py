@@ -37,6 +37,23 @@ merged body.
 from django.apps import AppConfig
 
 
+def _register_flow_service_functions() -> None:
+    """Register world-side flow verbs under short names (#3417).
+
+    ``flows`` must not import ``world.*``, so out-of-app verbs like the
+    conditions services register themselves here instead of living in a
+    ``hooks`` dict alongside an in-app ``flows.service_functions`` module.
+    """
+    from flows.service_functions import register_service_function  # noqa: PLC0415
+    from world.conditions import services as condition_services  # noqa: PLC0415
+
+    register_service_function("apply_condition_by_name", condition_services.apply_condition_by_name)
+    register_service_function("advance_condition_stage", condition_services.advance_condition_stage)
+    register_service_function(
+        "remove_condition_by_name", condition_services.remove_condition_by_name
+    )
+
+
 class ArxiiConfig(AppConfig):
     """AppConfig for the collapsed ``world`` package."""
 
@@ -93,3 +110,5 @@ class ArxiiConfig(AppConfig):
         room_features_apps.ready()
         # #3071 — new registration, no ordering dependency on the handshakes above.
         gm_apps.ready()
+        # #3417 — new registration, no ordering dependency on the handshakes above.
+        _register_flow_service_functions()

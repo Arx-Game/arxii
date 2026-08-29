@@ -7,7 +7,21 @@ Database-driven workflow engine that replaces hardcoded command logic. All game 
 ### `models/`
 - **`flows.py`**: `FlowDefinition`, `FlowStepDefinition`, `FlowStack` - database-defined workflows
 - **`triggers.py`**: `TriggerDefinition` (with `event_name: EventName` choice), `Trigger` - event handlers that modify flows
-- **`constants.py`**: `EventName(TextChoices)` - canonical event-name choices for the reactive layer
+- **`constants.py`**: `EventName(TextChoices)` - canonical event-name choices for the reactive
+  layer, including the generic `ACTION_INTENT`/`ACTION_RESULT` pair every `Action.run()` emits
+  (#3418, ADR-0243) - authored triggers discriminate the verb via a `payload.action_key` filter
+  clause, not a per-action event name
+
+### Authoring API (#3417)
+- **`catalog.py`**: `StepActionSpec`/`ParamSpec` dataclasses, `STEP_ACTION_SPECS` - hand-declared
+  per-action parameter schemas (the runtime has no way to introspect them from handler bodies);
+  also `event_catalog()`, `service_function_catalog()`, `FILTER_OPS`. Single source of truth shared
+  by server-side validation and the frontend palette.
+- **`step_validation.py`**: `validate_step_tree()` - catalog-driven validation of an authored
+  (unsaved) step tree; no DRF import.
+- **`serializers.py`** / **`views.py`** / **`urls.py`**: DRF CRUD for `FlowDefinition` (full-tree
+  step replace), `TriggerDefinition`, `Trigger`, plus the read-only `DslCatalogViewSet`. Mounted at
+  `api/flows/`. See `docs/systems/flows.md#authoring-api-3417`.
 
 ### `object_states/`
 - **`base_state.py`**: `BaseState` - mutable wrapper for Evennia objects during flows

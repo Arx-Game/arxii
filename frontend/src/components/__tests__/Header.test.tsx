@@ -197,6 +197,7 @@ describe('Header', () => {
       active_persona_id: 7,
       unread_narrative_count: 0,
       lifecycle_state: 'ALIVE',
+      roster_type: 'Active',
     };
 
     it("renders no chip when there is no selection (byte-for-byte today's header)", () => {

@@ -8,7 +8,10 @@ staff-only (``perm(Admin)``).
 toolkit's telnet face — thin ``resolve_action_args()``-style parsing +
 ``action.run()`` over ``InvokeCatalogCheckAction``/``GMAwardAction``/
 ``GMApplyConditionAction`` (``actions/definitions/gm_adjudication.py``), the
-same seam the web available-actions dispatcher uses.
+same seam the web available-actions dispatcher uses. ``gm condition remove
+<character> condition=<name> reason=<text>`` (#3431) is the referee off-switch
+``GMApplyConditionAction`` never got — dispatches ``GMRemoveConditionAction``,
+catalog-bounded to the target's own active instances.
 
 ``gm dramatic <character> reason=<text>`` (#3387) is the SENIOR-gated manual
 dramatic-beat trigger — thin over ``GMTriggerDramaticBeatAction``
@@ -19,6 +22,11 @@ of the automatic surge detectors catch.
 inbox verb — thin over ``SubmitCatalogSuggestionAction``
 (``actions/definitions/gm_catalog.py``), landing in the same staff inbox
 ``GMApplication`` already routes through.
+
+``gm npc <name>[=<description>]`` (#3426) is the GM story-NPC on-ramp — thin
+over ``MintStoryNPCAction`` (``actions/definitions/gm_npcs.py``), which mints
+a Story NPC tenure-bound to the caller's own account so the persona picker
+and ``@ic`` work on it immediately.
 """
 
 from __future__ import annotations
@@ -47,6 +55,7 @@ _USAGE_AWARD = (
 )
 _USAGE_CONDITION = (
     "Usage: gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]"
+    " | gm condition remove <character> condition=<name> reason=<text>"
 )
 _USAGE_DRAMATIC = "Usage: gm dramatic <character> reason=<text> (requires Senior GM+)"
 _USAGE_SUGGEST = (
@@ -58,9 +67,11 @@ _USAGE_SUMMON = (
     "Usage: gm summon <character>"
     " (consent-prompted -- the character must `accept summon`/`decline summon`)"
 )
+_USAGE_NPC = "Usage: gm npc <name>[=<description>] (requires Junior GM+)"
 _SUBVERB_LIST = "list"
 _SUBVERB_ARM = "arm"
 _SUBVERB_DISARM = "disarm"
+_SUBVERB_REMOVE = "remove"
 
 # parse_kv_and_flags key names -- module constants so the STRING_LITERAL lint's
 # comparison/membership check doesn't see bare identifier-shaped literals.
@@ -89,12 +100,14 @@ class CmdGMDashboard(ArxCommand):
       gm award <character> stat=<trait>
       gm award <character> technique=<name>
       gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]
+      gm condition remove <character> condition=<name> reason=<text>
       gm dramatic <character> reason=<text>     (requires Senior GM+)
       gm suggest <kind>=<text>
       gm trap list
       gm trap arm <id>
       gm trap disarm <id>
       gm summon <character>
+      gm npc <name>[=<description>]             (requires Junior GM+)
     """
 
     key = "gm"
@@ -104,30 +117,33 @@ class CmdGMDashboard(ArxCommand):
     action = None
 
     def func(self) -> None:
-        """Route the leading subverb, falling back to the dashboard render."""
+        """Route the leading subverb, falling back to the dashboard render.
+
+        A dispatch dict (not an if/elif chain) keeps this under the cyclomatic
+        complexity budget as subverbs accumulate (#3426 added the 9th, tipping
+        an elif chain over the C901 threshold).
+        """
         try:
             raw = (self.args or "").strip()
             tokens = raw.split(maxsplit=1)
             first = tokens[0].lower() if tokens else ""
             rest = tokens[1].strip() if len(tokens) > 1 else ""
-            if first == "claim":  # noqa: STRING_LITERAL
-                self._claim(rest)
-            elif first == "check":  # noqa: STRING_LITERAL
-                self._handle_check(rest)
-            elif first == "award":  # noqa: STRING_LITERAL
-                self._handle_award(rest)
-            elif first == "condition":  # noqa: STRING_LITERAL
-                self._handle_condition(rest)
-            elif first == "dramatic":  # noqa: STRING_LITERAL
-                self._handle_dramatic(rest)
-            elif first == "suggest":  # noqa: STRING_LITERAL
-                self._handle_suggest(rest)
-            elif first == "trap":  # noqa: STRING_LITERAL
-                self._handle_trap(rest)
-            elif first == "summon":  # noqa: STRING_LITERAL
-                self._handle_summon(rest)
-            else:
+            handlers = {
+                "claim": self._claim,
+                "check": self._handle_check,
+                "award": self._handle_award,
+                "condition": self._handle_condition,
+                "dramatic": self._handle_dramatic,
+                "suggest": self._handle_suggest,
+                "trap": self._handle_trap,
+                "summon": self._handle_summon,
+                "npc": self._handle_npc,
+            }
+            handler = handlers.get(first)
+            if handler is None:
                 self._render()
+            else:
+                handler(rest)
         except CommandError as err:
             self.msg(str(err))
 
@@ -245,12 +261,18 @@ class CmdGMDashboard(ArxCommand):
             self.msg(result.message)
 
     def _handle_condition(self, rest: str) -> None:
-        """Dispatch GMApplyConditionAction -- condition=<name> [severity=][duration=][note=]."""
-        from actions.definitions.gm_adjudication import GMApplyConditionAction  # noqa: PLC0415
-
+        """``gm condition <character> condition=<name> [severity=][duration=][note=]``
+        dispatches ``GMApplyConditionAction``; ``gm condition remove <character>
+        condition=<name> reason=<text>`` dispatches ``GMRemoveConditionAction`` (#3431)."""
         tokens = rest.split(maxsplit=1)
         if not tokens:
             raise CommandError(_USAGE_CONDITION)
+        if tokens[0].lower() == _SUBVERB_REMOVE:  # noqa: STRING_LITERAL
+            self._handle_condition_remove(tokens[1].strip() if len(tokens) > 1 else "")
+            return
+
+        from actions.definitions.gm_adjudication import GMApplyConditionAction  # noqa: PLC0415
+
         char_name = tokens[0]
         kv_rest = tokens[1] if len(tokens) > 1 else ""
         kwargs, _flags = parse_kv_and_flags(
@@ -275,6 +297,32 @@ class CmdGMDashboard(ArxCommand):
             run_kwargs["note"] = kwargs[_KEY_NOTE]
 
         result = GMApplyConditionAction().run(actor=self.caller, **run_kwargs)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_condition_remove(self, rest: str) -> None:
+        """``gm condition remove <character> condition=<name> reason=<text>`` (#3431)."""
+        from actions.definitions.gm_adjudication import GMRemoveConditionAction  # noqa: PLC0415
+
+        tokens = rest.split(maxsplit=1)
+        if not tokens:
+            raise CommandError(_USAGE_CONDITION)
+        char_name = tokens[0]
+        kv_rest = tokens[1] if len(tokens) > 1 else ""
+        kwargs, _flags = parse_kv_and_flags(
+            kv_rest,
+            multiword_keys=frozenset({"condition", "reason"}),
+            known_flags=frozenset(),
+        )
+        condition_ref = kwargs.get("condition")
+        reason = kwargs.get("reason")
+        if not condition_ref or not reason:
+            raise CommandError(_USAGE_CONDITION)
+
+        target = self._resolve_target(char_name)
+        result = GMRemoveConditionAction().run(
+            actor=self.caller, target=target, condition=condition_ref, reason=reason
+        )
         if result.message:
             self.msg(result.message)
 
@@ -366,6 +414,21 @@ class CmdGMDashboard(ArxCommand):
             return
 
         result = SummonPlayerAction().run(actor=self.caller, target=target)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_npc(self, rest: str) -> None:
+        """``gm npc <name>[=<description>]`` -- mint a Story NPC (#3426, Junior GM+)."""
+        from actions.definitions.gm_npcs import MintStoryNPCAction  # noqa: PLC0415
+
+        npc_name, _, description = rest.partition("=")
+        npc_name = npc_name.strip()
+        if not npc_name:
+            raise CommandError(_USAGE_NPC)
+
+        result = MintStoryNPCAction().run(
+            actor=self.caller, name=npc_name, description=description.strip()
+        )
         if result.message:
             self.msg(result.message)
 

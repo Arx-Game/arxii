@@ -235,7 +235,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     per the standard recipe (`arx manage rebase_migration arxii` /
     renumber-at-merge) — not a defect of this slice.
 
-- **The Hall — logged-in home surface (#3412 slice 2, complete, ADR-0244):** ships
+- **The Hall — logged-in home surface (#3412 slice 2, complete, ADR-0245):** ships
   the page slice 1 deferred. Backend: `unread_narrative_count` annotated onto
   `RosterEntryViewSet.mine`'s queryset (single aggregated JOIN/GROUP BY, not a
   per-row query — closes the slice-1 seam below) and surfaced on
@@ -243,7 +243,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   an org membership offer through the existing `membership_services` functions,
   telnet parity — no staff bypass). Frontend: `frontend/src/components/folio/`
   primitives (`Plate`/`PlateHead`/`CountChip`/`PersonaTiles`) establish the
-  Commonplace Book idiom (ADR-0244); `SelectedCharacterChip` restyled
+  Commonplace Book idiom (ADR-0245); `SelectedCharacterChip` restyled
   portrait-forward. The Hall mounts at `/` for any authed account (visitors keep the
   Gatefold byte-identical; the zero-character remedy reuses `WelcomePanel` behind an
   `isLoading` gate so it never flashes for a character-having account): **Your
@@ -253,7 +253,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   **no boards row**, see seams below), **The World** (clock plate rendered plainly,
   upcoming occasions, the Crier as the state-2 tidings skim with no archive
   affordance, persona tidings digest plate docked-only). See
-  [roster.md](../systems/roster.md) and ADR-0244.
+  [roster.md](../systems/roster.md) and ADR-0245.
   - **Seams closed this slice:** per-character narrative unread counts — **DONE**
     (was the top slice-1 seam).
   - **Seams still open:** no boards-index surface exists anywhere in the app
@@ -269,7 +269,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     the actual bug) rather than replacing it with a live presence read; presence
     wiring for that label stays open for a future slice.
 
-- **The offscreen-act gate (#3412 slice 3, complete, ADR-0245):** the "2.5 acts" a
+- **The offscreen-act gate (#3412 slice 3, complete, ADR-0246):** the "2.5 acts" a
   player can still do on a degraded-lifecycle character's behalf without that
   character being onscreen. Backend: `actions.offscreen_gate.offscreen_act_state`
   (`OFFSCREEN_ACT_KEYS`: journal entries, character goals, persona swaps,
@@ -292,7 +292,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   CAPTURED/DEAD/RETIRED/UNKNOWN docked character instead of the act rows; the
   persona-switcher's `setActivePersona` fetcher now surfaces the response's
   `{"detail"}` (via `readErrorDetail`) so a failed switch's toast carries the real
-  gate reason instead of a fixed generic message. See ADR-0245 for the
+  gate reason instead of a fixed generic message. See ADR-0246 for the
   extend-the-dead-gate architecture, the rejected `CharacterCapabilities`-facade-now
   and DB-config-table-now alternatives, and the COMA-is-unwritten finding.
   - **Remaining #3412 scope (deferred to a later slice or explicitly out of
@@ -305,7 +305,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     are conceptually adjacent to that system but not wired to it); DB
     authorability of the `OFFSCREEN_ACT_KEYS`/`OFFSCREEN_LIFECYCLE_DISPOSITIONS`
     tables (currently Python constants — a config-table facade was explicitly
-    rejected for this slice, ADR-0245); the unconscious display-state overlay is
+    rejected for this slice, ADR-0246); the unconscious display-state overlay is
     NOT exposed on `MyRosterEntry` (it's a conditions-system read, not a sheet
     column — recorded as a seam, not built, to avoid a new per-row query on a
     payload every Hall visit fetches); a proclamation FE compose surface (no
@@ -333,6 +333,18 @@ features across every gameplay domain. It is scheduled to be addressed as
 Magic Scope #5. Mage scars are the wedge consumer; the resulting plumbing is
 cross-cutting infrastructure that combat, items, environments, and missions all
 inherit. **This work needs to follow Scope 5 sooner rather than later.**
+
+**Update (#3416/#3417):** Scope 5.5 shipped the reactive engine itself (events
+emitted, triggers dispatched, `FlowExecution` runs steps). #3416 (ADR-0242)
+then established that new mechanics should be authored as
+Flow/Trigger/Condition rows rather than modeled as bespoke classes, and found
+that the only authoring surface was raw Django admin with no step inlines.
+#3417 closed that authoring gap: a staff-only DRF API
+(`docs/systems/flows.md#authoring-api-3417`, ADR-0244) plus a visual tree
+editor at `/staff/flows-builder`. What remains open is the original claim
+above, unchanged by #3417: still no `FlowDefinition`/`TriggerDefinition`
+content actually lives in the database. The authoring tool exists; the
+content does not yet.
 
 ### Status Key
 

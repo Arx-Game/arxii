@@ -21,6 +21,12 @@ vi.mock('@/store/hooks', () => ({
   useAccount: vi.fn(() => null),
 }));
 
+// The My NPCs block (#3426) fetches the account's roster entries; mock the
+// query directly so it never competes with the order-dependent apiFetch mocks.
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({ data: [] })),
+}));
+
 import { apiFetch } from '@/evennia_replacements/api';
 import { useAccount } from '@/store/hooks';
 

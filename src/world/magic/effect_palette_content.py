@@ -33,8 +33,11 @@ as integration-test setup and staff seed data.  Safe to call repeatedly.
 
 Note — destination/position placeholder params: teleport, obstacle, and telekinesis
 flow steps carry ``destination_position_id=0`` / ``position_a_id=0`` / ``position_b_id=0``
-as placeholders.  Runtime destination selection (cast-time target picker) is deferred to
-a follow-up; the Task 15/16 E2Es use real seeded Positions passed in test setup.
+as guarded fallbacks only (``test_effect_placeholder_guard.py`` proves the 0-id path
+no-ops safely).  Runtime destination selection shipped in #2206: the caster declares a
+real ``areas.Position`` at cast-declaration time (``resolve_cast_position_params`` →
+``ConditionInstance`` stamping), so these seed-time zeros are never the live path when a
+destination was declared.  The Task 15/16 E2Es use real seeded Positions in test setup.
 
 The full cast → CONDITION_APPLIED → trigger → handler paths are exercised by the
 Task 15/16 PG E2Es (``apply_condition`` uses PG-only DISTINCT ON); this module's

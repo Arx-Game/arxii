@@ -21,6 +21,7 @@ from world.conditions.models import (
     DamageType,
     TreatmentTemplate,
 )
+from world.gm.models import GMProfile
 
 # =============================================================================
 # Lookup Table Serializers
@@ -108,6 +109,40 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
 
     category_name = serializers.CharField(source="category.name", read_only=True)
     is_negative = serializers.BooleanField(source="category.is_negative", read_only=True)
+    # Read-only exposure of the reactive-trigger wiring M2M (#3417 task 12):
+    # the flows authoring UI's "wire to template" picker needs the template's
+    # CURRENT full set before calling `set_reactive_triggers` (`.set()`
+    # semantics there replace the whole set, so building the next set safely
+    # requires reading this one first) — no endpoint exposed it before this.
+    #
+    # This serializer backs ConditionTemplateViewSet, which is deliberately
+    # player-facing (IsAuthenticated - TechniqueBuilderPage reads it too), but
+    # trigger wiring is GM/staff-only authoring metadata (#3417 leak-analysis
+    # commitment: no player-facing serializer exposes flow wiring). Gate the
+    # field to staff/GM requesters at the field level instead of moving the
+    # whole serializer behind IsGMOrStaff.
+    reactive_trigger_ids = serializers.SerializerMethodField()
+
+    def get_reactive_trigger_ids(self, obj: ConditionTemplate) -> list[int]:
+        """Return wired TriggerDefinition ids, staff/GM requesters only.
+
+        Mirrors ``IsGMOrStaff.has_permission`` (src/world/gm/permissions.py):
+        staff or a GMProfile qualifies; anyone else (including a plain
+        authenticated player) gets an empty list, never the real wiring.
+        """
+        request = self.context.get("request")
+        if request is None or not (request.user and request.user.is_authenticated):
+            return []
+        if not request.user.is_staff:
+            try:
+                request.user.gm_profile  # noqa: B018 - side effect: triggers reverse lookup
+            except GMProfile.DoesNotExist:
+                return []
+        try:
+            triggers = obj.cached_reactive_triggers
+        except AttributeError:
+            triggers = obj.reactive_triggers.all()
+        return [trigger.pk for trigger in triggers]
 
     class Meta:
         model = ConditionTemplate
@@ -129,6 +164,7 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
             "color_hex",
             "display_priority",
             "is_visible_to_others",
+            "reactive_trigger_ids",
         ]
         read_only_fields = fields
 

@@ -142,6 +142,17 @@ class NoChargesRemaining(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item has no uses left."})
 
 
+class ItemNotAttuned(ItemError):
+    """The template requires attunement (#3430) and this holder isn't attuned to it.
+
+    Authored flavor only — never computed detail about which bonus was withheld
+    (per the spec's leak analysis).
+    """
+
+    user_message = "The item does not answer to you."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"The item does not answer to you."})
+
+
 class MakeoverNotPermitted(ItemError):
     """The target's consent settings exclude the actor from makeovers (#2632)."""
 

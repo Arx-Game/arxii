@@ -193,6 +193,8 @@ from actions.definitions.gift_acquisition import (
 from actions.definitions.gm_adjudication import (
     GMApplyConditionAction,
     GMAwardAction,
+    GMListConditionsAction,
+    GMRemoveConditionAction,
     InvokeCatalogCheckAction,
     SummonPlayerAction,
 )
@@ -209,8 +211,10 @@ from actions.definitions.gm_combat import (
     RemoveEncounterParticipantAction,
     RemoveOpponentAction,
     ResolveEncounterRoundAction,
+    SpawnCreatureAction,
     UpdateEncounterSettingsAction,
 )
+from actions.definitions.gm_npcs import MintStoryNPCAction
 from actions.definitions.gm_props import StagePropAction, StagePropertyAction
 from actions.definitions.gm_stories import (
     ClaimGroupStoryRequestAction,
@@ -550,6 +554,7 @@ from actions.definitions.voyages import (
 )
 from actions.definitions.windows import CloseWindowAction, OpenWindowAction
 from actions.definitions.world_builder import (
+    AuthorClueAction,
     CreateAreaAction,
     EditAreaAction,
     PromoteAreaAction,
@@ -774,6 +779,7 @@ _ALL_ACTIONS: list[Action] = [
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),
+    SpawnCreatureAction(),
     RemoveOpponentAction(),
     AddEncounterParticipantAction(),
     RemoveEncounterParticipantAction(),
@@ -951,6 +957,9 @@ _ALL_ACTIONS: list[Action] = [
     InvokeCatalogCheckAction(),
     GMAwardAction(),
     GMApplyConditionAction(),
+    # #3431 — GM web parity: condition removal + the read seam that feeds its picker.
+    GMRemoveConditionAction(),
+    GMListConditionsAction(),
     # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
     SummonPlayerAction(),
     AcceptGMSummonAction(),
@@ -958,6 +967,8 @@ _ALL_ACTIONS: list[Action] = [
     # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
     FindSituationAction(),
     SubmitCatalogSuggestionAction(),
+    # #3426 — GM story-NPC on-ramp: mint a Story NPC tenure-bound to the GM's account.
+    MintStoryNPCAction(),
     # #3295 — scene check invocation: player self-checks, GM calls, proposals.
     SceneSelfCheckAction(),
     CallForCheckAction(),
@@ -1102,6 +1113,7 @@ _ALL_ACTIONS: list[Action] = [
     StaffBatchDigAction(),
     PromoteRoomAction(),
     PromoteAreaAction(),
+    AuthorClueAction(),
     StaffPlaceClueAction(),
     StaffRemoveClueAction(),
     StaffPlaceClueTriggerAction(),

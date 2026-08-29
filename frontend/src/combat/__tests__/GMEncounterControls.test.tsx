@@ -30,10 +30,22 @@ vi.mock('../queries', () => ({
   useRemoveParticipant: vi.fn(),
   useRemoveOpponent: vi.fn(),
   useProposeLethalDuel: vi.fn(),
+  useCreatureTemplates: vi.fn(),
+  useSpawnCreature: vi.fn(),
 }));
 
 vi.mock('@/roster/usePersonaSearch', () => ({
   usePersonaSearch: vi.fn(),
+}));
+
+// Active-character resolution for the "From Bestiary" spawn mode (#3424) —
+// mirrors GMAdjudicationPanel.test.tsx's mock-the-hook-module idiom.
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(),
+}));
+
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -42,6 +54,9 @@ vi.mock('sonner', () => ({
 
 import * as combatQueries from '../queries';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useAppSelector } from '@/store/hooks';
+import { toast } from 'sonner';
 import { GMEncounterControls } from '../sections/GMEncounterControls';
 import type { ThreatPool } from '../api';
 import type { EncounterDetail, Opponent, Participant, PositionNode } from '../types';
@@ -106,7 +121,13 @@ const mockedUseUpdateEncounterSettings = combatQueries.useUpdateEncounterSetting
 const mockedUseRemoveParticipant = combatQueries.useRemoveParticipant as ReturnType<typeof vi.fn>;
 const mockedUseRemoveOpponent = combatQueries.useRemoveOpponent as ReturnType<typeof vi.fn>;
 const mockedUseProposeLethalDuel = combatQueries.useProposeLethalDuel as ReturnType<typeof vi.fn>;
+const mockedUseCreatureTemplates = combatQueries.useCreatureTemplates as ReturnType<typeof vi.fn>;
+const mockedUseSpawnCreature = combatQueries.useSpawnCreature as ReturnType<typeof vi.fn>;
 const mockedUsePersonaSearch = usePersonaSearch as unknown as ReturnType<typeof vi.fn>;
+const mockedUseMyRosterEntriesQuery = useMyRosterEntriesQuery as unknown as ReturnType<
+  typeof vi.fn
+>;
+const mockedUseAppSelector = useAppSelector as unknown as ReturnType<typeof vi.fn>;
 
 interface MutateOpts {
   onSuccess?: (data?: unknown) => void;
@@ -153,9 +174,23 @@ const mockProposeLethalDuelMutate = vi.fn(
     _opts?: MutateOpts
   ) => {}
 );
+const mockSpawnCreatureMutate = vi.fn(
+  (_vars: { template: string; positionId: number | null }, _opts?: MutateOpts) => {}
+);
 
 const defaultPools: ThreatPool[] = [
   { id: 7, name: 'Goblin Raiders', description: '' } as unknown as ThreatPool,
+];
+
+const defaultCreatureTemplates = [
+  {
+    id: 3,
+    name: 'Gorehorn the Undying',
+    tier: 'boss',
+    description: '',
+    has_phases: true,
+    threat_pool_name: 'Goblin Raiders',
+  },
 ];
 
 beforeEach(() => {
@@ -197,6 +232,19 @@ beforeEach(() => {
     isError: false,
   });
   mockedUsePersonaSearch.mockReturnValue({ results: [], isFetching: false });
+  mockedUseCreatureTemplates.mockReturnValue({ data: defaultCreatureTemplates });
+  mockedUseSpawnCreature.mockReturnValue({
+    mutate: mockSpawnCreatureMutate,
+    isPending: false,
+    error: null,
+    isError: false,
+  });
+  mockedUseMyRosterEntriesQuery.mockReturnValue({
+    data: [{ id: 1, name: 'GMChar', character_id: 42 }],
+  });
+  mockedUseAppSelector.mockImplementation((selector: (state: unknown) => unknown) =>
+    selector({ game: { active: 'GMChar' } })
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -380,6 +428,88 @@ describe('GMEncounterControls — add opponent', () => {
     await user.click(screen.getByTestId('add-opponent-trigger'));
 
     expect(screen.getByTestId('add-opponent-submit')).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spawn from bestiary (#3424)
+// ---------------------------------------------------------------------------
+
+describe('GMEncounterControls — spawn from bestiary', () => {
+  it('dispatches spawn_creature with the selected template', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={makeEncounter()} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('add-opponent-trigger'));
+    await user.click(screen.getByTestId('add-opponent-mode-bestiary'));
+
+    await user.selectOptions(screen.getByTestId('spawn-creature-select'), 'Gorehorn the Undying');
+    await user.click(screen.getByTestId('spawn-creature-submit'));
+
+    expect(mockSpawnCreatureMutate).toHaveBeenCalledWith(
+      { template: 'Gorehorn the Undying', positionId: null },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('includes the selected position', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const encounter = makeEncounter({
+      position_nodes: [{ id: 12, name: 'North Wall' } as unknown as PositionNode],
+    });
+    render(<GMEncounterControls sceneId={5} encounter={encounter} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('add-opponent-trigger'));
+    await user.click(screen.getByTestId('add-opponent-mode-bestiary'));
+
+    await user.selectOptions(screen.getByTestId('spawn-creature-select'), 'Gorehorn the Undying');
+    await user.click(screen.getByTestId('spawn-creature-position-select'));
+    await user.click(await screen.findByRole('option', { name: 'North Wall' }));
+    await user.click(screen.getByTestId('spawn-creature-submit'));
+
+    expect(mockSpawnCreatureMutate).toHaveBeenCalledWith(
+      { template: 'Gorehorn the Undying', positionId: 12 },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it('keeps submit disabled until a template is chosen', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={makeEncounter()} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('add-opponent-trigger'));
+    await user.click(screen.getByTestId('add-opponent-mode-bestiary'));
+
+    expect(screen.getByTestId('spawn-creature-submit')).toBeDisabled();
+  });
+
+  it('toasts a business-rule failure instead of closing the dialog', async () => {
+    mockSpawnCreatureMutate.mockImplementation((_vars, opts?: MutateOpts) => {
+      opts?.onSuccess?.({ backend: 'registry', deferred: false, success: false, message: 'No.' });
+    });
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={makeEncounter()} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('add-opponent-trigger'));
+    await user.click(screen.getByTestId('add-opponent-mode-bestiary'));
+    await user.selectOptions(screen.getByTestId('spawn-creature-select'), 'Gorehorn the Undying');
+    await user.click(screen.getByTestId('spawn-creature-submit'));
+
+    expect(toast.error).toHaveBeenCalledWith('No.');
+    // The dialog stays open on a business-rule refusal (only isDispatchFailure
+    // === false closes it) — the form is still in the document.
+    expect(screen.getByTestId('add-opponent-dialog')).toBeInTheDocument();
   });
 });
 
