@@ -1,4 +1,4 @@
-# ADR-0245: The offscreen-act gate extends the dead-gate choke point
+# ADR-0246: The offscreen-act gate extends the dead-gate choke point
 
 <!--
 Numbering note (final, post-renumber): main took 0243 via #3418; the
@@ -136,5 +136,5 @@ conditions-system-backed field this task deliberately did not add) until a
 real display need justifies the extra query.
 
 > Status: accepted · Source: issue #3412 (slice 3), `src/actions/offscreen_gate.py`,
-> `src/actions/base.py`'s `check_availability`, ADR-0244 (the Hall's visual
+> `src/actions/base.py`'s `check_availability`, ADR-0245 (the Hall's visual
 > idiom this gate's refusal prose renders inside).

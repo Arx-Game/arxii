@@ -151,6 +151,48 @@ export async function fetchOpponentDefaults(
   return res.json() as Promise<OpponentDefaults>;
 }
 
+/**
+ * One row of the bestiary catalog (GET /api/combat/creature-templates/, #3424).
+ * Deliberately thin — no phase/break-bar internals (see CreatureTemplateSerializer's
+ * leak-table rationale); `has_phases` only signals presence.
+ *
+ * Typed locally rather than via the generated `components['schemas']` map — the
+ * same pattern as `OpponentDefaults` above — so this file doesn't require an
+ * `openapi-typescript` regen to compile.
+ */
+export interface CreatureTemplateSummary {
+  id: number;
+  name: string;
+  tier: OpponentTier;
+  description: string;
+  has_phases: boolean;
+  threat_pool_name: string | null;
+}
+
+/**
+ * List authored CreatureTemplates (bestiary entries), optionally name/description
+ * search-filtered and/or tier-filtered — the GM "spawn from bestiary" picker's
+ * data source (#3424). GM/staff only server-side (`IsGMOrStaff`) — the bestiary
+ * is spoiler-sensitive, unlike the open `ThreatPool` catalog.
+ * GET /api/combat/creature-templates/[?search=<term>][&tier=<tier>]
+ */
+export async function fetchCreatureTemplates(
+  search?: string,
+  tier?: OpponentTier
+): Promise<CreatureTemplateSummary[]> {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (tier) params.set('tier', tier);
+  const query = params.toString();
+  const url = query
+    ? `/api/combat/creature-templates/?${query}`
+    : '/api/combat/creature-templates/';
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Failed to load creature templates');
+  const data = (await res.json()) as { results?: CreatureTemplateSummary[]; count?: number };
+  return data.results ?? [];
+}
+
 /** Body for postAddOpponent — mirrors AddOpponentSerializer. */
 export interface AddOpponentPayload {
   name: string;

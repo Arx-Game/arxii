@@ -38,7 +38,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure` and does not conceal body markings, #2985 — both read the shared `covered_regions` predicate), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`) |
+| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure` and does not conceal body markings, #2985 — both read the shared `covered_regions` predicate), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`), `requires_attunement` (BooleanField, default `False` — #3430; gates `ItemCheckModifier`/on-use eligibility on `ItemInstance.attuned_to_character_sheet`, see "Enchantment authoring" below) |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 
@@ -409,7 +409,10 @@ REGISTRY actions (`StagePropAction`/`StagePropertyAction`,
 room's active scene GM/owner or staff, resolving the template/property by exact
 pk-or-name (curated gate — no freeform creation); shared by telnet `CmdStage` (`stage
 prop <template>` / `stage property <property> [=<target>]`,
-`commands/gm_props.py`) and the web action-list dispatch.
+`commands/gm_props.py`) and — since #3431, which closed the gap a 2026-08-28 audit
+found (these actions carry no `ActionTemplate`, so despite being reachable over the
+generic REST dispatch endpoint since #3070, nothing in the browser actually called
+them) — `GMAdjudicationPanel`'s Stage tab (`frontend/src/scenes/components/`).
 
 ---
 
@@ -446,6 +449,36 @@ touchstone-mode design.
 `tied_resonance` — consumed exactly like any other template-mode ritual/crafting
 component; no attunement step.
 
+### Enchantment authoring: check modifiers, template Properties, `requires_attunement` (#3430)
+
+`ItemCheckModifier` (template-level flat check-type bonus, e.g. "+5 Stealth while
+equipped") and `ItemTemplateProperty` (template-authored default `Property` grants,
+materialized onto every instance) are authored inline on `ItemTemplateAdmin`
+(`ItemCheckModifierInline` / `ItemTemplatePropertyInline`, `src/world/items/admin.py`) —
+staff no longer need a shell to give a template its mechanics.
+
+`ItemTemplate.requires_attunement` (`BooleanField`, default `False`) gates whether a
+flagged template's mechanics are live for a given holder:
+
+- **Writers unchanged.** Only the touchstone ritual (`attune_touchstone()`, resonance-tied
+  items — see above) and staff admin edits on `ItemInstance.attuned_to_character_sheet`
+  set attunement; this PR adds no new writer, deliberately (a GM-facing "attune" lever for
+  generic artifacts is a later pass).
+- **Check pipeline.** `collect_check_modifiers`'s EQUIPMENT block
+  (`world.checks.services`) only emits a flagged template's `ItemCheckModifier`
+  contribution when the SAME joined `ItemInstance` is both equipped by and attuned to the
+  checking character — an unattuned holder gets nothing from that template.
+- **On-use.** `use_item` (`world.items.services.usage`) refuses dispatch on a flagged
+  template with `ItemNotAttuned` ("The item does not answer to you.") when the acting
+  character (resolved from the `user` ObjectDB via `character_sheet`) doesn't match the
+  locked instance's `attuned_to_character_sheet`.
+- **Stacking.** With multiple equipped instances of the same flagged template, the
+  modifier applies once iff at least one is attuned to the holder — attunement never
+  multiplies a bonus (two rings, one attuned, is the same as one ring attuned).
+- Ordinary items (`requires_attunement=False`, the default) are untouched by any of this.
+- `requires_attunement` is staff/admin-only — it is not exposed on any player-facing
+  serializer.
+
 ### Narrative acquisition — no shop/merchant system exists (#707)
 
 There is no `Shop`/`Vendor`/`Merchant` model or purchase service anywhere in this
@@ -460,7 +493,10 @@ narratively, through two channels:
   (`actions/definitions/items.py`, registry key `grant_item`, gated on
   `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`, staff bypass preserved, #2117)
   via telnet `CmdGrantItem` (`grant_item <character>=<item template name>`,
-  `src/commands/grant_item.py`).
+  `src/commands/grant_item.py`) and, since #3431, `GMAdjudicationPanel`'s Grant Item
+  tab — a participant picker (sending the picked persona's display name as
+  `target_name`, since this action resolves its target by name, not pk) + a
+  searchable `ItemTemplateViewSet`-backed template select.
 - **Mission reward** — `DeedRewardSink.ITEM` (`world.missions.constants`) on a
   `MissionDeedRewardLine` dispatches `IMMEDIATE` (not queued/cron): `_route_line`
   (`world.missions.services.rewards`) calls `grant_touchstone_item_to_character` directly

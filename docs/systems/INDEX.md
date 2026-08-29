@@ -1369,7 +1369,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`)
-- **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0245) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
+- **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
 - **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
@@ -1506,13 +1506,25 @@ a collaborative **research project**.
   referencing rooms by their `fixture_key` and the clue by its `slug`), upserted
   by `grid_import.load_grid_bundles()`'s 5th pass and report-never-deleted when a
   fixture-keyed row is absent from a reimported bundle.
+- **Authoring the clue itself (#3432):** `author_clue`
+  (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+  `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` — staff bypass built in) mints the `Clue`
+  row (name/description/target_kind/target ids; `slug` generated + uniquified), closing the
+  admin-only gap the staff-authoring canvas above left. **SECRET-target clues are
+  additionally staff-only** (no GM-scoped secrets listing exists yet) — canon-creating
+  surfaces gate hard by owner ruling; see the system doc's "Authoring the clue itself"
+  section. Frontend: the shared `AuthorClueDialog`
+  (`frontend/src/clues/components/`), reached from `PlaceClueDialog`'s "New clue…" and
+  `StaffSecretsPanel`'s "Author a clue to this secret".
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
   `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
   `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
   (on room entry), `plant_rescue_clue` / `clear_rescue_clues` (#931), `start_research_project`
-  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler)
+  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler —
+  CODEX/SECRET/MISSION targets grant to every distinct contributor; MISSION grants via
+  `staff_assign_mission`, log-and-continue per contributor, #3429)
 - **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
   via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
 - **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
@@ -1522,10 +1534,11 @@ a collaborative **research project**.
   (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
   only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
-  (`grant_rescue_mission`, mission target), projects (RESEARCH kind), captivity (RESCUE
-  clues planted on capture / cleared on resolution), predicates (eligibility), checks
-  (`perform_check`), actions (search), narrative (trigger notification), typeclasses
-  (`Character.at_post_move` trigger hook)
+  (`grant_rescue_mission` for RESCUE's AUTOMATIC mission target; `staff_assign_mission`
+  for a RESEARCH-resolved MISSION target, #3429), projects (RESEARCH kind), captivity
+  (RESCUE clues planted on capture / cleared on resolution), predicates (eligibility),
+  checks (`perform_check`), actions (search), narrative (trigger notification + RESEARCH
+  MISSION-grant story text), typeclasses (`Character.at_post_move` trigger hook)
 - **Source:** `src/world/clues/`
 - **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
 
@@ -2173,21 +2186,21 @@ Character lifecycle management with web-first applications and player anonymity.
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
   and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
   [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
-- **The Hall — logged-in home surface (#3412 slice 2, ADR-0244):** `GET
+- **The Hall — logged-in home surface (#3412 slice 2, ADR-0245):** `GET
   /api/roster/entries/mine/` annotates `unread_narrative_count` per character (one
   aggregated JOIN/GROUP BY over unacknowledged `NarrativeMessageDelivery` rows, not
   per-row queries); `MyRosterEntrySerializer.get_unread_narrative_count` reads the
   annotation off `obj.__dict__` when present, falling back to a direct count on the
   unannotated `select`-endpoint path. Drives the "Your Characters" band's tidings
   `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section.
-- **The offscreen-act gate (#3412 slice 3, ADR-0245):** `MyRosterEntrySerializer` also
+- **The offscreen-act gate (#3412 slice 3, ADR-0246):** `MyRosterEntrySerializer` also
   exposes `lifecycle_state` (plain read-only `CharField` mirror of
   `CharacterSheet.lifecycle_state`, no annotation, no migration), letting the Hall's
   OffscreenActsPlate render world-voice refusal prose for a docked
   CAPTURED/DEAD/RETIRED/UNKNOWN character instead of the offscreen-act rows. The
   actual gate — `actions.offscreen_gate.offscreen_act_state` — runs server-side in
   `Action.check_availability()` for journal/goal/persona/proclamation acts; see the
-  Actions section above and ADR-0245.
+  Actions section above and ADR-0246.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
@@ -2450,6 +2463,45 @@ GM at a given level may author (#2000, ADR-0097).
   Prerequisite is the only gate, no client-side trust check). (3) **Situation declaration —
   no override, by design:** recorded as ADR-0240 rather than built; GM tooling investment
   goes toward making state genuinely true (positioning #3385, encounter settings #3383).
+- **GM web parity: Grant Item, Stage, Traps tabs + condition removal (#3431):** the
+  2026-08-28 GM storytelling-tools audit found `grant_item`, `stage_prop`/
+  `stage_property`, and `list_room_traps`/`arm_trap`/`gm_disarm_trap` `[BUILT &
+  WIRED]` on telnet only (zero web callers), and GM condition *removal* fully
+  `[ABSENT]` (`GMApplyConditionAction` had no off-switch). **Backend (one new
+  pair, `actions/definitions/gm_adjudication.py`):** `GMRemoveConditionAction`
+  (key `gm_remove_condition`) — gated identically to `GMApplyConditionAction`
+  (`IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`);
+  resolves `target` via `_resolve_gm_target`, `condition` (a template name, but
+  resolved against the target's own ACTIVE `ConditionInstance`s via
+  `get_active_conditions` — refuses when the target doesn't currently carry it,
+  unlike `remove_condition_by_name`'s silent no-op), and a required `reason`
+  echoed in the result message (no persisted field — `remove_condition` carries
+  no note/description of its own). `GMListConditionsAction` (key
+  `gm_list_conditions`, same gates) returns the target's active instances
+  (template name, severity, `rounds_remaining`, `expires_at`) as result data —
+  the `list_room_traps` pattern (a REGISTRY dispatch, not a ViewSet) — because no
+  read path exposes this to a GM: `CharacterConditionsViewSet` is self-only and
+  its `observed` action filters to `is_visible_to_others=True`, hiding a GM's own
+  fiat-applied hidden conditions from the GM who applied them. Telnet: `gm
+  condition remove <character> condition=<name> reason=<text>` extends
+  `CmdGMDashboard`'s existing `gm condition` subverb (`commands/gm_ops.py`).
+  **Frontend:** `GMAdjudicationPanel` gained three tabs, all thin dispatches over
+  the pre-existing telnet-only actions above, plus a Remove mode on the Condition
+  tab: **Grant Item** (participant picker + a searchable `ItemTemplateViewSet`
+  select feeding `template_name`, dispatching `grant_item` with `target_name`
+  resolved from the picked participant's persona display name — that action
+  resolves its target by `actor.search()`, not pk, a telnet-era shape this spec
+  didn't change); **Stage** (prop mode → `stage_prop` with `item_template`;
+  property mode → `stage_property` with a free-text `property` name — no
+  `Property` enumeration endpoint exists and none was added — and an optional
+  `target_id` from the shared participant picker, omitted to tag the room
+  itself); **Traps** (mounts-on-open dispatch of `list_room_traps` — Radix
+  `Tabs.Content` unmounts inactive tabs, so "on mount" is "on open" — rendering
+  its result-data rows with per-row Arm/Disarm buttons dispatching
+  `arm_trap`/`gm_disarm_trap` then refreshing the list); **Condition → Remove**
+  (participant picker feeds `gm_list_conditions` to populate an active-instance
+  select, then dispatches `gm_remove_condition` with the picked template name +
+  a required reason).
 - **Pool opacity is documented as deliberate (#3071):** `CharacterVitalsView._can_view`
   (`world/vitals/views.py`) and `CharacterAnimaViewSet.get_queryset`
   (`world/magic/views.py`) are staff-or-own-tenure only — no `viewer_can_gm` carve-out.
@@ -2586,6 +2638,32 @@ GM at a given level may author (#2000, ADR-0097).
   dispatching the same `join_story_room`/`leave_story_room` REGISTRY actions
   telnet's `joinroom`/`leaveroom` already used; linked from
   `ProfileDropdown`'s general (non-staff) menu section.
+- **GM story-NPC on-ramp (#3426):** `mint_story_npc`
+  (`world.roster.services.staff_characters`) — JUNIOR+ `GMProfile` (staff bypass) +
+  the new `GMLevelCap.max_story_npcs` per-level cap (most-restrictive/refuse when
+  unconfigured; enforced by the shared `check_story_npc_cap`), delegating to
+  `mint_staff_character`'s working set (#3283 — Character + sheet + PRIMARY persona
+  + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to the GM's own
+  account, the same tenure the persona picker and telnet `@ic` key on).
+  `description` writes `CharacterSheet.additional_desc` via
+  `set_physical_description`. In-scope bugfix: `mint_staff_character`'s shelf
+  lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
+  `roster/seeds.py`'s seeded shelf is named "NPCs", so the old lookup missed it and
+  collided on create). Heavyweight sibling: `finalize_gm_character(draft,
+  claim_as_npc=True)` (`world.character_creation.services`) lands a full-CG
+  character on the NPC shelf with the same tenure hand-off instead of tenure-less
+  on Available, gated by the same `check_story_npc_cap`. **Action + telnet:**
+  `MintStoryNPCAction` (key `mint_story_npc`, `actions/definitions/gm_npcs.py`,
+  `MinimumGMLevelPrerequisite(JUNIOR)`); `gm npc <name>[=<description>]`
+  (`CmdGMDashboard`, `commands/gm_ops.py`). **API:**
+  `CharacterDraftViewSet.finalize_gm`'s `claim_as_npc` body flag;
+  `FinalizeForTableDialog`'s matching checkbox. **Leak fix:** `RosterEntryViewSet`
+  (`AllowAny`) now excludes `RosterType.NPC` entries from its general queryset
+  (staff and the entry's own tenure holder still see them) — previously
+  individually reachable even though `RosterViewSet` already hid the shelf itself.
+  Frontend: a "My NPCs" block on `GMDashboardPage` + a mint dialog. See
+  `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
+  rundown and how this relates to the ambient-NPC ladder.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`
@@ -5204,6 +5282,20 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
+  (template check-bonus + default-Property authoring; `checks/services.py`'s
+  `collect_check_modifiers` EQUIPMENT block is the runtime consumer of the former,
+  `materialize.apply_template_properties` of the latter) were runtime-wired but
+  shell-only — now inline on `ItemTemplateAdmin`
+  (`ItemCheckModifierInline`/`ItemTemplatePropertyInline`,
+  `src/world/items/admin.py`). New `ItemTemplate.requires_attunement` gates a
+  flagged template's `ItemCheckModifier` contribution and `use_item` dispatch on
+  `ItemInstance.attuned_to_character_sheet`: the EQUIPMENT block's queryset
+  constrains equipped-and-attuned to the SAME joined instance in one `.filter()`
+  call (apply-once stacking — two equipped instances, one attuned, contributes
+  once, never doubled); attunement writers are unchanged (touchstone ritual +
+  admin). See docs/systems/items.md ("Enchantment authoring").
+
 - **Fashion vocabulary (#2907):** `Silhouette` (the wearable FORM — umbrella
   hierarchy, `WearFamily`, prose skins via `silhouette_prose_noun`: cut/garments,
   setting/jewelry) with `ItemTemplate.silhouette` (authored default) +
@@ -6270,6 +6362,23 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `CombatEncounterViewSet.remove_opponent` (`opponent_id`, gated `IsEncounterGMOrStaff`),
     `RemoveOpponentAction` (`actions/definitions/gm_combat.py`, key `remove_opponent`), and
     telnet `encounter removenpc <opponent>` — symmetric with `add_opponent`/`remove_participant`.
+  - **Bestiary spawn (#3424):** `world.combat.services.spawn_from_creature_template(encounter,
+    template, *, position=None, acting_account=None)` — previously built but zero-caller
+    (Django-admin-only) — is now GM-reachable: `SpawnCreatureAction` (key `spawn_creature`,
+    `actions/definitions/gm_combat.py`) mirrors `AddOpponentAction`'s shape exactly (same
+    `_active_encounter_for_gm` resolution, same `acting_account` custody threading), resolving
+    `template` pk-or-name via `resolve_model_by_pk_or_name(CreatureTemplate, ...)` and
+    `position_id` as a pk. Telnet: `encounter spawn <template name> [at <position>]`
+    (`commands/encounter.py`) resolves the position name to a pk in the command layer, exactly
+    as `_handle_add` does. Web: `CreatureTemplateViewSet` (`GET
+    /api/combat/creature-templates/`, read-only, `IsGMOrStaff`, `search`/`tier` filters) feeds
+    the GM `AddOpponentDialog`'s "From Bestiary" tab
+    (`frontend/src/combat/sections/GMEncounterControls.tsx`), which dispatches `spawn_creature`
+    over the generic REGISTRY dispatch seam. The catalog serializer is deliberately thin (`name`/
+    `tier`/`description`/`has_phases`/`threat_pool_name` — no phase or break-bar internals) so
+    browsing it never spoils a boss's authored phases ahead of Consider/weakness-research
+    discovery. `spawn_from_creature_template` clones any authored `CreaturePhaseTemplate` rows
+    into `BossPhase` rows and stamps `BreakBarConfig` onto the spawned opponent when present.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
@@ -7686,11 +7795,11 @@ Self-contained game actions that own prerequisites, execution, and events.
   `target_object_id` instead of `challenge_instance_id`; `dispatch_player_action` re-validates
   the pair, mints a `ChallengeInstance` via `instantiate_challenge`, then resolves through the
   unchanged `resolve_challenge()`. See `docs/architecture/action-template-pipeline.md`.
-- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
+- **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → emits `EventName.ACTION_INTENT` (cancellable, skipped when `actor is None`) → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → runs post-effects → emits `EventName.ACTION_RESULT` → returns `ActionResult` (#3418, ADR-0243)
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
-- **Two built-in gates run BEFORE `get_prerequisites()`** (`Action.check_availability`, `base.py`): the dead gate (#2287 — a dead actor is refused every action key except `DEAD_ALLOWED_ACTION_KEYS`'s spectator/off-ramp whitelist), then the offscreen-act gate (#3412, ADR-0245 — `actions.offscreen_gate.offscreen_act_state(sheet, action_key)`, consulted only when the dead gate didn't already refuse; a character in a degraded lifecycle state — CAPTURED/unconscious/DEAD/RETIRED/UNKNOWN — gets ROUTED or BLOCKED instead of ALLOWED for the narrow `OFFSCREEN_ACT_KEYS` set of "2.5 acts": journal entries, character goals, persona swaps, proclamations; every other key resolves ALLOWED with zero lifecycle read). Neither is opt-in — both apply to every action automatically.
-- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
-- **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Two built-in gates run BEFORE `get_prerequisites()`** (`Action.check_availability`, `base.py`): the dead gate (#2287 — a dead actor is refused every action key except `DEAD_ALLOWED_ACTION_KEYS`'s spectator/off-ramp whitelist), then the offscreen-act gate (#3412, ADR-0246 — `actions.offscreen_gate.offscreen_act_state(sheet, action_key)`, consulted only when the dead gate didn't already refuse; a character in a degraded lifecycle state — CAPTURED/unconscious/DEAD/RETIRED/UNKNOWN — gets ROUTED or BLOCKED instead of ALLOWED for the narrow `OFFSCREEN_ACT_KEYS` set of "2.5 acts": journal entries, character goals, persona swaps, proclamations; every other key resolves ALLOWED with zero lifecycle read). Neither is opt-in — both apply to every action automatically.
+- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (the generic `ACTION_INTENT`/`ACTION_RESULT` pair, #3418 — authored triggers filter on `payload.action_key`)
+- **Not Yet Built:** `SyntheticAction` model, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Telnet convergence convention (ratified #1337):** the three player-action dispatch
   families and the seam each telnet command must converge on with the web — Family 1
   `dispatch_player_action()`, Family 2 consent services, Family 3 a real `Action` on
@@ -7701,11 +7810,13 @@ Self-contained game actions that own prerequisites, execution, and events.
 Database-driven game logic engine for complex branching sequences, plus the reactive layer that powers triggers/scars/wards.
 
 - **Models:** `FlowDefinition`, `FlowStepDefinition`, `FlowStack`, `Event`, `TriggerDefinition`, `Trigger`, `TriggerData`
-- **Trigger fields:** `obj` (typeclass owner), `source_condition` (required — room-owned triggers use a pseudo-instance whose target is the room), `source_stage` (optional stage gate), `additional_filter_condition` (JSON DSL), `priority`. **No `scope` field** — self-vs-target-vs-bystander is expressed via filters
+- **Trigger fields:** `obj` (typeclass owner), `source_condition` (optional, null = system-installed; set when a `ConditionInstance` installed the trigger), `source_stage` (optional stage gate), `additional_filter_condition` (JSON DSL), `priority`. **No `scope` field** - self-vs-target-vs-bystander is expressed via filters
 - **Key Classes:** `FlowStack` (with depth cap + cancellation), `FlowExecution`, `FlowEvent`, `SceneDataManager`, `TriggerHandler` (per-owner cached_property; pure provider — its sole public method is `triggers_for(event_name) -> list[Trigger]`)
 - **Reactive Entry Points:**
   - `emit_event(event_name, payload, location, *, parent_stack=None)` (`flows/emit.py`) — **single unified dispatch path**. Walks `[location, *location.contents]`, calls `triggers_for(event_name)` on each owner, priority-sorts the combined list globally (descending), dispatches synchronously on one `FlowStack`, stops on `CANCEL_EVENT`. Used by service functions, typeclass hooks, and `EMIT_FLOW_EVENT` flow steps alike
-  - `EventNames` (`flows/events/names.py`) — canonical string constants for the 18 MVP events
+  - `EventName` (`flows/constants.py`, a `TextChoices`) — canonical event-name constants for the
+    reactive layer; grows as new domains wire in events (see `docs/systems/flows.md`'s Event
+    Catalog for the documented MVP subset)
   - `PAYLOAD_FOR_EVENT` (`flows/events/payloads.py`) — event-name → payload dataclass map; PRE payloads are mutable, POST payloads frozen. AE payloads use `targets: list`
   - `evaluate_filter(spec, payload, *, self_ref)` (`flows/filters/evaluator.py`) — JSON filter DSL: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, `has_capability`, plus `and`/`or`/`not`. Bare `"self"` (and `self.<attr>`) resolves to the trigger's owner
   - **Filter idioms** (see `docs/systems/flows.md` for details): `{"path": "target", "op": "==", "value": "self"}` = self-only (replaces `scope=SELF`); `{"path": "target", "op": "!=", "value": "self"}` = bystander-only; no target filter = room-wide (replaces `scope=ROOM`/`ANY`)
@@ -7717,6 +7828,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
 - **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
 - **Where events are emitted:** `world/combat/services.py` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks
 - **Critical Note:** `FlowDefinition`/`FlowStepDefinition`/`TriggerDefinition` are content-exportable via `NaturalKeyMixin` + `CONTENT_MODELS` (#2663), so the lore repo can author the trigger→flow→step wiring that `ConditionTemplate.reactive_triggers` references. The `ensure_*` palette seeds in `world/magic/effect_palette_content.py` remain test/E2E fixtures only; real content ships as lore-repo fixtures. Flow step parameters use name-based lookups (e.g. `threat_pool_name`) rather than raw PKs so they are identity-stable across environments.
+- **Authoring API (#3417):** `flows.catalog` (`STEP_ACTION_SPECS`, `event_catalog()`, `service_function_catalog()`, `FILTER_OPS`) is the hand-declared single source of truth for the step-parameter schemas that only exist implicitly in handler bodies; `flows.step_validation.validate_step_tree` (no DRF import) enforces it against an authored step tree. DRF CRUD mounted at `api/flows/` (`catalog/`, `flows/`, `trigger-definitions/`, `triggers/`) via `FlowDefinitionViewSet`/`TriggerDefinitionViewSet`/`TriggerViewSet`/`DslCatalogViewSet`; reads are `IsGMOrStaff`, writes `IsAdminUser` (staff-only v1). `FlowDefinitionWriteSerializer.steps` does a full-tree replace keyed on author-chosen `client_id`/`parent_client_id` (not DB pks); zero-step drafts and exactly-one-root are the only shape rules. `FlowDefinitionDetailSerializer.interactions` (`flows.interactions.flow_interactions`) cross-references what runs a flow, what it emits and who listens, and what it calls. Staff wire `ConditionTemplate.reactive_triggers` via `PATCH api/conditions/templates/{id}/set_reactive_triggers/`. Frontend: `/staff/flows-builder`. Zero new models. Details: [flows.md](flows.md#authoring-api-3417).
 - **Source:** `src/flows/`
 - **Details:** [flows.md](flows.md)
 

@@ -1,4 +1,4 @@
-# ADR-0246: State-3 mode coherence — live-connection redirect and sheet-in-new-tab
+# ADR-0247: State-3 mode coherence — live-connection redirect and sheet-in-new-tab
 
 <!--
 Numbering note (#3412 slice 4, final task): origin/main was at 0243 (#3418)
@@ -35,7 +35,7 @@ would otherwise be a pointless waiting room in front of a game they're already i
 **Rejected alternative — key the redirect on selection instead of connection.**
 Rejected because it collapses the ruled selection≠presence distinction (ADR-0241):
 a selected-but-not-connected account would be forced into `/game` with nothing to
-render there, and the 2.5-state offscreen-act surface (ADR-0245) — reachable
+render there, and the 2.5-state offscreen-act surface (ADR-0246) — reachable
 specifically *because* a character can be selected without being connected — would
 lose its natural home (the Hall) for players in exactly that state.
 
@@ -94,4 +94,4 @@ consolidate the two components deliberately rather than let a third glance
 duplicate either.
 
 > Status: accepted · Source: issue #3412 (slice 4), `frontend/src/home/GatefoldPage.tsx`,
-> `frontend/src/game/components/GameTopBar.tsx`, ADR-0241, ADR-0245
+> `frontend/src/game/components/GameTopBar.tsx`, ADR-0241, ADR-0246

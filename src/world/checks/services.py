@@ -6,6 +6,7 @@ import random
 from typing import TYPE_CHECKING, NamedTuple, cast
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 
 from world.checks.constants import (
     BOTCH_SUCCESS_LEVEL_MAX,
@@ -1482,9 +1483,25 @@ def collect_check_modifiers(
 
     character = character_sheet.character
     if isinstance(check_type, _DjangoModel) and character is not None:
+        # requires_attunement (#3430): a flagged template only contributes when the
+        # SAME joined ItemInstance is both equipped by this character and attuned to
+        # them. Both legs of the attuned branch live in one Q() so Django's
+        # multi-valued-relationship join-sharing binds them to one instance row
+        # (the ratified apply-once stacking rule — see ItemTemplate.requires_attunement's
+        # help_text); an unflagged template only needs the equipped leg. .distinct()
+        # still collapses multiple equipped/attuned instances of the same template
+        # to one contribution.
         item_mods = (
             ItemCheckModifier.objects.filter(
-                template__instances__equipped_slots__character=character_sheet,
+                Q(
+                    template__requires_attunement=False,
+                    template__instances__equipped_slots__character=character_sheet,
+                )
+                | Q(
+                    template__requires_attunement=True,
+                    template__instances__equipped_slots__character=character_sheet,
+                    template__instances__attuned_to_character_sheet=character_sheet,
+                ),
                 check_type=check_type,
             )
             .select_related("template")

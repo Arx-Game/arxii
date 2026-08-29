@@ -64,7 +64,7 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   that session), else nothing. The active character is structurally excluded
   (this bar only ever renders alts) — its own attention lives in
   `ConversationTabStrip`'s per-tab badges, not here. Also renders (#3412 S4,
-  ADR-0246), for the active character: an own-sheet link (`/characters/:id`,
+  ADR-0247), for the active character: an own-sheet link (`/characters/:id`,
   `RosterEntry.id`-keyed, opens in a new tab so the live session is never
   disturbed) and a compact `ClockReadout` (season + paused indicator only,
   full date/time/phase in the title tooltip) reusing the Hall's

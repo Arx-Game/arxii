@@ -15,11 +15,11 @@ Database-driven game logic engine. Two layers live here:
 
 ```python
 from flows.emit import emit_event
-from flows.events.names import EventNames
+from flows.constants import EventName
 from flows.events.payloads import DamageAppliedPayload
 
 emit_event(
-    EventNames.DAMAGE_APPLIED,
+    EventName.DAMAGE_APPLIED,
     DamageAppliedPayload(
         target=character,
         amount_dealt=12,
@@ -48,11 +48,13 @@ PRE-event payloads are mutable dataclasses. `MODIFY_PAYLOAD` flow steps can amen
 
 - `obj` — the typeclass owner (Character / Room / Object) the trigger lives on
 - `trigger_definition` — the reusable template (event + flow + base filter + priority)
-- `source_condition` — **required**. Every trigger must be scoped to a source `ConditionInstance` for provenance and cascade. Room-owned triggers use a pseudo-`ConditionInstance` whose target is the room.
+- `source_condition` - optional (`null=True, blank=True` on the model). Set when a `ConditionInstance` installed the trigger, for provenance and cascade; null for system-installed triggers (e.g. combat escalation room triggers).
 - `source_stage` — optional. Makes the trigger active only while the source condition is at that stage.
 - `additional_filter_condition` — JSON DSL evaluated per dispatch; restricts which payloads match. **This is how you express self-vs-target-vs-bystander semantics** — there is no `scope` field. See Filter Idioms below.
 
 Service functions install triggers from `ConditionTemplate.reactive_triggers` (M2M to `TriggerDefinition`) when `apply_condition` runs and call `handler.on_trigger_added(...)` to invalidate the cached handler (on commit) so the next read re-picks up the new row.
+
+Staff wire this M2M from the flows authoring UI's TriggerDefinition editor via `PATCH /api/conditions/templates/{id}/set_reactive_triggers/` (`.set()` semantics — replaces the whole set). `ConditionTemplateSerializer.reactive_trigger_ids` (read-only, #3417 task 12) exposes a template's current set so the picker can read-modify-write it safely instead of clobbering a template's other wired triggers.
 
 ### TriggerHandler (per-owner cache)
 
@@ -130,7 +132,10 @@ Area-of-effect events carry a `targets: list` field on the payload (e.g. `Attack
 
 ## Event Catalog (MVP)
 
-All names live in `flows.events.names.EventNames`; payload dataclasses in `flows.events.payloads`; mapping in `PAYLOAD_FOR_EVENT`.
+All names live in `flows.constants.EventName` (a `TextChoices`, growing as new domains wire in
+events — includes the generic `ACTION_INTENT`/`ACTION_RESULT` pair every `Action.run()` emits,
+#3418/ADR-0243); payload dataclasses in `flows.events.payloads`; mapping in `PAYLOAD_FOR_EVENT`.
+This table documents the originally-shipped MVP subset, not the full current enum.
 
 | Event | Payload | Location | Cancellable |
 |-------|---------|----------|-------------|
@@ -196,10 +201,147 @@ All three reactive-layer definition models (`FlowDefinition`, `FlowStepDefinitio
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Event` | Catalog row matching an `EventNames` constant | `name`, `description` |
+| `Event` | Catalog row matching an `EventName` constant | `name`, `description` |
 | `TriggerDefinition` | Reusable template (event + flow + base filter + priority) | `name`, `event`, `flow_definition`, `base_filter_condition`, `priority` |
-| `Trigger` | Installed instance on a typeclass owner | `obj`, `trigger_definition`, `source_condition` (required), `source_stage`, `additional_filter_condition`, `priority` |
+| `Trigger` | Installed instance on a typeclass owner | `obj`, `trigger_definition`, `source_condition` (optional; null = system-installed), `source_stage`, `additional_filter_condition`, `priority` |
 | `TriggerData` | Per-trigger runtime data (e.g. usage counters — fields pending) | `trigger`, `key`, `value` |
+
+---
+
+## Authoring API (#3417)
+
+Staff-facing DRF surface mounted at `api/flows/` (`src/web/urls.py`), plus one
+write endpoint mounted under `api/conditions/`. Read at `src/flows/catalog.py`,
+`step_validation.py`, `serializers.py`, `views.py`, `urls.py`.
+
+### Catalog contract
+
+`FlowStepDefinition.parameters` is a bare JSONField whose shape is only
+implicit in each `_execute_*` handler body (e.g. `params.get("attribute")`);
+there is no way to introspect a handler and recover its parameter schema. So
+`flows.catalog` hand-declares one `StepActionSpec` per `FlowActionChoices`
+member (19 total: the 6 `evaluate_*` conditional actions share one builder,
+plus 13 non-conditional actions each with their own), each carrying:
+
+- `variable_name_role` (`VariableNameRole` enum: `flow_variable`,
+  `object_pk_variable`, `service_function_name`, `event_store_key`,
+  `unused`) - what the step's `variable_name` field means for that action.
+- `params: tuple[ParamSpec, ...]` - name, `type` tag (`str`/`int`/`float`/
+  `bool`/`json`/`dict`), `required`, `description`, `choices`, and
+  `accepts_reference`. `accepts_reference=True` only when the matching
+  handler resolves the param through `FlowExecution.resolve_flow_reference`
+  (directly, or via `resolve_modifier`); a param the handler reads as a raw
+  literal (an attribute name, an op string) is `accepts_reference=False`, so
+  the frontend never lets an author type `@some_variable` into a field the
+  runtime treats as a literal.
+- `allows_extra_params` - set on `CALL_SERVICE_FUNCTION`, whose extra
+  parameters are the target service function's own kwargs, not a fixed set.
+
+`STEP_ACTION_SPECS: dict[str, StepActionSpec]` is the single source of truth,
+consumed by both `step_validation.validate_step_tree` (server-side) and
+`DslCatalogViewSet` (frontend palette) - one dict, so the two cannot drift.
+`test_catalog.py` enforces completeness against `FlowActionChoices`, so a new
+action can't ship without a catalog entry.
+
+The catalog also exposes:
+
+- `event_catalog()` - every `EventName` with its `PAYLOAD_FOR_EVENT` payload
+  dataclass fields (`None` when a name has no payload mapped), for the
+  `TriggerDefinition` filter builder.
+- `service_function_catalog()` - every name in
+  `flows.service_functions.list_service_functions()` with its keyword-capable
+  parameter names and type tags (`inspect.signature` + `typing.get_type_hints`,
+  falling back to a `json` tag when an annotation can't be resolved), for the
+  `CALL_SERVICE_FUNCTION` step editor.
+- `FILTER_OPS` - the comparison operators `flows.filters.evaluator` supports,
+  for the `TriggerDefinition`/`Trigger` filter condition builder.
+
+### Endpoint table
+
+| Endpoint | Viewset | Read permission | Write permission |
+|---|---|---|---|
+| `GET /api/flows/catalog/` | `DslCatalogViewSet` (list only; no write action) | `IsAuthenticated` + `IsGMOrStaff` | n/a |
+| `/api/flows/flows/` | `FlowDefinitionViewSet` | `IsGMOrStaff` (list/retrieve) | `IsAdminUser` (create/update/destroy) |
+| `/api/flows/trigger-definitions/` | `TriggerDefinitionViewSet` | `IsGMOrStaff` | `IsAdminUser` |
+| `/api/flows/triggers/` | `TriggerViewSet` | `IsGMOrStaff` | `IsAdminUser` |
+| `PATCH /api/conditions/templates/{id}/set_reactive_triggers/` | `ConditionTemplateViewSet` action | n/a (write-only action) | `IsAuthenticated` + `IsAdminUser` |
+
+`FlowDefinitionViewSet.list` returns lightweight rows (`id`, `name`,
+`description`, `step_count` from an annotated `Count("steps")`, not a
+per-row query). `.retrieve` returns the full step tree in depth-first
+authored order plus an `interactions` block (see below).
+`TriggerDefinitionViewSet` filters on `event_name`, searches `name`;
+`TriggerViewSet` filters on `trigger_definition`/`obj`, searches
+`trigger_definition__name`.
+
+### Permission tiers
+
+Every authoring viewset (catalog included) requires `IsGMOrStaff` just to
+read, since the catalog leaks event/service-function vocabulary that is a
+mechanics spoiler and is never player-visible. Writes on flows, trigger
+definitions, and triggers are `IsAdminUser` (staff-only) in this v1: per the
+issue's ratified decision, flow authoring stays staff-only while GM/builder
+access is a scoped follow-up (builders will get a narrower surface to build
+triggers on their own content and *select* existing flows, never author
+flow step trees). `StaffWriteGMReadPermissionMixin` (`views.py`) is the
+shared implementation of this split.
+
+### Step-tree write semantics
+
+`FlowDefinitionWriteSerializer.steps` is a write-only nested list
+(`FlowStepWriteSerializer`) addressed by an author-chosen `client_id`, not a
+DB pk, since the tree may mix brand-new steps with renames of existing ones
+in one save. Each entry: `client_id`, `parent_client_id` (nullable),
+`action`, `variable_name`, `parameters` (JSON object; a non-dict payload is
+rejected before it reaches validation).
+
+- **Full-tree replace.** `_replace_steps` deletes every existing
+  `FlowStepDefinition` on the flow, then re-creates the authored tree
+  depth-first (parent before children) so the saved rows' pk order matches
+  authored order. `FlowDefinitionViewSet.get_queryset` fetches
+  `prefetched_steps` with an explicit `.order_by("pk")` for the same reason:
+  sibling execution order is queryset order (no order column exists), so it
+  must never depend on undocumented table-scan order.
+- **`steps` omitted vs. `steps: []`.** On create, omitting `steps` starts an
+  empty tree (there is no "existing tree" to preserve). On update, omitting
+  `steps` from the payload leaves the current steps untouched; `steps: []`
+  (or a populated list) replaces the entire tree.
+- **Single root, zero-step drafts.** `step_validation.validate_step_tree`
+  returns immediately (valid) for an empty list, so a flow with no steps yet
+  is a valid draft. Once there is at least one step, exactly one must have
+  `parent_client_id: null` (the runtime enters at the single parentless step;
+  a second root would be an unreachable dead row); every other
+  `parent_client_id` must reference a `client_id` in the same payload; and no
+  parent chain may cycle back on itself.
+- **Per-step validation.** `action` must be a known `STEP_ACTION_SPECS` key;
+  `variable_name` is required iff the spec's `variable_name_required` is set;
+  every `required` param in the spec must be present; every supplied param is
+  type-checked against its `ParamSpec.type` (a string starting with `@` is
+  exempted from the type check when `accepts_reference` allows it, since the
+  runtime resolves it as a flow-variable reference rather than a literal); a
+  param outside the declared set is rejected unless the spec sets
+  `allows_extra_params`. `step_validation.py` has no DRF import, so it can be
+  called directly by non-serializer callers too.
+
+### Interactions block
+
+`FlowDefinitionDetailSerializer.interactions` (`flows.interactions.
+flow_interactions`) cross-references what the raw step/trigger rows don't
+show on their own: `run_by` (every `TriggerDefinition` with
+`flow_definition=this flow`, each with the `ConditionTemplate`s that install
+it via `reactive_triggers`), `emits` (event names produced by the flow's
+`EMIT_FLOW_EVENT`/`EMIT_FLOW_EVENT_FOR_EACH` steps, each with the
+`TriggerDefinition`s listening for that `event_name`), and `calls` (service
+function names invoked by the flow's `CALL_SERVICE_FUNCTION` steps).
+
+### Condition wiring
+
+See "Trigger ownership and lifecycle" above for `PATCH
+/api/conditions/templates/{id}/set_reactive_triggers/` and
+`ConditionTemplateSerializer.reactive_trigger_ids`. The `by_category` and
+default list querysets on `ConditionTemplateViewSet` prefetch
+`reactive_triggers` so serializing `reactive_trigger_ids` across an unpaginated
+template list doesn't N+1.
 
 ---
 

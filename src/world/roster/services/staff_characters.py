@@ -11,8 +11,11 @@ never publicly listed), and an active RosterTenure binding it to the
 requesting account — which is exactly what ``IsCharacterOwner`` and the
 builder's actor resolution key on.
 
-Follow-on (deliberately not built): the same mint gated on ``GMProfile`` for
-player GMs' OOC characters; free-form sheet editing rides the Django admin.
+``mint_story_npc`` below is the GMProfile-gated follow-on this docstring used
+to describe as deliberately not built (#3426): a JUNIOR+ GM mints a Story NPC
+through the same working set, capped per GM level and tenure-bound to their
+own account so the existing persona picker and telnet ``@ic`` work on it
+immediately. Free-form sheet editing still rides the Django admin.
 """
 
 from __future__ import annotations
@@ -56,7 +59,12 @@ def mint_staff_character(account: AccountDB, name: str) -> ObjectDB:
     character, sheet, _persona = create_character_with_sheet(
         character_key=name, primary_persona_name=name
     )
-    roster, _ = Roster.objects.get_or_create(name="NPC", defaults={"roster_type": RosterType.NPC})
+    # Keyed on roster_type (unique), not name (#3426 in-scope bugfix): the seeded
+    # shelf is named "NPCs" (world/roster/seeds.py), so a name="NPC" lookup never
+    # matches it on a seeded DB and the fallback create collides on the unique
+    # roster_type column, raising IntegrityError. roster_type is the shelf's real
+    # identity (#2728) -- match it the way seeds.py itself does.
+    roster, _ = Roster.objects.get_or_create(roster_type=RosterType.NPC, defaults={"name": "NPCs"})
     entry = RosterEntry.objects.create(character_sheet=sheet, roster=roster)
     player_data, _ = PlayerData.objects.get_or_create(account=account)
     RosterTenure.objects.create(
@@ -67,4 +75,80 @@ def mint_staff_character(account: AccountDB, name: str) -> ObjectDB:
         approved_date=timezone.now(),
         approved_by=player_data,
     )
+    return character
+
+
+def check_story_npc_cap(gm_account: AccountDB) -> None:
+    """Validate JUNIOR+ GM trust and ``GMLevelCap.max_story_npcs`` for ``gm_account``.
+
+    The one authorization seam for "does this account get another Story-NPC
+    tenure right now" (#3426) -- shared by ``mint_story_npc`` and
+    ``finalize_gm_character``'s ``claim_as_npc`` path, so the two on-ramps to
+    an NPC-shelf tenure enforce identically. Staff bypass via
+    ``is_staff_observer``.
+
+    No ``select_for_update`` on the cap count: a double-submit briefly
+    exceeding the cap is accepted, matching ``world.gm.story_services``'s
+    documented norm.
+
+    Raises:
+        StaffMintError: missing GM trust, below JUNIOR, or at/over cap.
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from world.gm.constants import GMLevel, gm_level_index  # noqa: PLC0415
+    from world.gm.models import GMLevelCap, GMProfile  # noqa: PLC0415
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+
+    if is_staff_observer(gm_account):
+        return
+
+    try:
+        profile = gm_account.gm_profile
+    except GMProfile.DoesNotExist:
+        msg = "GM trust required."
+        raise StaffMintError(msg) from None
+
+    if gm_level_index(profile.level) < gm_level_index(GMLevel.JUNIOR):
+        msg = f"Requires {GMLevel(GMLevel.JUNIOR).label} or higher."
+        raise StaffMintError(msg)
+
+    cap = GMLevelCap.objects.filter(level=profile.level).first()
+    max_story_npcs = cap.max_story_npcs if cap is not None else 0
+    active_count = RosterTenure.objects.filter(
+        player_data__account=gm_account,
+        roster_entry__roster__roster_type=RosterType.NPC,
+        end_date__isnull=True,
+    ).count()
+    if active_count >= max_story_npcs:
+        msg = (
+            f"You already have {active_count} story NPC(s) -- your level allows "
+            f"{max_story_npcs}. Ask staff to release one, or raise your GM level."
+        )
+        raise StaffMintError(msg)
+
+
+@transaction.atomic
+def mint_story_npc(*, gm_account: AccountDB, name: str, description: str = "") -> ObjectDB:
+    """Mint a Story NPC for a JUNIOR+ GM, tenure-bound to their account (#3426).
+
+    Validates trust + the per-level cap via ``check_story_npc_cap``, then
+    delegates the actual mint to ``mint_staff_character``'s working set
+    (Character + sheet + PRIMARY persona + NPC-shelf entry + active
+    RosterTenure) -- its documented follow-on, no parallel creation path.
+
+    ``description``, when given, lands in ``CharacterSheet.additional_desc``
+    via ``set_physical_description`` -- the seam ``get_display_description()``
+    reads.
+
+    Raises:
+        StaffMintError: missing GM trust, below JUNIOR, or at/over cap.
+    """
+    from world.character_sheets.services import set_physical_description  # noqa: PLC0415
+
+    check_story_npc_cap(gm_account)
+
+    character = mint_staff_character(gm_account, name)
+    if description:
+        set_physical_description(character.sheet_data, description)
     return character

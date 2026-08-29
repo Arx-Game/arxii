@@ -332,6 +332,12 @@ class GMLevelCap(SharedMemoryModel):
         default=0,
         help_text="Rooms a GM at this level may dig into one story area (#2450).",
     )
+    max_story_npcs = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Concurrent Story NPCs (active NPC-shelf tenures) a GM at this level may hold (#3426)."
+        ),
+    )
 
     class Meta:
         verbose_name = "GM Level Cap"

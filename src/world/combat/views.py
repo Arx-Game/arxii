@@ -35,7 +35,7 @@ from world.combat.constants import (
     OpponentTier,
     ParticipantStatus,
 )
-from world.combat.filters import CombatEncounterFilter, DuelChallengeFilter
+from world.combat.filters import CombatEncounterFilter, CreatureTemplateFilter, DuelChallengeFilter
 from world.combat.models import (
     Clash,
     CombatEncounter,
@@ -44,6 +44,8 @@ from world.combat.models import (
     CombatRoundAction,
     ComboDefinition,
     ConsiderReading,
+    CreaturePhaseTemplate,
+    CreatureTemplate,
     DuelChallenge,
     EngagementLock,
     ThreatPool,
@@ -59,6 +61,7 @@ from world.combat.serializers import (
     AddParticipantSerializer,
     ConsiderReadingSerializer,
     CoverSerializer,
+    CreatureTemplateSerializer,
     DuelChallengeSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
@@ -89,6 +92,7 @@ from world.combat.services import (
 )
 from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
+from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona, Scene
@@ -207,6 +211,36 @@ class ThreatPoolViewSet(ReadOnlyModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ["name"]
     permission_classes = [IsAuthenticated]
+
+
+class CreatureTemplateViewSet(ReadOnlyModelViewSet):
+    """Read-only bestiary catalog browse for the GM spawn-from-template picker (#3424).
+
+    Mirrors ``checks.CheckTypeViewSet``'s shape (django-filter ``search`` +
+    exact-field filter, ``IsGMOrStaff``, standard pagination). Unlike
+    ``ThreatPoolViewSet`` (open to any authenticated user — that catalog carries
+    no spoiler-sensitive content), the bestiary names authored encounter design
+    (boss identity, phase presence) a player shouldn't browse ahead of Consider
+    readings / weakness research — see the #3424 spec's leak table.
+    """
+
+    queryset = (
+        CreatureTemplate.objects.all()
+        .select_related("threat_pool")
+        .prefetch_related(
+            Prefetch(
+                "phase_templates",
+                queryset=CreaturePhaseTemplate.objects.all(),
+                to_attr="cached_phase_templates",
+            )
+        )
+        .order_by("name")
+    )
+    serializer_class = CreatureTemplateSerializer
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CreatureTemplateFilter
+    pagination_class = StandardResultsSetPagination
 
 
 class CombatEncounterViewSet(ModelViewSet):

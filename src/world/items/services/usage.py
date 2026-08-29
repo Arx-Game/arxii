@@ -23,6 +23,7 @@ from world.checks.types import ResolutionContext
 from world.items.constants import OwnershipEventType
 from world.items.exceptions import (
     BlendNotSupported,
+    ItemNotAttuned,
     ItemNotUsable,
     MakeoverNotPermitted,
     NoChargesRemaining,
@@ -212,6 +213,16 @@ def use_item(  # noqa: PLR0913
         raise ItemNotUsable
     if template.is_consumable and locked.charges <= 0:
         raise NoChargesRemaining
+
+    # Attunement gate (#3430): refuse BEFORE any charge is spent. requires_attunement
+    # templates are inert for a holder the instance isn't attuned to — resolve the
+    # acting sheet from the user ObjectDB (character_sheet is None for a sheet-less
+    # actor, which never matches a real attuned_to_character_sheet_id).
+    if template.requires_attunement:
+        acting_sheet = user.character_sheet
+        acting_sheet_pk = acting_sheet.pk if acting_sheet is not None else None
+        if locked.attuned_to_character_sheet_id != acting_sheet_pk:
+            raise ItemNotAttuned
 
     # Styling someone else (#2632): consent-gate BEFORE any charge is spent,
     # so a refused makeover never burns a dye.

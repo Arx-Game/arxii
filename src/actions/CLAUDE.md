@@ -44,7 +44,8 @@ They do not use the command system, dispatchers, or handlers.
   `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction`/
   `RallyAction`/`DemoralizeAction`/`TauntAction`/`ParleyAction` (social maneuvers, #1590/#1591)/
   `ChargeAction`/`JoustAction` (mounted, #1843)/`EngageAction`/`DisengageAction`
-  (engagement locks, #2020; currently surfaced from NOWHERE, see #3386) (keys
+  (engagement locks, #2020; telnet `combat engage`/`combat disengage` since #3396;
+  the web affordance #3396 deferred to #3381 never landed there — tracked in #3447) (keys
   prefixed `combat_`). `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
   names a specific ally (no "any ally" path, unlike Interpose). `UseItemManeuverAction`
   (key `combat_use`, #2120) wraps `declare_use_item` — a primary maneuver (consumes the
@@ -529,14 +530,14 @@ action gets both automatically:
    is refused on every action key except `DEAD_ALLOWED_ACTION_KEYS`
    (`actions/constants.py` — the ghost-interlude spectator/off-ramp whitelist:
    `look`, `emit`, `pose`, `wake`, `retire`, `death_kudos`, …).
-2. **The offscreen-act gate (#3412, ADR-0245)** — `Action._offscreen_gate_reason(actor)`,
+2. **The offscreen-act gate (#3412, ADR-0246)** — `Action._offscreen_gate_reason(actor)`,
    consulted only when the dead gate above did NOT already refuse. Delegates to
    `actions.offscreen_gate.offscreen_act_state(sheet, action_key)`: for the
    narrow set of "2.5 acts" in `OFFSCREEN_ACT_KEYS` (journal entries, character
    goals, persona swaps, proclamations), a character in a degraded lifecycle
    state (CAPTURED, unconscious, DEAD, RETIRED, UNKNOWN) gets ROUTED (refusal
    naming a rescue channel) or BLOCKED instead of ALLOWED. Every other action
-   key resolves ALLOWED without a lifecycle read at all — see ADR-0245 for why
+   key resolves ALLOWED without a lifecycle read at all — see ADR-0246 for why
    this extends the dead gate's choke point rather than building a second one.
 
 Both gates append to the same `failures` list `check_availability()` builds
@@ -680,14 +681,43 @@ lives on the config model rows attached to the `ActionEnhancement`, not on the s
 1. Build `ActionContext` with SceneDataManager
 2. Apply voluntary enhancements via `enh.apply(context)` → dispatches to handlers
 3. Query and apply involuntary enhancements via `enh.apply(context)`
-4. **Enforce prerequisites** — `check_availability()` is called against the
-   post-enhancement kwargs; if any prerequisite is unmet, `run()` returns a failure
-   `ActionResult` immediately (never reaches `execute()`). This is a hard gate, not
-   advisory. See "Prerequisites" below for the kwargs-via-context convention.
-5. Charge declarative AP + fatigue costs (`_charge_costs`) — fails if AP cannot be
+4. **Emit `EventName.ACTION_INTENT`** (#3418; skipped when `actor is None`) — fires
+   BEFORE the prerequisite gate, since intent means "the actor wants to do this,"
+   not "the actor can." A trigger that cancels the flow (`stack.was_cancelled()`)
+   short-circuits `run()` with a failure `ActionResult` right here, using the
+   flow's `cancel_message` or a generic fallback — no prerequisite check, no AP
+   charge, no `execute()`. A `MODIFY_PAYLOAD` step on the `target` field writes
+   `context.kwargs["target"]` straight from the step's JSON `value` — correct
+   only for a pk-shaped kwarg the action itself resolves (the
+   `objectdb_target_kwargs` REST-dispatch shape, see above). Redirecting
+   `target` to a real `ObjectDB` instance (so a real `execute()` body can call
+   `target.location` etc.) goes through the resolving service function
+   instead — `redirect_action_target`
+   (`flows/service_functions/actions.py`), the action-layer counterpart of
+   the movement-redirect pattern's `redirect_move` (ADR-0242/0243).
+5. **Enforce prerequisites** — `check_availability()` is called against the
+   post-enhancement (and post-redirect) kwargs; if any prerequisite is unmet, `run()`
+   returns a failure `ActionResult` immediately (never reaches `execute()`). This is
+   a hard gate, not advisory. See "Prerequisites" below for the kwargs-via-context
+   convention.
+6. Charge declarative AP + fatigue costs (`_charge_costs`) — fails if AP cannot be
    afforded.
-6. Call `execute()` with context and kwargs
-7. Run post-effects
+7. Call `execute()` with context and kwargs
+8. Run post-effects
+9. **Emit `EventName.ACTION_RESULT`** (`_emit_result`, #3418; skipped when `actor is
+   None`) — fires for every concluded attempt that reached this point, success or
+   failure alike (a prerequisite-gate or AP-cost failure still emits; only the
+   intent-cancel path in step 4 returns before any result event). `message` is
+   coerced to `""` so authored comparison filters (e.g. `contains`) never receive
+   `None`. Gathered at the actor's location **after** `execute()` and post-effects
+   run — a successful `traverse` fires `ACTION_RESULT` in the destination room,
+   not the room the actor departed from.
+
+Generic per-action event declarations (`intent_event`/`result_event` fields on
+`Action`) were removed in #3418 — every `Action` now goes through this same
+`ACTION_INTENT`/`ACTION_RESULT` pair; author triggers filtered on `action_key`
+(see `flows/events/payloads.py`'s `ActionIntentPayload`/`ActionResultPayload`)
+instead of a per-action event name.
 
 ## Social Template Actions Return an Honest `ActionResult`
 
@@ -716,14 +746,10 @@ base `execute()` bypasses it.
 Wholly new actions granted by database entities. Uses parameterized templates
 or flow definitions for execution. Same source contract as enhancements.
 
-### Event Emission
-`Action.run()` has TODOs for emitting intent/result events. When implemented,
-the action will emit events that triggers can respond to.
-
 ### CharacterCapabilities Facade
 Unified query interface for checking character capabilities. Used by
 prerequisites to evaluate "can this character do X right now?" The offscreen-act
-gate (#3412, ADR-0245) is a deliberate seed of this future facade, not the
+gate (#3412, ADR-0246) is a deliberate seed of this future facade, not the
 facade itself — building the full generalized interface now was rejected as
 premature generalization for a slice that only needed the lifecycle-state
 question.

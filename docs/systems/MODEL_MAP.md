@@ -1401,7 +1401,7 @@
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
-- `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
+- `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
 - `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' - Recompute and persist ``origin_story_state`` from slot rows + prose.`

@@ -650,7 +650,25 @@ Plan: `docs/superpowers/plans/2026-04-17-reactive-layer-implementation.md`.
 Spec: `docs/architecture/reactive-layer-foundation.md`.
 Key new modules: `flows/trigger_handler.py`, `flows/emit.py`,
 `flows/events/`, `flows/filters/`, `flows/execution/prompts.py`,
-`world/combat/damage_source.py`. 29 integration tests cover damage-source
+`world/combat/damage_source.py`.
+
+**Follow-on (#3417, DONE) - flows/triggers authoring surface:** #3416
+(ADR-0242) established that new mechanics should be authored as rows
+(`FlowDefinition`/`TriggerDefinition`/`Trigger`/`ConditionTemplate`) rather
+than modeled per mechanic, and found the only authoring surface was raw
+Django admin with no step inlines. #3417 built the staff-only authoring API:
+`flows.catalog` hand-declares a parameter schema per `FlowActionChoices`
+action (ADR-0244) as the single source shared by server-side validation and
+the frontend palette; DRF CRUD mounted at `api/flows/` does a full-tree
+replace for flow steps, keyed on author-chosen `client_id`s rather than DB
+pks; a `PATCH` on `ConditionTemplateViewSet` wires
+`ConditionTemplate.reactive_triggers`; and `/staff/flows-builder` is the
+frontend tree editor. Zero new models, zero migrations. Reads are
+GM-or-staff, writes are staff-only in this v1; a scoped builder tier (build
+triggers on owned content, select but never author flows) is a deferred
+follow-up. Details: `docs/systems/flows.md#authoring-api-3417`.
+
+29 integration tests cover damage-source
 discrimination, cross-character filters, AE topology, stage cascades,
 cancellation tiers, and async prompt resolution. The 10 previously
 authored-but-skipped tests are now ALL ACTIVE and passing (#527/#528), closed via:

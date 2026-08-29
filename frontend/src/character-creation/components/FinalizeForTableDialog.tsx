@@ -9,6 +9,10 @@
  * specific table instead of immediately redirecting — the player-GM stays in
  * control of when the draft is cleared (see `useFinalizeDraftForTable`'s doc
  * comment and the unmount-cleanup effect below).
+ *
+ * The "This is my NPC" switch (#3426) sends `claim_as_npc: true`: the entry
+ * lands on the NPC shelf instead of Available, tenure-bound to the GM's own
+ * account, for a heavyweight recurring antagonist rather than an appable PC.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -25,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -59,6 +64,7 @@ export function FinalizeForTableDialog({
   const [tableId, setTableId] = useState('');
   const [storyTitle, setStoryTitle] = useState('');
   const [storyDescription, setStoryDescription] = useState('');
+  const [claimAsNpc, setClaimAsNpc] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
   const [result, setResult] = useState<FinalizeForTableResponse | null>(null);
 
@@ -76,6 +82,7 @@ export function FinalizeForTableDialog({
     setTableId('');
     setStoryTitle('');
     setStoryDescription('');
+    setClaimAsNpc(false);
     setFieldErrors({});
     setResult(null);
   }
@@ -126,6 +133,7 @@ export function FinalizeForTableDialog({
           target_table: parseInt(tableId, 10),
           story_title: storyTitle.trim(),
           story_description: storyDescription.trim() || undefined,
+          claim_as_npc: claimAsNpc,
         },
       },
       {
@@ -201,6 +209,17 @@ export function FinalizeForTableDialog({
                 placeholder="What's this story about?"
                 rows={3}
                 className="resize-y"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="finalize-claim-as-npc">
+                This is my NPC, not an appable character
+              </Label>
+              <Switch
+                id="finalize-claim-as-npc"
+                checked={claimAsNpc}
+                onCheckedChange={setClaimAsNpc}
               />
             </div>
 

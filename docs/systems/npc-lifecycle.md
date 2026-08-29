@@ -83,6 +83,44 @@ AVAILABLE roster, `previous_roster` stamped, history rides along —
 `available_characters()` immediately sees it). Staff surfaces:
 `/api/npc-services/lifecycle/…`.
 
+## GM story-NPC on-ramp (#3426) — parallel to the ladder, not a rung on it
+
+A GM prepping a session's cast doesn't climb the ladder above — that's for
+*ambient* NPCs discovered through play (Functionary engagement, promotion,
+extraction). A **Story NPC** is authored directly by a trust-tiered GM and
+is playable immediately, with no Functionary placement in the chain:
+
+- **Lightweight mint** — `mint_story_npc` (`world/roster/services/staff_characters.py`)
+  gates on `GMProfile` at JUNIOR+ (staff bypass) and
+  `GMLevelCap.max_story_npcs` (per-GM-level cap, most-restrictive/refuse when
+  no cap row exists), then delegates to `mint_staff_character`'s working set:
+  Character + `CharacterSheet` + PRIMARY `Persona` + a `RosterEntry` on the
+  NPC shelf (`RosterType.NPC`) + an active `RosterTenure` binding it to the
+  GM's own account. `description`, when given, writes
+  `CharacterSheet.additional_desc` via `set_physical_description`. Telnet:
+  `gm npc <name>[=<description>]` (`CmdGMDashboard`, `commands/gm_ops.py`);
+  Action: `mint_story_npc` (`actions/definitions/gm_npcs.py`).
+- **Heavyweight claim** — `finalize_gm_character(draft, claim_as_npc=True)`
+  (`world/character_creation/services.py`) is the full-CG sibling: a GM runs
+  a character through CG as normal, then claims the finished sheet as their
+  own NPC at finalize time instead of landing it tenure-less on Available.
+  Same JUNIOR+/cap authorization (`check_story_npc_cap`, shared with
+  `mint_story_npc`). Web: `CharacterDraftViewSet.finalize_gm`'s
+  `claim_as_npc` body flag + `FinalizeForTableDialog`'s "This is my NPC, not
+  an appable character" checkbox.
+- Either way, the tenure is what makes it playable: the persona picker
+  (`get_account_personas`) and telnet `@ic` key on `RosterTenure`, not on
+  any ladder tier — a Story NPC is immediately speakable/emotable/actable in
+  a scene, the same as a PC.
+- The NPC shelf is never publicly listed (`RosterEntryViewSet` excludes
+  `RosterType.NPC` entries from the general/anonymous queryset — staff and
+  the tenure holder still see them) — an unrevealed story's cast doesn't
+  leak through roster browsing.
+- **Exit is staff-only today** (deliberate deferral): there is no
+  self-service release/retire action to free a cap slot — staff ends the
+  `RosterTenure` in Django admin. A self-service release is a stated
+  follow-up, not an oversight.
+
 ## Deliberately not here
 
 Tier-0 *consumers* (mob formation, stealth publicness, venue economics) are

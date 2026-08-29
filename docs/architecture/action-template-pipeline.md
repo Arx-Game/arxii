@@ -610,10 +610,12 @@ note for the full authorization/telnet detail.
 - Pool inheritance preview (show effective consequences after inheritance)
 
 ### Future Work (not in this spec)
-- **Intent/result event emission** — the resolution pipeline should emit events at
-  key points that triggers can intercept. This is critical infrastructure for wards,
-  protective effects, and environmental reactions. See "Event Integration" section
-  below for architecture.
+- **Intent/result event emission for `resolve_action_template()`** — the
+  ActionTemplate resolution pipeline should emit events at key points that triggers
+  can intercept, mirroring the `ACTION_INTENT`/`ACTION_RESULT` pair `Action.run()`
+  now emits for code-defined actions (#3418, ADR-0243). This is critical
+  infrastructure for wards, protective effects, and environmental reactions on the
+  data-driven path. See "Event Integration" section below for architecture.
 - **Reroll resource mechanics** — Kudos/PlayerTrust system determines when rerolls
   are available and what they cost. Pipeline already supports reroll as a decision.
 - **Reactive processing** — when effects target another character, receiver-side
@@ -630,16 +632,21 @@ note for the full authorization/telnet detail.
 
 The resolution pipeline must support event emission at defined points so that
 triggers, wards, and environmental effects can intercept, prevent, or modify
-actions. The Action base class already has `intent_event` and `result_event` fields
-and TODO placeholders for this in `Action.run()`. ActionTemplate resolution needs
-the same pattern.
+actions. `Action.run()` already does this for code-defined actions: it emits a
+generic `ACTION_INTENT`/`ACTION_RESULT` pair (#3418, ADR-0243) — not the
+per-action `intent_event`/`result_event` fields this section originally
+proposed, which were deleted as dead placeholders (24 declarations, never
+emitted). `resolve_action_template()` needs the equivalent pair for the
+data-driven path; see `src/actions/CLAUDE.md`'s "Enhancement Flow in `run()`"
+for the emission points and payload shape to mirror.
 
 **Event points in the pipeline:**
 
 1. **Pre-resolution intent** — "character is about to attempt X." Emitted before any
    checks run. Triggers can prevent the action entirely (a ward that blocks magic,
    a condition that prevents movement, a target-specific protection). If interrupted,
-   the pipeline never starts. This maps to the existing `intent_event` on Action.
+   the pipeline never starts. This mirrors `Action.run()`'s `ACTION_INTENT` emission
+   point (#3418, ADR-0243).
 
 2. **Post-selection, pre-application** — "check resolved, consequence Y was selected."
    Emitted after `select_consequence()` but before `apply_resolution()`. Triggers
@@ -649,8 +656,8 @@ the same pattern.
 
 3. **Post-resolution result** — "action completed with these effects." Emitted after
    all effects are applied. Triggers can react (a fire spell triggers a sprinkler
-   system, an attack triggers a counterattack flow). This maps to the existing
-   `result_event` on Action.
+   system, an attack triggers a counterattack flow). This mirrors `Action.run()`'s
+   `ACTION_RESULT` emission point (#3418, ADR-0243).
 
 **Design considerations for implementation:**
 
