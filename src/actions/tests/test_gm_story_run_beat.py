@@ -232,10 +232,11 @@ class GMListRunnableBeatsActionTests(RunBeatActionTestBase):
         self.assertIn(self.beat.pk, ids)
         self.assertEqual(len(ids), 1)
 
-    def test_non_gm_sees_no_beats(self) -> None:
+    def test_non_gm_is_refused_by_the_trust_gate(self) -> None:
+        """A non-GM never gets a listing at all -- the prerequisite refuses,
+        matching every sibling gated GM action (not an empty success)."""
         result = GMListRunnableBeatsAction().run(self.player_actor)
-        self.assertTrue(result.success, result.message)
-        self.assertEqual(result.data["beats"], [])
+        self.assertFalse(result.success)
 
     def test_outsider_gm_does_not_see_this_story(self) -> None:
         """A JUNIOR+ GM running a DIFFERENT story never sees this story's beats."""
