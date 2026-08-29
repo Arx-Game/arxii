@@ -23,6 +23,7 @@ from world.roster.services.staff_characters import (
     mint_story_npc,
 )
 from world.skills.models import CharacterSkillValue
+from world.traits.factories import PointConversionRangeFactory
 from world.traits.models import (
     STAT_DISPLAY_DIVISOR,
     CharacterTraitChange,
@@ -85,10 +86,26 @@ class ApplyNpcPresetServiceTests(TestCase):
         assert "already has a preset" in caught.exception.user_message
 
     def test_check_pipeline_resolves_a_preset_skill(self) -> None:
-        """Proves the #2894 bridge landed: a check weighted on the preset
-        skill's trait scores real points off a preset-applied sheet."""
+        """Proves the #2894 bridge landed: a preset-applied sheet scores the
+        SAME trait points as a control sheet whose bridge row was written by
+        hand. Comparative, because trait_points runs raw values through
+        PointConversionRange -- never identity with the skill value."""
         skill_line = NPCPresetSkillLineFactory(preset=self.preset, value=30)
         apply_npc_preset(self.sheet, self.preset)
+
+        control_sheet = CharacterSheetFactory()
+        CharacterTraitValue.objects.create(
+            character=control_sheet, trait=skill_line.skill.trait, value=30
+        )
+
+        # Seed a conversion range so trait_points is nonzero -- with no rows,
+        # calculate_points returns 0 and the comparison below would be vacuous.
+        PointConversionRangeFactory(
+            trait_type=skill_line.skill.trait.trait_type,
+            min_value=1,
+            max_value=100,
+            points_per_level=1,
+        )
 
         category = CheckCategoryFactory(name="npc_preset_check_category")
         check_type = CheckTypeFactory(name="npc_preset_check", category=category)
@@ -96,9 +113,11 @@ class ApplyNpcPresetServiceTests(TestCase):
             check_type=check_type, trait=skill_line.skill.trait, weight=Decimal("1.0")
         )
 
-        result = perform_check(self.sheet.character, check_type, target_difficulty=0)
+        preset_result = perform_check(self.sheet.character, check_type, target_difficulty=0)
+        control_result = perform_check(control_sheet.character, check_type, target_difficulty=0)
 
-        assert result.trait_points == 30
+        assert preset_result.trait_points > 0
+        assert preset_result.trait_points == control_result.trait_points
 
 
 class MintStoryNpcWithPresetServiceTests(TestCase):
