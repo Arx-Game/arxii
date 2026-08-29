@@ -155,14 +155,16 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
 
     Steps (in order):
     1. ``scene.finish_scene()`` — sets ``date_finished`` + ``is_active=False``.
-    2. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
-    3. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
+    2. Clear ``scene.running_beat`` if set (#3425) — the session-prep run pointer
+       ``RunBeatAction`` wrote only lives for the scene's duration.
+    3. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
+    4. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
        tasks for all participant accounts.
-    4. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
+    5. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
        ``teardown_ramparts``): disarms any Trap the scene's room holds whose
        ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
        staff-authored one.
-    5. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
+    6. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
        event over the scene's WebSocket channel.
 
     ``by_account`` is accepted for call-site symmetry (so both the web viewset
@@ -174,6 +176,12 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         return
 
     scene.finish_scene()
+    if scene.running_beat_id is not None:
+        # #3425: a beat's session-prep run pointer only lives for the scene's
+        # duration -- clear it so a later ``story beats`` listing / #3433 header
+        # badge don't keep reporting a finished scene as still running the beat.
+        scene.running_beat = None
+        scene.save(update_fields=["running_beat"])
     on_scene_finished(scene)
     participant_account_ids = set(scene.participations.values_list("account_id", flat=True))
     process_deferred_fatigue_resets(participant_account_ids)

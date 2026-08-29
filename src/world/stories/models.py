@@ -1168,6 +1168,112 @@ class Beat(SharedMemoryModel):
         return f"Beat({self.predicate_type}) on {self.episode.title}"
 
 
+class BeatOpponentLine(SharedMemoryModel):
+    """An authored opponent (creature x count x position hint) to spawn when a beat runs.
+
+    Session prep (#3425): a GM authors the roster for an ENCOUNTER beat ahead of the
+    table, so ``RunBeatAction`` can instantiate the fight in one call at session time.
+    ``position_name`` is authored text, not a live FK -- the room the beat eventually
+    runs in isn't known at authoring time (only at ``RunBeatAction`` execution, against
+    whichever room the GM's scene occupies then), so it's resolved by name against that
+    room's ``Position`` set via the shared ``resolve_position_by_name`` helper
+    (``commands/utils/gm_resolution.py``) at run time; an unresolvable name spawns the
+    opponent without a position rather than refusing the whole line.
+    """
+
+    beat = models.ForeignKey(
+        STORY_BEAT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="opponent_lines",
+    )
+    creature_template = models.ForeignKey(
+        "arxii.CreatureTemplate",
+        on_delete=models.PROTECT,
+        related_name="beat_opponent_lines",
+        help_text="The bestiary entry to spawn.",
+    )
+    count = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="How many of this creature to spawn.",
+    )
+    position_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text=(
+            "Authored position hint, resolved by name against the run-time room's "
+            "Position set. Blank = no position."
+        ),
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["beat", "order"]
+
+    def __str__(self) -> str:
+        return f"{self.count}x {self.creature_template.name} on Beat #{self.beat_id}"
+
+
+class BeatStagedTemplate(SharedMemoryModel):
+    """An authored situation or challenge template to place when a SITUATION beat runs.
+
+    Session prep (#3425). Exactly one of ``situation_template``/``challenge_template``
+    is set per row (DB-enforced XOR, mirroring the ``ChallengeInstance.severity_adjustment``
+    style of a ``CheckConstraint`` over an authoring invariant) -- a situation-template row
+    is placed via ``instantiate_situation``; a challenge-template row is placed via
+    ``instantiate_challenge`` against a fresh target object, exactly as
+    ``PlaceChallengeAction`` does today.
+    """
+
+    beat = models.ForeignKey(
+        STORY_BEAT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="staged_templates",
+    )
+    situation_template = models.ForeignKey(
+        "arxii.SituationTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="beat_staged_lines",
+    )
+    challenge_template = models.ForeignKey(
+        "arxii.ChallengeTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="beat_staged_lines",
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["beat", "order"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(situation_template__isnull=False, challenge_template__isnull=True)
+                    | models.Q(situation_template__isnull=True, challenge_template__isnull=False)
+                ),
+                name="beatstagedtemplate_exactly_one_template",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        has_situation = self.situation_template_id is not None
+        has_challenge = self.challenge_template_id is not None
+        if has_situation == has_challenge:
+            msg = "Exactly one of situation_template or challenge_template must be set."
+            raise ValidationError({"situation_template": msg})
+
+    def __str__(self) -> str:
+        if self.situation_template_id:
+            name = self.situation_template.name
+        else:
+            name = self.challenge_template.name
+        return f"{name} on Beat #{self.beat_id}"
+
+
 class EpisodeProgressionRequirement(SharedMemoryModel):
     """A beat that must reach ``required_outcome`` before any outbound transition fires."""
 

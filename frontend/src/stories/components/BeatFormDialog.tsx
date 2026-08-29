@@ -30,6 +30,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
 import { useAccount } from '@/store/hooks';
+import { useCreatureTemplates } from '@/combat/queries';
+import {
+  useSituationTemplateCatalog,
+  useChallengeTemplateCatalog,
+} from '@/gm-adjudication/queries';
 import {
   useCreateBeat,
   useUpdateBeat,
@@ -41,8 +46,10 @@ import type {
   Beat,
   BeatCreateBody,
   BeatKind,
+  BeatOpponentLine,
   BeatPredicateType,
   BeatRisk,
+  BeatStagedTemplate,
   BeatVisibility,
   ReferencedMilestoneType,
 } from '../types';
@@ -75,6 +82,10 @@ interface DRFFieldErrors {
   required_points?: string[];
   non_field_errors?: string[];
   detail?: string;
+  // #3425 session prep: DRF nested list-of-dicts field errors, one entry per
+  // submitted row (empty object = that row is valid).
+  opponent_lines?: Record<string, string[]>[];
+  staged_templates?: Record<string, string[]>[];
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +444,276 @@ function PredicateConfigFields({ predicateType, config, onChange, errors }: Conf
 }
 
 // ---------------------------------------------------------------------------
+// Session prep row editors (#3425) — repeatable rows shown on kind=encounter
+// (opponent lines) / kind=situation (staged situation/challenge templates).
+// A row's `id` is carried through untouched when present (an existing row
+// being edited) and omitted for a freshly-added row — BeatSerializer.update()
+// diffs incoming rows against the beat's existing children by id.
+// ---------------------------------------------------------------------------
+
+/** Draft shape for one opponent-line row while the form is open. */
+interface OpponentLineDraft {
+  id?: number;
+  creature_template: string;
+  count: string;
+  position_name: string;
+}
+
+function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[] {
+  return (beat?.opponent_lines ?? []).map((line) => ({
+    id: line.id,
+    creature_template: String(line.creature_template),
+    count: String(line.count ?? 1),
+    position_name: line.position_name ?? '',
+  }));
+}
+
+function opponentLineDraftsToPayload(drafts: OpponentLineDraft[]): BeatOpponentLine[] {
+  return drafts
+    .filter((d) => d.creature_template !== '')
+    .map((d) => ({
+      ...(d.id !== undefined ? { id: d.id } : {}),
+      creature_template: Number(d.creature_template),
+      count: d.count !== '' ? Number(d.count) : 1,
+      position_name: d.position_name.trim(),
+      order: 0,
+    }));
+}
+
+interface OpponentLinesEditorProps {
+  lines: OpponentLineDraft[];
+  onChange: (lines: OpponentLineDraft[]) => void;
+  rowErrors: Record<string, string[]>[] | undefined;
+}
+
+function OpponentLinesEditor({ lines, onChange, rowErrors }: OpponentLinesEditorProps) {
+  const [search, setSearch] = useState('');
+  const { data: creatureTemplates = [] } = useCreatureTemplates(search);
+
+  function updateRow(index: number, partial: Partial<OpponentLineDraft>) {
+    onChange(lines.map((line, i) => (i === index ? { ...line, ...partial } : line)));
+  }
+
+  function addRow() {
+    onChange([...lines, { creature_template: '', count: '1', position_name: '' }]);
+  }
+
+  function removeRow(index: number) {
+    onChange(lines.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="space-y-2" data-testid="beat-opponent-lines">
+      <div className="flex items-center justify-between">
+        <Label>Encounter prep — opponent lines</Label>
+        <Button type="button" size="sm" variant="outline" onClick={addRow}>
+          Add opponent
+        </Button>
+      </div>
+      <Input
+        placeholder="Search the bestiary…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      {lines.length === 0 && (
+        <p className="text-xs text-muted-foreground">No opponents authored yet.</p>
+      )}
+      {lines.map((line, index) => {
+        const errors = rowErrors?.[index];
+        return (
+          <div
+            key={line.id ?? `new-${index}`}
+            className="grid grid-cols-[1fr_auto_1fr_auto] items-start gap-2 rounded-md border p-2"
+            data-testid={`beat-opponent-line-row-${index}`}
+          >
+            <div className="space-y-1">
+              <select
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                value={line.creature_template}
+                onChange={(e) => updateRow(index, { creature_template: e.target.value })}
+                data-testid={`beat-opponent-line-creature-${index}`}
+              >
+                <option value="">Select a creature…</option>
+                {creatureTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.tier})
+                  </option>
+                ))}
+              </select>
+              {errors?.creature_template && (
+                <p className="text-xs text-destructive">{errors.creature_template.join(' ')}</p>
+              )}
+            </div>
+            <Input
+              type="number"
+              min={1}
+              className="w-16"
+              value={line.count}
+              onChange={(e) => updateRow(index, { count: e.target.value })}
+              data-testid={`beat-opponent-line-count-${index}`}
+            />
+            <Input
+              placeholder="Position (optional)"
+              value={line.position_name}
+              onChange={(e) => updateRow(index, { position_name: e.target.value })}
+              data-testid={`beat-opponent-line-position-${index}`}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => removeRow(index)}
+              data-testid={`beat-opponent-line-remove-${index}`}
+            >
+              Remove
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Draft shape for one staged-template row while the form is open. */
+interface StagedTemplateDraft {
+  id?: number;
+  templateKind: 'situation' | 'challenge';
+  situation_template: string;
+  challenge_template: string;
+}
+
+function stagedTemplateDraftsFromBeat(beat: Beat | undefined): StagedTemplateDraft[] {
+  return (beat?.staged_templates ?? []).map((line) => {
+    const situation = line.situation_template ?? null;
+    const challenge = line.challenge_template ?? null;
+    return {
+      id: line.id,
+      templateKind: situation !== null ? ('situation' as const) : ('challenge' as const),
+      situation_template: situation !== null ? String(situation) : '',
+      challenge_template: challenge !== null ? String(challenge) : '',
+    };
+  });
+}
+
+function stagedTemplateDraftsToPayload(drafts: StagedTemplateDraft[]): BeatStagedTemplate[] {
+  return drafts
+    .filter((d) =>
+      d.templateKind === 'situation' ? d.situation_template !== '' : d.challenge_template !== ''
+    )
+    .map((d) => ({
+      ...(d.id !== undefined ? { id: d.id } : {}),
+      situation_template: d.templateKind === 'situation' ? Number(d.situation_template) : null,
+      challenge_template: d.templateKind === 'challenge' ? Number(d.challenge_template) : null,
+      order: 0,
+    }));
+}
+
+interface StagedTemplatesEditorProps {
+  lines: StagedTemplateDraft[];
+  onChange: (lines: StagedTemplateDraft[]) => void;
+  rowErrors: Record<string, string[]>[] | undefined;
+}
+
+function StagedTemplatesEditor({ lines, onChange, rowErrors }: StagedTemplatesEditorProps) {
+  const { data: situationTemplates = [] } = useSituationTemplateCatalog(true);
+  const { data: challengeTemplates = [] } = useChallengeTemplateCatalog(true);
+
+  function updateRow(index: number, partial: Partial<StagedTemplateDraft>) {
+    onChange(lines.map((line, i) => (i === index ? { ...line, ...partial } : line)));
+  }
+
+  function addRow() {
+    onChange([
+      ...lines,
+      { templateKind: 'situation', situation_template: '', challenge_template: '' },
+    ]);
+  }
+
+  function removeRow(index: number) {
+    onChange(lines.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="space-y-2" data-testid="beat-staged-templates">
+      <div className="flex items-center justify-between">
+        <Label>Staging — situation/challenge templates</Label>
+        <Button type="button" size="sm" variant="outline" onClick={addRow}>
+          Add staged template
+        </Button>
+      </div>
+      {lines.length === 0 && (
+        <p className="text-xs text-muted-foreground">No staging authored yet.</p>
+      )}
+      {lines.map((line, index) => {
+        const errors = rowErrors?.[index];
+        return (
+          <div
+            key={line.id ?? `new-${index}`}
+            className="space-y-1 rounded-md border p-2"
+            data-testid={`beat-staged-template-row-${index}`}
+          >
+            <div className="flex items-center gap-2">
+              <select
+                className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                value={line.templateKind}
+                onChange={(e) =>
+                  updateRow(index, { templateKind: e.target.value as 'situation' | 'challenge' })
+                }
+                data-testid={`beat-staged-template-kind-${index}`}
+              >
+                <option value="situation">Whole situation</option>
+                <option value="challenge">Single challenge</option>
+              </select>
+              {line.templateKind === 'situation' ? (
+                <select
+                  className="flex-1 rounded-md border bg-background px-2 py-1.5 text-sm"
+                  value={line.situation_template}
+                  onChange={(e) => updateRow(index, { situation_template: e.target.value })}
+                  data-testid={`beat-staged-template-situation-${index}`}
+                >
+                  <option value="">Select a situation…</option>
+                  {situationTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  className="flex-1 rounded-md border bg-background px-2 py-1.5 text-sm"
+                  value={line.challenge_template}
+                  onChange={(e) => updateRow(index, { challenge_template: e.target.value })}
+                  data-testid={`beat-staged-template-challenge-${index}`}
+                >
+                  <option value="">Select a challenge…</option>
+                  {challengeTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => removeRow(index)}
+                data-testid={`beat-staged-template-remove-${index}`}
+              >
+                Remove
+              </Button>
+            </div>
+            {errors?.situation_template && (
+              <p className="text-xs text-destructive">{errors.situation_template.join(' ')}</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -478,6 +759,12 @@ export function BeatFormDialog({
   const [order, setOrder] = useState<string>(beat?.order !== undefined ? String(beat.order) : '');
   const [deadline, setDeadline] = useState(beat?.deadline ?? '');
   const [agmEligible, setAgmEligible] = useState(beat?.agm_eligible ?? false);
+  const [opponentLines, setOpponentLines] = useState<OpponentLineDraft[]>(
+    opponentLineDraftsFromBeat(beat)
+  );
+  const [stagedTemplates, setStagedTemplates] = useState<StagedTemplateDraft[]>(
+    stagedTemplateDraftsFromBeat(beat)
+  );
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
   const createMutation = useCreateBeat();
@@ -507,6 +794,8 @@ export function BeatFormDialog({
     setOrder(beat?.order !== undefined ? String(beat.order) : '');
     setDeadline(beat?.deadline ?? '');
     setAgmEligible(beat?.agm_eligible ?? false);
+    setOpponentLines(opponentLineDraftsFromBeat(beat));
+    setStagedTemplates(stagedTemplateDraftsFromBeat(beat));
     setFieldErrors({});
   }
 
@@ -547,7 +836,23 @@ export function BeatFormDialog({
       agm_eligible: agmEligible,
     };
 
-    return { ...base, ...predicateConfigPayload(predicateType, config) };
+    // #3425 session prep: only the section matching the current kind rides
+    // the payload — switching kind away doesn't silently clear the other
+    // kind's authored rows (they're simply left untouched server-side, since
+    // an omitted nested-list field is a no-op on update, see
+    // BeatSerializer.update()).
+    const sessionPrep: Partial<BeatCreateBody> = {};
+    if (kind === 'encounter') {
+      sessionPrep.opponent_lines = opponentLineDraftsToPayload(opponentLines);
+    } else if (kind === 'situation') {
+      sessionPrep.staged_templates = stagedTemplateDraftsToPayload(stagedTemplates);
+    }
+
+    return {
+      ...base,
+      ...predicateConfigPayload(predicateType, config),
+      ...sessionPrep,
+    };
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -725,6 +1030,22 @@ export function BeatFormDialog({
                 <p className="text-xs text-destructive">{fieldErrors.kind.join(' ')}</p>
               )}
             </div>
+
+            {/* Session prep (#3425) — kind-gated repeatable rows */}
+            {kind === 'encounter' && (
+              <OpponentLinesEditor
+                lines={opponentLines}
+                onChange={setOpponentLines}
+                rowErrors={fieldErrors.opponent_lines}
+              />
+            )}
+            {kind === 'situation' && (
+              <StagedTemplatesEditor
+                lines={stagedTemplates}
+                onChange={setStagedTemplates}
+                rowErrors={fieldErrors.staged_templates}
+              />
+            )}
 
             {/* Advances */}
             <div className="space-y-1.5">

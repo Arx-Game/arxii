@@ -100,6 +100,8 @@ function makeGmMarkedBeat(overrides: Partial<Beat> = {}): Beat {
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-04-19T00:00:00Z',
     can_mark: false,
+    opponent_lines: [],
+    staged_templates: [],
     ...overrides,
   };
 }
@@ -140,6 +142,8 @@ describe('BeatRow — contribute button visibility', () => {
       predicate_type: 'aggregate_threshold',
       required_points: 100,
       can_mark: false,
+      opponent_lines: [],
+      staged_templates: [],
     });
     render(<BeatRow beat={beat} characterSheetId={42} />, { wrapper: createWrapper() });
     expect(screen.getByTestId('contribute-beat-dialog-trigger')).toBeInTheDocument();
@@ -150,6 +154,8 @@ describe('BeatRow — contribute button visibility', () => {
       predicate_type: 'aggregate_threshold',
       required_points: 100,
       can_mark: false,
+      opponent_lines: [],
+      staged_templates: [],
     });
     render(<BeatRow beat={beat} characterSheetId={null} />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('contribute-beat-dialog-trigger')).not.toBeInTheDocument();

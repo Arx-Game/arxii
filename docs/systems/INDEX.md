@@ -1333,7 +1333,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
 - **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`, `declare_standing` (#3290 — direction kwarg picks FAVOR/DISFAVOR, shared by both telnet subverbs and the web dialog), `org_appeal_lodge`, `org_appeal_signon`, `org_appeal_resolve`, `org_appeal_withdraw` (#3293)
 - **Telnet:** `org <subverb>` command (`favor`/`disfavor <person> in <org>=<citation>` added #3290); `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
-- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet`, `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
+- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` (+ `respond` detail action, #3412 — `POST /offers/{id}/respond/` accept/decline via the existing `membership_services` functions, no staff bypass, matching telnet's `accept org`/`decline org`), `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
 - **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
@@ -2186,6 +2186,13 @@ Character lifecycle management with web-first applications and player anonymity.
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
   and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
   [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
+- **The Hall — logged-in home surface (#3412 slice 2, ADR-0245):** `GET
+  /api/roster/entries/mine/` annotates `unread_narrative_count` per character (one
+  aggregated JOIN/GROUP BY over unacknowledged `NarrativeMessageDelivery` rows, not
+  per-row queries); `MyRosterEntrySerializer.get_unread_narrative_count` reads the
+  annotation off `obj.__dict__` when present, falling back to a direct count on the
+  unannotated `select`-endpoint path. Drives the "Your Characters" band's tidings
+  `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
@@ -2723,7 +2730,9 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
 action consent flow, and a three-mode non-combat round framework.
 
-- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
+- **Models:** `Scene` (incl. `running_beat` FK → `stories.Beat`, nullable, #3425 — the beat this
+  scene is currently running, set by `RunBeatAction`/cleared by `finish_scene_full`; see
+  stories.md's "Session prep"), `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
   `SceneCastPullDeclaration`,
   **Round framework (#1351):** `SceneRound` (room-anchored non-combat round — `room` FKs
   `evennia_extensions.RoomProfile` since #2608, as do `Place.room` and `SpeakerQueue.room`;
@@ -2985,7 +2994,8 @@ action consent flow, and a three-mode non-combat round framework.
 ### Stories
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
-- **Models:** `Story` (incl. `summary` — player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 — see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
+- **Models:** `Story` (incl. `summary` — player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 — see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 — see below)
+- **Session prep + Run Beat (#3425):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat — nested read-write child lists on `BeatSerializer`, including the id-based-diff update path. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: creates a `CombatEncounter`/spawns opponents (ENCOUNTER) or instantiates situations/challenges (SITUATION), and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows + `GMAdjudicationPanel`'s Run Beat tab. See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **GM↔player visibility contract:** `description`/`consequences` are GM/staff-only; `summary` is player-facing ("The Story So Far"), blanked while node `maturity == PITCH`. Enforced server-side in two places: the three Detail serializers' `to_representation` (via `_gm_text_gate`, default-deny when no request) **and** `serialize_story_log` (per-beat internals gated to privileged roles). No dedicated `pitch` field by design — `description`=GM pitch, `summary`=player recap

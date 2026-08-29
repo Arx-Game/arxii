@@ -310,7 +310,14 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 ### Entries (`/api/roster/entries/`)
 - `GET /api/roster/entries/` - List roster entries with character data
 - `GET /api/roster/entries/{id}/` - Entry detail
-- `GET /api/roster/entries/mine/` - Current user's characters (authenticated)
+- `GET /api/roster/entries/mine/` - Current user's characters (authenticated).
+  `MyRosterEntrySerializer` annotates `unread_narrative_count` (#3412 slice 2 — the
+  Hall's per-character tidings badge) via one aggregated `Count(...filter=...)` JOIN
+  over unacknowledged `NarrativeMessageDelivery` rows, not a per-row query. The same
+  serializer backs the unannotated `select` response fragment
+  (`selected_entry`/`SelectedEntryResultSerializer`), so the field is a
+  `SerializerMethodField` reading the annotation off `obj.__dict__` when present and
+  falling back to a direct count (one extra query, single-object path only) when not.
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
 - `POST /api/roster/entries/{id}/set_profile_picture/` - Set profile picture from tenure media
 - `POST /api/roster/entries/select/` - Set/clear the account's durable character selection

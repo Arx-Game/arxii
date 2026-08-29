@@ -34,6 +34,22 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+// #3425 session prep — creature/situation/challenge catalog pickers.
+vi.mock('@/combat/queries', () => ({
+  useCreatureTemplates: vi.fn(() => ({
+    data: [{ id: 1, name: 'Gorehorn', tier: 'boss', description: '', has_phases: true }],
+  })),
+}));
+
+vi.mock('@/gm-adjudication/queries', () => ({
+  useSituationTemplateCatalog: vi.fn(() => ({
+    data: [{ id: 5, name: 'Ambush', category: 1, category_name: 'Combat' }],
+  })),
+  useChallengeTemplateCatalog: vi.fn(() => ({
+    data: [{ id: 9, name: 'Locked Gate', category: 1, category_name: 'Exploration' }],
+  })),
+}));
+
 // Mock the auth/account selector hook the component uses to determine
 // whether the current user is staff (controls the risk control's disabled
 // state). Mirrors the @/store/hooks mocking pattern used elsewhere
@@ -376,6 +392,8 @@ describe('BeatFormDialog', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
       can_mark: false,
+      opponent_lines: [],
+      staged_templates: [],
     };
 
     renderWithProviders(<BeatFormDialog {...defaultProps} beat={existingBeat} />);
@@ -537,6 +555,8 @@ describe('BeatFormDialog', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
       can_mark: false,
+      opponent_lines: [],
+      staged_templates: [],
     };
 
     renderWithProviders(<BeatFormDialog {...defaultProps} beat={existingBeat} />);
@@ -544,5 +564,120 @@ describe('BeatFormDialog', () => {
     expect((screen.getByLabelText(/^kind$/i) as HTMLSelectElement).value).toBe('requirement');
     expect(screen.getByLabelText(/advances the plot/i)).not.toBeChecked();
     expect((screen.getByLabelText(/^risk$/i) as HTMLSelectElement).value).toBe('high');
+  });
+
+  // -------------------------------------------------------------------------
+  // #3425 — session prep: opponent lines (kind=encounter) / staged templates
+  // (kind=situation) repeatable rows.
+  // -------------------------------------------------------------------------
+
+  it('kind=encounter shows the opponent lines editor, hidden by default', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    expect(screen.queryByTestId('beat-opponent-lines')).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    expect(screen.getByTestId('beat-opponent-lines')).toBeInTheDocument();
+    expect(screen.queryByTestId('beat-staged-templates')).not.toBeInTheDocument();
+  });
+
+  it('kind=situation shows the staged templates editor, hidden by default', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'situation');
+    expect(screen.getByTestId('beat-staged-templates')).toBeInTheDocument();
+    expect(screen.queryByTestId('beat-opponent-lines')).not.toBeInTheDocument();
+  });
+
+  it('submits an encounter beat with an authored opponent line', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 101 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/internal description/i), 'A fight beat');
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    await user.click(screen.getByRole('button', { name: /add opponent/i }));
+    await user.selectOptions(screen.getByTestId('beat-opponent-line-creature-0'), '1');
+    await user.clear(screen.getByTestId('beat-opponent-line-count-0'));
+    await user.type(screen.getByTestId('beat-opponent-line-count-0'), '2');
+    await user.type(screen.getByTestId('beat-opponent-line-position-0'), 'front');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'encounter',
+          opponent_lines: [{ creature_template: 1, count: 2, position_name: 'front', order: 0 }],
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('submits a situation beat with an authored staged situation template', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 102 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/internal description/i), 'A staged beat');
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'situation');
+    await user.click(screen.getByRole('button', { name: /add staged template/i }));
+    await user.selectOptions(screen.getByTestId('beat-staged-template-situation-0'), '5');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'situation',
+          staged_templates: [{ situation_template: 5, challenge_template: null, order: 0 }],
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('removing an opponent line row drops it from the payload', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 103 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/internal description/i), 'A fight beat');
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    await user.click(screen.getByRole('button', { name: /add opponent/i }));
+    await user.click(screen.getByTestId('beat-opponent-line-remove-0'));
+    expect(screen.queryByTestId('beat-opponent-line-row-0')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'encounter', opponent_lines: [] }),
+        expect.any(Object)
+      );
+    });
   });
 });
