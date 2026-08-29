@@ -401,10 +401,10 @@ class FlowStepDefinition(NaturalKeyMixin, SharedMemoryModel):
         """Invoke a service function and optionally store its result.
 
         All ``@variable`` references are resolved before calling the function.
-        For each parameter, the method first tries to resolve it as an object
-        state (BaseState). If that fails, the raw resolved value is used.
-        Service functions receive resolved objects directly — never
-        FlowExecution or ``@variable`` strings.
+        A reference holding a game object (or the pk of a state already in the
+        scene context) arrives as a BaseState; scalars arrive as themselves —
+        see ``_resolve_service_param``. Service functions receive resolved
+        values directly — never FlowExecution or ``@variable`` strings.
         """
         service_function = flow_execution.get_service_function(self.variable_name)
         resolved: dict[str, object] = {}
