@@ -33,6 +33,7 @@ import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
 import { useCombatEncounter, useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
+import { GMStoryRail } from '../components/GMStoryRail';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
 import { SelfCheckPanel } from '../components/SelfCheckPanel';
@@ -59,6 +60,12 @@ export function SceneDetailPage() {
   const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
   const hasActiveEncounter = !encounterLoading && encounterListItem != null;
   const encounterId = encounterListItem?.id ?? 0;
+  // GM story rail fold-in (#3434): shares the right-rail column with the
+  // combat rail. Mounted whenever the viewer can GM this scene at all --
+  // GMStoryRail itself renders the "no beat running" fallback when
+  // scene.running_beat is null, so the grid doesn't collapse the moment a
+  // GM's beat finishes.
+  const showStoryRail = !!scene?.viewer_can_gm;
   // Full encounter detail (carries is_gm) for the GM controls panel (#3067) —
   // shares the combatKeys.encounter(encounterId) cache with CombatTurnPanel's
   // own useCombatEncounter call inside CombatRail, so this doesn't double-fetch.
@@ -257,7 +264,9 @@ export function SceneDetailPage() {
       <div
         className={cn(
           'min-h-0 flex-1',
-          hasActiveEncounter ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4' : 'flex flex-col'
+          hasActiveEncounter || showStoryRail
+            ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4'
+            : 'flex flex-col'
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col" data-testid="scene-detail-left">
@@ -313,20 +322,25 @@ export function SceneDetailPage() {
           )}
         </div>
 
-        {hasActiveEncounter && (
+        {(hasActiveEncounter || showStoryRail) && (
           <div
             ref={railRef}
             className="min-h-0 space-y-3 overflow-y-auto"
             data-testid="scene-detail-combat-rail"
           >
-            {gmEncounterDetail?.is_gm && (
-              <GMEncounterControls
-                sceneId={sceneIdNum}
-                encounter={gmEncounterDetail}
-                viewerCanGm={scene?.viewer_can_gm ?? false}
-              />
+            {showStoryRail && scene && <GMStoryRail scene={scene} />}
+            {hasActiveEncounter && (
+              <>
+                {gmEncounterDetail?.is_gm && (
+                  <GMEncounterControls
+                    sceneId={sceneIdNum}
+                    encounter={gmEncounterDetail}
+                    viewerCanGm={scene?.viewer_can_gm ?? false}
+                  />
+                )}
+                <CombatRail sceneId={sceneIdNum} encounterId={encounterId} />
+              </>
             )}
-            <CombatRail sceneId={sceneIdNum} encounterId={encounterId} />
           </div>
         )}
       </div>
