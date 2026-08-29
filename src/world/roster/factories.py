@@ -267,6 +267,39 @@ class GameInviteFactory(factory_django.DjangoModelFactory):
     status = InviteStatus.PENDING
 
 
+class NPCStatlinePresetFactory(factory_django.DjangoModelFactory):
+    """Factory for curated Story-NPC statline presets (#3427)."""
+
+    class Meta:
+        model = "arxii.NPCStatlinePreset"
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Test Preset {n}")
+    description = factory.Faker("sentence")
+
+
+class NPCPresetTraitLineFactory(factory_django.DjangoModelFactory):
+    """Factory for one STAT line on a preset (#3427)."""
+
+    class Meta:
+        model = "arxii.NPCPresetTraitLine"
+
+    preset = factory.SubFactory(NPCStatlinePresetFactory)
+    trait = factory.SubFactory("world.traits.factories.StatTraitFactory")
+    display_value = 3
+
+
+class NPCPresetSkillLineFactory(factory_django.DjangoModelFactory):
+    """Factory for one SKILL line on a preset (#3427)."""
+
+    class Meta:
+        model = "arxii.NPCPresetSkillLine"
+
+    preset = factory.SubFactory(NPCStatlinePresetFactory)
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    value = 25
+
+
 def grant_test_tenure(character_sheet: CharacterSheet) -> RosterTenure:
     """Give ``character_sheet`` a live, non-staff tenure (achievement-eligible, #3024).
 

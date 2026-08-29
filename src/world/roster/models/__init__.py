@@ -9,6 +9,7 @@ This module is organized into logical groups:
 - settings: TenureDisplaySettings and TenureMedia models
 - mail: PlayerMail model
 - families: Family + the kinship graph (#2062)
+- npc_presets: NPCStatlinePreset + its trait/skill lines (#3427)
 """
 
 # Import all models for backward compatibility
@@ -36,6 +37,11 @@ from world.roster.models.families import (
 )
 from world.roster.models.invites import GameInvite, InviteStatus
 from world.roster.models.mail import PlayerMail
+from world.roster.models.npc_presets import (
+    NPCPresetSkillLine,
+    NPCPresetTraitLine,
+    NPCStatlinePreset,
+)
 from world.roster.models.roster_core import Roster, RosterEntry
 from world.roster.models.settings import (
     TenureDisplaySettings,
@@ -55,6 +61,9 @@ __all__ = [
     "KinSlotPool",
     "Kinsperson",
     "KinspersonTraitValue",
+    "NPCPresetSkillLine",
+    "NPCPresetTraitLine",
+    "NPCStatlinePreset",
     "ParentageEdge",
     "PlayerMail",
     "PlotInvolvement",

@@ -2649,6 +2649,29 @@ GM at a given level may author (#2000, ADR-0097).
   Frontend: a "My NPCs" block on `GMDashboardPage` + a mint dialog. See
   `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
   rundown and how this relates to the ambient-NPC ladder.
+- **Story-NPC statline presets (#3427):** `NPCStatlinePreset`
+  (`world.roster.models`, `NaturalKeyMixin + CreditedContent`, registered in
+  `CONTENT_MODELS` — staff-authored catalog, GMs select but never edit values,
+  ADR-0176 intact) + its child rows `NPCPresetTraitLine`
+  (STAT trait, display-scale 1-10) / `NPCPresetSkillLine` (SKILL, true 1-100),
+  unique per (preset, trait)/(preset, skill), admin page with two inlines.
+  `apply_npc_preset(sheet, preset)` (beside `mint_story_npc`) mirrors CG
+  finalize's write shape exactly (`_create_stat_values`/`_create_skill_values`,
+  `world.character_creation.services`): trait lines at `display_value *
+  STAT_DISPLAY_DIVISOR`, skill lines as a `CharacterSkillValue` plus the #2894
+  bridging `CharacterTraitValue` on `skill.trait`, every line stamped with a
+  `CharacterTraitChange` (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`).
+  Refuses re-application to a sheet already carrying an NPC_PRESET stamp — no
+  re-apply path in v1, staff adjust via admin instead.
+  `mint_story_npc`/`MintStoryNPCAction` gain a keyword-only/optional `preset`
+  (resolved by natural key; unknown name → refusal, no mint). Telnet: `gm npc
+  <name>[=<description>] [preset=<name>]` (`CmdGMDashboard`, `commands/gm_ops.py`).
+  **API:** `NPCStatlinePresetViewSet` (`/api/roster/npc-presets/`, read-only,
+  `IsGMOrStaff`, `SearchFilter` on `name`) feeds a preset `Select` in the #3426
+  mint dialog (`GMDashboardPage`). Seed: 3-4 starter presets (Guard, Courtier,
+  Innkeeper, Investigator) via `authored_or_sample` in the roster seed cluster
+  (`world.roster.seeds.ensure_starter_npc_presets`) — modest values, staff
+  rewrite freely.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`

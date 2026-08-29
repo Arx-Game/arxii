@@ -471,13 +471,22 @@ def _seed_project_resonance() -> None:
 
 
 def _seed_roster() -> None:
-    from world.roster.seeds import ensure_rosters, seed_invite_trust_category  # noqa: PLC0415
+    from world.roster.seeds import (  # noqa: PLC0415
+        ensure_rosters,
+        ensure_starter_npc_presets,
+        seed_invite_trust_category,
+    )
 
     # ensure_rosters() is idempotent (#2728) — seed it here too so the roster cluster
     # creates the seven shelves on its own instead of depending on character_creation's
     # cluster having run first.
     ensure_rosters()
     seed_invite_trust_category()
+    # Starter Story-NPC statline presets (#3427). Runs last in this cluster,
+    # after "character_creation" (stat Traits) and the check-family clusters
+    # (skill Traits/Skills) have already seeded the rows these presets
+    # reference by name.
+    ensure_starter_npc_presets()
 
 
 def _seed_traits() -> None:
@@ -813,7 +822,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     )
     from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
-    from world.roster.models import GameInvite, Kinsperson  # noqa: PLC0415
+    from world.roster.models import GameInvite, Kinsperson, NPCStatlinePreset  # noqa: PLC0415
     from world.scenes.models import ReactionEmoji  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import (  # noqa: PLC0415
@@ -1013,8 +1022,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
         # (#2038).
         "project_resonance": [ProjectKindResonanceAward],
-        # Roster: the INVITE TrustCategory for game-invite eligibility (#2483).
-        "roster": [GameInvite],
+        # Roster: the INVITE TrustCategory for game-invite eligibility (#2483) +
+        # the starter Story-NPC statline preset catalog (#3427).
+        "roster": [GameInvite, NPCStatlinePreset],
         # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
         "agriculture": [CropType, RoomFeatureKind],
         # Traits: no-op seeder — see _seed_traits (#2266). Row count for the #944

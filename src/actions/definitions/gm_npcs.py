@@ -9,6 +9,11 @@ staff-only (``mint_staff_character``). ``category="gm"``, gated by
 per-level cap (``GMLevelCap.max_story_npcs``) and the finer "missing GM
 profile"/"below JUNIOR" messaging are enforced inside the service itself, not
 re-derived here.
+
+An optional ``preset`` kwarg (#3427) names a curated ``NPCStatlinePreset`` by
+natural key -- resolved here (not in the service, which takes the instance)
+so both telnet and web pass a plain string; an unknown name is refused with
+a player-safe message rather than silently minting with no statline.
 """
 
 from __future__ import annotations
@@ -30,7 +35,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class MintStoryNPCAction(Action):
-    """Mint a Story NPC and bind it to the caller's account. Kwargs: ``name``, ``description``."""
+    """Mint a Story NPC and bind it to the caller's account.
+
+    Kwargs: ``name``, ``description``, optional ``preset`` (an
+    ``NPCStatlinePreset`` natural-key name, #3427).
+    """
 
     key: str = "mint_story_npc"
     name: str = "Mint Story NPC"
@@ -45,6 +54,7 @@ class MintStoryNPCAction(Action):
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
+        from world.roster.models import NPCStatlinePreset  # noqa: PLC0415
         from world.roster.services.staff_characters import (  # noqa: PLC0415
             StaffMintError,
             mint_story_npc,
@@ -61,11 +71,23 @@ class MintStoryNPCAction(Action):
         if not npc_name:
             return ActionResult(success=False, message="Name the NPC.")
 
+        preset = None
+        preset_name = (kwargs.get("preset") or "").strip()
+        if preset_name:
+            try:
+                preset = NPCStatlinePreset.objects.get_by_natural_key(preset_name)
+            except NPCStatlinePreset.DoesNotExist:
+                return ActionResult(
+                    success=False,
+                    message=f"No statline preset named '{preset_name}'.",
+                )
+
         try:
             character = mint_story_npc(
                 gm_account=gm_account,
                 name=npc_name,
                 description=kwargs.get("description") or "",
+                preset=preset,
             )
         except StaffMintError as exc:
             return ActionResult(success=False, message=exc.user_message)
