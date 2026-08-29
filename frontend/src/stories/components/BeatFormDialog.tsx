@@ -463,8 +463,8 @@ function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[]
   return (beat?.opponent_lines ?? []).map((line) => ({
     id: line.id,
     creature_template: String(line.creature_template),
-    count: String(line.count),
-    position_name: line.position_name,
+    count: String(line.count ?? 1),
+    position_name: line.position_name ?? '',
   }));
 }
 
@@ -583,12 +583,16 @@ interface StagedTemplateDraft {
 }
 
 function stagedTemplateDraftsFromBeat(beat: Beat | undefined): StagedTemplateDraft[] {
-  return (beat?.staged_templates ?? []).map((line) => ({
-    id: line.id,
-    templateKind: line.situation_template !== null ? 'situation' : 'challenge',
-    situation_template: line.situation_template !== null ? String(line.situation_template) : '',
-    challenge_template: line.challenge_template !== null ? String(line.challenge_template) : '',
-  }));
+  return (beat?.staged_templates ?? []).map((line) => {
+    const situation = line.situation_template ?? null;
+    const challenge = line.challenge_template ?? null;
+    return {
+      id: line.id,
+      templateKind: situation !== null ? ('situation' as const) : ('challenge' as const),
+      situation_template: situation !== null ? String(situation) : '',
+      challenge_template: challenge !== null ? String(challenge) : '',
+    };
+  });
 }
 
 function stagedTemplateDraftsToPayload(drafts: StagedTemplateDraft[]): BeatStagedTemplate[] {

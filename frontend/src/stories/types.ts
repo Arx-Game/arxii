@@ -38,46 +38,19 @@ export type EpisodeDetail = components['schemas']['EpisodeDetail'];
 export type EpisodeCreate = components['schemas']['EpisodeCreate'];
 export type Episode = EpisodeDetail;
 
-// #3425 session prep: one authored opponent line on an ENCOUNTER beat.
-// Not yet in the generated schema — hand-defined until the next regeneration
-// (mirrors the can_mark precedent below).
-export interface BeatOpponentLine {
-  id?: number;
-  creature_template: number;
-  count: number;
-  position_name: string;
-  order: number;
-}
-
-// #3425 session prep: one authored situation/challenge template on a
-// SITUATION beat. Exactly one of situation_template/challenge_template is
-// set per row (server-enforced XOR).
-export interface BeatStagedTemplate {
-  id?: number;
-  situation_template: number | null;
-  challenge_template: number | null;
-  order: number;
-}
+// #3425 session prep child rows: one authored opponent line on an ENCOUNTER
+// beat, and one authored situation/challenge template on a SITUATION beat
+// (exactly one of situation_template/challenge_template is set per row,
+// server-enforced XOR). Both are in the generated schema as of #3425.
+export type BeatOpponentLine = components['schemas']['BeatOpponentLine'];
+export type BeatStagedTemplate = components['schemas']['BeatStagedTemplate'];
 
 // Beat — single shape with all Phase 2 predicate config fields plus the
 // Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
-// story_id, story_title). The generated type now correctly includes these
-// as readonly non-nullable fields (verified in api.d.ts Beat schema).
-//
-// Wave 12: can_mark is a server-computed boolean telling the client whether
-// the requesting user may POST /beats/{id}/mark/. Added to BeatSerializer
-// in Phase 5 Wave 12; not yet in the schema dump — extended here until
-// the next schema regeneration.
-//
-// #3425: opponent_lines/staged_templates are the session-prep child row
-// lists (repeatable rows authored on the beat). Same "not yet in the schema
-// dump" treatment as can_mark.
-export type Beat = components['schemas']['Beat'] & {
-  /** True when the requesting user may call POST /beats/{id}/mark/. */
-  readonly can_mark: boolean;
-  opponent_lines: BeatOpponentLine[];
-  staged_templates: BeatStagedTemplate[];
-};
+// story_id, story_title), the Wave 12 server-computed can_mark, and the
+// #3425 session-prep child row lists. All of these are in the generated
+// schema now, so no hand-written extension is needed.
+export type Beat = components['schemas']['Beat'];
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
