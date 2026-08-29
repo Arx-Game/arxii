@@ -510,7 +510,7 @@ narrative-only "you may now sign" beat at level 3; higher crossings produce no b
   At least one gate required (`clean()`). AND semantics.
 - **Payload child rows:** `SignatureMotifBonusDamageProfile` /
   `SignatureMotifBonusAppliedCondition` — inherit the shared `Abstract*` bases from
-  `models/techniques.py`. (The capability-grant sibling was stripped per ADR-0245 —
+  `models/techniques.py`. (The capability-grant sibling was stripped per ADR-0248 —
   capability-flavored signature effects are authored as applied conditions.)
 - **Thread FK:** `Thread.signature_bonus` (nullable FK, TECHNIQUE-kind only — enforced by
   `clean()` + DB `CheckConstraint("thread_signature_bonus_technique_only")`). Migrations
@@ -552,7 +552,7 @@ narrative-only "you may now sign" beat at level 3; higher crossings produce no b
   /api/magic/signatures/`, `POST /api/magic/signatures/set/`, `POST
   /api/magic/signatures/clear/`.
 - **Admin:** `SignatureMotifBonusAdmin` with inlines for the two payload child models.
-- **Resolved (ADR-0245, #3449):** no capability-grant cast seam will be built — grants
+- **Resolved (ADR-0248, #3449):** no capability-grant cast seam will be built — grants
   mean standing possession; cast-time capability boosts are authored as applied
   conditions (`ConditionCapabilityEffect`, outcome-scaled). The formerly-inert
   `SignatureMotifBonusCapabilityGrant` payload family was stripped.

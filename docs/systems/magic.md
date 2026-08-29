@@ -948,7 +948,7 @@ Motif → weave TECHNIQUE thread → select bonus → cast → assert cosmetic s
 Interaction, intensity delta applied, condition lands on caster. Also tests rejection
 (`SignatureBonusNotAvailable` / `TechniqueNotOwned`) and bonus portability between threads.
 
-**Resolved (ADR-0245, #3449):** no capability-grant cast seam will be built — grants
+**Resolved (ADR-0248, #3449):** no capability-grant cast seam will be built — grants
 mean standing possession, and cast-time capability boosts are authored as applied
 conditions (`ConditionCapabilityEffect`, outcome-scaled via `compute_severity`). The
 formerly-inert `SignatureMotifBonusCapabilityGrant` family was stripped.

@@ -608,7 +608,7 @@ def _dispel_valuation(technique: Technique) -> PayloadValuation | None:
 def _capability_grant_valuations(technique: Technique) -> list[PayloadValuation]:
     """One INERT_PAYLOAD row per capability grant (#3279 Task 2) — explicitly zero.
 
-    Ruled, not pending (ADR-0245 / #3449): a capability GRANT means standing
+    Ruled, not pending (ADR-0248 / #3449): a capability GRANT means standing
     possession — its value is possession-side, priced by capability_power_eval
     through the two oracles, and a cast deliberately does nothing extra with it.
     Cast-time capability boosts are authored as applied conditions instead
@@ -622,7 +622,7 @@ def _capability_grant_valuations(technique: Technique) -> list[PayloadValuation]
             label=grant.capability.name,
             value=0.0,
             provenance=ValuationProvenance.INERT_PAYLOAD,
-            detail="possession-side payload; cast-time boosts ride conditions (ADR-0245)",
+            detail="possession-side payload; cast-time boosts ride conditions (ADR-0248)",
         )
         for grant in technique.cached_capability_grants
     ]

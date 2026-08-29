@@ -144,3 +144,15 @@ Characters" band), NOT in the header chip. Use case: browsing journals/events
 while certain nothing gets posted as the wrong character.
 _Avoid_: step away (retired — read as logout when placed next to "Enter the
 world"); using any one of the three where another is meant.
+
+**the Hall**:
+PLACEHOLDER name for the state-2 logged-in home surface — mounts at `/` for any
+authed account (visitors keep the pre-login Gatefold, byte-identical). Built in
+the Commonplace Book idiom (ADR-0245): the "Your Characters" band (portrait
+cards, per-character tidings `CountChip`s, `PersonaTiles`, select-on-click,
+"Clear Active Character"), "Your Attention" (OOC mail + per-character pending
+groups), and "The World" (clock, upcoming occasions, the Crier tidings skim).
+Naming is deliberately unfinished — Apostate's to finalize; don't treat "the
+Hall" as a canon term to build further copy/UI around until ratified.
+_Avoid_: treating the name as final; "home page" (loses the in-fiction voice
+the rest of the frontend maintains).

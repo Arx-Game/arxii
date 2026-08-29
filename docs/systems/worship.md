@@ -86,7 +86,7 @@ Majora crossings.
   Unique per `(being, name)`.
 - `MiracleAppliedCondition` / `MiracleDamageProfile` —
   payload child rows inheriting `Abstract*` bases from `magic/models/techniques.py`.
-  (The capability-grant sibling was stripped per ADR-0245 — capability-flavored miracle
+  (The capability-grant sibling was stripped per ADR-0248 — capability-flavored miracle
   effects are authored as applied conditions.) `MiracleAppliedCondition` rows are
   the MVP mechanical effect surface. `MiracleDamageProfile` inherits
   `execute_missing_health_multiplier` from `AbstractDamageProfile` (#2643, see
@@ -146,7 +146,7 @@ time (not offer creation), so a declined offer costs nothing.
   `manifestation_text`, `resonance_pool_cost`, `favor_threshold`, `is_active`.
   Unique per `(threshold, being)`.
 - `AudereMajoraFaithVariantAppliedCondition` — the payload child row, applied live at
-  crossing. (The capability-grant sibling was stripped per ADR-0245.)
+  crossing. (The capability-grant sibling was stripped per ADR-0248.)
   `AudereMajoraFaithVariantAppliedCondition` rows are the MVP bonus surface.
 - `PendingAudereMajoraOffer.faith_variant` — nullable FK (SET_NULL), persisted at
   offer creation when a variant qualifies.

@@ -4,7 +4,7 @@ RosterEntry views and related functionality.
 
 from http import HTTPMethod
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Count, Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status, viewsets
@@ -114,7 +114,12 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         serializer_class=MyRosterEntrySerializer,
     )
     def mine(self, request: Request) -> Response:
-        """Return roster entries for characters owned by the account."""
+        """Return roster entries for characters owned by the account.
+
+        Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
+        ``NarrativeMessageDelivery`` rows per character, via a single aggregated
+        JOIN/GROUP BY rather than a per-row query.
+        """
 
         # Get characters through PlayerData model
         try:
@@ -123,9 +128,20 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         except AttributeError:
             available_characters = []
 
-        entries = RosterEntry.objects.filter(
-            character_sheet__character__in=available_characters
-        ).select_related("roster")
+        entries = (
+            RosterEntry.objects.filter(
+                character_sheet__character__in=available_characters,
+            )
+            .select_related("roster")
+            .annotate(
+                unread_narrative_count=Count(
+                    "character_sheet__narrative_message_deliveries",
+                    filter=Q(
+                        character_sheet__narrative_message_deliveries__acknowledged_at__isnull=True,
+                    ),
+                ),
+            )
+        )
         serializer = self.get_serializer(entries, many=True)
         return Response(serializer.data)
 
