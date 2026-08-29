@@ -63,7 +63,14 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   character), else a muted dot for _ambient_ (any other unseen activity in
   that session), else nothing. The active character is structurally excluded
   (this bar only ever renders alts) — its own attention lives in
-  `ConversationTabStrip`'s per-tab badges, not here.
+  `ConversationTabStrip`'s per-tab badges, not here. Also renders (#3412 S4,
+  ADR-0247), for the active character: an own-sheet link (`/characters/:id`,
+  `RosterEntry.id`-keyed, opens in a new tab so the live session is never
+  disturbed) and a compact `ClockReadout` (season + paused indicator only,
+  full date/time/phase in the title tooltip) reusing the Hall's
+  `useClockQuery` directly — deliberately NOT `hh:mm`, since `WeatherWidget`
+  (also rendered here) already surfaces `phase + hh:mm` from the same
+  `game_clock` backend and a second hh:mm would just duplicate it.
 - **`ConversationSidebar.tsx`**: Left sidebar. Renders the scene's
   `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
   threading state for an active scene; otherwise falls back to a static
@@ -98,9 +105,11 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   now" identity marker on the composer, shown even for single-character
   players. Always renders when supplied; renders nothing when omitted
   (legacy callers unaffected). `GamePage` supplies it from `activeEntry`;
-  `SceneDetailPage`'s record-page composer supplies the same shape from its
-  own roster lookup. `CombatScenePage`'s composer does not yet thread this
-  prop (out of scope for #2166).
+  `SceneDetailPage`'s composer supplies the same shape from its own roster
+  lookup — this covers combat too, since #2197 folded the standalone
+  `CombatScenePage` into `SceneDetailPage`'s single composer (verified #3412
+  S4: no separate combat composer remains; the fold-in already carries
+  `speakingAs`).
 - **`EvenniaMessage.tsx`**: Game message display and formatting
 
 ### Room Panel (`components/room-panel/`)

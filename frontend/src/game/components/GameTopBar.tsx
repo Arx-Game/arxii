@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { ScrollText } from 'lucide-react';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
@@ -10,9 +11,60 @@ import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
 import { sessionAttention } from '@/game/attention';
+// #3412 S4 — reused from the Hall (frontend/src/home/hall/queries.ts), not
+// duplicated: no import-boundary lint rule exists between home/ and game/
+// (checked eslint.config.js — no `boundaries`/`no-restricted-imports` rule
+// is configured at all), so the smallest change is importing directly
+// rather than relocating the hook.
+import { useClockQuery } from '@/home/hall/queries';
 
 import { FormSwitcher } from './FormSwitcher';
 import { PersonaSwitcher } from './PersonaSwitcher';
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
+}
+
+/**
+ * Compact IC-season readout (#3412 S4) beside the WeatherWidget. Deliberately
+ * NOT hh:mm — WeatherWidget already surfaces `phase + hh:mm` from the same
+ * game_clock backend (`get_ic_now`) via its own `ic_time` field, so a second
+ * clock readout duplicating that number would just be visual noise (review
+ * finding, folded in-branch rather than filed). ClockReadout shows what
+ * WeatherWidget lacks — season, plus the paused indicator — and keeps the
+ * full date/time/phase in the title tooltip. Mirrors WeatherWidget's own
+ * hide-until-resolved shape: renders nothing while loading or on error (no
+ * `throwOnError` on `useClockQuery` — an errored fetch just resolves
+ * `data: undefined`), so there's no layout jump.
+ */
+function ClockReadout() {
+  const { data: clock } = useClockQuery();
+  if (!clock) return null;
+
+  const seasonLabel = capitalize(clock.season);
+  const tooltip = [
+    `Year ${clock.year}, Month ${clock.month}, Day ${clock.day}, ${pad(clock.hour)}:${pad(clock.minute)}`,
+    capitalize(clock.phase),
+  ]
+    .filter(Boolean)
+    .join(' — ');
+
+  return (
+    <div
+      className="flex items-center gap-1 text-xs text-muted-foreground"
+      title={tooltip}
+      aria-label="The world clock"
+    >
+      <span>{seasonLabel}</span>
+      {/* PLACEHOLDER copy */}
+      {clock.paused && <span className="text-muted-foreground/70">(Paused)</span>}
+    </div>
+  );
+}
 
 interface GameTopBarProps {
   characters: MyRosterEntry[];
@@ -123,6 +175,21 @@ export function GameTopBar({ characters }: GameTopBarProps) {
             activePersonaId={activeCharacter.active_persona_id}
           />
           <FormSwitcher characterSheetId={activeCharacter.character_id} />
+          {/* #3412 S4 — own-sheet link, mode-preserving (new tab so leaving
+              the game window doesn't drop the WebSocket session). Route
+              param is the RosterEntry id (App.tsx: /characters/:id ->
+              CharacterSheetPage reads useParams().id as entryId), not
+              character_id. */}
+          <Link
+            to={`/characters/${activeCharacter.id}`}
+            target="_blank"
+            rel="noopener"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            title="Your character sheet" // PLACEHOLDER copy
+            aria-label="Your character sheet" // PLACEHOLDER copy
+          >
+            <ScrollText className="h-4 w-4" />
+          </Link>
         </div>
       ) : null}
 
@@ -176,6 +243,7 @@ export function GameTopBar({ characters }: GameTopBarProps) {
 
       <div className="ml-auto flex items-center gap-3">
         <ComfortWidget characterId={activeCharacter?.character_id ?? null} />
+        <ClockReadout />
         <WeatherWidget />
         <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />

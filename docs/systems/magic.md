@@ -878,7 +878,6 @@ never changes the technique's identity.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `SignatureMotifBonus` | Staff-authored bonus gated on the character's Motif | `name`, `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable), `flat_intensity_delta` (SmallInt, additive to effective intensity). At least one gate must be set (`clean()` enforces). AND semantics when both gates set. |
-| `SignatureMotifBonusCapabilityGrant` | Capability granted by a bonus (inherits `AbstractCapabilityGrant`) | `signature_bonus` FK |
 | `SignatureMotifBonusDamageProfile` | Damage profile for a bonus (inherits `AbstractDamageProfile`) | `signature_bonus` FK |
 | `SignatureMotifBonusAppliedCondition` | Applied condition for a bonus (inherits `AbstractAppliedCondition`) | `signature_bonus` FK |
 
@@ -949,9 +948,10 @@ Motif → weave TECHNIQUE thread → select bonus → cast → assert cosmetic s
 Interaction, intensity delta applied, condition lands on caster. Also tests rejection
 (`SignatureBonusNotAvailable` / `TechniqueNotOwned`) and bonus portability between threads.
 
-**Deferred fast-follow (NOT shipped as of #1728):**
-- `capability_grants` cast seam — no general technique-authored capability grant seam
-  exists anywhere yet, so `SignatureMotifBonusCapabilityGrant` rows remain inert.
+**Resolved (ADR-0248, #3449):** no capability-grant cast seam will be built — grants
+mean standing possession, and cast-time capability boosts are authored as applied
+conditions (`ConditionCapabilityEffect`, outcome-scaled via `compute_severity`). The
+formerly-inert `SignatureMotifBonusCapabilityGrant` family was stripped.
 
 **Shipped in #1728** (see `docs/adr/0072-...` addendum): the `damage_profiles` combat
 cast seam, combat cosmetic narration, and the web `SignatureViewSet`.

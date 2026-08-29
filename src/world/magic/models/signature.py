@@ -20,7 +20,6 @@ from world.achievements.models import DiscoverableContent
 from world.magic.models.motifs import Facet, Motif, MotifResonanceAssociation
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
-    AbstractCapabilityGrant,
     AbstractDamageProfile,
 )
 
@@ -101,14 +100,6 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
     # ------------------------------------------------------------------
 
     @cached_property
-    def cached_capability_grants(self) -> list:
-        """Capability grants for this bonus. Supports Prefetch(to_attr=).
-
-        To invalidate: ``del instance.cached_capability_grants``.
-        """
-        return list(self.capability_grants.all())
-
-    @cached_property
     def cached_damage_profiles(self) -> list:
         """Damage profiles for this bonus. Supports Prefetch(to_attr=).
 
@@ -160,24 +151,6 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
 # ---------------------------------------------------------------------------
 # Payload child rows
 # ---------------------------------------------------------------------------
-
-
-class SignatureMotifBonusCapabilityGrant(AbstractCapabilityGrant):
-    """Capability granted by a SignatureMotifBonus (mirrors TechniqueVariantCapabilityGrant)."""
-
-    signature_bonus = models.ForeignKey(
-        SignatureMotifBonus,
-        on_delete=models.CASCADE,
-        related_name="capability_grants",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["signature_bonus", "capability"],
-                name="sig_bonus_cap_grant_unique",
-            ),
-        ]
 
 
 class SignatureMotifBonusDamageProfile(AbstractDamageProfile):

@@ -8,12 +8,14 @@
  */
 
 import { cleanup, screen } from '@testing-library/react';
+import { Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { GatefoldPage } from '../GatefoldPage';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
+import { startSession, setSessionConnectionStatus, resetGame } from '@/store/gameSlice';
 import { mockAccount } from '@/test/mocks/account';
 import type { StartingArea } from '@/character-creation/types';
 import type { CodexEntryListItem } from '@/codex/types';
@@ -126,6 +128,7 @@ describe('GatefoldPage', () => {
     // the store mutation has anything left to re-render.
     cleanup();
     store.dispatch(setAccount(null));
+    store.dispatch(resetGame());
     vi.clearAllMocks();
   });
 
@@ -231,6 +234,85 @@ describe('GatefoldPage', () => {
     expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
     expect(screen.queryByText('The Ward of the Compact')).not.toBeInTheDocument();
     expect(mockSetForcedRealm).not.toHaveBeenCalled();
+  });
+
+  // #3412 S4 — connected-redirect matrix. Wraps GatefoldPage in a small Routes
+  // table so `<Navigate to="/game" replace/>` has somewhere real to land;
+  // `renderWithProviders`' own MemoryRouter supplies the outer Router context.
+  it('redirects to /game when the active character has a live connection (#3412 S4)', () => {
+    setDefaultMocks();
+    mockUseAuthStatus.mockReturnValue({ isLoading: false, account: mockAccount });
+    store.dispatch(setAccount({ ...mockAccount }));
+    store.dispatch(startSession('Serane'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Serane', status: true }));
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<GatefoldPage />} />
+        <Route path="/game" element={<div data-testid="game-page-stub" />} />
+      </Routes>,
+      { initialEntries: ['/'] }
+    );
+
+    expect(screen.getByTestId('game-page-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
+  });
+
+  it('renders the Hall (no redirect) for a selected-but-unconnected active character (#3412 S4)', () => {
+    setDefaultMocks();
+    mockUseAuthStatus.mockReturnValue({ isLoading: false, account: mockAccount });
+    store.dispatch(setAccount({ ...mockAccount }));
+    // startSession alone: selection without a live socket connection — a
+    // hydrated-on-reload selection has no session/connection yet either.
+    store.dispatch(startSession('Serane'));
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<GatefoldPage />} />
+        <Route path="/game" element={<div data-testid="game-page-stub" />} />
+      </Routes>,
+      { initialEntries: ['/'] }
+    );
+
+    expect(screen.getByTestId('hall-page-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('game-page-stub')).not.toBeInTheDocument();
+  });
+
+  it('does not redirect a visitor even when a connected session exists in the slice (#3412 S4)', () => {
+    setDefaultMocks();
+    // account stays null (visitor) — the redirect must gate on auth, not
+    // merely on connection state.
+    store.dispatch(startSession('Serane'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Serane', status: true }));
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<GatefoldPage />} />
+        <Route path="/game" element={<div data-testid="game-page-stub" />} />
+      </Routes>,
+      { initialEntries: ['/'] }
+    );
+
+    expect(screen.queryByTestId('game-page-stub')).not.toBeInTheDocument();
+    expect(screen.getByText('The Ward of the Compact')).toBeInTheDocument();
+  });
+
+  it('does not redirect while the account query is loading, even with a connected session (#3412 S4)', () => {
+    setDefaultMocks();
+    mockUseAuthStatus.mockReturnValue({ isLoading: true, account: null });
+    store.dispatch(startSession('Serane'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Serane', status: true }));
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<GatefoldPage />} />
+        <Route path="/game" element={<div data-testid="game-page-stub" />} />
+      </Routes>,
+      { initialEntries: ['/'] }
+    );
+
+    expect(screen.queryByTestId('game-page-stub')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('hall-page-stub')).not.toBeInTheDocument();
   });
 
   it('renders the gatefold chapters unchanged for a visitor (byte-identical mount split)', () => {
