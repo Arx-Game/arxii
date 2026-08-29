@@ -547,6 +547,87 @@ describe('CombatantsList', () => {
       // No crash — the row is still rendered.
       expect(screen.getByTestId('opponent-row-10')).toBeInTheDocument();
     });
+
+    // Engagement lock menu items (#2020/#3447) — the web half #3396 deferred.
+
+    it('Engage dispatches combat_engage with the opponent_id kwarg', async () => {
+      const user = userEvent.setup();
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      await user.click(await screen.findByTestId('opponent-combat_engage-10'));
+
+      expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+        registryKey: 'combat_engage',
+        kwargs: { opponent_id: 10 },
+      });
+    });
+
+    it('hides Engage on an opponent already locked to someone', async () => {
+      const user = userEvent.setup();
+      const encounter: EncounterDetail = {
+        ...makeEncounter(
+          [makeParticipant({ id: 1, character_name: 'Aerande' })],
+          [makeOpponent({ id: 10, name: 'Mire Knight' })]
+        ),
+        engagement_locks: [
+          {
+            id: 1,
+            opponent_id: 10,
+            participant_id: 1,
+            status: 'active',
+            initiated_by: 'pc_challenge',
+            started_round: 1,
+          },
+        ],
+      };
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      await screen.findByTestId('opponent-combat_taunt-10');
+      expect(screen.queryByTestId('opponent-combat_engage-10')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('opponent-combat_disengage-10')).not.toBeInTheDocument();
+    });
+
+    it('shows Disengage only when the viewer holds the lock, and dispatches it', async () => {
+      const user = userEvent.setup();
+      const encounter: EncounterDetail = {
+        ...makeEncounter(
+          [makeParticipant({ id: 1, character_name: 'Aerande', character_sheet_id: 7 })],
+          [makeOpponent({ id: 10, name: 'Mire Knight' })]
+        ),
+        engagement_locks: [
+          {
+            id: 1,
+            opponent_id: 10,
+            participant_id: 1,
+            status: 'active',
+            initiated_by: 'pc_challenge',
+            started_round: 1,
+          },
+        ],
+      };
+
+      render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
+        wrapper: createWrapper(),
+      });
+
+      await user.click(screen.getByTestId('opponent-menu-trigger-10'));
+      await user.click(await screen.findByTestId('opponent-combat_disengage-10'));
+
+      expect(mockManeuverMutateAsync).toHaveBeenCalledWith({
+        registryKey: 'combat_disengage',
+        kwargs: { opponent_id: 10 },
+      });
+      expect(screen.queryByTestId('opponent-combat_engage-10')).not.toBeInTheDocument();
+    });
   });
 
   // ---------------------------------------------------------------------------

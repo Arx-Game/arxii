@@ -1526,6 +1526,13 @@ To add a new handler: implement the `OfferHandler` protocol and call
 config), `PendingAudereOffer` (poll-able offer, one per character),
 `check_audere_eligibility` (intensity tier + Soulfray stage + engagement),
 `offer_audere`/`end_audere` lifecycle, `AbstractPendingOffer` (shared offer base).
+**Surge broadcast (#3451):** `AudereThreshold.surge_manifestation_text` (blank
+default) is EMITted to the active scene by `_broadcast_surge` when a surge is
+accepted — the plain-Audere echo of the Majora manifestation, via the shared
+`world.scenes.interaction_services.broadcast_scene_emit` seam (which
+`_broadcast_manifestation` now also delegates to). `{name}` substitutes the
+primary persona's name; blank text keeps the accept room-silent (staff authors
+the line — a required-content row for the #3444 sentinel, never code prose).
 
 `models/renown_config.py` — `RenownAwardConfig`: **abstract base** (SharedMemoryModel)
 shared by `DramaticMomentType` and `AudereMajoraThreshold`. Carries four authored
