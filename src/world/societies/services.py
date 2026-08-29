@@ -68,6 +68,7 @@ def create_solo_deed(  # noqa: PLR0913
     archetypes: list | None = None,
     concealed: bool = False,
     containment_approach: str | None = None,
+    earned_at_level: int = 0,
 ) -> LegendEntry:
     """Create a legend deed not tied to a shared event.
 
@@ -89,6 +90,10 @@ def create_solo_deed(  # noqa: PLR0913
             witnesses before knowledge is minted.
         containment_approach: #1824 — a declared ``WitnessApproach.key`` for
             the hush-up roll; None keeps the auto-pick.
+        earned_at_level: #3463 — the deed's STATION, min(earner level, threat
+            level). Defaults to 0, meaning "won outside a perilous stakes
+            contract": real legend for fame, murmur and spread, but qualifying
+            no advancement at any level. Only settlement passes a non-zero value.
 
     Returns:
         The created LegendEntry.
@@ -99,6 +104,7 @@ def create_solo_deed(  # noqa: PLR0913
         title=title,
         source_type=source_type,
         base_value=base_value,
+        earned_at_level=earned_at_level,
         description=description,
         scene=scene,
         story=story,
@@ -162,6 +168,8 @@ def create_legend_event(  # noqa: PLR0913, C901
     archetypes: list | None = None,
     concealed: bool = False,
     containment_approach: str | None = None,
+    values_by_persona: dict[int, int] | None = None,
+    stations_by_persona: dict[int, int] | None = None,
 ) -> tuple[LegendEvent, list[LegendEntry]]:
     """Create a shared event and individual deeds for each participant.
 
@@ -185,6 +193,14 @@ def create_legend_event(  # noqa: PLR0913, C901
             is minted.
         containment_approach: #1824 — a declared ``WitnessApproach.key`` for
             each entry's hush-up roll; None keeps the auto-pick.
+        values_by_persona: #3463 — per-persona ``base_value`` override, keyed by
+            persona pk. Settlement pays each participant by their own STATION, so
+            one shared number no longer fits; omit (the default) and every entry
+            takes the flat ``base_value`` exactly as before.
+        stations_by_persona: #3463 — per-persona ``earned_at_level`` (station),
+            keyed by persona pk. Omit and every entry is stamped station 0,
+            meaning "won outside a perilous stakes contract": still real legend
+            for fame, murmur and spread, but qualifying no advancement.
 
     Returns:
         Tuple of (LegendEvent, list of LegendEntry instances).
@@ -209,7 +225,8 @@ def create_legend_event(  # noqa: PLR0913, C901
                 persona=persona,
                 title=title,
                 source_type=source_type,
-                base_value=base_value,
+                base_value=(values_by_persona or {}).get(persona.pk, base_value),
+                earned_at_level=(stations_by_persona or {}).get(persona.pk, 0),
                 description=description,
                 scene=scene,
                 story=story,
