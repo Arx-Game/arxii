@@ -133,6 +133,14 @@ export interface SceneDetail extends SceneListItem {
    * (`SceneListSerializer.get_running_beat`); never internal beat text.
    */
   running_beat: { id: number; risk: string } | null;
+  /**
+   * Player-visible declared risk tier for the scene-header badge (#3433).
+   * Precedence: running_beat.risk -> the active combat encounter's
+   * story_beat.risk -> the scene's PENDING DecisiveCheckMarker's beat risk ->
+   * null. Tier string only (RenownRisk value) -- never a beat id/name.
+   * null also covers RenownRisk 'none' (undeclared risk is not "safe").
+   */
+  declared_risk: 'low' | 'moderate' | 'high' | 'extreme' | null;
 }
 
 export interface InteractionPersona {

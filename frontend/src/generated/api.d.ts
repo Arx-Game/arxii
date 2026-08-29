@@ -40484,6 +40484,20 @@ export interface components {
       readonly position_edges: components['schemas']['PositionEdge'][];
       readonly persona_positions: components['schemas']['PersonaPosition'][];
       readonly active_round: components['schemas']['SceneRound'] | null;
+      /**
+       * @description Player-visible declared risk tier for the scene header badge (#3433).
+       *
+       *     Precedence: ``scene.running_beat.risk`` (#3425) -> the active (not-yet-
+       *     completed) combat encounter's ``story_beat.risk`` -> the scene's PENDING
+       *     ``DecisiveCheckMarker``'s beat risk -> ``None``. Reads
+       *     ``story_beat.risk`` (``RenownRisk``, the narrative stakes tier) --
+       *     NEVER ``CombatEncounter.risk_level`` (the combat ``RiskLevel`` enum
+       *     that drives the acknowledgement gate; a different field one hop away).
+       *     Returns the tier string only -- never the beat's id/name/internals,
+       *     which stay on the GM/staff-gated ``running_beat`` field above.
+       *     ``RenownRisk.NONE`` renders nothing: undeclared risk is not "safe".
+       */
+      readonly declared_risk: string | null;
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {

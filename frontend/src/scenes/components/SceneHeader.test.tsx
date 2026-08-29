@@ -87,6 +87,7 @@ const BASE_SCENE: SceneDetail = {
   position_adjacency: [],
   persona_positions: [],
   active_round: null,
+  declared_risk: null,
 } as unknown as SceneDetail;
 
 describe('SceneHeader round-state badge (#2158)', () => {
@@ -178,5 +179,29 @@ describe('SceneHeader grant GM control (#3155)', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Grant GM target character name')).toHaveValue('');
     });
+  });
+});
+
+describe('SceneHeader declared-risk badge (#3433)', () => {
+  it.each([
+    ['low', 'LOW stakes'],
+    ['moderate', 'MODERATE stakes'],
+    ['high', 'HIGH stakes'],
+    ['extreme', 'EXTREME stakes'],
+  ] as const)('renders "%s" stakes as "%s"', (risk, expectedText) => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: risk });
+
+    const badge = screen.getByTestId('scene-header-risk-badge');
+    expect(badge).toHaveTextContent(expectedText);
+  });
+
+  it('renders nothing when declared_risk is null (absent or undeclared/NONE)', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: null });
+
+    expect(screen.queryByTestId('scene-header-risk-badge')).not.toBeInTheDocument();
   });
 });

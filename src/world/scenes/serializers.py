@@ -12,7 +12,12 @@ from world.areas.positioning.serializers import (
 )
 from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
-from world.scenes.constants import ScenePrivacyMode, SceneRoundMode, SceneRoundStartReason
+from world.scenes.constants import (
+    DecisiveCheckMarkerStatus,
+    ScenePrivacyMode,
+    SceneRoundMode,
+    SceneRoundStartReason,
+)
 from world.scenes.models import (
     Persona,
     PersonaType,
@@ -21,6 +26,7 @@ from world.scenes.models import (
     SceneRound,
     SceneSummaryRevision,
 )
+from world.societies.constants import RenownRisk
 from world.societies.houses.constants import NameDegree, TitleSuffixMode
 
 
@@ -347,6 +353,7 @@ class SceneDetailSerializer(SceneListSerializer):
     position_edges = serializers.SerializerMethodField()
     persona_positions = serializers.SerializerMethodField()
     active_round = serializers.SerializerMethodField()
+    declared_risk = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -362,6 +369,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "position_edges",
             "persona_positions",
             "active_round",
+            "declared_risk",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -460,6 +468,44 @@ class SceneDetailSerializer(SceneListSerializer):
 
         rnd = active_round_for_room(obj.location)
         return SceneRoundSerializer(rnd).data if rnd is not None else None
+
+    def get_declared_risk(self, obj: Scene) -> str | None:
+        """Player-visible declared risk tier for the scene header badge (#3433).
+
+        Precedence: ``scene.running_beat.risk`` (#3425) -> the active (not-yet-
+        completed) combat encounter's ``story_beat.risk`` -> the scene's PENDING
+        ``DecisiveCheckMarker``'s beat risk -> ``None``. Reads
+        ``story_beat.risk`` (``RenownRisk``, the narrative stakes tier) --
+        NEVER ``CombatEncounter.risk_level`` (the combat ``RiskLevel`` enum
+        that drives the acknowledgement gate; a different field one hop away).
+        Returns the tier string only -- never the beat's id/name/internals,
+        which stay on the GM/staff-gated ``running_beat`` field above.
+        ``RenownRisk.NONE`` renders nothing: undeclared risk is not "safe".
+        """
+        risk = self._resolve_declared_risk(obj)
+        if risk is None or risk == RenownRisk.NONE:
+            return None
+        return risk
+
+    @staticmethod
+    def _resolve_declared_risk(obj: Scene) -> str | None:
+        if obj.running_beat_id is not None:
+            return obj.running_beat.risk
+        encounter = (
+            obj.combat_encounters.filter(completed_at__isnull=True)
+            .select_related("story_beat")
+            .first()
+        )
+        if encounter is not None and encounter.story_beat_id is not None:
+            return encounter.story_beat.risk
+        marker = (
+            obj.decisive_markers.filter(status=DecisiveCheckMarkerStatus.PENDING)
+            .select_related("beat")
+            .first()
+        )
+        if marker is not None:
+            return marker.beat.risk
+        return None
 
 
 class ScenesSpotlightSerializer(serializers.Serializer):

@@ -631,6 +631,36 @@ Written only by `RunBeatAction` (`src/actions/definitions/gm_story.py`); cleared
 (`{id, risk}`, GM/staff viewers only — mirrors `viewer_can_gm`'s gate). Web surface: the
 `GMAdjudicationPanel`'s "Run Beat" tab (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`).
 
+### Declared-risk badge (#3433)
+
+`SceneDetailSerializer.declared_risk` is the **player-visible** sibling of the GM/staff-gated
+`running_beat` field above - a `SerializerMethodField` carrying the `RenownRisk` tier string
+only, never the beat's id/name/internals. No new model, no migration. Precedence chain:
+
+1. `scene.running_beat.risk` (#3425) - set while a beat is actively run.
+2. else the scene's active (not-yet-completed) `CombatEncounter.story_beat.risk`
+   (`scene.combat_encounters.filter(completed_at__isnull=True)`, mirroring the accessor in
+   `round_services.py`'s active-encounter check).
+3. else the scene's PENDING `DecisiveCheckMarker.beat.risk` (one PENDING marker per scene by
+   constraint, see "Decisive checks" below).
+4. else `null` - no badge.
+
+`RenownRisk.NONE` also resolves to `null`: undeclared risk is not the same as "safe," so nothing
+renders rather than implying a false all-clear. **Reads `story_beat.risk` (`RenownRisk`, the
+narrative stakes tier) - never `CombatEncounter.risk_level`** (the unrelated `RiskLevel` enum
+that drives the combat acknowledgement gate; a same-named field one hop away on the same model).
+Query cost: `select_related` on the encounter/marker hops; scoped to `SceneDetailSerializer`
+only (not the list serializer) since the detail view is single-object but a list view would pay
+an extra query per row for the encounter/marker fallback lookups.
+
+Web surface: `SceneHeader.tsx`'s `DeclaredRiskBadge`, mounted beside the existing "In Combat"
+badge, `data-testid="scene-header-risk-badge"`, copy `"<TIER> stakes"`. Tier maps to the existing
+`Badge` variants by severity (`low` → outline, `moderate` → secondary, `high` → default,
+`extreme` → destructive) rather than introducing a new badge component or variant. Per-check
+stakes tags were considered and rejected (2026-08-29 ruling) - stakes consent already happens at
+beat activation via the boundaries/stakes-contract flow, so a header-only read of authored data
+is the whole surface; no per-roll noise.
+
 ### Lifecycle Actions
 
 **`StartSceneAction`** (`key="start_scene"`, `src/actions/definitions/scenes.py`)
