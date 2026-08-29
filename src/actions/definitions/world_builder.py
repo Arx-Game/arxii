@@ -2104,7 +2104,7 @@ def _set_clue_target(clue: Clue, field_name: str | None, target_id: Any) -> str 
     """
     if field_name is None or target_id is None:
         return None
-    related_model = Clue._meta.get_field(field_name).related_model  # noqa: SLF001
+    related_model = clue._meta.get_field(field_name).related_model  # noqa: SLF001
     if related_model is None or not related_model.objects.filter(pk=target_id).exists():
         return _NO_SUCH_CLUE_TARGET_MSG
     setattr(clue, f"{field_name}_id", target_id)
