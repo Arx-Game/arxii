@@ -7,6 +7,7 @@
  * and all, and lets staff mint or edit one via AuthorSecretDialog.
  */
 
+import { AuthorClueDialog } from '@/clues/components/AuthorClueDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -41,15 +42,25 @@ function SecretRow({ subjectId, secret }: { subjectId: number; secret: AuthoredS
         {previewContent(secret.content ?? '')}
       </TableCell>
       <TableCell>
-        <AuthorSecretDialog
-          subjectId={subjectId}
-          secret={secret}
-          trigger={
-            <Button variant="outline" size="sm">
-              Edit
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-2">
+          <AuthorSecretDialog
+            subjectId={subjectId}
+            secret={secret}
+            trigger={
+              <Button variant="outline" size="sm">
+                Edit
+              </Button>
+            }
+          />
+          <AuthorClueDialog
+            lockedSecretId={secret.id}
+            trigger={
+              <Button variant="outline" size="sm">
+                Author a clue to this secret
+              </Button>
+            }
+          />
+        </div>
       </TableCell>
     </TableRow>
   );

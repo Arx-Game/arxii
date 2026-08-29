@@ -1506,13 +1506,25 @@ a collaborative **research project**.
   referencing rooms by their `fixture_key` and the clue by its `slug`), upserted
   by `grid_import.load_grid_bundles()`'s 5th pass and report-never-deleted when a
   fixture-keyed row is absent from a reimported bundle.
+- **Authoring the clue itself (#3432):** `author_clue`
+  (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
+  `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` — staff bypass built in) mints the `Clue`
+  row (name/description/target_kind/target ids; `slug` generated + uniquified), closing the
+  admin-only gap the staff-authoring canvas above left. **SECRET-target clues are
+  additionally staff-only** (no GM-scoped secrets listing exists yet) — canon-creating
+  surfaces gate hard by owner ruling; see the system doc's "Authoring the clue itself"
+  section. Frontend: the shared `AuthorClueDialog`
+  (`frontend/src/clues/components/`), reached from `PlaceClueDialog`'s "New clue…" and
+  `StaffSecretsPanel`'s "Author a clue to this secret".
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
   `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
   `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
   `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
   (on room entry), `plant_rescue_clue` / `clear_rescue_clues` (#931), `start_research_project`
-  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler)
+  / `contribute_research` (floored CHECK→progress) / `resolve_research` (RESEARCH handler —
+  CODEX/SECRET/MISSION targets grant to every distinct contributor; MISSION grants via
+  `staff_assign_mission`, log-and-continue per contributor, #3429)
 - **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
   via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
 - **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
@@ -1522,10 +1534,11 @@ a collaborative **research project**.
   (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
   only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
-  (`grant_rescue_mission`, mission target), projects (RESEARCH kind), captivity (RESCUE
-  clues planted on capture / cleared on resolution), predicates (eligibility), checks
-  (`perform_check`), actions (search), narrative (trigger notification), typeclasses
-  (`Character.at_post_move` trigger hook)
+  (`grant_rescue_mission` for RESCUE's AUTOMATIC mission target; `staff_assign_mission`
+  for a RESEARCH-resolved MISSION target, #3429), projects (RESEARCH kind), captivity
+  (RESCUE clues planted on capture / cleared on resolution), predicates (eligibility),
+  checks (`perform_check`), actions (search), narrative (trigger notification + RESEARCH
+  MISSION-grant story text), typeclasses (`Character.at_post_move` trigger hook)
 - **Source:** `src/world/clues/`
 - **Details:** [investigation_and_discovery.md](investigation_and_discovery.md)
 
@@ -2610,6 +2623,32 @@ GM at a given level may author (#2000, ADR-0097).
   dispatching the same `join_story_room`/`leave_story_room` REGISTRY actions
   telnet's `joinroom`/`leaveroom` already used; linked from
   `ProfileDropdown`'s general (non-staff) menu section.
+- **GM story-NPC on-ramp (#3426):** `mint_story_npc`
+  (`world.roster.services.staff_characters`) — JUNIOR+ `GMProfile` (staff bypass) +
+  the new `GMLevelCap.max_story_npcs` per-level cap (most-restrictive/refuse when
+  unconfigured; enforced by the shared `check_story_npc_cap`), delegating to
+  `mint_staff_character`'s working set (#3283 — Character + sheet + PRIMARY persona
+  + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to the GM's own
+  account, the same tenure the persona picker and telnet `@ic` key on).
+  `description` writes `CharacterSheet.additional_desc` via
+  `set_physical_description`. In-scope bugfix: `mint_staff_character`'s shelf
+  lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
+  `roster/seeds.py`'s seeded shelf is named "NPCs", so the old lookup missed it and
+  collided on create). Heavyweight sibling: `finalize_gm_character(draft,
+  claim_as_npc=True)` (`world.character_creation.services`) lands a full-CG
+  character on the NPC shelf with the same tenure hand-off instead of tenure-less
+  on Available, gated by the same `check_story_npc_cap`. **Action + telnet:**
+  `MintStoryNPCAction` (key `mint_story_npc`, `actions/definitions/gm_npcs.py`,
+  `MinimumGMLevelPrerequisite(JUNIOR)`); `gm npc <name>[=<description>]`
+  (`CmdGMDashboard`, `commands/gm_ops.py`). **API:**
+  `CharacterDraftViewSet.finalize_gm`'s `claim_as_npc` body flag;
+  `FinalizeForTableDialog`'s matching checkbox. **Leak fix:** `RosterEntryViewSet`
+  (`AllowAny`) now excludes `RosterType.NPC` entries from its general queryset
+  (staff and the entry's own tenure holder still see them) — previously
+  individually reachable even though `RosterViewSet` already hid the shelf itself.
+  Frontend: a "My NPCs" block on `GMDashboardPage` + a mint dialog. See
+  `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
+  rundown and how this relates to the ambient-NPC ladder.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`

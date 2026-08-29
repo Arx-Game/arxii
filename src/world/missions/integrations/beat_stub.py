@@ -1,18 +1,19 @@
-"""In-memory beat-completion stub (Phase 5b.1 placeholder).
+"""In-memory stub for ``DeedRewardSink.BEAT`` reward-line deliveries only.
 
-# DESIGN: Reward-line BEAT sinks (DeedRewardSink.BEAT) are reserved for future
-# fine-grained Beat propagation (e.g., per-deed beat advancement, multi-beat
-# fan-out). The PRIMARY Beat seam is MissionInstance.source_beat →
-# on_mission_complete_for_beat() called at terminal (Phase 5b.3). A BEAT-sink
-# reward line is currently a no-op record; the canonical instance-level seam
-# fires independently when the mission terminates.
+This file is NOT the Mission→Beat completion engine — that engine is live
+(#1757): ``MissionInstance.source_beat`` + ``on_mission_complete_for_beat()``
+(``world.missions.services.beat``) complete the linked ``Beat`` when a run
+reaches its terminal node, called from ``_finish_terminal``
+(``services/resolution.py``) and covered by ``test_services_beat.py``/
+``test_services_resolution_beat.py``. That instance-level seam fires
+independently of anything in this module.
 
-Phase 5b.3 landed the cross-app data shape (Beat.required_mission +
-MissionInstance.source_beat FKs) and ``on_mission_complete_for_beat()`` as
-the canonical instance-level seam; the real BeatCompletion engine is
-deferred to a future stories-missions seam design pass. This stub's
-behavior is unchanged: it records BEAT-sink line deliveries in-memory so
-the apply-router test suite can verify the call fired.
+What THIS module stubs is narrower: ``DeedRewardSink.BEAT`` reward lines are
+reserved for future fine-grained per-deed Beat propagation (e.g. multi-beat
+fan-out from a single mission's deeds) — deliberately deferred, not part of
+#1757's scope. A BEAT-sink reward line is currently a no-op record; this stub
+records the call in-memory so the apply-router test suite can verify it
+fired, without doing anything with it yet.
 """
 
 from __future__ import annotations

@@ -415,7 +415,7 @@ web-only pattern.
 All MVP-blocking items from Phase 5's "What's Needed for MVP" section have landed. Remaining items are either blocked on other systems or represent quality-of-life improvements:
 
 - **Covenant / organization chat channels** — broader feature beyond stories scope; will land alongside the organizations system
-- **MISSION_COMPLETE predicate UI** — blocked by the Missions system; the `Beat.required_mission` FK scaffold exists in backend but Missions does not yet exist. Will land alongside missions.
+- **MISSION_COMPLETE predicate UI** — no longer blocked by the Missions system: Missions shipped, and the `Beat.required_mission` seam is live (#1757, `world.missions.services.beat.on_mission_complete_for_beat`, called from `services/resolution.py`'s terminal handler) — a launched instance completes its linked beat on termination today. What remains is GM-facing authoring UI to set `required_mission` without a shell/admin round-trip.
 - **DAG advanced editing** — multi-select, copy/paste, layout templates, drag-position persistence; Phase 5 delivered drag-to-add; richer graph editing is Phase 6+
 - **Cross-table GM availability marketplace** — the *player→GM* discovery direction shipped as #2119 (`GroupStoryRequest`, a covenant's broadcast ask any GM can browse/claim). A GM-directed (browse *players*/covenants wanting a GM, headhunting a specific one) direction remains a possible follow-up with no evidence of demand yet.
 - **Notification settings UI beyond story mute** — per-category toggles for atmosphere / visions / happenstance / system; Phase 6+

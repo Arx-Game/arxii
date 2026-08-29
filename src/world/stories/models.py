@@ -975,14 +975,18 @@ class Beat(SharedMemoryModel):
 
     # Phase 5b.3: authoring-time side of the stories-missions seam. A Beat
     # MAY name a MissionTemplate it requires; the engine that walks this FK
-    # to flip the Beat when a launched instance terminates is deferred to a
-    # future stories-missions seam design pass (the 5b.3 service
-    # ``world.missions.services.beat.on_mission_complete_for_beat`` only
-    # stub-records the trigger). The FK is independent of
-    # ``predicate_type`` in 5b.3 — predicate-type-vs-required_mission
-    # interaction is one of the deferred design questions; ``clean()`` does
-    # not yet constrain it. SET_NULL on template delete: losing the
-    # MissionTemplate must not also lose the Beat.
+    # to flip the Beat when a launched instance terminates SHIPPED in #1757:
+    # ``world.missions.services.beat.on_mission_complete_for_beat`` resolves
+    # ``instance.source_beat``, guards already-resolved beats, resolves
+    # scope-aware progress, and completes the beat via
+    # ``record_outcome_tier_completion`` (graded routes) or
+    # ``record_gm_marked_outcome(SUCCESS)`` (BRANCH terminals) — called from
+    # ``_finish_terminal`` (``services/resolution.py``) and covered by
+    # ``test_services_beat.py``/``test_services_resolution_beat.py``. The FK
+    # is independent of ``predicate_type``; predicate-type-vs-required_mission
+    # interaction remains a design question ``clean()`` does not yet
+    # constrain. SET_NULL on template delete: losing the MissionTemplate must
+    # not also lose the Beat.
     required_mission = models.ForeignKey(
         "arxii.MissionTemplate",
         null=True,
@@ -990,8 +994,9 @@ class Beat(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text=(
-            "Optional: a MissionTemplate this beat requires (Phase 5b.3 data "
-            "shape only; engine deferred). SET_NULL on template delete."
+            "Optional: a MissionTemplate this beat requires. The completion "
+            "engine (#1757) flips this beat when a launched instance "
+            "terminates. SET_NULL on template delete."
         ),
     )
 

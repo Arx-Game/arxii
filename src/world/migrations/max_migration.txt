@@ -1,1 +1,1 @@
-0184_itemtemplate_requires_attunement
+0186_gmlevelcap_max_story_npcs

@@ -13,9 +13,10 @@ from rest_framework.test import APITestCase
 
 from world.character_creation.models import CharacterDraft
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
-from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
 from world.magic.exceptions import GiftResonanceUnresolvable
-from world.roster.models import RosterEntry
+from world.roster.models import RosterEntry, RosterTenure
 from world.roster.models.choices import CreationProvenance, RosterType
 
 
@@ -119,6 +120,48 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
         self.assertIn("incomplete stages", response.data["detail"])
+
+    def test_claim_as_npc_lands_on_npc_shelf_with_tenure(self) -> None:
+        """#3426: claim_as_npc=true binds the entry to the finalizing GM by tenure."""
+        self.gm.level = GMLevel.JUNIOR
+        self.gm.save(update_fields=["level"])
+        seed_default_gm_level_caps()
+
+        draft = self._draft()
+        self.client.force_authenticate(user=self.gm.account)
+        response = self.client.post(
+            self._url(draft),
+            {
+                "target_table": self.table.pk,
+                "story_title": "My Own NPC",
+                "claim_as_npc": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        entry = RosterEntry.objects.get(pk=response.data["roster_entry_id"])
+        self.assertEqual(entry.roster.roster_type, RosterType.NPC)
+        self.assertEqual(entry.creation_provenance, CreationProvenance.GM_TABLE)
+        tenure = RosterTenure.objects.get(roster_entry=entry)
+        self.assertEqual(tenure.player_data.account_id, self.gm.account_id)
+        self.assertIsNone(tenure.end_date)
+
+    def test_claim_as_npc_refused_below_junior(self) -> None:
+        """A STARTING-level GM (the factory default) can't claim_as_npc yet (#3426)."""
+        seed_default_gm_level_caps()
+        draft = self._draft()
+        self.client.force_authenticate(user=self.gm.account)
+        response = self.client.post(
+            self._url(draft),
+            {
+                "target_table": self.table.pk,
+                "story_title": "Too Junior",
+                "claim_as_npc": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertFalse(RosterEntry.objects.filter(created_for_table=self.table).exists())
 
     def test_unresolvable_gift_resonance_returns_400_not_500(self) -> None:
         """A GiftResonanceUnresolvable from finalize_gm_character must not surface as an

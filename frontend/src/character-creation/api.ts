@@ -259,6 +259,8 @@ export interface FinalizeForTablePayload {
   target_table: number;
   story_title: string;
   story_description?: string;
+  /** Land on the NPC shelf, tenure-bound to the requester, instead of Available (#3426). */
+  claim_as_npc?: boolean;
 }
 
 /** 201 response from POST .../drafts/{id}/finalize-gm/. */
