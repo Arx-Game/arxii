@@ -2354,24 +2354,41 @@ def add_application_comment(
 
 
 @transaction.atomic
-def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
+def finalize_gm_character(
+    draft: CharacterDraft, *, claim_as_npc: bool = False
+) -> tuple[RosterEntry, Story]:
     """Finalize a GM-initiated draft into a roster character + story.
 
-    Creates Character + CharacterSheet + PRIMARY Persona, a RosterEntry on
-    the Available roster (no tenure), a Story linked to the GM's target
-    table, and a StoryParticipation linking the character to the story.
+    Creates Character + CharacterSheet + PRIMARY Persona, a Story linked to
+    the GM's target table, and a StoryParticipation linking the character to
+    the story. By default the RosterEntry lands on the Available roster with
+    no tenure (an appable future PC).
+
+    ``claim_as_npc`` (#3426): when True, the entry lands on the NPC shelf
+    instead, and an active RosterTenure binds it to ``draft.account`` --
+    the same JUNIOR+/GMLevelCap.max_story_npcs authorization
+    ``mint_story_npc`` enforces (``check_story_npc_cap``), so a heavyweight
+    full-CG NPC gets the same hand-off as the lightweight mint. Use for a
+    recurring antagonist the GM plays, never an appable roster PC.
 
     Args:
         draft: CharacterDraft with is_gm_creation=True, target_table set,
             story_title set.
+        claim_as_npc: land the entry on the NPC shelf with an active
+            tenure to ``draft.account``, instead of tenure-less on Available.
 
     Returns:
         (roster_entry, story)
 
     Raises:
-        ValidationError: if draft is not a GM draft, or missing target_table,
-            or missing story_title.
+        ValidationError: if draft is not a GM draft, missing target_table,
+            missing story_title, or (``claim_as_npc``) the account lacks
+            JUNIOR+ GM trust or is at its Story NPC cap.
     """
+    from world.roster.services.staff_characters import (  # noqa: PLC0415
+        StaffMintError,
+        check_story_npc_cap,
+    )
     from world.stories.constants import StoryScope  # noqa: PLC0415
     from world.stories.models import Story, StoryParticipation  # noqa: PLC0415
     from world.stories.services.progress import create_character_progress  # noqa: PLC0415
@@ -2388,6 +2405,11 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     if not draft.story_title:
         msg = "GM drafts require a story_title at finalize."
         raise ValidationError(msg)
+    if claim_as_npc:
+        try:
+            check_story_npc_cap(draft.account)
+        except StaffMintError as exc:
+            raise ValidationError(exc.user_message) from exc
 
     # Build name — reuse helper (handles tarot surname for orphans, plain
     # first_name otherwise).
@@ -2410,17 +2432,33 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     # NOTE: home and location are intentionally unset. A GM-created character
     # sits on the Available roster with no location. Once a player claims the
     # character (via RosterApplication → tenure), downstream code sets the
-    # starting location at activation time.
-    # Create RosterEntry on Available roster (no tenure). Stamp GM_TABLE provenance
-    # (#1506): the player-GM authored this for their table, recorded as a viewable
-    # quality/trust signal alongside the GM's account and the table itself.
+    # starting location at activation time. ``claim_as_npc`` skips this
+    # entirely -- the entry lands on the NPC shelf, already tenured to the GM.
+    # Stamp GM_TABLE provenance either way (#1506): the player-GM authored
+    # this for their table, recorded as a viewable quality/trust signal
+    # alongside the GM's account and the table itself.
     entry = RosterEntry.objects.create(
         character_sheet=sheet,
-        roster=Roster.objects.get(roster_type=RosterType.AVAILABLE),
+        roster=Roster.objects.get(
+            roster_type=RosterType.NPC if claim_as_npc else RosterType.AVAILABLE
+        ),
         creation_provenance=CreationProvenance.GM_TABLE,
         created_by_account=draft.account,
         created_for_table=draft.target_table,
     )
+    if claim_as_npc:
+        # #3426: bind the finalizing GM's own account by an active tenure, the
+        # same working-set shape mint_story_npc/mint_staff_character grant --
+        # what the persona picker and telnet @ic key on.
+        player_data, _ = PlayerData.objects.get_or_create(account=draft.account)
+        RosterTenure.objects.create(
+            player_data=player_data,
+            roster_entry=entry,
+            player_number=1,
+            start_date=timezone.now(),
+            approved_date=timezone.now(),
+            approved_by=player_data,
+        )
 
     # Create the Story tied to the GM's target table.
     story = Story.objects.create(

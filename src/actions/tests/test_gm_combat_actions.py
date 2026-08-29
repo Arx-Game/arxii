@@ -15,6 +15,7 @@ from actions.definitions.gm_combat import (
     PreviewOpponentDefaultsAction,
     RemoveEncounterParticipantAction,
     ResolveEncounterRoundAction,
+    SpawnCreatureAction,
     UpdateEncounterSettingsAction,
 )
 from actions.registry import get_action
@@ -38,9 +39,13 @@ from world.combat.factories import (
     seed_scaling_defaults,
 )
 from world.combat.models import (
+    BossPhase,
+    BreakBarConfig,
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
+    CreaturePhaseTemplate,
+    CreatureTemplate,
     DramaticSurgeRecord,
 )
 from world.gm.constants import GMLevel
@@ -259,6 +264,139 @@ class AddOpponentActionTests(GMCombatActionTestBase):
         self.assertFalse(
             CombatOpponent.objects.filter(encounter=self.encounter, name="Misplaced Mook").exists()
         )
+
+
+class SpawnCreatureActionTests(GMCombatActionTestBase):
+    """SpawnCreatureAction spawns an authored bestiary CreatureTemplate (#3424)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        seed_scaling_defaults()
+        self.pool = ThreatPoolFactory()
+
+    def test_gm_can_spawn_creature(self) -> None:
+        template = CreatureTemplate.objects.create(
+            name="Gorehorn",
+            tier=OpponentTier.MOOK,
+            threat_pool=self.pool,
+        )
+        result = SpawnCreatureAction().run(self.gm_actor, template=str(template.pk))
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(
+            CombatOpponent.objects.filter(encounter=self.encounter, name="Gorehorn").exists()
+        )
+
+    def test_non_gm_denied(self) -> None:
+        template = CreatureTemplate.objects.create(
+            name="Gorehorn",
+            tier=OpponentTier.MOOK,
+            threat_pool=self.pool,
+        )
+        result = SpawnCreatureAction().run(self.player_actor, template=str(template.pk))
+        self.assertFalse(result.success)
+        self.assertFalse(
+            CombatOpponent.objects.filter(encounter=self.encounter, name="Gorehorn").exists()
+        )
+
+    def test_resolves_template_by_name(self) -> None:
+        CreatureTemplate.objects.create(
+            name="Named Bestiary Mook",
+            tier=OpponentTier.MOOK,
+            threat_pool=self.pool,
+        )
+        result = SpawnCreatureAction().run(self.gm_actor, template="Named Bestiary Mook")
+        self.assertTrue(result.success, result.message)
+
+    def test_missing_template(self) -> None:
+        result = SpawnCreatureAction().run(self.gm_actor)
+        self.assertFalse(result.success)
+
+    def test_unknown_template(self) -> None:
+        result = SpawnCreatureAction().run(self.gm_actor, template="Nonexistent")
+        self.assertFalse(result.success)
+
+    def test_cross_room_position_fails_without_orphaning_opponent(self) -> None:
+        """Mirrors AddOpponentActionTests' cross-room position coverage (#2005 Task 4)."""
+        from world.areas.positioning.services import create_position
+
+        template = CreatureTemplate.objects.create(
+            name="Misplaced Beast",
+            tier=OpponentTier.MOOK,
+            threat_pool=self.pool,
+        )
+        other_room = _make_room("OtherRoomForSpawnPosition")
+        position = create_position(other_room, "elsewhere")
+
+        result = SpawnCreatureAction().run(
+            self.gm_actor,
+            template=str(template.pk),
+            position_id=position.pk,
+        )
+
+        self.assertFalse(result.success)
+        self.assertFalse(
+            CombatOpponent.objects.filter(encounter=self.encounter, name="Misplaced Beast").exists()
+        )
+
+    def test_journey_authored_phases_and_break_bar_then_round_resolves(self) -> None:
+        """Registry-dispatch journey test (#3424 spec Test seams).
+
+        Spawns a template with authored phases + a break bar via
+        ``action.run()`` (not the service function directly), asserts the
+        cloned ``BossPhase`` rows and break-bar stamps land on the spawned
+        ``CombatOpponent``, then resolves a round with it present.
+        """
+        template = CreatureTemplate.objects.create(
+            name="Gorehorn the Undying",
+            tier=OpponentTier.BOSS,
+            threat_pool=self.pool,
+        )
+        phase_one = CreaturePhaseTemplate.objects.create(
+            creature_template=template,
+            phase_number=1,
+            health_trigger_percentage=1.0,
+            soak_value=5,
+        )
+        CreaturePhaseTemplate.objects.create(
+            creature_template=template,
+            phase_number=2,
+            health_trigger_percentage=0.5,
+            soak_value=10,
+            extra_actions=1,
+        )
+        BreakBarConfig.objects.create(
+            boss_phase=phase_one,
+            max_threshold=30,
+            vulnerability_rounds=2,
+            intensity_bonus=2,
+        )
+
+        result = SpawnCreatureAction().run(self.gm_actor, template=str(template.pk))
+        self.assertTrue(result.success, result.message)
+
+        opponent = CombatOpponent.objects.get(encounter=self.encounter, name="Gorehorn the Undying")
+        self.assertEqual(opponent.creature_template, template)
+        phases = BossPhase.objects.filter(opponent=opponent).order_by("phase_number")
+        self.assertEqual(phases.count(), 2)
+        self.assertEqual(phases[0].soak_value, 5)
+        self.assertEqual(phases[1].soak_value, 10)
+        self.assertGreater(opponent.break_bar_threshold, 0)
+        self.assertEqual(opponent.break_bar_current, opponent.break_bar_threshold)
+        self.assertEqual(opponent.vulnerability_rounds, 2)
+
+        # A round resolves cleanly with the spawned bestiary opponent present
+        # -- covers web and telnet identically (both converge on action.run()).
+        # A living PC participant keeps the encounter running after the round
+        # (with none, resolution completes the encounter instead).
+        self._add_participant()
+        self.encounter.refresh_from_db()
+        self.encounter.status = RoundStatus.DECLARING
+        self.encounter.round_number = 1
+        self.encounter.save(update_fields=["status", "round_number"])
+        round_result = ResolveEncounterRoundAction().run(self.gm_actor)
+        self.assertTrue(round_result.success, round_result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.status, RoundStatus.BETWEEN_ROUNDS)
 
 
 class AddEncounterParticipantActionTests(GMCombatActionTestBase):
@@ -674,6 +812,7 @@ class RegistryCompletenessSmokeTest(TestCase):
             "begin_encounter_round",
             "resolve_encounter_round",
             "add_opponent",
+            "spawn_creature",
             "add_encounter_participant",
             "remove_encounter_participant",
             "pause_encounter",

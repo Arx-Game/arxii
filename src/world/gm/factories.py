@@ -148,6 +148,7 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "auto_clear_regional": False,
             "max_story_areas": 1,
             "max_story_rooms_per_area": 8,
+            "max_story_npcs": 0,
         },
         GMLevel.JUNIOR: {
             "max_beat_risk": RenownRisk.MODERATE,
@@ -156,6 +157,7 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "auto_clear_regional": False,
             "max_story_areas": 2,
             "max_story_rooms_per_area": 12,
+            "max_story_npcs": 2,
         },
         GMLevel.GM: {
             "max_beat_risk": RenownRisk.HIGH,
@@ -164,6 +166,7 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "auto_clear_regional": False,
             "max_story_areas": 3,
             "max_story_rooms_per_area": 20,
+            "max_story_npcs": 4,
         },
         GMLevel.EXPERIENCED: {
             "max_beat_risk": RenownRisk.EXTREME,
@@ -172,6 +175,7 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "auto_clear_regional": True,
             "max_story_areas": 4,
             "max_story_rooms_per_area": 30,
+            "max_story_npcs": 8,
         },
         GMLevel.SENIOR: {
             "max_beat_risk": RenownRisk.EXTREME,
@@ -180,6 +184,7 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "auto_clear_regional": True,
             "max_story_areas": 6,
             "max_story_rooms_per_area": 50,
+            "max_story_npcs": 12,
         },
     }
     caps: dict[str, GMLevelCap] = {}

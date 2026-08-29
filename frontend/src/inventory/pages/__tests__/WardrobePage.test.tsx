@@ -102,6 +102,7 @@ function makeRosterEntry(overrides: Partial<MyRosterEntry> = {}): MyRosterEntry 
     primary_persona_id: null,
     active_persona_id: null,
     unread_narrative_count: 0,
+    roster_type: 'Active',
     ...overrides,
   };
 }

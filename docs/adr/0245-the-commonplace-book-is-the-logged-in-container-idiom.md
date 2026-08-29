@@ -1,4 +1,4 @@
-# ADR-0244: The Commonplace Book is the logged-in container idiom
+# ADR-0245: The Commonplace Book is the logged-in container idiom
 
 <!--
 Numbering note (#3412 slice 2 task 4): this worktree's docs/adr/ topped out at

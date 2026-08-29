@@ -18,6 +18,8 @@ _USAGE = (
     "  encounter resolve                       - resolve the current round\n"
     "  encounter add <name> <tier> [pool [position]]\n"
     "                                           - add an NPC opponent\n"
+    "  encounter spawn <template name> [at <position>]\n"
+    "                                           - spawn an authored bestiary creature (#3424)\n"
     "  encounter default <tier>                - preview opponent defaults\n"
     "  encounter addpc <character>             - add a PC to the encounter\n"
     "  encounter removepc <participant>        - remove a PC from the encounter\n"
@@ -36,6 +38,8 @@ _USAGE = (
 
 _CREATE_USAGE = "Usage: encounter create [pace]  (pace: timed/ready/manual; default timed)"
 _ADD_USAGE = "Usage: encounter add <name> <tier> [pool [position]]"
+_SPAWN_USAGE = "Usage: encounter spawn <template name> [at <position>]"
+_SPAWN_AT_SEPARATOR = " at "
 _DEFAULT_USAGE = "Usage: encounter default <tier>"
 _ADDPC_USAGE = "Usage: encounter addpc <character>"
 _REMOVEPC_USAGE = "Usage: encounter removepc <participant>"
@@ -58,6 +62,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "begin": "_handle_begin",
     "resolve": "_handle_resolve",
     "add": "_handle_add",
+    "spawn": "_handle_spawn",
     "default": "_handle_default",
     "addpc": "_handle_addpc",
     "removepc": "_handle_removepc",
@@ -139,6 +144,44 @@ class CmdEncounter(ArxNamespaceCommand):
             kwargs["position_id"] = position.pk
 
         self._run_action(AddOpponentAction, **kwargs)
+
+    def _handle_spawn(self, rest: str) -> None:
+        """Parse ``spawn <template name> [at <position>]`` and dispatch SpawnCreatureAction (#3424).
+
+        ``<template name>`` may contain spaces (e.g. "Gorehorn the Undying"), so
+        the optional trailing position clause is introduced by the literal
+        `` at `` token rather than positional token-splitting (contrast
+        ``_handle_add``, whose NPC name is single-token). The position name
+        resolves against the caller's current room via the shared
+        ``resolve_position_by_name`` helper -- the same one ``_handle_add`` and
+        ``CmdPosition`` use.
+        """
+        from actions.definitions.gm_combat import SpawnCreatureAction  # noqa: PLC0415
+
+        text = rest.strip()
+        if not text:
+            raise CommandError(_SPAWN_USAGE)
+
+        template_name = text
+        position_name = ""
+        if _SPAWN_AT_SEPARATOR in text:
+            template_name, _, position_name = text.partition(_SPAWN_AT_SEPARATOR)
+            template_name = template_name.strip()
+            position_name = position_name.strip()
+
+        if not template_name:
+            raise CommandError(_SPAWN_USAGE)
+
+        kwargs: dict[str, object] = {"template": template_name}
+        if position_name:
+            room = self.caller.location
+            if room is None:
+                msg = "You aren't anywhere."
+                raise CommandError(msg)
+            position = resolve_position_by_name(room, position_name)
+            kwargs["position_id"] = position.pk
+
+        self._run_action(SpawnCreatureAction, **kwargs)
 
     def _handle_default(self, rest: str) -> None:
         """Parse ``default <tier>`` and dispatch PreviewOpponentDefaultsAction."""

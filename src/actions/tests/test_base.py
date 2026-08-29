@@ -312,6 +312,7 @@ class ActionRegistryTests(TestCase):
             "truncate_precapture",
             "add_encounter_participant",
             "add_opponent",
+            "spawn_creature",
             "remove_opponent",
             "begin_encounter_round",
             "create_encounter",
@@ -481,6 +482,9 @@ class ActionRegistryTests(TestCase):
             "gm_invoke_check",
             "gm_award_progression",
             "gm_apply_condition",
+            # #3431 — GM web parity: condition removal + the read seam that feeds its picker.
+            "gm_remove_condition",
+            "gm_list_conditions",
             # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
             "summon_player",
             "accept_gm_summon",
@@ -488,6 +492,8 @@ class ActionRegistryTests(TestCase):
             # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
             "gm_find_situation",
             "gm_submit_catalog_suggestion",
+            # #3426 — GM story-NPC on-ramp: mint a Story NPC tenure-bound to the GM's account.
+            "mint_story_npc",
             # #3295 — scene check invocation: player self-checks, GM calls, proposals.
             "scene_self_check",
             "call_for_check",
@@ -637,6 +643,8 @@ class ActionRegistryTests(TestCase):
             "promote_room",
             "promote_area",
             # #2451 — staff clue placement.
+            # #3432 — SENIOR-GM/staff clue authoring (mints the Clue row itself).
+            "author_clue",
             "staff_place_clue",
             "staff_remove_clue",
             "staff_place_clue_trigger",

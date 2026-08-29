@@ -2,21 +2,36 @@
  * GMDashboardPage — the GM's story-shaped dashboard (#2004).
  *
  * Shows the GM's tables, upcoming sessions, stories needing attention,
- * pending AGM claims, pending story offers, and evidence summary from
- * GET /api/gm/dashboard/.
+ * pending AGM claims, pending story offers, evidence summary, and (#3426)
+ * the GM's own Story NPCs + a mint dialog, from GET /api/gm/dashboard/ plus
+ * GET /api/roster/entries/mine/.
  *
  * Permission gating: the endpoint returns 403 for non-GMs. We use a local
  * query with throwOnError: false so we can render a friendly "not a GM" page
  * rather than blowing the error boundary.
  */
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/evennia_replacements/api';
 import { parseDispatchBody } from '@/lib/errors';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAccount } from '@/store/hooks';
 
 // ---------------------------------------------------------------------------
@@ -101,6 +116,31 @@ async function claimGroupStoryRequest(characterId: number, requestId: number): P
   return detail ?? 'Request claimed.';
 }
 
+/**
+ * Dispatch MintStoryNPCAction as the actor's own character (#3426) — mints a
+ * Story NPC tenure-bound to the GM's own account, playable immediately via
+ * the persona picker / telnet `@ic`. Mirrors claimGroupStoryRequest's dispatch
+ * shape; `success === false` (not just `res.ok`) signals a refusal (trust
+ * gate or cap), per the same #3155 contract.
+ */
+async function mintStoryNpc(
+  characterId: number,
+  name: string,
+  description: string
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'mint_story_npc' },
+      kwargs: { name, description },
+    }),
+  });
+  const { success, message: detail } = await parseDispatchBody(res);
+  if (!res.ok || success === false) throw new Error(detail ?? 'Failed to mint the NPC.');
+  return detail ?? 'NPC minted.';
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -138,6 +178,30 @@ function GMDashboardContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gm-dashboard'] }).catch(() => {});
+    },
+  });
+
+  // "My NPCs" (#3426) — the account's own Story NPC tenures, split out of the
+  // general character list client-side (no dedicated backend endpoint needed).
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const myNpcs = myRosterEntries.filter((entry) => entry.roster_type === 'NPC');
+
+  const [mintOpen, setMintOpen] = useState(false);
+  const [npcName, setNpcName] = useState('');
+  const [npcDescription, setNpcDescription] = useState('');
+
+  const mintMutation = useMutation({
+    mutationFn: () => {
+      if (actorCharacterId === null) {
+        return Promise.reject(new Error('Puppet a character to mint an NPC.'));
+      }
+      return mintStoryNpc(actorCharacterId, npcName.trim(), npcDescription.trim());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] }).catch(() => {});
+      setMintOpen(false);
+      setNpcName('');
+      setNpcDescription('');
     },
   });
 
@@ -200,6 +264,91 @@ function GMDashboardContent() {
               <li key={table.id}>
                 <span className="font-medium">{table.name}</span>: {table.membership_count}{' '}
                 member(s)
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* My NPCs (#3426) — Story NPCs minted directly by this GM, tenure-bound
+          to their own account. Playing one needs no new UI: the persona
+          picker already lists it once minted. */}
+      <section className="rounded-lg border p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">My NPCs ({myNpcs.length})</h2>
+          <Dialog open={mintOpen} onOpenChange={setMintOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline">
+                Mint Story NPC
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Mint Story NPC</DialogTitle>
+                <DialogDescription>
+                  Create a Story NPC bound to your account — playable immediately via the persona
+                  picker or telnet @ic. Bounded by your GM level's cap.
+                </DialogDescription>
+              </DialogHeader>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  mintMutation.mutate();
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <Label htmlFor="mint-npc-name">Name *</Label>
+                  <Input
+                    id="mint-npc-name"
+                    value={npcName}
+                    onChange={(e) => setNpcName(e.target.value)}
+                    placeholder="e.g. Master Aldous"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="mint-npc-description">
+                    Description{' '}
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="mint-npc-description"
+                    value={npcDescription}
+                    onChange={(e) => setNpcDescription(e.target.value)}
+                    rows={3}
+                    className="resize-y"
+                  />
+                </div>
+                {mintMutation.isError && (
+                  <p className="text-sm text-destructive">
+                    {(mintMutation.error as Error).message}
+                  </p>
+                )}
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setMintOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={npcName.trim().length === 0 || mintMutation.isPending}
+                  >
+                    {mintMutation.isPending ? 'Minting…' : 'Mint'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+        {myNpcs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No Story NPCs yet.</p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {myNpcs.map((entry) => (
+              <li key={entry.id}>
+                <Link to={`/characters/${entry.id}`} className="font-medium hover:underline">
+                  {entry.name}
+                </Link>
               </li>
             ))}
           </ul>

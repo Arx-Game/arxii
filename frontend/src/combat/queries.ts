@@ -44,6 +44,9 @@ export const combatKeys = {
 
   opponentDefaults: (encounterId: number, tier: api.OpponentTier) =>
     [...combatKeys.all, 'opponent-defaults', encounterId, tier] as const,
+
+  creatureTemplates: (search?: string, tier?: api.OpponentTier) =>
+    [...combatKeys.all, 'creature-templates', search ?? '', tier ?? ''] as const,
 };
 
 /**
@@ -515,6 +518,40 @@ export function useCreateEncounter(sceneId: number) {
 export function useAddOpponent(encounterId: number) {
   return useEncounterMutation<EncounterDetail, api.AddOpponentPayload>(encounterId, (payload) =>
     api.postAddOpponent(encounterId, payload)
+  );
+}
+
+/**
+ * List the CreatureTemplate bestiary catalog for the "From bestiary" spawn
+ * picker (#3424), optionally name/description search-filtered and/or
+ * tier-filtered. Not encounter-scoped — authored content, long staleTime
+ * (mirrors `useThreatPools`).
+ */
+export function useCreatureTemplates(search?: string, tier?: api.OpponentTier) {
+  return useQuery({
+    queryKey: combatKeys.creatureTemplates(search, tier),
+    queryFn: () => api.fetchCreatureTemplates(search, tier),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Spawn an authored CreatureTemplate bestiary entry into the encounter
+ * (GM only, #3424). Unlike `useAddOpponent` (a bespoke `add_opponent` REST
+ * verb on `CombatEncounterViewSet`), `spawn_creature` carries no dedicated
+ * REST action — it rides the generic REGISTRY dispatch seam
+ * (`api.postDispatchAction`), the same pattern `useGuardMutation` established
+ * for `combat_interpose`. Reuses `useEncounterMutation` so the cache-
+ * invalidation contract matches every other GM lifecycle mutation here.
+ */
+export function useSpawnCreature(encounterId: number, characterId: number) {
+  return useEncounterMutation<DispatchResult, { template: string; positionId: number | null }>(
+    encounterId,
+    ({ template, positionId }) =>
+      api.postDispatchAction(characterId, {
+        ref: { backend: 'registry', registry_key: 'spawn_creature' },
+        kwargs: { template, position_id: positionId },
+      })
   );
 }
 

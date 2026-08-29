@@ -11,6 +11,7 @@ are placeholder data deferred to a later author pass per #1143.
 from __future__ import annotations
 
 from datetime import timedelta
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from world.roster.models import RosterEntry
     from world.scenes.models import Persona
     from world.traits.models import CheckOutcome
+
+logger = logging.getLogger(__name__)
 
 # Placeholder magnitudes — tuned in a later author pass (#1143).
 _DEFAULT_THRESHOLD = 10
@@ -124,9 +127,9 @@ def resolve_research(project: Project, outcome_tier: CheckOutcome | None) -> Non
 
     Registered with the projects framework at app-ready; runs from ``resolve_project``
     *before* the COMPLETED/FAILED status is set. A failed outcome grants nothing. On
-    success every distinct contributor learns the clue's target. CODEX targets are wired
-    now (the contributors learn the entry, firing the codex KNOWN reactivity); other
-    target kinds (mission/secret) are a documented extension point.
+    success every distinct contributor learns the clue's target. CODEX, SECRET, and
+    MISSION targets are wired; other target kinds (rescue/persona-link/item) remain a
+    documented extension point (#1143).
     """
     if outcome_tier is None or outcome_tier.success_level < 0:
         return
@@ -134,8 +137,11 @@ def resolve_research(project: Project, outcome_tier: CheckOutcome | None) -> Non
     if clue.target_kind == ClueTargetKind.SECRET:
         _resolve_secret_research(project, clue)
         return
+    if clue.target_kind == ClueTargetKind.MISSION:
+        _resolve_mission_research(project, clue)
+        return
     if clue.target_kind != ClueTargetKind.CODEX:
-        return  # mission target grants — extension point (#1143)
+        return  # other target kinds — extension point (#1143)
     entry = clue.target_codex_entry
     if entry is None:
         return
@@ -165,6 +171,59 @@ def _resolve_secret_research(project: Project, clue: Clue) -> None:
         from world.justice.nullification import nullify_accusation  # noqa: PLC0415
 
         nullify_accusation(secret)
+
+
+def _resolve_mission_research(project: Project, clue: Clue) -> None:
+    """MISSION-target research payoff (#3429): grant the mission to each contributor.
+
+    Mirrors the CODEX branch's shape (distinct contributors, log-and-continue per
+    contributor, no bystander fan-out) but the grant path is
+    ``staff_assign_mission`` (``missions/services/run.py``) rather than an idempotent
+    knowledge-row helper, so each contributor's grant runs in its own savepoint —
+    the ``external_acts.py`` pattern — and a failure for one contributor never
+    aborts the others or the research resolution itself. A contributor who already
+    holds an ACTIVE instance of this mission (inline query; see the private, narrower
+    ``trigger_dispatch._holds_active_trigger_mission`` for the sibling pattern this
+    deliberately does not reuse) is skipped without error.
+    """
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInstance  # noqa: PLC0415
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    template = clue.target_mission
+    if template is None:
+        return
+    for roster_entry in _distinct_contributor_roster_entries(project):
+        sheet = roster_entry.character_sheet
+        character = sheet.character
+        already_holds = MissionInstance.objects.filter(
+            template=template,
+            status=MissionStatus.ACTIVE,
+            participants__character_id=character.pk,
+            participants__is_contract_holder=True,
+        ).exists()
+        if already_holds:
+            continue
+        try:
+            with transaction.atomic():
+                persona = active_persona_for_sheet(sheet)
+                staff_assign_mission(template, character, persona=persona)
+                send_narrative_message(
+                    recipients=[sheet],
+                    body=f"Your research pays off: {template.name} is now open to you.",
+                    category=NarrativeCategory.STORY,
+                    ooc_note=f"Research project #{project.pk} resolved (clue #{clue.pk}).",
+                )
+        except Exception:  # log-and-continue; one grant failure must not
+            # abort the others or the research resolution (mirrors external_acts.py).
+            logger.exception(
+                "MISSION research grant failed for roster_entry=%s clue=%s",
+                roster_entry.pk,
+                clue.pk,
+            )
 
 
 def _distinct_contributor_roster_entries(project: Project) -> list[RosterEntry]:

@@ -127,6 +127,7 @@ describe('FinalizeForTableDialog', () => {
           target_table: 1,
           story_title: 'The Long Road Home',
           story_description: 'A caravan crosses the wastes.',
+          claim_as_npc: false,
         },
       },
       expect.any(Object)

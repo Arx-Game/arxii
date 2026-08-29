@@ -14,7 +14,9 @@ import type { components } from '@/generated/api';
  * wins" (contrast `AccountData` in `evennia_replacements/types.ts`, which
  * stays genuinely hand-rolled because `CurrentUserAPIView` is a plain
  * `APIView` with no `serializer_class`/`@extend_schema` and never enters the
- * generated schema at all).
+ * generated schema at all). Main's #3426 `roster_type` field rides the same
+ * generated type after the post-merge regen — the hand interface it was
+ * declared on in main is retired by this merge ("generated wins").
  */
 export type MyRosterEntry = components['schemas']['MyRosterEntry'];
 

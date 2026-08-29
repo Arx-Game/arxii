@@ -430,6 +430,21 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "target of that kind is required, validated by UseItemAction."
         ),
     )
+    requires_attunement = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, this template's mechanics are inert for an unattuned holder "
+            "(#3430). Writers: the touchstone ritual (attune_touchstone, resonance-tied "
+            "items only) and staff admin edits on ItemInstance.attuned_to_character_sheet "
+            "— unchanged by this flag. Enforcement: collect_check_modifiers' EQUIPMENT "
+            "block (world.checks.services) only emits this template's ItemCheckModifier "
+            "contributions for an instance both equipped by and attuned to the acting "
+            "character; use_item (world.items.services.usage) refuses on-use dispatch the "
+            "same way. Stacking: with multiple equipped instances of a flagged template, "
+            "the modifier applies once iff at least one is attuned to the holder — "
+            "attunement never multiplies a bonus."
+        ),
+    )
     is_craftable = models.BooleanField(
         default=False,
         help_text="Whether this item can be crafted by players.",

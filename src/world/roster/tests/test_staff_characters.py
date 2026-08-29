@@ -6,7 +6,9 @@ from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.roster.models import RosterEntry, RosterTenure
+from world.roster.models import Roster, RosterEntry, RosterTenure
+from world.roster.models.choices import RosterType
+from world.roster.seeds import ensure_rosters
 from world.roster.services.staff_characters import StaffMintError, mint_staff_character
 
 
@@ -17,7 +19,7 @@ class MintStaffCharacterServiceTests(TestCase):
         assert character.db_key == "Apostate Builder"
         sheet = character.sheet_data
         entry = RosterEntry.objects.get(character_sheet=sheet)
-        assert entry.roster.name == "NPC"
+        assert entry.roster.name == "NPCs"
         tenure = RosterTenure.objects.get(roster_entry=entry)
         assert tenure.player_data.account_id == account.pk
         assert tenure.approved_date is not None
@@ -34,6 +36,27 @@ class MintStaffCharacterServiceTests(TestCase):
         with self.assertRaises(StaffMintError):
             mint_staff_character(account, "   ")
 
+    def test_mint_on_seeded_db_reuses_the_npcs_shelf(self) -> None:
+        """#3426 regression: the seeded shelf is named "NPCs", not "NPC".
+
+        A ``name="NPC"`` lookup never matched it, so the ``get_or_create``
+        fallback tried to create a second row and collided on the unique
+        ``roster_type`` column (IntegrityError) on any DB that had already
+        run ``ensure_rosters()``. This test seeds the shelf first (mirroring
+        a real deploy) to catch that regression -- the un-seeded tests above
+        alone never exercised this path.
+        """
+        seeded = ensure_rosters()
+        seeded_npc_roster = seeded[RosterType.NPC]
+        assert seeded_npc_roster.name == "NPCs"
+
+        account = AccountFactory(username="seeded_staffer", is_staff=True)
+        character = mint_staff_character(account, "Seeded Story NPC")
+
+        entry = RosterEntry.objects.get(character_sheet=character.sheet_data)
+        assert entry.roster_id == seeded_npc_roster.pk
+        assert Roster.objects.filter(roster_type=RosterType.NPC).count() == 1
+
 
 class MintBuilderCharacterEndpointTests(APITestCase):
     def test_staff_mints_via_endpoint(self) -> None:
@@ -47,7 +70,7 @@ class MintBuilderCharacterEndpointTests(APITestCase):
         assert response.status_code == 201, response.content
         assert response.data["name"] == "Endpoint Builder"
         entry = RosterEntry.objects.get(character_sheet_id=response.data["character_id"])
-        assert entry.roster.name == "NPC"
+        assert entry.roster.name == "NPCs"
 
     def test_non_staff_rejected(self) -> None:
         account = AccountFactory(username="endpoint_player", is_staff=False)

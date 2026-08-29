@@ -1,9 +1,27 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { PlaceClueDialog } from './PlaceClueDialog';
+
+// AuthorClueDialog (#3432, "New clue…") is exercised in its own test file —
+// only its hook dependencies are mocked here so it renders for real and this
+// file can prove the mint-then-place handoff (onCreated pre-fills the slug).
+const authorClueMutate = vi.fn();
+
+vi.mock('@/clues/queries', () => ({
+  useAuthorClueMutation: vi.fn(() => ({ mutate: authorClueMutate, isPending: false })),
+}));
+vi.mock('@/world-builder/useWorldBuilderActor', () => ({
+  useWorldBuilderActor: vi.fn(() => 42),
+}));
+vi.mock('@/store/hooks', () => ({
+  useAccount: vi.fn(() => ({ is_staff: true })),
+}));
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 function renderDialog(overrides: Partial<Parameters<typeof PlaceClueDialog>[0]> = {}) {
   const runAction = vi.fn();
@@ -60,5 +78,20 @@ describe('PlaceClueDialog', () => {
     await userEvent.click(screen.getByRole('tab', { name: /on entry \(passive\)/i }));
 
     expect(screen.queryByLabelText(/detect difficulty/i)).not.toBeInTheDocument();
+  });
+
+  it('pre-fills the clue slug from AuthorClueDialog on a successful "New clue…" mint', () => {
+    authorClueMutate.mockImplementation((_kwargs, opts) => {
+      opts.onSuccess({ success: true, message: 'Clue authored.', data: { slug: 'torn-letter-2' } });
+    });
+    renderDialog();
+
+    fireEvent.click(screen.getByText('New clue…'));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Torn Letter' } });
+    fireEvent.change(screen.getByLabelText('Clue text'), { target: { value: 'A letter.' } });
+    fireEvent.change(screen.getByLabelText('Target id'), { target: { value: '1' } });
+    fireEvent.click(screen.getByTestId('author-clue-submit'));
+
+    expect(screen.getByLabelText(/clue slug/i)).toHaveValue('torn-letter-2');
   });
 });
