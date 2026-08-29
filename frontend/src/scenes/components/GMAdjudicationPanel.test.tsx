@@ -98,6 +98,7 @@ function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     position_nodes: [],
     position_edges: [],
     running_beat: null,
+    declared_risk: null,
     ...overrides,
   };
 }

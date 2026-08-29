@@ -115,6 +115,38 @@ function RoundStateBadge({ activeRound }: { activeRound: SceneRoundState | null 
   );
 }
 
+/**
+ * Declared-risk badge (#3433) - the scene header's player-visible read of the
+ * beat's authored stakes (never the beat's id/name/internals; see
+ * SceneDetail.declared_risk's doc comment). Reuses the existing Badge
+ * variants (no new variant is introduced) rather than inventing per-tier
+ * colors: severity climbs outline -> secondary -> default -> destructive.
+ */
+const RISK_BADGE_VARIANT: Record<
+  NonNullable<SceneDetail['declared_risk']>,
+  'outline' | 'secondary' | 'default' | 'destructive'
+> = {
+  low: 'outline',
+  moderate: 'secondary',
+  high: 'default',
+  extreme: 'destructive',
+};
+
+function DeclaredRiskBadge({ risk }: { risk: SceneDetail['declared_risk'] }) {
+  if (risk == null) {
+    return null;
+  }
+  return (
+    <Badge
+      variant={RISK_BADGE_VARIANT[risk]}
+      className="mb-2 ml-2 inline-block text-xs"
+      data-testid="scene-header-risk-badge"
+    >
+      {risk.toUpperCase()} stakes
+    </Badge>
+  );
+}
+
 export function SceneHeader({ scene, onRefresh }: Props) {
   const [editing, setEditing] = useState(false);
   const qc = useQueryClient();
@@ -185,6 +217,7 @@ export function SceneHeader({ scene, onRefresh }: Props) {
           In Combat
         </Badge>
       )}
+      <DeclaredRiskBadge risk={scene.declared_risk} />
       <p className="mb-4">{scene.description}</p>
       {(scene.is_owner || scene.is_active) && (
         <div className="mb-2 flex gap-2">
