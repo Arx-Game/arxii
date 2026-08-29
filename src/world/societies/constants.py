@@ -175,6 +175,38 @@ MAGNITUDE_PRESTIGE_AWARDS: dict[str, int] = {
     RenownMagnitude.VERY_HIGH.value: 300,
 }
 
+# #3463 — the minimum EFFECTIVE risk at which any source may mint Legend.
+# Below this, a settled unit mints nothing at all: not a reduced award, zero.
+#
+# Generalized from world.missions.constants.LEGEND_RISK_FLOOR_TIER (#2051),
+# which enforced the same bar for one system only and keyed on a mission's
+# *declared* risk_tier. This one keys on EFFECTIVE risk — the value
+# compute_effective_risk (ADR-0077) prices against the beat's target_level —
+# which is what makes "challenging" mean challenging *to you*: a level-10
+# party's raid on level-4 content decays below the floor and pays nothing.
+#
+# Designer-tunable by code change only, deliberately: the bar for what is
+# worth a song is an invariant, not content.
+LEGEND_RISK_FLOOR: str = str(RenownRisk.HIGH.value)
+
+
+def risk_meets_legend_floor(risk: str) -> bool:
+    """Is this (EFFECTIVE, not declared) risk at or above the Legend floor?
+
+    Ordering comes from ``RenownRisk``'s own declaration order, weakest to
+    strongest, which is authoritative. ``world.stories.constants.RISK_LADDER``
+    is a hand-maintained copy of the same sequence used for effective-risk
+    ladder shifts; both agree, and this deliberately reads the enum rather
+    than the copy. An unknown value is treated as below the floor — the safe
+    direction, since the failure mode is minting Legend that was not earned.
+    """
+    ladder = list(RenownRisk.values)
+    try:
+        return ladder.index(risk) >= ladder.index(LEGEND_RISK_FLOOR)
+    except ValueError:
+        return False
+
+
 # Risk → legend base_value (added to LegendEntry; spreads extend it
 # further per the existing legend mechanics).
 RISK_LEGEND_AWARDS: dict[str, int] = {

@@ -1481,6 +1481,22 @@ class LegendEntry(AbstractLegendRecord):
         default=True,
         help_text="Whether this entry contributes to legend totals",
     )
+    # #3463 — the deed's STATION: min(earner class level, threat level) at
+    # settlement. 0 means "no station", which is what every deed minted
+    # outside a jeopardy-bearing stakes contract carries, and it satisfies no
+    # LegendRequirement band at any level. So this one column is both the
+    # peril gate ("could this have killed you") and the staleness gate ("was
+    # this recent enough to qualify you for the step you're taking").
+    # Deliberately NOT reach — reach is Renown's axis (see ADR-0245).
+    earned_at_level = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        help_text=(
+            "Station this deed was won at: min(earner level, threat level). "
+            "0 = no station (minted outside a perilous stakes contract); such a "
+            "deed still counts for fame and spread but qualifies no advancement."
+        ),
+    )
     updated_at = models.DateTimeField(auto_now=True)
     spread_multiplier = models.PositiveIntegerField(
         default=9,
@@ -1669,6 +1685,84 @@ class LegendDeedStory(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.author.name}'s account of: {self.deed.title}"
+
+
+class LegendContribution(SharedMemoryModel):
+    """What one character actually did during a staked unit (#3463).
+
+    **Why this exists:** Legend settles at the end of a story unit from a record
+    of what each character did across it, not at the moment of each act. Nothing
+    else persists that record outside `Battle` — `CheckResult`
+    (`world.checks.types`) is a dataclass, so a scene or mission check leaves no
+    trace of who rolled what for which objective. This is that trace.
+
+    **Who writes it:** the `action.run()` seam, for every check resolved while a
+    stakes contract is open on the running beat.
+
+    **Who reads it:** `world.societies.legend_settlement.settle_legend_for`, which
+    pays the shared deed on objectives held and pays standout contributors a
+    smaller solo deed even when the unit was lost (generalizing ADR-0122's battle
+    standout pass).
+
+    ``success_level`` is **server-only** and must never be serialized to another
+    player — it exposes how good someone is. Mirrors the ``ConsiderReading``
+    precedent in ``world.combat.models``.
+    """
+
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="legend_contributions",
+        help_text="Who acted.",
+    )
+    activation = models.ForeignKey(
+        "arxii.StakeContractActivation",
+        on_delete=models.CASCADE,
+        related_name="legend_contributions",
+        help_text="The staked unit being settled; the contribution dies with it.",
+    )
+    check_type = models.ForeignKey(
+        "arxii.CheckType",
+        on_delete=models.PROTECT,
+        related_name="legend_contributions",
+        help_text="What kind of thing they did.",
+    )
+    stake = models.ForeignKey(
+        "arxii.Stake",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_contributions",
+        help_text="Which objective this served; null when the act served the beat at large.",
+    )
+    success_level = models.SmallIntegerField(
+        help_text="The check's success_level (-10 to +10). SERVER-ONLY — never serialize.",
+    )
+    was_crucial = models.BooleanField(
+        default=False,
+        help_text=(
+            "Derived at write time from the served stake's severity, never authored "
+            "per row. Crucial contributions carry the standout pass."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Legend Contribution"
+        verbose_name_plural = "Legend Contributions"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["activation", "character_sheet"],
+                name="legendcontrib_activation_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"LegendContribution(sheet={self.character_sheet_id}, "
+            f"activation={self.activation_id}, sl={self.success_level})"
+        )
 
 
 class PersonaDeedKnowledge(SharedMemoryModel):

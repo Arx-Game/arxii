@@ -624,6 +624,20 @@ class LegendRequirement(AbstractClassLevelRequirement):
     minimum_legend = models.PositiveIntegerField(
         help_text="Minimum total legend required",
     )
+    # #3463 — the staleness band. Only deeds whose STATION
+    # (LegendEntry.earned_at_level) is at or above (target level - offset)
+    # count. Legend stays permanent and monotonic for fame, murmur and common
+    # knowledge (ADR-0066/0054); this narrows only the ADVANCEMENT read, so a
+    # bank accumulated at level 1 while development points accrued stops
+    # qualifying you once you have advanced past it.
+    counts_from_level_offset = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "How many levels below this unlock's target a deed may have been won "
+            "at and still qualify. 1 = the step you're taking plus the one below it. "
+            "Deeds with station 0 (won outside a perilous stakes contract) never qualify."
+        ),
+    )
 
     class Meta:
         verbose_name = "Legend Requirement"

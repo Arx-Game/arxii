@@ -1,1 +1,1 @@
-0191_alter_npcserviceoffer_kind_cluerevealofferdetails
+0192_legendentry_earned_at_level_and_more
