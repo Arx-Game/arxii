@@ -590,11 +590,11 @@ function ClueDetailsPanel({
   roleId,
   offerId,
   details,
-}: {
+}: Readonly<{
   roleId: number;
   offerId: number;
   details: ClueRevealOfferDetails | null;
-}) {
+}>) {
   const createDetails = useCreateClueDetails(roleId);
   const patchDetails = usePatchClueDetails(roleId);
 
@@ -611,6 +611,7 @@ function ClueDetailsPanel({
 
   const pending = createDetails.isPending || patchDetails.isPending;
   const error = createDetails.error ?? patchDetails.error;
+  const saveLabel = details ? 'Save clue details' : 'Create clue details';
 
   return (
     <div className="space-y-3 rounded-md border border-dashed p-3">
@@ -628,7 +629,7 @@ function ClueDetailsPanel({
         </p>
       )}
       <Button size="sm" variant="secondary" onClick={save} disabled={pending || !clueSlug.trim()}>
-        {pending ? 'Saving…' : details ? 'Save clue details' : 'Create clue details'}
+        {pending ? 'Saving…' : saveLabel}
       </Button>
     </div>
   );

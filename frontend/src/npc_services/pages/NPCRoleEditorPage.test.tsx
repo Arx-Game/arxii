@@ -123,16 +123,16 @@ describe('NPCRoleEditorPage — AddOfferForm clue_reveal branch', () => {
     vi.mocked(queries.useOffersForRole).mockReturnValue({
       data: EMPTY_PAGE,
       isLoading: false,
-    } as ReturnType<typeof queries.useOffersForRole>);
+    } as unknown as ReturnType<typeof queries.useOffersForRole>);
     vi.mocked(queries.useMissionDetailsForRole).mockReturnValue({
       data: EMPTY_PAGE,
-    } as ReturnType<typeof queries.useMissionDetailsForRole>);
+    } as unknown as ReturnType<typeof queries.useMissionDetailsForRole>);
     vi.mocked(queries.usePermitDetailsForRole).mockReturnValue({
       data: EMPTY_PAGE,
-    } as ReturnType<typeof queries.usePermitDetailsForRole>);
+    } as unknown as ReturnType<typeof queries.usePermitDetailsForRole>);
     vi.mocked(queries.useClueDetailsForRole).mockReturnValue({
       data: EMPTY_PAGE,
-    } as ReturnType<typeof queries.useClueDetailsForRole>);
+    } as unknown as ReturnType<typeof queries.useClueDetailsForRole>);
     vi.mocked(queries.useCreateMissionDetails).mockReturnValue(
       mockNoOpMutation() as ReturnType<typeof queries.useCreateMissionDetails>
     );

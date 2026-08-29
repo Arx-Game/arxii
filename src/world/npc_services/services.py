@@ -218,7 +218,7 @@ def _build_eligibility_cache(
     )
 
 
-def _is_offer_eligible(  # noqa: PLR0911, PLR0913
+def _is_offer_eligible(  # noqa: PLR0913
     offer: NPCServiceOffer,
     *,
     persona: Persona,
@@ -273,24 +273,29 @@ def _is_offer_eligible(  # noqa: PLR0911, PLR0913
         ).exists()
     ):
         return False
-    if offer.kind == OfferKind.MISSION.value and not _mission_gates_pass(
-        offer=offer, persona=persona, character=character, cache=cache
-    ):
-        return False
-    if offer.kind == OfferKind.ASSET_TASK_INTEL.value and not _intel_pool_has_unheld_clues(
-        offer=offer, persona=persona
-    ):
-        return False
-    if offer.kind == OfferKind.ASSET_TASK_COLLECT.value and not _asset_has_collectable_income(
-        persona=persona
-    ):
-        return False
-    if offer.kind == OfferKind.CLUE_REVEAL.value and not _clue_reveal_not_yet_held(
-        offer=offer, persona=persona
-    ):
+    if not _kind_gate_passes(offer, persona=persona, character=character, cache=cache):
         return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(offer.eligibility_rule or {}, ctx)
+
+
+def _kind_gate_passes(
+    offer: NPCServiceOffer,
+    *,
+    persona: Persona,
+    character: Character,
+    cache: _EligibilityCache,
+) -> bool:
+    """The kind-specific eligibility gate (layer 5/6 of ``_is_offer_eligible``)."""
+    if offer.kind == OfferKind.MISSION.value:
+        return _mission_gates_pass(offer=offer, persona=persona, character=character, cache=cache)
+    if offer.kind == OfferKind.ASSET_TASK_INTEL.value:
+        return _intel_pool_has_unheld_clues(offer=offer, persona=persona)
+    if offer.kind == OfferKind.ASSET_TASK_COLLECT.value:
+        return _asset_has_collectable_income(persona=persona)
+    if offer.kind == OfferKind.CLUE_REVEAL.value:
+        return _clue_reveal_not_yet_held(offer=offer, persona=persona)
+    return True
 
 
 def _intel_pool_has_unheld_clues(*, offer: NPCServiceOffer, persona: Persona) -> bool:

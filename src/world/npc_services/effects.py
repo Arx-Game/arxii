@@ -961,18 +961,28 @@ def run_clue_reveal_offer(offer: NPCServiceOffer, persona: Persona) -> EffectRes
     clue = details.clue
     sheet = persona.character_sheet
 
+    # Fail closed up front: a persona with no sheet (and so no character to
+    # roll or roster entry to hold clues) gets nothing. Hoisting the guard
+    # also makes every later sheet access None-safe.
+    if sheet is None or sheet.character is None:
+        return EffectResult(
+            kind=OfferKind.CLUE_REVEAL.value,
+            message="You have no roster tenure to hold what they'd tell you.",
+            payload={"offer_pk": offer.pk, "clue_pk": clue.pk},
+        )
+    character = sheet.character
+
     # The placement actually serving the finder, mirroring run_styling_offer's
-    # functionary resolution — falls back to the role's name when no placed
+    # functionary resolution -- falls back to the role's name when no placed
     # Functionary is co-located (a global/roleless interaction).
-    character = sheet.character if sheet is not None else None
     functionary = None
-    if character is not None and character.location is not None:
+    if character.location is not None:
         functionary = functionaries_in_location(character.location).filter(role=offer.role).first()
     npc_label = functionary.display_name if functionary is not None else offer.role.name
 
     if offer.check_type is not None:
         check_result = perform_check(
-            persona.character_sheet.character,
+            character,
             offer.check_type,
             target_difficulty=offer.check_difficulty,
         )
@@ -983,11 +993,11 @@ def run_clue_reveal_offer(offer: NPCServiceOffer, persona: Persona) -> EffectRes
     if not succeeded:
         return EffectResult(
             kind=OfferKind.CLUE_REVEAL.value,
-            message=f"{npc_label} deflects — whatever they know, they aren't telling you today.",
+            message=f"{npc_label} deflects. Whatever they know, they aren't telling you today.",
             payload={"offer_pk": offer.pk, "clue_pk": clue.pk},
         )
 
-    roster_entry = persona.character_sheet.roster_entry_or_none
+    roster_entry = sheet.roster_entry_or_none
     if roster_entry is None:
         return EffectResult(
             kind=OfferKind.CLUE_REVEAL.value,

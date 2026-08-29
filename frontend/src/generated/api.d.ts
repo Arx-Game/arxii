@@ -15406,6 +15406,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/npc-services/clue-details/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    get: operations['npc_services_clue_details_list'];
+    put?: never;
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    post: operations['npc_services_clue_details_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/clue-details/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    get: operations['npc_services_clue_details_retrieve'];
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    put: operations['npc_services_clue_details_update'];
+    post?: never;
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    delete: operations['npc_services_clue_details_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    patch: operations['npc_services_clue_details_partial_update'];
+    trace?: never;
+  };
   '/api/npc-services/cooldowns/': {
     parameters: {
       query?: never;
@@ -65086,6 +65124,151 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  npc_services_clue_details_list: {
+    parameters: {
+      query?: {
+        clue?: number;
+        offer?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        role?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedClueRevealOfferDetailsList'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClueRevealOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClueRevealOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_clue_details_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedClueRevealOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
       };
     };
   };
