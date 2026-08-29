@@ -71,7 +71,13 @@ A `Clue` is a pointer defined by three orthogonal things:
   `world/projects` framework) targeting a clue. Contributors spend AP to make Research rolls
   (`contribute_research`); progress scales with the outcome, **floored at 0** (a failed help
   never detracts). A weekly cron setback (`apply_research_setbacks`) is the only negative.
-  On completion, `resolve_research` grants the clue's target to every contributor.
+  On completion, `resolve_research` grants the clue's target to every distinct
+  contributor: CODEX (`grant_codex_entry`), SECRET (`grant_secret_knowledge`, plus
+  accusation nullification), and MISSION (#3429 — `staff_assign_mission`, skipping a
+  contributor who already holds an ACTIVE instance of the target mission, with a
+  per-contributor STORY notification via `send_narrative_message`) are wired; RESCUE /
+  PERSONA_LINK / ITEM targets remain a documented RESEARCH-resolution extension point
+  (#1143) — their AUTOMATIC-mode grants above are unaffected.
 
 ## Two-layer gating
 

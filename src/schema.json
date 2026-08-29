@@ -39539,8 +39539,9 @@ components:
         required_mission:
           type: integer
           nullable: true
-          description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
-            data shape only; engine deferred). SET_NULL on template delete.'
+          description: 'Optional: a MissionTemplate this beat requires. The completion
+            engine (#1757) flips this beat when a launched instance terminates. SET_NULL
+            on template delete.'
         created_at:
           type: string
           format: date-time
@@ -39758,8 +39759,9 @@ components:
         required_mission:
           type: integer
           nullable: true
-          description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
-            data shape only; engine deferred). SET_NULL on template delete.'
+          description: 'Optional: a MissionTemplate this beat requires. The completion
+            engine (#1757) flips this beat when a launched instance terminates. SET_NULL
+            on template delete.'
       required:
       - episode
       - internal_description
@@ -54824,13 +54826,13 @@ components:
         consequence:
           type: integer
           nullable: true
-          description: Optional per-candidate consequence override; falls back to
-            the parent route's consequence when null. STORED BUT UNCONSUMED in Phase
-            B — Phase D wires per-candidate emission.
+          description: 'Optional per-candidate consequence override; falls back to
+            the parent route''s consequence when null. WIRED by #941 — checked first
+            when this candidate fires.'
         outcome_text:
           type: string
-          description: Optional per-candidate outcome text shown to the player. STORED
-            BUT UNCONSUMED in Phase B — Phase D wires it.
+          description: 'Optional per-candidate outcome text shown to the player. WIRED
+            by #941 — used first when this candidate fires.'
         outcome_text_needs_rewrite:
           type: boolean
           description: Phase-D copy service sets True; the Phase-D edit service clears
@@ -54854,13 +54856,13 @@ components:
         consequence:
           type: integer
           nullable: true
-          description: Optional per-candidate consequence override; falls back to
-            the parent route's consequence when null. STORED BUT UNCONSUMED in Phase
-            B — Phase D wires per-candidate emission.
+          description: 'Optional per-candidate consequence override; falls back to
+            the parent route''s consequence when null. WIRED by #941 — checked first
+            when this candidate fires.'
         outcome_text:
           type: string
-          description: Optional per-candidate outcome text shown to the player. STORED
-            BUT UNCONSUMED in Phase B — Phase D wires it.
+          description: 'Optional per-candidate outcome text shown to the player. WIRED
+            by #941 — used first when this candidate fires.'
         outcome_text_needs_rewrite:
           type: boolean
           description: Phase-D copy service sets True; the Phase-D edit service clears
@@ -54925,9 +54927,9 @@ components:
         candidate:
           type: integer
           nullable: true
-          description: Parent candidate (per-candidate reward bundle — design §8.3).
-            STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random
-            candidate fires. Exactly one of route / candidate must be set.
+          description: 'Parent candidate (per-candidate reward bundle — design §8.3).
+            WIRED by #941 — emitted when this candidate fires. Exactly one of route
+            / candidate must be set.'
         kind:
           allOf:
           - $ref: '#/components/schemas/MissionOptionRouteRewardKindEnum'
@@ -55012,9 +55014,9 @@ components:
         candidate:
           type: integer
           nullable: true
-          description: Parent candidate (per-candidate reward bundle — design §8.3).
-            STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random
-            candidate fires. Exactly one of route / candidate must be set.
+          description: 'Parent candidate (per-candidate reward bundle — design §8.3).
+            WIRED by #941 — emitted when this candidate fires. Exactly one of route
+            / candidate must be set.'
         kind:
           allOf:
           - $ref: '#/components/schemas/MissionOptionRouteRewardKindEnum'
@@ -63105,8 +63107,9 @@ components:
         required_mission:
           type: integer
           nullable: true
-          description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
-            data shape only; engine deferred). SET_NULL on template delete.'
+          description: 'Optional: a MissionTemplate this beat requires. The completion
+            engine (#1757) flips this beat when a launched instance terminates. SET_NULL
+            on template delete.'
     PatchedBequestRequest:
       type: object
       properties:
@@ -63980,13 +63983,13 @@ components:
         consequence:
           type: integer
           nullable: true
-          description: Optional per-candidate consequence override; falls back to
-            the parent route's consequence when null. STORED BUT UNCONSUMED in Phase
-            B — Phase D wires per-candidate emission.
+          description: 'Optional per-candidate consequence override; falls back to
+            the parent route''s consequence when null. WIRED by #941 — checked first
+            when this candidate fires.'
         outcome_text:
           type: string
-          description: Optional per-candidate outcome text shown to the player. STORED
-            BUT UNCONSUMED in Phase B — Phase D wires it.
+          description: 'Optional per-candidate outcome text shown to the player. WIRED
+            by #941 — used first when this candidate fires.'
         outcome_text_needs_rewrite:
           type: boolean
           description: Phase-D copy service sets True; the Phase-D edit service clears
@@ -64043,9 +64046,9 @@ components:
         candidate:
           type: integer
           nullable: true
-          description: Parent candidate (per-candidate reward bundle — design §8.3).
-            STORED BUT UNCONSUMED in Phase B; Phase D wires emission when a random
-            candidate fires. Exactly one of route / candidate must be set.
+          description: 'Parent candidate (per-candidate reward bundle — design §8.3).
+            WIRED by #941 — emitted when this candidate fires. Exactly one of route
+            / candidate must be set.'
         kind:
           allOf:
           - $ref: '#/components/schemas/MissionOptionRouteRewardKindEnum'
