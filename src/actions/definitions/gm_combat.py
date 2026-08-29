@@ -27,7 +27,13 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
+    from world.areas.positioning.models import Position
+    from world.combat.models import (
+        CombatEncounter,
+        CombatOpponent,
+        CombatParticipant,
+        CreatureTemplate,
+    )
     from world.combat.scaling import OpponentStatBlock
     from world.scenes.models import Scene
 
@@ -346,6 +352,109 @@ class AddOpponentAction(Action):
         return ActionResult(
             success=True,
             message=f"Opponent '{opponent.name}' added to the encounter.",
+        )
+
+
+def _resolve_spawn_creature_inputs(
+    kwargs: dict[str, Any],
+) -> tuple[CreatureTemplate, Position | None] | ActionResult:
+    """Resolve + validate ``SpawnCreatureAction`` kwargs.
+
+    Returns ``(template, position)`` on success, or the failure ``ActionResult``
+    to return immediately. Mirrors ``_resolve_add_opponent_inputs``'s shape:
+    ``template`` resolves pk-or-name via the shared ``resolve_model_by_pk_or_name``
+    helper; ``position_id`` is a pk (name-to-pk resolution happens in the telnet
+    command layer, exactly as ``_handle_add`` does for ``AddOpponentAction``).
+    """
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.combat.models import CreatureTemplate  # noqa: PLC0415
+
+    template_ref = kwargs.get("template")
+    position_id = kwargs.get("position_id")
+
+    if not template_ref:
+        return ActionResult(success=False, message="A creature template is required.")
+
+    try:
+        template = resolve_model_by_pk_or_name(
+            CreatureTemplate,
+            str(template_ref),
+            not_found_msg=f"No creature template named {template_ref!r} found.",
+        )
+    except CommandError as err:
+        return ActionResult(success=False, message=str(err))
+
+    position = None
+    if position_id is not None:
+        try:
+            position = Position.objects.get(pk=position_id)
+        except Position.DoesNotExist:
+            return ActionResult(success=False, message="That position does not exist.")
+
+    return template, position
+
+
+@dataclass
+class SpawnCreatureAction(Action):
+    """Spawn an authored ``CreatureTemplate`` bestiary entry into the active encounter (#3424).
+
+    Mirrors ``AddOpponentAction``'s shape exactly: resolves the active encounter
+    via ``_active_encounter_for_gm``, threads the GM's account through
+    ``acting_account`` for the same custody APPEAR gate, and resolves
+    ``position_id`` (a pk — name resolution happens in the telnet command layer,
+    see ``CmdEncounter._handle_spawn``). Calls
+    ``world.combat.services.spawn_from_creature_template``, which clones any
+    authored ``CreaturePhaseTemplate``/``BreakBarConfig`` rows onto the spawned
+    opponent — the wiring gap #3424 closes (the service previously had zero
+    non-test callers).
+    """
+
+    key: str = "spawn_creature"
+    name: str = "Spawn Creature"
+    icon: str = "skull"
+    category: str = "combat"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
+        from world.combat.services import spawn_from_creature_template  # noqa: PLC0415
+
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
+
+        resolved = _resolve_spawn_creature_inputs(kwargs)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        template, position = resolved
+
+        # Same custody-threading rationale as AddOpponentAction: a spawned
+        # bestiary opponent is ephemeral today (no existing_objectdb/persona
+        # kwarg here yet), but the account is threaded through so a future
+        # kwarg addition inherits the APPEAR gate for free.
+        account = resolve_account_or_none(actor)
+
+        try:
+            opponent = spawn_from_creature_template(
+                encounter,
+                template,
+                position=position,
+                acting_account=account,
+            )
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"'{opponent.name}' spawned from the bestiary.",
         )
 
 

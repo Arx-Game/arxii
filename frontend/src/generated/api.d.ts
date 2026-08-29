@@ -4897,6 +4897,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/creature-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only bestiary catalog browse for the GM spawn-from-template picker (#3424).
+     *
+     *     Mirrors ``checks.CheckTypeViewSet``'s shape (django-filter ``search`` +
+     *     exact-field filter, ``IsGMOrStaff``, standard pagination). Unlike
+     *     ``ThreatPoolViewSet`` (open to any authenticated user — that catalog carries
+     *     no spoiler-sensitive content), the bestiary names authored encounter design
+     *     (boss identity, phase presence) a player shouldn't browse ahead of Consider
+     *     readings / weakness research — see the #3424 spec's leak table.
+     */
+    get: operations['combat_creature_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/creature-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only bestiary catalog browse for the GM spawn-from-template picker (#3424).
+     *
+     *     Mirrors ``checks.CheckTypeViewSet``'s shape (django-filter ``search`` +
+     *     exact-field filter, ``IsGMOrStaff``, standard pagination). Unlike
+     *     ``ThreatPoolViewSet`` (open to any authenticated user — that catalog carries
+     *     no spoiler-sensitive content), the bestiary names authored encounter design
+     *     (boss identity, phase presence) a player shouldn't browse ahead of Consider
+     *     readings / weakness research — see the #3424 spec's leak table.
+     */
+    get: operations['combat_creature_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/duel-challenges/': {
     parameters: {
       query?: never;
@@ -26450,6 +26502,22 @@ export interface components {
      * @enum {string}
      */
     CreationProvenanceEnum: 'staff' | 'gm_table' | 'player';
+    /**
+     * @description Read-only bestiary catalog listing for the GM spawn-from-template picker (#3424).
+     *
+     *     Deliberately thin — no phase/break-bar internals (leak table in the #3424
+     *     spec: a player reading this payload would learn boss-phase mechanics and
+     *     weakness windows ahead of Consider/weakness-research discovery). ``has_phases``
+     *     only signals presence, never the phase count or triggers.
+     */
+    CreatureTemplate: {
+      readonly id: number;
+      readonly name: string;
+      readonly tier: components['schemas']['Tier756Enum'];
+      readonly description: string;
+      readonly has_phases: boolean;
+      readonly threat_pool_name: string | null;
+    };
     /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
     CrossXPLockRequest: {
       boundary_level: number;
@@ -33363,6 +33431,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
+    };
+    PaginatedCreatureTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CreatureTemplate'][];
     };
     PaginatedCrossoverInviteList: {
       /** @example 123 */
@@ -50495,6 +50578,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OutcomeDetail'][];
+        };
+      };
+    };
+  };
+  combat_creature_templates_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+        tier?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCreatureTemplateList'];
+        };
+      };
+    };
+  };
+  combat_creature_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this creature template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CreatureTemplate'];
         };
       };
     };
