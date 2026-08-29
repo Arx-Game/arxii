@@ -371,37 +371,9 @@ def _broadcast_manifestation(character: ObjectDB, text: str) -> None:
 
     No-ops silently when: no active scene at location, or character has no primary persona.
     """
-    from world.scenes.constants import InteractionMode  # noqa: PLC0415
-    from world.scenes.interaction_services import (  # noqa: PLC0415
-        create_interaction,
-        push_interaction,
-    )
-    from world.scenes.models import Persona, Scene  # noqa: PLC0415
+    from world.scenes.interaction_services import broadcast_scene_emit  # noqa: PLC0415
 
-    scene = Scene.objects.active_for_room(character.location).first()
-    if scene is None:
-        return
-
-    try:
-        # sheet_data is CharacterSheet's OneToOne reverse accessor (models.py:98).
-        persona = character.sheet_data.primary_persona
-    except (AttributeError, Persona.DoesNotExist):
-        # AttributeError covers a missing sheet (plain ObjectDB); DoesNotExist
-        # a sheet with no PRIMARY persona (intentionally loud).
-        return
-
-    interaction = create_interaction(
-        persona=persona,
-        content=text,
-        mode=InteractionMode.EMIT,
-        scene=scene,
-    )
-    push_interaction(
-        interaction,
-        receiver_persona_ids=[],
-        target_persona_ids=[],
-        receiver_characters=[],
-    )
+    broadcast_scene_emit(character, text)
 
 
 def maybe_create_audere_majora_offer(

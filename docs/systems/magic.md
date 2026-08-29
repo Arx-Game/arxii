@@ -1887,6 +1887,16 @@ filterset (pre-existing gap).
 
 ### Audere & Audere Majora (models/audere.py, audere_majora.py)
 
+**Surge broadcast on accept (#3451).** `AudereThreshold.surge_manifestation_text`
+(TextField, blank default) is broadcast as a system EMIT to the active scene when a
+character accepts a plain Audere surge — `_broadcast_surge` in `world/magic/audere.py`,
+fired from `offer_audere`'s accepted path after the bonus transaction commits. `{name}`
+substitutes the character's primary-persona name. Blank text keeps the accept
+room-silent, so the line is staff-authored content, never code-authored prose. The
+scene-EMIT mechanics live in the shared `broadcast_scene_emit`
+(`world/scenes/interaction_services.py`), which the Audere Majora
+`_broadcast_manifestation` also delegates to — one dispatch shape for both beats.
+
 **`RenownAwardConfig`** (`world/societies/renown_config.py` — relocated from
 `world/magic/models/renown_config.py` in #1621 so any app can inherit it without a
 magic import cycle) — abstract base (SharedMemoryModel) shared by

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 import pytest
 
+from evennia_extensions.factories import ObjectDBFactory
 from flows.consts import FlowActionChoices
 from flows.factories import (
     FlowDefinitionFactory,
@@ -11,6 +12,7 @@ from flows.factories import (
     SceneDataManagerFactory,
 )
 from flows.flow_stack import FlowStack
+from flows.object_states.base_state import BaseState
 
 
 class FlowStepDefinitionTests(TestCase):
@@ -306,6 +308,57 @@ class FlowStepDefinitionTests(TestCase):
         )
         assert fx.get_variable("result") == "result_value"
         assert next_step == fx.get_next_child(step)
+
+    @patch("flows.flow_execution.FlowExecution.get_service_function")
+    def test_call_service_function_int_variable_stays_int_despite_pk_collision(
+        self, mock_get_service
+    ):
+        """A scalar int flow variable reaches the service function as that int.
+
+        Regression for the AuthoredLabyrinthTests CI flake (#3416 follow-up):
+        ``"@depth"`` (an int stage number) was resolved through
+        ``get_object_state``, so whenever the int collided with a live ObjectDB
+        pk the service function received that object's BaseState instead of the
+        int — and ``redirect_move_to_bearer_at_stage``'s ``int(stage_order)``
+        swallowed the TypeError as a silent no-op. In production pks 1-3 always
+        exist, so every small scalar was mangled.
+        """
+        mock_service = MagicMock(return_value=None)
+        mock_get_service.return_value = mock_service
+        room = ObjectDBFactory(db_key="Collides With Depth")
+
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="test_service",
+            parameters={"stage_order": "@depth"},
+        )
+        fx = self.get_flow_execution(variable_mapping={"depth": room.pk})
+
+        step.execute(fx)
+
+        mock_service.assert_called_once_with(stage_order=room.pk)
+
+    @patch("flows.flow_execution.FlowExecution.get_service_function")
+    def test_call_service_function_object_variable_becomes_state(self, mock_get_service):
+        """An object-valued flow variable still arrives wrapped as a BaseState."""
+        mock_service = MagicMock(return_value=None)
+        mock_get_service.return_value = mock_service
+        room = ObjectDBFactory(db_key="A Real Room")
+
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="test_service",
+            parameters={"target": "@room"},
+        )
+        fx = self.get_flow_execution(variable_mapping={"room": room})
+
+        step.execute(fx)
+
+        (received,) = mock_service.call_args.kwargs.values()
+        assert isinstance(received, BaseState)
+        assert received.obj == room
 
     def test_execute_emit_flow_event(self):
         """EMIT_FLOW_EVENT stores a FlowEvent shim and advances to the next step.
