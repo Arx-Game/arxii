@@ -57,15 +57,24 @@ could expose IC or private content and confirm it's contained:
 
 ### Anti-reinvention ledger
 
-Run the `verify-against-code` pass. For every new surface the design proposes, label
-it against the code (not docs/summaries) with file:line + caller evidence:
+Run the `verify-against-code` pass. For every new surface the design proposes, state its
+**role** first, then label it against the code (not docs/summaries) with file:line evidence:
 
-| Proposed surface | Verdict | Evidence (file:line + caller) |
-|---|---|---|
-| `<surface>` | BUILT & WIRED / BUILT, NOT WIRED / ABSENT | `<file:line>`; <caller or "no caller"> |
+| Proposed surface | Role (what it lets someone express) | Verdict | Evidence (file:line + caller) |
+|---|---|---|---|
+| `<surface>` | <what it lets someone express; who sets it, who reads it> | BUILT & WIRED / BUILT, NOT WIRED / ABSENT | `<file:line>`; <caller or "no caller"> |
 
 Prefer reuse-with-extension over build-new; drop any stub whose user goal is already
-wired elsewhere.
+wired elsewhere. **Caller-absence is never a finding on its own** — a row asserting a
+surface is unneeded states its role and what breaks without it.
+
+**Surfaces this change removes or strands** — required whenever the change deletes,
+deprecates, replaces or orphans anything. An empty table is fine; an absent one means
+the spec isn't finished.
+
+| Removed / stranded | Traced intent | What breaks if it goes |
+|---|---|---|
+| `<surface>` | <issue / header comment / ADR> | <concrete consequence, or "nothing — superseded by X"> |
 
 ### Design
 

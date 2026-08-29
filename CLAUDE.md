@@ -225,11 +225,22 @@ pass before the spec is finalized.** Sprawl from parallel
 components/dataclasses/enums/helpers is the most expensive failure mode in this
 codebase. The core rule: **existing code is the source of truth; docs (INDEX,
 MODEL_MAP, architecture/roadmap, prior agent summaries) are stale hints.** Before
-approving any proposed new surface, verify it against code, find a live caller, and
+approving any proposed new surface, verify it against code, state what it is *for*, and
 prefer reuse-with-extension over build-new — then present consolidations for
 ratification. The `verify-against-code` skill carries the labeling procedure
 (`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]`), the ledger format, and the
 recurring-traps list. **Use it.**
+
+**Caller-count is not evidence.** "Nothing calls it" is a syntactic observation standing
+in for a semantic question, and on an open consumption surface — a model field, a
+`TextChoices` member, an authored config row, a public service function — the real
+consumer is routinely a generic evaluator, a fixture, an admin form, or a staff member
+filling it in. So **"no production callers" is never a complete finding**: it is
+followed by *"and here's the gap where we'll wire it up"* or *"and here's what it's
+for,"* or it does not go in a ledger, a spec, or an issue. Any claim that a surface is
+dead, vestigial or safe to remove states its role and what breaks without it, and a
+caller-absence your own change creates is not evidence at all. Removals get the same
+ledger treatment as additions (see the skill's removal table and `intent-provenance`).
 
 ## Fold In, Don't File
 

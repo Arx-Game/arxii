@@ -54,10 +54,13 @@ You MUST work through these items in order:
 4. **Present design** — in sections scaled to their complexity, get user
    approval after each section.
 5. **Run the `verify-against-code` pass** — for every new surface the design
-   proposes, verify against code (not docs/summaries) and label it
-   `[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line + caller
-   evidence. This produces the **anti-reinvention ledger**, embedded as a
-   section of the spec. A spec without a code-verified ledger is not finalized.
+   proposes, state its **role** (what it lets someone express), then verify
+   against code (not docs/summaries) and label it `[BUILT & WIRED]` /
+   `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line evidence. If the design
+   **removes, deprecates or strands** anything, fill the removal table too —
+   what breaks if it goes. Caller-absence is never a finding on its own. This
+   produces the **anti-reinvention ledger**, embedded as a section of the spec.
+   A spec without a code-verified ledger is not finalized.
    (Skill at `tools/skills/verify-against-code/`.)
 6. **Write the spec into the issue body** — between the `<!-- spec:start -->` /
    `<!-- spec:end -->` markers, using the section layout in
