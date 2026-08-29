@@ -123,3 +123,109 @@ def seed_invite_trust_category() -> None:
             "is_active": True,
         },
     )
+
+
+class NPCPresetSeedSpec(NamedTuple):
+    """One starter statline preset's authored defaults (#3427).
+
+    ``trait_lines``/``skill_lines`` name their Trait/Skill by the name a
+    real content deploy already seeds (the 12 core stats, the Melee
+    Combat/Persuasion/Performance/Investigation skill catalog) — a name that
+    isn't authored/sampled yet is skipped, not invented, by
+    ``ensure_starter_npc_presets``.
+    """
+
+    name: str
+    description: str
+    #: (STAT trait name, display-scale value 1-10).
+    trait_lines: tuple[tuple[str, int], ...]
+    #: (SKILL name, true 1-100 value).
+    skill_lines: tuple[tuple[str, int], ...]
+
+
+_NPC_PRESET_SEED: tuple[NPCPresetSeedSpec, ...] = (
+    NPCPresetSeedSpec(
+        name="Guard",
+        description=(
+            "A trained watchman or house guard — solid in a fight, "
+            "unremarkable everywhere else. Staff rewrite freely."
+        ),
+        trait_lines=(("strength", 3), ("stamina", 3)),
+        skill_lines=(("Melee Combat", 25),),
+    ),
+    NPCPresetSeedSpec(
+        name="Courtier",
+        description=(
+            "A polished court fixture — persuasive and composed under scrutiny. "
+            "Staff rewrite freely."
+        ),
+        trait_lines=(("charm", 3), ("presence", 3)),
+        skill_lines=(("Persuasion", 25), ("Performance", 15)),
+    ),
+    NPCPresetSeedSpec(
+        name="Innkeeper",
+        description=(
+            "A venue-running fixture NPC — personable enough to run a room. Staff rewrite freely."
+        ),
+        trait_lines=(("charm", 2), ("presence", 2)),
+        skill_lines=(("Persuasion", 15),),
+    ),
+    NPCPresetSeedSpec(
+        name="Investigator",
+        description=(
+            "A sharp-eyed inquirer, good at noticing what others miss. Staff rewrite freely."
+        ),
+        trait_lines=(("wits", 3), ("perception", 3)),
+        skill_lines=(("Investigation", 25),),
+    ),
+)
+
+
+def ensure_starter_npc_presets() -> None:
+    """Look up (or, under ``SEED_SAMPLE_CONTENT``, invent) the starter preset catalog (#3427).
+
+    ``NPCStatlinePreset`` is content-repo-owned (#2698) — looked up via
+    ``authored_or_sample`` rather than invented unless sampling is on. Its
+    trait/skill line rows are not themselves in ``CONTENT_MODELS`` (mirrors
+    ``skills.Specialization`` under a content-gated parent ``Skill`` — see
+    ``combat_checks.ensure_weapon_specializations``), so once a preset exists
+    they're created unconditionally via ``get_or_create``, idempotent across
+    re-runs. A line whose named Trait/Skill isn't itself authored (or
+    sampled) yet is skipped rather than invented — a later re-seed picks it
+    up once that Trait/Skill exists.
+    """
+    from world.roster.models import (  # noqa: PLC0415
+        NPCPresetSkillLine,
+        NPCPresetTraitLine,
+        NPCStatlinePreset,
+    )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    for spec in _NPC_PRESET_SEED:
+        preset = authored_or_sample(
+            NPCStatlinePreset, {"description": spec.description}, name=spec.name
+        )
+        if preset is None:
+            continue
+
+        for trait_name, display_value in spec.trait_lines:
+            trait = Trait.objects.filter(name__iexact=trait_name, trait_type=TraitType.STAT).first()
+            if trait is None:
+                continue
+            NPCPresetTraitLine.objects.get_or_create(
+                preset=preset,
+                trait=trait,
+                defaults={"display_value": display_value},
+            )
+
+        for skill_name, value in spec.skill_lines:
+            skill = Skill.objects.filter(trait__name__iexact=skill_name).first()
+            if skill is None:
+                continue
+            NPCPresetSkillLine.objects.get_or_create(
+                preset=preset,
+                skill=skill,
+                defaults={"value": value},
+            )

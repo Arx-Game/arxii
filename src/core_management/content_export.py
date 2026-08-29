@@ -294,6 +294,11 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "realms.realm",
         # relationships
         "relationships.relationshiptrack",
+        # roster — #3427: the curated Story-NPC statline preset catalog (GMs
+        # select at mint time, never invent values). Trait/skill line rows
+        # (NPCPresetTraitLine/NPCPresetSkillLine) stay seeder-owned, mirroring
+        # traits.traitrankdescription's asymmetry above.
+        "roster.npcstatlinepreset",
         # skills
         "skills.skill",
         # societies

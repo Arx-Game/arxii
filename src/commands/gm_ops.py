@@ -23,10 +23,13 @@ inbox verb — thin over ``SubmitCatalogSuggestionAction``
 (``actions/definitions/gm_catalog.py``), landing in the same staff inbox
 ``GMApplication`` already routes through.
 
-``gm npc <name>[=<description>]`` (#3426) is the GM story-NPC on-ramp — thin
-over ``MintStoryNPCAction`` (``actions/definitions/gm_npcs.py``), which mints
-a Story NPC tenure-bound to the caller's own account so the persona picker
-and ``@ic`` work on it immediately.
+``gm npc <name>[=<description>] [preset=<name>]`` (#3426; ``preset=`` #3427)
+is the GM story-NPC on-ramp — thin over ``MintStoryNPCAction``
+(``actions/definitions/gm_npcs.py``), which mints a Story NPC tenure-bound to
+the caller's own account so the persona picker and ``@ic`` work on it
+immediately. ``preset=<name>`` names a curated ``NPCStatlinePreset`` by
+natural key, giving the NPC a real, rollable statline at mint time instead of
+a blank sheet.
 """
 
 from __future__ import annotations
@@ -67,7 +70,7 @@ _USAGE_SUMMON = (
     "Usage: gm summon <character>"
     " (consent-prompted -- the character must `accept summon`/`decline summon`)"
 )
-_USAGE_NPC = "Usage: gm npc <name>[=<description>] (requires Junior GM+)"
+_USAGE_NPC = "Usage: gm npc <name>[=<description>] [preset=<name>] (requires Junior GM+)"
 _SUBVERB_LIST = "list"
 _SUBVERB_ARM = "arm"
 _SUBVERB_DISARM = "disarm"
@@ -107,7 +110,7 @@ class CmdGMDashboard(ArxCommand):
       gm trap arm <id>
       gm trap disarm <id>
       gm summon <character>
-      gm npc <name>[=<description>]             (requires Junior GM+)
+      gm npc <name>[=<description>] [preset=<name>]  (requires Junior GM+)
     """
 
     key = "gm"
@@ -418,17 +421,36 @@ class CmdGMDashboard(ArxCommand):
             self.msg(result.message)
 
     def _handle_npc(self, rest: str) -> None:
-        """``gm npc <name>[=<description>]`` -- mint a Story NPC (#3426, Junior GM+)."""
+        """``gm npc <name>[=<description>] [preset=<name>]`` -- mint a Story NPC
+        (#3426, Junior GM+; ``preset=`` selects a curated statline, #3427).
+
+        ``preset=<name>`` is pulled off the tail before the name/description
+        split (which still runs on the first bare ``=``, unchanged from
+        #3426) so a preset can be combined with a description:
+        ``gm npc Bob=A grim watchman. preset=Guard``.
+        """
         from actions.definitions.gm_npcs import MintStoryNPCAction  # noqa: PLC0415
+
+        preset_name = ""
+        marker = " preset="
+        marker_index = rest.find(marker)
+        if marker_index != -1:
+            preset_name = rest[marker_index + len(marker) :].strip()
+            rest = rest[:marker_index]
 
         npc_name, _, description = rest.partition("=")
         npc_name = npc_name.strip()
         if not npc_name:
             raise CommandError(_USAGE_NPC)
 
-        result = MintStoryNPCAction().run(
-            actor=self.caller, name=npc_name, description=description.strip()
-        )
+        run_kwargs: dict[str, Any] = {
+            "name": npc_name,
+            "description": description.strip(),
+        }
+        if preset_name:
+            run_kwargs["preset"] = preset_name
+
+        result = MintStoryNPCAction().run(actor=self.caller, **run_kwargs)
         if result.message:
             self.msg(result.message)
 

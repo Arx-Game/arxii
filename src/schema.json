@@ -30623,6 +30623,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/Media'
           description: ''
+  /api/roster/npc-presets/:
+    get:
+      operationId: roster_npc_presets_list
+      description: |-
+        Read-only catalog listing feeding the Story-NPC mint dialog's preset picker.
+
+        Mirrors ``combat.views.ThreatPoolViewSet``'s shape (flat, unfiltered
+        catalog browse via ``SearchFilter`` on ``name``) but gated ``IsGMOrStaff``
+        rather than any-authenticated-user, since presets have exactly one
+        consumer today: the GM mint dialog (#3426's ``GMDashboardPage``) and its
+        telnet counterpart (``gm npc ... preset=<name>``).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNPCStatlinePresetList'
+          description: ''
+  /api/roster/npc-presets/{id}/:
+    get:
+      operationId: roster_npc_presets_retrieve
+      description: |-
+        Read-only catalog listing feeding the Story-NPC mint dialog's preset picker.
+
+        Mirrors ``combat.views.ThreatPoolViewSet``'s shape (flat, unfiltered
+        catalog browse via ``SearchFilter`` on ``name``) but gated ``IsGMOrStaff``
+        rather than any-authenticated-user, since presets have exactly one
+        consumer today: the GM mint dialog (#3426's ``GMDashboardPage``) and its
+        telnet counterpart (``gm npc ... preset=<name>``).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this NPC Statline Preset.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCStatlinePreset'
+          description: ''
   /api/roster/rosters/:
     get:
       operationId: roster_rosters_list
@@ -56094,6 +56158,36 @@ components:
         * `compromised` - Compromised
         * `lost` - Lost
         * `dismissed` - Dismissed
+    NPCPresetSkillLine:
+      type: object
+      description: One SKILL line, named by the skill rather than its id (#3427).
+      properties:
+        skill_name:
+          type: string
+          readOnly: true
+        value:
+          type: integer
+          readOnly: true
+          description: True 1-100 skill value -- no display-scale conversion, matching
+            CharacterSkillValue.
+      required:
+      - skill_name
+      - value
+    NPCPresetTraitLine:
+      type: object
+      description: One STAT line, named by the trait rather than its id (#3427).
+      properties:
+        trait_name:
+          type: string
+          readOnly: true
+        display_value:
+          type: integer
+          readOnly: true
+          description: Display-scale value (1-10), mirroring CG's stat-allocation
+            scale.
+      required:
+      - display_value
+      - trait_name
     NPCReactionLine:
       type: object
       description: Staff CRUD for banded NPC reaction lines (#2632).
@@ -56530,6 +56624,43 @@ components:
       required:
       - npc_persona
       - persona
+    NPCStatlinePreset:
+      type: object
+      description: |-
+        Read-only catalog listing for the Story-NPC mint dialog's preset picker.
+
+        NPCStatlinePreset is authored content (a curated archetype — e.g.
+        "Guard") — nothing sensitive in it, mirroring ``ThreatPoolSerializer``'s
+        reasoning, but gated ``IsGMOrStaff`` (not open to any authenticated user)
+        since the endpoint only has a GM-facing consumer.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Archetype name shown to GMs at mint time (e.g. 'Guard', 'Courtier').
+        description:
+          type: string
+          readOnly: true
+          description: Staff-facing summary of when to reach for this archetype.
+        trait_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCPresetTraitLine'
+          readOnly: true
+        skill_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCPresetSkillLine'
+          readOnly: true
+      required:
+      - description
+      - id
+      - name
+      - skill_lines
+      - trait_lines
     NameDegreeEnum:
       enum:
       - familiar
@@ -60532,6 +60663,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NPCStanding'
+    PaginatedNPCStatlinePresetList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCStatlinePreset'
     PaginatedNarrativeMessageDeliveryList:
       type: object
       required:
