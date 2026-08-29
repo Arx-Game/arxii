@@ -109,12 +109,16 @@ vi.mock('../../actionQueries', async () => {
 // so we override the roster hook explicitly to return an array.
 // ---------------------------------------------------------------------------
 
-vi.mock('@/roster/queries', () => ({
-  useMyRosterEntriesQuery: vi.fn(() => ({
+const mockUseMyRosterEntriesQuery = vi.fn(
+  (): { data: unknown[]; isLoading: boolean; isError: boolean } => ({
     data: [],
     isLoading: false,
     isError: false,
-  })),
+  })
+);
+
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: () => mockUseMyRosterEntriesQuery(),
   // The character-card drawer (#2156 Task 7) always mounts (persona is null
   // unless an avatar was clicked) and calls these — stub them out since this
   // test suite isn't exercising the drawer's own identity resolution.
@@ -263,10 +267,14 @@ vi.mock('@/checks/queries', () => ({
 // Mock redux selectors (game.active character + auth.account)
 // ---------------------------------------------------------------------------
 
+// Mutable so #3412 S4's speakingAs tests can drive `state.game.active`
+// without a real store — every other test relies on the null default.
+let mockGameActive: string | null = null;
+
 vi.mock('@/store/hooks', () => ({
   useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
     selector({
-      game: { active: null },
+      game: { active: mockGameActive },
       auth: {
         account: {
           id: 1,
@@ -352,8 +360,14 @@ vi.mock('@/crossover/components/LinkedStoriesPanel', () => ({
   LinkedStoriesPanel: () => <div data-testid="linked-stories-panel" />,
 }));
 
+// Captures the props each render passes so #3412 S4's speakingAs assertion
+// can inspect them without deep-rendering the real composer.
+const mockCommandInput = vi.fn();
 vi.mock('@/game/components/CommandInput', () => ({
-  CommandInput: () => <div data-testid="command-input">CommandInput</div>,
+  CommandInput: (props: unknown) => {
+    mockCommandInput(props);
+    return <div data-testid="command-input">CommandInput</div>;
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -382,6 +396,10 @@ describe('SceneDetailPage', () => {
       isError: false,
     });
     mockUseCombatEncounter.mockReturnValue({ data: undefined });
+    // Reset roster entries to default (empty) by default.
+    mockUseMyRosterEntriesQuery.mockReturnValue({ data: [], isLoading: false, isError: false });
+    // Reset the mocked game.active selector to default (no active character).
+    mockGameActive = null;
   });
 
   it('renders without crashing', () => {
@@ -530,5 +548,64 @@ describe('SceneDetailPage', () => {
     );
 
     expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // #3412 S4 — speakingAs threading. SceneDetailPage IS the combat composer
+  // now (#2197 folded the standalone CombatScenePage in here, encounter rail
+  // included) — this covers the "CombatScenePage passes speakingAs" item for
+  // that reason. Shallow: asserts the prop shape CommandInput receives,
+  // mirroring GamePage's own construction (activeEntry ? {name,
+  // thumbnailUrl} : undefined).
+  // -------------------------------------------------------------------------
+
+  it('threads speakingAs to CommandInput from the active roster entry (#3412 S4)', () => {
+    mockUseMyRosterEntriesQuery.mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'Aria',
+          character_id: 42,
+          profile_picture_url: 'https://example.com/aria.png',
+          primary_persona_id: 7,
+          active_persona_id: 7,
+          unread_narrative_count: 0,
+          lifecycle_state: 'ALIVE',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    mockGameActive = 'Aria';
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(mockCommandInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        speakingAs: { name: 'Aria', thumbnailUrl: 'https://example.com/aria.png' },
+      })
+    );
+  });
+
+  it('omits speakingAs from CommandInput when there is no active roster entry (#3412 S4)', () => {
+    mockGameActive = 'Aria';
+    // Deliberately leave mockUseMyRosterEntriesQuery at its default empty
+    // array — activeEntry resolves to null even though a session is active.
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(mockCommandInput).toHaveBeenCalledWith(
+      expect.objectContaining({ speakingAs: undefined })
+    );
   });
 });

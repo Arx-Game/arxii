@@ -252,6 +252,7 @@ treat those names as hints to confirm, not gospel.
 - [0244 - Flow step parameter schemas are hand-declared catalog data, not introspected or DB rows](0244-flow-step-parameter-schemas-are-hand-declared-catalog-data.md) (#3417; follows ADR-0242)
 - [0245 - The Commonplace Book is the logged-in container idiom](0245-the-commonplace-book-is-the-logged-in-container-idiom.md) (#3412 slice 2; extends ADR-0227)
 - [0246 - The offscreen-act gate extends the dead-gate choke point](0246-the-offscreen-act-gate-extends-the-dead-gate-choke-point.md) (#3412 slice 3; extends the #2287 dead gate; related ADR-0245)
+- [0247 - State-3 mode coherence: live-connection redirect and sheet-in-new-tab](0247-state-3-mode-coherence-live-connection-redirect-and-sheet-in-new-tab.md) (#3412 slice 4; extends ADR-0241; related ADR-0246)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
