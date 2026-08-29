@@ -39,6 +39,9 @@ class OfferKind(models.TextChoices):
     # a sitting; the write-up completes via RecordedProfile (the diegetic
     # desc-update + permanent archive; see run_profile_recording_offer).
     PROFILE_RECORDING = "profile_recording", "Profile Recording"
+    # #3428 — an NPC role reveals a pre-authored clue on resolve (optionally
+    # gated by an authored check); see world.npc_services.effects.run_clue_reveal_offer.
+    CLUE_REVEAL = "clue_reveal", "Clue Reveal"
     # Future kinds: marriage/attunement.
 
 

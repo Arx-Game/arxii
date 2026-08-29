@@ -21,9 +21,11 @@ is imported here. If a sub-package is ever missing from this file, its
 admin registrations silently vanish — add the missing import here rather
 than suppressing the test.
 
-Sub-packages with no ``admin`` module at all (as of 2026-08-04:
-``missions``, ``npc_services``, ``predicates``, ``staff_inbox``,
-``tidings``) are intentionally absent.
+Sub-packages with no ``admin`` module at all (as of 2026-08-29:
+``missions``, ``predicates``, ``staff_inbox``, ``tidings``) are intentionally
+absent. ``npc_services`` gained one in #3428 (``ClueRevealOfferDetails`` only
+— see that module's docstring for why the rest of ``NPCServiceOffer``'s kinds
+still have none).
 """
 
 import world.achievements.admin
@@ -69,6 +71,7 @@ import world.magic.admin
 import world.mechanics.admin
 import world.military.admin
 import world.narrative.admin
+import world.npc_services.admin
 import world.player_submissions.admin
 import world.progression.admin
 import world.projects.admin

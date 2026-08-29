@@ -2,8 +2,9 @@
  * NPC Role editor (#728 — Mission Studio).
  *
  * Drill-down editor for one NPCRole: its descriptive/rapport fields plus the
- * service offers it holds (mission + permit kinds). Mission offers expose the
- * MissionOfferDetails panel (template, weight, cooldown, requirements rule).
+ * service offers it holds (mission + permit + clue_reveal kinds). Mission
+ * offers expose the MissionOfferDetails panel (template, weight, cooldown,
+ * requirements rule); clue_reveal offers expose a clue-slug field (#3428).
  * Replaces the deleted GiverEditorPage against the unified npc-services surface.
  */
 import { Loader2 } from 'lucide-react';
@@ -37,6 +38,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { ApiValidationError, flattenErrorMessage, listAreasFlat } from '../api';
 import {
+  useClueDetailsForRole,
+  useCreateClueDetails,
   useCreateMissionDetails,
   useCreateOffer,
   useCreatePermitDetails,
@@ -44,6 +47,7 @@ import {
   useDeleteRole,
   useMissionDetailsForRole,
   useOffersForRole,
+  usePatchClueDetails,
   usePatchMissionDetails,
   usePatchOffer,
   usePatchPermitDetails,
@@ -51,7 +55,12 @@ import {
   usePermitDetailsForRole,
   useRole,
 } from '../queries';
-import type { MissionOfferDetails, NPCServiceOffer, PermitOfferDetails } from '../types';
+import type {
+  ClueRevealOfferDetails,
+  MissionOfferDetails,
+  NPCServiceOffer,
+  PermitOfferDetails,
+} from '../types';
 
 const EMPTY_RULE: PredicateNode = {};
 
@@ -184,6 +193,7 @@ function OffersSection({ roleId }: { roleId: number }) {
   const { data: offersData, isLoading } = useOffersForRole(roleId);
   const { data: detailsData } = useMissionDetailsForRole(roleId);
   const { data: permitDetailsData } = usePermitDetailsForRole(roleId);
+  const { data: clueDetailsData } = useClueDetailsForRole(roleId);
   const offers = offersData?.results ?? [];
   const detailsByOffer = new Map<number, MissionOfferDetails>();
   for (const d of detailsData?.results ?? []) {
@@ -192,6 +202,10 @@ function OffersSection({ roleId }: { roleId: number }) {
   const permitDetailsByOffer = new Map<number, PermitOfferDetails>();
   for (const d of permitDetailsData?.results ?? []) {
     if (typeof d.offer === 'number') permitDetailsByOffer.set(d.offer, d);
+  }
+  const clueDetailsByOffer = new Map<number, ClueRevealOfferDetails>();
+  for (const d of clueDetailsData?.results ?? []) {
+    if (typeof d.offer === 'number') clueDetailsByOffer.set(d.offer, d);
   }
 
   return (
@@ -214,6 +228,7 @@ function OffersSection({ roleId }: { roleId: number }) {
               offer={offer}
               details={detailsByOffer.get(offer.id) ?? null}
               permitDetails={permitDetailsByOffer.get(offer.id) ?? null}
+              clueDetails={clueDetailsByOffer.get(offer.id) ?? null}
             />
           ))
         )}
@@ -228,11 +243,13 @@ function OfferCard({
   offer,
   details,
   permitDetails,
+  clueDetails,
 }: {
   roleId: number;
   offer: NPCServiceOffer;
   details: MissionOfferDetails | null;
   permitDetails: PermitOfferDetails | null;
+  clueDetails: ClueRevealOfferDetails | null;
 }) {
   const patchOffer = usePatchOffer(roleId);
   const patchDetails = usePatchMissionDetails(roleId);
@@ -432,6 +449,10 @@ function OfferCard({
         <PermitDetailsPanel roleId={roleId} offerId={offer.id} details={permitDetails} />
       )}
 
+      {offer.kind === 'clue_reveal' && (
+        <ClueDetailsPanel roleId={roleId} offerId={offer.id} details={clueDetails} />
+      )}
+
       <PredicateBuilder label="Eligibility rule" value={rule} onChange={setRule} />
       {ruleErrors.length > 0 && <p className="text-sm text-destructive">{ruleErrors[0]}</p>}
 
@@ -565,22 +586,79 @@ function PermitDetailsPanel({
   );
 }
 
+function ClueDetailsPanel({
+  roleId,
+  offerId,
+  details,
+}: Readonly<{
+  roleId: number;
+  offerId: number;
+  details: ClueRevealOfferDetails | null;
+}>) {
+  const createDetails = useCreateClueDetails(roleId);
+  const patchDetails = usePatchClueDetails(roleId);
+
+  const [clueSlug, setClueSlug] = useState(details?.clue ?? '');
+
+  const save = () => {
+    const body = { clue: clueSlug.trim() };
+    if (details) {
+      patchDetails.mutate({ id: details.id, body });
+    } else {
+      createDetails.mutate({ offer: offerId, ...body });
+    }
+  };
+
+  const pending = createDetails.isPending || patchDetails.isPending;
+  const error = createDetails.error ?? patchDetails.error;
+  const saveLabel = details ? 'Save clue details' : 'Create clue details';
+
+  return (
+    <div className="space-y-3 rounded-md border border-dashed p-3">
+      <p className="text-xs font-medium text-muted-foreground">Clue reveal details</p>
+      <Field label="Clue slug">
+        <Input
+          value={clueSlug}
+          onChange={(e) => setClueSlug(e.target.value)}
+          placeholder="torn-letter"
+        />
+      </Field>
+      {error != null && (
+        <p className="text-sm text-destructive">
+          {errText(error, 'Could not save the clue-reveal details.')}
+        </p>
+      )}
+      <Button size="sm" variant="secondary" onClick={save} disabled={pending || !clueSlug.trim()}>
+        {pending ? 'Saving…' : saveLabel}
+      </Button>
+    </div>
+  );
+}
+
+type NewOfferKind = 'mission' | 'permit' | 'clue_reveal';
+
 function AddOfferForm({ roleId }: { roleId: number }) {
   const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<'mission' | 'permit'>('mission');
+  const [kind, setKind] = useState<NewOfferKind>('mission');
   const [label, setLabel] = useState('');
   const [templateId, setTemplateId] = useState<string>('');
+  const [clueSlug, setClueSlug] = useState('');
   const createOffer = useCreateOffer(roleId);
   const createDetails = useCreateMissionDetails(roleId);
+  const createClueDetails = useCreateClueDetails(roleId);
   const deleteOffer = useDeleteOffer(roleId);
   // page_size: the paginator max (2026-07 audit) — this picker read only page 1
   // (25 rows), so the 26th authored template couldn't be assigned to an offer.
   const { data: templatesData } = useMissionTemplates({ page_size: 100 });
   const templates = templatesData?.results ?? [];
 
+  const canSubmitKind =
+    (kind === 'mission' && templateId.trim() !== '') ||
+    (kind === 'clue_reveal' && clueSlug.trim() !== '') ||
+    kind === 'permit';
+
   const submit = () => {
-    if (!label.trim()) return;
-    if (kind === 'mission' && !templateId) return;
+    if (!label.trim() || !canSubmitKind) return;
     createOffer.mutate(
       { role: roleId, kind, label: label.trim() },
       {
@@ -597,6 +675,21 @@ function AddOfferForm({ roleId }: { roleId: number }) {
                 // Compensating rollback: the details create failed (usually the
                 // (role, mission_template) uniqueness), so drop the now-orphaned
                 // offer rather than leave a mission offer with no template.
+                onError: () => deleteOffer.mutate(offer.id),
+              }
+            );
+          } else if (kind === 'clue_reveal') {
+            createClueDetails.mutate(
+              { offer: offer.id, clue: clueSlug.trim() },
+              {
+                onSuccess: () => {
+                  setOpen(false);
+                  setLabel('');
+                  setClueSlug('');
+                },
+                // Compensating rollback, mirroring the mission branch: an unresolvable
+                // clue slug fails the details create, so drop the now-orphaned offer
+                // rather than leave a clue_reveal offer with nothing to reveal.
                 onError: () => deleteOffer.mutate(offer.id),
               }
             );
@@ -618,16 +711,17 @@ function AddOfferForm({ roleId }: { roleId: number }) {
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-dashed p-3">
+    <div className="space-y-3 rounded-md border border-dashed p-3" data-testid="add-offer-form">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Kind">
-          <Select value={kind} onValueChange={(v) => setKind(v as 'mission' | 'permit')}>
+          <Select value={kind} onValueChange={(v) => setKind(v as NewOfferKind)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="mission">Mission</SelectItem>
               <SelectItem value="permit">Permit</SelectItem>
+              <SelectItem value="clue_reveal">Clue Reveal</SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -653,9 +747,22 @@ function AddOfferForm({ roleId }: { roleId: number }) {
         </Field>
       )}
 
-      {(createOffer.isError || createDetails.isError) && (
+      {kind === 'clue_reveal' && (
+        <Field label="Clue slug">
+          <Input
+            value={clueSlug}
+            onChange={(e) => setClueSlug(e.target.value)}
+            placeholder="torn-letter"
+          />
+        </Field>
+      )}
+
+      {(createOffer.isError || createDetails.isError || createClueDetails.isError) && (
         <p className="text-sm text-destructive">
-          {errText(createOffer.error ?? createDetails.error, 'Could not add the offer.')}
+          {errText(
+            createOffer.error ?? createDetails.error ?? createClueDetails.error,
+            'Could not add the offer.'
+          )}
         </p>
       )}
       <div className="flex gap-2">
@@ -664,12 +771,15 @@ function AddOfferForm({ roleId }: { roleId: number }) {
           onClick={submit}
           disabled={
             !label.trim() ||
-            (kind === 'mission' && !templateId) ||
+            !canSubmitKind ||
             createOffer.isPending ||
-            createDetails.isPending
+            createDetails.isPending ||
+            createClueDetails.isPending
           }
         >
-          {createOffer.isPending || createDetails.isPending ? 'Adding…' : 'Add'}
+          {createOffer.isPending || createDetails.isPending || createClueDetails.isPending
+            ? 'Adding…'
+            : 'Add'}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cancel

@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
 import {
+  createClueDetails,
   createMissionDetails,
   createOffer,
   createPermitDetails,
@@ -11,16 +12,20 @@ import {
   deleteOffer,
   deleteRole,
   getRole,
+  listClueDetails,
   listMissionDetails,
   listOffers,
   listPermitDetails,
   listRoles,
+  patchClueDetails,
   patchMissionDetails,
   patchOffer,
   patchPermitDetails,
   patchRole,
 } from './api';
 import type {
+  ClueRevealOfferDetails,
+  ClueRevealOfferDetailsRequest,
   MissionOfferDetailsRequest,
   NPCRoleFilters,
   NPCRoleRequest,
@@ -46,6 +51,8 @@ export const npcServiceKeys = {
   permitDetails: () => [...npcServiceKeys.all, 'permit-details'] as const,
   permitDetailList: (roleId: number) =>
     [...npcServiceKeys.permitDetails(), 'list', roleId] as const,
+  clueDetails: () => [...npcServiceKeys.all, 'clue-details'] as const,
+  clueDetailList: (roleId: number) => [...npcServiceKeys.clueDetails(), 'list', roleId] as const,
 };
 
 export function useRoles(filters: NPCRoleFilters = {}): UseQueryResult<PaginatedResponse<NPCRole>> {
@@ -116,6 +123,7 @@ function invalidateRoleOffers(qc: ReturnType<typeof useQueryClient>, roleId: num
   qc.invalidateQueries({ queryKey: npcServiceKeys.offerList(roleId) });
   qc.invalidateQueries({ queryKey: npcServiceKeys.missionDetailList(roleId) });
   qc.invalidateQueries({ queryKey: npcServiceKeys.permitDetailList(roleId) });
+  qc.invalidateQueries({ queryKey: npcServiceKeys.clueDetailList(roleId) });
 }
 
 export function usePermitDetailsForRole(
@@ -183,6 +191,33 @@ export function usePatchMissionDetails(roleId: number) {
   return useMutation({
     mutationFn: ({ id, body }: { id: number; body: Partial<MissionOfferDetailsRequest> }) =>
       patchMissionDetails(id, body),
+    onSuccess: () => invalidateRoleOffers(qc, roleId),
+  });
+}
+
+export function useClueDetailsForRole(
+  roleId: number | null
+): UseQueryResult<PaginatedResponse<ClueRevealOfferDetails>> {
+  return useQuery({
+    queryKey: npcServiceKeys.clueDetailList(roleId ?? -1),
+    queryFn: () => listClueDetails({ role: roleId as number, page_size: 200 }),
+    enabled: roleId !== null,
+  });
+}
+
+export function useCreateClueDetails(roleId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ClueRevealOfferDetailsRequest) => createClueDetails(body),
+    onSuccess: () => invalidateRoleOffers(qc, roleId),
+  });
+}
+
+export function usePatchClueDetails(roleId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<ClueRevealOfferDetailsRequest> }) =>
+      patchClueDetails(id, body),
     onSuccess: () => invalidateRoleOffers(qc, roleId),
   });
 }

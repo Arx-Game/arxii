@@ -8,6 +8,7 @@ from factory.django import DjangoModelFactory
 
 from world.npc_services.constants import DrawMode, NpcRegardEventReason, OfferKind, RegardTargetType
 from world.npc_services.models import (
+    ClueRevealOfferDetails,
     DistinctionRegardSeed,
     Functionary,
     MissionOfferDetails,
@@ -211,6 +212,14 @@ class ProfileRecordingOfferDetailsFactory(DjangoModelFactory):
 
     offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.PROFILE_RECORDING)
     price_coppers = 500
+
+
+class ClueRevealOfferDetailsFactory(DjangoModelFactory):
+    class Meta:
+        model = ClueRevealOfferDetails
+
+    offer = factory.SubFactory(NPCServiceOfferFactory, kind=OfferKind.CLUE_REVEAL)
+    clue = factory.SubFactory("world.clues.factories.ClueFactory")
 
 
 class StaffingProfileFactory(DjangoModelFactory):

@@ -2,7 +2,9 @@
 
 from rest_framework import serializers
 
+from world.clues.models import Clue
 from world.npc_services.models import (
+    ClueRevealOfferDetails,
     MissionOfferDetails,
     NPCReactionLine,
     NPCRole,
@@ -104,6 +106,26 @@ class PermitOfferDetailsSerializer(serializers.ModelSerializer):
             "default_max_target_size",
             "permit_cost_currency",
         ]
+        read_only_fields = ["id"]
+
+
+class ClueRevealOfferDetailsSerializer(serializers.ModelSerializer):
+    """Staff CRUD for clue-reveal-kind offer details (#3428).
+
+    ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+    "browse all clues" listing endpoint to build a picker from (unlike
+    ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+    other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+    `staff_place_clue_trigger` actions) already takes a clue by slug — this
+    stays consistent rather than inventing a clue-id lookup round-trip. Clue
+    rows themselves are minted via #3432's `author_clue`, not created here.
+    """
+
+    clue = serializers.SlugRelatedField(slug_field="slug", queryset=Clue.objects.all())
+
+    class Meta:
+        model = ClueRevealOfferDetails
+        fields = ["id", "offer", "clue"]
         read_only_fields = ["id"]
 
 

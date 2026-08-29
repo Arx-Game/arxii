@@ -218,7 +218,7 @@ def _build_eligibility_cache(
     )
 
 
-def _is_offer_eligible(  # noqa: PLR0911, PLR0913
+def _is_offer_eligible(  # noqa: PLR0913
     offer: NPCServiceOffer,
     *,
     persona: Persona,
@@ -244,7 +244,9 @@ def _is_offer_eligible(  # noqa: PLR0911, PLR0913
        ``visibility``/``availability_rule`` via ``template_visible_to``,
        ``level_band``), AND-composed with ``details.requirements_override``
        (see ``_mission_gates_pass``).
-    6. Offer's own ``eligibility_rule`` predicate.
+    6. For CLUE_REVEAL offers only: the offer's clue must not already be held by
+       the persona's roster entry (see ``_clue_reveal_not_yet_held``, #3428).
+    7. Offer's own ``eligibility_rule`` predicate.
 
     POOL draw_mode is now a first-class case: eligibility itself is
     draw-mode-agnostic; ``available_offers`` applies the POOL sampling
@@ -271,20 +273,29 @@ def _is_offer_eligible(  # noqa: PLR0911, PLR0913
         ).exists()
     ):
         return False
-    if offer.kind == OfferKind.MISSION.value and not _mission_gates_pass(
-        offer=offer, persona=persona, character=character, cache=cache
-    ):
-        return False
-    if offer.kind == OfferKind.ASSET_TASK_INTEL.value and not _intel_pool_has_unheld_clues(
-        offer=offer, persona=persona
-    ):
-        return False
-    if offer.kind == OfferKind.ASSET_TASK_COLLECT.value and not _asset_has_collectable_income(
-        persona=persona
-    ):
+    if not _kind_gate_passes(offer, persona=persona, character=character, cache=cache):
         return False
     ctx = CharacterPredicateContext(character, presented_persona=persona)
     return evaluate(offer.eligibility_rule or {}, ctx)
+
+
+def _kind_gate_passes(
+    offer: NPCServiceOffer,
+    *,
+    persona: Persona,
+    character: Character,
+    cache: _EligibilityCache,
+) -> bool:
+    """The kind-specific eligibility gate (layer 5/6 of ``_is_offer_eligible``)."""
+    if offer.kind == OfferKind.MISSION.value:
+        return _mission_gates_pass(offer=offer, persona=persona, character=character, cache=cache)
+    if offer.kind == OfferKind.ASSET_TASK_INTEL.value:
+        return _intel_pool_has_unheld_clues(offer=offer, persona=persona)
+    if offer.kind == OfferKind.ASSET_TASK_COLLECT.value:
+        return _asset_has_collectable_income(persona=persona)
+    if offer.kind == OfferKind.CLUE_REVEAL.value:
+        return _clue_reveal_not_yet_held(offer=offer, persona=persona)
+    return True
 
 
 def _intel_pool_has_unheld_clues(*, offer: NPCServiceOffer, persona: Persona) -> bool:
@@ -311,6 +322,31 @@ def _intel_pool_has_unheld_clues(*, offer: NPCServiceOffer, persona: Persona) ->
     )
     pool_clue_ids = set(details.clue_pool.entries.values_list("clue_id", flat=True))
     return bool(pool_clue_ids - held_clue_ids)
+
+
+def _clue_reveal_not_yet_held(*, offer: NPCServiceOffer, persona: Persona) -> bool:
+    """Check whether the CLUE_REVEAL offer's clue is still unheld by the persona (#3428).
+
+    Returns False (offer ineligible) once the persona's roster entry already holds
+    the offer's clue — the known-target rule (spec Decision 4): "you already know
+    this" is surfaced by the journal, not re-offered by the NPC. Also returns False
+    on authoring errors (missing details row) or a persona with no roster tenure,
+    failing closed consistent with ``_intel_pool_has_unheld_clues``.
+    """
+    from world.clues.models import CharacterClue  # noqa: PLC0415
+    from world.npc_services.models import ClueRevealOfferDetails  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        details = offer.clue_reveal_offer_details
+    except ClueRevealOfferDetails.DoesNotExist:
+        return False
+    roster_entry = RosterEntry.objects.filter(character_sheet=persona.character_sheet).first()
+    if roster_entry is None:
+        return False
+    return not CharacterClue.objects.filter(
+        roster_entry=roster_entry, clue_id=details.clue_id
+    ).exists()
 
 
 def _asset_has_collectable_income(*, persona: Persona) -> bool:

@@ -1,1 +1,1 @@
-0190_remove_miraclecapabilitygrant_capability_and_more
+0191_alter_npcserviceoffer_kind_cluerevealofferdetails

@@ -15406,6 +15406,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/npc-services/clue-details/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    get: operations['npc_services_clue_details_list'];
+    put?: never;
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    post: operations['npc_services_clue_details_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/clue-details/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    get: operations['npc_services_clue_details_retrieve'];
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    put: operations['npc_services_clue_details_update'];
+    post?: never;
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    delete: operations['npc_services_clue_details_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428). */
+    patch: operations['npc_services_clue_details_partial_update'];
+    trace?: never;
+  };
   '/api/npc-services/cooldowns/': {
     parameters: {
       query?: never;
@@ -25905,6 +25943,41 @@ export interface components {
       light_level: number;
       paused: boolean;
     };
+    /**
+     * @description Staff CRUD for clue-reveal-kind offer details (#3428).
+     *
+     *     ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+     *     "browse all clues" listing endpoint to build a picker from (unlike
+     *     ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+     *     other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+     *     `staff_place_clue_trigger` actions) already takes a clue by slug — this
+     *     stays consistent rather than inventing a clue-id lookup round-trip. Clue
+     *     rows themselves are minted via #3432's `author_clue`, not created here.
+     */
+    ClueRevealOfferDetails: {
+      readonly id: number;
+      /** @description The NPCServiceOffer row this details model decorates. */
+      offer: number;
+      /** @description Stable content-pipeline identifier (#2451). NULL for ad hoc/test clues. */
+      clue: string | null;
+    };
+    /**
+     * @description Staff CRUD for clue-reveal-kind offer details (#3428).
+     *
+     *     ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+     *     "browse all clues" listing endpoint to build a picker from (unlike
+     *     ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+     *     other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+     *     `staff_place_clue_trigger` actions) already takes a clue by slug — this
+     *     stays consistent rather than inventing a clue-id lookup round-trip. Clue
+     *     rows themselves are minted via #3432's `author_clue`, not created here.
+     */
+    ClueRevealOfferDetailsRequest: {
+      /** @description The NPCServiceOffer row this details model decorates. */
+      offer: number;
+      /** @description Stable content-pipeline identifier (#2451). NULL for ad hoc/test clues. */
+      clue: string | null;
+    };
     CodexCategory: {
       readonly id: number;
       /** @description Name of this category. */
@@ -32127,6 +32200,7 @@ export interface components {
        *     * `settle_obligation` - Settle Obligation
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
+       *     * `clue_reveal` - Clue Reveal
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -32174,6 +32248,7 @@ export interface components {
      *     * `settle_obligation` - Settle Obligation
      *     * `styling` - Styling
      *     * `profile_recording` - Profile Recording
+     *     * `clue_reveal` - Clue Reveal
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -32194,7 +32269,8 @@ export interface components {
       | 'train'
       | 'settle_obligation'
       | 'styling'
-      | 'profile_recording';
+      | 'profile_recording'
+      | 'clue_reveal';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -32218,6 +32294,7 @@ export interface components {
        *     * `settle_obligation` - Settle Obligation
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
+       *     * `clue_reveal` - Clue Reveal
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -33568,6 +33645,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CheckType'][];
+    };
+    PaginatedClueRevealOfferDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ClueRevealOfferDetails'][];
     };
     PaginatedCompanionList: {
       /** @example 123 */
@@ -36562,6 +36654,23 @@ export interface components {
       review_notes?: string;
     };
     /**
+     * @description Staff CRUD for clue-reveal-kind offer details (#3428).
+     *
+     *     ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+     *     "browse all clues" listing endpoint to build a picker from (unlike
+     *     ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+     *     other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+     *     `staff_place_clue_trigger` actions) already takes a clue by slug — this
+     *     stays consistent rather than inventing a clue-id lookup round-trip. Clue
+     *     rows themselves are minted via #3432's `author_clue`, not created here.
+     */
+    PatchedClueRevealOfferDetailsRequest: {
+      /** @description The NPCServiceOffer row this details model decorates. */
+      offer?: number;
+      /** @description Stable content-pipeline identifier (#2451). NULL for ad hoc/test clues. */
+      clue?: string | null;
+    };
+    /**
      * @description Serializer for CovenantRank (the per-covenant authority ladder).
      *
      *     Read: exposes all rank fields.
@@ -37080,6 +37189,7 @@ export interface components {
        *     * `settle_obligation` - Settle Obligation
        *     * `styling` - Styling
        *     * `profile_recording` - Profile Recording
+       *     * `clue_reveal` - Clue Reveal
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -65256,6 +65366,151 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  npc_services_clue_details_list: {
+    parameters: {
+      query?: {
+        clue?: number;
+        offer?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        role?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedClueRevealOfferDetailsList'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClueRevealOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClueRevealOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
+      };
+    };
+  };
+  npc_services_clue_details_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_clue_details_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Clue Reveal Offer Details. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedClueRevealOfferDetailsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueRevealOfferDetails'];
+        };
       };
     };
   };

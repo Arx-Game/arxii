@@ -24208,6 +24208,164 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/npc-services/clue-details/:
+    get:
+      operationId: npc_services_clue_details_list
+      description: 'Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer,
+        #3428).'
+      parameters:
+      - in: query
+        name: clue
+        schema:
+          type: number
+      - in: query
+        name: offer
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: role
+        schema:
+          type: number
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedClueRevealOfferDetailsList'
+          description: ''
+    post:
+      operationId: npc_services_clue_details_create
+      description: 'Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer,
+        #3428).'
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClueRevealOfferDetailsRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClueRevealOfferDetails'
+          description: ''
+  /api/npc-services/clue-details/{id}/:
+    get:
+      operationId: npc_services_clue_details_retrieve
+      description: 'Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer,
+        #3428).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Clue Reveal Offer Details.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClueRevealOfferDetails'
+          description: ''
+    put:
+      operationId: npc_services_clue_details_update
+      description: 'Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer,
+        #3428).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Clue Reveal Offer Details.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClueRevealOfferDetailsRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClueRevealOfferDetails'
+          description: ''
+    patch:
+      operationId: npc_services_clue_details_partial_update
+      description: 'Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer,
+        #3428).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Clue Reveal Offer Details.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedClueRevealOfferDetailsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClueRevealOfferDetails'
+          description: ''
+    delete:
+      operationId: npc_services_clue_details_destroy
+      description: 'Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer,
+        #3428).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Clue Reveal Offer Details.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/npc-services/cooldowns/:
     get:
       operationId: npc_services_cooldowns_list
@@ -43613,6 +43771,58 @@ components:
       - phase
       - season
       - year
+    ClueRevealOfferDetails:
+      type: object
+      description: |-
+        Staff CRUD for clue-reveal-kind offer details (#3428).
+
+        ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+        "browse all clues" listing endpoint to build a picker from (unlike
+        ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+        other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+        `staff_place_clue_trigger` actions) already takes a clue by slug — this
+        stays consistent rather than inventing a clue-id lookup round-trip. Clue
+        rows themselves are minted via #3432's `author_clue`, not created here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        offer:
+          type: integer
+          description: The NPCServiceOffer row this details model decorates.
+        clue:
+          type: string
+          nullable: true
+          description: Stable content-pipeline identifier (#2451). NULL for ad hoc/test
+            clues.
+      required:
+      - clue
+      - id
+      - offer
+    ClueRevealOfferDetailsRequest:
+      type: object
+      description: |-
+        Staff CRUD for clue-reveal-kind offer details (#3428).
+
+        ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+        "browse all clues" listing endpoint to build a picker from (unlike
+        ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+        other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+        `staff_place_clue_trigger` actions) already takes a clue by slug — this
+        stays consistent rather than inventing a clue-id lookup round-trip. Clue
+        rows themselves are minted via #3432's `author_clue`, not created here.
+      properties:
+        offer:
+          type: integer
+          description: The NPCServiceOffer row this details model decorates.
+        clue:
+          type: string
+          nullable: true
+          description: Stable content-pipeline identifier (#2451). NULL for ad hoc/test
+            clues.
+      required:
+      - clue
+      - offer
     CodexCategory:
       type: object
       properties:
@@ -56379,6 +56589,7 @@ components:
             * `settle_obligation` - Settle Obligation
             * `styling` - Styling
             * `profile_recording` - Profile Recording
+            * `clue_reveal` - Clue Reveal
         label:
           type: string
           description: UI display text for the menu option.
@@ -56459,6 +56670,7 @@ components:
       - settle_obligation
       - styling
       - profile_recording
+      - clue_reveal
       type: string
       description: |-
         * `permit` - Permit
@@ -56479,6 +56691,7 @@ components:
         * `settle_obligation` - Settle Obligation
         * `styling` - Styling
         * `profile_recording` - Profile Recording
+        * `clue_reveal` - Clue Reveal
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -56508,6 +56721,7 @@ components:
             * `settle_obligation` - Settle Obligation
             * `styling` - Styling
             * `profile_recording` - Profile Recording
+            * `clue_reveal` - Clue Reveal
         label:
           type: string
           minLength: 1
@@ -59049,6 +59263,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CheckType'
+    PaginatedClueRevealOfferDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClueRevealOfferDetails'
     PaginatedCompanionList:
       type: object
       required:
@@ -63782,6 +64019,27 @@ components:
           $ref: '#/components/schemas/StatusD66Enum'
         review_notes:
           type: string
+    PatchedClueRevealOfferDetailsRequest:
+      type: object
+      description: |-
+        Staff CRUD for clue-reveal-kind offer details (#3428).
+
+        ``clue`` is written/read by **slug**, not PK — there is no staff-facing
+        "browse all clues" listing endpoint to build a picker from (unlike
+        ``building_kind``'s existing `/api/buildings/building-kinds/`), and every
+        other staff clue-placement surface (`PlaceClueDialog`'s `staff_place_clue`/
+        `staff_place_clue_trigger` actions) already takes a clue by slug — this
+        stays consistent rather than inventing a clue-id lookup round-trip. Clue
+        rows themselves are minted via #3432's `author_clue`, not created here.
+      properties:
+        offer:
+          type: integer
+          description: The NPCServiceOffer row this details model decorates.
+        clue:
+          type: string
+          nullable: true
+          description: Stable content-pipeline identifier (#2451). NULL for ad hoc/test
+            clues.
     PatchedCovenantRankRequest:
       type: object
       description: |-
@@ -64682,6 +64940,7 @@ components:
             * `settle_obligation` - Settle Obligation
             * `styling` - Styling
             * `profile_recording` - Profile Recording
+            * `clue_reveal` - Clue Reveal
         label:
           type: string
           minLength: 1

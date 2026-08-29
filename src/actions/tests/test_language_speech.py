@@ -7,6 +7,7 @@ from django.test import TestCase
 from actions.definitions.communication import MutterAction, SayAction, WhisperAction
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 from world.species.factories import LanguageFactory
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
@@ -272,9 +273,14 @@ class MutterActionLanguageTests(LanguageSpeechTestCase):
         )
 
         assert result.success is True
-        full = Interaction.objects.get(content="the plan is set")
+        # record_mutter_interaction() writes the full text first, then the
+        # fragment. Identify them by that order, never by content: the
+        # fragment is a SystemRandom word-survival garble that keeps every
+        # word of a four-word line about 1 time in 81, and an equal-content
+        # lookup then matches both rows.
+        full, fragment = Interaction.objects.filter(mode=InteractionMode.MUTTER).order_by("pk")
+        assert full.content == "the plan is set"
         assert full.language_id == self.language.pk
-        fragment = Interaction.objects.exclude(pk=full.pk).latest("timestamp")
         assert fragment.language_id is None
 
     def test_mutter_speaker_without_the_language_fails(self) -> None:

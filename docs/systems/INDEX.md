@@ -1478,8 +1478,8 @@ Lore storage and character knowledge tracking.
 ### Investigation & Discovery
 The mystery core loop: a clue points at something worth finding (codex entry, mission, a
 held captive to rescue, a character secret, or a masked identity); players acquire clues by
-**searching** a room or via passive **triggers**, then resolve them automatically or through
-a collaborative **research project**.
+**searching** a room, via passive **triggers**, or by an NPC **revealing** one (#3428), then
+resolve them automatically or through a collaborative **research project**.
 
 - **Models:** `Clue` (DiscriminatorMixin — `target_kind` ∈ CODEX / MISSION / RESCUE / SECRET /
   PERSONA_LINK / ITEM + a per-kind FK; never exists without a target. PERSONA_LINK (#2120) is
@@ -1528,6 +1528,11 @@ a collaborative **research project**.
   `staff_assign_mission`, log-and-continue per contributor, #3429)
 - **Action:** `SearchAction` (`actions/definitions/investigation.py`) — AP + mental fatigue
   via the declarative cost on the `Action` base; rolls the seeded "Search" CheckType
+- **NPC reveal (#3428):** `npc_services.OfferKind.CLUE_REVEAL` +
+  `ClueRevealOfferDetails` — a role-anchored acquisition surface parallel to Search/triggers;
+  see the "NPC Services" system entry above and `docs/systems/npc-lifecycle.md` for the
+  interaction-loop side, and `investigation_and_discovery.md`'s "Acquisition surfaces"
+  section for how it composes with `acquire_clue` / `grant_clue_target`.
 - **Two-layer gating:** the detect (skill) check *and* an `eligibility_rule` predicate on
   each placement (access layer; empty rule = open to anyone)
 - **Read surface (#1575):** `GET /api/clues/held/?character_sheet=<id>` (`MyHeldCluesView`,
@@ -3528,11 +3533,25 @@ register as additional kinds.
   `/api/npc-services/recorded-profiles/` (owner-scoped list + `complete`). Seeds:
   `world.seeds.styling` (stylist + scribe roles, cosmetic templates incl. the
   enchanted-lens eye-color gate).
+- **NPC-held clues (#3428):** `ClueRevealOfferDetails` (kind=CLUE_REVEAL — 1:1 `offer` +
+  `clue` FK PROTECT → `clues.Clue`; mirrors `PermitOfferDetails`'s shape). Staff attaches a
+  pre-authored clue to an `NPCRole`; `available_offers()` excludes the offer once the
+  character's roster entry already holds the clue
+  (`services._clue_reveal_not_yet_held`). Final offers skip the engine's own check
+  application, so the handler (`run_clue_reveal_offer`) rolls `offer.check_type` /
+  `check_difficulty` itself when set (mirrors `raise_court_grant`); on success (or a null
+  check_type — auto-success) it calls `acquire_clue` + `grant_clue_target` — the same
+  chokepoint Search/Research use — voiced as reaction-line flavor + the clue's description.
+  Fails closed with a plain message when the finder has no roster tenure. See
+  `docs/systems/investigation_and_discovery.md` for the clue-side detail. Editor: Mission
+  Studio's `AddOfferForm`/`ClueDetailsPanel` (`NPCRoleEditorPage.tsx`) — no Django admin
+  round-trip beyond a debugging-only `ClueRevealOfferDetailsAdmin`.
 - **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930) /
   INFORMANT / CONTACT / PERSONAL_FAVOR / GUARD / FAN / MINOR_ALLY / ASSET_TASK_INTEL /
   ASSET_TASK_COLLECT / TRAIN (#2440) / SETTLE_OBLIGATION (#2428 whole-branch fix) /
-  STYLING / PROFILE_RECORDING (#2632); `RecordedProfileStatus` (COMMISSIONED/RECORDED);
-  future POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL).
+  STYLING / PROFILE_RECORDING (#2632) / CLUE_REVEAL (#3428);
+  `RecordedProfileStatus` (COMMISSIONED/RECORDED); future POLITICAL_FAVOR/...),
+  `DrawMode` (MENU, POOL).
   `NPCServiceOffer.ap_cost` (#930) charges the resolving character before any effect
   dispatches (`InsufficientAPError` rolls the grant back) — a generic knob on every kind;
   TRAIN offers leave it at 0 and charge AP through the technique-acquisition multiplier

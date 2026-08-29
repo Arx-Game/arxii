@@ -135,6 +135,19 @@ machinery has no free-input channel. Charges the purse, then applies through the
 `change_appearance` seam dyes and PC stylists use.
 _Avoid_: makeover request, salon job.
 
+**CLUE_REVEAL offer** (`ClueRevealOfferDetails`, #3428):
+An NPC role tells a finder a pre-authored `clues.Clue` on resolve. Role-anchored (every
+placement of the role can reveal it — a Story NPC's own persona-specific knowledge is a
+deliberately deferred later slice, not this). The offer's own `check_type`/`check_difficulty`
+gates the reveal — the handler (`effects.run_clue_reveal_offer`) rolls it directly, because
+final offers skip the interaction engine's own check application (mirrors `raise_court_grant`).
+Success (or a null `check_type` — auto-success) grants through `clues.acquire_clue` +
+`clues.grant_clue_target`, the same chokepoint Search/Research use; `available_offers()`
+stops listing the offer once the finder already holds the clue (the "you already know this"
+flag lives on the clue journal, not a re-offered NPC line).
+_Avoid_: dialogue tree, conversation option (there is no dialogue engine here — this is the
+clue-acquisition axis wearing an NPC's voice).
+
 **Reaction Line** (`NPCReactionLine`, #2632):
 A banded, data-authored NPC reaction ("Alphonso sees to <name>, admiring them as if they
 were a work of art") — per-ROLE defaults with optional per-FUNCTIONARY override sets

@@ -14,6 +14,8 @@ export type MissionOfferDetails = components['schemas']['MissionOfferDetails'];
 export type MissionOfferDetailsRequest = components['schemas']['MissionOfferDetailsRequest'];
 export type PermitOfferDetails = components['schemas']['PermitOfferDetails'];
 export type PermitOfferDetailsRequest = components['schemas']['PermitOfferDetailsRequest'];
+export type ClueRevealOfferDetails = components['schemas']['ClueRevealOfferDetails'];
+export type ClueRevealOfferDetailsRequest = components['schemas']['ClueRevealOfferDetailsRequest'];
 
 export interface PaginatedResponse<T> {
   count: number;
