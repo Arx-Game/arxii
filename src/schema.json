@@ -39565,6 +39565,14 @@ components:
             'episode__chapter__story__primary_table' to avoid N+1 on list endpoints.
             BeatViewSet.queryset already includes this chain.
           readOnly: true
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatOpponentLine'
+        staged_templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedTemplate'
       required:
       - can_mark
       - chapter_title
@@ -39588,6 +39596,70 @@ components:
         * `encounter` - Encounter
         * `task` - Task
         * `requirement` - Requirement
+    BeatOpponentLine:
+      type: object
+      description: |-
+        One authored opponent line on an ENCOUNTER beat (#3425).
+
+        ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
+        .update()`` can diff incoming rows against the beat's existing lines by
+        id: an id present in the payload and on the beat is an edit, an id absent
+        is a new row, and an existing row whose id is missing from the payload is
+        deleted. See ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        creature_template:
+          type: integer
+          description: The bestiary entry to spawn.
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+          description: How many of this creature to spawn.
+        position_name:
+          type: string
+          description: Authored position hint, resolved by name against the run-time
+            room's Position set. Blank = no position.
+          maxLength: 100
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - creature_template
+    BeatOpponentLineRequest:
+      type: object
+      description: |-
+        One authored opponent line on an ENCOUNTER beat (#3425).
+
+        ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
+        .update()`` can diff incoming rows against the beat's existing lines by
+        id: an id present in the payload and on the beat is an edit, an id absent
+        is a new row, and an existing row whose id is missing from the payload is
+        deleted. See ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        creature_template:
+          type: integer
+          description: The bestiary entry to spawn.
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+          description: How many of this creature to spawn.
+        position_name:
+          type: string
+          description: Authored position hint, resolved by name against the run-time
+            room's Position set. Blank = no position.
+          maxLength: 100
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - creature_template
     BeatOption:
       type: object
       description: Read-only mirror of :class:`world.missions.types.BeatOption`.
@@ -39765,6 +39837,14 @@ components:
           description: 'Optional: a MissionTemplate this beat requires. The completion
             engine (#1757) flips this beat when a launched instance terminates. SET_NULL
             on template delete.'
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatOpponentLineRequest'
+        staged_templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedTemplateRequest'
       required:
       - episode
       - internal_description
@@ -39781,6 +39861,50 @@ components:
           nullable: true
       required:
       - option_id
+    BeatStagedTemplate:
+      type: object
+      description: |-
+        One authored situation/challenge template on a SITUATION beat (#3425).
+
+        Exactly one of ``situation_template``/``challenge_template`` must be set
+        per row, mirroring the model's ``CheckConstraint``. See
+        ``BeatOpponentLineSerializer`` for the ``id`` writable-but-optional
+        convention this shares.
+      properties:
+        id:
+          type: integer
+        situation_template:
+          type: integer
+          nullable: true
+        challenge_template:
+          type: integer
+          nullable: true
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+    BeatStagedTemplateRequest:
+      type: object
+      description: |-
+        One authored situation/challenge template on a SITUATION beat (#3425).
+
+        Exactly one of ``situation_template``/``challenge_template`` must be set
+        per row, mirroring the model's ``CheckConstraint``. See
+        ``BeatOpponentLineSerializer`` for the ``id`` writable-but-optional
+        convention this shares.
+      properties:
+        id:
+          type: integer
+        situation_template:
+          type: integer
+          nullable: true
+        challenge_template:
+          type: integer
+          nullable: true
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
     BeatView:
       type: object
       description: Read-only mirror of :class:`world.missions.types.BeatView`.
@@ -63117,6 +63241,14 @@ components:
           description: 'Optional: a MissionTemplate this beat requires. The completion
             engine (#1757) flips this beat when a launched instance terminates. SET_NULL
             on template delete.'
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatOpponentLineRequest'
+        staged_templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedTemplateRequest'
     PatchedBequestRequest:
       type: object
       properties:
@@ -70855,6 +70987,9 @@ components:
         viewer_can_gm:
           type: boolean
           readOnly: true
+        running_beat:
+          type: string
+          readOnly: true
         date_finished:
           type: string
           format: date-time
@@ -70919,6 +71054,7 @@ components:
       - position_edges
       - position_nodes
       - positions
+      - running_beat
       - viewer_can_gm
     SceneDetailRequest:
       type: object
@@ -71060,6 +71196,9 @@ components:
         viewer_can_gm:
           type: boolean
           readOnly: true
+        running_beat:
+          type: string
+          readOnly: true
       required:
       - date_started
       - id
@@ -71067,6 +71206,7 @@ components:
       - location
       - name
       - participants
+      - running_beat
       - viewer_can_gm
     SceneRound:
       type: object
