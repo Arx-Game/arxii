@@ -6,7 +6,6 @@ from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
     AudereMajoraFaithVariantAppliedCondition,
-    AudereMajoraFaithVariantCapabilityGrant,
 )
 from world.magic.models import (
     Affinity,
@@ -59,7 +58,6 @@ from world.magic.models import (
     SceneEntryEndorsement,
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
-    SignatureMotifBonusCapabilityGrant,
     SignatureMotifBonusDamageProfile,
     SoulfrayConfig,
     SoulTetherConfig,
@@ -1185,21 +1183,6 @@ class TechniqueGrantAdmin(admin.ModelAdmin):
     autocomplete_fields = ["technique", "item_template", "ritual"]
 
 
-class SignatureMotifBonusCapabilityGrantInline(admin.TabularInline):
-    """Capability-grant payload rows for a SignatureMotifBonus.
-
-    WARNING: these rows are currently INERT. There is no technique-capability-grant
-    cast seam (combat or non-combat) that reads a SignatureMotifBonus's capability
-    grants — authoring a row here has no in-game effect yet.
-    """
-
-    model = SignatureMotifBonusCapabilityGrant
-    extra = 0
-    autocomplete_fields = ["capability"]
-    verbose_name = "Capability Grant (INERT — not applied at cast time)"
-    verbose_name_plural = "Capability Grants (INERT — not applied at cast time)"
-
-
 class SignatureMotifBonusDamageProfileInline(admin.TabularInline):
     """Damage-profile payload rows for a SignatureMotifBonus.
 
@@ -1249,7 +1232,6 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
         "discovery_achievement",
     ]
     inlines = [
-        SignatureMotifBonusCapabilityGrantInline,
         SignatureMotifBonusDamageProfileInline,
         SignatureMotifBonusAppliedConditionInline,
     ]
@@ -1382,11 +1364,6 @@ class GhostTutelageAdmin(admin.ModelAdmin):
 # --- Audere Majora Faith Variant (#2360) ---
 
 
-class FaithVariantCapabilityGrantInline(admin.TabularInline):
-    model = AudereMajoraFaithVariantCapabilityGrant
-    extra = 0
-
-
 class FaithVariantAppliedConditionInline(admin.TabularInline):
     model = AudereMajoraFaithVariantAppliedCondition
     extra = 0
@@ -1396,7 +1373,7 @@ class FaithVariantAppliedConditionInline(admin.TabularInline):
 class AudereMajoraFaithVariantAdmin(admin.ModelAdmin):
     list_display = ("threshold", "being", "resonance_pool_cost", "favor_threshold", "is_active")
     list_filter = ("is_active",)
-    inlines = [FaithVariantCapabilityGrantInline, FaithVariantAppliedConditionInline]
+    inlines = [FaithVariantAppliedConditionInline]
 
 
 @admin.register(TechniqueProgress)

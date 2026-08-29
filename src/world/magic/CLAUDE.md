@@ -508,9 +508,10 @@ narrative-only "you may now sign" beat at level 3; higher crossings produce no b
   (Resonance, nullable), `flat_intensity_delta`, `min_crossing_level` (default 3),
   `discovery_achievement` (nullable FK → `Achievement`, from `DiscoverableContent`).
   At least one gate required (`clean()`). AND semantics.
-- **Payload child rows:** `SignatureMotifBonusCapabilityGrant` /
-  `SignatureMotifBonusDamageProfile` / `SignatureMotifBonusAppliedCondition` — inherit the
-  shared `Abstract*` bases from `models/techniques.py`.
+- **Payload child rows:** `SignatureMotifBonusDamageProfile` /
+  `SignatureMotifBonusAppliedCondition` — inherit the shared `Abstract*` bases from
+  `models/techniques.py`. (The capability-grant sibling was stripped per ADR-0245 —
+  capability-flavored signature effects are authored as applied conditions.)
 - **Thread FK:** `Thread.signature_bonus` (nullable FK, TECHNIQUE-kind only — enforced by
   `clean()` + DB `CheckConstraint("thread_signature_bonus_technique_only")`). Migrations
   0066 + 0067.
@@ -550,12 +551,11 @@ narrative-only "you may now sign" beat at level 3; higher crossings produce no b
   `SanctumViewSet`). Routes (`urls.py`, basename `signature`): `GET
   /api/magic/signatures/`, `POST /api/magic/signatures/set/`, `POST
   /api/magic/signatures/clear/`.
-- **Admin:** `SignatureMotifBonusAdmin` with inlines for the three payload child models;
-  each inline's `help_text` flags its wiring status (capability grants are inert — no
-  cast seam yet).
-- **Deferred (fast-follow):** the capability-grant cast seam — no technique/signature
-  capability-grant cast seam exists anywhere yet, so `SignatureMotifBonusCapabilityGrant`
-  rows remain inert.
+- **Admin:** `SignatureMotifBonusAdmin` with inlines for the two payload child models.
+- **Resolved (ADR-0245, #3449):** no capability-grant cast seam will be built — grants
+  mean standing possession; cast-time capability boosts are authored as applied
+  conditions (`ConditionCapabilityEffect`, outcome-scaled). The formerly-inert
+  `SignatureMotifBonusCapabilityGrant` payload family was stripped.
 
 ### Motif System
 

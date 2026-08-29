@@ -84,10 +84,10 @@ Majora crossings.
   `resonance_pool_cost`, `intervention_trigger` (MiracleTrigger: INCAPACITATED,
   NEAR_DEATH), `favor_threshold`, `narrative_text`, `is_active`, `sort_order`.
   Unique per `(being, name)`.
-- `MiracleCapabilityGrant` / `MiracleAppliedCondition` / `MiracleDamageProfile` —
+- `MiracleAppliedCondition` / `MiracleDamageProfile` —
   payload child rows inheriting `Abstract*` bases from `magic/models/techniques.py`.
-  Capability-grant rows are **inert** until a future read-path issue is built (mirrors
-  `SignatureMotifBonusCapabilityGrant` inertness). `MiracleAppliedCondition` rows are
+  (The capability-grant sibling was stripped per ADR-0245 — capability-flavored miracle
+  effects are authored as applied conditions.) `MiracleAppliedCondition` rows are
   the MVP mechanical effect surface. `MiracleDamageProfile` inherits
   `execute_missing_health_multiplier` from `AbstractDamageProfile` (#2643, see
   `docs/systems/magic.md`'s "The Damage Identity" section) — default 0, no wiring
@@ -145,8 +145,8 @@ time (not offer creation), so a declined offer costs nothing.
   `being` FK → `worship.WorshippedBeing` (PROTECT), `vision_text` (spoiler-private),
   `manifestation_text`, `resonance_pool_cost`, `favor_threshold`, `is_active`.
   Unique per `(threshold, being)`.
-- `AudereMajoraFaithVariantCapabilityGrant` / `AudereMajoraFaithVariantAppliedCondition` —
-  payload child rows. Capability-grant rows are inert (same as MiracleCapabilityGrant).
+- `AudereMajoraFaithVariantAppliedCondition` — the payload child row, applied live at
+  crossing. (The capability-grant sibling was stripped per ADR-0245.)
   `AudereMajoraFaithVariantAppliedCondition` rows are the MVP bonus surface.
 - `PendingAudereMajoraOffer.faith_variant` — nullable FK (SET_NULL), persisted at
   offer creation when a variant qualifies.

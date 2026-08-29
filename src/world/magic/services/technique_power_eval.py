@@ -608,11 +608,13 @@ def _dispel_valuation(technique: Technique) -> PayloadValuation | None:
 def _capability_grant_valuations(technique: Technique) -> list[PayloadValuation]:
     """One INERT_PAYLOAD row per capability grant (#3279 Task 2) — explicitly zero.
 
-    No technique/capability-grant cast seam exists anywhere in the codebase yet
-    (see this app's CLAUDE.md, "Signature Motif Bonus" section's "Deferred" note,
-    which documents the same gap for the sibling ``SignatureMotifBonusCapabilityGrant``
-    payload) — valued 0 explicitly rather than silently dropped, so the report
-    never implies a capability grant is combat-inert by omission.
+    Ruled, not pending (ADR-0245 / #3449): a capability GRANT means standing
+    possession — its value is possession-side, priced by capability_power_eval
+    through the two oracles, and a cast deliberately does nothing extra with it.
+    Cast-time capability boosts are authored as applied conditions instead
+    (``ConditionCapabilityEffect``, outcome-scaled via ``compute_severity``).
+    Valued 0 explicitly rather than silently dropped, so the report never
+    implies a capability grant is combat-inert by omission.
     """
     return [
         PayloadValuation(
@@ -620,7 +622,7 @@ def _capability_grant_valuations(technique: Technique) -> list[PayloadValuation]
             label=grant.capability.name,
             value=0.0,
             provenance=ValuationProvenance.INERT_PAYLOAD,
-            detail="no capability-grant cast seam exists (see src/world/magic/CLAUDE.md)",
+            detail="possession-side payload; cast-time boosts ride conditions (ADR-0245)",
         )
         for grant in technique.cached_capability_grants
     ]
