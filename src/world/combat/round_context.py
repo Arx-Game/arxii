@@ -360,6 +360,7 @@ class CombatRoundContext(RoundContext):
         )
 
         confirm_soulfray_risk: bool = bool(kwargs.get("confirm_soulfray_risk", False))
+        strain_commitment = int(kwargs.get("strain_commitment", 0) or 0)
 
         fury_commitment = None
         fury_commitment_id = kwargs.get("fury_commitment_id")
@@ -386,6 +387,7 @@ class CombatRoundContext(RoundContext):
             social_passive=social,
             mental_passive=mental,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            strain_commitment=strain_commitment,
             fury_commitment=fury_commitment,
             fury_anchor=fury_anchor,
             cast_destination=cast_positions["cast_destination"],

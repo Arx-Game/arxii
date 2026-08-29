@@ -65,6 +65,7 @@ class CastTechniqueAction(Action):
         position_params: dict[str, int] | None = None,
         preferred_resonance_id: int | None = None,
         cast_openly: bool = False,
+        strain_commitment: int = 0,
         **kwargs: Any,
     ) -> ActionResult:
         """Resolve or gate the cast.
@@ -134,6 +135,7 @@ class CastTechniqueAction(Action):
                 position_params=position_params,
                 preferred_resonance=preferred_resonance,
                 cast_openly=cast_openly,
+                strain_commitment=strain_commitment,
             )
         except MagicError as exc:
             # Surface magic-layer failures (e.g. invalid/inert pull
@@ -245,6 +247,9 @@ class CastTechniqueAction(Action):
             decl_kwargs["focused_ally_target_id"] = focused_ally_id
         if kwargs.get("confirm_soulfray_risk"):
             decl_kwargs["confirm_soulfray_risk"] = True
+        strain_commitment = kwargs.get("strain_commitment")
+        if strain_commitment:
+            decl_kwargs["strain_commitment"] = strain_commitment
         fury_commitment_id = kwargs.get("fury_commitment_id")
         if fury_commitment_id is not None:
             decl_kwargs["fury_commitment_id"] = fury_commitment_id

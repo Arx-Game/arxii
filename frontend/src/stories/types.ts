@@ -38,19 +38,19 @@ export type EpisodeDetail = components['schemas']['EpisodeDetail'];
 export type EpisodeCreate = components['schemas']['EpisodeCreate'];
 export type Episode = EpisodeDetail;
 
+// #3425 session prep child rows: one authored opponent line on an ENCOUNTER
+// beat, and one authored situation/challenge template on a SITUATION beat
+// (exactly one of situation_template/challenge_template is set per row,
+// server-enforced XOR). Both are in the generated schema as of #3425.
+export type BeatOpponentLine = components['schemas']['BeatOpponentLine'];
+export type BeatStagedTemplate = components['schemas']['BeatStagedTemplate'];
+
 // Beat — single shape with all Phase 2 predicate config fields plus the
 // Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
-// story_id, story_title). The generated type now correctly includes these
-// as readonly non-nullable fields (verified in api.d.ts Beat schema).
-//
-// Wave 12: can_mark is a server-computed boolean telling the client whether
-// the requesting user may POST /beats/{id}/mark/. Added to BeatSerializer
-// in Phase 5 Wave 12; not yet in the schema dump — extended here until
-// the next schema regeneration.
-export type Beat = components['schemas']['Beat'] & {
-  /** True when the requesting user may call POST /beats/{id}/mark/. */
-  readonly can_mark: boolean;
-};
+// story_id, story_title), the Wave 12 server-computed can_mark, and the
+// #3425 session-prep child row lists. All of these are in the generated
+// schema now, so no hand-written extension is needed.
+export type Beat = components['schemas']['Beat'];
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
@@ -422,6 +422,11 @@ export interface BeatCreateBody {
   referenced_chapter?: number | null; // STORY_AT_MILESTONE/chapter_reached
   referenced_episode?: number | null; // STORY_AT_MILESTONE/episode_reached
   required_points?: number | null; // AGGREGATE_THRESHOLD
+
+  // #3425 session prep — repeatable child rows. omit to leave untouched on a
+  // PATCH; an explicit [] clears every existing row (see BeatSerializer.update()).
+  opponent_lines?: BeatOpponentLine[];
+  staged_templates?: BeatStagedTemplate[];
 }
 
 export type BeatUpdateBody = Partial<BeatCreateBody>;

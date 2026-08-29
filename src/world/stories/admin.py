@@ -6,6 +6,8 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     BeatCompletion,
+    BeatOpponentLine,
+    BeatStagedTemplate,
     CanonReview,
     Chapter,
     CrossoverInvite,
@@ -275,6 +277,18 @@ class TransitionAdmin(admin.ModelAdmin):
     inlines = [TransitionRequiredOutcomeInline]
 
 
+class BeatOpponentLineInline(admin.TabularInline):
+    model = BeatOpponentLine
+    extra = 0
+    fields = ["creature_template", "count", "position_name", "order"]
+
+
+class BeatStagedTemplateInline(admin.TabularInline):
+    model = BeatStagedTemplate
+    extra = 0
+    fields = ["situation_template", "challenge_template", "order"]
+
+
 @admin.register(Beat)
 class BeatAdmin(admin.ModelAdmin):
     list_display = ("episode", "predicate_type", "outcome", "visibility", "order")
@@ -282,6 +296,7 @@ class BeatAdmin(admin.ModelAdmin):
     search_fields = ("internal_description", "player_hint", "episode__title")
     ordering = ("episode", "order")
     readonly_fields = ("created_at", "updated_at")
+    inlines = [BeatOpponentLineInline, BeatStagedTemplateInline]
 
 
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):
