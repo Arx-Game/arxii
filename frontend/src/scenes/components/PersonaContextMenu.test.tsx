@@ -475,6 +475,85 @@ describe('PersonaContextMenu', () => {
     expect(screen.queryByTestId('identify-persona-item')).not.toBeInTheDocument();
   });
 
+  it('dispatches scene-round succor and interpose with the ally name (#3448)', async () => {
+    const user = userEvent.setup();
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true, message: 'ok' })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'Alice', character_sheet: 99 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await user.click(await screen.findByTestId('scene-succor-item'));
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'scene_succor' },
+      kwargs: { ally_name: 'Alice' },
+    });
+
+    await user.click(screen.getByRole('button'));
+    await user.click(await screen.findByTestId('scene-interpose-item'));
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'scene_interpose' },
+      kwargs: { ally_name: 'Alice' },
+    });
+  });
+
+  it('hides the guard items for the viewer’s own persona (no self-guard, #3448)', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="TestChar" sceneId="1">
+        <span>TestChar</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'TestChar', character_sheet: 42 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('Intimidate');
+    expect(screen.queryByTestId('scene-succor-item')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scene-interpose-item')).not.toBeInTheDocument();
+  });
+
+  it('surfaces the backend rejection message when a guard dispatch fails (#3448)', async () => {
+    const user = userEvent.setup();
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({
+        backend: 'registry',
+        deferred: false,
+        success: false,
+        message: 'No scene round is gathering declarations.',
+      })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+
+    render(
+      <PersonaContextMenu personaId={10} personaName="Alice" sceneId="1">
+        <span>Alice</span>
+      </PersonaContextMenu>,
+      { wrapper: createWrapperWithScene([{ id: 10, name: 'Alice', character_sheet: 99 }]) }
+    );
+
+    await user.click(screen.getByRole('button'));
+    await user.click(await screen.findByTestId('scene-succor-item'));
+
+    const { toast } = await import('sonner');
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'No scene round is gathering declarations.'
+    );
+  });
+
   it('does not show "Attach to Pose" section when onAttachAction is not provided', async () => {
     const user = userEvent.setup();
 

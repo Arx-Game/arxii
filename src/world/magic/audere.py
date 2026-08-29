@@ -49,6 +49,15 @@ class AudereThreshold(SharedMemoryModel):
     anima_pool_bonus = models.PositiveIntegerField(
         help_text="Temporary increase to CharacterAnima.maximum during Audere.",
     )
+    surge_manifestation_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Broadcast to the room as a system EMIT when a character accepts the "
+            "surge (#3451). Supports a {name} placeholder for the character's "
+            "primary-persona name. Blank = accepting stays room-silent."
+        ),
+    )
     # Deprecated: no longer used by Soulfray severity calculation (Scope #3).
     # Audere naturally drives high Soulfray via intensity boost. Can be removed.
     warp_multiplier = models.PositiveIntegerField(
@@ -268,12 +277,38 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         anima.maximum += threshold.anima_pool_bonus
         anima.save(update_fields=["pre_audere_maximum", "maximum"])
 
+    _broadcast_surge(character, threshold)
+
     return AudereOfferResult(
         accepted=True,
         intensity_bonus_applied=threshold.intensity_bonus,
         anima_pool_expanded_by=threshold.anima_pool_bonus,
         advisory_text=advisory,
     )
+
+
+def _broadcast_surge(character: ObjectDB, threshold: AudereThreshold) -> None:
+    """Announce an accepted surge to the room, when the line is authored (#3451).
+
+    The plain-Audere echo of the Audere Majora manifestation broadcast: an
+    authored ``surge_manifestation_text`` on the threshold config is EMITted to
+    the active scene, with ``{name}`` replaced by the character's primary-persona
+    name (falling back to the object key). Blank text = accepting stays silent —
+    the line is staff-authored content, never code-authored prose.
+    """
+    from world.scenes.interaction_services import broadcast_scene_emit
+    from world.scenes.models import Persona
+
+    text = threshold.surge_manifestation_text.strip()
+    if not text:
+        return
+    try:
+        name = character.sheet_data.primary_persona.name
+    except (AttributeError, Persona.DoesNotExist):
+        # Missing sheet (plain ObjectDB) or no PRIMARY persona — broadcast_scene_emit
+        # would no-op on the same condition, so there is nothing to announce.
+        return
+    broadcast_scene_emit(character, text.replace("{name}", name))
 
 
 def end_audere(character: ObjectDB) -> None:

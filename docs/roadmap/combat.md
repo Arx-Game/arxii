@@ -42,7 +42,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - SUCCOR shelters a named ally from a round-ticked environmental hazard, in both combat and
   non-combat scene rounds (#1744, ADR-0069) — the environmental-DoT sibling of INTERPOSE.
   Reachable from web since #3381 (`YourTurn`'s Succor ally picker, generic registry dispatch
-  — `combat_succor` had no web caller before, registry-only).
+  — `combat_succor` had no web caller before, registry-only). The scene-round siblings
+  (`scene_succor`/`scene_interpose`, #1744/#1316) got their web surface in #3448:
+  Succor/Interpose items on `PersonaContextMenu`, dispatching through the same generic
+  registry seam with the target persona's name as `ally_name` — previously telnet-only.
 - **Guardian reactions — best-of check selection and technique-guardian BARRIER (#2207),
   two journey tests.** Interpose's Melee-Defense twin (seeded per interpose capability,
   `interpose_content.py`) is reachable on the REAL dispatch path:

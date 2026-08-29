@@ -6,9 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0186_gmlevelcap_max_story_npcs"),
-    ]
+    dependencies = [("arxii", "0187_auderethreshold_surge_manifestation_text")]
 
     operations = [
         migrations.AddField(
