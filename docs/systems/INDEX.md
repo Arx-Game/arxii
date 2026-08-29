@@ -2435,6 +2435,45 @@ GM at a given level may author (#2000, ADR-0097).
   Prerequisite is the only gate, no client-side trust check). (3) **Situation declaration —
   no override, by design:** recorded as ADR-0240 rather than built; GM tooling investment
   goes toward making state genuinely true (positioning #3385, encounter settings #3383).
+- **GM web parity: Grant Item, Stage, Traps tabs + condition removal (#3431):** the
+  2026-08-28 GM storytelling-tools audit found `grant_item`, `stage_prop`/
+  `stage_property`, and `list_room_traps`/`arm_trap`/`gm_disarm_trap` `[BUILT &
+  WIRED]` on telnet only (zero web callers), and GM condition *removal* fully
+  `[ABSENT]` (`GMApplyConditionAction` had no off-switch). **Backend (one new
+  pair, `actions/definitions/gm_adjudication.py`):** `GMRemoveConditionAction`
+  (key `gm_remove_condition`) — gated identically to `GMApplyConditionAction`
+  (`IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`);
+  resolves `target` via `_resolve_gm_target`, `condition` (a template name, but
+  resolved against the target's own ACTIVE `ConditionInstance`s via
+  `get_active_conditions` — refuses when the target doesn't currently carry it,
+  unlike `remove_condition_by_name`'s silent no-op), and a required `reason`
+  echoed in the result message (no persisted field — `remove_condition` carries
+  no note/description of its own). `GMListConditionsAction` (key
+  `gm_list_conditions`, same gates) returns the target's active instances
+  (template name, severity, `rounds_remaining`, `expires_at`) as result data —
+  the `list_room_traps` pattern (a REGISTRY dispatch, not a ViewSet) — because no
+  read path exposes this to a GM: `CharacterConditionsViewSet` is self-only and
+  its `observed` action filters to `is_visible_to_others=True`, hiding a GM's own
+  fiat-applied hidden conditions from the GM who applied them. Telnet: `gm
+  condition remove <character> condition=<name> reason=<text>` extends
+  `CmdGMDashboard`'s existing `gm condition` subverb (`commands/gm_ops.py`).
+  **Frontend:** `GMAdjudicationPanel` gained three tabs, all thin dispatches over
+  the pre-existing telnet-only actions above, plus a Remove mode on the Condition
+  tab: **Grant Item** (participant picker + a searchable `ItemTemplateViewSet`
+  select feeding `template_name`, dispatching `grant_item` with `target_name`
+  resolved from the picked participant's persona display name — that action
+  resolves its target by `actor.search()`, not pk, a telnet-era shape this spec
+  didn't change); **Stage** (prop mode → `stage_prop` with `item_template`;
+  property mode → `stage_property` with a free-text `property` name — no
+  `Property` enumeration endpoint exists and none was added — and an optional
+  `target_id` from the shared participant picker, omitted to tag the room
+  itself); **Traps** (mounts-on-open dispatch of `list_room_traps` — Radix
+  `Tabs.Content` unmounts inactive tabs, so "on mount" is "on open" — rendering
+  its result-data rows with per-row Arm/Disarm buttons dispatching
+  `arm_trap`/`gm_disarm_trap` then refreshing the list); **Condition → Remove**
+  (participant picker feeds `gm_list_conditions` to populate an active-instance
+  select, then dispatches `gm_remove_condition` with the picked template name +
+  a required reason).
 - **Pool opacity is documented as deliberate (#3071):** `CharacterVitalsView._can_view`
   (`world/vitals/views.py`) and `CharacterAnimaViewSet.get_queryset`
   (`world/magic/views.py`) are staff-or-own-tenure only — no `viewer_can_gm` carve-out.

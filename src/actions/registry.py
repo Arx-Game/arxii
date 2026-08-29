@@ -193,6 +193,8 @@ from actions.definitions.gift_acquisition import (
 from actions.definitions.gm_adjudication import (
     GMApplyConditionAction,
     GMAwardAction,
+    GMListConditionsAction,
+    GMRemoveConditionAction,
     InvokeCatalogCheckAction,
     SummonPlayerAction,
 )
@@ -949,6 +951,9 @@ _ALL_ACTIONS: list[Action] = [
     InvokeCatalogCheckAction(),
     GMAwardAction(),
     GMApplyConditionAction(),
+    # #3431 — GM web parity: condition removal + the read seam that feeds its picker.
+    GMRemoveConditionAction(),
+    GMListConditionsAction(),
     # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
     SummonPlayerAction(),
     AcceptGMSummonAction(),

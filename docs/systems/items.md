@@ -409,7 +409,10 @@ REGISTRY actions (`StagePropAction`/`StagePropertyAction`,
 room's active scene GM/owner or staff, resolving the template/property by exact
 pk-or-name (curated gate — no freeform creation); shared by telnet `CmdStage` (`stage
 prop <template>` / `stage property <property> [=<target>]`,
-`commands/gm_props.py`) and the web action-list dispatch.
+`commands/gm_props.py`) and — since #3431, which closed the gap a 2026-08-28 audit
+found (these actions carry no `ActionTemplate`, so despite being reachable over the
+generic REST dispatch endpoint since #3070, nothing in the browser actually called
+them) — `GMAdjudicationPanel`'s Stage tab (`frontend/src/scenes/components/`).
 
 ---
 
@@ -490,7 +493,10 @@ narratively, through two channels:
   (`actions/definitions/items.py`, registry key `grant_item`, gated on
   `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`, staff bypass preserved, #2117)
   via telnet `CmdGrantItem` (`grant_item <character>=<item template name>`,
-  `src/commands/grant_item.py`).
+  `src/commands/grant_item.py`) and, since #3431, `GMAdjudicationPanel`'s Grant Item
+  tab — a participant picker (sending the picked persona's display name as
+  `target_name`, since this action resolves its target by name, not pk) + a
+  searchable `ItemTemplateViewSet`-backed template select.
 - **Mission reward** — `DeedRewardSink.ITEM` (`world.missions.constants`) on a
   `MissionDeedRewardLine` dispatches `IMMEDIATE` (not queued/cron): `_route_line`
   (`world.missions.services.rewards`) calls `grant_touchstone_item_to_character` directly
