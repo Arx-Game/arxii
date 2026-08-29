@@ -2,7 +2,7 @@
 
 Built in ``setUp`` (not ``setUpTestData``): the scenario needs real ObjectDB
 rooms/characters with ``db_location`` assigned so ``room.contents`` (which
-``Scene.has_character_present`` reads) resolves correctly — factories create
+``Scene.has_character_present`` reads) resolves correctly - factories create
 Evennia ObjectDB instances (DbHolder, not deepcopyable), which breaks
 ``setUpTestData``'s deepcopy. Mirrors ``world.scenes.tests.test_sudden_harm``'s
 documented rationale for the same deviation.
@@ -22,7 +22,7 @@ from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
 class SceneGMVitalsCarveoutTests(APITestCase):
-    """GET /api/vitals/<character_id>/ — the #3434 scene-GM carve-out."""
+    """GET /api/vitals/<character_id>/ - the #3434 scene-GM carve-out."""
 
     def setUp(self) -> None:
         self.room = create_object("typeclasses.rooms.Room", key="VitalsCarveoutRoom", nohome=True)
@@ -94,7 +94,7 @@ class SceneGMVitalsCarveoutTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_battle_backed_scene_excluded(self) -> None:
-        """active_for_room excludes battle-backed scenes — this carve-out never fires there."""
+        """active_for_room excludes battle-backed scenes - this carve-out never fires there."""
         from world.battles.factories import BattleFactory
 
         self.scene.delete()

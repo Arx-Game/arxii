@@ -27,12 +27,12 @@ class CharacterVitalsView(APIView):
     Visibility: staff, an account with an active tenure on the character, or
     the GM of the character's active (non-battle) scene at JUNIOR+ trust
     (#3434). Everyone else receives 404 (same queryset rule as
-    CharacterAnimaViewSet, which deliberately does NOT gain this carve-out —
+    CharacterAnimaViewSet, which deliberately does NOT gain this carve-out -
     see docs/systems/INDEX.md's "Pool opacity" subsection).
 
     Hot path rides the SharedMemoryModel identity map: the sheet is resolved
     by pk and vitals/fatigue are read via the instance-cached reverse
-    accessors — repeated calls re-query none of those rows.
+    accessors - repeated calls re-query none of those rows.
     """
 
     permission_classes = [IsAuthenticated]
@@ -48,7 +48,7 @@ class CharacterVitalsView(APIView):
         grants (``CombatParticipantSerializer._can_view_vitals``,
         `world/combat/serializers.py:285`). The carve-out is narrower than
         combat's precedent in two ways combat doesn't enforce: it requires an
-        *active* scene (battle-backed scenes are excluded — combat's own
+        *active* scene (battle-backed scenes are excluded - combat's own
         ``_can_view_vitals`` already serves vitals inside encounters) and at
         least JUNIOR GM trust (``HasGMTrust``, staff bypass preserved).
         """
@@ -60,14 +60,14 @@ class CharacterVitalsView(APIView):
         return self._can_view_as_scene_gm(request, character_id)
 
     def _can_view_as_scene_gm(self, request: Request, character_id: int) -> bool:
-        """The #3434 scene-GM carve-out — see ``_can_view``'s docstring.
+        """The #3434 scene-GM carve-out - see ``_can_view``'s docstring.
 
         Note: ``Scene.has_character_present`` reads the room's *current*
         contents, so "target present in that scene" is location-derived, not
-        participation-derived — a participant who steps out of the room drops
+        participation-derived - a participant who steps out of the room drops
         out of the carve-out the moment they leave, even mid-scene. That is
         deliberately stricter than combat's precedent (which never checks
-        scene state at all) — do not "fix" this by switching to a
+        scene state at all) - do not "fix" this by switching to a
         participation-based check.
         """
         try:

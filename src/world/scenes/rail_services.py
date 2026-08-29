@@ -1,4 +1,4 @@
-"""GM story rail (#3434) — a composed, per-viewer read of a scene's running-beat
+"""GM story rail (#3434) - a composed, per-viewer read of a scene's running-beat
 authored material plus participant conditions/vitals seams.
 
 No new models, no writes: this is a read-only aggregation over Beat/
@@ -20,10 +20,10 @@ def viewer_qualifies_for_rail(request: Any, view: Any, scene: Scene) -> bool:
     """Whether the requesting user may see the GM story rail for ``scene`` at all.
 
     Staff bypass, else ``scene.is_gm(user)`` AND at least JUNIOR GM trust
-    (``HasGMTrust`` — the DRF counterpart to ``MinimumGMLevelPrerequisite``,
+    (``HasGMTrust`` - the DRF counterpart to ``MinimumGMLevelPrerequisite``,
     the same bar ``GMListConditionsAction`` gates on). Deliberately narrower
     than ``IsSceneGMOrOwnerOrStaff``: a scene *owner* who isn't also its GM
-    gets nothing from this endpoint — see the anti-reinvention ledger in
+    gets nothing from this endpoint - see the anti-reinvention ledger in
     #3434's spec.
     """
     from world.gm.permissions import HasGMTrust  # noqa: PLC0415
@@ -39,7 +39,7 @@ def viewer_qualifies_for_rail(request: Any, view: Any, scene: Scene) -> bool:
 def _present_character_sheets(location: Any) -> list[Any]:
     """CharacterSheets of characters currently in ``location`` (walks room.contents).
 
-    Mirrors ``world.scenes.round_services._present_character_sheets`` — kept
+    Mirrors ``world.scenes.round_services._present_character_sheets`` - kept
     local (not imported) since that helper is private to its module.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
@@ -58,7 +58,7 @@ def _viewer_has_story_standing(user: AccountDB, story: Any) -> bool:
     """Staff, or the SAME scoping ``IsProtectedSubjectStoryOwnerOrStaff`` uses.
 
     CRITICAL leak invariant (#3434 spec): must never be looser than
-    ``user_owns_or_leads_story`` — a scene co-GM with no standing on the
+    ``user_owns_or_leads_story`` - a scene co-GM with no standing on the
     running story must get an empty protected-subjects section and no
     ``internal_description``/line details, matching
     ``stories/permissions.py:1624``'s "never readable by non-owner/
@@ -74,7 +74,7 @@ def _viewer_has_story_standing(user: AccountDB, story: Any) -> bool:
 def _serialize_beat_summary(beat: Any) -> dict[str, Any]:
     """The low-sensitivity refereeing metadata any qualifying scene GM sees.
 
-    id/kind/risk/outcome/predicate state/pools-authored booleans only — never
+    id/kind/risk/outcome/predicate state/pools-authored booleans only - never
     internal_description or line details (those are gated separately by
     story standing, see ``build_gm_story_rail_payload``).
     """
@@ -96,7 +96,7 @@ def _serialize_beat_summary(beat: Any) -> dict[str, Any]:
 def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]:
     """Compose the GM story rail payload for ``user`` viewing ``scene``.
 
-    Caller (the view) has already confirmed ``viewer_qualifies_for_rail`` —
+    Caller (the view) has already confirmed ``viewer_qualifies_for_rail`` -
     this function computes the finer-grained per-section gating on top:
     story-privileged content (internal_description, opponent/staged lines,
     protected subjects) and staff-only clue placements.

@@ -2,7 +2,7 @@
 
 Built as instance methods (not ``setUpTestData``): the scenario needs real
 ObjectDB rooms/characters, which ``ObjectDBFactory``/``CharacterFactory``
-create via Evennia's ``create_object`` — not deepcopyable, so per-test
+create via Evennia's ``create_object`` - not deepcopyable, so per-test
 creation is required (mirrors ``SceneViewSetTestCase`` in ``test_views.py``).
 """
 
@@ -51,7 +51,7 @@ class GMStoryRailViewTests(APITestCase):
         self.assertEqual(beat["outcome"], self.beat.outcome)
 
     def test_co_gm_with_no_story_standing_gets_empty_protected_subjects(self) -> None:
-        """The leak test (#3434 spec) — must not skip this."""
+        """The leak test (#3434 spec) - must not skip this."""
         StoryProtectedSubjectFactory(story=self.story, is_active=True)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)

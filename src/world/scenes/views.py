@@ -405,7 +405,7 @@ class SceneViewSet(viewsets.ModelViewSet):
     @extend_schema(responses=GMStoryRailSerializer, tags=["scenes"])
     @action(detail=True, methods=[HTTPMethod.GET], url_path="gm-rail")
     def gm_rail(self, request: Request, pk: int | None = None) -> Response:
-        """GET /api/scenes/{id}/gm-rail/ (#3434) — the running beat's authored
+        """GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
         material, protected subjects, and room clue placements, gated per-viewer.
 
         Composed read only -- no writes, no models, no migration. View-level gate

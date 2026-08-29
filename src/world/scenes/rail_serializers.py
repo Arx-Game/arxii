@@ -1,6 +1,6 @@
 """Response-shape serializers for GET /api/scenes/{id}/gm-rail/ (#3434).
 
-Documentation-only (drf_spectacular schema) — the view builds the payload via
+Documentation-only (drf_spectacular schema) - the view builds the payload via
 ``world.scenes.rail_services.build_gm_story_rail_payload`` and returns it as a
 plain dict; these serializers describe that dict's shape for the OpenAPI
 schema and are not used to validate writes (the endpoint has none).
@@ -41,7 +41,7 @@ class GMStoryRailParticipantSerializer(serializers.Serializer):
 
 
 class GMStoryRailClueSerializer(serializers.Serializer):
-    """One room clue placement — staff viewers only."""
+    """One room clue placement - staff viewers only."""
 
     id = serializers.IntegerField()
     clue_name = serializers.CharField()
