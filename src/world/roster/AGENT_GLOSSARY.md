@@ -145,6 +145,38 @@ while certain nothing gets posted as the wrong character.
 _Avoid_: step away (retired — read as logout when placed next to "Enter the
 world"); using any one of the three where another is meant.
 
+**Offscreen act**:
+A "2.5 act" (#3412 slice 3, ADR-0246) — one of a narrow set of action keys
+(`actions.constants.OFFSCREEN_ACT_KEYS`: journal entries, character goals,
+persona swaps, proclamations) the player can still perform on a degraded-
+lifecycle character's behalf without that character being in-world. Gated by
+`actions.offscreen_gate.offscreen_act_state`, keyed on
+`CharacterSheet.lifecycle_state` (CAPTURED/UNKNOWN/RETIRED/DEAD) plus the
+unconscious overlay; resolves ALLOWED / ROUTED / BLOCKED. Deliberately
+distinct from an ordinary IC action (which the dead gate, #2287, and this
+gate both refuse outright) and from Selection (state 2.5 is a durable fact
+with no side effects; an offscreen act is a real mutation the gate decides
+whether to permit).
+_Avoid:_ 2.5 act as the only name (that's the state, not the act); treating
+every action a state-2.5 account can trigger as an offscreen act — most
+action keys never enter the gate's `OFFSCREEN_ACT_KEYS` set at all.
+
+**Routed channel**:
+PLACEHOLDER naming (Dan's to finalize) for how a `ROUTED` offscreen-act
+disposition names *how* word could still travel for a degraded-lifecycle
+character — `OFFSCREEN_CHANNEL_SMUGGLE` (CAPTURED) and
+`OFFSCREEN_CHANNEL_DREAM` (unconscious) are the two implemented channel
+constants (`actions/constants.py`); séance (DEAD) is named in prose and ADR-
+0245 but has no channel constant yet. This slice (#3412 slice 3) ships zero
+delivery mechanics for any channel — `ROUTED` is refusal-with-API-room, not a
+working feature; the channel name is currently only ever seen in refusal
+text (backend `OFFSCREEN_REASON_*` strings, and separately the Hall's own
+display copy in `OffscreenActsPlate`).
+_Avoid:_ treating a routed channel as a built messaging surface; conflating
+the backend `OFFSCREEN_REASON_*` refusal strings with the Hall's own display
+prose — the two registers are written independently and are allowed to
+diverge.
+
 **the Hall**:
 PLACEHOLDER name for the state-2 logged-in home surface — mounts at `/` for any
 authed account (visitors keep the pre-login Gatefold, byte-identical). Built in

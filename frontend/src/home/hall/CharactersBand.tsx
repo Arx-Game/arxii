@@ -2,14 +2,25 @@
  * "Your Characters" band (#3412 slice 2) — the Hall's portrait-forward roster
  * of the account's playable characters. Clicking a card sets the account's
  * durable server-side selection (`useSelectCharacterMutation`); the docked
- * card gets a primary top rule + "Playing: Currently Offscreen" meta
- * (PLACEHOLDER — presence isn't wired yet, mirrors `SelectedCharacterChip`).
+ * card gets a primary top rule + a "Playing: …" meta line (PLACEHOLDER —
+ * presence isn't wired yet, mirrors `SelectedCharacterChip`).
  * "Clear Active Character" lives once, bottom-right of the whole band —
  * disabled (not hidden) when nothing is docked, so the control stays
  * discoverable per the ruling.
  *
  * Selection is NOT presence (ruled): this band never starts/stops a `/game`
  * session — Enter-the-world stays the header chip's job.
+ *
+ * Degraded-state meta line (#3412 final review, IMPORTANT-1): a docked
+ * character whose `lifecycle_state` is CAPTURED/DEAD/RETIRED/UNKNOWN used to
+ * assert "Playing: Currently Offscreen" unconditionally — a factual
+ * contradiction with `OffscreenActsPlate`'s death/captivity prose shown right
+ * below it on the same screen. The meta line now branches the same way the
+ * plate does (mirrors its `ALLOWED_LIFECYCLE_STATES` set: ALIVE and the
+ * unwritten COMA member still read "Currently Offscreen"; everything else
+ * gets a short PLACEHOLDER state label instead). "Clear Active Character"
+ * and card selection stay unaffected — this is a display-only fix, same as
+ * the plate's own gate/display split.
  */
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -17,6 +28,7 @@ import { CountChip, PersonaTiles, Plate, PlateHead } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
+import { dockedStateLabel } from '@/roster/lifecycleDisplay';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { hydrateActiveCharacter } from '@/store/gameSlice';
 
@@ -62,7 +74,7 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
         {/* PLACEHOLDER copy — presence state isn't wired yet, mirrors SelectedCharacterChip */}
         {isDocked && (
           <span className="font-body text-xs text-muted-foreground">
-            Playing: Currently Offscreen
+            Playing: {dockedStateLabel(entry.lifecycle_state)}
           </span>
         )}
       </button>

@@ -38,6 +38,7 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
   roster_type: 'Active',
 };
 
@@ -49,6 +50,7 @@ const bianca: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
   roster_type: 'Active',
 };
 

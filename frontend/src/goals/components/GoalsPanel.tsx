@@ -46,6 +46,12 @@ function LogProgressDialog({ characterId }: { characterId: number }) {
   const logProgress = useCreateGoalJournalMutation(characterId);
 
   const canSubmit = title.trim() !== '' && content.trim() !== '' && !logProgress.isPending;
+  // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
+  // `ApiError.message` by `readErrorDetail`/`createGoalJournalEntry`) needs to stay
+  // readable after the toast dismisses; the reason text IS the message, never rewritten
+  // here. Mirrors `PromoteRoleDialog`'s established inline-error convention.
+  const errorMessage =
+    logProgress.isError && logProgress.error instanceof Error ? logProgress.error.message : null;
 
   function reset() {
     setDomainId(null);
@@ -137,6 +143,15 @@ function LogProgressDialog({ characterId }: { characterId: number }) {
             />
             Make this entry public
           </label>
+          {/* PLACEHOLDER styling */}
+          {errorMessage && (
+            <div
+              className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              data-testid="goals-log-progress-error"
+            >
+              <p>{errorMessage}</p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
