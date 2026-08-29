@@ -18452,7 +18452,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Return roster entries for characters owned by the account. */
+    /**
+     * @description Return roster entries for characters owned by the account.
+     *
+     *     Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
+     *     ``NarrativeMessageDelivery`` rows per character, via a single aggregated
+     *     JOIN/GROUP BY rather than a per-row query.
+     */
     get: operations['roster_entries_mine_retrieve'];
     put?: never;
     post?: never;
@@ -19986,6 +19992,43 @@ export interface paths {
     get: operations['societies_offers_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/offers/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Accept or decline a membership offer (#3412 — the Hall).
+     *
+     *     Body: ``{"response": "accept"|"decline"}``.
+     *
+     *     INVITE offers are directed at a specific persona (``to_persona``): the
+     *     responder must own that persona — mirrors ``OrgInviteHandler`` (telnet
+     *     `accept org`/`decline org`, `offer_handlers.py`), which resolves the
+     *     responding persona from the caller's own identity, not a dispatch-time
+     *     argument. APPLICATION offers have no invitee (the applicant is
+     *     ``from_persona``); the responder must own a persona holding an active,
+     *     invite-authorized membership in the offer's organization — this mirrors
+     *     ``accept_application``/``decline_application``'s own authority check
+     *     (``actor_membership.rank.can_invite``), performed here up front so an
+     *     unauthorized member gets a 403 rather than the service's 400.
+     *
+     *     Returns the updated offer (mirrors ``OrgAppealViewSet``'s
+     *     signon/resolve/withdraw actions, which return the updated resource
+     *     rather than an Action-result envelope — there is no ``Action`` here,
+     *     only the raw ``membership_services`` functions per the #3412 brief).
+     */
+    post: operations['societies_offers_respond_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -31774,6 +31817,18 @@ export interface components {
        *     else the PRIMARY. Lets the top-bar switcher highlight the worn identity.
        */
       readonly active_persona_id: number | null;
+      /**
+       * @description Unread narrative tidings for this character (#3412 — the Hall).
+       *
+       *     ``RosterEntryViewSet.mine`` annotates this via one aggregated query for
+       *     the whole list; that annotation lands as a plain instance attribute, so
+       *     prefer it when present (``obj.__dict__`` avoids GETATTR_LITERAL — see
+       *     `OrgAppealViewSet._refetch` for the same idiom). Other callers (e.g. the
+       *     #3412 ``select`` endpoint's ``selected_entry`` fragment) serialize a
+       *     plain, unannotated ``RosterEntry`` — fall back to a direct count there,
+       *     a single extra query on that single-object path only.
+       */
+      readonly unread_narrative_count: number;
       readonly roster_type: string;
     };
     /**
@@ -32677,6 +32732,16 @@ export interface components {
      * @enum {string}
      */
     OrganizationMembershipOfferKindEnum: 'invite' | 'application';
+    OrganizationMembershipOfferRequest: {
+      organization: number;
+      from_persona: number;
+      to_persona?: number | null;
+      kind: components['schemas']['OrganizationMembershipOfferKindEnum'];
+      /** @default pending */
+      status: components['schemas']['OrganizationMembershipOfferStatusEnum'];
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
     /**
      * @description * `pending` - Pending
      *     * `accepted` - Accepted
@@ -72142,6 +72207,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationMembershipOffer'];
+        };
+      };
+    };
+  };
+  societies_offers_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization membership offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrganizationMembershipOfferRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

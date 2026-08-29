@@ -84,6 +84,20 @@ export async function inviteToEvent(
   return res.json();
 }
 
+/**
+ * Every `EventInvitation` visible to the caller (#3412 — Hall Attention band).
+ * `EventInvitationViewSet.list` already scopes server-side to invitations
+ * targeting the caller's own personas or events they host (`_apply_list_visibility`,
+ * `world/events/views.py`) — no `response`/pending filter exists on
+ * `EventInvitationFilter` (verified #3412 T1), so callers filter to pending +
+ * "mine" client-side, mirroring `EventInvitations.tsx`'s own persona-matching.
+ */
+export async function fetchMyEventInvitations(): Promise<PaginatedResponse<EventInvitation>> {
+  const res = await apiFetch('/api/events/invitations/');
+  if (!res.ok) throw new Error('Failed to load invitations');
+  return res.json();
+}
+
 export async function removeInvitation(invitationId: number): Promise<void> {
   const res = await apiFetch(`/api/events/invitations/${invitationId}/`, {
     method: 'DELETE',

@@ -46,6 +46,8 @@ from world.societies.serializers import (
 from world.tidings.serializers import PublicFeedItemSerializer
 
 _NO_ACTIVE_PERSONA_MESSAGE = "No active persona."
+_OFFER_RESPONSE_ACCEPT = "accept"
+_OFFER_RESPONSE_DECLINE = "decline"
 
 
 def _active_persona_for_request(request):
@@ -369,6 +371,87 @@ class OrganizationMembershipOfferViewSet(viewsets.ReadOnlyModelViewSet):
             organization__memberships__exiled_at__isnull=True,
         )
         return (owned | received | org_visible).distinct()
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def respond(self, request, pk=None) -> Response:
+        """Accept or decline a membership offer (#3412 — the Hall).
+
+        Body: ``{"response": "accept"|"decline"}``.
+
+        INVITE offers are directed at a specific persona (``to_persona``): the
+        responder must own that persona — mirrors ``OrgInviteHandler`` (telnet
+        `accept org`/`decline org`, `offer_handlers.py`), which resolves the
+        responding persona from the caller's own identity, not a dispatch-time
+        argument. APPLICATION offers have no invitee (the applicant is
+        ``from_persona``); the responder must own a persona holding an active,
+        invite-authorized membership in the offer's organization — this mirrors
+        ``accept_application``/``decline_application``'s own authority check
+        (``actor_membership.rank.can_invite``), performed here up front so an
+        unauthorized member gets a 403 rather than the service's 400.
+
+        Returns the updated offer (mirrors ``OrgAppealViewSet``'s
+        signon/resolve/withdraw actions, which return the updated resource
+        rather than an Action-result envelope — there is no ``Action`` here,
+        only the raw ``membership_services`` functions per the #3412 brief).
+        """
+        response_str = request.data.get("response", "")
+        response_str = response_str.strip().lower() if isinstance(response_str, str) else ""
+        if response_str not in {_OFFER_RESPONSE_ACCEPT, _OFFER_RESPONSE_DECLINE}:
+            return Response(
+                {"detail": "response must be 'accept' or 'decline'."},
+                status=400,
+            )
+
+        from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
+        from world.societies.exceptions import OrganizationMembershipError  # noqa: PLC0415
+        from world.societies.membership_services import (  # noqa: PLC0415
+            accept_application,
+            accept_invitation,
+            decline_application,
+            decline_invitation,
+        )
+
+        offer = self.get_object()
+        owned_persona_ids = get_account_personas(request)
+
+        if offer.kind == OrganizationMembershipOffer.Kind.INVITE:
+            if offer.to_persona_id not in owned_persona_ids:
+                return Response({"detail": "That offer is not for you."}, status=403)
+            actor_persona = offer.to_persona
+            handler = (
+                accept_invitation if response_str == _OFFER_RESPONSE_ACCEPT else decline_invitation
+            )
+        else:
+            membership = (
+                OrganizationMembership.objects.filter(
+                    organization_id=offer.organization_id,
+                    persona_id__in=owned_persona_ids,
+                    left_at__isnull=True,
+                    exiled_at__isnull=True,
+                    rank__can_invite=True,
+                )
+                .select_related("persona")
+                .first()
+            )
+            if membership is None:
+                return Response(
+                    {"detail": "You are not authorized to respond to this offer."},
+                    status=403,
+                )
+            actor_persona = membership.persona
+            handler = (
+                accept_application
+                if response_str == _OFFER_RESPONSE_ACCEPT
+                else decline_application
+            )
+
+        try:
+            handler(offer, actor_persona)
+        except OrganizationMembershipError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+
+        offer.refresh_from_db()
+        return Response(self.get_serializer(offer).data)
 
 
 class StandingDeclarationViewSet(viewsets.ReadOnlyModelViewSet):

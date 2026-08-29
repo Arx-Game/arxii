@@ -37,6 +37,8 @@ const aria: MyRosterEntry = {
   profile_picture_url: null,
   primary_persona_id: 7,
   active_persona_id: 7,
+  unread_narrative_count: 0,
+  roster_type: 'Active',
 };
 
 const bianca: MyRosterEntry = {
@@ -46,6 +48,8 @@ const bianca: MyRosterEntry = {
   profile_picture_url: null,
   primary_persona_id: 8,
   active_persona_id: 8,
+  unread_narrative_count: 0,
+  roster_type: 'Active',
 };
 
 describe('GameTopBar selection wiring (#3412)', () => {
