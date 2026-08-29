@@ -7028,19 +7028,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (`CmdCombat._SUBVERBS`, `src/commands/combat_maneuvers.py`) — the same REGISTRY
   keys the web reaches generically via `useDispatchPlayerAction`
   (`{ ref: { backend: 'registry', registry_key: 'combat_engage' }, kwargs: {
-  opponent_id } }`); no bespoke web click affordance yet — that's #3381's scope.
+  opponent_id } }`). **Web click affordance (#3447):** the opponent click-menu on
+  `CombatantsList.tsx` now carries "Engage in a duel" (hidden while anyone holds
+  the lock) and "Disengage" (shown only when the viewer's own participant holds
+  it — resolved via `character_sheet_id` against the viewer's character pk, which
+  CharacterSheet shares with ObjectDB), both dispatching the registry keys through
+  the same generic seam as the #3381 maneuvers.
   `EncounterDetailSerializer.get_engagement_locks` is schema-typed via
   `@extend_schema_field(EngagementLockSerializer(many=True))` (mirrors
   `get_clashes`/`ClashStateSerializer`), and `CombatantsList.tsx` renders a
-  read-only "Locked: `<PC name>`" badge on the paired opponent row — no click
-  handling. **Lock-lifecycle close-out (#3386):** fleeing while locked now breaks
+  read-only "Locked: `<PC name>`" badge on the paired opponent row.
+  **Lock-lifecycle close-out (#3386):** fleeing while locked now breaks
   the lock (`LockBreakReason.FLEE`, `_resolve_flee` in `world/combat/services.py`)
   alongside the pre-existing defeat-breaks-lock and disengage-breaks-lock paths —
   a PC who flees no longer leaves a phantom pairing behind.
-  `trigger_interference_drama` (`world/combat/engagement_locks.py`) — the "an ally
-  interfering with a locked NPC is a narrative payoff" mechanic — remains
-  unwired (zero callers); flagged, not built, pending a real
-  non-locked-PC-attacks-locked-opponent detection mechanism.
+  **Interference beat armed (#3447):** `trigger_interference_drama`
+  (`world/combat/engagement_locks.py`) — zero callers since #2020 — now fires from
+  `_maybe_trigger_lock_interference` in `apply_damage_to_opponent`: a non-locked
+  PC landing post-soak damage on a locked opponent fires the locked duelist's
+  `break_in_consequence_pool` + INTERFERENCE dramatic surge, deduped per
+  (duelist, interloper) per encounter via the `DramaticSurgeRecord` trail.
 - **Duels — `DuelChallenge` + GM-initiated lethal duels (#568, #3068):** `DuelChallenge`
   (`world/combat/models.py`) is the one challenge/accept/decline/withdraw handshake model
   for BOTH shapes: PC-vs-PC (`challenger_sheet` set, accepting opens `create_pvp_duel`) and
