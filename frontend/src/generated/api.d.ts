@@ -18895,6 +18895,56 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/npc-presets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog listing feeding the Story-NPC mint dialog's preset picker.
+     *
+     *     Mirrors ``combat.views.ThreatPoolViewSet``'s shape (flat, unfiltered
+     *     catalog browse via ``SearchFilter`` on ``name``) but gated ``IsGMOrStaff``
+     *     rather than any-authenticated-user, since presets have exactly one
+     *     consumer today: the GM mint dialog (#3426's ``GMDashboardPage``) and its
+     *     telnet counterpart (``gm npc ... preset=<name>``).
+     */
+    get: operations['roster_npc_presets_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/npc-presets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog listing feeding the Story-NPC mint dialog's preset picker.
+     *
+     *     Mirrors ``combat.views.ThreatPoolViewSet``'s shape (flat, unfiltered
+     *     catalog browse via ``SearchFilter`` on ``name``) but gated ``IsGMOrStaff``
+     *     rather than any-authenticated-user, since presets have exactly one
+     *     consumer today: the GM mint dialog (#3426's ``GMDashboardPage``) and its
+     *     telnet counterpart (``gm npc ... preset=<name>``).
+     */
+    get: operations['roster_npc_presets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/rosters/': {
     parameters: {
       query?: never;
@@ -31841,6 +31891,18 @@ export interface components {
      * @enum {string}
      */
     NPCAssetStatusEnum: 'active' | 'compromised' | 'lost' | 'dismissed';
+    /** @description One SKILL line, named by the skill rather than its id (#3427). */
+    NPCPresetSkillLine: {
+      readonly skill_name: string;
+      /** @description True 1-100 skill value -- no display-scale conversion, matching CharacterSkillValue. */
+      readonly value: number;
+    };
+    /** @description One STAT line, named by the trait rather than its id (#3427). */
+    NPCPresetTraitLine: {
+      readonly trait_name: string;
+      /** @description Display-scale value (1-10), mirroring CG's stat-allocation scale. */
+      readonly display_value: number;
+    };
     /** @description Staff CRUD for banded NPC reaction lines (#2632). */
     NPCReactionLine: {
       readonly id: number;
@@ -32084,6 +32146,23 @@ export interface components {
       affection?: number;
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
+    };
+    /**
+     * @description Read-only catalog listing for the Story-NPC mint dialog's preset picker.
+     *
+     *     NPCStatlinePreset is authored content (a curated archetype — e.g.
+     *     "Guard") — nothing sensitive in it, mirroring ``ThreatPoolSerializer``'s
+     *     reasoning, but gated ``IsGMOrStaff`` (not open to any authenticated user)
+     *     since the endpoint only has a GM-facing consumer.
+     */
+    NPCStatlinePreset: {
+      readonly id: number;
+      /** @description Archetype name shown to GMs at mint time (e.g. 'Guard', 'Courtier'). */
+      readonly name: string;
+      /** @description Staff-facing summary of when to reach for this archetype. */
+      readonly description: string;
+      readonly trait_lines: components['schemas']['NPCPresetTraitLine'][];
+      readonly skill_lines: components['schemas']['NPCPresetSkillLine'][];
     };
     /**
      * @description * `familiar` - Familiar
@@ -34380,6 +34459,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['NPCStanding'][];
+    };
+    PaginatedNPCStatlinePresetList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['NPCStatlinePreset'][];
     };
     PaginatedNarrativeMessageDeliveryList: {
       /** @example 123 */
@@ -70715,6 +70809,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Media'];
+        };
+      };
+    };
+  };
+  roster_npc_presets_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNPCStatlinePresetList'];
+        };
+      };
+    };
+  };
+  roster_npc_presets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this NPC Statline Preset. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NPCStatlinePreset'];
         };
       };
     };
