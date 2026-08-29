@@ -12,6 +12,7 @@ from world.roster.views import (
     GameInviteViewSet,
     KinRelationshipView,
     MediaViewSet,
+    NPCStatlinePresetViewSet,
     PlayerMailViewSet,
     RosterApplicationViewSet,
     RosterEntryViewSet,
@@ -33,6 +34,7 @@ router.register("media", MediaViewSet, basename="media")
 router.register("mail", PlayerMailViewSet, basename="mail")
 router.register("tenures", RosterTenureViewSet, basename="tenures")
 router.register("galleries", TenureGalleryViewSet, basename="galleries")
+router.register("npc-presets", NPCStatlinePresetViewSet, basename="npc-presets")
 
 urlpatterns = [
     path(

@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { WelcomePanel } from '@/components/WelcomePanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { CharactersBand } from './hall/CharactersBand';
+import { OffscreenActsPlate } from './hall/OffscreenActsPlate';
 import { AttentionBand } from './hall/AttentionBand';
 import { WorldBand } from './hall/WorldBand';
 
@@ -66,6 +67,8 @@ export function HallPage() {
       ) : (
         <CharactersBand characters={characters} />
       )}
+
+      <OffscreenActsPlate characters={characters} />
 
       {/* 52rem, not a default Tailwind breakpoint (brief's explicit threshold) —
           arbitrary variant. Single column below stacks Attention above World

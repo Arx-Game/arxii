@@ -163,6 +163,14 @@ class Action:
         dead_reason = self._dead_gate_reason(actor)
         if dead_reason:
             failures.append(dead_reason)
+        else:
+            # #3412 — the offscreen-act gate: only consulted once the dead
+            # gate above has already passed, so a dead actor's refusal text
+            # for a non-whitelisted key stays byte-identical to the dead gate
+            # alone (no second reason appended to the same failure list).
+            offscreen_reason = self._offscreen_gate_reason(actor)
+            if offscreen_reason:
+                failures.append(offscreen_reason)
         for prereq in self.get_prerequisites():
             met, reason = prereq.is_met(actor, target, context)
             if not met:
@@ -251,6 +259,28 @@ class Action:
         if is_dead(sheet) and self.key not in DEAD_ALLOWED_ACTION_KEYS:
             return "The dead cannot do that."
         return ""
+
+    def _offscreen_gate_reason(self, actor: ObjectDB | None) -> str:
+        """Refusal/routing reason for a degraded-lifecycle actor's offscreen acts (#3412).
+
+        Only consulted from ``check_availability`` when the dead gate above
+        did not already refuse — DEAD is a disposition inside the offscreen
+        gate too, but the global dead-gate check stays authoritative and
+        byte-identical for every key (offscreen or not). Empty string means
+        ALLOWED; both ROUTED and BLOCKED are refusals this slice (#3412 —
+        ROUTED has no delivery mechanics yet, only world-voice prose).
+        """
+        if actor is None:
+            return ""
+        from actions.constants import OffscreenActState  # noqa: PLC0415
+        from actions.offscreen_gate import offscreen_act_state  # noqa: PLC0415
+        from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
+
+        sheet = resolve_actor_sheet(actor)
+        result = offscreen_act_state(sheet, self.key)
+        if result.state == OffscreenActState.ALLOWED:
+            return ""
+        return result.reason or ""
 
     def run(  # noqa: C901
         self,

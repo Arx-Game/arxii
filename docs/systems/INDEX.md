@@ -1369,7 +1369,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`)
-- **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`).
+- **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
 - **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
@@ -2198,6 +2198,14 @@ Character lifecycle management with web-first applications and player anonymity.
   annotation off `obj.__dict__` when present, falling back to a direct count on the
   unannotated `select`-endpoint path. Drives the "Your Characters" band's tidings
   `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section.
+- **The offscreen-act gate (#3412 slice 3, ADR-0246):** `MyRosterEntrySerializer` also
+  exposes `lifecycle_state` (plain read-only `CharField` mirror of
+  `CharacterSheet.lifecycle_state`, no annotation, no migration), letting the Hall's
+  OffscreenActsPlate render world-voice refusal prose for a docked
+  CAPTURED/DEAD/RETIRED/UNKNOWN character instead of the offscreen-act rows. The
+  actual gate — `actions.offscreen_gate.offscreen_act_state` — runs server-side in
+  `Action.check_availability()` for journal/goal/persona/proclamation acts; see the
+  Actions section above and ADR-0246.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
@@ -2661,6 +2669,29 @@ GM at a given level may author (#2000, ADR-0097).
   Frontend: a "My NPCs" block on `GMDashboardPage` + a mint dialog. See
   `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the full
   rundown and how this relates to the ambient-NPC ladder.
+- **Story-NPC statline presets (#3427):** `NPCStatlinePreset`
+  (`world.roster.models`, `NaturalKeyMixin + CreditedContent`, registered in
+  `CONTENT_MODELS` — staff-authored catalog, GMs select but never edit values,
+  ADR-0176 intact) + its child rows `NPCPresetTraitLine`
+  (STAT trait, display-scale 1-10) / `NPCPresetSkillLine` (SKILL, true 1-100),
+  unique per (preset, trait)/(preset, skill), admin page with two inlines.
+  `apply_npc_preset(sheet, preset)` (beside `mint_story_npc`) mirrors CG
+  finalize's write shape exactly (`_create_stat_values`/`_create_skill_values`,
+  `world.character_creation.services`): trait lines at `display_value *
+  STAT_DISPLAY_DIVISOR`, skill lines as a `CharacterSkillValue` plus the #2894
+  bridging `CharacterTraitValue` on `skill.trait`, every line stamped with a
+  `CharacterTraitChange` (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`).
+  Refuses re-application to a sheet already carrying an NPC_PRESET stamp — no
+  re-apply path in v1, staff adjust via admin instead.
+  `mint_story_npc`/`MintStoryNPCAction` gain a keyword-only/optional `preset`
+  (resolved by natural key; unknown name → refusal, no mint). Telnet: `gm npc
+  <name>[=<description>] [preset=<name>]` (`CmdGMDashboard`, `commands/gm_ops.py`).
+  **API:** `NPCStatlinePresetViewSet` (`/api/roster/npc-presets/`, read-only,
+  `IsGMOrStaff`, `SearchFilter` on `name`) feeds a preset `Select` in the #3426
+  mint dialog (`GMDashboardPage`). Seed: 3-4 starter presets (Guard, Courtier,
+  Innkeeper, Investigator) via `authored_or_sample` in the roster seed cluster
+  (`world.roster.seeds.ensure_starter_npc_presets`) — modest values, staff
+  rewrite freely.
 - **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates;
   `GroupStoryRequest.claimed_by` → `GMProfile`, #2119 — claiming creates the GROUP
   Story and seats the covenant via `join_table`; `world.stories.services.gm_rewards`
@@ -7818,6 +7849,7 @@ Self-contained game actions that own prerequisites, execution, and events.
   unchanged `resolve_challenge()`. See `docs/architecture/action-template-pipeline.md`.
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → emits `EventName.ACTION_INTENT` (cancellable, skipped when `actor is None`) → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → runs post-effects → emits `EventName.ACTION_RESULT` → returns `ActionResult` (#3418, ADR-0243)
 - **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
+- **Two built-in gates run BEFORE `get_prerequisites()`** (`Action.check_availability`, `base.py`): the dead gate (#2287 — a dead actor is refused every action key except `DEAD_ALLOWED_ACTION_KEYS`'s spectator/off-ramp whitelist), then the offscreen-act gate (#3412, ADR-0246 — `actions.offscreen_gate.offscreen_act_state(sheet, action_key)`, consulted only when the dead gate didn't already refuse; a character in a degraded lifecycle state — CAPTURED/unconscious/DEAD/RETIRED/UNKNOWN — gets ROUTED or BLOCKED instead of ALLOWED for the narrow `OFFSCREEN_ACT_KEYS` set of "2.5 acts": journal entries, character goals, persona swaps, proclamations; every other key resolves ALLOWED with zero lifecycle read). Neither is opt-in — both apply to every action automatically.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (the generic `ACTION_INTENT`/`ACTION_RESULT` pair, #3418 — authored triggers filter on `payload.action_key`)
 - **Not Yet Built:** `SyntheticAction` model, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Telnet convergence convention (ratified #1337):** the three player-action dispatch

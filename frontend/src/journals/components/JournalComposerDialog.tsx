@@ -125,6 +125,12 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
   }
 
   const canSubmit = title.trim().length > 0 && body.trim().length > 0 && !createEntry.isPending;
+  // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
+  // `ApiError.message` by `readErrorDetail`/`createJournalEntry`) needs to stay readable
+  // after the toast above dismisses; the reason text IS the message, never rewritten here.
+  // Mirrors `PromoteRoleDialog`'s established inline-error convention.
+  const errorMessage =
+    createEntry.isError && createEntry.error instanceof Error ? createEntry.error.message : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -206,6 +212,16 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
               placeholder="Type a tag and press Enter"
             />
           </div>
+
+          {/* PLACEHOLDER styling */}
+          {errorMessage && (
+            <div
+              className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              data-testid="journal-composer-error"
+            >
+              <p>{errorMessage}</p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={createEntry.isPending}>

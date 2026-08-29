@@ -26,11 +26,13 @@ vi.mock('sonner', () => ({
 import * as queries from '../queries';
 import { toast } from 'sonner';
 
-function makeCreateMock() {
+function makeCreateMock(errorState?: { error: Error }) {
   const mutateMock = vi.fn();
   vi.mocked(queries.useCreateJournalEntry).mockReturnValue({
     mutate: mutateMock,
     isPending: false,
+    isError: !!errorState,
+    error: errorState?.error ?? null,
   } as unknown as ReturnType<typeof queries.useCreateJournalEntry>);
   return mutateMock;
 }
@@ -119,6 +121,24 @@ describe('JournalComposerDialog', () => {
       expect(toast.success).toHaveBeenCalledWith('Journal entry recorded.');
     });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('renders a gate refusal reason inline (not just a toast) — #3412 T4', () => {
+    makeCreateMock({
+      error: new Error('You are captured; smuggle a message out to reach the world.'),
+    });
+    render(<JournalComposerDialog open onClose={vi.fn()} />);
+
+    expect(screen.getByTestId('journal-composer-error')).toHaveTextContent(
+      'You are captured; smuggle a message out to reach the world.'
+    );
+  });
+
+  it('renders no inline error block when the mutation has not errored', () => {
+    makeCreateMock();
+    render(<JournalComposerDialog open onClose={vi.fn()} />);
+
+    expect(screen.queryByTestId('journal-composer-error')).not.toBeInTheDocument();
   });
 
   it('disables submit until both title and body are filled', async () => {

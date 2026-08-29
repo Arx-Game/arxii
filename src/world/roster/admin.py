@@ -10,6 +10,9 @@ from world.roster.models import (
     KinSlotPool,
     Kinsperson,
     KinspersonTraitValue,
+    NPCPresetSkillLine,
+    NPCPresetTraitLine,
+    NPCStatlinePreset,
     ParentageEdge,
     PlayerMail,
     Roster,
@@ -379,3 +382,24 @@ class PlayerMailAdmin(admin.ModelAdmin):
 
     is_read.boolean = True
     is_read.short_description = "Read"
+
+
+class NPCPresetTraitLineInline(admin.TabularInline):
+    model = NPCPresetTraitLine
+    extra = 1
+    autocomplete_fields = ["trait"]
+
+
+class NPCPresetSkillLineInline(admin.TabularInline):
+    model = NPCPresetSkillLine
+    extra = 1
+    autocomplete_fields = ["skill"]
+
+
+@admin.register(NPCStatlinePreset)
+class NPCStatlinePresetAdmin(admin.ModelAdmin):
+    """Staff authoring surface for the Story-NPC statline catalog (#3427)."""
+
+    list_display = ["name", "description"]
+    search_fields = ["name", "description"]
+    inlines = [NPCPresetTraitLineInline, NPCPresetSkillLineInline]

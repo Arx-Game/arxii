@@ -36,6 +36,14 @@ vi.mock('../hall/AttentionBand', () => ({
   },
 }));
 
+const mockOffscreenActsPlate = vi.fn();
+vi.mock('../hall/OffscreenActsPlate', () => ({
+  OffscreenActsPlate: (props: { characters: MyRosterEntry[] }) => {
+    mockOffscreenActsPlate(props);
+    return <div data-testid="offscreen-acts-plate-stub" />;
+  },
+}));
+
 vi.mock('../hall/WorldBand', () => ({
   WorldBand: () => <div data-testid="world-band-stub" />,
 }));
@@ -48,6 +56,7 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
   roster_type: 'Active',
 };
 
@@ -91,5 +100,15 @@ describe('HallPage', () => {
     expect(screen.getByTestId('characters-band-stub')).toBeInTheDocument();
     expect(screen.getByTestId('attention-band-stub')).toBeInTheDocument();
     expect(screen.getByTestId('world-band-stub')).toBeInTheDocument();
+  });
+
+  it('mounts the OffscreenActsPlate with the same characters list', () => {
+    mockUseMyRosterEntriesQuery.mockReturnValue({ data: [aria] });
+    renderWithProviders(<HallPage />);
+
+    expect(screen.getByTestId('offscreen-acts-plate-stub')).toBeInTheDocument();
+    expect(mockOffscreenActsPlate).toHaveBeenCalledWith(
+      expect.objectContaining({ characters: [aria] })
+    );
   });
 });

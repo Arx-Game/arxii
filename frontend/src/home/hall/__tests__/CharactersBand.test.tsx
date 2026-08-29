@@ -29,6 +29,7 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 4,
+  lifecycle_state: 'ALIVE',
   roster_type: 'Active',
 };
 
@@ -40,6 +41,7 @@ const bianca: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
   roster_type: 'Active',
 };
 
@@ -76,6 +78,34 @@ describe('CharactersBand', () => {
   it('shows no offscreen meta on an undocked card', () => {
     renderWithProviders(<CharactersBand characters={[aria]} />);
     expect(screen.queryByText('Playing: Currently Offscreen')).not.toBeInTheDocument();
+  });
+
+  it('shows "Currently Offscreen" for a docked ALIVE character', () => {
+    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    renderWithProviders(<CharactersBand characters={[aria]} />);
+
+    expect(screen.getByText('Playing: Currently Offscreen')).toBeInTheDocument();
+  });
+
+  it('shows a degraded state label instead of "Currently Offscreen" for a docked CAPTURED character (#3412 review IMPORTANT-1)', () => {
+    const captured: MyRosterEntry = { ...aria, lifecycle_state: 'CAPTURED' };
+    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    renderWithProviders(<CharactersBand characters={[captured]} />);
+
+    expect(screen.getByText('Playing: Held captive')).toBeInTheDocument();
+    expect(screen.queryByText('Playing: Currently Offscreen')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['DEAD', 'Dead'],
+    ['RETIRED', 'Retired'],
+    ['UNKNOWN', 'Whereabouts unknown'],
+  ])('shows the "%s" state label for a docked %s character', (lifecycleState, label) => {
+    const entry: MyRosterEntry = { ...aria, lifecycle_state: lifecycleState };
+    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    renderWithProviders(<CharactersBand characters={[entry]} />);
+
+    expect(screen.getByText(`Playing: ${label}`)).toBeInTheDocument();
   });
 
   it('selecting a card dispatches the local hydrate and fires the select mutation', async () => {

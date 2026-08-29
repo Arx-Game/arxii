@@ -232,16 +232,17 @@ class ProclamationViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=[HTTPMethod.POST], url_path="proclaim")
     def proclaim(self, request):
-        """Issue a proclamation (optionally enacting a domain edict)."""
+        """Issue a proclamation (optionally enacting a domain edict).
+
+        Dispatches through ``IssueProclamationAction.run()`` (#3412 slice 3)
+        instead of calling the ``proclamations`` service functions directly —
+        this is the choke point the offscreen-act gate consults, so a
+        captured/unconscious/dead leader is now refused before the service
+        layer's own leadership/domain-authority checks ever run.
+        """
+        from actions.definitions.organizations import IssueProclamationAction  # noqa: PLC0415
         from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
-        from world.societies.houses.models import Domain, EdictKind  # noqa: PLC0415
-        from world.societies.models import Organization, StanceArchetype  # noqa: PLC0415
-        from world.societies.proclamations import (  # noqa: PLC0415
-            ProclamationError,
-            enact_edict,
-            issue_proclamation,
-        )
         from world.societies.serializers import (  # noqa: PLC0415
             ProclamationCreateSerializer,
             ProclamationSerializer,
@@ -253,25 +254,19 @@ class ProclamationViewSet(viewsets.ReadOnlyModelViewSet):
         persona = Persona.objects.filter(pk__in=get_account_personas(request)).first()
         if persona is None:
             return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
-        try:
-            if data.get("domain"):
-                domain = Domain.objects.filter(pk=data["domain"]).first()
-                kind = EdictKind.objects.filter(pk=data["edict_kind"]).first()
-                if domain is None or kind is None:
-                    return Response({"detail": "No such domain or edict."}, status=400)
-                edict = enact_edict(domain, kind, persona, prose=data.get("prose", ""))
-                row = edict.proclamation
-            else:
-                stance = StanceArchetype.objects.filter(pk=data["stance"]).first()
-                if stance is None:
-                    return Response({"detail": "No such stance."}, status=400)
-                org = (
-                    Organization.objects.filter(pk=data["org"]).first() if data.get("org") else None
-                )
-                row = issue_proclamation(persona, stance, prose=data.get("prose", ""), org=org)
-        except ProclamationError as exc:
-            return Response({"detail": exc.user_message}, status=400)
-        return Response(ProclamationSerializer(row).data, status=201)
+        actor = persona.character_sheet.character
+        result = IssueProclamationAction().run(
+            actor=actor,
+            persona_id=persona.pk,
+            stance_id=data.get("stance"),
+            prose=data.get("prose", ""),
+            org_id=data.get("org"),
+            domain_id=data.get("domain"),
+            edict_kind_id=data.get("edict_kind"),
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+        return Response(ProclamationSerializer(result.data["proclamation"]).data, status=201)
 
 
 class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):

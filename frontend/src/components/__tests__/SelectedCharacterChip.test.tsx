@@ -69,6 +69,7 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  lifecycle_state: 'ALIVE',
   roster_type: 'Active',
 };
 
@@ -128,6 +129,46 @@ describe('SelectedCharacterChip (#3412)', () => {
     );
     expect(screen.queryByText(/Playing: Currently Offscreen/)).not.toBeInTheDocument();
     expect(screen.getByText(/as Aria/)).toBeInTheDocument();
+  });
+
+  it('shows the normal offscreen label for an ALIVE docked character', () => {
+    state.personas = [persona(7, 'Aria', 'primary')];
+
+    render(
+      <MemoryRouter initialEntries={['/tidings']}>
+        <SelectedCharacterChip entry={aria} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Playing: Currently Offscreen/)).toBeInTheDocument();
+  });
+
+  it('shows a degraded state label instead of "Currently Offscreen" for a CAPTURED character (#3412 review IMPORTANT-1)', () => {
+    state.personas = [persona(7, 'Aria', 'primary')];
+    const captured: MyRosterEntry = { ...aria, lifecycle_state: 'CAPTURED' };
+
+    render(
+      <MemoryRouter initialEntries={['/tidings']}>
+        <SelectedCharacterChip entry={captured} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Playing: Held captive/)).toBeInTheDocument();
+    expect(screen.queryByText(/Playing: Currently Offscreen/)).not.toBeInTheDocument();
+  });
+
+  it('keeps "Enter the world" rendered for a DEAD docked character (spectator/ghost entry stays allowed)', () => {
+    state.personas = [persona(7, 'Aria', 'primary')];
+    const dead: MyRosterEntry = { ...aria, lifecycle_state: 'DEAD' };
+
+    render(
+      <MemoryRouter initialEntries={['/tidings']}>
+        <SelectedCharacterChip entry={dead} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Playing: Dead/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /enter the world/i })).toHaveAttribute('href', '/game');
   });
 
   it('carries no clear-selection control (ruled: clearing lives with the character list)', () => {
