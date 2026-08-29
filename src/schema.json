@@ -31184,6 +31184,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/scenes/{id}/gm-rail/:
+    get:
+      operationId: scenes_gm_rail_retrieve
+      description: |-
+        GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
+        material, protected subjects, and room clue placements, gated per-viewer.
+
+        Composed read only -- no writes, no models, no migration. View-level gate
+        (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
+        the scene owner and is too broad -- see the #3434 spec's anti-reinvention
+        ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+        (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
+        ``CharacterVitalsView``, the scene itself is already visible through the
+        plain detail endpoint, so this gate is refusing a sub-resource, not hiding
+        the scene's existence.
+
+        Payload sections are gated further, per-viewer, inside
+        ``build_gm_story_rail_payload``: the beat summary for any qualifying
+        viewer; ``internal_description``/opponent-and-staged-line
+        details/protected subjects only for viewers with standing on the running
+        story; room clue placements staff-only. No secrets data at any tier.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMStoryRail'
+          description: ''
   /api/scenes/{id}/highlight-reel/:
     get:
       operationId: scenes_highlight_reel_retrieve
@@ -37725,12 +37765,15 @@ paths:
       description: |-
         Read-only vitals payload for the character sheet page (#521).
 
-        Visibility: staff, or an account with an active tenure on the character.
-        Everyone else receives 404 (same queryset rule as CharacterAnimaViewSet).
+        Visibility: staff, an account with an active tenure on the character, or
+        the GM of the character's active (non-battle) scene at JUNIOR+ trust
+        (#3434). Everyone else receives 404 (same queryset rule as
+        CharacterAnimaViewSet, which deliberately does NOT gain this carve-out -
+        see docs/systems/INDEX.md's "Pool opacity" subsection).
 
         Hot path rides the SharedMemoryModel identity map: the sheet is resolved
         by pk and vitals/fatigue are read via the instance-cached reverse
-        accessors — repeated calls re-query none of those rows.
+        accessors - repeated calls re-query none of those rows.
       parameters:
       - in: path
         name: character_id
@@ -50290,6 +50333,104 @@ components:
           format: email
       required:
       - roster_entry
+    GMStoryRail:
+      type: object
+      description: Full GM story rail response.
+      properties:
+        beat:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailBeat'
+          nullable: true
+        protected_subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryProtectedSubject'
+        clue_placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMStoryRailClue'
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMStoryRailParticipant'
+      required:
+      - beat
+      - clue_placements
+      - participants
+      - protected_subjects
+    GMStoryRailBeat:
+      type: object
+      description: The running beat's authored state, gated per-field by story standing.
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+        risk:
+          type: string
+        outcome:
+          type: string
+        predicate_type:
+          type: string
+        success_consequences_authored:
+          type: boolean
+        failure_consequences_authored:
+          type: boolean
+        expired_consequences_authored:
+          type: boolean
+        internal_description:
+          type: string
+          nullable: true
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatOpponentLine'
+          nullable: true
+        staged_templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedTemplate'
+          nullable: true
+      required:
+      - expired_consequences_authored
+      - failure_consequences_authored
+      - id
+      - internal_description
+      - kind
+      - opponent_lines
+      - outcome
+      - predicate_type
+      - risk
+      - staged_templates
+      - success_consequences_authored
+    GMStoryRailClue:
+      type: object
+      description: One room clue placement - staff viewers only.
+      properties:
+        id:
+          type: integer
+        clue_name:
+          type: string
+        detect_difficulty:
+          type: integer
+        is_active:
+          type: boolean
+      required:
+      - clue_name
+      - detect_difficulty
+      - id
+      - is_active
+    GMStoryRailParticipant:
+      type: object
+      description: One character currently present in the scene's room (location-derived).
+      properties:
+        character_sheet_id:
+          type: integer
+        name:
+          type: string
+      required:
+      - character_sheet_id
+      - name
     GMSummonOffer:
       type: object
       description: |-

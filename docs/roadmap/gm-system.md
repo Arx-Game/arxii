@@ -215,6 +215,25 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   `GMAdjudicationPanel` gained three tabs (Grant Item, Stage — prop/property modes,
   Traps — list/arm/disarm) dispatching the pre-existing telnet-only actions, plus a
   Remove mode on the Condition tab.
+- **GM story rail: running beat + protected subjects + participant conditions/vitals
+  ready (#3434)** - a 2026-08-28 audit found no scene-scoped GM reference view: the
+  adjudication panel's target picker showed names only, beat/story state lived on
+  separate pages, and `StaffSecretsPanel` is staff-gated and per-character-page.
+  **Built:** `GET /api/scenes/{id}/gm-rail/`, a composed per-viewer read (no new
+  models) gated to staff or a scene's own GM at JUNIOR+ trust - beat summary
+  (id/kind/risk/outcome/predicate state/pools-authored booleans) for any qualifying
+  viewer; `internal_description` + opponent/staged line details + active
+  `StoryProtectedSubject`s only for viewers with standing on the running story (same
+  scoping `IsProtectedSubjectStoryOwnerOrStaff` enforces, never widened); room clue
+  placements staff-only; present-in-room participants for the conditions/vitals
+  seams. No secrets data at any tier. Paired with a fresh ruling (2026-08-29,
+  superseding the 2026-08-08 #3071 note) extending `CharacterVitalsView._can_view`
+  with the same trust-gated scene-GM carve-out - matching the parity combat already
+  grants (`CombatParticipantSerializer._can_view_vitals`) - while
+  `CharacterAnimaViewSet` deliberately keeps the #3071 staff-or-own-tenure-only gate
+  (see `docs/systems/INDEX.md`'s "Pool opacity" entry). Frontend: `GMStoryRail`
+  (`frontend/src/scenes/components/GMStoryRail.tsx`), a `CombatRail`-pattern sibling
+  in `SceneDetailPage`'s right rail.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system

@@ -1,7 +1,13 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
-import type { HighlightReel, Interaction, ReactionEmojiEntry, SceneRoundModeValue } from './types';
+import type {
+  GMStoryRailPayload,
+  HighlightReel,
+  Interaction,
+  ReactionEmojiEntry,
+  SceneRoundModeValue,
+} from './types';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -30,6 +36,7 @@ export type {
   SceneDetail,
   Interaction,
   HighlightReel,
+  GMStoryRailPayload,
   SceneRoundModeValue,
 } from './types';
 
@@ -106,6 +113,29 @@ export async function fetchHighlightReel(sceneId: string): Promise<HighlightReel
   const res = await apiFetch(`/api/scenes/${sceneId}/highlight-reel/`);
   if (!res.ok) throw new Error('Failed to load highlight reel');
   return res.json();
+}
+
+/**
+ * Fetch the GM story rail payload (#3434): the running beat's authored
+ * material, protected subjects, room clue placements, and present
+ * participants, all gated per-viewer server-side. Returns null on 401/403 -
+ * the caller (a GM without JUNIOR+ trust, or a merely-present GM) simply sees
+ * no rail rather than an error, mirroring `fetchCharacterVitals`'s convention.
+ */
+export async function fetchGMStoryRail(sceneId: string): Promise<GMStoryRailPayload | null> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/gm-rail/`);
+  if (res.status === 401 || res.status === 403 || res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to load GM story rail');
+  return res.json();
+}
+
+export function useGMStoryRailQuery(sceneId: string, enabled: boolean) {
+  return useQuery<GMStoryRailPayload | null>({
+    queryKey: ['scene-gm-rail', sceneId],
+    queryFn: () => fetchGMStoryRail(sceneId),
+    enabled,
+    staleTime: 10_000,
+  });
 }
 
 export interface InteractionReactionResponse {

@@ -2508,13 +2508,23 @@ GM at a given level may author (#2000, ADR-0097).
   (participant picker feeds `gm_list_conditions` to populate an active-instance
   select, then dispatches `gm_remove_condition` with the picked template name +
   a required reason).
-- **Pool opacity is documented as deliberate (#3071):** `CharacterVitalsView._can_view`
-  (`world/vitals/views.py`) and `CharacterAnimaViewSet.get_queryset`
-  (`world/magic/views.py`) are staff-or-own-tenure only — no `viewer_can_gm` carve-out.
-  Ruled 2026-08-08 (Tehom): a scene's GM narrates off public wound text (badges, pose
-  descriptions) and what a character chooses to show, not raw vitals/anima numbers. This
-  is least-privilege BY DESIGN, not a gap that got missed — both view methods carry a
-  docstring pointing back here so a future agent doesn't "fix" it without a fresh ruling.
+- **Pool opacity split between vitals and anima (#3071 superseded for vitals by #3434,
+  2026-08-29):** the two views no longer match. `CharacterAnimaViewSet.get_queryset`
+  (`world/magic/views.py`) stays staff-or-own-tenure only - no `viewer_can_gm` carve-out -
+  per the original 2026-08-08 #3071 ruling: a scene's GM narrates off public wound text
+  (badges, pose descriptions) and what a character chooses to show, not raw anima
+  numbers. This is least-privilege BY DESIGN for anima, not a gap that got missed - its
+  `get_queryset` carries a docstring pointing back here so a future agent doesn't "fix"
+  it without a fresh ruling. `CharacterVitalsView._can_view` (`world/vitals/views.py`)
+  gained a narrower carve-out (#3434, the fresh ruling #3071 asked for): staff, own
+  tenure, OR the GM of an active non-battle scene at the character's location, at JUNIOR+
+  GM trust (`HasGMTrust`), with the target actually present in that scene right now
+  (`Scene.has_character_present` - location-derived, not participation-derived, so a
+  participant who steps out of the room drops out of the carve-out). Matches the parity
+  combat already grants via `CombatParticipantSerializer._can_view_vitals`
+  (`world/combat/serializers.py:285`). Feeds the GM story rail (#3434,
+  `GET /api/scenes/{id}/gm-rail/`, see `docs/systems/scenes.md`'s "API Endpoints"
+  section) as one of its per-participant sections.
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
   shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
   read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than

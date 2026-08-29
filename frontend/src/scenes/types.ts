@@ -143,6 +143,82 @@ export interface SceneDetail extends SceneListItem {
   declared_risk: 'low' | 'moderate' | 'high' | 'extreme' | null;
 }
 
+/** #3434 GM story rail - one authored opponent line on an ENCOUNTER beat. */
+export interface GMStoryRailOpponentLine {
+  id: number;
+  creature_template: number;
+  count: number;
+  position_name: string;
+  order: number;
+}
+
+/** #3434 GM story rail - one authored situation/challenge template on a SITUATION beat. */
+export interface GMStoryRailStagedTemplate {
+  id: number;
+  situation_template: number | null;
+  challenge_template: number | null;
+  order: number;
+}
+
+/**
+ * #3434 GM story rail - the running beat's authored state.
+ *
+ * `internal_description`/`opponent_lines`/`staged_templates` are null unless
+ * the viewer has standing on the running story (owner/lead-GM/staff) - every
+ * other field is refereeing metadata any qualifying scene GM sees.
+ */
+export interface GMStoryRailBeat {
+  id: number;
+  kind: string;
+  risk: string;
+  outcome: string;
+  predicate_type: string;
+  success_consequences_authored: boolean;
+  failure_consequences_authored: boolean;
+  expired_consequences_authored: boolean;
+  internal_description: string | null;
+  opponent_lines: GMStoryRailOpponentLine[] | null;
+  staged_templates: GMStoryRailStagedTemplate[] | null;
+}
+
+/** #3434 GM story rail - one active StoryProtectedSubject; story-privileged viewers only. */
+export interface GMStoryRailProtectedSubject {
+  id: number;
+  story: number;
+  subject_kind: string;
+  subject_sheet: number | null;
+  subject_item: number | null;
+  subject_society: number | null;
+  subject_organization: number | null;
+  subject_label: string | null;
+  beat: number | null;
+  is_active: boolean;
+  notes: string;
+  created_at: string;
+}
+
+/** #3434 GM story rail - one room clue placement; staff viewers only. */
+export interface GMStoryRailCluePlacement {
+  id: number;
+  clue_name: string;
+  detect_difficulty: number;
+  is_active: boolean;
+}
+
+/** #3434 GM story rail - one character currently present in the scene's room. */
+export interface GMStoryRailParticipant {
+  character_sheet_id: number;
+  name: string;
+}
+
+/** GET /api/scenes/{id}/gm-rail/ response (#3434). */
+export interface GMStoryRailPayload {
+  beat: GMStoryRailBeat | null;
+  protected_subjects: GMStoryRailProtectedSubject[];
+  clue_placements: GMStoryRailCluePlacement[];
+  participants: GMStoryRailParticipant[];
+}
+
 export interface InteractionPersona {
   id: number;
   name: string;

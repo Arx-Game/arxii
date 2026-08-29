@@ -19147,6 +19147,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/scenes/{id}/gm-rail/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
+     *     material, protected subjects, and room clue placements, gated per-viewer.
+     *
+     *     Composed read only -- no writes, no models, no migration. View-level gate
+     *     (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
+     *     the scene owner and is too broad -- see the #3434 spec's anti-reinvention
+     *     ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+     *     (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
+     *     ``CharacterVitalsView``, the scene itself is already visible through the
+     *     plain detail endpoint, so this gate is refusing a sub-resource, not hiding
+     *     the scene's existence.
+     *
+     *     Payload sections are gated further, per-viewer, inside
+     *     ``build_gm_story_rail_payload``: the beat summary for any qualifying
+     *     viewer; ``internal_description``/opponent-and-staged-line
+     *     details/protected subjects only for viewers with standing on the running
+     *     story; room clue placements staff-only. No secrets data at any tier.
+     */
+    get: operations['scenes_gm_rail_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/scenes/{id}/highlight-reel/': {
     parameters: {
       query?: never;
@@ -23030,12 +23065,15 @@ export interface paths {
     /**
      * @description Read-only vitals payload for the character sheet page (#521).
      *
-     *     Visibility: staff, or an account with an active tenure on the character.
-     *     Everyone else receives 404 (same queryset rule as CharacterAnimaViewSet).
+     *     Visibility: staff, an account with an active tenure on the character, or
+     *     the GM of the character's active (non-battle) scene at JUNIOR+ trust
+     *     (#3434). Everyone else receives 404 (same queryset rule as
+     *     CharacterAnimaViewSet, which deliberately does NOT gain this carve-out -
+     *     see docs/systems/INDEX.md's "Pool opacity" subsection).
      *
      *     Hot path rides the SharedMemoryModel identity map: the sheet is resolved
      *     by pk and vitals/fatigue are read via the instance-cached reverse
-     *     accessors — repeated calls re-query none of those rows.
+     *     accessors - repeated calls re-query none of those rows.
      */
     get: operations['vitals_retrieve'];
     put?: never;
@@ -29046,6 +29084,39 @@ export interface components {
       is_public?: boolean;
       /** Format: email */
       invited_email?: string;
+    };
+    /** @description Full GM story rail response. */
+    GMStoryRail: {
+      beat: components['schemas']['GMStoryRailBeat'] | null;
+      protected_subjects: components['schemas']['StoryProtectedSubject'][];
+      clue_placements: components['schemas']['GMStoryRailClue'][];
+      participants: components['schemas']['GMStoryRailParticipant'][];
+    };
+    /** @description The running beat's authored state, gated per-field by story standing. */
+    GMStoryRailBeat: {
+      id: number;
+      kind: string;
+      risk: string;
+      outcome: string;
+      predicate_type: string;
+      success_consequences_authored: boolean;
+      failure_consequences_authored: boolean;
+      expired_consequences_authored: boolean;
+      internal_description: string | null;
+      opponent_lines: components['schemas']['BeatOpponentLine'][] | null;
+      staged_templates: components['schemas']['BeatStagedTemplate'][] | null;
+    };
+    /** @description One room clue placement - staff viewers only. */
+    GMStoryRailClue: {
+      id: number;
+      clue_name: string;
+      detect_difficulty: number;
+      is_active: boolean;
+    };
+    /** @description One character currently present in the scene's room (location-derived). */
+    GMStoryRailParticipant: {
+      character_sheet_id: number;
+      name: string;
     };
     /**
      * @description Read-only payload for a pending GM summon offer (#3071).
@@ -71595,6 +71666,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  scenes_gm_rail_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMStoryRail'];
         };
       };
     };
