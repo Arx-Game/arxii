@@ -158,7 +158,14 @@ class RenownReach(models.TextChoices):
     WORLD = "world", "World"
 
 
-# Magnitude → numeric awards (admin-tunable starting points per the spec).
+# Magnitude → numeric awards.
+#
+# NOT admin-tunable, despite what this comment claimed until #3463: these are
+# Python constants and changing them needs a deploy. Legend's equivalent moved
+# to RiskCalibration.legend_award, which is a real per-risk-tier DB row staff
+# can edit; the table below stays the fallback for a tier with no calibration
+# row. Fame and prestige have no such row yet — if they need tuning, they want
+# the same treatment rather than a second constants edit.
 # Fame outscales prestige — a Very High event puts you instantly at
 # Household Name fame (10k threshold), but permanent prestige climbs slowly.
 MAGNITUDE_FAME_AWARDS: dict[str, int] = {
@@ -207,8 +214,9 @@ def risk_meets_legend_floor(risk: str) -> bool:
         return False
 
 
-# Risk → legend base_value (added to LegendEntry; spreads extend it
-# further per the existing legend mechanics).
+# Risk → legend base_value FALLBACK. The authored value is
+# RiskCalibration.legend_award (#3463); this table is what a tier with no
+# calibration row falls back to.
 RISK_LEGEND_AWARDS: dict[str, int] = {
     RenownRisk.NONE.value: 0,
     RenownRisk.LOW.value: 10,

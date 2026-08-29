@@ -23,7 +23,7 @@ from world.societies.legend_settlement import (
     settle_standouts_only,
 )
 from world.stories.constants import StakeResolutionColumn
-from world.stories.models import StakeOutcome
+from world.stories.models import RiskCalibration, StakeOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -61,6 +61,24 @@ def held_fraction_for_activation(activation: StakeContractActivation) -> float:
     if total <= 0:
         return 0.0
     return held / total
+
+
+def authored_legend_award(effective_risk: str) -> int | None:
+    """The staff-authored Legend award for this risk tier, if one is authored.
+
+    ``RiskCalibration`` is already THE designer-tunable per-risk-tier config
+    (severity bands, fuse hops, reward bands), so the Legend award for a tier
+    belongs beside them rather than in a Python constant. Returns None when no
+    row exists or the row leaves ``legend_award`` at 0, in which case the seam
+    falls back to ``societies.constants.RISK_LEGEND_AWARDS``.
+
+    0 means "not authored", not "this tier pays nothing" — a tier that should
+    pay nothing is one below ``LEGEND_RISK_FLOOR``.
+    """
+    calibration = RiskCalibration.objects.filter(risk=effective_risk).first()
+    if calibration is None or calibration.legend_award <= 0:
+        return None
+    return int(calibration.legend_award)
 
 
 def participants_for_activation(
@@ -137,6 +155,7 @@ def settle_legend_for_activation(  # noqa: PLR0913 - mirrors the seam it adapts
             story=story,
         )
     return settle_legend_for(
+        risk_award_override=authored_legend_award(activation.effective_risk),
         effective_risk=activation.effective_risk,
         target_level=activation.declared_target_level,
         held_fraction=held,

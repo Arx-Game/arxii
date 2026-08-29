@@ -2352,6 +2352,20 @@ class RiskCalibration(SharedMemoryModel):
     max_fuse_hops = models.PositiveSmallIntegerField()
     reward_floor = models.PositiveIntegerField(default=0)
     reward_ceiling = models.PositiveIntegerField(default=0)
+    # #3463 — what a settled unit at this risk pays in Legend, before the
+    # held-objective share and the station multiplier. Lives here rather than
+    # in a Python constant because this row is already THE designer-tunable
+    # per-risk-tier config; societies.constants.RISK_LEGEND_AWARDS remains the
+    # fallback for a tier with no calibration row authored yet.
+    # 0 = "not authored, use the fallback", not "this tier pays nothing" —
+    # a tier that should pay nothing is one below LEGEND_RISK_FLOOR.
+    legend_award = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Legend a settled unit at this risk pays, before the held-objective "
+            "share and station multiplier. 0 = use the code fallback."
+        ),
+    )
 
     class Meta:
         ordering = ["risk"]

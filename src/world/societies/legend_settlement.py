@@ -121,6 +121,7 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
     story: Story | None = None,
     concealed: bool = False,
     structurally_perilous: bool = False,
+    risk_award_override: int | None = None,
 ) -> SettlementReport:
     """Price and mint the Legend a settled unit earned. The only mint seam.
 
@@ -132,6 +133,10 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
         held_fraction: Severity-weighted share of objectives held, 0.0-1.0.
         participants: Who was there, at what level, with their best crucial
             contribution.
+        risk_award_override: The authored ``RiskCalibration.legend_award`` for
+            this tier, when a calibration row exists. ``RISK_LEGEND_AWARDS`` is
+            only the fallback — societies must not import stories (ADR-0010),
+            so the consumer resolves the authored value and passes it in.
         structurally_perilous: Bypasses the floor for a source whose peril is
             intrinsic rather than declared. **Audere Majora only** — a crossing
             is always a legendary reward and cannot happen without great
@@ -161,7 +166,7 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
             reason="no objective was held; the shared deed pays nothing",
         )
 
-    risk_award = RISK_LEGEND_AWARDS.get(effective_risk, 0)
+    risk_award = risk_award_override or RISK_LEGEND_AWARDS.get(effective_risk, 0)
     if structurally_perilous and risk_award <= 0:
         risk_award = RISK_LEGEND_AWARDS[LEGEND_RISK_FLOOR]
 
