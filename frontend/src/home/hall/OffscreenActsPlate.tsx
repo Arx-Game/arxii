@@ -38,15 +38,7 @@ import { Link } from 'react-router-dom';
 import { Plate, PlateHead } from '@/components/folio';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
-
-/**
- * The `lifecycle_state` values this plate treats as "still in the story, can
- * still act" — everything else gets the refusal prose. `COMA` is unwritten
- * anywhere in the codebase (no setter exists, #3412 recon) but is included
- * here to mirror the backend gate's own fall-through, not because it's
- * reachable today.
- */
-const ALLOWED_LIFECYCLE_STATES = new Set(['ALIVE', 'COMA']);
+import { ALLOWED_LIFECYCLE_STATES } from '@/roster/lifecycleDisplay';
 
 /**
  * PLACEHOLDER world-voice copy (Garamond/serif body voice, ADR-0245) — final

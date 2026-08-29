@@ -28,31 +28,9 @@ import { CountChip, PersonaTiles, Plate, PlateHead } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
+import { dockedStateLabel } from '@/roster/lifecycleDisplay';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { hydrateActiveCharacter } from '@/store/gameSlice';
-
-/**
- * `lifecycle_state` values that still read as "Currently Offscreen" — mirrors
- * `OffscreenActsPlate`'s `ALLOWED_LIFECYCLE_STATES` (COMA is unwritten
- * anywhere in the codebase today but included to match the backend gate's
- * own fall-through).
- */
-const ALLOWED_LIFECYCLE_STATES = new Set(['ALIVE', 'COMA']);
-
-/** PLACEHOLDER short state labels for the docked meta line — condensed
- * form of the plate's `DEGRADED_STATE_COPY` prose (full sentences don't fit
- * a one-line card meta). */
-const DEGRADED_STATE_LABELS: Record<string, string> = {
-  CAPTURED: 'Held captive',
-  DEAD: 'Dead',
-  RETIRED: 'Retired',
-  UNKNOWN: 'Whereabouts unknown',
-};
-
-function dockedStateLabel(lifecycleState: string): string {
-  if (ALLOWED_LIFECYCLE_STATES.has(lifecycleState)) return 'Currently Offscreen';
-  return DEGRADED_STATE_LABELS[lifecycleState] ?? 'Currently Offscreen';
-}
 
 function getInitials(name: string): string {
   return name
