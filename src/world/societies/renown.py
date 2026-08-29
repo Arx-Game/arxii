@@ -351,6 +351,7 @@ def fire_renown_award(  # noqa: PLR0913
     title: str = "Renown deed",
     settled_risk: str | None = None,
     station: int = 0,
+    structurally_perilous: bool = False,
 ) -> RenownAwardResult:
     """Thin wrapper around :func:`_apply_renown_award` that fires the
     #743 narrative notification post-commit.
@@ -372,6 +373,7 @@ def fire_renown_award(  # noqa: PLR0913
         title=title,
         settled_risk=settled_risk,
         station=station,
+        structurally_perilous=structurally_perilous,
     )
     try:
         from world.societies.notifications import notify_renown_event  # noqa: PLC0415
@@ -408,7 +410,13 @@ class _AwardInputs:
     station: int = 0
 
 
-def _priced_legend(declared_risk: str | None, settled_risk: str | None, station: int) -> int:
+def _priced_legend(
+    declared_risk: str | None,
+    settled_risk: str | None,
+    station: int,
+    *,
+    structurally_perilous: bool = False,
+) -> int:
     """What this award actually pays in Legend (#3463, ADR-0245).
 
     ``declared_risk`` is the authored wager on the ``RenownAwardConfig`` — the
@@ -422,19 +430,35 @@ def _priced_legend(declared_risk: str | None, settled_risk: str | None, station:
     prestige and reputation are untouched by this — a royal wedding is still
     enormously fame-worthy and still mints no legend, which is exactly what
     ``RenownRisk``'s docstring has said since #676.
+
+    ``structurally_perilous`` is for a source whose peril is intrinsic rather
+    than declared — **Audere Majora alone**. A crossing is always a legendary
+    reward and cannot happen without great personal risk (Tehom, 2026-08-29), so
+    it needs no stakes contract to prove it and cannot be authored down below
+    the floor. Everything else must show priced proof.
     """
     from world.societies.constants import (  # noqa: PLC0415
+        LEGEND_RISK_FLOOR,
         RenownRisk,
         risk_meets_legend_floor,
     )
 
-    if not declared_risk or not settled_risk or station <= 0:
+    if station <= 0:
         return 0
     ladder = list(RenownRisk.values)
-    try:
-        effective = min(declared_risk, settled_risk, key=ladder.index)
-    except ValueError:
-        return 0
+    if structurally_perilous:
+        # The declaration is trusted (peril is intrinsic), and floored so an
+        # authored NONE cannot silently produce a crossing worth nothing —
+        # the contingent-deed bug this replaces.
+        candidates = [r for r in (declared_risk, LEGEND_RISK_FLOOR) if r in ladder]
+        effective = max(candidates, key=ladder.index) if candidates else LEGEND_RISK_FLOOR
+    else:
+        if not declared_risk or not settled_risk:
+            return 0
+        try:
+            effective = min(declared_risk, settled_risk, key=ladder.index)
+        except ValueError:
+            return 0
     if not risk_meets_legend_floor(effective):
         return 0
     return round(RISK_LEGEND_AWARDS.get(effective, 0) * station)
@@ -452,6 +476,7 @@ def _resolve_award_inputs(  # noqa: PLR0913
     title: str,
     settled_risk: str | None = None,
     station: int = 0,
+    structurally_perilous: bool = False,
 ) -> _AwardInputs:
     """Compute the normalized inputs once so the apply-phase helpers stay focused."""
     effective_reach = (
@@ -464,7 +489,9 @@ def _resolve_award_inputs(  # noqa: PLR0913
         persona=persona,
         fame_awarded=MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0,
         prestige_awarded=MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0,
-        legend_awarded=_priced_legend(risk, settled_risk, station),
+        legend_awarded=_priced_legend(
+            risk, settled_risk, station, structurally_perilous=structurally_perilous
+        ),
         station=station,
         archetype_list=list(archetypes),
         aware_realm_ids=tuple(r.pk for r in aware_realms),
@@ -568,6 +595,7 @@ def _apply_renown_award(  # noqa: PLR0913
     title: str = "Renown deed",
     settled_risk: str | None = None,
     station: int = 0,
+    structurally_perilous: bool = False,
 ) -> RenownAwardResult:
     """Apply a Renown award bundle to ``persona``. Writes across every axis.
 
@@ -601,6 +629,7 @@ def _apply_renown_award(  # noqa: PLR0913
         title=title,
         settled_risk=settled_risk,
         station=station,
+        structurally_perilous=structurally_perilous,
     )
     fame_tier_changed = _apply_magnitude_writes(inputs)
     aware_society_ids, reputation_deltas = _apply_archetype_reputation(inputs)

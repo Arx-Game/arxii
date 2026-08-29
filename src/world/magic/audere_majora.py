@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import models, transaction
@@ -28,6 +29,9 @@ from world.societies.renown_config import RenownAwardConfig
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+
+
+logger = logging.getLogger(__name__)
 
 
 class AudereMajoraThreshold(RenownAwardConfig):
@@ -481,9 +485,25 @@ def _crossing_deed_description(persona, chosen_path) -> str:
 def _mint_crossing_deed(crossing: AudereMajoraCrossing) -> None:
     """Mint the renown deed for a completed crossing; record present witnesses.
 
-    No-ops when the crosser has no primary persona. When the threshold's risk
-    yields no legend (misconfigured), fire_renown_award creates no LegendEntry
-    and there is nothing to link or witness.
+    No-ops when the crosser has no primary persona.
+
+    **A crossing is always a legendary reward** (Tehom, 2026-08-29): it is
+    impossible to have an Audere Majora without great personal risk, and it is
+    likely the culmination of years of real-time play. So the deed is minted
+    unconditionally, at the character's NEW level as its station, and no
+    authored ``risk`` value can produce a crossing worth nothing.
+
+    This is not an exception to #3463's gates — the crossing satisfies them
+    structurally. Jeopardy is intrinsic to the act; a completed crossing *is*
+    the objective held (there is no partial crossing); and a tier crossing sits
+    at the ceiling of the old station by definition. ``structurally_perilous``
+    exists so this one source need not fake a stakes contract to say so, and
+    nothing authored can set it.
+
+    Previously the deed was *contingent*: this function bailed on
+    ``result.legend_entry_id is None``, and a threshold authored at
+    ``risk=NONE`` produced a crossing with no deed at all — guarded only by a
+    test asserting the seeded default. That state is now unreachable.
     """
     from world.scenes.models import Persona  # noqa: PLC0415
     from world.societies.constants import DeedKnowledgeSource  # noqa: PLC0415
@@ -509,9 +529,17 @@ def _mint_crossing_deed(crossing: AudereMajoraCrossing) -> None:
         persona=persona,
         origin_area=origin_area,
         title=title,
+        station=crossing.level_after,
+        structurally_perilous=True,
         **threshold.as_renown_award_kwargs(),
     )
     if result.legend_entry_id is None:
+        logger.error(
+            "Audere Majora crossing %s minted no legend entry — a crossing is "
+            "always legendary, so this indicates a bug in the pricing path, "
+            "not a misconfigured threshold.",
+            crossing.pk,
+        )
         return
 
     entry = LegendEntry.objects.get(pk=result.legend_entry_id)
