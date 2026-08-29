@@ -24,7 +24,7 @@ from world.scenes.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Scene` | Primary scene entity (SharedMemoryModel, cached) | `name`, `description`, `location` (FK ObjectDB — the last room-shaped ObjectDB FK still pending retarget to `RoomProfile`; see #2608), `date_started`, `date_finished`, `is_active`, `is_public` |
+| `Scene` | Primary scene entity (SharedMemoryModel, cached) | `name`, `description`, `location` (FK ObjectDB — the last room-shaped ObjectDB FK still pending retarget to `RoomProfile`; see #2608), `date_started`, `date_finished`, `is_active`, `is_public`, `running_beat` (FK `arxii.Beat`, nullable, SET_NULL, #3425 — the story beat this scene is currently running, written by `RunBeatAction` and cleared by `finish_scene_full`) |
 | `SceneParticipation` | Links accounts to scenes with roles | `scene` (FK), `account` (FK AccountDB), `is_gm`, `is_owner`, `joined_at`, `left_at` |
 | `Persona` | Identity a participant uses within a scene | `participation` (FK), `name`, `is_fake_name`, `description`, `thumbnail_url`, `character` (FK ObjectDB) |
 
@@ -563,7 +563,8 @@ add_present_as_co_owners(scene, room) -> None
 from world.scenes.scene_admin_services import finish_scene_full
 
 # Full scene-finish orchestration. Idempotent — returns immediately if already finished.
-# Steps: scene.finish_scene() → on_scene_finished() → deferred fatigue resets →
+# Steps: scene.finish_scene() → clear scene.running_beat if set (#3425) →
+#        on_scene_finished() → deferred fatigue resets →
 #        teardown conjured obstacles/ramparts → revalidate Durance engagements →
 #        clear speaker queue → expire_scene_scoped_conditions(participants) (#2514) →
 #        broadcast_scene_message(scene, SceneAction.END).
@@ -619,6 +620,16 @@ scene owner wants to co-adjudicate). Gated: the actor must already administer th
 available-actions dispatcher (mirrors `set_the_stage`); a minimal "Grant GM" control lives next
 to the co-owner list in `SceneHeader.tsx`, visible only when `actor_can_administer_scene` is true
 for the viewer.
+
+### Session prep: Run Beat (#3425)
+
+`Scene.running_beat` (FK → `arxii.Beat`, nullable, SET_NULL) is the first-class "this scene is
+running this beat" pointer — see `stories.md`'s "Session prep" section for the full
+`BeatOpponentLine`/`BeatStagedTemplate`/`RunBeatAction`/`GMListRunnableBeatsAction` contract.
+Written only by `RunBeatAction` (`src/actions/definitions/gm_story.py`); cleared by
+`finish_scene_full`. Exposed on `SceneListSerializer`/`SceneDetailSerializer` as `running_beat`
+(`{id, risk}`, GM/staff viewers only — mirrors `viewer_can_gm`'s gate). Web surface: the
+`GMAdjudicationPanel`'s "Run Beat" tab (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`).
 
 ### Lifecycle Actions
 

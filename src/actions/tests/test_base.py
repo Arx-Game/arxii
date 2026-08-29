@@ -479,6 +479,9 @@ class ActionRegistryTests(TestCase):
             "request_gm_for_covenant",
             "claim_group_story_request",
             "withdraw_group_story_request",
+            # #3425 — session prep on story beats: opponent/staging lines + Run Beat.
+            "run_beat",
+            "gm_list_runnable_beats",
             # #2118 — GM adjudication toolkit: catalog check invocation, awards, conditions.
             "gm_invoke_check",
             "gm_award_progression",

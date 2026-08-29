@@ -193,6 +193,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     # Fury-related parsed state (None means no fury declared).
     _fury_str: str | None = None
     _anchor_str: str | None = None
+    # Strain (#3446): extra anima committed beyond the technique's base cost.
+    _strain: int = 0
     # Base-form opt-out (#1581 Task 8).
     _use_base_form: bool = False
     # Cast-concealment waiver (#2710 Task 6).
@@ -220,7 +222,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         raw = (self.args or "").strip()
         if not raw:
             msg = (
-                "Usage: cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]"
+                "Usage: cast <technique> [at <target>] [effort=<level>] "
+                "[strain=<n>] [secondary] [base] [openly]"
             )
             raise CommandError(msg)
 
@@ -237,6 +240,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # Done before effort=/secondary/at parsing so the keywords are fully
         # order-independent and never swallowed into the technique/target name.
         raw, fury_str, anchor_str = self._extract_fury_keywords(raw)
+
+        # Strip strain=<n> if present (#3446) - the push-yourself anima
+        # overcommit, same keyword the clash grammar uses.
+        raw, strain = self._extract_strain_keyword(raw)
 
         # #2019: Strip position=<name> or position_a=<name>,position_b=<name>
         # keywords (order-independent). Resolved to PKs in resolve_action_args.
@@ -294,6 +301,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._beseech_bonus = beseech_bonus
         self._fury_str = fury_str
         self._anchor_str = anchor_str
+        self._strain = strain
         self._position_str = position_str
         self._variant_resonance_str = variant_str
         self._parsed = True
@@ -343,6 +351,26 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 cast_openly = True
                 changed = True
         return raw, secondary, use_base_form, cast_openly
+
+    @staticmethod
+    def _extract_strain_keyword(raw: str) -> tuple[str, int]:
+        """Strip ``strain=<n>`` from *raw* (#3446). Order-independent, single token.
+
+        Returns ``(remainder, strain)`` with the keyword removed; ``strain`` is 0
+        when absent. Raises ``CommandError`` on a non-integer value.
+        """
+        strain = 0
+        kept: list[str] = []
+        for token in raw.split():
+            if token.lower().startswith(_STRAIN_PREFIX):
+                strain_str = token[len(_STRAIN_PREFIX) :]
+                if not strain_str.isdigit():
+                    msg = f"Invalid strain value '{strain_str}' - must be a non-negative integer."
+                    raise CommandError(msg)
+                strain = int(strain_str)
+            else:
+                kept.append(token)
+        return " ".join(kept), strain
 
     @staticmethod
     def _extract_fury_keywords(raw: str) -> tuple[str, str | None, str | None]:
@@ -840,6 +868,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         # combat/clash lever; round_declaration forwards these into the
         # CombatRoundAction, where resolve_combat_technique consumes them.
         self._inject_fury_kwargs(kwargs)
+
+        # Strain (#3446): only inject when declared, matching use_base_form.
+        if self._strain > 0:
+            kwargs["strain_commitment"] = self._strain
 
         # Base-form opt-out: only inject when explicitly declared to keep the
         # default (variant applied) from polluting kwargs unnecessarily.

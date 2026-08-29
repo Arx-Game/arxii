@@ -97,6 +97,7 @@ function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     active_round: null,
     position_nodes: [],
     position_edges: [],
+    running_beat: null,
     ...overrides,
   };
 }
@@ -400,6 +401,63 @@ test('Traps tab lists traps on open, and Arm dispatches + refreshes the list (#3
     ref: { backend: 'registry', registry_key: 'list_room_traps' },
     kwargs: {},
   });
+});
+
+// ---------------------------------------------------------------------------
+// #3425 — Run Beat tab: session prep on story beats.
+// ---------------------------------------------------------------------------
+
+test('renders the Run Beat tab', () => {
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  expect(screen.getByTestId('gm-tab-runbeat')).toBeInTheDocument();
+});
+
+test('Run Beat tab lists runnable beats on open, and Run dispatches run_beat (#3425)', async () => {
+  mutateAsync
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: {
+        beats: [
+          {
+            id: 12,
+            story_title: 'The Long Watch',
+            episode_title: 'Ambush at Dusk',
+            kind: 'encounter',
+            risk: 'high',
+            opponent_line_count: 2,
+            staged_template_count: 0,
+          },
+        ],
+      },
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'Beat #12 is now running in this scene.',
+    });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  await waitFor(() => expect(screen.getByTestId('gm-runbeat-row-12')).toBeInTheDocument());
+  expect(mutateAsync).toHaveBeenNthCalledWith(1, {
+    ref: { backend: 'registry', registry_key: 'gm_list_runnable_beats' },
+    kwargs: {},
+  });
+
+  await user.click(screen.getByTestId('gm-runbeat-run-12'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      ref: { backend: 'registry', registry_key: 'run_beat' },
+      kwargs: { beat_id: 12 },
+    })
+  );
 });
 
 test('Condition tab Remove mode lists active instances then dispatches gm_remove_condition (#3431)', async () => {
