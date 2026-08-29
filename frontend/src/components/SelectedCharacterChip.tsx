@@ -1,9 +1,11 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { DoorOpen } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { PersonaSwitcher } from '@/game/components/PersonaSwitcher';
+import { useCharacterPersonasQuery } from '@/game/personaQueries';
+import { cn } from '@/lib/utils';
 import type { MyRosterEntry } from '@/roster/types';
 
 interface SelectedCharacterChipProps {
@@ -42,23 +44,63 @@ function getInitials(name: string): string {
  * account; "quit" (telnet) = leave the world but stay selected; "Clear Active
  * Character" = no selection, still logged in.
  *
- * PLACEHOLDER copy throughout — final chrome wording/visual design is a
- * separate pass (Direction B, Commonplace Book); this markup stays plain
- * shadcn primitives on purpose so restyling later is cheap.
+ * Portrait-forward restyle (#3412 slice 2, Direction B "Commonplace Book" —
+ * ratified 2026-08-28): the portrait is the load-bearing state signal, so it
+ * grows to `h-11`; the name takes the Cinzel identity voice
+ * (`.theme-heading`); a data-voice sub-line under the name spells out the
+ * worn persona and presence state; "Enter the world" becomes the folio's
+ * squared primary button (no radius, tracked uppercase). All colors flow
+ * through realm tokens — no literals — so the chip holds in every realm and
+ * dark mode by construction.
+ *
+ * PLACEHOLDER copy: "Playing: Currently Offscreen" is a stand-in for real
+ * presence state (not wired to the WebSocket session yet — this chip still
+ * never starts/stops a session on its own, see above).
  */
 export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
+  const { data: personas = [] } = useCharacterPersonasQuery(entry.character_id);
+  const worn =
+    personas.find((p) => p.id === entry.active_persona_id) ??
+    personas.find((p) => p.persona_type === 'primary') ??
+    personas[0];
+  const wornName = worn?.name ?? entry.name;
+  // On /game the player IS in the world — asserting "Currently Offscreen"
+  // there would be a false fact, so the state fragment drops and only the
+  // worn-persona line remains. Real presence wiring is a later slice.
+  const { pathname } = useLocation();
+  const inWorld = pathname.startsWith('/game');
+
   return (
-    <div className="flex items-center gap-2 rounded-md border px-2 py-1">
-      <Avatar className="h-8 w-8">
+    <div
+      className={cn(
+        'flex items-center gap-3 rounded-none border bg-card px-2 py-1',
+        'text-card-foreground'
+      )}
+    >
+      <Avatar className="h-11 w-11 rounded-none">
         <AvatarImage src={entry.profile_picture_url ?? undefined} alt={entry.name} />
-        <AvatarFallback className="text-xs">{getInitials(entry.name)}</AvatarFallback>
+        <AvatarFallback className="rounded-none text-sm">{getInitials(entry.name)}</AvatarFallback>
       </Avatar>
-      <span className="text-sm font-medium">{entry.name}</span>
-      <PersonaSwitcher
-        characterSheetId={entry.character_id}
-        activePersonaId={entry.active_persona_id}
-      />
-      <Button asChild variant="secondary" size="sm">
+      <div className="flex flex-col leading-tight">
+        <span className="theme-heading text-sm font-semibold [font-variant:small-caps]">
+          {entry.name}
+        </span>
+        {/* PLACEHOLDER copy — presence state isn't wired yet */}
+        <span className="font-body text-xs text-muted-foreground">
+          as {wornName}
+          {inWorld ? '' : ' · Playing: Currently Offscreen'}
+        </span>
+        <PersonaSwitcher
+          characterSheetId={entry.character_id}
+          activePersonaId={entry.active_persona_id}
+        />
+      </div>
+      <Button
+        asChild
+        variant="default"
+        size="sm"
+        className="rounded-none uppercase tracking-[0.08em]"
+      >
         {/* PLACEHOLDER copy */}
         <Link to="/game">
           <DoorOpen className="h-3.5 w-3.5" />

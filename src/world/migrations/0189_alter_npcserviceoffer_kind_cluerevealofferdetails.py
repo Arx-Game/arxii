@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0187_auderethreshold_surge_manifestation_text")]
+    dependencies = [("arxii", "0188_scene_running_beat_beatopponentline_and_more")]
 
     operations = [
         migrations.AlterField(

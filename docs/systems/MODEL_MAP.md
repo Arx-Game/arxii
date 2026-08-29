@@ -2321,6 +2321,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - bossphase_set <- combat.BossPhase
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
   - phase_templates <- combat.CreaturePhaseTemplate
+  - beat_opponent_lines <- stories.BeatOpponentLine
 
 ### DramaticSurgeRecord
 **Foreign Keys:**
@@ -6125,6 +6126,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - situation_templates <- mechanics.SituationTemplate
   - situation_links <- mechanics.SituationChallengeLink
   - instances <- mechanics.ChallengeInstance
+  - beat_staged_lines <- stories.BeatStagedTemplate
 
 ### ChallengeTemplateConsequence
 **Foreign Keys:**
@@ -6305,6 +6307,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - challenge_links <- mechanics.SituationChallengeLink
   - trap_links <- mechanics.SituationTrapLink
   - instances <- mechanics.SituationInstance
+  - beat_staged_lines <- stories.BeatStagedTemplate
 
 ### SituationTrapLink
 **Foreign Keys:**
@@ -8228,6 +8231,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 **Foreign Keys:**
   - location -> evennia.ObjectDB [FK] (nullable)
   - event -> events.Event [FK] (nullable)
+  - running_beat -> stories.Beat [FK] (nullable)
   - participants -> evennia.AccountDB [M2M]
 **Pointed to by:**
   - check_calls <- checks.CheckCall
@@ -9316,7 +9320,10 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - expired_consequences -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - resolving_encounters <- combat.CombatEncounter
+  - running_scenes <- scenes.Scene
   - decisive_markers <- scenes.DecisiveCheckMarker
+  - opponent_lines <- stories.BeatOpponentLine
+  - staged_templates <- stories.BeatStagedTemplate
   - gating_for_episodes <- stories.EpisodeProgressionRequirement
   - routing_for_transitions <- stories.TransitionRequiredOutcome
   - aggregate_contributions <- stories.AggregateBeatContribution
@@ -9338,6 +9345,17 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - era -> stories.Era [FK] (nullable)
 **Pointed to by:**
   - narrative_messages <- narrative.NarrativeMessage
+
+### BeatOpponentLine
+**Foreign Keys:**
+  - beat -> stories.Beat [FK]
+  - creature_template -> combat.CreatureTemplate [FK]
+
+### BeatStagedTemplate
+**Foreign Keys:**
+  - beat -> stories.Beat [FK]
+  - situation_template -> mechanics.SituationTemplate [FK] (nullable)
+  - challenge_template -> mechanics.ChallengeTemplate [FK] (nullable)
 
 ### CanonReview
 **Foreign Keys:**

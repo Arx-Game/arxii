@@ -42,6 +42,8 @@ const rosterEntry: MyRosterEntry = {
   profile_picture_url: null,
   primary_persona_id: 7,
   active_persona_id: 7,
+  unread_narrative_count: 0,
+  roster_type: 'Active',
 };
 
 // A second puppet (#2156 review fix — multi-puppet threading/baseline tests
@@ -54,6 +56,8 @@ const rosterEntry2: MyRosterEntry = {
   profile_picture_url: null,
   primary_persona_id: 8,
   active_persona_id: 8,
+  unread_narrative_count: 0,
+  roster_type: 'Active',
 };
 
 vi.mock('@/roster/queries', () => ({

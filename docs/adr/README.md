@@ -250,6 +250,7 @@ treat those names as hints to confirm, not gospel.
 - [0242 - Special movement is authored in the flows DSL, never modeled per space](0242-movement-redirection-is-authored-not-modeled.md) (#3416; the anti-`LordFluffwinkleOrbOfAnnihilation` rule)
 - [0243 - Action interception events are generic, not per-verb](0243-action-interception-events-are-generic.md) (#3418; extends ADR-0005's reactive engine boundary)
 - [0244 - Flow step parameter schemas are hand-declared catalog data, not introspected or DB rows](0244-flow-step-parameter-schemas-are-hand-declared-catalog-data.md) (#3417; follows ADR-0242)
+- [0245 - The Commonplace Book is the logged-in container idiom](0245-the-commonplace-book-is-the-logged-in-container-idiom.md) (#3412 slice 2; extends ADR-0227)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

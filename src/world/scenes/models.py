@@ -92,6 +92,18 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         related_name="scenes",
         help_text="The scheduled event that spawned this scene, if any",
     )
+    running_beat = models.ForeignKey(
+        "arxii.Beat",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="running_scenes",
+        help_text=(
+            "The Beat this scene is currently running (#3425), set by RunBeatAction "
+            "and cleared by finish_scene_full. String FK form (matches "
+            "CombatEncounter.story_beat) to avoid a cross-module import."
+        ),
+    )
 
     participants = models.ManyToManyField(
         "accounts.AccountDB",

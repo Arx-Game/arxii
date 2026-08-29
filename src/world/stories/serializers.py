@@ -38,6 +38,8 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     BeatCompletion,
+    BeatOpponentLine,
+    BeatStagedTemplate,
     CanonReview,
     Chapter,
     CrossoverInvite,
@@ -1006,6 +1008,47 @@ def _gm_allows_global_scope(user) -> bool:
     return cap.allow_global_scope_authoring
 
 
+class BeatOpponentLineSerializer(serializers.ModelSerializer):
+    """One authored opponent line on an ENCOUNTER beat (#3425).
+
+    ``id`` is writable-but-optional (not ``read_only``) so ``BeatSerializer
+    .update()`` can diff incoming rows against the beat's existing lines by
+    id: an id present in the payload and on the beat is an edit, an id absent
+    is a new row, and an existing row whose id is missing from the payload is
+    deleted. See ``BeatSerializer._sync_children``.
+    """
+
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = BeatOpponentLine
+        fields = ["id", "creature_template", "count", "position_name", "order"]
+
+
+class BeatStagedTemplateSerializer(serializers.ModelSerializer):
+    """One authored situation/challenge template on a SITUATION beat (#3425).
+
+    Exactly one of ``situation_template``/``challenge_template`` must be set
+    per row, mirroring the model's ``CheckConstraint``. See
+    ``BeatOpponentLineSerializer`` for the ``id`` writable-but-optional
+    convention this shares.
+    """
+
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = BeatStagedTemplate
+        fields = ["id", "situation_template", "challenge_template", "order"]
+
+    def validate(self, attrs: Any) -> Any:
+        has_situation = attrs.get("situation_template") is not None
+        has_challenge = attrs.get("challenge_template") is not None
+        if has_situation == has_challenge:
+            msg = "Exactly one of situation_template or challenge_template must be set."
+            raise serializers.ValidationError({"situation_template": msg})
+        return attrs
+
+
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
@@ -1021,6 +1064,12 @@ class BeatSerializer(serializers.ModelSerializer):
     # Delegates to CanMarkBeat.has_object_permission so the frontend can hide the Mark
     # button instead of rendering it optimistically and hitting a 403.
     can_mark = serializers.SerializerMethodField(read_only=True)
+
+    # #3425 session prep: repeatable child rows. Both are nested read-write,
+    # including the update path (see update() / _sync_children below) --
+    # required=False so a Beat with no prep authored yet omits them entirely.
+    opponent_lines = BeatOpponentLineSerializer(many=True, required=False)
+    staged_templates = BeatStagedTemplateSerializer(many=True, required=False)
 
     class Meta:
         model = Beat
@@ -1068,6 +1117,9 @@ class BeatSerializer(serializers.ModelSerializer):
             "updated_at",
             # Client-side permission gating
             "can_mark",
+            # #3425 session prep child rows
+            "opponent_lines",
+            "staged_templates",
         ]
         read_only_fields = [
             "id",
@@ -1154,7 +1206,13 @@ class BeatSerializer(serializers.ModelSerializer):
                 "required_mission",
             ]:
                 existing[field_name] = getattr(self.instance, field_name)
-        merged = {**existing, **attrs}
+        # opponent_lines/staged_templates (#3425) are reverse-FK child rows, not
+        # Beat model fields -- exclude them before building the temp instance
+        # Beat.clean() validates against; sync_children handles them separately.
+        scalar_attrs = {
+            k: v for k, v in attrs.items() if k not in ("opponent_lines", "staged_templates")
+        }
+        merged = {**existing, **scalar_attrs}
         temp = Beat(**merged)
         try:
             temp.clean()
@@ -1209,6 +1267,70 @@ class BeatSerializer(serializers.ModelSerializer):
         if not owners_ok:
             msg = "You do not have permission to author a beat on this episode."
             raise serializers.ValidationError(msg)
+
+    def create(self, validated_data: dict[str, Any]) -> Beat:
+        """Create the Beat, then its opponent/staged-template child rows (#3425)."""
+        opponent_lines_data = validated_data.pop("opponent_lines", [])
+        staged_templates_data = validated_data.pop("staged_templates", [])
+        beat = super().create(validated_data)
+        self._sync_children(beat, "opponent_lines", opponent_lines_data, BeatOpponentLine)
+        self._sync_children(beat, "staged_templates", staged_templates_data, BeatStagedTemplate)
+        return beat
+
+    def update(self, instance: Beat, validated_data: dict[str, Any]) -> Beat:
+        """Update the Beat, then diff-sync any child rows supplied (#3425).
+
+        A field omitted entirely from the payload (``None`` from ``.pop``, as
+        opposed to an empty list) is left untouched -- a PATCH that doesn't
+        mention ``opponent_lines`` doesn't wipe out the beat's authored roster.
+        """
+        opponent_lines_data = validated_data.pop("opponent_lines", None)
+        staged_templates_data = validated_data.pop("staged_templates", None)
+        beat = super().update(instance, validated_data)
+        if opponent_lines_data is not None:
+            self._sync_children(beat, "opponent_lines", opponent_lines_data, BeatOpponentLine)
+        if staged_templates_data is not None:
+            self._sync_children(beat, "staged_templates", staged_templates_data, BeatStagedTemplate)
+        return beat
+
+    @staticmethod
+    def _sync_children(
+        beat: Beat,
+        related_name: str,
+        rows: list[dict[str, Any]],
+        model: type[BeatOpponentLine] | type[BeatStagedTemplate],
+    ) -> None:
+        """Diff *rows* against ``beat``'s existing children by id (#3425).
+
+        A row carrying an id matching an existing child updates it in place; a
+        row with no id (or an id not found among this beat's children) creates
+        a new row; any existing child whose id is absent from *rows* is
+        deleted. Order is preserved because each row's own ``order`` field
+        rides through untouched -- this helper doesn't renumber anything.
+
+        Shape (FK existence, the XOR invariant on staged templates, count's
+        min-value) is already validated by the nested serializer's own field
+        validators and ``validate()`` before this ever runs -- no second
+        ``full_clean()`` pass here, so a real invariant break surfaces as the
+        DB ``CheckConstraint``/FK error it actually is, not a silently
+        swallowed one.
+        """
+        existing = {obj.pk: obj for obj in getattr(beat, related_name).all()}
+        seen_ids: set[int] = set()
+        for raw_row in rows:
+            row = dict(raw_row)
+            row_id = row.pop("id", None)
+            child = existing.get(row_id) if row_id is not None else None
+            if child is not None:
+                for field_name, value in row.items():
+                    setattr(child, field_name, value)
+                child.save()
+                seen_ids.add(row_id)
+            else:
+                model.objects.create(beat=beat, **row)
+        stale_ids = set(existing) - seen_ids
+        if stale_ids:
+            model.objects.filter(pk__in=stale_ids).delete()
 
 
 # ---------------------------------------------------------------------------
