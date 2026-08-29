@@ -5189,6 +5189,20 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **Enchantment authoring (#3430):** `ItemCheckModifier`/`ItemTemplateProperty`
+  (template check-bonus + default-Property authoring; `checks/services.py`'s
+  `collect_check_modifiers` EQUIPMENT block is the runtime consumer of the former,
+  `materialize.apply_template_properties` of the latter) were runtime-wired but
+  shell-only — now inline on `ItemTemplateAdmin`
+  (`ItemCheckModifierInline`/`ItemTemplatePropertyInline`,
+  `src/world/items/admin.py`). New `ItemTemplate.requires_attunement` gates a
+  flagged template's `ItemCheckModifier` contribution and `use_item` dispatch on
+  `ItemInstance.attuned_to_character_sheet`: the EQUIPMENT block's queryset
+  constrains equipped-and-attuned to the SAME joined instance in one `.filter()`
+  call (apply-once stacking — two equipped instances, one attuned, contributes
+  once, never doubled); attunement writers are unchanged (touchstone ritual +
+  admin). See docs/systems/items.md ("Enchantment authoring").
+
 - **Fashion vocabulary (#2907):** `Silhouette` (the wearable FORM — umbrella
   hierarchy, `WearFamily`, prose skins via `silhouette_prose_noun`: cut/garments,
   setting/jewelry) with `ItemTemplate.silhouette` (authored default) +

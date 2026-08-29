@@ -17,10 +17,12 @@ from world.items.models import (
     GemGrade,
     GemInstanceDetails,
     InteractionType,
+    ItemCheckModifier,
     ItemInstance,
     ItemStyle,
     ItemTemplate,
     ItemTemplateAppearanceEffect,
+    ItemTemplateProperty,
     MaterialBucket,
     MaterialCategory,
     OrgMaterialStock,
@@ -187,6 +189,22 @@ class GarmentMitigationInline(admin.TabularInline):
     raw_id_fields = ["resonance"]
 
 
+class ItemCheckModifierInline(admin.TabularInline):
+    model = ItemCheckModifier
+    extra = 1
+    autocomplete_fields = ["check_type"]
+    verbose_name = "Check Modifier"
+    verbose_name_plural = "Check Modifiers"
+
+
+class ItemTemplatePropertyInline(admin.TabularInline):
+    model = ItemTemplateProperty
+    extra = 1
+    autocomplete_fields = ["property"]
+    verbose_name = "Default Property"
+    verbose_name_plural = "Default Properties"
+
+
 @admin.register(ItemTemplate)
 class ItemTemplateAdmin(admin.ModelAdmin):
     list_display = [
@@ -244,7 +262,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Consumable & on-use",
+            "Mechanics: consumable & on-use",
             {
                 "fields": [
                     "is_consumable",
@@ -253,6 +271,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
                     "on_use_check_type",
                     "on_use_difficulty",
                     "on_use_target_kind",
+                    "requires_attunement",
                 ],
                 "classes": ["collapse"],
             },
@@ -279,6 +298,8 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         GarmentMitigationInline,
         ItemTemplateAppearanceEffectInline,
         DisguiseKitEffectInline,
+        ItemCheckModifierInline,
+        ItemTemplatePropertyInline,
     ]
 
 
