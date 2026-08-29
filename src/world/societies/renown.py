@@ -410,6 +410,30 @@ class _AwardInputs:
     station: int = 0
 
 
+def _magnitude_awards(magnitude: str | None) -> tuple[int, int]:
+    """Authored ``(fame, prestige)`` for a magnitude tier, else the constants.
+
+    ``RenownMagnitudeAward`` is the staff-editable table (#3463); the
+    ``MAGNITUDE_*_AWARDS`` dicts are the default for a tier nobody has authored
+    a row for yet, so an empty table behaves exactly as it did before rather
+    than paying nothing.
+
+    Returns both axes from one row read — they are always wanted together, and
+    splitting them cost a duplicate query for the same row.
+    """
+    if not magnitude:
+        return 0, 0
+    from world.societies.models import RenownMagnitudeAward  # noqa: PLC0415
+
+    row = RenownMagnitudeAward.objects.filter(magnitude=magnitude).first()
+    if row is not None:
+        return int(row.fame_award), int(row.prestige_award)
+    return (
+        MAGNITUDE_FAME_AWARDS.get(magnitude, 0),
+        MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0),
+    )
+
+
 def _priced_legend(
     declared_risk: str | None,
     settled_risk: str | None,
@@ -479,6 +503,7 @@ def _resolve_award_inputs(  # noqa: PLR0913
     structurally_perilous: bool = False,
 ) -> _AwardInputs:
     """Compute the normalized inputs once so the apply-phase helpers stay focused."""
+    fame_awarded, prestige_awarded = _magnitude_awards(magnitude)
     effective_reach = (
         reach
         or (MAGNITUDE_TO_DEFAULT_REACH.get(magnitude) if magnitude else None)
@@ -487,8 +512,8 @@ def _resolve_award_inputs(  # noqa: PLR0913
     aware_realms = _resolve_aware_realms(_resolve_home_realm(origin_area), effective_reach)
     return _AwardInputs(
         persona=persona,
-        fame_awarded=MAGNITUDE_FAME_AWARDS.get(magnitude, 0) if magnitude else 0,
-        prestige_awarded=MAGNITUDE_PRESTIGE_AWARDS.get(magnitude, 0) if magnitude else 0,
+        fame_awarded=fame_awarded,
+        prestige_awarded=prestige_awarded,
         legend_awarded=_priced_legend(
             risk, settled_risk, station, structurally_perilous=structurally_perilous
         ),

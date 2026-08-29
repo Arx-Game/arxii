@@ -57,15 +57,37 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# A standout contribution pays this share of what the shared deed pays a
-# participant at the same station. Deliberately small: brilliance in defeat is
-# "much less" (Tehom, 2026-08-29), a consolation rather than a second full award.
+# FALLBACK defaults only. The authored values live on the
+# LegendSettlementConfig singleton (#3463) — per Tehom's ruling, every number
+# here is a lookup table first and a constant only when no table is defined.
+# These are what the singleton is created with, and what a failed config read
+# falls back to so a settlement can never be broken by a missing tuning row.
+#
+# STANDOUT_FRACTION: share of a participant's take that a standout pays its
+# actor on a LOST unit. Deliberately small — brilliance in defeat is "much
+# less", a consolation rather than a second full award.
+# STANDOUT_SUCCESS_LEVEL: mirrors battles' bar (ADR-0122), clearly above bare
+# success.
 STANDOUT_FRACTION = 0.2
-
-# Minimum success_level for a contribution to count as a standout. Matches
-# battles' STANDOUT_SUCCESS_LEVEL (clearly above bare success) so the
-# generalized pass keeps the bar ADR-0122 set.
 STANDOUT_SUCCESS_LEVEL = 2
+
+
+def _standout_dials() -> tuple[float, int]:
+    """Authored (fraction, min success level), falling back to the constants."""
+    from django.db import OperationalError, ProgrammingError  # noqa: PLC0415
+
+    from world.societies.models import LegendSettlementConfig  # noqa: PLC0415
+
+    try:
+        config = LegendSettlementConfig.get_active_config()
+    except (ProgrammingError, OperationalError):
+        # Table not yet created (mid-migrate / fresh DB). Narrowly these two —
+        # any other failure is a real fault and should surface.
+        return STANDOUT_FRACTION, STANDOUT_SUCCESS_LEVEL
+    return (
+        config.standout_fraction_tenths / 10,
+        int(config.standout_min_success_level),
+    )
 
 
 @dataclass(frozen=True)
@@ -288,17 +310,18 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     """
     from world.societies.services import create_solo_deed  # noqa: PLC0415
 
+    fraction, min_success_level = _standout_dials()
     minted: list[LegendEntry] = []
     for participant in participants:
         if participant.persona.pk in already_paid:
             continue
         level = participant.crucial_success_level
-        if level is None or level < STANDOUT_SUCCESS_LEVEL:
+        if level is None or level < min_success_level:
             continue
         station = station_for(participant.level, target_level)
         if station <= 0:
             continue
-        value = round(risk_award * STANDOUT_FRACTION * station)
+        value = round(risk_award * fraction * station)
         if value <= 0:
             continue
         entry = create_solo_deed(

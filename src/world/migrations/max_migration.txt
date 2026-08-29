@@ -1,1 +1,1 @@
-0193_riskcalibration_legend_award
+0194_legendsettlementconfig_renownmagnitudeaward

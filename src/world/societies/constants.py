@@ -197,7 +197,28 @@ MAGNITUDE_PRESTIGE_AWARDS: dict[str, int] = {
 LEGEND_RISK_FLOOR: str = str(RenownRisk.HIGH.value)
 
 
-def risk_meets_legend_floor(risk: str) -> bool:
+def resolve_legend_risk_floor() -> str:
+    """The authored Legend risk floor, falling back to the constant.
+
+    Reads ``LegendSettlementConfig`` (a staff-editable singleton) so the bar
+    for what is worth a song is tunable without a deploy. ``LEGEND_RISK_FLOOR``
+    below is the default the singleton is created with, and the fallback if the
+    row cannot be read at all.
+    """
+    from django.db import OperationalError, ProgrammingError  # noqa: PLC0415
+
+    from world.societies.models import LegendSettlementConfig  # noqa: PLC0415
+
+    try:
+        return str(LegendSettlementConfig.get_active_config().risk_floor)
+    except (ProgrammingError, OperationalError):
+        # The tuning table does not exist yet (mid-migrate, or a fresh DB being
+        # built). Narrowly these two: anything else is a real fault and should
+        # surface rather than silently pay out at the default floor.
+        return LEGEND_RISK_FLOOR
+
+
+def risk_meets_legend_floor(risk: str, floor: str | None = None) -> bool:
     """Is this (EFFECTIVE, not declared) risk at or above the Legend floor?
 
     Ordering comes from ``RenownRisk``'s own declaration order, weakest to
@@ -209,14 +230,15 @@ def risk_meets_legend_floor(risk: str) -> bool:
     """
     ladder = list(RenownRisk.values)
     try:
-        return ladder.index(risk) >= ladder.index(LEGEND_RISK_FLOOR)
+        return ladder.index(risk) >= ladder.index(floor or resolve_legend_risk_floor())
     except ValueError:
         return False
 
 
 # Risk → legend base_value FALLBACK. The authored value is
 # RiskCalibration.legend_award (#3463); this table is what a tier with no
-# calibration row falls back to.
+# calibration row falls back to. Per Tehom's ruling (2026-08-29) every one of
+# these numbers is a lookup table first and a constant only as a default.
 RISK_LEGEND_AWARDS: dict[str, int] = {
     RenownRisk.NONE.value: 0,
     RenownRisk.LOW.value: 10,

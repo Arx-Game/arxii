@@ -35,6 +35,8 @@ from world.societies.constants import (
     ObligationOrigin,
     ObligationState,
     OrgAppealState,
+    RenownMagnitude,
+    RenownRisk,
     StandingDirection,
 )
 from world.societies.renown_config import RenownAwardConfig
@@ -1685,6 +1687,96 @@ class LegendDeedStory(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.author.name}'s account of: {self.deed.title}"
+
+
+class RenownMagnitudeAward(SharedMemoryModel):
+    """Staff-authored fame + prestige per RenownMagnitude tier (#3463).
+
+    Replaces the ``MAGNITUDE_FAME_AWARDS`` / ``MAGNITUDE_PRESTIGE_AWARDS``
+    Python dicts, which were labelled "admin-tunable" while needing a deploy to
+    change. Follows the pattern ``checks.OutcomeTierAward`` already documents:
+    "a staff-tunable DB row per canonical outcome tier, instead of a bespoke
+    Python threshold re-derivation".
+
+    The constants survive as the fallback for a tier with no row authored yet,
+    so an empty table behaves exactly as before rather than paying nothing.
+    """
+
+    magnitude = models.CharField(
+        max_length=20,
+        choices=RenownMagnitude.choices,
+        unique=True,
+    )
+    fame_award = models.PositiveIntegerField(
+        help_text="Fame buffer bump for an event of this magnitude.",
+    )
+    prestige_award = models.PositiveIntegerField(
+        help_text="Permanent prestige-from-deeds increment for this magnitude.",
+    )
+
+    class Meta:
+        verbose_name = "Renown Magnitude Award"
+        verbose_name_plural = "Renown Magnitude Awards"
+        ordering = ["magnitude"]
+
+    def __str__(self) -> str:
+        return f"RenownMagnitudeAward({self.magnitude}: {self.fame_award}f/{self.prestige_award}p)"
+
+
+class LegendSettlementConfig(SharedMemoryModel):
+    """Singleton tuning row for Legend settlement (#3463).
+
+    The dials that decide what is worth a song. Held as authored rows rather
+    than Python constants per Tehom's ruling (2026-08-29): lookup tables for
+    all of it, constants only as defaults when a table is not defined.
+
+    Singleton on pk=1, matching ``SpreadingConfig``'s established shape in this
+    same app — this is a tuning singleton for one subsystem, not a bespoke
+    model per mechanic.
+    """
+
+    risk_floor = models.CharField(
+        max_length=20,
+        choices=RenownRisk.choices,
+        default=RenownRisk.HIGH,
+        help_text=(
+            "Minimum EFFECTIVE risk at which any source may mint Legend. "
+            "Below this a settled unit mints zero, not a reduced award."
+        ),
+    )
+    standout_fraction_tenths = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Tenths of a participant's share that a standout contribution pays "
+            "its actor on a unit that was LOST. 2 = 0.2x. Brilliance in defeat "
+            "is deliberately 'much less', not a second full award."
+        ),
+    )
+    standout_min_success_level = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Minimum success_level for a crucial contribution to count as a "
+            "standout. Mirrors battles' STANDOUT_SUCCESS_LEVEL (ADR-0122)."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Legend Settlement Configuration"
+        verbose_name_plural = "Legend Settlement Configuration"
+
+    @classmethod
+    def get_active_config(cls) -> "LegendSettlementConfig":
+        """Get or create the singleton settlement configuration (pk=1)."""
+        config = cls.objects.cached_singleton()
+        if config is None:
+            config, _created = cls.objects.get_or_create(pk=1)
+        return config
+
+    def __str__(self) -> str:
+        return (
+            f"LegendSettlementConfig(floor={self.risk_floor}, "
+            f"standout={self.standout_fraction_tenths / 10:.1f}x)"
+        )
 
 
 class LegendContribution(SharedMemoryModel):
