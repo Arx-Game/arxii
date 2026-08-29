@@ -58,8 +58,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Signature Motif Bonus (ADR-0072 — #1582):** `SignatureMotifBonus` (staff-authored
     catalog; `required_facet` FK, `required_resonance` FK, `flat_intensity_delta`,
     `narrative_snippet`; `qualifies_for(character_sheet)` gate predicate),
-    `SignatureMotifBonusCapabilityGrant` / `SignatureMotifBonusDamageProfile` /
-    `SignatureMotifBonusAppliedCondition` (payload children inheriting the abstract bases).
+    `SignatureMotifBonusDamageProfile` /
+    `SignatureMotifBonusAppliedCondition` (payload children inheriting the abstract bases;
+    the capability-grant sibling was stripped per ADR-0248).
     `Thread.signature_bonus` (nullable FK, TECHNIQUE-kind only). Selection service
     (`services/signature.py`): `available_signature_bonuses`, `set_signature_bonus`,
     `clear_signature_bonus`, `signature_bonus_for`. Cast wiring

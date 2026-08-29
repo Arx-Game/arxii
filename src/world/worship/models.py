@@ -14,7 +14,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
-    AbstractCapabilityGrant,
     AbstractDamageProfile,
 )
 from world.worship.constants import MiracleTrigger
@@ -296,28 +295,6 @@ class Miracle(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.being})"
-
-
-class MiracleCapabilityGrant(AbstractCapabilityGrant):
-    """Capability grant payload row for a Miracle (#2360).
-
-    INERT until a capability-read-path issue is built — mirrors
-    SignatureMotifBonusCapabilityGrant inertness.
-    """
-
-    miracle = models.ForeignKey(
-        Miracle,
-        on_delete=models.CASCADE,
-        related_name="capability_grants",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["miracle", "capability"],
-                name="miracle_cap_grant_unique",
-            ),
-        ]
 
 
 class MiracleAppliedCondition(AbstractAppliedCondition):

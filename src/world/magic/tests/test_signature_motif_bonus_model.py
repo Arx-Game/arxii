@@ -27,7 +27,6 @@ from world.magic.factories import (
 from world.magic.models import (
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
-    SignatureMotifBonusCapabilityGrant,
     SignatureMotifBonusDamageProfile,
     Thread,
 )
@@ -153,17 +152,6 @@ class SignatureMotifBonusCachedPayloadTests(TestCase):
         result = self.bonus.cached_condition_applications
         self.assertIn(applied, result)
 
-    def test_cached_capability_grants_returns_attached_row(self):
-        """cached_capability_grants returns the attached capability grant."""
-        grant = SignatureMotifBonusCapabilityGrant.objects.create(
-            signature_bonus=self.bonus,
-            capability=self.capability_type,
-        )
-        with contextlib.suppress(AttributeError):
-            del self.bonus.cached_capability_grants
-        result = self.bonus.cached_capability_grants
-        self.assertIn(grant, result)
-
     def test_cached_damage_profiles_returns_attached_row(self):
         """cached_damage_profiles returns the attached damage profile."""
         profile = SignatureMotifBonusDamageProfile.objects.create(
@@ -182,14 +170,6 @@ class SignatureMotifBonusCachedPayloadTests(TestCase):
             required_facet=self.facet,
         )
         self.assertEqual(bonus.cached_condition_applications, [])
-
-    def test_cached_capability_grants_empty_when_none(self):
-        """cached_capability_grants returns empty list when no rows attached."""
-        bonus = SignatureMotifBonus.objects.create(
-            name="Empty Bonus 2",
-            required_facet=self.facet,
-        )
-        self.assertEqual(bonus.cached_capability_grants, [])
 
     def test_cached_damage_profiles_empty_when_none(self):
         """cached_damage_profiles returns empty list when no rows attached."""

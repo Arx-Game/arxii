@@ -21,7 +21,6 @@ from world.magic.audere import (
 )
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
-    AbstractCapabilityGrant,
 )
 from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
@@ -834,28 +833,6 @@ class AudereMajoraFaithVariant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"FaithVariant({self.threshold} / {self.being})"
-
-
-class AudereMajoraFaithVariantCapabilityGrant(AbstractCapabilityGrant):
-    """Capability grant payload for an AudereMajoraFaithVariant (#2360).
-
-    INERT until a capability-read-path issue is built — mirrors
-    SignatureMotifBonusCapabilityGrant inertness.
-    """
-
-    faith_variant = models.ForeignKey(
-        AudereMajoraFaithVariant,
-        on_delete=models.CASCADE,
-        related_name="capability_grants",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["faith_variant", "capability"],
-                name="faith_variant_cap_grant_unique",
-            ),
-        ]
 
 
 class AudereMajoraFaithVariantAppliedCondition(AbstractAppliedCondition):

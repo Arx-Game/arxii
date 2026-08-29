@@ -6,7 +6,6 @@ from world.worship.models import (
     DivineInterventionConfig,
     Miracle,
     MiracleAppliedCondition,
-    MiracleCapabilityGrant,
     MiracleDamageProfile,
     MiraclePerformance,
     WorshipDeclaration,
@@ -58,11 +57,6 @@ class WorshipDeclarationAdmin(admin.ModelAdmin):
     raw_id_fields = ("character_sheet", "secret")
 
 
-class MiracleCapabilityGrantInline(admin.TabularInline):
-    model = MiracleCapabilityGrant
-    extra = 0
-
-
 class MiracleAppliedConditionInline(admin.TabularInline):
     model = MiracleAppliedCondition
     extra = 0
@@ -86,7 +80,6 @@ class MiracleAdmin(admin.ModelAdmin):
     list_filter = ("being", "intervention_trigger", "is_active")
     search_fields = ("name",)
     inlines = [
-        MiracleCapabilityGrantInline,
         MiracleAppliedConditionInline,
         MiracleDamageProfileInline,
     ]

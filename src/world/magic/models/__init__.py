@@ -189,7 +189,6 @@ from world.magic.models.sessions import (
 from world.magic.models.signature import (
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
-    SignatureMotifBonusCapabilityGrant,
     SignatureMotifBonusDamageProfile,
 )
 from world.magic.models.soul_tether import (
@@ -425,7 +424,6 @@ __all__ = [
     # signature motif bonuses (#1582)
     "SignatureMotifBonus",
     "SignatureMotifBonusAppliedCondition",
-    "SignatureMotifBonusCapabilityGrant",
     "SignatureMotifBonusDamageProfile",
     # soul tether (Spec B §14.1, §15.1)
     "Sineating",
