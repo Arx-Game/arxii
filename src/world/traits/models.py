@@ -42,6 +42,7 @@ class TraitChangeSource(models.TextChoices):
     MATURATION = "maturation", "Maturation"
     LEVEL_STAT_POINT = "level_stat_point", "Level Stat Point"
     GM_GRANT = "gm_grant", "GM Grant"
+    NPC_PRESET = "npc_preset", "NPC Statline Preset"
 
 
 class TraitType(models.TextChoices):

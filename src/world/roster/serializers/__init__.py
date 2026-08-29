@@ -44,6 +44,11 @@ from world.roster.serializers.media import (
     TenureGallerySerializer,
     TenureMediaSerializer,
 )
+from world.roster.serializers.npc_presets import (
+    NPCPresetSkillLineSerializer,
+    NPCPresetTraitLineSerializer,
+    NPCStatlinePresetSerializer,
+)
 from world.roster.serializers.roster_core import (
     MyRosterEntrySerializer,
     RosterEntryListSerializer,
@@ -75,6 +80,9 @@ __all__ = [
     "KinSlotSerializer",
     "MediaSerializer",
     "MyRosterEntrySerializer",
+    "NPCPresetSkillLineSerializer",
+    "NPCPresetTraitLineSerializer",
+    "NPCStatlinePresetSerializer",
     # Mail serializers
     "PlayerMailSerializer",
     "RosterApplicationApprovalSerializer",

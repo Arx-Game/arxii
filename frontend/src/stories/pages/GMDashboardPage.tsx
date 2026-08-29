@@ -27,6 +27,13 @@ import {
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/evennia_replacements/api';
@@ -122,24 +129,53 @@ async function claimGroupStoryRequest(characterId: number, requestId: number): P
  * the persona picker / telnet `@ic`. Mirrors claimGroupStoryRequest's dispatch
  * shape; `success === false` (not just `res.ok`) signals a refusal (trust
  * gate or cap), per the same #3155 contract.
+ *
+ * `preset`, when given (#3427), names a curated `NPCStatlinePreset` by
+ * natural key — the same string the telnet `gm npc ... preset=<name>`
+ * grammar takes.
  */
 async function mintStoryNpc(
   characterId: number,
   name: string,
-  description: string
+  description: string,
+  preset: string | null
 ): Promise<string> {
+  const kwargs: Record<string, string> = { name, description };
+  if (preset) kwargs.preset = preset;
   const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ref: { backend: 'registry', registry_key: 'mint_story_npc' },
-      kwargs: { name, description },
+      kwargs,
     }),
   });
   const { success, message: detail } = await parseDispatchBody(res);
   if (!res.ok || success === false) throw new Error(detail ?? 'Failed to mint the NPC.');
   return detail ?? 'NPC minted.';
 }
+
+/** One curated statline preset in the GM mint dialog's picker (#3427). */
+interface NPCStatlinePresetOption {
+  id: number;
+  name: string;
+  description: string;
+}
+
+/**
+ * Read-only preset catalog for the mint dialog's Select (GET
+ * /api/roster/npc-presets/). No paging param: the ViewSet's page size (100)
+ * already covers the whole starter catalog in one page.
+ */
+async function getNpcStatlinePresets(): Promise<NPCStatlinePresetOption[]> {
+  const res = await apiFetch('/api/roster/npc-presets/');
+  if (!res.ok) return [];
+  const body = (await res.json()) as { results?: NPCStatlinePresetOption[] };
+  return body.results ?? [];
+}
+
+/** Sentinel Select value for "no preset" — Radix Select rejects an empty-string item value. */
+const NO_PRESET_VALUE = '__none__';
 
 // ---------------------------------------------------------------------------
 // Page
@@ -189,19 +225,29 @@ function GMDashboardContent() {
   const [mintOpen, setMintOpen] = useState(false);
   const [npcName, setNpcName] = useState('');
   const [npcDescription, setNpcDescription] = useState('');
+  const [npcPreset, setNpcPreset] = useState<string | null>(null);
+
+  // Preset catalog (#3427) — only fetched once the dialog is open, since it's
+  // a GM-only catalog with no reason to load before the GM asks to mint.
+  const { data: presets = [] } = useQuery({
+    queryKey: ['npc-statline-presets'],
+    queryFn: getNpcStatlinePresets,
+    enabled: mintOpen,
+  });
 
   const mintMutation = useMutation({
     mutationFn: () => {
       if (actorCharacterId === null) {
         return Promise.reject(new Error('Puppet a character to mint an NPC.'));
       }
-      return mintStoryNpc(actorCharacterId, npcName.trim(), npcDescription.trim());
+      return mintStoryNpc(actorCharacterId, npcName.trim(), npcDescription.trim(), npcPreset);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] }).catch(() => {});
       setMintOpen(false);
       setNpcName('');
       setNpcDescription('');
+      setNpcPreset(null);
     },
   });
 
@@ -319,6 +365,28 @@ function GMDashboardContent() {
                     rows={3}
                     className="resize-y"
                   />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="mint-npc-preset">
+                    Statline preset{' '}
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Select
+                    value={npcPreset ?? NO_PRESET_VALUE}
+                    onValueChange={(val) => setNpcPreset(val === NO_PRESET_VALUE ? null : val)}
+                  >
+                    <SelectTrigger id="mint-npc-preset">
+                      <SelectValue placeholder="No preset (blank sheet)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_PRESET_VALUE}>No preset (blank sheet)</SelectItem>
+                      {presets.map((preset) => (
+                        <SelectItem key={preset.id} value={preset.name}>
+                          {preset.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {mintMutation.isError && (
                   <p className="text-sm text-destructive">

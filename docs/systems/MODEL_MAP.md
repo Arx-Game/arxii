@@ -7786,6 +7786,24 @@
   - trait -> forms.FormTrait [FK]
   - option -> forms.FormTraitOption [FK]
 
+### NPCPresetSkillLine
+**Foreign Keys:**
+  - preset -> roster.NPCStatlinePreset [FK]
+  - skill -> skills.Skill [FK]
+
+### NPCPresetTraitLine
+**Foreign Keys:**
+  - preset -> roster.NPCStatlinePreset [FK]
+  - trait -> traits.Trait [FK]
+
+### NPCStatlinePreset
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - trait_lines <- roster.NPCPresetTraitLine
+  - skill_lines <- roster.NPCPresetSkillLine
+
 ### ParentageEdge
 **Foreign Keys:**
   - child -> roster.Kinsperson [FK]
@@ -8571,6 +8589,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - trait -> traits.Trait [OneToOne]
 **Pointed to by:**
+  - npc_preset_skill_lines <- roster.NPCPresetSkillLine
   - legend_spreads <- societies.LegendSpread
   - specializations <- skills.Specialization
   - character_values <- skills.CharacterSkillValue
@@ -9833,6 +9852,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
+  - npc_preset_trait_lines <- roster.NPCPresetTraitLine
   - check_type_traits <- checks.CheckTypeTrait
   - modifier_targets <- mechanics.ModifierTarget
   - capability_derivations <- mechanics.TraitCapabilityDerivation
