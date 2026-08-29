@@ -450,6 +450,28 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   a pose's standing outlives the week it was posed in), reaction count as tie-break, and
   recency last, capped at 10. Source set is filtered through `Interaction.objects.visible_to`,
   so hidden poses never appear. Reveal a pose via `GET /api/interactions/{id}/`.
+- `GET /api/scenes/{id}/gm-rail/` - GM story rail (#3434): the running beat's authored
+  material + protected subjects + room clue placements, composed per-viewer. View-level
+  gate (`world.scenes.rail_services.viewer_qualifies_for_rail`) - staff, or
+  `scene.is_gm(user)` at JUNIOR+ GM trust (`HasGMTrust`); denies 403 (the scene itself is
+  already visible via the plain detail endpoint, so this refuses a sub-resource, not the
+  scene's existence). Payload (`world.scenes.rail_services.build_gm_story_rail_payload`,
+  no models/writes/migration):
+  - `beat` - null when no `running_beat`; else id/kind/risk/outcome/predicate_type/
+    pools-authored booleans for any qualifying viewer, plus `internal_description`/
+    `opponent_lines`/`staged_templates` (else null) gated on story standing
+  - `protected_subjects` - active `StoryProtectedSubject` rows for the running beat's
+    story, same scoping `stories.permissions.user_owns_or_leads_story` enforces
+    (never widened - see `IsProtectedSubjectStoryOwnerOrStaff`'s "no carve-out" invariant)
+  - `clue_placements` - the room's active `RoomClue` placements, staff-only
+  - `participants` - characters currently present in the scene's room
+    (location-derived, same room-contents read `Scene.has_character_present` uses)
+
+  No secrets data at any tier. Frontend: `GMStoryRail`
+  (`frontend/src/scenes/components/GMStoryRail.tsx`), mounted from `SceneDetailPage` as a
+  `CombatRail`-pattern sibling whenever `scene.viewer_can_gm`; renders a "no beat running"
+  hint when there's no running beat, and tolerates a denied per-participant
+  conditions/vitals fetch without breaking the rest of the rail.
 
 **Filters:** `is_active`, `is_public`, `location`, `participant`, `status` (active/completed/upcoming), `gm`, `player`
 
@@ -629,7 +651,9 @@ running this beat" pointer — see `stories.md`'s "Session prep" section for the
 Written only by `RunBeatAction` (`src/actions/definitions/gm_story.py`); cleared by
 `finish_scene_full`. Exposed on `SceneListSerializer`/`SceneDetailSerializer` as `running_beat`
 (`{id, risk}`, GM/staff viewers only — mirrors `viewer_can_gm`'s gate). Web surface: the
-`GMAdjudicationPanel`'s "Run Beat" tab (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`).
+`GMAdjudicationPanel`'s "Run Beat" tab (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`)
+authors it; the running beat's authored material then rides the GM story rail (#3434,
+`GET /api/scenes/{id}/gm-rail/`, see "API Endpoints" above) for referee-time reference.
 
 ### Lifecycle Actions
 
