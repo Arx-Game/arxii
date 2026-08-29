@@ -77,6 +77,7 @@ function buildScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     position_nodes: [],
     position_edges: [],
     running_beat: { id: 9, risk: 'moderate' },
+    declared_risk: 'moderate',
     ...overrides,
   };
 }
