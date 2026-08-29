@@ -53,7 +53,18 @@ What changes:
 The backbone runs end-to-end immediately with every richer beat resolving
 via placeholder GM-mark. Sequenced follow-ups (each its own brainstorm):
 (1) Mission/Challenge engine via existing `resolve_challenge`,
-(2) Situation/Encounter resolution + Sessions,
+(2) 🟡 Situation/Encounter resolution + Sessions — **session prep on story
+beats shipped (#3425)**: `BeatOpponentLine`/`BeatStagedTemplate` let a GM
+author an ENCOUNTER beat's opponent roster or a SITUATION beat's staged
+situation/challenge templates ahead of the table; `RunBeatAction`
+instantiates all of it into the GM's live scene in one call (creates the
+`CombatEncounter` + spawns opponents, or places the situations/challenges)
+and sets `Scene.running_beat` — the first-class "this scene is running this
+beat" pointer #3433/#3434 consume. `GMListRunnableBeatsAction` +
+`GMAdjudicationPanel`'s Run Beat tab are the read/dispatch surfaces. Still
+open: copy-beat/reusable prep tooling (ruled deferred at #3425 spec time),
+and TASK/REQUIREMENT beats still have nothing to stage (by design — they
+carry no room payload),
 (3) consequence + reward computation (where risk numbers gain meaning),
 (4) ✅ GM leveling / the trust→risk gating hook (#2000 — see ADR-0097;
 the automatic *feedback-driven earning curve* is still deliberately deferred,

@@ -12,7 +12,7 @@
  * threading complexity.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -360,6 +360,64 @@ describe('ActionDeclarationCard — Task 5.3 effort selector', () => {
 
     await userEvent.click(screen.getByText('Low'));
     expect(onContextChange).toHaveBeenCalledWith(expect.objectContaining({ effort: 'LOW' }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #3446 — strain slider (push-yourself anima overcommit)
+// ---------------------------------------------------------------------------
+
+describe('ActionDeclarationCard — #3446 strain slider', () => {
+  beforeEach(() => {
+    mockedFetchActions.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
+    mockUseTechnique(null);
+    mockPickerHooks();
+  });
+
+  it('renders no strain slider without strainMax (scene ActionPanel owns its own)', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext({ techniqueId: 5 })}
+        onContextChange={() => {}}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByTestId('focused-strain-slider')).not.toBeInTheDocument();
+  });
+
+  it('renders no strain slider before a technique is picked', () => {
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+        strainMax={12}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByTestId('focused-strain-slider')).not.toBeInTheDocument();
+  });
+
+  it('emits onContextChange with the new strainCommitment', () => {
+    const onContextChange = vi.fn();
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext({ techniqueId: 5 })}
+        onContextChange={onContextChange}
+        strainMax={12}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const slider = screen.getByTestId('focused-strain-slider');
+    expect(slider).toHaveAttribute('max', '12');
+    fireEvent.change(slider, { target: { value: '7' } });
+    expect(onContextChange).toHaveBeenCalledWith(expect.objectContaining({ strainCommitment: 7 }));
   });
 });
 
