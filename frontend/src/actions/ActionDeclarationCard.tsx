@@ -80,6 +80,12 @@ export interface ActionDeclarationCardProps {
   castPosition?: CastPosition;
   /** Setter for the lifted position selection state. */
   onCastPositionChange?: (next: CastPosition) => void;
+  /**
+   * Strain slider max (#3446) — ParticipantSerializer.available_strain,
+   * threaded by YourTurn. Omitted = no strain control rendered (the scene
+   * ActionPanel carries its own slider; passive slots never overcommit).
+   */
+  strainMax?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -590,6 +596,7 @@ export function ActionDeclarationCard({
   positions,
   castPosition,
   onCastPositionChange,
+  strainMax,
 }: ActionDeclarationCardProps) {
   // Fetch available techniques for this character.
   const { data, isLoading } = useAvailableActionsQuery(characterId);
@@ -765,6 +772,34 @@ export function ActionDeclarationCard({
           onChange={handleEffortChange}
           disabled={readOnly}
         />
+        {/* Strain (#3446) — the push-yourself anima overcommit on an ordinary
+         * declared cast. Mirrors the per-clash strain slider in YourTurn;
+         * capped by available_strain, validated again server-side. */}
+        {strainMax !== undefined && actionContext.techniqueId !== undefined && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Strain commitment
+              </span>
+              <span className="font-mono text-xs text-foreground">
+                {actionContext.strainCommitment}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={strainMax}
+              value={actionContext.strainCommitment}
+              disabled={readOnly}
+              onChange={(e) =>
+                onContextChange({ ...actionContext, strainCommitment: Number(e.target.value) })
+              }
+              data-testid="focused-strain-slider"
+              className="w-full accent-primary"
+              aria-label="Strain commitment"
+            />
+          </div>
+        )}
       </Section>
 
       {/* Cost section */}

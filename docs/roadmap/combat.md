@@ -148,6 +148,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (`focused_ally_target=None`) declaration could never actually fire (Django drops a `None`
   member of `field__in=[...]`) is fixed alongside the new catch seam's identical query shape.
 - Escalation → Audere offer → accept → real power change.
+- **Strain on ordinary casts (#3446).** The push-yourself anima overcommit is no longer
+  Clash-only: `declare_action` accepts and caps `strain_commitment` (the field
+  `CombatRoundAction` always inherited from `CommittingDeclaration` but nothing wrote),
+  round resolution forwards it into `use_technique`'s effective-cost/deficit math, telnet
+  `cast` gained `strain=<n>`, and the focused declaration card gained a strain slider
+  (the scene ActionPanel already had one for standalone casts). No migration — the
+  column already existed.
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).

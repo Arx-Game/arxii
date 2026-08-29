@@ -335,6 +335,13 @@ function buildFocusedJob(
   const soulfrayKwarg =
     soulfrayWarning !== null && soulfrayAccepted ? { confirm_soulfray_risk: true } : {};
 
+  // Strain (#3446): the push-yourself anima overcommit on an ordinary declared
+  // cast — the non-clash sibling of the per-clash strain slider below.
+  const strainKwarg =
+    focusedContext.strainCommitment > 0
+      ? { strain_commitment: focusedContext.strainCommitment }
+      : {};
+
   // Strictly per-shape — never derive position_params from mere presence of
   // castPosition fields, since stale state from a previously-selected
   // technique can otherwise leak into a differently-shaped technique's
@@ -368,6 +375,7 @@ function buildFocusedJob(
         ...targetKwargs,
         ...pullKwargs,
         ...soulfrayKwarg,
+        ...strainKwarg,
         ...furyKwargs,
         ...positionKwargs,
       },
@@ -1304,6 +1312,7 @@ export function YourTurn({
           positions={focusedPositions}
           castPosition={castPosition}
           onCastPositionChange={setCastPosition}
+          strainMax={strainMax}
         />
         {soulfrayWarning !== null && (
           <SoulfrayAcceptGate

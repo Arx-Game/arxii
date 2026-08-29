@@ -1447,6 +1447,7 @@ def resolve_combat_technique(
         technique=action.focused_action,
         resolve_fn=resolver,
         confirm_soulfray_risk=action.confirm_soulfray_risk,
+        strain_commitment=action.strain_commitment,
         targets=targets,
         lethal=encounter.is_lethal,
         control_penalty=fury_res.control_penalty if fury_res else 0,
@@ -3388,6 +3389,24 @@ def _validate_technique_reach(
         raise ActionDispatchError(ActionDispatchError.TARGET_OUT_OF_REACH)
 
 
+def _validate_strain_commitment(participant: CombatParticipant, strain_commitment: int) -> None:
+    """Reject a strain overcommit beyond the participant's anima budget (#3446).
+
+    The push-yourself lever is capped by the same budget the clash UI reads
+    (mirrors ``_cap_strain_by_anima`` on the standalone cast serializer).
+    Negative values are a caller bug, not a player choice.
+    """
+    if strain_commitment < 0:
+        msg = "Strain commitment cannot be negative."
+        raise ValueError(msg)
+    if strain_commitment > participant.available_strain:
+        msg = (
+            f"Strain commitment ({strain_commitment}) exceeds available "
+            f"anima ({participant.available_strain})."
+        )
+        raise ValueError(msg)
+
+
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
@@ -3400,6 +3419,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     social_passive: Technique | None = None,
     mental_passive: Technique | None = None,
     confirm_soulfray_risk: bool = False,
+    strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
     cast_destination: Position | None = None,
@@ -3438,6 +3458,8 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     if not can_act(participant.character_sheet):
         msg = "Cannot declare action: character is dead or incapacitated."
         raise ValueError(msg)
+
+    _validate_strain_commitment(participant, strain_commitment)
 
     # Encounter status check
     if encounter.status != RoundStatus.DECLARING:
@@ -3518,6 +3540,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "combo_upgrade": None,  # Reset combo on re-declaration
             "is_ready": False,  # Reset ready on re-declaration
             "confirm_soulfray_risk": confirm_soulfray_risk,
+            "strain_commitment": strain_commitment,
             "fury_commitment": fury_commitment,
             "fury_anchor": fury_anchor,
             "cast_destination": cast_destination,
