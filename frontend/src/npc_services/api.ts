@@ -11,6 +11,8 @@ import { ApiValidationError } from '@/missions/api';
 import { apiFetch } from '@/evennia_replacements/api';
 
 import type {
+  ClueRevealOfferDetails,
+  ClueRevealOfferDetailsRequest,
   MissionOfferDetails,
   MissionOfferDetailsRequest,
   NPCRole,
@@ -161,6 +163,31 @@ export async function listAreasFlat(): Promise<{ id: number; name: string }[]> {
   if (!res.ok) throw new Error('Failed to load areas');
   const data = await res.json();
   return Array.isArray(data) ? data : data.results;
+}
+
+// ---------------------------------------------------------------------------
+// ClueRevealOfferDetails (per clue_reveal-kind offer, #3428)
+// ---------------------------------------------------------------------------
+
+export async function listClueDetails(
+  filters: { offer?: number; role?: number; page_size?: number } = {}
+): Promise<PaginatedResponse<ClueRevealOfferDetails>> {
+  const res = await apiFetch(`${BASE_URL}/clue-details/${buildQueryString(filters)}`);
+  if (!res.ok) throw new Error('Failed to load clue-reveal offer details');
+  return res.json();
+}
+
+export function createClueDetails(
+  body: ClueRevealOfferDetailsRequest
+): Promise<ClueRevealOfferDetails> {
+  return writeJson(`${BASE_URL}/clue-details/`, 'POST', body);
+}
+
+export function patchClueDetails(
+  id: number,
+  body: Partial<ClueRevealOfferDetailsRequest>
+): Promise<ClueRevealOfferDetails> {
+  return writeJson(`${BASE_URL}/clue-details/${id}/`, 'PATCH', body);
 }
 
 // ---------------------------------------------------------------------------

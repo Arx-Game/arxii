@@ -14,7 +14,7 @@ rescues all reuse rather than each reinventing.
 
 A **clue is a pointer** on three independent axes: a **target** (codex entry / mission /
 rescue-a-captive / character secret / masked-identity pair; never empty), an **acquisition**
-(room search or passive trigger), and a
+(room search, passive trigger, or an NPC revealing it, #3428), and a
 **resolution** (granted automatically, or won through a collaborative research project).
 Every player-facing detail — clue text, difficulties, eligibility, research magnitudes — is
 **authored data**, never agent-generated; code ships the mechanism, GMs fill the menu.
@@ -40,12 +40,23 @@ Every player-facing detail — clue text, difficulties, eligibility, research ma
   + the shared `AuthorClueDialog` reached from `PlaceClueDialog` ("New clue…") and
   `StaffSecretsPanel` ("Author a clue to this secret"). See the system doc's "Authoring
   the clue itself" section.
+- **NPC-held clues** (#3428) — a fourth acquisition surface: `OfferKind.CLUE_REVEAL` on the
+  existing `npc_services` offer/interaction framework. Anchored to the `NPCRole` (every
+  placed Functionary of the role can reveal it — persona-anchored Story-NPC knowledge is a
+  later, deliberately deferred slice); fires GM-less; the offer's own `check_type` gates the
+  reveal (the handler rolls it directly, mirroring `raise_court_grant`, since final offers
+  skip the engine's own check application) and grants through the same
+  `acquire_clue`/`grant_clue_target` chokepoint Search/Research use. Talking to NPCs is now a
+  first-class discovery channel, not just flavor text.
 
 ## Remaining
 
-- **More trigger sources** (#1160) — item-acquisition / resonance / past-life soul-tie. Needs
-  a verify-against-code pass on which predicate leaves exist before designing (likely a
-  "flag the holes" moment — resonance probably exists, soul-tie may not).
+- **More trigger sources** (#1160) — resonance / past-life soul-tie (item-acquisition
+  shipped via `ItemClueTrigger`). Needs a verify-against-code pass on which predicate leaves
+  exist before designing (likely a "flag the holes" moment — resonance probably exists,
+  soul-tie may not).
+- **Persona-anchored Story-NPC knowledge** (#3428 Decision 2) — a Story NPC's own persona
+  knowing something distinct from its role, deliberately deferred at spec time.
 - **Clue journal UI** — the web surface where players see held clues, known-target flags, and
   pursue research. Frontend; wants a UX design pass.
 - **Scandal target kind** — the remaining social-information target; informational shape not

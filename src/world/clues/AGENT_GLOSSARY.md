@@ -16,6 +16,12 @@ _Avoid_: passive clue, auto-grant.
 The active acquisition path: the `SearchAction` charges AP plus mental fatigue and rolls the seeded Search CheckType (Perception + Investigation) against each hidden `RoomClue`'s `detect_difficulty`, acquiring the ones spotted.
 _Avoid_: look, detect, perception roll.
 
+**CLUE_REVEAL** (#3428):
+A fourth acquisition surface, living in `npc_services` rather than here: an `NPCRole`'s offer
+reveals a pre-authored `Clue` through the interaction loop, optionally gated by the offer's own
+check. See `world.npc_services.AGENT_GLOSSARY.md`'s "CLUE_REVEAL offer" entry — this pointer
+exists so a reader scanning acquisition surfaces here doesn't miss the one that lives elsewhere.
+
 **Research Project**:
 A `ProjectKind.RESEARCH` project (on the shared `world/projects` framework, with `ResearchProjectDetails` naming the clue) by which contributors spend AP on Research rolls to win a clue's target collaboratively. The RESEARCH `resolution_mode`; progress is floored at zero so a failed help never detracts, and completion grants the target to every contributor.
 _Avoid_: investigation, study.

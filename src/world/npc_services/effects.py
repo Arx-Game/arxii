@@ -936,3 +936,76 @@ def run_profile_recording_offer(offer: NPCServiceOffer, persona: Persona) -> Eff
 
 OFFER_EFFECT_HANDLERS[OfferKind.STYLING.value] = run_styling_offer
 OFFER_EFFECT_HANDLERS[OfferKind.PROFILE_RECORDING.value] = run_profile_recording_offer
+
+
+def run_clue_reveal_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """CLUE_REVEAL effect handler (#3428): an NPC reveals a pre-authored clue.
+
+    CLUE_REVEAL offers are final (``is_final=True``), and the interaction state
+    machine's final branch never rolls ``_apply_check`` — so, mirroring
+    ``raise_court_grant``, **the handler rolls its own check** when
+    ``offer.check_type`` is set. Success (or a null ``check_type``, which is
+    auto-success) grants the clue's target through the same
+    ``acquire_clue``/``grant_clue_target`` chokepoint room search and research
+    use — ``acquire_clue`` also creates the ``CharacterClue`` row that
+    ``services._clue_reveal_not_yet_held`` reads to stop offering an
+    already-known clue. Failure just deflects — no grant, no held-clue row.
+    Fails closed with a clear message when the finder has no roster tenure: a
+    persona with no roster entry can't hold clues.
+    """
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.clues.services import acquire_clue, grant_clue_target  # noqa: PLC0415
+    from world.npc_services.functionaries import functionaries_in_location  # noqa: PLC0415
+
+    details = offer.clue_reveal_offer_details
+    clue = details.clue
+    sheet = persona.character_sheet
+
+    # The placement actually serving the finder, mirroring run_styling_offer's
+    # functionary resolution — falls back to the role's name when no placed
+    # Functionary is co-located (a global/roleless interaction).
+    character = sheet.character if sheet is not None else None
+    functionary = None
+    if character is not None and character.location is not None:
+        functionary = functionaries_in_location(character.location).filter(role=offer.role).first()
+    npc_label = functionary.display_name if functionary is not None else offer.role.name
+
+    if offer.check_type is not None:
+        check_result = perform_check(
+            persona.character_sheet.character,
+            offer.check_type,
+            target_difficulty=offer.check_difficulty,
+        )
+        succeeded = check_result.success_level > 0
+    else:
+        succeeded = True
+
+    if not succeeded:
+        return EffectResult(
+            kind=OfferKind.CLUE_REVEAL.value,
+            message=f"{npc_label} deflects — whatever they know, they aren't telling you today.",
+            payload={"offer_pk": offer.pk, "clue_pk": clue.pk},
+        )
+
+    roster_entry = persona.character_sheet.roster_entry_or_none
+    if roster_entry is None:
+        return EffectResult(
+            kind=OfferKind.CLUE_REVEAL.value,
+            message="You have no roster tenure to hold what they'd tell you.",
+            payload={"offer_pk": offer.pk, "clue_pk": clue.pk},
+        )
+
+    acquire_clue(roster_entry, clue)
+    grant_clue_target(clue, roster_entry)
+
+    message = f"{npc_label} tells you what they know. {clue.description}"
+    return EffectResult(
+        kind=OfferKind.CLUE_REVEAL.value,
+        object_pk=clue.pk,
+        object_label=clue.name,
+        message=message,
+        payload={"clue_pk": clue.pk},
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.CLUE_REVEAL.value] = run_clue_reveal_offer

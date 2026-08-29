@@ -1,1 +1,1 @@
-0186_gmlevelcap_max_story_npcs
+0187_alter_npcserviceoffer_kind_cluerevealofferdetails

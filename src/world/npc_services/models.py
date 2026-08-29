@@ -1694,6 +1694,38 @@ class ProfileRecordingOfferDetails(SharedMemoryModel):
         return f"ProfileRecordingOfferDetails(offer {self.offer_id})"
 
 
+class ClueRevealOfferDetails(SharedMemoryModel):
+    """Per-kind details for `NPCServiceOffer` rows of kind=CLUE_REVEAL (#3428).
+
+    Staff attaches a pre-authored ``Clue`` (minted via #3432's SENIOR-gated
+    ``author_clue``) to an NPCRole offer. The CLUE_REVEAL effect handler
+    (``run_clue_reveal_offer`` in ``effects.py``) grants the clue's target on
+    resolve — the same ``grant_clue_target`` chokepoint room search/research
+    use. ``PROTECT`` on delete: an authored clue still pointed at by a live
+    offer must not silently vanish out from under it.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="clue_reveal_offer_details",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
+    )
+    clue = models.ForeignKey(
+        "arxii.Clue",
+        on_delete=models.PROTECT,
+        related_name="npc_reveal_offers",
+        help_text="The clue this offer reveals when the offer resolves successfully.",
+    )
+
+    class Meta:
+        verbose_name = "Clue Reveal Offer Details"
+        verbose_name_plural = "Clue Reveal Offer Details"
+
+    def __str__(self) -> str:
+        return f"ClueRevealOfferDetails({self.clue_id} -> offer {self.offer_id})"
+
+
 class RecordedProfile(SharedMemoryModel):
     """A profile recorded at the Great Archive (or a similar institution) (#2632).
 

@@ -44,6 +44,14 @@ interaction viewset converge on — so engaging a faceless co-located
 placement makes it real automatically, and rapport flows into durable
 `NPCStanding` from the first conversation (ADR-0058's seam, formalized).
 
+**Offers are role-anchored, not tier-gated**: any placed Functionary of an
+`NPCRole` surfaces that role's `NPCServiceOffer` rows through the interaction
+loop the moment the placement exists — including `OfferKind.CLUE_REVEAL`
+(#3428, see `docs/systems/investigation_and_discovery.md`), which grants a
+pre-authored clue's target on resolve. A role reveals what staff attached to
+the *role*; which Functionary happens to be standing there doesn't change
+what it knows.
+
 **Name cultures**: `NameCulture` + weighted `NameCultureEntry` pools
 (GIVEN/SURNAME), resolved by nearest area ancestor (`AreaClosure` walk) with
 a global default fallback; `generate_person_name(culture, family=...)` uses

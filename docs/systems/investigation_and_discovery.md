@@ -54,6 +54,18 @@ A `Clue` is a pointer defined by three orthogonal things:
   that kind — "acquiring an item your past-life soul is tied to". Same eligible/not-yet-held
   semantics as the room trigger (the two share `_grant_triggered_clues`). Player-facing
   acquisition only (`give` / `pick_up`); reward/factory-created items are a deferred follow-up.
+- **NPC reveal (active, #3428):** `OfferKind.CLUE_REVEAL` on `npc_services.NPCServiceOffer` —
+  staff attaches a pre-authored clue to an **NPCRole** (every placed Functionary of that role
+  can reveal it; persona-anchored Story-NPC knowledge is a deliberately deferred later slice).
+  Fires GM-less through the existing interaction loop: `available_offers()` excludes the offer
+  once the character's roster entry already holds the clue (the "you already know this" rule
+  stays the journal's job, not a re-offered NPC line); the `run_clue_reveal_offer` effect
+  handler rolls the offer's own `check_type`/`check_difficulty` (final offers skip the engine's
+  check application — see `run_clue_reveal_offer`'s docstring) and, on success or a null
+  check_type (auto-success), calls `acquire_clue` + `grant_clue_target` — the same chokepoint
+  Search and Research use. Reveal voice is reaction-line flavor + the clue's authored
+  description; a persona with no roster tenure fails closed with a clear message rather than
+  silently no-op-ing.
 
 ## Resolution paths
 
@@ -194,7 +206,10 @@ passes.
 
 Shipped: clue model, Investigation skill + CheckTypes (seed), search action + declarative
 cost, eligibility gating, RESEARCH kind, rescue-as-clue (closes #931), passive enter-room
-triggers, and the `author_clue` mint-then-place authoring loop (closes #3432 — no more
-Django admin round-trip). Remaining (see `docs/roadmap/investigation-discovery.md`): more
-trigger sources (item / resonance / soul-tie), the clue journal UI, and the error-handling
-service (#1164) that replaces the interim log-and-continue in the trigger hooks.
+triggers, the `author_clue` mint-then-place authoring loop (closes #3432 — no more
+Django admin round-trip), and NPC-held clues via `OfferKind.CLUE_REVEAL` (closes #3428 —
+talking to NPCs is now a first-class discovery channel, role-anchored). Remaining (see
+`docs/roadmap/investigation-discovery.md`): more trigger sources (resonance / soul-tie),
+persona-anchored Story-NPC knowledge (#3428 Decision 2, deliberately deferred), the clue
+journal UI, and the error-handling service (#1164) that replaces the interim
+log-and-continue in the trigger hooks.

@@ -27,6 +27,7 @@ from actions.definitions.npc_services import (
 )
 from world.gm.permissions import IsGMOrStaff
 from world.npc_services.filters import (
+    ClueRevealOfferDetailsFilterSet,
     MissionOfferDetailsFilterSet,
     NPCReactionLineFilterSet,
     NPCRoleFilterSet,
@@ -39,6 +40,7 @@ from world.npc_services.filters import (
     StaffingProfileLineFilterSet,
 )
 from world.npc_services.models import (
+    ClueRevealOfferDetails,
     MissionOfferDetails,
     NPCReactionLine,
     NPCRole,
@@ -52,6 +54,7 @@ from world.npc_services.models import (
     StaffingProfileLine,
 )
 from world.npc_services.serializers import (
+    ClueRevealOfferDetailsSerializer,
     InteractionResolveRequestSerializer,
     InteractionStartRequestSerializer,
     InteractionStateSerializer,
@@ -145,6 +148,17 @@ class PermitOfferDetailsViewSet(viewsets.ModelViewSet):
     pagination_class = NPCServicesPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = PermitOfferDetailsFilterSet
+
+
+class ClueRevealOfferDetailsViewSet(viewsets.ModelViewSet):
+    """Staff CRUD for clue-reveal offer details (1:1 to an NPCServiceOffer, #3428)."""
+
+    queryset = ClueRevealOfferDetails.objects.all().order_by("pk")
+    serializer_class = ClueRevealOfferDetailsSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = NPCServicesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ClueRevealOfferDetailsFilterSet
 
 
 class MissionOfferDetailsViewSet(viewsets.ModelViewSet):

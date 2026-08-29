@@ -1,3 +1,4 @@
+warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/workspaces/arxii/.claude/worktrees/feature-3428-needs-design-pre-authored-npc-knowledge/.venv` and will be ignored; use `--active` to target the active environment instead
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -1941,6 +1942,7 @@
   - room_placements <- clues.RoomClue
   - trigger_placements <- clues.ClueTrigger
   - item_trigger_placements <- clues.ItemClueTrigger
+  - npc_reveal_offers <- npc_services.ClueRevealOfferDetails
 
 ### ClueTrigger
 **Foreign Keys:**
@@ -6708,6 +6710,11 @@
 
 ## world.npc_services
 
+### ClueRevealOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - clue -> clues.Clue [FK]
+
 ### CourtGrantOfferDetails
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
@@ -6798,6 +6805,7 @@
   - summonses <- npc_services.OfferSummons
   - styling_offer_details <- npc_services.StylingOfferDetails
   - profile_recording_offer_details <- npc_services.ProfileRecordingOfferDetails
+  - clue_reveal_offer_details <- npc_services.ClueRevealOfferDetails
   - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
 
 ### NPCStanding
