@@ -169,10 +169,15 @@ invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
 
 **MANDATORY before posting the spec: run the `verify-against-code` pass**
 (skill at `tools/skills/verify-against-code/`). For every new surface the design
-proposes, verify against code (not docs/summaries) and label it
-`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line + caller
+proposes, state its **role** (what it lets someone express, who sets it, who reads
+it), then verify against code (not docs/summaries) and label it
+`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]` with file:line
 evidence; treat INDEX/MODEL_MAP/architecture docs as possibly-stale hints and
-correct any stale doc at its source. **Embed the resulting anti-reinvention
+correct any stale doc at its source. **If the change removes, deprecates or strands
+any surface, fill the removal table too** — traced intent + what breaks if it goes;
+an absent removal table means the spec is unfinished. Caller-absence is never a
+finding on its own: any claim that something is dead, vestigial or safe to remove
+states its role and its consequence. **Embed the resulting anti-reinvention
 ledger as a section of the spec in the issue body.** A spec without a
 code-verified ledger is not finalized. (This codifies CLAUDE.md's
 "Anti-Reinvention Pass" into the workflow.)

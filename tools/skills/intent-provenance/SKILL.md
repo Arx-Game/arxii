@@ -5,7 +5,7 @@ description: Use when a class/function/model has no live caller and you're decid
 
 # Intent Provenance
 
-**Absence of a caller means "investigate," not "assume orphaned."** A surface with no
+**Absence of a caller means "investigate," not "assume orphaned" — and so does the word "vestigial."** A surface with no
 live caller can be superseded, abandoned, genuinely unfinished, or never designed at
 all — and only two of those four are safe to write off. This skill traces which one
 you're looking at, and teaches the forward-looking habit (documenting *why* a new
@@ -22,6 +22,16 @@ built for. It wasn't a stub — it was an unfinished wire, and fixing it became 
 correctly-scoped work. The reflex that almost missed this is common enough to be
 worth a skill: "no caller" is a question, not a verdict.
 
+A second case, #3463 (2026-08-29), shows the same reflex wearing a different disguise.
+`RenownAwardConfig.risk` *had* a caller — legend minting — but a draft spec proposed a
+refactor that removed it, then cited the resulting absence as grounds for a `RemoveField`
+across four authored-content tables. The rationale it missed was in a module header
+comment and an enum docstring (`societies/constants.py:104`, `RenownRisk`), not in git
+history or any ADR. The field was one axis of a deliberately orthogonal four-axis
+descriptor; deleting it would have destroyed the very property that issue existed to
+protect. Two lessons: **a caller-absence your own change creates is not evidence**, and
+**intent often lives in the file rather than the history**.
+
 ## Relationship to other skills
 
 - **`verify-against-code`** labels a surface `BUILT & WIRED` / `BUILT, NOT WIRED` /
@@ -36,8 +46,27 @@ worth a skill: "no caller" is a question, not a verdict.
   sweep turns up something orphaned, run this skill to classify it before
   recommending removal.
 
+## Trigger on the words, not just the code state
+
+Run this procedure whenever you are about to write — or accept from a summary — any of:
+**vestigial, dead, unused, leftover, orphaned, no longer needed, safe to remove, nothing
+calls it.** With or without a live caller present. Those adjectives are the moment the
+conclusion gets written down, and a conclusion reached before the trace only gets
+ratified by it.
+
+**Special case, and the worst one: circular deadness.** If a surface's only consumer is
+one that *your own proposed change removes*, caller-absence is not evidence of anything —
+your change manufactured it. Ask what the surface meant BEFORE your change, and whether
+your change is the thing that is wrong. This is how #3463 nearly deleted
+`RenownAwardConfig.risk` (see the second worked case below).
+
 ## The investigation procedure (reactive — found something unwired)
 
+0. **Read the thing itself, first.** Its definition, its **module header comment**, and
+   its **sibling constants/enums in the same file**. This is the cheapest step and it is
+   skipped most often. In #3463 the entire rationale lived in a module header and an enum
+   docstring; git history, the ADR log and the roadmap held nothing, so a
+   history-first trace would have come back empty and *confirmed the wrong answer*.
 1. **Find the introducing commit.** `git log --oneline --follow -- <file>` (or `git
    log -p --follow -- <file> | tail` for the earliest one). This is almost always
    cheaper than guessing.
@@ -97,4 +126,7 @@ the sentence now.
 | "No caller anywhere, so it's a speculative stub." | Two greps (git log + issue search) tell you whether that's true. Check before writing it off. |
 | "This looks unfinished, I'll just delete it." | Unfinished ≠ abandoned. If a spec called for it, deleting it un-does real, already-approved scope. |
 | "I can't find a reason for this, so there isn't one." | Absence of a *documented* reason is itself the finding — file it as `needs-design`, don't silently prune the idea. |
+| "Nothing will call it once my change lands, so it's dead." | Circular — your change created the absence. What did it mean before? |
+| "It's a vestigial knob, I'll note it and move on." | "Vestigial" is a claim requiring the full trace. Name what breaks if it goes, or you haven't finished. |
+| "git log and the ADRs turned up nothing, so there's no intent." | Did you read the module header and the sibling enums? #3463's whole answer was there. |
 | "I'll skip the docstring, the code is self-explanatory." | It's self-explanatory to you, right now, with full context. It won't be to whoever reads it after the caller you had in mind never got built. |
