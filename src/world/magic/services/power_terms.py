@@ -245,12 +245,14 @@ def touchstone_power_term(ctx: PowerTermContext) -> int:
 def enhancement_overlap_term(ctx: PowerTermContext) -> int:
     """Flat bonus when an enhancement technique overlaps the character's existing kit (#2022).
 
-    Role-granted enhancement techniques (``Technique.enhances_effect_type`` is set)
-    are primarily passive boosts to the character's existing techniques that serve
-    the same role function. When the character also has a technique whose
-    ``effect_type`` matches this technique's ``enhances_effect_type``, the cast
-    gains a flat intensity bonus — the vow amplifies what the character already
-    does.
+    Enhancement techniques (``Technique.enhances_effect_type`` is set) are primarily
+    passive boosts to the character's existing techniques that serve the same
+    function. When the character also has a technique whose ``effect_type`` matches
+    this technique's ``enhances_effect_type``, the cast gains a flat intensity
+    bonus — the enhancement amplifies what the character already does. Note this
+    term is acquisition-agnostic: it performs no covenant-role/vow check, so it
+    fires for an overlapping enhancement technique however it was learned (in
+    practice most enhancement techniques arrive via role grants, #2022).
 
     Returns 0 when the technique has no ``enhances_effect_type`` or when the
     character has no matching technique. The bonus amount is a fixed constant
