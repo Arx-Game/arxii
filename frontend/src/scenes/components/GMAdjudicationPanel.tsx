@@ -43,6 +43,12 @@
  * gm_adjudication.py` — the referee off-switch `GMApplyConditionAction` never
  * got; `gm_list_conditions` feeds the Remove picker since no ViewSet read
  * exposes a target's hidden active conditions to their GM).
+ *
+ * #3425 adds a Run Beat tab: `gm_list_runnable_beats` lists ENCOUNTER/
+ * SITUATION beats runnable at the acting GM's currently-active episode, and
+ * `run_beat` instantiates the selected one's authored session prep
+ * (opponent lines / staged situation-challenge templates) into this scene,
+ * setting `Scene.running_beat` (`actions/definitions/gm_story.py`).
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -71,6 +77,7 @@ import type {
   AwardKind,
   DifficultyBand,
   RoomTrapEntry,
+  RunnableBeatEntry,
 } from '@/gm-adjudication/types';
 
 const SELECT_CLASS =
@@ -1164,6 +1171,103 @@ function TrapsTab({ characterId }: { characterId: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Run Beat tab (#3425) — session prep on story beats. Lists ENCOUNTER/
+// SITUATION beats runnable at the acting GM's currently-active episode
+// (`gm_list_runnable_beats`) and instantiates the selected one into this
+// scene (`run_beat`, `beat_id`). Mirrors TrapsTab's non-ViewSet list+action
+// shape exactly (no `list_runnable_beats` ViewSet exists — this is
+// `ActionResult.data` from a REGISTRY dispatch, same as `list_room_traps`).
+// ---------------------------------------------------------------------------
+
+function RunBeatTab({ characterId }: { characterId: number }) {
+  const [beats, setBeats] = useState<RunnableBeatEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [runningId, setRunningId] = useState<number | null>(null);
+  const dispatch = useDispatchPlayerAction(characterId);
+
+  function loadBeats() {
+    setLoading(true);
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'gm_list_runnable_beats' },
+        kwargs: {},
+      })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not list runnable beats.');
+          setBeats([]);
+          return;
+        }
+        const data = result.data as { beats?: RunnableBeatEntry[] } | null | undefined;
+        setBeats(data?.beats ?? []);
+      })
+      .catch(() => toast.error('Could not list runnable beats.'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadBeats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function runBeat(beatId: number) {
+    setRunningId(beatId);
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'run_beat' },
+        kwargs: { beat_id: beatId },
+      })
+      .then((result) => reportResult(result, 'Beat is now running in this scene.'))
+      .catch(() => toast.error('Could not run that beat.'))
+      .finally(() => setRunningId(null));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-runbeat-tab">
+      <p className="text-xs text-muted-foreground">
+        Instantiates a beat's authored session prep (opponents, situations) into this scene and
+        marks the scene as running it.
+      </p>
+      <Button
+        variant="outline"
+        disabled={dispatch.isPending}
+        onClick={loadBeats}
+        data-testid="gm-runbeat-refresh"
+      >
+        {loading ? 'Loading…' : 'Refresh'}
+      </Button>
+      <div className="space-y-1" data-testid="gm-runbeat-list">
+        {beats.length === 0 && (
+          <p className="text-xs text-muted-foreground">No runnable beats at your tables.</p>
+        )}
+        {beats.map((beat) => (
+          <div
+            key={beat.id}
+            className="flex items-center justify-between gap-2 rounded-md border p-2"
+            data-testid={`gm-runbeat-row-${beat.id}`}
+          >
+            <span className="text-sm">
+              {beat.story_title} / {beat.episode_title} ({beat.kind}, risk={beat.risk})
+              {beat.kind === 'encounter'
+                ? ` — ${beat.opponent_line_count} opponent line(s)`
+                : ` — ${beat.staged_template_count} staged template(s)`}
+            </span>
+            <Button
+              size="sm"
+              disabled={dispatch.isPending}
+              onClick={() => runBeat(beat.id)}
+              data-testid={`gm-runbeat-run-${beat.id}`}
+            >
+              {runningId === beat.id ? 'Running…' : 'Run'}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Panel shell
 // ---------------------------------------------------------------------------
 
@@ -1229,6 +1333,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <TabsTrigger value="traps" data-testid="gm-tab-traps">
               Traps
             </TabsTrigger>
+            <TabsTrigger value="runbeat" data-testid="gm-tab-runbeat">
+              Run Beat
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="check">
             <CallCheckTab characterId={characterId} targetCharacterId={targetCharacterId} />
@@ -1263,6 +1370,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
           </TabsContent>
           <TabsContent value="traps">
             <TrapsTab characterId={characterId} />
+          </TabsContent>
+          <TabsContent value="runbeat">
+            <RunBeatTab characterId={characterId} />
           </TabsContent>
         </Tabs>
       </CardContent>

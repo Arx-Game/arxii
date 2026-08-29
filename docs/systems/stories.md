@@ -283,6 +283,84 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 - GROUP / GLOBAL scope: predicates that require a CharacterSheet (ACHIEVEMENT_HELD, CONDITION_HELD, CODEX_ENTRY_UNLOCKED, CHARACTER_LEVEL_AT_LEAST) are skipped — the GM must mark these manually. STORY_AT_MILESTONE is evaluated without a sheet.
 - AGGREGATE_THRESHOLD is write-path triggered (via `record_aggregate_contribution`), not evaluated by `evaluate_auto_beats`.
 
+#### Session prep: `BeatOpponentLine` / `BeatStagedTemplate` (#3425)
+
+A GM authors, ahead of the session, exactly what an ENCOUNTER or SITUATION beat
+stages in the room — child rows on the `Beat`, no standalone reusable prep
+object (copy-beat tooling is a deferred follow-up).
+
+**`BeatOpponentLine`** (`related_name="opponent_lines"`, ENCOUNTER beats):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | FK → Beat | CASCADE |
+| `creature_template` | FK → combat.CreatureTemplate | PROTECT; the bestiary entry to spawn |
+| `count` | PositiveSmallIntegerField | Default 1; how many to spawn |
+| `position_name` | CharField (blank) | Authored position hint, resolved by name against the run-time room's `Position` set at run time (not a live FK — the room isn't known until the beat runs) |
+| `order` | PositiveIntegerField | |
+
+**`BeatStagedTemplate`** (`related_name="staged_templates"`, SITUATION beats):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | FK → Beat | CASCADE |
+| `situation_template` | FK → mechanics.SituationTemplate (nullable) | PROTECT |
+| `challenge_template` | FK → mechanics.ChallengeTemplate (nullable) | PROTECT |
+| `order` | PositiveIntegerField | |
+
+Exactly one of `situation_template`/`challenge_template` is set per row —
+enforced by a DB `CheckConstraint` (`beatstagedtemplate_exactly_one_template`)
+plus a mirroring `clean()`.
+
+`BeatSerializer` exposes both as nested read-write child lists
+(`opponent_lines`/`staged_templates`), including the update path: a custom
+`update()` diffs incoming rows against the beat's existing children **by id**
+(an id present + matching an existing row = edit; no id, or an id not
+found = create; an existing row whose id is absent from the payload =
+delete). Omitting the field entirely from a PATCH leaves the rows untouched;
+an explicit empty list clears them.
+
+#### Run Beat (#3425)
+
+`RunBeatAction` (`run_beat`, `actions/definitions/gm_story.py`) instantiates
+a beat's authored session prep into the GM's live scene in one call: sets
+`Scene.running_beat`, and for `kind=ENCOUNTER` creates a `CombatEncounter`
+(`story_beat=beat`, `risk_level` mapped from `Beat.risk` — see below) and
+spawns each opponent line via `spawn_from_creature_template` (position looked
+up by name against the room's `Position` set; an unresolvable name spawns
+without position rather than refusing the line); for `kind=SITUATION`,
+instantiates each staged template via `instantiate_situation`/
+`instantiate_challenge` exactly as `SetSituationAction`/`PlaceChallengeAction`
+do. Each line runs in its own DB savepoint — a failing line is logged and
+skipped, never aborting the whole run; `result.data` reports a per-line
+outcome. TASK/REQUIREMENT kinds are refused (nothing to stage); re-running
+the same beat while it is already the scene's `running_beat` is an idempotent
+no-op; running a *different* beat while one is already running is refused.
+
+Gated by `IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite(JUNIOR)`, plus
+a re-check in `execute()` that the acting GM actually runs the beat's story:
+reuses `CanMarkBeat.has_object_permission` via a duck-typed request shim
+(`SimpleNamespace(user=account)`) — the same permission `BeatSerializer
+.get_can_mark` already calls outside DRF.
+
+**Risk mapping (RenownRisk → combat RiskLevel):** NONE → low, LOW → low,
+then name-for-name (MODERATE/HIGH/EXTREME). `lethal` is never auto-set — GM
+adjusts it afterward via the existing `UpdateEncounterSettingsAction`.
+`stakes_level` is not prefilled (no beat-side source).
+
+`GMListRunnableBeatsAction` (`gm_list_runnable_beats`) is the read side:
+lists ENCOUNTER/SITUATION beats on the episode currently active (per
+`get_active_progress_for_story`) on stories the acting GM runs — staff see
+every table-assigned story, a non-staff GM only stories where they are the
+Lead GM. Feeds the web `GMAdjudicationPanel`'s Run Beat tab.
+
+`Scene.running_beat` (FK → `arxii.Beat`, nullable, `SET_NULL`,
+`related_name="running_scenes"`, string-FK form matching
+`CombatEncounter.story_beat`) is the first-class "this scene is running this
+beat" pointer, written only by `RunBeatAction` and cleared by
+`finish_scene_full`. Exposed on the scene serializers as `running_beat`
+(id + risk only) for GM/staff viewers — never beat internals.
+
 ---
 
 ### AggregateBeatContribution
@@ -643,6 +721,12 @@ Never pass `str(exc)` to API responses — use `exc.user_message`.
 |--------|-----|------------|-------------|
 | POST | `/api/beats/{pk}/mark/` | Story owner (GM) | `record_gm_marked_outcome`; body: `{outcome, gm_notes?}` |
 | POST | `/api/beats/{pk}/contribute/` | Story participant | `record_aggregate_contribution`; body: `{points, source_note?}` |
+
+Session prep (#3425) has no bespoke ViewSet action — `run_beat`/
+`gm_list_runnable_beats` ride the generic REGISTRY action-dispatch seam
+(`POST /api/actions/characters/{id}/dispatch/`, `useDispatchPlayerAction` on
+the web, `GMAdjudicationPanel`'s Run Beat tab), the same seam every other
+`gm_*` adjudication verb uses. See "Run Beat (#3425)" above.
 
 ### AGM Claim Lifecycle
 

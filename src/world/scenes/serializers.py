@@ -196,6 +196,7 @@ class SceneListSerializer(serializers.ModelSerializer):
     )
     is_owner = serializers.SerializerMethodField()
     viewer_can_gm = serializers.SerializerMethodField()
+    running_beat = serializers.SerializerMethodField()
 
     class Meta:
         model = Scene
@@ -209,6 +210,7 @@ class SceneListSerializer(serializers.ModelSerializer):
             "participants",
             "is_owner",
             "viewer_can_gm",
+            "running_beat",
         ]
 
     def get_location(self, obj):
@@ -299,6 +301,19 @@ class SceneListSerializer(serializers.ModelSerializer):
             return False
         user = request.user
         return bool(user.is_staff or obj.is_gm(user) or obj.is_owner(user))
+
+    def get_running_beat(self, obj: Scene) -> dict[str, object] | None:
+        """The Beat this scene is currently running (#3425), GM/staff viewers only.
+
+        Only id + risk tier -- beat internals (internal_description, player
+        hints, etc.) never ride this payload (see the #3425 spec's leak
+        table); #3433 decides the separate player-visible slice.
+        """
+        if obj.running_beat_id is None:
+            return None
+        if not self.get_viewer_can_gm(obj):
+            return None
+        return {"id": obj.running_beat_id, "risk": obj.running_beat.risk}
 
 
 class SceneRoundSerializer(serializers.ModelSerializer):

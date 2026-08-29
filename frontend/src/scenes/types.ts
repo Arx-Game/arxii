@@ -127,6 +127,12 @@ export interface SceneDetail extends SceneListItem {
   position_nodes: PositionNode[];
   /** Full position-graph edges — obstacle/gate visibility (#2006). */
   position_edges: PositionEdgeInfo[];
+  /**
+   * The Beat this scene is currently running (#3425), null when none. Only
+   * id + risk tier ride this payload — GM/staff viewers only, server-side
+   * (`SceneListSerializer.get_running_beat`); never internal beat text.
+   */
+  running_beat: { id: number; risk: string } | null;
 }
 
 export interface InteractionPersona {
