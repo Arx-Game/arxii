@@ -121,6 +121,61 @@ is playable immediately, with no Functionary placement in the chain:
   `RosterTenure` in Django admin. A self-service release is a stated
   follow-up, not an oversight.
 
+## Story-NPC statline presets (#3427)
+
+A minted Story NPC used to have a blank sheet — a GM's only path to a real,
+rollable statline was to hand-invent trait/skill values. Presets close that
+gap with a **curated archetype catalog**: staff author the presets in admin;
+GMs select at mint time, never invent values (ADR-0176 stays intact — the
+applied values land as the same real `CharacterTraitValue`/
+`CharacterSkillValue` rows a PC's sheet carries).
+
+- **Models** (`world.roster.models.npc_presets`): `NPCStatlinePreset`
+  (`name` unique, `description`, `NaturalKeyMixin + CreditedContent +
+  SharedMemoryModel`, registered in `CONTENT_MODELS`) with child rows
+  `NPCPresetTraitLine` (`trait` FK PROTECT to a STAT `Trait`, `display_value`
+  1-10) and `NPCPresetSkillLine` (`skill` FK PROTECT, `value` true 1-100),
+  each unique per (preset, trait)/(preset, skill). Admin: one preset page
+  with two `TabularInline`s. The child-line models are not themselves in
+  `CONTENT_MODELS` (mirrors `traits.TraitRankDescription`'s asymmetry) — they
+  ride along with their preset's export/import via the FK, and the starter
+  catalog's own lines are seeded unconditionally once their preset exists.
+- **Service** `apply_npc_preset(sheet, preset)`
+  (`world.roster.services.staff_characters`, beside `mint_story_npc`) mirrors
+  CG finalize's write shape exactly — `_create_stat_values`/
+  `_create_skill_values` in `world.character_creation.services` — rather
+  than calling those private draft-dict helpers: trait lines write a
+  `CharacterTraitValue` at `display_value * STAT_DISPLAY_DIVISOR`; skill
+  lines write a `CharacterSkillValue` plus the #2894 bridging
+  `CharacterTraitValue` on `skill.trait` (the check engine reads only trait
+  rows); every written value gets a `CharacterTraitChange` provenance stamp
+  (`old_value=0`, `source=TraitChangeSource.NPC_PRESET`). Refuses a sheet
+  that already carries any NPC_PRESET-sourced stamp — no re-apply path in
+  v1 (a second application path invites drift); staff adjust an existing
+  NPC's values via admin instead.
+- **Wiring:** `mint_story_npc` gains a keyword-only `preset:
+  NPCStatlinePreset | None = None`; `MintStoryNPCAction` gains an optional
+  `preset` kwarg, resolved by natural key inside the Action (an unknown name
+  refuses the whole mint — no partial mint with a silently-dropped preset).
+  Telnet: `gm npc <name>[=<description>] [preset=<name>]` (`CmdGMDashboard`,
+  `commands/gm_ops.py`) — `preset=` is pulled off the tail before the
+  existing `<name>[=<description>]` split runs, so it composes with a
+  description.
+- **API:** `NPCStatlinePresetViewSet` (`/api/roster/npc-presets/`,
+  read-only, `IsGMOrStaff`, `SearchFilter` on `name`, standard pagination)
+  feeds a preset `Select` in the #3426 mint dialog (`GMDashboardPage`).
+- **Seed:** 3-4 starter presets (Guard, Courtier, Innkeeper, Investigator)
+  via `authored_or_sample` (ADR-0168) in the roster seed cluster
+  (`world.roster.seeds.ensure_starter_npc_presets`, called from
+  `world.seeds.clusters._seed_roster`) — modest values, staff rewrite
+  freely. A line whose named Trait/Skill isn't itself authored yet is
+  skipped, not invented.
+- **Cross-GM preset library** (a shared/reusable preset catalog visible
+  across every GM) was considered at spec review and closed as premature —
+  the #3426 "My NPCs" list already covers self-reuse and #2001's custody
+  system already protects story assets; revisit if multiple GMs start
+  running recurring casts that would benefit from sharing presets.
+
 ## Deliberately not here
 
 Tier-0 *consumers* (mob formation, stealth publicness, venue economics) are

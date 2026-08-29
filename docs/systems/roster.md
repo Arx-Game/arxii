@@ -318,6 +318,11 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   (`selected_entry`/`SelectedEntryResultSerializer`), so the field is a
   `SerializerMethodField` reading the annotation off `obj.__dict__` when present and
   falling back to a direct count (one extra query, single-object path only) when not.
+  Also exposes `lifecycle_state` (#3412 slice 3 — a plain read-only `CharField` mirror
+  of `CharacterSheet.lifecycle_state`, no annotation, no migration) so the Hall's
+  OffscreenActsPlate can branch on a degraded state (CAPTURED/DEAD/RETIRED/UNKNOWN)
+  without a new endpoint. Deliberately does NOT expose the unconscious overlay (a
+  conditions-system read, not a sheet column) — recorded as an open seam, not built.
 - `POST /api/roster/entries/{id}/apply/` - Apply for a character (requires verified email)
 - `POST /api/roster/entries/{id}/set_profile_picture/` - Set profile picture from tenure media
 - `POST /api/roster/entries/select/` - Set/clear the account's durable character selection

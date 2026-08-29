@@ -467,6 +467,84 @@ class OrgExpelAction(Action):
         )
 
 
+_MSG_NO_ACTIVE_PERSONA = "No active persona."
+_MSG_NO_DOMAIN_OR_EDICT = "No such domain or edict."
+_MSG_NO_STANCE = "No such stance."
+
+
+@dataclass
+class IssueProclamationAction(Action):
+    """Issue a proclamation, optionally enacting a domain edict (#2842, #3412).
+
+    Wraps the SAME ``world.societies.proclamations`` service calls
+    ``ProclamationViewSet.proclaim`` used to call directly. Routing through
+    ``action.run()`` activates the offscreen-act gate (#3412 slice 3): a
+    captured, unconscious, or dead leader can no longer proclaim or enact an
+    edict. This action does NOT duplicate the leadership/domain-authority
+    checks — those still live in the service layer exactly as before
+    (``issue_proclamation``'s ``_require_org_leadership``, ``enact_edict``'s
+    ``can_administer_domain``); this action only adds the lifecycle gate in
+    front of the same call. One key covers both branches (plain/org stance
+    and domain-edict enactment) since they are the same "speak for the
+    house" act with the same actor-lifecycle exposure — see
+    ``ProclamationCreateSerializer.validate`` for the mutually-exclusive
+    domain/edict_kind vs. stance shape this mirrors.
+    """
+
+    key: str = "issue_proclamation"
+    name: str = "Issue Proclamation"
+    icon: str = "megaphone"
+    category: str = "social"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.societies.houses.models import Domain, EdictKind  # noqa: PLC0415
+        from world.societies.models import StanceArchetype  # noqa: PLC0415
+        from world.societies.proclamations import (  # noqa: PLC0415
+            ProclamationError,
+            enact_edict,
+            issue_proclamation,
+        )
+
+        # character_sheet_id=actor.pk validates the persona belongs to the ACTOR's
+        # own sheet (CharacterSheet shares ObjectDB's pk, see CLAUDE.md) — mirrors
+        # the sibling convention (`_actor_persona`/`SetActivePersonaAction`) instead
+        # of trusting a client-suppliable persona_id unowned-checked (#3412 review
+        # CRITICAL-1): without this, any actor could proclaim/enact as any other
+        # persona, including proxying an ALIVE actor for a CAPTURED/DEAD leader.
+        persona = Persona.objects.filter(
+            pk=kwargs.get("persona_id"), character_sheet_id=actor.pk
+        ).first()
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_PERSONA)
+
+        try:
+            if kwargs.get("domain_id"):
+                domain = Domain.objects.filter(pk=kwargs["domain_id"]).first()
+                kind = EdictKind.objects.filter(pk=kwargs.get("edict_kind_id")).first()
+                if domain is None or kind is None:
+                    return ActionResult(success=False, message=_MSG_NO_DOMAIN_OR_EDICT)
+                edict = enact_edict(domain, kind, persona, prose=kwargs.get("prose", ""))
+                row = edict.proclamation
+            else:
+                stance = StanceArchetype.objects.filter(pk=kwargs.get("stance_id")).first()
+                if stance is None:
+                    return ActionResult(success=False, message=_MSG_NO_STANCE)
+                org = _resolve_organization(kwargs.get("org_id"))
+                row = issue_proclamation(persona, stance, prose=kwargs.get("prose", ""), org=org)
+        except ProclamationError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(success=True, data={"proclamation": row})
+
+
 # Module-level singletons registered in actions.registry.
 org_invite_action = OrgInviteAction()
 org_apply_action = OrgApplyAction()
@@ -475,3 +553,4 @@ org_leave_action = OrgLeaveAction()
 org_promote_action = OrgPromoteAction()
 org_demote_action = OrgDemoteAction()
 org_expel_action = OrgExpelAction()
+issue_proclamation_action = IssueProclamationAction()

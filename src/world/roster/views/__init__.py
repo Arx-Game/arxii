@@ -22,6 +22,7 @@ from world.roster.views.family_views import (
 from world.roster.views.invite_views import GameInviteViewSet
 from world.roster.views.mail_views import PlayerMailPagination, PlayerMailViewSet
 from world.roster.views.media_views import MediaViewSet, TenureGalleryViewSet
+from world.roster.views.npc_preset_views import NPCStatlinePresetViewSet
 from world.roster.views.roster_views import RosterViewSet
 from world.roster.views.tenure_views import RosterTenureViewSet
 
@@ -31,6 +32,7 @@ __all__ = [
     "GameInviteViewSet",
     "KinRelationshipView",
     "MediaViewSet",
+    "NPCStatlinePresetViewSet",
     "PlayerMailPagination",
     "PlayerMailViewSet",
     "RosterApplicationPagination",

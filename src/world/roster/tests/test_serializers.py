@@ -611,3 +611,22 @@ class MyRosterEntrySerializerTestCase(TestCase):
 
         data = MyRosterEntrySerializer(entry).data
         assert data["active_persona_id"] == alt.pk
+
+    def test_lifecycle_state_defaults_to_alive(self):
+        """#3412 slice 3 task 5 — lifecycle_state exposes the sheet's default."""
+        from world.character_sheets.types import LifecycleState
+
+        data = MyRosterEntrySerializer(self.entry).data
+        assert data["lifecycle_state"] == LifecycleState.ALIVE
+
+    def test_lifecycle_state_reflects_degraded_state(self):
+        """lifecycle_state surfaces a non-ALIVE state (e.g. CAPTURED) unchanged."""
+        from world.character_sheets.types import LifecycleState
+
+        entry = RosterEntryFactory()
+        sheet = entry.character_sheet
+        sheet.lifecycle_state = LifecycleState.CAPTURED
+        sheet.save(update_fields=["lifecycle_state"])
+
+        data = MyRosterEntrySerializer(entry).data
+        assert data["lifecycle_state"] == LifecycleState.CAPTURED

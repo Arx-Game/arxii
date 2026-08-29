@@ -7,6 +7,7 @@ import { PersonaSwitcher } from '@/game/components/PersonaSwitcher';
 import { useCharacterPersonasQuery } from '@/game/personaQueries';
 import { cn } from '@/lib/utils';
 import type { MyRosterEntry } from '@/roster/types';
+import { dockedStateLabel } from '@/roster/lifecycleDisplay';
 
 interface SelectedCharacterChipProps {
   entry: MyRosterEntry;
@@ -56,6 +57,17 @@ function getInitials(name: string): string {
  * PLACEHOLDER copy: "Playing: Currently Offscreen" is a stand-in for real
  * presence state (not wired to the WebSocket session yet — this chip still
  * never starts/stops a session on its own, see above).
+ *
+ * Degraded-state sub-line (#3412 final review, IMPORTANT-1): a docked
+ * character whose `lifecycle_state` is CAPTURED/DEAD/RETIRED/UNKNOWN used to
+ * assert "Playing: Currently Offscreen" on every non-`/game` page — a
+ * factual contradiction with the Hall's `OffscreenActsPlate` death/captivity
+ * prose shown for the same character. The sub-line now branches the same way
+ * the plate does (mirrors its `ALLOWED_LIFECYCLE_STATES` set) and shows a
+ * short PLACEHOLDER state label instead. "Enter the world" stays rendered in
+ * every state deliberately — a dead character's player legitimately enters
+ * as a spectator/ghost (the dead-gate whitelist exists for exactly that,
+ * #2287) — only the sub-line's wording changes.
  */
 export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
   const { data: personas = [] } = useCharacterPersonasQuery(entry.character_id);
@@ -88,7 +100,7 @@ export function SelectedCharacterChip({ entry }: SelectedCharacterChipProps) {
         {/* PLACEHOLDER copy — presence state isn't wired yet */}
         <span className="font-body text-xs text-muted-foreground">
           as {wornName}
-          {inWorld ? '' : ' · Playing: Currently Offscreen'}
+          {inWorld ? '' : ` · Playing: ${dockedStateLabel(entry.lifecycle_state)}`}
         </span>
         <PersonaSwitcher
           characterSheetId={entry.character_id}

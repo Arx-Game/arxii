@@ -21,6 +21,32 @@ vi.mock('@/store/hooks', () => ({
   useAccount: vi.fn(() => null),
 }));
 
+// The mint dialog's statline preset picker (#3427) — a Radix Select. jsdom
+// can't drive Radix's real pointer-capture popover, so this is stubbed as a
+// plain native <select> (the established pattern; see
+// boundaries/__tests__/PlayerBoundaryFormDialog.test.tsx).
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value?: string;
+    onValueChange?: (v: string) => void;
+    children?: ReactNode;
+  }) => (
+    <select value={value} onChange={(e) => onValueChange?.(e.target.value)}>
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children?: React.ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
+}));
+
 // The My NPCs block (#3426) fetches the account's roster entries; mock the
 // query directly so it never competes with the order-dependent apiFetch mocks.
 vi.mock('@/roster/queries', () => ({
@@ -206,5 +232,107 @@ describe('GMDashboardPage claim rejection (#3155)', () => {
     // the button returns to its normal (non-"Claiming…") label once the
     // mutation settles into its error state rather than a success refetch.
     expect(screen.getByTestId('claim-group-request-button')).toHaveTextContent('Claim');
+  });
+});
+
+/**
+ * Mint dialog preset picker (#3427) — selecting a statline preset must land
+ * on the dispatch payload's `kwargs.preset`, and omitting one must not send
+ * the key at all (matching `mint_story_npc`'s optional keyword-only param).
+ */
+describe('GMDashboardPage mint dialog preset picker (#3427)', () => {
+  beforeEach(() => {
+    vi.mocked(useAccount).mockReturnValue({
+      available_characters: [{ id: 42, currently_puppeted_in_session: true }],
+    } as unknown as ReturnType<typeof useAccount>);
+  });
+
+  function mockDashboardFetch() {
+    return {
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response;
+  }
+
+  function mockPresetsFetch() {
+    return {
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          results: [{ id: 1, name: 'Guard', description: 'A trained watchman.' }],
+        }),
+    } as Response;
+  }
+
+  function mockDispatchFetch() {
+    return {
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          backend: 'registry',
+          deferred: false,
+          success: true,
+          message: 'Guardsman minted as a Story NPC (#7).',
+          data: null,
+        }),
+    } as Response;
+  }
+
+  it('sends the selected preset name as kwargs.preset on mint', async () => {
+    const user = userEvent.setup();
+    // Calls accumulate across `it` blocks in this file (no global mock reset),
+    // so index the dispatch call relative to this test's own start rather
+    // than an absolute position.
+    const callsBefore = vi.mocked(apiFetch).mock.calls.length;
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(mockDashboardFetch())
+      .mockResolvedValueOnce(mockPresetsFetch())
+      .mockResolvedValueOnce(mockDispatchFetch());
+
+    render(withProviders(<GMDashboardPage />));
+
+    await waitFor(() => expect(screen.getByText('GM Dashboard')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Mint Story NPC' }));
+
+    const presetOption = await screen.findByRole('option', { name: 'Guard' });
+    const select = presetOption.closest('select');
+    if (!select) throw new Error('preset select not found');
+    await user.selectOptions(select, 'Guard');
+
+    await user.type(screen.getByLabelText('Name *'), 'Guardsman');
+    await user.click(screen.getByRole('button', { name: 'Mint' }));
+
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.length).toBe(callsBefore + 3));
+    const dispatchCall = vi.mocked(apiFetch).mock.calls[callsBefore + 2];
+    const body = JSON.parse((dispatchCall[1] as RequestInit).body as string) as {
+      kwargs: Record<string, unknown>;
+    };
+    expect(body.kwargs.preset).toBe('Guard');
+    expect(body.kwargs.name).toBe('Guardsman');
+  });
+
+  it('omits kwargs.preset entirely when no preset is selected', async () => {
+    const user = userEvent.setup();
+    const callsBefore = vi.mocked(apiFetch).mock.calls.length;
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(mockDashboardFetch())
+      .mockResolvedValueOnce(mockPresetsFetch())
+      .mockResolvedValueOnce(mockDispatchFetch());
+
+    render(withProviders(<GMDashboardPage />));
+
+    await waitFor(() => expect(screen.getByText('GM Dashboard')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Mint Story NPC' }));
+    await screen.findByRole('option', { name: 'Guard' });
+
+    await user.type(screen.getByLabelText('Name *'), 'Blank Slate');
+    await user.click(screen.getByRole('button', { name: 'Mint' }));
+
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.length).toBe(callsBefore + 3));
+    const dispatchCall = vi.mocked(apiFetch).mock.calls[callsBefore + 2];
+    const body = JSON.parse((dispatchCall[1] as RequestInit).body as string) as {
+      kwargs: Record<string, unknown>;
+    };
+    expect(body.kwargs.preset).toBeUndefined();
   });
 });

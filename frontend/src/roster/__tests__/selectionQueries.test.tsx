@@ -45,6 +45,7 @@ describe('postSelectEntry', () => {
         primary_persona_id: 1,
         active_persona_id: 1,
         unread_narrative_count: 0,
+        lifecycle_state: 'ALIVE',
         roster_type: 'ACTIVE',
       },
     };
@@ -105,6 +106,7 @@ describe('useSelectCharacterMutation', () => {
         primary_persona_id: 1,
         active_persona_id: 1,
         unread_narrative_count: 0,
+        lifecycle_state: 'ALIVE',
         roster_type: 'ACTIVE',
       },
     };

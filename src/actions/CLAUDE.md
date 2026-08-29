@@ -520,6 +520,31 @@ Key: `"cast_technique"`. Resolves a standalone technique cast via `request_techn
 against all returned prerequisites after enhancements are applied and before
 `execute()` is ever reached. A non-empty list is a hard gate, not advisory.
 
+### Two built-in gates run BEFORE `get_prerequisites()`
+
+`check_availability()` (`base.py`) consults two central, built-in gates ahead of
+any action-specific `Prerequisite` — neither is opted into per-action; every
+action gets both automatically:
+
+1. **The dead gate (#2287)** — `Action._dead_gate_reason(actor)`. A dead actor
+   is refused on every action key except `DEAD_ALLOWED_ACTION_KEYS`
+   (`actions/constants.py` — the ghost-interlude spectator/off-ramp whitelist:
+   `look`, `emit`, `pose`, `wake`, `retire`, `death_kudos`, …).
+2. **The offscreen-act gate (#3412, ADR-0246)** — `Action._offscreen_gate_reason(actor)`,
+   consulted only when the dead gate above did NOT already refuse. Delegates to
+   `actions.offscreen_gate.offscreen_act_state(sheet, action_key)`: for the
+   narrow set of "2.5 acts" in `OFFSCREEN_ACT_KEYS` (journal entries, character
+   goals, persona swaps, proclamations), a character in a degraded lifecycle
+   state (CAPTURED, unconscious, DEAD, RETIRED, UNKNOWN) gets ROUTED (refusal
+   naming a rescue channel) or BLOCKED instead of ALLOWED. Every other action
+   key resolves ALLOWED without a lifecycle read at all — see ADR-0246 for why
+   this extends the dead gate's choke point rather than building a second one.
+
+Both gates append to the same `failures` list `check_availability()` builds
+before `get_prerequisites()` ever runs, so a refusal from either reads as an
+ordinary unmet-prerequisite failure to every caller (web dispatch and telnet
+alike) — no separate error path to special-case.
+
 ### kwargs-via-context convention
 
 `check_availability()` receives `context={"kwargs": context.kwargs, "scene_data": sdm}`.
@@ -723,7 +748,11 @@ or flow definitions for execution. Same source contract as enhancements.
 
 ### CharacterCapabilities Facade
 Unified query interface for checking character capabilities. Used by
-prerequisites to evaluate "can this character do X right now?"
+prerequisites to evaluate "can this character do X right now?" The offscreen-act
+gate (#3412, ADR-0246) is a deliberate seed of this future facade, not the
+facade itself — building the full generalized interface now was rejected as
+premature generalization for a slice that only needed the lifecycle-state
+question.
 
 ### On-Demand Action Availability
 WebSocket endpoint for the frontend to request available actions for a

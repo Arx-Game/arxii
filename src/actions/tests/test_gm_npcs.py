@@ -1,4 +1,7 @@
-"""GM story-NPC on-ramp action tests (#3426) — MintStoryNPCAction gates + journey."""
+"""GM story-NPC on-ramp action tests (#3426) — MintStoryNPCAction gates + journey.
+
+Preset-selection tests (#3427) live in ``MintStoryNPCActionPresetTests`` below.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +16,14 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
-from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.factories import (
+    NPCPresetTraitLineFactory,
+    NPCStatlinePresetFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+)
 from world.scenes.factories import SceneFactory
+from world.traits.models import CharacterTraitChange, TraitChangeSource
 
 
 def _make_room(key: str = "The GM's Study") -> object:
@@ -76,6 +85,41 @@ class MintStoryNPCActionPermissionTests(MintStoryNPCActionTestBase):
         result = MintStoryNPCAction().run(actor=actor, name="Third NPC")
         assert result.success is False
         assert "story NPC" in (result.message or "")
+
+
+class MintStoryNPCActionPresetTests(MintStoryNPCActionTestBase):
+    """``preset=<name>`` resolution + refusal on the Action seam (#3427)."""
+
+    def test_unknown_preset_refused(self) -> None:
+        seed_default_gm_level_caps()
+        actor = self._gm_character(GMLevel.JUNIOR)
+
+        result = MintStoryNPCAction().run(
+            actor=actor, name="No Statline Here", preset="Nonexistent Archetype"
+        )
+
+        assert result.success is False
+        assert "No statline preset" in (result.message or "")
+        # A refused preset lookup must not have minted the character anyway.
+        from world.character_sheets.models import CharacterSheet
+
+        assert not CharacterSheet.objects.filter(character__db_key="No Statline Here").exists()
+
+    def test_known_preset_applies_the_statline(self) -> None:
+        seed_default_gm_level_caps()
+        actor = self._gm_character(GMLevel.JUNIOR)
+        preset = NPCStatlinePresetFactory(name="Test Watch Guard")
+        trait_line = NPCPresetTraitLineFactory(preset=preset, display_value=3)
+
+        result = MintStoryNPCAction().run(actor=actor, name="Preset Guard", preset=preset.name)
+
+        assert result.success is True, result.message
+        stamp = CharacterTraitChange.objects.get(
+            character_sheet__character__db_key="Preset Guard",
+            trait=trait_line.trait,
+        )
+        assert stamp.source == TraitChangeSource.NPC_PRESET
+        assert stamp.new_value == trait_line.display_value * 10
 
 
 class MintStoryNPCJourneyTests(APITestCase):
