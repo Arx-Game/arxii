@@ -463,6 +463,37 @@ def redeem_favor_token(token: FavorTokenDetails, *, redeemer_org: Organization) 
         locked.save(update_fields=["redeemed_at"])
 
 
+def resolve_unredeemed_favor_tokens(
+    *, sheet: CharacterSheet, org: Organization, count: int
+) -> list[FavorTokenDetails]:
+    """The holder's ``count`` unredeemed tokens issued by ``org``, locked (#3466).
+
+    Generalizes ``_resolve_unredeemed_hare``'s (``world/npc_services/effects.py``)
+    single-token pattern to N, for rites that price a voice at more than one Hare.
+    Mirrors its ``select_for_update()`` TOCTOU guard — the row lock serializes a
+    concurrent caller behind this one's commit, so it either finds different tokens
+    or raises. Must be called inside ``transaction.atomic()``; does not itself
+    redeem anything (see ``redeem_favor_token``). Raises
+    ``NoAvailableFavorTokenError`` when the holder has fewer than ``count`` such
+    tokens — the caller does not consume the shortfall.
+    """
+    from world.npc_services.effects import NoAvailableFavorTokenError  # noqa: PLC0415
+
+    tokens = list(
+        FavorTokenDetails.objects.select_for_update()
+        .filter(
+            issuing_organization=org,
+            redeemed_at__isnull=True,
+            item_instance__holder_character_sheet=sheet,
+            item_instance__destroyed_at__isnull=True,
+        )
+        .order_by("pk")[:count]
+    )
+    if len(tokens) < count:
+        raise NoAvailableFavorTokenError(org.name)
+    return tokens
+
+
 def get_or_create_economics(organization: Organization) -> OrgEconomicsProfile:
     economics, _ = OrgEconomicsProfile.objects.get_or_create(organization=organization)
     return economics

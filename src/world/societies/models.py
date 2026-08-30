@@ -1834,6 +1834,9 @@ class LegendHonor(SharedMemoryModel):
     """
 
     deed = models.ForeignKey(LegendEntry, on_delete=models.CASCADE, related_name="honors")
+    # PROTECT (unlike sibling persona FKs LegendSpread.spreader_persona / LegendDeedStory.author,
+    # both CASCADE): story-significant per the class docstring, so a persona delete must not
+    # silently erase who spoke an honor.
     honorer = models.ForeignKey(
         PERSONA_MODEL,
         on_delete=models.PROTECT,
