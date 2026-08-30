@@ -279,6 +279,8 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     trigger_kind: str,
     subject_sheet: CharacterSheet | None = None,
     reason: str = "",
+    subject_opponent: CombatOpponent | None = None,
+    subject_phase_number: int | None = None,
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -294,6 +296,11 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
 
     ``reason`` (#3387) is GM-stated provenance for a manual (``GM_MANUAL``)
     trigger — every automatic trigger_kind leaves it blank.
+
+    A boss beat (#3445) passes ``subject_opponent`` plus ``subject_phase_number``
+    instead of ``subject_sheet``, and dedups on that tuple — one surge per boss
+    per phase, so a multi-phase boss surges at each transition while the #2642
+    re-break loop cannot repeat itself.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -316,6 +323,8 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         participant=participant,
         trigger_kind=trigger_kind,
         subject_sheet=subject_sheet,
+        subject_opponent=subject_opponent,
+        subject_phase_number=subject_phase_number,
         defaults={
             "amount": amount,
             "round_number": encounter.round_number,
@@ -608,3 +617,87 @@ def assign_default_escalation_curve(encounter: CombatEncounter) -> None:
         return
     encounter.escalation_curve = modifier.default_curve
     encounter.save(update_fields=["escalation_curve"])
+
+
+def _surge_every_active_participant(
+    *,
+    encounter: CombatEncounter,
+    opponent: CombatOpponent,
+    amount: int,
+    trigger_kind: str,
+) -> None:
+    """Write one boss-beat surge per ACTIVE participant of ``encounter`` (#3445).
+
+    Unlike the grief/peril/hated-foe legs there is no relationship qualification:
+    a boss changing phase, enraging, or its wall breaking is public, room-wide
+    fact, so it lands on everyone still standing (decision 2) - the same shape as
+    ``_apply_initial_stakes_surge``'s HIGH_STAKES leg. An authored amount of 0
+    switches the beat off for the curve, mirroring the interference leg's guard
+    (``engagement_locks.py``).
+    """
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+    if amount <= 0:
+        return
+    participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for participant in participants:
+        apply_dramatic_surge(
+            encounter=encounter,
+            participant=participant,
+            amount=amount,
+            trigger_kind=trigger_kind,
+            subject_sheet=None,
+            subject_opponent=opponent,
+            subject_phase_number=opponent.current_phase,
+        )
+
+
+def apply_boss_phase_surge(*, opponent: CombatOpponent, enraged: bool) -> None:
+    """Surge every ACTIVE PC when a boss crosses into a new phase (#3445).
+
+    ``enraged`` is decided at the seam (``check_and_advance_boss_phase``) by
+    comparing the new phase's ``damage_multiplier`` against the one the boss
+    carried in. The two kinds are mutually exclusive, so one transition is always
+    exactly one surge. Curve-gated per ADR-0098: an encounter with no
+    ``escalation_curve`` surges nobody.
+    """
+    encounter = opponent.encounter
+    curve = encounter.escalation_curve
+    if curve is None:
+        return
+    if enraged:
+        amount = curve.boss_enrage_spike_intensity_amount
+        trigger_kind = SurgeTriggerKind.BOSS_ENRAGE
+    else:
+        amount = curve.boss_phase_spike_intensity_amount
+        trigger_kind = SurgeTriggerKind.BOSS_PHASE
+    _surge_every_active_participant(
+        encounter=encounter,
+        opponent=opponent,
+        amount=amount,
+        trigger_kind=trigger_kind,
+    )
+
+
+def apply_boss_break_surge(*, opponent: CombatOpponent) -> None:
+    """Surge every ACTIVE PC when a boss's break bar reaches zero (#3445).
+
+    Called on every round the bar reads zero, which after the first break is
+    every round a qualifying feed lands (#2642 leaves the bar at zero and
+    re-opens the vulnerability window). Only the first break in a phase writes
+    anything: the dedup key carries ``opponent.current_phase``, so the repeats
+    are clean no-ops and a later phase - which re-stamps the bar - surges again.
+    """
+    encounter = opponent.encounter
+    curve = encounter.escalation_curve
+    if curve is None:
+        return
+    _surge_every_active_participant(
+        encounter=encounter,
+        opponent=opponent,
+        amount=curve.boss_break_spike_intensity_amount,
+        trigger_kind=SurgeTriggerKind.BOSS_BREAK,
+    )

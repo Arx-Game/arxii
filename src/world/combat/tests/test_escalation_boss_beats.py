@@ -4,13 +4,18 @@ two boss seams (phase transition / enrage, break-bar break)."""
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 
-from world.combat.constants import SurgeTriggerKind
+from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.escalation import apply_boss_break_surge, apply_boss_phase_surge
 from world.combat.factories import (
     BossOpponentFactory,
+    CombatEncounterFactory,
     CombatParticipantFactory,
     EscalationCurveFactory,
 )
 from world.combat.models import DramaticSurgeRecord
+from world.mechanics.constants import EngagementType
+from world.mechanics.engagement import CharacterEngagement
+from world.mechanics.services import begin_engagement
 
 
 class BossBeatDedupConstraintTests(TestCase):
@@ -89,3 +94,87 @@ class BossBeatCurveFieldTests(TestCase):
         self.assertEqual(curve.boss_phase_spike_intensity_amount, 2)
         self.assertEqual(curve.boss_enrage_spike_intensity_amount, 4)
         self.assertEqual(curve.boss_break_spike_intensity_amount, 4)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
+class BossBeatSurgeLegTests(TestCase):
+    """apply_boss_phase_surge / apply_boss_break_surge (#3445)."""
+
+    def setUp(self):
+        self.curve = EscalationCurveFactory(
+            boss_phase_spike_intensity_amount=2,
+            boss_enrage_spike_intensity_amount=4,
+            boss_break_spike_intensity_amount=5,
+        )
+        self.encounter = CombatEncounterFactory(escalation_curve=self.curve, round_number=3)
+        self.boss = BossOpponentFactory(encounter=self.encounter, current_phase=2)
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, status=ParticipantStatus.ACTIVE
+        )
+        self.character = self.participant.character_sheet.character
+        begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
+
+    def _intensity(self) -> int:
+        return CharacterEngagement.objects.get(
+            character=self.character.sheet_data
+        ).intensity_modifier
+
+    def test_plain_transition_surges_boss_phase(self):
+        apply_boss_phase_surge(opponent=self.boss, enraged=False)
+
+        self.assertEqual(self._intensity(), 2)
+        record = DramaticSurgeRecord.objects.get()
+        self.assertEqual(record.trigger_kind, SurgeTriggerKind.BOSS_PHASE)
+        self.assertEqual(record.subject_opponent_id, self.boss.pk)
+        self.assertEqual(record.subject_phase_number, 2)
+
+    def test_enraging_transition_surges_boss_enrage(self):
+        apply_boss_phase_surge(opponent=self.boss, enraged=True)
+
+        self.assertEqual(self._intensity(), 4)
+        self.assertEqual(
+            DramaticSurgeRecord.objects.get().trigger_kind, SurgeTriggerKind.BOSS_ENRAGE
+        )
+
+    def test_break_surge_repeats_once_per_phase(self):
+        apply_boss_break_surge(opponent=self.boss)
+        apply_boss_break_surge(opponent=self.boss)  # the #2642 re-break: no-op
+
+        self.assertEqual(self._intensity(), 5)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
+
+        self.boss.current_phase = 3
+        self.boss.save(update_fields=["current_phase"])
+        apply_boss_break_surge(opponent=self.boss)
+
+        self.assertEqual(self._intensity(), 10)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 2)
+
+    def test_no_curve_surges_nobody(self):
+        plain = CombatEncounterFactory(escalation_curve=None, round_number=3)
+        boss = BossOpponentFactory(encounter=plain)
+        participant = CombatParticipantFactory(encounter=plain, status=ParticipantStatus.ACTIVE)
+        begin_engagement(participant.character_sheet.character, EngagementType.COMBAT, source=plain)
+
+        apply_boss_phase_surge(opponent=boss, enraged=True)
+
+        self.assertFalse(DramaticSurgeRecord.objects.filter(encounter=plain).exists())
+
+    def test_zero_authored_amount_surges_nobody(self):
+        self.curve.boss_phase_spike_intensity_amount = 0
+        self.curve.save(update_fields=["boss_phase_spike_intensity_amount"])
+
+        apply_boss_phase_surge(opponent=self.boss, enraged=False)
+
+        self.assertEqual(self._intensity(), 0)
+        self.assertFalse(DramaticSurgeRecord.objects.exists())
+
+    def test_only_active_participants_surge(self):
+        fled = CombatParticipantFactory(encounter=self.encounter, status=ParticipantStatus.FLED)
+        begin_engagement(
+            fled.character_sheet.character, EngagementType.COMBAT, source=self.encounter
+        )
+
+        apply_boss_phase_surge(opponent=self.boss, enraged=False)
+
+        self.assertFalse(DramaticSurgeRecord.objects.filter(participant=fled).exists())
