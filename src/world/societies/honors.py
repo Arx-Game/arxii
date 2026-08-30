@@ -106,10 +106,14 @@ class UnknownDeedError(HonorRefused):
 
 
 class HonoreeAlreadyAnchoredError(HonorRefused):
-    """The honoree already has a deed anchored to this event (#3466 — one deed per act).
+    """The honoree already has a LIVE deed anchored to this event (#3466 — one deed per act).
 
     Settled automatically or established by an earlier honor, it makes no difference:
     many voices are meant to grow ONE deed, never each mint their own for the same act.
+    A struck (``is_active=False``) deed does not count — it is worth nothing everywhere
+    else, so directing someone to "honor the existing deed instead" would send them to
+    spend Hares on a record that can never be worth anything; the act may still deserve
+    a fresh, genuine deed.
     """
 
     def __init__(self) -> None:
@@ -196,7 +200,7 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if establishing:
             if honoree_persona.character_sheet_id == character_sheet.pk:
                 raise CannotHonorOwnDeedError
-            if anchor_event.deeds.filter(persona=honoree_persona).exists():
+            if anchor_event.deeds.filter(persona=honoree_persona, is_active=True).exists():
                 raise HonoreeAlreadyAnchoredError
             if not deed_title:
                 msg = "honor_deed requires deed_title when establishing a new deed."

@@ -487,6 +487,36 @@ class HonorDeedSuccessTests(TestCase):
         # not 9 — the struck level-9 sibling must not count.
         assert new_deed.earned_at_level == 0
 
+    def test_struck_deed_on_event_does_not_block_establishing_a_live_one(self) -> None:
+        """A struck deed for the SAME honoree does not poison the event slot (ruling, #3466).
+
+        Staff strike a farcical deed by setting is_active=False, which zeroes its value
+        everywhere else (get_total_value, both matviews) — it must not also bar the
+        honoree's genuine act from ever being recognized on this event again.
+        """
+        struck_deed = LegendEntryFactory(
+            persona=self.honoree_persona,
+            event=self.establish_event,
+            base_value=50,
+            earned_at_level=0,
+            is_active=False,
+        )
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        honor = honor_deed(
+            character_sheet=self.honorer_sheet,
+            ritual=None,
+            honoree_persona=self.honoree_persona,
+            event=self.establish_event,
+            deed_title="The real account of what happened",
+            journal_title="t",
+            journal_body="b",
+        )
+        new_deed = LegendEntry.objects.get(pk=honor.deed_id)
+        assert new_deed.pk != struck_deed.pk
+        assert new_deed.is_active is True
+        assert new_deed.persona_id == self.honoree_persona.pk
+        assert new_deed.event_id == self.establish_event.pk
+
     def test_journal_is_public_and_earns_no_weekly_xp(self) -> None:
         honor = honor_deed(
             character_sheet=self.honorer_sheet,
