@@ -106,6 +106,52 @@ Six standard types with default rank titles (1=highest, 5=lowest):
 
 ## Legend System
 
+**The bar: would bards make songs about this?** (#3463, ADR-0249)
+
+Legend is **settled at the end of a story unit**, never minted at the moment of an
+act. `legend_settlement.settle_legend_for` is the one seam that prices a deed, and
+it applies four rules in order:
+
+1. **Per-person peril floor** — each earner's risk priced against their OWN level
+   (`SettlementParticipant.personal_risk`), not the party average. Below
+   `LegendSettlementConfig.risk_floor` they mint **zero**, not a reduced award. A
+   level-10 who obliterates level-1 mooks earns nothing while the level-1 beside
+   them earns, from the same lethal scene.
+2. **Held-objective share** — the shared deed pays the severity-weighted fraction
+   of stakes actually held. Beat the monsters, lose the town, get paid for the
+   monsters.
+3. **Station** — `min(earner level, threat level)`, stamped as
+   `LegendEntry.earned_at_level`. **Not** folded into `base_value`: the tale is
+   worth the same whoever tells it, and `station_multiplier()` is applied on read
+   by `LegendRequirement`, so retuning never requires recomputing history.
+4. **Standout pass** — a crucial contribution resolved brilliantly pays a solo
+   deed even on a LOST unit (ADR-0122, generalized past `Battle`).
+
+`LegendContribution` is the ledger settlement reads: what each character did during
+a staked unit, written at the `perform_check` chokepoint. Its `success_level` is
+**server-only** — never serialize it to another player.
+
+**Dependency direction:** `societies` is the reusable primitive. The seam takes
+system-agnostic inputs; `stories`/`battles`/`missions` each adapt their own world
+into it (ADR-0010). `world.stories.services.legend_settlement` is the
+stakes-contract adapter.
+
+**Every number is authored**, with the Python constants demoted to fallbacks:
+`RiskCalibration.legend_award` (what a risk tier pays), `RenownMagnitudeAward`
+(fame/prestige per magnitude), `LegendSettlementConfig` (peril floor + standout
+dials). All four surface on the Game Setup inventory under `progression`, because
+nothing *breaks* when they are unauthored — the failure mode is silent blandness.
+The station multiplier stays a code constant deliberately: it is the rule, not a knob.
+
+**A deed's `earned_at_level = 0`** means it was won outside a perilous stakes
+contract. It is still real Legend for fame, murmur, spread and item legend — it
+simply qualifies no advancement at any level. That is how "safe play cannot
+advance you" is enforced, and it is why per-act sites (lockpicking, theft, feeding
+kills) still write their deed rows for crime tags and witnesses while being worth
+nothing.
+
+---
+
 Permanent, monotonically increasing metric of a character's remarkable accomplishments:
 - **Per-persona**: Each Persona has its own legend total; character total sums all personas
 - **LegendEntry**: Individual deed with `base_value`, optional `LegendEvent` link, spread multiplier

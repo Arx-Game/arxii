@@ -187,6 +187,22 @@ Registered on the `advance_class_level_via_session` service path. Translates:
   `apply_class_level_advance`; receipt creation lives in `advance_class_level_via_session`.
 - **Legend qualifies; it is never spent.** `LegendRequirement` + `ClassLevelUnlock` gate
   advancement; no legend rows are consumed or minted for within-tier advances.
+- **The Legend gate reads a BAND, not the lifetime total (#3463, ADR-0249).**
+  `LegendRequirement.is_met_by_character` no longer calls `get_character_legend_total`
+  (the `CharacterLegendSummary` matview). It aggregates live over entries whose
+  **station** (`LegendEntry.earned_at_level`) is at or above
+  `target_level - counts_from_level_offset`, multiplying each by
+  `station_multiplier()` on read. Consequences:
+  - A bank accumulated at level 1 while development points accrued stops
+    qualifying once you advance past it. Legend stays permanent and monotonic for
+    fame, murmur and common knowledge — advancement is the only read that narrows.
+  - A deed with station **0** (won outside a perilous stakes contract) satisfies
+    no band at any level. That is how "safe play cannot advance you" is enforced.
+  - The multiplier is applied on read, never baked into `base_value`, so retuning
+    it never requires recomputing a historical row.
+  - The band centres on `ClassLevelUnlock.target_level`, falling back to the
+    character's current level for the thread-crossing and path-entry targets the
+    requirement base also supports (#1885, #2538).
 - **Multi-gate rule — XP unlocks, never grants.** The Durance gate is not a single
   check: `check_requirements_for_unlock` (authored `Requirement` rows — Legend,
   Relationships, Traits, …) AND the purchased XP unlock (`CharacterUnlock`, bought via

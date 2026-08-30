@@ -57,6 +57,28 @@ tier.range_description                       # "+250 to +499"
 
 ### Legend System (models.Model)
 
+**Settled, not asserted (#3463, ADR-0249).** Legend is priced at the END of a story
+unit by `world.societies.legend_settlement.settle_legend_for`, the single mint seam.
+Four rules, in order:
+
+1. **Per-person peril floor** — each earner's risk priced against their own level,
+   not the party average. Below `LegendSettlementConfig.risk_floor`: **zero**, not a
+   reduced award. Safe play cannot advance anyone.
+2. **Held-objective share** — the shared deed pays the severity-weighted fraction of
+   stakes actually held.
+3. **Station** — `min(earner level, threat level)`, stamped as
+   `LegendEntry.earned_at_level`, never folded into `base_value`.
+4. **Standout pass** — brilliance on a crucial contribution pays even when the unit
+   was lost (ADR-0122, generalized past `Battle`).
+
+`RenownAwardConfig.risk` is a **declared wager, not a payout**: Legend pays on the
+weaker of the author's declaration and the level-priced settled reality, and mints
+nothing without a settled context. #676's three independent scales are preserved —
+a royal wedding stays high Magnitude, NONE Risk: famous, not legendary.
+
+Authored tuning: `RiskCalibration.legend_award`, `RenownMagnitudeAward`,
+`LegendSettlementConfig`. Python constants are fallbacks only.
+
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `LegendEntry` | A deed that earns legend for a persona | `persona`, `title`, `description`, `base_value`, `source_note`, `location_note`, `societies_aware` (M2M) |
