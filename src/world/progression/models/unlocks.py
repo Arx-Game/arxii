@@ -697,6 +697,7 @@ class LegendRequirement(AbstractClassLevelRequirement):
         A live aggregate rather than a second matview column: this runs once per
         advancement attempt, which is rare, and the band varies per requirement.
         """
+        from world.societies.legend_settlement import station_multiplier  # noqa: PLC0415
         from world.societies.models import LegendEntry  # noqa: PLC0415
 
         floor = self._station_floor(character)
@@ -709,7 +710,16 @@ class LegendRequirement(AbstractClassLevelRequirement):
             # directly, so there is no filtered queryset or to_attr to declare.
             "spreads"  # noqa: PREFETCH_STRING
         )
-        total = sum(entry.get_total_value() for entry in qualifying)
+        # The station multiplier is applied HERE, on read, not baked into
+        # base_value at mint time. get_total_value() stays the deed's worth as
+        # a story — identical for everyone who was there, and what fame, spread,
+        # murmur and item legend all read. What station scales is how far the
+        # deed carries its earner, and deriving that on read means retuning the
+        # multiplier never requires recomputing a single historical row.
+        total = sum(
+            entry.get_total_value() * station_multiplier(entry.earned_at_level)
+            for entry in qualifying
+        )
         gate = f"Legend {total} won at station >= {floor}"
         if total >= self.minimum_legend:
             return True, f"{gate} meets requirement of {self.minimum_legend}"

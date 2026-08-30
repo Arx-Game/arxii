@@ -20,9 +20,14 @@ The rules it enforces, in order:
 2. **Outcome.** The shared deed pays on the severity-weighted share of objectives
    actually held. Beat the monsters but let the town burn and you are paid for
    the monsters, not the town.
-3. **Station.** Each participant's deed is stamped and scaled by
-   ``min(their class level, the threat's level)``. You cannot bank above your
-   station, and you cannot bank by slumming.
+3. **Station.** Each participant's deed is *stamped* with
+   ``min(their class level, the threat's level)``. The stamp is not applied to
+   the stored value: a deed's worth as a story does not depend on who did it,
+   and the level-1 and the level-5 who both survived the same level-5 threat
+   did the equally impressive thing. What station governs is how much the deed
+   advances *you*, which the advancement gate derives on read
+   (``LegendRequirement.is_met_by_character``). Storing the value untuned means
+   retuning the multiplier never requires recomputing a single historical row.
 4. **Standouts.** A crucial contribution resolved brilliantly pays its actor a
    solo deed *even when the unit was lost* — generalizing ADR-0122's battle-only
    standout pass, whose own words were "a losing-side rescue is still a story
@@ -130,6 +135,19 @@ def station_for(participant_level: int, target_level: int) -> int:
     return max(0, min(participant_level, target_level))
 
 
+def station_multiplier(station: int) -> int:
+    """How much a deed won at ``station`` counts toward advancement.
+
+    Linear in station today: a deed won at station 5 advances you five times as
+    far as one won at station 1. Deliberately a code constant rather than an
+    authored row — this is not a tuning knob but the rule that you cannot bank
+    above your station or by slumming, and authoring it would let that rule be
+    edited away. Tuning it is a deploy, and costs nothing retroactively because
+    ``LegendEntry.base_value`` is stored UNTUNED and this is applied on read.
+    """
+    return max(0, station)
+
+
 def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bearing
     *,
     effective_risk: str,
@@ -192,19 +210,22 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
     if structurally_perilous and risk_award <= 0:
         risk_award = RISK_LEGEND_AWARDS[LEGEND_RISK_FLOOR]
 
-    values: dict[int, int] = {}
+    # UNTUNED: the tale's worth, identical for everyone who was there. Station
+    # is a per-participant stamp, never folded into the stored number.
+    base_value = round(risk_award * held_fraction)
+    if base_value <= 0:
+        return SettlementReport(
+            minted=False,
+            reason="the priced award rounded to zero",
+        )
+
     stations: dict[int, int] = {}
     for participant in participants:
         station = station_for(participant.level, target_level)
-        if station <= 0:
-            continue
-        value = round(risk_award * held_fraction * station)
-        if value <= 0:
-            continue
-        values[participant.persona.pk] = value
-        stations[participant.persona.pk] = station
+        if station > 0:
+            stations[participant.persona.pk] = station
 
-    paid = [p for p in participants if p.persona.pk in values]
+    paid = [p for p in participants if p.persona.pk in stations]
     if not paid:
         return SettlementReport(
             minted=False,
@@ -216,13 +237,12 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
     event, entries = create_legend_event(
         title[:200],
         source_type,
-        max(values.values()),
+        base_value,
         [p.persona for p in paid],
         description=description,
         scene=scene,
         story=story,
         concealed=concealed,
-        values_by_persona=values,
         stations_by_persona=stations,
     )
     standouts = _mint_standouts(
@@ -321,7 +341,7 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
         station = station_for(participant.level, target_level)
         if station <= 0:
             continue
-        value = round(risk_award * fraction * station)
+        value = round(risk_award * fraction)
         if value <= 0:
             continue
         entry = create_solo_deed(

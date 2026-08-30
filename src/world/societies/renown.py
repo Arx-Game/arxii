@@ -485,7 +485,9 @@ def _priced_legend(
             return 0
     if not risk_meets_legend_floor(effective):
         return 0
-    return round(RISK_LEGEND_AWARDS.get(effective, 0) * station)
+    # UNTUNED: station is a stamp on the entry, not a factor in its stored
+    # worth. See LegendEntry.earned_at_level and station_multiplier().
+    return RISK_LEGEND_AWARDS.get(effective, 0)
 
 
 def _resolve_award_inputs(  # noqa: PLR0913

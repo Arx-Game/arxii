@@ -1760,6 +1760,10 @@ class LegendSettlementConfig(SharedMemoryModel):
         ),
     )
 
+    # Needed for cached_singleton(); mirrors SpreadingConfig's manager in this
+    # same app, which is the shape this singleton is modelled on.
+    objects = ArxSharedMemoryManager()
+
     class Meta:
         verbose_name = "Legend Settlement Configuration"
         verbose_name_plural = "Legend Settlement Configuration"

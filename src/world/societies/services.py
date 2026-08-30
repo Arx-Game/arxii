@@ -168,7 +168,6 @@ def create_legend_event(  # noqa: PLR0913, C901
     archetypes: list | None = None,
     concealed: bool = False,
     containment_approach: str | None = None,
-    values_by_persona: dict[int, int] | None = None,
     stations_by_persona: dict[int, int] | None = None,
 ) -> tuple[LegendEvent, list[LegendEntry]]:
     """Create a shared event and individual deeds for each participant.
@@ -193,12 +192,12 @@ def create_legend_event(  # noqa: PLR0913, C901
             is minted.
         containment_approach: #1824 — a declared ``WitnessApproach.key`` for
             each entry's hush-up roll; None keeps the auto-pick.
-        values_by_persona: #3463 — per-persona ``base_value`` override, keyed by
-            persona pk. Settlement pays each participant by their own STATION, so
-            one shared number no longer fits; omit (the default) and every entry
-            takes the flat ``base_value`` exactly as before.
         stations_by_persona: #3463 — per-persona ``earned_at_level`` (station),
-            keyed by persona pk. Omit and every entry is stamped station 0,
+            keyed by persona pk. The STAMP only: ``base_value`` stays the tale's
+            worth and is identical for everyone who was there, because a deed's
+            worth as a story does not depend on who did it. Station governs how
+            much the deed advances its earner, derived on read by
+            ``LegendRequirement``. Omit and every entry is stamped station 0,
             meaning "won outside a perilous stakes contract": still real legend
             for fame, murmur and spread, but qualifying no advancement.
 
@@ -225,7 +224,7 @@ def create_legend_event(  # noqa: PLR0913, C901
                 persona=persona,
                 title=title,
                 source_type=source_type,
-                base_value=(values_by_persona or {}).get(persona.pk, base_value),
+                base_value=base_value,
                 earned_at_level=(stations_by_persona or {}).get(persona.pk, 0),
                 description=description,
                 scene=scene,
