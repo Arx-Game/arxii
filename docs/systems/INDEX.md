@@ -8056,7 +8056,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   a new content dependency (a code path's hard dependency on a specific authored
   database row) gets registered, and `collect_required_content()` probes the live
   database for each one, since no repo artifact can answer the question (ADR-0238). See
-  `docs/adr/0250-content-dependencies-are-a-live-db-registry.md`.
+  `docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
   `core_management.content_fixtures.load_world_content`; linked from the Game Setup

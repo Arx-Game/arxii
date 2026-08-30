@@ -362,23 +362,32 @@ when the row is absent.
   `consequence`, `probe`. `DependencyTier` is `REQUIRED` (a code path a player or
   staff member can hit today breaks or goes silently inert) or `TUNING` (a config
   singleton the game runs without, just with worse numbers).
-- Three probe shapes, all subclasses of `ContentProbe`: `NamedRowsProbe` (every one
-  of a set of names exists on a model, matched case-insensitively), `AnyRowProbe`
-  (a singleton/config table has at least one row), and `CustomProbe` (delegates to
-  an arbitrary callable for a check a name/existence probe can't express, such as a
-  compound filter or a cross-model invariant).
+- Four probe shapes, all subclasses of `ContentProbe`: `NamedRowsProbe` (every one
+  of a set of names exists on a model, case-sensitive by default - opt into
+  `case_insensitive=True` only for a declaration whose consumer itself resolves
+  case-insensitively, which today is exactly the `ConditionTemplate` declarations
+  via `ConditionTemplate.get_by_name`), `AnyRowProbe` (a singleton/config table has
+  at least one row), `FilteredRowProbe` (a row matching an exact compound filter
+  exists on a model - a name filed under the wrong parent category, the wrong
+  `trait_type`, the wrong key column, where a name-only probe would be a false
+  green), and `CustomProbe` (delegates to an arbitrary callable for a composite,
+  cross-model invariant `FilteredRowProbe` can't express, such as the Surrounded
+  isolation bundle needing a `ConditionTemplate`, a `ConsequencePool`, and a
+  `ConditionStage` all to exist together).
 - `collect_required_content() -> RequiredContentSnapshot` batches every
   `NamedRowsProbe` sharing a model label onto one `values_list("name", flat=True)`
-  query per label, rather than one query per declaration, then resolves every
-  declared dependency against that pre-fetched set (or its own query, for
-  `AnyRowProbe`/`CustomProbe`). `RequiredContentSnapshot` sorts the result into
-  `missing_required`, `present_required`, `missing_tuning`, `present_tuning`.
+  query per label (exact case, not lowercased - a `case_insensitive=True` probe
+  casefolds on its own inside `resolve()`), rather than one query per declaration,
+  then resolves every declared dependency against that pre-fetched set (or its own
+  query, for `AnyRowProbe`/`FilteredRowProbe`/`CustomProbe`). `RequiredContentSnapshot`
+  sorts the result into `missing_required`, `present_required`, `missing_tuning`,
+  `present_tuning`.
 
 The panel probes the live database because no repo artifact can answer the
 question: seeds under `world/seeds/` are clone-bootstrap and E2E scaffolding only,
 never a stand-in for the corpus, and the database is the single master copy of
 authored content (ADR-0238). See
-`docs/adr/0250-content-dependencies-are-a-live-db-registry.md` for the rejected
+`docs/adr/0251-content-dependencies-are-a-live-db-registry.md` for the rejected
 alternatives (try/except guards at the lookups, a repo-side manifest, a Django
 system check, per-package declaration files).
 

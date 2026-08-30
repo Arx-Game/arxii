@@ -22,6 +22,13 @@ def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.Conten
     )
 
 
+def _probe_for(key: str) -> rc.ContentProbe:
+    """The real declaration's own probe, by key - so a probe test always
+    exercises the exact object shipped in `_declarations()`, not a
+    hand-copied duplicate of its filter values."""
+    return next(dep.probe for dep in rc._declarations() if dep.key == key)
+
+
 class TestBuildRegistry(TestCase):
     def test_duplicate_key_rejected(self) -> None:
         probe = rc.AnyRowProbe(label="ConditionTemplate")
@@ -48,19 +55,30 @@ class TestNamedRowsProbe(TestCase):
 
     def test_present_when_row_exists(self) -> None:
         probe = rc.NamedRowsProbe(label="ConditionTemplate", names=("Mounted",))
-        result = probe.resolve(frozenset({"mounted"}))
+        result = probe.resolve(frozenset({"Mounted"}))
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
 
     def test_missing_names_reported(self) -> None:
         probe = rc.NamedRowsProbe(label="ConditionTemplate", names=("Mounted", "Unhorsed"))
-        result = probe.resolve(frozenset({"mounted"}))
+        result = probe.resolve(frozenset({"Mounted"}))
         self.assertFalse(result.present)
         self.assertEqual(result.missing, ("Unhorsed",))
 
-    def test_matching_is_case_insensitive(self) -> None:
-        probe = rc.NamedRowsProbe(label="ConditionTemplate", names=("MOUNTED",))
-        self.assertTrue(probe.resolve(frozenset({"mounted"})).present)
+    def test_default_matching_is_case_sensitive(self) -> None:
+        """Every consumer except ConditionTemplate resolves case-sensitively
+        (#3444 final review item 3) - a probe that matched case-insensitively
+        by default would report present for a row those consumers still can't
+        find."""
+        probe = rc.NamedRowsProbe(label="CheckType", names=("Tax Collection",))
+        self.assertFalse(probe.resolve(frozenset({"tax collection"})).present)
+        self.assertTrue(probe.resolve(frozenset({"Tax Collection"})).present)
+
+    def test_case_insensitive_opt_in_matches_regardless_of_case(self) -> None:
+        probe = rc.NamedRowsProbe(
+            label="ConditionTemplate", names=("MOUNTED",), case_insensitive=True
+        )
+        self.assertTrue(probe.resolve(frozenset({"Mounted"})).present)
 
 
 class TestCustomProbe(TestCase):
@@ -95,10 +113,41 @@ class TestModelLabel(TestCase):
         self.assertIsNone(probe.model_label())
         self.assertFalse(probe.participates_in_name_batch())
 
+    def test_filtered_row_probe_reports_its_label_but_does_not_batch(self) -> None:
+        probe = rc.FilteredRowProbe(
+            label="ModifierTarget", filters=(("name", "x"),), absent_detail="missing"
+        )
+        self.assertEqual(probe.model_label(), "ModifierTarget")
+        self.assertFalse(probe.participates_in_name_batch())
+
+
+class TestFilteredRowProbe(TestCase):
+    def test_present_when_the_compound_filter_matches(self) -> None:
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        travel_category = ModifierCategoryFactory(name="travel")
+        ModifierTargetFactory(name="travel_speed", category=travel_category)
+        probe = rc.FilteredRowProbe(
+            label="ModifierTarget",
+            filters=(("name", "travel_speed"), ("category__name", "travel")),
+            absent_detail="No ModifierTarget 'travel_speed' row under category 'travel'.",
+        )
+        result = probe.resolve(None)
+        self.assertTrue(result.present)
+        self.assertEqual(result.detail, "")
+
+    def test_missing_reports_the_configured_absent_detail(self) -> None:
+        probe = rc.FilteredRowProbe(
+            label="ModifierTarget", filters=(("name", "nonexistent"),), absent_detail="gone"
+        )
+        result = probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.detail, "gone")
+
 
 class DeclarationPatchMixin:
     @contextmanager
-    def patch_declarations(self, deps):
+    def patch_declarations(self, deps: tuple[rc.ContentDependency, ...]):
         with mock.patch.object(rc, "_declarations", return_value=deps):
             yield
 
@@ -175,6 +224,17 @@ class TestRealDeclarations(TestCase):
         tiers = {dep.tier for dep in rc._declarations()}
         self.assertEqual(tiers, {rc.DependencyTier.REQUIRED, rc.DependencyTier.TUNING})
 
+    def test_label_names_the_dependency_not_its_model(self) -> None:
+        """`label` is a human phrase, never equal to the probe's `model_label()`.
+
+        The panel renders `dependency.label` as its only "Dependency" column
+        (#3444 final review item 5) - a label that just repeats the model name
+        is indistinguishable from every other declaration on the same model.
+        """
+        for dep in rc._declarations():
+            with self.subTest(key=dep.key):
+                self.assertNotEqual(dep.label, dep.probe.model_label())
+
     def test_collector_runs_against_the_real_table(self) -> None:
         snapshot = rc.collect_required_content()
         total = (
@@ -211,11 +271,77 @@ class TestSoulfrayStagePoolProbe(TestCase):
         self.assertTrue(result.present)
 
 
+class TestSurroundedConditionBundleProbe(TestCase):
+    """All three rows are required - a name-only check on the template alone
+    is the exact false green #3444 final review item 2 flagged."""
+
+    def test_missing_when_only_the_template_exists(self) -> None:
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+
+        ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        result = rc._probe_surrounded_condition_bundle()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConsequencePool" in m for m in result.missing))
+        self.assertTrue(any("ConditionStage" in m for m in result.missing))
+
+    def test_missing_when_the_pool_is_absent(self) -> None:
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.factories import ConditionStageFactory
+
+        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        ConditionStageFactory(condition=template, stage_order=1)
+        result = rc._probe_surrounded_condition_bundle()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConsequencePool" in m for m in result.missing))
+
+    def test_missing_when_the_entry_stage_is_absent(self) -> None:
+        from actions.factories import ConsequencePoolFactory
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.vitals.constants import POOL_SURROUNDED_ENTRY
+
+        ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY)
+        result = rc._probe_surrounded_condition_bundle()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConditionStage" in m for m in result.missing))
+
+    def test_missing_when_the_pool_name_is_wrong_case(self) -> None:
+        """The call site compares `p.name == POOL_SURROUNDED_ENTRY` case-
+        sensitively - a differently-cased pool name is a real miss, not a
+        false red."""
+        from actions.factories import ConsequencePoolFactory
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.factories import ConditionStageFactory
+        from world.vitals.constants import POOL_SURROUNDED_ENTRY
+
+        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        ConditionStageFactory(condition=template, stage_order=1)
+        ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY.title())
+        result = rc._probe_surrounded_condition_bundle()
+        self.assertFalse(result.present)
+
+    def test_present_when_all_three_rows_exist(self) -> None:
+        from actions.factories import ConsequencePoolFactory
+        from world.conditions.constants import SURROUNDED_CONDITION_NAME
+        from world.conditions.factories import ConditionStageFactory
+        from world.vitals.constants import POOL_SURROUNDED_ENTRY
+
+        template = ConditionTemplateFactory(name=SURROUNDED_CONDITION_NAME)
+        ConditionStageFactory(condition=template, stage_order=1)
+        ConsequencePoolFactory(name=POOL_SURROUNDED_ENTRY)
+        result = rc._probe_surrounded_condition_bundle()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
 class TestEscalationCurveProbe(TestCase):
     def test_missing_with_no_rows(self) -> None:
         self.assertFalse(rc._probe_escalation_curves().present)
 
-    def test_present_when_a_row_has_a_default_curve(self) -> None:
+    def test_missing_when_only_one_of_five_levels_is_covered(self) -> None:
+        """The partial-coverage case: this is the direction #3444 final review
+        item 1 flagged as a false green - one covered stakes level must not
+        report present for the other four."""
         from world.combat.constants import StakesLevel
         from world.combat.factories import EscalationCurveFactory
         from world.combat.models import StakesEscalationModifier
@@ -223,7 +349,22 @@ class TestEscalationCurveProbe(TestCase):
         curve = EscalationCurveFactory()
         StakesEscalationModifier.objects.create(stakes_level=StakesLevel.LOCAL, default_curve=curve)
         result = rc._probe_escalation_curves()
+        self.assertFalse(result.present)
+        self.assertIn(StakesLevel.WORLD, result.missing)
+        self.assertNotIn(StakesLevel.LOCAL, result.missing)
+
+    def test_present_when_every_level_has_a_default_curve(self) -> None:
+        from world.combat.constants import StakesLevel
+        from world.combat.factories import EscalationCurveFactory
+        from world.combat.models import StakesEscalationModifier
+
+        for level in StakesLevel.values:
+            StakesEscalationModifier.objects.create(
+                stakes_level=level, default_curve=EscalationCurveFactory()
+            )
+        result = rc._probe_escalation_curves()
         self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
 
 
 class TestAudereMajoraThresholdsProbe(TestCase):
@@ -280,7 +421,7 @@ class TestTravelSpeedModifierTargetProbe(TestCase):
 
         wrong_category = ModifierCategoryFactory(name="combat")
         ModifierTargetFactory(name="travel_speed", category=wrong_category)
-        result = rc._probe_travel_speed_modifier_target()
+        result = _probe_for("travel-speed-modifier-target").resolve(None)
         self.assertFalse(result.present)
 
     def test_present_when_the_category_matches(self) -> None:
@@ -288,7 +429,7 @@ class TestTravelSpeedModifierTargetProbe(TestCase):
 
         travel_category = ModifierCategoryFactory(name="travel")
         ModifierTargetFactory(name="travel_speed", category=travel_category)
-        result = rc._probe_travel_speed_modifier_target()
+        result = _probe_for("travel-speed-modifier-target").resolve(None)
         self.assertTrue(result.present)
 
 
@@ -301,7 +442,7 @@ class TestGossipCheckTypeProbe(TestCase):
 
         wrong_category = CheckCategoryFactory(name="Combat")
         CheckTypeFactory(name=GOSSIP_CHECK_TYPE_NAME, category=wrong_category)
-        result = rc._probe_gossip_check_type()
+        result = _probe_for("gossip-check-type").resolve(None)
         self.assertFalse(result.present)
 
     def test_present_when_the_category_matches(self) -> None:
@@ -310,7 +451,7 @@ class TestGossipCheckTypeProbe(TestCase):
 
         social_category = CheckCategoryFactory(name="Social")
         CheckTypeFactory(name=GOSSIP_CHECK_TYPE_NAME, category=social_category)
-        result = rc._probe_gossip_check_type()
+        result = _probe_for("gossip-check-type").resolve(None)
         self.assertTrue(result.present)
 
 
@@ -322,7 +463,7 @@ class TestGossipSpecializationProbe(TestCase):
 
         wrong_skill = SkillFactory(trait__name="Deception")
         SpecializationFactory(name="Gossip", parent_skill=wrong_skill)
-        result = rc._probe_gossip_specialization()
+        result = _probe_for("gossip-specialization").resolve(None)
         self.assertFalse(result.present)
 
     def test_present_when_the_parent_skill_trait_matches(self) -> None:
@@ -330,7 +471,7 @@ class TestGossipSpecializationProbe(TestCase):
 
         persuasion_skill = SkillFactory(trait__name="Persuasion")
         SpecializationFactory(name="Gossip", parent_skill=persuasion_skill)
-        result = rc._probe_gossip_specialization()
+        result = _probe_for("gossip-specialization").resolve(None)
         self.assertTrue(result.present)
 
 
@@ -342,7 +483,7 @@ class TestWillpowerStatTraitProbe(TestCase):
         from world.traits.models import TraitType
 
         TraitFactory(name="willpower", trait_type=TraitType.SKILL)
-        result = rc._probe_willpower_stat_trait()
+        result = _probe_for("willpower-stat-trait").resolve(None)
         self.assertFalse(result.present)
 
     def test_present_when_the_trait_type_matches(self) -> None:
@@ -350,7 +491,7 @@ class TestWillpowerStatTraitProbe(TestCase):
         from world.traits.models import TraitType
 
         TraitFactory(name="willpower", trait_type=TraitType.STAT)
-        result = rc._probe_willpower_stat_trait()
+        result = _probe_for("willpower-stat-trait").resolve(None)
         self.assertTrue(result.present)
 
 
@@ -361,14 +502,25 @@ class TestHostileSocialConsentCategoryProbe(TestCase):
         from world.consent.factories import SocialConsentCategoryFactory
 
         SocialConsentCategoryFactory(key="antagonism", name="Hostile")
-        result = rc._probe_hostile_social_consent_category()
+        result = _probe_for("hostile-social-consent-category").resolve(None)
         self.assertFalse(result.present)
 
     def test_present_when_the_key_matches(self) -> None:
         from world.consent.factories import SocialConsentCategoryFactory
 
         SocialConsentCategoryFactory(key="hostile", name="Hostile")
-        result = rc._probe_hostile_social_consent_category()
+        result = _probe_for("hostile-social-consent-category").resolve(None)
+        self.assertTrue(result.present)
+
+    def test_present_when_the_key_differs_only_by_case(self) -> None:
+        """`get_by_natural_key` casefolds text natural-key components
+        (`core/natural_keys.py`) - an exact `key="hostile"` filter would be a
+        false RED for a row the game's own lookup resolves fine (#3444 final
+        review item 3)."""
+        from world.consent.factories import SocialConsentCategoryFactory
+
+        SocialConsentCategoryFactory(key="Hostile", name="Hostile")
+        result = _probe_for("hostile-social-consent-category").resolve(None)
         self.assertTrue(result.present)
 
 

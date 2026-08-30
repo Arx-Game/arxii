@@ -47,15 +47,17 @@ class ContentProbe:
     """Base class for a single row-presence check.
 
     A subclass declares what it checks (which rows, which model); `resolve()`
-    performs the check and reports the result. `model_label()` is the display/
-    grouping seam: a probe that names a model returns that model's label, so
-    the collector (and a later panel) can report or group by model without
-    knowing each probe's concrete type. `participates_in_name_batch()` is the
-    narrower seam that actually drives collector batching: only a
-    `NamedRowsProbe` shares a single `values_list` query across declarations
-    naming the same model - `AnyRowProbe` also has a `model_label()` (it names
-    a model too) but resolves its own `.exists()` query per declaration, so it
-    must not be folded into that batch.
+    performs the check and reports the result. `model_label()` is the seam
+    that names which `arxii` model a probe checks, so the collector can tell
+    which probes share a model without an `isinstance` check. Today the
+    collector is `model_label()`'s only reader (no panel calls it - the panel
+    renders `dependency.label` instead), and only under
+    `participates_in_name_batch()`, the narrower seam that actually drives
+    batching: only a `NamedRowsProbe` shares a single `values_list` query
+    across declarations naming the same model - `AnyRowProbe` also overrides
+    `model_label()` (it genuinely has a model, resolved via `apps.get_model`
+    in its own `resolve()`) but must keep resolving its own `.exists()` query
+    per declaration, so it must not be folded into that batch.
     """
 
     def model_label(self) -> str | None:
@@ -79,14 +81,29 @@ class ContentProbe:
 class NamedRowsProbe(ContentProbe):
     """Checks that every one of `names` exists as a row on `label`.
 
-    Matching is case-insensitive to match `ConditionTemplate.get_by_name`'s
-    natural-key lookup (`world/conditions/models.py:503-511`) - a probe that
-    compared case-sensitively could report a false fault for a row the game
-    resolves at runtime without trouble.
+    Matching is case-sensitive by default, matching the dominant consumer
+    pattern in this registry: `CheckType`, `ChallengeTemplate`, `Property`,
+    `RoomFeatureKind`, `Ritual`, `KudosSourceCategory`, `CapabilityType`, and
+    `ModifierTarget` are all resolved by plain `.objects.get(name=...)`, which
+    is case-sensitive - a probe that matched case-insensitively there could
+    report present for a row the game's own lookup still can't find (#3444
+    final review item 3).
+
+    Set `case_insensitive=True` only for a declaration whose consumer resolves
+    through a case-insensitive lookup - in this registry, that is exactly the
+    `ConditionTemplate` declarations, whose consumers go through
+    `ConditionTemplate.get_by_name` (`world/conditions/models.py:503-511`),
+    which casefolds. One exception even among those: `berserk-condition`'s
+    consumer, `world/species/moon_sensitivity.py:180`, uses `filter(name=...)`
+    case-sensitively - `case_insensitive=True` is kept for it anyway since
+    `get_by_name` is the dominant path for `ConditionTemplate` lookups, and
+    this note exists so the next reader knows that exception was seen, not
+    missed.
     """
 
     label: str
     names: tuple[str, ...]
+    case_insensitive: bool = False
 
     def model_label(self) -> str | None:
         return self.label
@@ -96,7 +113,11 @@ class NamedRowsProbe(ContentProbe):
 
     def resolve(self, known_names: frozenset[str] | None) -> ProbeResult:
         known = known_names or frozenset()
-        missing = tuple(name for name in self.names if name.lower() not in known)
+        if self.case_insensitive:
+            folded = frozenset(name.casefold() for name in known)
+            missing = tuple(name for name in self.names if name.casefold() not in folded)
+        else:
+            missing = tuple(name for name in self.names if name not in known)
         if missing:
             detail = f"Missing {self.label} row(s): {', '.join(missing)}."
         else:
@@ -132,6 +153,41 @@ class CustomProbe(ContentProbe):
     def resolve(self, known_names: frozenset[str] | None) -> ProbeResult:
         del known_names  # This probe delegates entirely to `fn`.
         return self.fn()
+
+
+@dataclass(frozen=True, slots=True)
+class FilteredRowProbe(ContentProbe):
+    """Checks that a row matching an exact compound filter exists on `label`.
+
+    The generalized shape behind what used to be five near-identical
+    `CustomProbe` callables (#3444 final review item 9): each checked one
+    row's presence under a compound filter a name-only `NamedRowsProbe`
+    can't express - a name filed under the wrong parent category, the wrong
+    trait_type, the wrong key column. `filters` is a tuple of `(lookup,
+    value)` pairs rather than a `dict` so the dataclass stays a plain,
+    order-stable value object; it is passed straight through to
+    `Model.objects.filter(**dict(filters))`, so any Django field lookup
+    (`key__iexact`, `category__name`, ...) works.
+
+    Model resolution goes through `apps.get_model("arxii", label)`, the same
+    seam `AnyRowProbe` uses - this probe needs no `world.*` import at all,
+    not even a function-level one, since it never touches a model attribute
+    by name at declaration time.
+    """
+
+    label: str
+    filters: tuple[tuple[str, object], ...]
+    absent_detail: str
+
+    def model_label(self) -> str | None:
+        return self.label
+
+    def resolve(self, known_names: frozenset[str] | None) -> ProbeResult:
+        del known_names  # This probe fetches its own existence check.
+        model = apps.get_model("arxii", self.label)
+        exists = model.objects.filter(**dict(self.filters)).exists()
+        detail = "" if exists else self.absent_detail
+        return ProbeResult(present=exists, detail=detail)
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,31 +290,102 @@ def _probe_soulfray_stage_pools() -> ProbeResult:
     return ProbeResult(present=not unpooled, missing=unpooled, detail=detail)
 
 
+def _probe_surrounded_condition_bundle() -> ProbeResult:
+    """All three rows `_apply_surrounded_isolation` needs, not just the template.
+
+    Consumer: `world/battles/resolution.py:1160-1190` (isolation entry). The guard
+    there is `if pool is None or template is None or entry_stage is None: return
+    False`, so a name-only probe on the `Surrounded` `ConditionTemplate` is a false
+    green when either of the other two rows is absent - the template alone is not
+    enough for isolation tagging to fire. This checks all three:
+
+    - the `Surrounded` `ConditionTemplate`, resolved via `get_by_name` (case-
+      insensitive), matching how the call site resolves it;
+    - a `ConsequencePool` whose `name` is exactly `POOL_SURROUNDED_ENTRY`
+      (`world/vitals/constants.py`) - the call site compares `p.name ==
+      POOL_SURROUNDED_ENTRY` in Python, case-sensitive, so this probe is too;
+    - a `ConditionStage` with `stage_order=1` whose `condition_id` is that
+      template's pk.
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
+    from world.vitals.constants import POOL_SURROUNDED_ENTRY  # noqa: PLC0415
+
+    missing: list[str] = []
+
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        template = None
+        missing.append(f"ConditionTemplate {SURROUNDED_CONDITION_NAME!r}")
+
+    if not ConsequencePool.objects.filter(name=POOL_SURROUNDED_ENTRY).exists():
+        missing.append(f"ConsequencePool {POOL_SURROUNDED_ENTRY!r}")
+
+    if template is not None:
+        has_entry_stage = ConditionStage.objects.filter(
+            condition_id=template.pk, stage_order=1
+        ).exists()
+        if not has_entry_stage:
+            missing.append(f"ConditionStage stage_order=1 for {SURROUNDED_CONDITION_NAME!r}")
+    else:
+        missing.append(f"ConditionStage stage_order=1 for {SURROUNDED_CONDITION_NAME!r}")
+
+    if missing:
+        detail = f"Missing row(s) for Surrounded isolation tagging: {', '.join(missing)}."
+    else:
+        detail = ""
+    return ProbeResult(present=not missing, missing=tuple(missing), detail=detail)
+
+
 def _probe_escalation_curves() -> ProbeResult:
-    """At least one `StakesEscalationModifier` row carries a `default_curve`.
+    """Every `StakesLevel` has a `StakesEscalationModifier` row with a `default_curve`.
 
     Consumer: `world/combat/escalation.py` (`assign_default_escalation_curve`,
     `_stakes_intensity_step_bonus`). Both already fall back gracefully (no curve
-    assigned, a zero intensity bonus) when a stakes level is unseeded - a high-
-    stakes fight just needs a GM to set its curve by hand instead of escalating
-    on its own. TUNING, not REQUIRED, for that reason.
+    assigned, a zero intensity bonus) for a stakes level with no row or no
+    `default_curve` - a high-stakes fight just needs a GM to set its curve by
+    hand instead of escalating on its own. REQUIRED, not TUNING, though:
+    `assign_default_escalation_curve` is a code path a player hits on every
+    encounter creation, and a single uncovered stakes level (e.g. WORLD) is a
+    real per-level gap, not a config the whole game runs fine without - partial
+    coverage must report missing, not present, so this checks ALL levels, not
+    "at least one."
     """
     from world.combat.constants import StakesLevel  # noqa: PLC0415
     from world.combat.models import StakesEscalationModifier  # noqa: PLC0415
 
     total_levels = len(StakesLevel.values)
-    with_curve = StakesEscalationModifier.objects.filter(default_curve__isnull=False).count()
-    present = StakesEscalationModifier.objects.exists() and with_curve > 0
+    covered_levels = set(
+        StakesEscalationModifier.objects.filter(default_curve__isnull=False).values_list(
+            "stakes_level", flat=True
+        )
+    )
+    missing = tuple(level for level in StakesLevel.values if level not in covered_levels)
+    with_curve = len(covered_levels)
     detail = f"{with_curve} of {total_levels} stakes levels have a default escalation curve."
-    return ProbeResult(present=present, detail=detail)
+    if missing:
+        detail += f" Missing: {', '.join(missing)}."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
 def _probe_capability_bridges() -> ProbeResult:
-    """Every evaluated capability has a non-zero, authored combat-power bridge.
+    """Every evaluated capability lands in the Capabilities panel's zero bucket for a reason.
 
     Reuses `web.admin.tuning.capability_power_analytics`'s existing 24h-cached
     panel builder rather than re-running the DE evaluator - see that module's
-    docstring for the caching contract this must not duplicate.
+    docstring for the caching contract this must not duplicate. Because it reads
+    that cache, a bridge authored in the last 24h can still show red here until
+    the cache refreshes - a false RED, not a false green, so the fix is this
+    wording, not a second cache or a fresh evaluator run.
+
+    `panel.zero_bucket` is not "no authored bridge" alone: a capability lands
+    there when it either has no authored bridge at all OR is bridged but prices
+    to zero DE (`_is_zero_value(report) or NO_AUTHORED_BRIDGE_FLAG in
+    report.flags` in that module). The count below is honest about that - it
+    says "prices to zero," which covers both causes, rather than claiming every
+    one of them is missing a bridge.
     """
     from web.admin.tuning.capability_power_analytics import (  # noqa: PLC0415
         CapabilityPowerAnalyticsParams,
@@ -268,87 +395,10 @@ def _probe_capability_bridges() -> ProbeResult:
     panel = build_capability_power_panel(CapabilityPowerAnalyticsParams())
     unbridged = len(panel.zero_bucket)
     detail = (
-        f"{unbridged} capabilities have no authored combat-power bridge - see the "
-        "Capabilities tuning panel."
+        f"{unbridged} capabilities price to zero combat-power (no authored bridge, or a "
+        "bridge that evaluates to zero DE) - see the Capabilities tuning panel."
     )
     return ProbeResult(present=unbridged == 0, detail=detail)
-
-
-def _probe_travel_speed_modifier_target() -> ProbeResult:
-    """The `travel_speed` `ModifierTarget` exists under the `travel` category.
-
-    A name-only probe would report present for a `travel_speed` row filed
-    under the wrong category, which is a false green - the real lookup at
-    `world/travel/services.py:138` filters on both.
-    """
-    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-
-    exists = ModifierTarget.objects.filter(name="travel_speed", category__name="travel").exists()
-    detail = "" if exists else "No ModifierTarget 'travel_speed' row under category 'travel'."
-    return ProbeResult(present=exists, detail=detail)
-
-
-def _probe_gossip_check_type() -> ProbeResult:
-    """The Gossip `CheckType` exists under the `Social` category.
-
-    A name-only probe would report present for a Gossip check filed under the
-    wrong category - the real lookup at `world/secrets/gossip.py:88` filters
-    on both.
-    """
-    from world.checks.models import CheckType  # noqa: PLC0415
-    from world.secrets.constants import GOSSIP_CHECK_TYPE_NAME  # noqa: PLC0415
-
-    exists = CheckType.objects.filter(name=GOSSIP_CHECK_TYPE_NAME, category__name="Social").exists()
-    detail = (
-        "" if exists else f"No CheckType {GOSSIP_CHECK_TYPE_NAME!r} row under category 'Social'."
-    )
-    return ProbeResult(present=exists, detail=detail)
-
-
-def _probe_gossip_specialization() -> ProbeResult:
-    """The Gossip `Specialization` exists under the Persuasion skill/trait.
-
-    A name-only probe would report present for a Gossip specialization filed
-    under the wrong parent skill - the real lookup at
-    `world/secrets/gossip.py:94` filters on both.
-    """
-    from world.skills.models import Specialization  # noqa: PLC0415
-
-    exists = Specialization.objects.filter(
-        name="Gossip", parent_skill__trait__name="Persuasion"
-    ).exists()
-    detail = "" if exists else "No Specialization 'Gossip' row under skill trait 'Persuasion'."
-    return ProbeResult(present=exists, detail=detail)
-
-
-def _probe_willpower_stat_trait() -> ProbeResult:
-    """The `willpower` `Trait` exists with `trait_type=STAT`.
-
-    A name-only probe would report present for a `willpower` row of the wrong
-    trait type (a skill or aspect can share the name) - the real lookup at
-    `world/magic/services/anima.py:393` filters on both.
-    """
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
-
-    exists = Trait.objects.filter(name="willpower", trait_type=TraitType.STAT).exists()
-    detail = "" if exists else "No Trait 'willpower' row with trait_type=STAT."
-    return ProbeResult(present=exists, detail=detail)
-
-
-def _probe_hostile_social_consent_category() -> ProbeResult:
-    """The `hostile` `SocialConsentCategory` exists, looked up by `key`.
-
-    `world/secrets/services.py:218` resolves this via
-    `get_by_natural_key("hostile")`, and `SocialConsentCategory`'s natural key
-    is `key` (`NaturalKeyConfig.fields = ["key"]`), not `name` - a name-based
-    `NamedRowsProbe` would check the wrong column entirely (`name` is a
-    separate player-facing label field), so this checks `key` directly.
-    """
-    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-
-    exists = SocialConsentCategory.objects.filter(key="hostile").exists()
-    detail = "" if exists else "No SocialConsentCategory row with key='hostile'."
-    return ProbeResult(present=exists, detail=detail)
 
 
 def _declarations() -> tuple[ContentDependency, ...]:
@@ -381,7 +431,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
     from world.conditions.berserk_content import BERSERK_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.constants import (  # noqa: PLC0415
         CHARM_CONDITION_NAME,
-        SURROUNDED_CONDITION_NAME,
         UNCONSCIOUS_CONDITION_NAME,
         FoundationalCapability,
     )
@@ -410,12 +459,14 @@ def _declarations() -> tuple[ContentDependency, ...]:
         RELATIONSHIP_WRITEUP_KUDOS_CATEGORY,
     )
     from world.room_features.seeds import SANCTUM_KIND_NAME  # noqa: PLC0415
+    from world.secrets.constants import GOSSIP_CHECK_TYPE_NAME  # noqa: PLC0415
+    from world.traits.models import TraitType  # noqa: PLC0415
 
     return (
         # --- ConditionTemplate: single-feature conditions --------------------------------
         ContentDependency(
             key="audere-conditions",
-            label="ConditionTemplate",
+            label="Audere and Audere Majora condition templates",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/audere.py:261 offer_audere(); "
@@ -433,11 +484,12 @@ def _declarations() -> tuple[ContentDependency, ...]:
                     AUDERE_MAJORA_CONDITION_NAME,
                     SOULFRAY_CONDITION_NAME,
                 ),
+                case_insensitive=True,
             ),
         ),
         ContentDependency(
             key="mount-combat-conditions",
-            label="ConditionTemplate",
+            label="Mounted and Unhorsed condition templates",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/combat/services.py:3774 (mounted charge); "
@@ -449,12 +501,14 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "combat action for both participants."
             ),
             probe=NamedRowsProbe(
-                label="ConditionTemplate", names=(MOUNTED_CONDITION_NAME, UNHORSED_CONDITION_NAME)
+                label="ConditionTemplate",
+                names=(MOUNTED_CONDITION_NAME, UNHORSED_CONDITION_NAME),
+                case_insensitive=True,
             ),
         ),
         ContentDependency(
             key="sent-flying-condition",
-            label="ConditionTemplate",
+            label="Sent Flying condition template",
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/services.py:5443 _apply_sent_flying_marker()",
             consequence=(
@@ -462,34 +516,47 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "applies no marker - the target never gets a mid-air catch window "
                 "and the fall never resolves at end of round."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(SENT_FLYING_CONDITION_NAME,)),
+            probe=NamedRowsProbe(
+                label="ConditionTemplate",
+                names=(SENT_FLYING_CONDITION_NAME,),
+                case_insensitive=True,
+            ),
         ),
         ContentDependency(
             key="shielded-condition",
-            label="ConditionTemplate",
+            label="Shielded condition template",
             tier=DependencyTier.REQUIRED,
             consumer="world/covenants/perks/evaluators.py:1180",
             consequence=(
                 "A covenant perk gated on an ally being Shielded silently never "
                 "triggers, even when the ally is actually defending."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(SHIELDED_CONDITION_NAME,)),
+            probe=NamedRowsProbe(
+                label="ConditionTemplate",
+                names=(SHIELDED_CONDITION_NAME,),
+                case_insensitive=True,
+            ),
         ),
         ContentDependency(
             key="surrounded-condition",
-            label="ConditionTemplate",
+            label="Surrounded isolation tagging (template, pool, entry stage)",
             tier=DependencyTier.REQUIRED,
-            consumer="world/battles/resolution.py:1174 (isolation entry)",
+            consumer=(
+                "world/battles/resolution.py:1160-1190 _apply_surrounded_isolation() - "
+                "needs the Surrounded ConditionTemplate, the surrounded_entry "
+                "ConsequencePool, and its stage_order=1 ConditionStage, not the "
+                "template alone"
+            ),
             consequence=(
                 "A battle participant cut off from their allies never gets tagged "
                 "Surrounded - the acute-peril stacking from being isolated silently "
                 "never applies."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(SURROUNDED_CONDITION_NAME,)),
+            probe=CustomProbe(fn=_probe_surrounded_condition_bundle),
         ),
         ContentDependency(
             key="unconscious-condition",
-            label="ConditionTemplate",
+            label="Unconscious condition template",
             tier=DependencyTier.REQUIRED,
             consumer="world/vitals/services.py:1407 unconscious_instance()",
             consequence=(
@@ -497,33 +564,43 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "silently reports the character as awake even when they should be "
                 "out cold."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(UNCONSCIOUS_CONDITION_NAME,)),
+            probe=NamedRowsProbe(
+                label="ConditionTemplate",
+                names=(UNCONSCIOUS_CONDITION_NAME,),
+                case_insensitive=True,
+            ),
         ),
         ContentDependency(
             key="charm-condition",
-            label="ConditionTemplate",
+            label="Charm condition template",
             tier=DependencyTier.REQUIRED,
             consumer="world/companions/services.py:512 promote_summon_to_companion()",
             consequence=(
                 "Promoting a charmed enemy to a permanent companion raises "
                 "ConditionTemplate.DoesNotExist and crashes the promotion."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(CHARM_CONDITION_NAME,)),
+            probe=NamedRowsProbe(
+                label="ConditionTemplate", names=(CHARM_CONDITION_NAME,), case_insensitive=True
+            ),
         ),
         ContentDependency(
             key="plummeting-condition",
-            label="ConditionTemplate",
+            label="Plummeting condition template",
             tier=DependencyTier.REQUIRED,
             consumer="world/areas/positioning/plummet.py:129 begin_plummet()",
             consequence=(
                 "A character who starts falling raises ConditionTemplate.DoesNotExist "
                 "instead of beginning to plummet, crashing movement resolution."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(PLUMMETING_CONDITION_NAME,)),
+            probe=NamedRowsProbe(
+                label="ConditionTemplate",
+                names=(PLUMMETING_CONDITION_NAME,),
+                case_insensitive=True,
+            ),
         ),
         ContentDependency(
             key="berserk-condition",
-            label="ConditionTemplate",
+            label="Berserk condition template",
             tier=DependencyTier.REQUIRED,
             consumer="world/species/moon_sensitivity.py:180 _apply_berserk()",
             consequence=(
@@ -531,11 +608,16 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "and never gets the Berserk condition applied - the forced rampage "
                 "compulsion silently never fires."
             ),
-            probe=NamedRowsProbe(label="ConditionTemplate", names=(BERSERK_CONDITION_NAME,)),
+            # case_insensitive=True for consistency with the other ConditionTemplate
+            # declarations, even though this consumer itself (moon_sensitivity.py:180)
+            # uses `filter(name=...)`, case-sensitively - see NamedRowsProbe's docstring.
+            probe=NamedRowsProbe(
+                label="ConditionTemplate", names=(BERSERK_CONDITION_NAME,), case_insensitive=True
+            ),
         ),
         ContentDependency(
             key="soul-tether-status-conditions",
-            label="ConditionTemplate",
+            label="Soul Tether Active and Tether Strain condition templates",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/services/soul_tether.py:273 accept_soul_tether(); "
@@ -548,13 +630,15 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "accrues Tether Strain."
             ),
             probe=NamedRowsProbe(
-                label="ConditionTemplate", names=("Soul Tether Active", "Tether Strain")
+                label="ConditionTemplate",
+                names=("Soul Tether Active", "Tether Strain"),
+                case_insensitive=True,
             ),
         ),
         # --- CheckType: single-feature checks ---------------------------------------------
         ContentDependency(
             key="penetration-check-type",
-            label="CheckType",
+            label="Penetration check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/services.py:343 get_penetration_check_type()",
             consequence=(
@@ -565,7 +649,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="concentration-check-type",
-            label="CheckType",
+            label="Concentration check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/services.py:357 get_concentration_check_type()",
             consequence=(
@@ -576,7 +660,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="fashion-presentation-check-type",
-            label="CheckType",
+            label="Fashion Presentation check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/items/services/fashion_presentation.py:119",
             consequence=(
@@ -587,7 +671,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="gather-evidence-check-type",
-            label="CheckType",
+            label="Gather Evidence check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/justice/evidence.py:68 _gather_check_type()",
             consequence=(
@@ -598,7 +682,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="scrutinize-evidence-check-type",
-            label="CheckType",
+            label="Scrutinize Evidence check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/justice/case_file.py:111 examine_evidence()",
             consequence=(
@@ -609,7 +693,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="bind-attempt-check-type",
-            label="CheckType",
+            label="Bind Attempt check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/companions/services.py:496 promote_summon_to_companion()",
             consequence=(
@@ -621,7 +705,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="identification-check-type",
-            label="CheckType",
+            label="Identification check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/forms/services/identification.py:414 attempt_identification()",
             consequence=(
@@ -632,7 +716,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="magical-endurance-check-type",
-            label="CheckType",
+            label="Magical Endurance check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/soul_tether.py:1403",
             consequence=(
@@ -643,7 +727,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="technique-training-check-type",
-            label="CheckType",
+            label="Technique Training check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/technique_training.py:69 resolve_training_check()",
             consequence=(
@@ -654,7 +738,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="endure-hallowed-ground-check-type",
-            label="CheckType",
+            label="Endure Hallowed Ground check type",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/services/resonance_environment.py:583 "
@@ -670,7 +754,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="search-check-type",
-            label="CheckType",
+            label="Search check type",
             tier=DependencyTier.REQUIRED,
             consumer="actions/definitions/investigation.py:69 SearchAction",
             consequence=(
@@ -682,7 +766,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="tax-collection-check-type",
-            label="CheckType",
+            label="Tax Collection check type",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/assets/content.py:95 ensure_asset_promotion_content() - literal, no constant"
@@ -697,7 +781,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- ChallengeTemplate ---------------------------------------------------------
         ContentDependency(
             key="interpose-challenge",
-            label="ChallengeTemplate",
+            label="Interpose challenge template",
             tier=DependencyTier.REQUIRED,
             consumer="world/scenes/sudden_harm.py:58 _bind_interpose_challenge()",
             consequence=(
@@ -708,7 +792,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="succor-challenge",
-            label="ChallengeTemplate",
+            label="Succor challenge template",
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/services.py:10512 _ensure_succor_challenges()",
             consequence=(
@@ -719,7 +803,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="catch-the-faller-challenge",
-            label="ChallengeTemplate",
+            label="Catch the Faller challenge template",
             tier=DependencyTier.REQUIRED,
             consumer="world/areas/positioning/plummet.py:70 _create_catch_challenge_for()",
             consequence=(
@@ -731,7 +815,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- RoomFeatureKind, Property, KudosSourceCategory, Ritual ---------------------
         ContentDependency(
             key="sanctum-room-feature-kind",
-            label="RoomFeatureKind",
+            label="Sanctum room feature kind",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/sanctum_install.py:301 perform_sanctification()",
             consequence=(
@@ -743,7 +827,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="aerial-property",
-            label="Property",
+            label="Aerial property",
             tier=DependencyTier.REQUIRED,
             consumer="world/areas/positioning/services.py:919 _aerial_property()",
             consequence=(
@@ -754,7 +838,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="relationship-writeup-kudos-category",
-            label="KudosSourceCategory",
+            label="Relationship Writeup kudos category",
             tier=DependencyTier.REQUIRED,
             consumer="world/relationships/services.py:578 give_writeup_kudos()",
             consequence=(
@@ -767,7 +851,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="social-engagement-kudos-category",
-            label="KudosSourceCategory",
+            label="Social Engagement kudos category",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/scenes/action_services.py:193 _get_social_engagement_category(); "
@@ -784,7 +868,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="accept-soul-tether-ritual",
-            label="Ritual",
+            label="Accept Soul Tether ritual",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/magic/services/soul_tether.py:218 accept_soul_tether() - "
@@ -799,7 +883,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- CapabilityType --------------------------------------------------------------
         ContentDependency(
             key="movement-capability-type",
-            label="CapabilityType",
+            label="Movement capability type",
             tier=DependencyTier.REQUIRED,
             consumer="world/areas/positioning/services.py:783 _can_move()",
             consequence=(
@@ -813,7 +897,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- ModifierTarget: required (no numeric fallback) ------------------------------
         ContentDependency(
             key="fashion-presentation-modifier-target",
-            label="ModifierTarget",
+            label="Fashion Presentation modifier target",
             tier=DependencyTier.REQUIRED,
             consumer="world/items/constants.py:301 get_fashion_modifier_target()",
             consequence=(
@@ -832,7 +916,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # string (not the tier) to know "no traceback, just missing" from "crash."
         ContentDependency(
             key="armor-soak-modifier-target",
-            label="ModifierTarget",
+            label="Armor Soak modifier target",
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/services.py:11565 _resonant_armor_soak()",
             consequence=(
@@ -844,7 +928,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="consider-bias-direction-modifier-target",
-            label="ModifierTarget",
+            label="Consider bias-direction modifier target",
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/consider.py:128 bias_direction()",
             consequence=(
@@ -857,7 +941,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- Compound-filter probes: name alone would be a false green -------------------
         ContentDependency(
             key="travel-speed-modifier-target",
-            label="ModifierTarget",
+            label="Travel Speed modifier target",
             tier=DependencyTier.REQUIRED,
             consumer="world/travel/services.py:138 compute_travel_time()",
             consequence=(
@@ -865,33 +949,47 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "fall back to 0 - no traceback, travel just never gets that "
                 "adjustment."
             ),
-            probe=CustomProbe(fn=_probe_travel_speed_modifier_target),
+            probe=FilteredRowProbe(
+                label="ModifierTarget",
+                filters=(("name", "travel_speed"), ("category__name", "travel")),
+                absent_detail="No ModifierTarget 'travel_speed' row under category 'travel'.",
+            ),
         ),
         ContentDependency(
             key="gossip-check-type",
-            label="CheckType",
+            label="Gossip check type",
             tier=DependencyTier.REQUIRED,
             consumer="world/secrets/gossip.py:88 _gossip_check_type()",
             consequence=(
                 "Planting, seeking, or suppressing gossip crashes with "
                 "CheckType.DoesNotExist instead of rolling the Gossip check."
             ),
-            probe=CustomProbe(fn=_probe_gossip_check_type),
+            probe=FilteredRowProbe(
+                label="CheckType",
+                filters=(("name", GOSSIP_CHECK_TYPE_NAME), ("category__name", "Social")),
+                absent_detail=(
+                    f"No CheckType {GOSSIP_CHECK_TYPE_NAME!r} row under category 'Social'."
+                ),
+            ),
         ),
         ContentDependency(
             key="gossip-specialization",
-            label="Specialization",
+            label="Gossip specialization",
             tier=DependencyTier.REQUIRED,
             consumer="world/secrets/gossip.py:94 _gossip_specialization()",
             consequence=(
                 "Every Gossip skill-gate check (can this character even attempt "
                 "gossip actions) crashes with Specialization.DoesNotExist."
             ),
-            probe=CustomProbe(fn=_probe_gossip_specialization),
+            probe=FilteredRowProbe(
+                label="Specialization",
+                filters=(("name", "Gossip"), ("parent_skill__trait__name", "Persuasion")),
+                absent_detail=("No Specialization 'Gossip' row under skill trait 'Persuasion'."),
+            ),
         ),
         ContentDependency(
             key="willpower-stat-trait",
-            label="Trait",
+            label="Willpower stat trait",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/services/anima.py:393 provision_player_anima_ritual()",
             consequence=(
@@ -899,11 +997,15 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "ritual creation entirely for that character when no explicit stat "
                 "was chosen at CG."
             ),
-            probe=CustomProbe(fn=_probe_willpower_stat_trait),
+            probe=FilteredRowProbe(
+                label="Trait",
+                filters=(("name", "willpower"), ("trait_type", TraitType.STAT)),
+                absent_detail="No Trait 'willpower' row with trait_type=STAT.",
+            ),
         ),
         ContentDependency(
             key="hostile-social-consent-category",
-            label="SocialConsentCategory",
+            label="Hostile social consent category",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/secrets/services.py:218 accusation_permitted() - literal, "
@@ -916,12 +1018,19 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "against a tenure that has blocked hostile targeting - the safety "
                 "gate never applies."
             ),
-            probe=CustomProbe(fn=_probe_hostile_social_consent_category),
+            probe=FilteredRowProbe(
+                label="SocialConsentCategory",
+                # key__iexact: natural-key text components match case-insensitively
+                # (core/natural_keys.py) - an exact filter here would be a false RED
+                # for a row the game's own get_by_natural_key() resolves fine.
+                filters=(("key__iexact", "hostile"),),
+                absent_detail="No SocialConsentCategory row with key='hostile'.",
+            ),
         ),
         # --- CustomProbe: composite invariants a name/existence probe can't express ------
         ContentDependency(
             key="audere-majora-thresholds",
-            label="AudereMajoraThreshold",
+            label="Audere Majora tier-crossing thresholds",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/audere_majora.py:679 (tier-crossing offer)",
             consequence=(
@@ -933,7 +1042,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="soulfray-stage-pools",
-            label="ConditionStage",
+            label="Soulfray stage consequence pools",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/audere.py, world/conditions/services.py (Soulfray progression)",
             consequence=(
@@ -946,7 +1055,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="stakes-escalation-curves",
-            label="StakesEscalationModifier",
+            label="Stakes escalation curves",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/combat/escalation.py (assign_default_escalation_curve, "
@@ -962,7 +1071,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="capability-power-bridges",
-            label="CapabilityType",
+            label="Capability combat-power bridges",
             tier=DependencyTier.REQUIRED,
             consumer=(
                 "web.admin.tuning.capability_power_analytics.build_capability_power_panel "
@@ -979,7 +1088,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- TUNING tier: singleton config tables (dormant-by-design, not yet set) -------
         ContentDependency(
             key="capability-power-config",
-            label="CapabilityPowerConfig",
+            label="Capability power config singleton",
             tier=DependencyTier.TUNING,
             consumer="world/magic/services/capability_curve.py:31 get_capability_power_config()",
             consequence=(
@@ -991,7 +1100,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="level-power-config",
-            label="LevelPowerConfig",
+            label="Level power config singleton",
             tier=DependencyTier.TUNING,
             consumer="world/magic/services/power_terms.py:87 get_level_power_config()",
             consequence=(
@@ -1003,7 +1112,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="aura-power-config",
-            label="AuraPowerConfig",
+            label="Aura power config singleton",
             tier=DependencyTier.TUNING,
             consumer="world/magic/services/power_terms.py:94 get_aura_power_config()",
             consequence=(
@@ -1014,7 +1123,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ),
         ContentDependency(
             key="soulfray-config",
-            label="SoulfrayConfig",
+            label="Soulfray config singleton",
             tier=DependencyTier.TUNING,
             consumer="world/magic/services/anima.py:219 apply_anima_ritual_outcome()",
             consequence=(
@@ -1027,7 +1136,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
         # --- REQUIRED singleton: no graceful fallback exists ------------------------------
         ContentDependency(
             key="audere-threshold",
-            label="AudereThreshold",
+            label="Audere offer threshold",
             tier=DependencyTier.REQUIRED,
             consumer="world/magic/audere.py:257 offer_audere()",
             consequence=(
@@ -1045,8 +1154,14 @@ def collect_required_content() -> RequiredContentSnapshot:
 
     Batches every `NamedRowsProbe` sharing a model label onto a single
     `values_list("name", flat=True)` query - one per distinct label, never one
-    per declaration - and passes the lowercased result to each such probe's
-    `resolve()`. `AnyRowProbe` and `CustomProbe` resolve themselves.
+    per declaration - and passes the exact-case result to each such probe's
+    `resolve()`, which casefolds on its own when `case_insensitive=True`. The
+    names are not lowercased here: a shared model label can carry both
+    case-sensitive and case-insensitive declarations (e.g. `ConditionTemplate`
+    is all case-insensitive today, but nothing stops a future case-sensitive
+    declaration on the same model), so the exact case must survive to
+    `resolve()` for it to decide. `AnyRowProbe` and `CustomProbe` resolve
+    themselves.
     """
     dependencies = build_registry(_declarations())
 
@@ -1060,9 +1175,7 @@ def collect_required_content() -> RequiredContentSnapshot:
     known_names_by_label: dict[str, frozenset[str]] = {}
     for label in named_labels:
         model = apps.get_model("arxii", label)
-        known_names_by_label[label] = frozenset(
-            name.lower() for name in model.objects.values_list("name", flat=True)
-        )
+        known_names_by_label[label] = frozenset(model.objects.values_list("name", flat=True))
 
     missing_required: list[DependencyRow] = []
     present_required: list[DependencyRow] = []

@@ -518,7 +518,7 @@ A specific authored database row a code path hard-depends on - a named `Conditio
 `src/web/admin/tuning/required_content.py`'s `_declarations()` table. Tiered REQUIRED (a code
 path a player or staff member can hit today breaks or goes silently inert if the row is
 missing) or TUNING (a config singleton the game runs without, just with worse numbers). See
-`docs/adr/0250-content-dependencies-are-a-live-db-registry.md`.
+`docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 
 **required-content sentinel**:
 The Game Ops panel (`ops_required_content_fragment`, `admin_ops_required_content`) that

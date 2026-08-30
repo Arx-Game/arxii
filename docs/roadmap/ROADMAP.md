@@ -151,7 +151,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     required-content sentinel panel (#3444, `required_content.py`) - one central
     `_declarations()` table of 48 code-level hard dependencies on specific authored database
     rows (44 REQUIRED, 4 TUNING), probed live against the database rather than any repo
-    artifact, since seeds are clone-bootstrap/E2E scaffolding only (ADR-0238). See ADR-0250.
+    artifact, since seeds are clone-bootstrap/E2E scaffolding only (ADR-0238). See ADR-0251.
   - Superuser-only external content-repo load surface (`web/admin/content_load_views.py`,
     `CONTENT_REPO_PATH` env var) upserting into the DB via `core_management.content_fixtures`;
     linked from the Game Setup hub alongside both new dashboards. Phase 2 (#2266, complete):
