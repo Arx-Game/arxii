@@ -92,6 +92,23 @@ class BossBeatDedupConstraintTests(TestCase):
                 round_number=1,
             )
 
+    def test_sheet_and_opponent_together_is_rejected(self):
+        """The ``surge_subject_sheet_xor_opponent`` CheckConstraint (#3445): a row
+
+        can carry ``subject_sheet`` OR ``subject_opponent``, never both.
+        """
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DramaticSurgeRecord.objects.create(
+                encounter=self.encounter,
+                participant=self.participant,
+                trigger_kind=SurgeTriggerKind.BOSS_PHASE,
+                subject_sheet=self.participant.character_sheet,
+                subject_opponent=self.boss,
+                subject_phase_number=2,
+                amount=2,
+                round_number=1,
+            )
+
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class BossBeatCurveFieldTests(TestCase):
@@ -184,6 +201,20 @@ class BossBeatSurgeLegTests(TestCase):
         apply_boss_phase_surge(opponent=self.boss, enraged=False)
 
         self.assertFalse(DramaticSurgeRecord.objects.filter(participant=fled).exists())
+
+    def test_enraging_transition_with_zero_amount_surges_nobody(self):
+        """boss_enrage_spike_intensity_amount=0 disables the beat (#3445) - it must
+
+        NOT silently fall back to a plain BOSS_PHASE beat. ``self.curve`` keeps its
+        setUp phase amount (2, non-zero) so this isolates the enrage leg specifically.
+        """
+        self.curve.boss_enrage_spike_intensity_amount = 0
+        self.curve.save(update_fields=["boss_enrage_spike_intensity_amount"])
+
+        apply_boss_phase_surge(opponent=self.boss, enraged=True)
+
+        self.assertEqual(self._intensity(), 0)
+        self.assertFalse(DramaticSurgeRecord.objects.exists())
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
@@ -323,3 +354,103 @@ class BossBreakSeamTests(TestCase):
 
         self.assertEqual(DramaticSurgeRecord.objects.count(), 1)
         self.assertEqual(self._intensity(), 5)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
+class BossBreakAndPhaseSameRoundTests(TestCase):
+    """One round can fire two distinct boss beats on the same PC (#3445).
+
+    ``resolve_round`` calls ``assess_break_bar`` BEFORE ``_check_boss_transitions``
+    (see the ordering comment directly above the ``assess_break_bar`` call inside
+    ``resolve_round``, in ``world/combat/services.py``) - so a boss that both
+    breaks AND crosses a phase threshold in the same round legitimately records a
+    BOSS_BREAK beat at the old phase followed by a BOSS_PHASE/BOSS_ENRAGE beat at
+    the new one. That double-surge is by design and it is the case a player
+    actually feels, so it needs an assertion.
+
+    Route taken: this drives the two seams directly (``assess_break_bar`` then
+    ``check_and_advance_boss_phase``), in that documented order, against one
+    encounter at one round number - NOT through ``resolve_round`` itself.
+    ``BossFightScenarioFactory`` is the only scenario builder that wires a full
+    round through the check/technique resolution pipeline, and it is reserved for
+    ``test_boss_fight_journey.py``'s hand-derived, curve-free damage arithmetic
+    (giving it an escalation curve here would change ``intensity_modifier``, which
+    feeds ``power_intensity`` in technique resolution, and invalidate that other
+    test's authored round-by-round numbers). Reproducing an equivalent break+phase
+    round through ``resolve_round`` outside that factory would mean inventing new
+    damage arithmetic to land both thresholds in one round, which the review
+    explicitly said not to fake. Calling the two seams directly - the same idiom
+    ``BossBreakSeamTests`` and ``BossPhaseSeamTests`` already use individually
+    above - covers the real behavior without that invented arithmetic.
+    """
+
+    def setUp(self):
+        self.curve = EscalationCurveFactory(
+            boss_break_spike_intensity_amount=5,
+            boss_phase_spike_intensity_amount=3,
+            boss_enrage_spike_intensity_amount=6,
+        )
+        self.encounter = CombatEncounterFactory(escalation_curve=self.curve, round_number=2)
+        self.boss = BossOpponentFactory(
+            encounter=self.encounter,
+            current_phase=1,
+            health=40,
+            max_health=100,
+            break_bar_threshold=1,
+            break_bar_current=1,
+            vulnerability_rounds=2,
+            vulnerability_rounds_remaining=0,
+        )
+        BossPhaseFactory(
+            opponent=self.boss,
+            phase_number=2,
+            health_trigger_percentage=0.5,
+            damage_multiplier=Decimal("1.0"),
+        )
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter, status=ParticipantStatus.ACTIVE
+        )
+        self.character = self.participant.character_sheet.character
+        begin_engagement(self.character, EngagementType.COMBAT, source=self.encounter)
+
+    def _damage_outcome(self):
+        return ActionOutcome(
+            entity_type="pc",
+            entity_label="PC1",
+            damage_results=[
+                OpponentDamageResult(
+                    damage_dealt=10,
+                    health_damaged=True,
+                    probed=False,
+                    probing_increment=0,
+                    defeated=False,
+                    opponent_id=self.boss.pk,
+                )
+            ],
+            participant_id=self.participant.pk,
+            effect_type_id=EffectTypeFactory().pk,
+        )
+
+    def _intensity(self) -> int:
+        return CharacterEngagement.objects.get(
+            character=self.character.sheet_data
+        ).intensity_modifier
+
+    def test_break_and_phase_transition_both_surge_the_same_round(self):
+        # resolve_round's documented order: break-bar assessment runs first, while
+        # the boss is still at phase 1...
+        assess_break_bar(self.encounter, [self._damage_outcome()])
+        # ...then the boss phase transition check, which advances it to phase 2.
+        check_and_advance_boss_phase(self.boss)
+
+        records = DramaticSurgeRecord.objects.filter(participant=self.participant)
+        self.assertEqual(records.count(), 2)
+        kinds_and_phases = {(r.trigger_kind, r.subject_phase_number) for r in records}
+        self.assertEqual(
+            kinds_and_phases,
+            {
+                (SurgeTriggerKind.BOSS_BREAK, 1),
+                (SurgeTriggerKind.BOSS_PHASE, 2),
+            },
+        )
+        self.assertEqual(self._intensity(), 5 + 3)

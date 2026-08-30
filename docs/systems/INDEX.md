@@ -6564,7 +6564,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
-  trigger_kind, subject_sheet=None, reason="")` (`world/combat/escalation.py`) — the one write
+  trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
+  subject_phase_number=None)` (`world/combat/escalation.py`) — the one write
   path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
   GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
