@@ -870,6 +870,19 @@ def _conversion_archetypes(
     return [archetype] if archetype is not None else []
 
 
+def _rite_was_perilous() -> bool:
+    """Did this rite put the celebrant's life at stake (#3463)?
+
+    Always False today, and named rather than inlined: a perilous rite is real
+    and ruled in, but it reaches Legend through the stakes-contract settlement
+    seam (``world.societies.legend_settlement``), not through the ceremony
+    reward path, which has no contract to consult. This is the seam a future
+    rite-under-stakes surface plugs into, so "why is this always False" has an
+    answer in place instead of reading as dead code.
+    """
+    return False
+
+
 def _mint_ceremony_deed(
     sheet: "CharacterSheet",
     title: str,
@@ -897,6 +910,13 @@ def _mint_ceremony_deed(
         name=CEREMONY_LEGEND_SOURCE,
         defaults={"description": "Rites and ceremonies — honors spoken over the worthy."},
     )
+    # #3463 — a rite that risked nothing mints no Legend. The honoree's
+    # prestige (base_honoree_prestige + offering prestige) is computed
+    # separately and untouched: a great ceremony still confers standing, it
+    # just does not confer might. A rite that genuinely endangered the
+    # celebrant settles through its stakes contract, at a real station.
+    if not _rite_was_perilous():
+        return
     create_solo_deed(
         persona,
         title,

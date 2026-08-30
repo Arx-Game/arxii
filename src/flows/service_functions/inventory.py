@@ -610,7 +610,10 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
         persona,
         f"Theft of {item.instance.display_name}",
         _theft_source_type(),
-        10,
+        # 0 per #3463 — see _record_door_deed. The deed carries the theft's
+        # crime tag, evidence and witnesses; the Legend for a heist is settled
+        # at the heist's end, from what was actually at stake.
+        0,
         scene=scene,
         crime_kinds=[_theft_crime_kind()],
         concealed=True,

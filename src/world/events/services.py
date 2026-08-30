@@ -368,7 +368,10 @@ def _award_catering_prestige(event: Event) -> None:
         host.persona,
         f"Set a lavish table at {event.name}",
         source_type,
-        score * CATERING_DEED_BASE_PER_POINT,
+        # 0 per #3463 — a feast risks nothing, so it mints no Legend. The host's
+        # prestige and their house's stature are untouched below: a legendary
+        # feast still makes you famous, it just does not make you mighty.
+        0,
         description="PLACEHOLDER: a spread remembered longer than the speeches.",
     )
     _apply_grand_display(host.persona, score)
@@ -521,7 +524,9 @@ def _award_grandeur_prestige(event: Event) -> None:
         host.persona,
         f"Threw a legendary {event.name}",
         source_type,
-        score * GRANDEUR_DEED_BASE_PER_POINT,
+        # 0 per #3463 — see _award_catering_prestige. Coin buys fame and
+        # stature, never Legend.
+        0,
         description="PLACEHOLDER: coin become memory, memory become standing.",
     )
     _apply_grand_display(host.persona, score)

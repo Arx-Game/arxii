@@ -138,7 +138,13 @@ def _record_breakin_deed(
     concealed: bool,
     base_value: int,
 ) -> None:
-    """Create a crime-tagged Legend deed for a pick/break attempt.
+    """Create a crime-tagged deed for a pick/break attempt.
+
+    ``base_value`` is 0 per #3463: Legend is settled at the END of a story unit
+    from what was at stake, never minted at the act. The deed row survives
+    because it carries the crime tag, its evidence, its witnesses and knowledge
+    spread — none of which read ``base_value`` — but it is worth no Legend on
+    its own. A heist full of dangerous acts pays at the heist's settlement.
 
     Mirrors ``_record_theft_deed`` in ``flows/service_functions/inventory.py``:
     resolve persona + scene from the actor, then call ``create_solo_deed``
@@ -230,7 +236,7 @@ class PickLockAction(Action):
             message = f"You fail to pick the lock on {exit_obj.key}."
 
         _record_breakin_deed(
-            actor, exit_obj, title_prefix="Lockpicking", concealed=True, base_value=5
+            actor, exit_obj, title_prefix="Lockpicking", concealed=True, base_value=0
         )
 
         return ActionResult(success=success, message=message)
@@ -310,7 +316,7 @@ class BreakExitAction(Action):
         )
 
         _record_breakin_deed(
-            actor, exit_obj, title_prefix="Break-in", concealed=False, base_value=10
+            actor, exit_obj, title_prefix="Break-in", concealed=False, base_value=0
         )
 
         return ActionResult(success=True, message=f"You break through {exit_obj.key}!")

@@ -52,6 +52,19 @@ def crafting_deed_value(tier: QualityTier, accents: tuple | list = ()) -> int:
     )
 
 
+def _working_was_perilous() -> bool:
+    """Did this working put the maker's life at stake (#3463)?
+
+    Always False today, and deliberately so rather than being inlined away: a
+    perilous working is real and ruled in, but it reaches Legend through the
+    stakes-contract settlement seam (``world.societies.legend_settlement``),
+    not through this fame path, which has no contract to consult. This function
+    is the named seam where a future crafting-under-stakes surface plugs in, so
+    the "why does this always return False" question has an answer in place.
+    """
+    return False
+
+
 def award_crafting_fame(  # noqa: PLR0913 — credit pair + scaling context
     *,
     crafter_persona: Persona | None,
@@ -63,16 +76,38 @@ def award_crafting_fame(  # noqa: PLR0913 — credit pair + scaling context
 ) -> None:
     """Fame at first making, to BOTH crafter and designer personas (#2878).
 
-    Persona-scoped (a masked artisan's fame accrues to the mask). Each
-    credited persona gets a solo legend deed valued by ``crafting_deed_value``
-    — zero-value work mints nothing. Deeds link to the item (#2359) so the
-    piece's legend and its makers' fame stay one graph.
+        Persona-scoped (a masked artisan's fame accrues to the mask). Each
+        credited persona gets a solo legend deed valued by ``crafting_deed_value``
+        — zero-value work mints nothing. Deeds link to the item (#2359) so the
+        piece's legend and its makers' fame stay one graph.
+
+    **Mints nothing for safe work (#3463)** — see the comment in the body.
     """
     from world.societies.models import LegendSourceType  # noqa: PLC0415
     from world.societies.services import create_solo_deed  # noqa: PLC0415
 
+    # #3463: an ordinary masterwork risks nothing, so it mints no Legend.
+    # Ruled twice by Tehom (2026-08-29): "if it is not risky to you, the legend
+    # should just be zero", and "perilous crafting and rites keep minting deeds
+    # — if something is dangerous to *you*, then yes. It can give legend."
+    #
+    # Crafting is NOT excluded as a category. A working that genuinely could
+    # have killed the forge crew settles through its stakes contract like
+    # anything else, at a real station, and the piece carries THAT deed. This
+    # function has no stakes context to consult, so it is the safe path by
+    # definition and mints nothing.
+    #
+    # Consequence, stated rather than discovered later: ordinary masterworks
+    # stop carrying item legend. ItemInstance.legend_deeds becomes rare and
+    # meaningful instead of routine — a sword is legendary for what it cost to
+    # make, not for being well made. ADR-0194 sharpened, not broken.
+    #
+    # crafting_deed_value() is deliberately KEPT and still called: it is the
+    # sizing function a perilous working needs, and it remains the single place
+    # that knows how quality and Accents scale a piece's worth. It is wired
+    # here, not orphaned.
     value = crafting_deed_value(tier, accents)
-    if value < 1:
+    if value < 1 or not _working_was_perilous():
         return
     source_type, _ = LegendSourceType.objects.get_or_create(
         name="Crafting",
