@@ -247,3 +247,46 @@ class StandoutTests(TestCase):
             title="A day at the front",
         )
         assert report.minted is False
+
+
+class StandoutDeedsAnchorToTheirEvent(TestCase):
+    """#3466: a standout must know the event that priced it, or it has no honor ceiling."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.source_type = LegendSourceTypeFactory()
+
+    def _settle_with_one_standout(self):
+        """A won unit whose shared deed mints alongside a separate standout.
+
+        ``paid`` (personal_risk=EXTREME) clears the shared-deed peril floor at
+        the party's low ``effective_risk`` (MODERATE, below the HIGH floor) and
+        is paid the shared deed. ``standout`` relies on the low
+        ``effective_risk`` for its own peril check (``personal_risk=None``), so
+        it is excluded from the shared payout, but still clears the standout
+        pass's own bar (crucial_success_level >= the standout threshold) and
+        mints a solo deed anchored to the same event.
+        """
+        paid = SettlementParticipant(
+            persona=PersonaFactory(),
+            level=3,
+            personal_risk=RenownRisk.EXTREME,
+        )
+        standout = SettlementParticipant(
+            persona=PersonaFactory(),
+            level=3,
+            crucial_success_level=9,
+        )
+        return settle_legend_for(
+            effective_risk=RenownRisk.MODERATE,
+            target_level=3,
+            held_fraction=1.0,
+            participants=[paid, standout],
+            source_type=self.source_type,
+            title="The stand at the ford",
+        )
+
+    def test_standout_carries_the_event(self) -> None:
+        report = self._settle_with_one_standout()
+        assert report.standouts, "expected a standout deed"
+        assert report.standouts[0].event_id == report.event.pk
