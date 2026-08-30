@@ -370,3 +370,41 @@ class TestHostileSocialConsentCategoryProbe(TestCase):
         SocialConsentCategoryFactory(key="hostile", name="Hostile")
         result = rc._probe_hostile_social_consent_category()
         self.assertTrue(result.present)
+
+
+class TestRequiredContentFragmentView(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.accounts.models import AccountDB
+
+        cls.super = AccountDB.objects.create_superuser("rcroot", "rcroot@example.com", "pw-123456")
+        cls.staff = AccountDB.objects.create_user("rcstaff", "rcs@example.com", "pw-123456")
+        cls.staff.is_staff = True
+        cls.staff.save()
+
+    def test_anonymous_redirected(self) -> None:
+        from django.urls import reverse
+
+        resp = self.client.get(reverse("admin_ops_required_content"))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_staff_non_superuser_forbidden(self) -> None:
+        from django.urls import reverse
+
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("admin_ops_required_content"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_superuser_gets_panel(self) -> None:
+        from django.urls import reverse
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_ops_required_content"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_ops_dashboard_includes_the_panel_section(self) -> None:
+        from django.urls import reverse
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_ops"))
+        self.assertIn('id="panel-ops-required-content"', resp.content.decode())

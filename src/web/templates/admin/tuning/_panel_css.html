@@ -73,6 +73,14 @@
     gap: 16px;
     align-items: start;
   }
+  /* Required-content sentinel (#3444): a missing row gets a left-edge accent
+     so it stands out in a scan of the table, but the meaning still comes from
+     the table's own heading and columns - this is a decoration, never the
+     only signal. */
+  .required-content-row--missing td:first-child {
+    border-left: 3px solid var(--error-fg);
+    padding-left: calc(0.5rem - 3px);
+  }
   /* Screen-reader-only utility: keeps a <th> in the accessibility tree without
      duplicating an adjacent visible heading (standard clip-based hiding). */
   .visually-hidden {
