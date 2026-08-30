@@ -1370,6 +1370,13 @@ def _build_combat_result(
 def _vulnerability_intensity_bonus(action: CombatRoundAction) -> int:
     """Return the break-bar vulnerability intensity bonus if the action's
     target opponent is currently vulnerable, else 0.
+
+    NOT the escalation currency. This is a POWER-ledger term: it rides
+    ``use_technique(power_intensity_bonus=...)`` and never touches
+    ``CharacterEngagement.intensity_modifier``, which is what the escalation tick
+    and every dramatic surge write (``world/combat/escalation.py``). Two different
+    "intensity" concepts share the word in this module - see
+    ``world/combat/AGENT_GLOSSARY.md``.
     """
     target = action.focused_opponent_target
     if target is None or target.vulnerability_rounds_remaining <= 0:

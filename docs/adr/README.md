@@ -255,6 +255,7 @@ treat those names as hints to confirm, not gospel.
 - [0247 - State-3 mode coherence: live-connection redirect and sheet-in-new-tab](0247-state-3-mode-coherence-live-connection-redirect-and-sheet-in-new-tab.md) (#3412 slice 4; extends ADR-0241; related ADR-0246)
 - [0248 - Cast-time capability effects ride the condition channel; grant tables mean standing possession](0248-cast-time-capability-effects-ride-the-condition-channel.md) (#3449; strips the three inert grant families, extends ADR-0144/0169)
 - [0249 - Declared risk is a wager, not a payout: Legend is settled, not asserted](0249-declared-risk-is-a-wager-not-a-payout.md) (#3463; extends ADR-0066/0076, generalizes ADR-0122 past Battle, preserves ADR-0077 and reconciles with ADR-0080)
+- [0250 - A boss beat's surge dedups per boss per phase, not per encounter](0250-boss-beat-surges-dedup-per-boss-per-phase.md) (#3445; extends ADR-0098's dramatic surge engine)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -143,6 +143,23 @@ _Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's 
 A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat — a bonded ally entering mortal peril, a hated NPC foe entering the fight, a high-stakes encounter igniting, or (#3387) a SENIOR GM manually spotlighting a beat the automatic detectors miss (`SurgeTriggerKind.GM_MANUAL`, via `GMTriggerDramaticBeatAction`) — written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`. A manual trigger's `reason` is staff-facing provenance on the record, never broadcast. Narrated generically in the combat log; never names the bond, track, subject, or (for a manual trigger) the GM's stated reason.
 _Avoid_: clash (reserved, see above), spike (ambiguous with the pre-existing #872 grief "spike" internals — "surge" is the player-facing term), burst, power-up
 
+**Escalation intensity**:
+`CharacterEngagement.intensity_modifier`. The one lever the escalation tick, every
+`SurgeTriggerKind` beat, and `AudereThreshold.intensity_bonus` write. Drives anima cost,
+Soulfray and the Audere gates.
+_Avoid_: intensity bonus
+
+**Vulnerability power bonus**:
+`BreakBarConfig.intensity_bonus` -> `CombatOpponent.vulnerability_intensity_bonus` ->
+`power_intensity_bonus`. Extra power a PC technique derives while a broken boss is inside
+its vulnerability window. Never touches escalation intensity.
+_Avoid_: intensity bonus (ambiguous with Escalation intensity, above), vulnerability bonus
+
+**Boss beat** (#3445, ADR-0250):
+A phase transition, enrage, or break-bar break; each fires its own `SurgeTriggerKind`
+(`BOSS_PHASE` / `BOSS_ENRAGE` / `BOSS_BREAK`) for every ACTIVE PC, once per boss per phase.
+_Avoid_: boss event, phase spike
+
 **Edge / Setback** (GM fiat, #3387):
 A curated, catalog-safe one-round nudge a GM applies through the existing `gm_apply_condition` lever — two authored `ConditionTemplate` rows (`world/conditions/gm_edge_content.py`) delivering a ±10 `ConditionCheckModifier` scoped to the Combat `CheckCategory`, `scales_with_severity=True`, expiring at the end of the round applied. Not a new mechanism — no bespoke GM-fiat modifier system exists or should exist alongside it.
 _Avoid_: buff/debuff (generic — Edge/Setback name this specific GM-fiat lever), bonus/penalty

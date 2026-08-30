@@ -355,6 +355,21 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   (rounds escalate → costs spike → Soulfray mounts → `PendingAudereOffer`
   fires). Deferred: near-death (not just fallen) spikes, scene-EMIT tick
   narration, risk-level→default-curve GM tooling.
+- ~~**Boss beats never fired a dramatic surge**~~ **DONE (#3445):** the escalation
+  engine's dramatic-surge lever (above; extended #2013/#3387) had no `SurgeTriggerKind`
+  keyed off the boss anatomy, so a boss's phase transitions, enrages, and break-bar
+  breaks left every PC's intensity untouched. Three new trigger kinds - `BOSS_PHASE`,
+  `BOSS_ENRAGE`, `BOSS_BREAK` - fire from the two existing production seams:
+  `check_and_advance_boss_phase` (phase transition; `BOSS_ENRAGE` when the new phase
+  raises `damage_multiplier`, else `BOSS_PHASE`) and `_assess_boss_break_bar` (break,
+  inside the existing `if broke_this_round:` block), each surging every ACTIVE
+  participant through the shared `apply_dramatic_surge` write path. Magnitudes are
+  curve-authored (`EscalationCurve.boss_{phase,enrage,break}_spike_intensity_amount`,
+  0 disables that beat) rather than hardcoded. A boss beat cannot use the existing
+  `subject_sheet`-keyed dedup (a `CombatOpponent` generally has no `persona`), so
+  `DramaticSurgeRecord` gained `subject_opponent`/`subject_phase_number` and a third
+  partial unique constraint - a boss beat dedups per boss per phase, not once per
+  encounter (ADR-0250).
 - **Audere offer/accept player surface** — shipped (#873): qualifying casts persist a
   `PendingAudereOffer` row; players see and answer it via the REST inbox/respond
   endpoints (`/api/magic/audere/`) and the combat-panel ceremony dialog (auto-opens on

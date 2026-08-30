@@ -740,7 +740,11 @@ class CombatOpponent(SharedMemoryModel):
     )
     vulnerability_intensity_bonus = models.PositiveIntegerField(
         default=0,
-        help_text="Intensity bonus during vulnerability window; from BreakBarConfig.",
+        help_text=(
+            "Intensity bonus during vulnerability window; from BreakBarConfig. "
+            "Power-ledger term (feeds power_intensity_bonus), NOT the engagement's "
+            "intensity_modifier."
+        ),
     )
 
     # === Boss-fight structure: lieutenant gate (#2642) ===
@@ -2659,7 +2663,11 @@ class BreakBarConfig(SharedMemoryModel):
     vulnerability_rounds = models.PositiveIntegerField(default=2)
     intensity_bonus = models.PositiveIntegerField(
         default=2,
-        help_text="Flat intensity bonus to PC techniques during the window.",
+        help_text=(
+            "Flat intensity bonus to PC techniques during the window. "
+            "Power-ledger term (feeds power_intensity_bonus), NOT the engagement's "
+            "intensity_modifier."
+        ),
     )
 
     def __str__(self) -> str:
