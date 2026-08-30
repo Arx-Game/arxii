@@ -152,3 +152,75 @@ class TestCollector(DeclarationPatchMixin, TestCase):
             # how many declarations name it.
             with self.assertNumQueries(1):
                 rc.collect_required_content()
+
+
+class TestRealDeclarations(TestCase):
+    """The shipped declaration table is well-formed and probes resolve."""
+
+    def test_keys_are_unique(self) -> None:
+        # build_registry raises on a duplicate key.
+        registry = rc.build_registry(rc._declarations())
+        self.assertEqual(len(registry), len(rc._declarations()))
+
+    def test_every_declaration_is_populated(self) -> None:
+        for dep in rc._declarations():
+            with self.subTest(key=dep.key):
+                self.assertTrue(dep.key)
+                self.assertTrue(dep.label)
+                self.assertTrue(dep.consumer)
+                self.assertTrue(dep.consequence)
+                self.assertIn(dep.tier, (rc.DependencyTier.REQUIRED, rc.DependencyTier.TUNING))
+
+    def test_both_tiers_are_represented(self) -> None:
+        tiers = {dep.tier for dep in rc._declarations()}
+        self.assertEqual(tiers, {rc.DependencyTier.REQUIRED, rc.DependencyTier.TUNING})
+
+    def test_collector_runs_against_the_real_table(self) -> None:
+        snapshot = rc.collect_required_content()
+        total = (
+            len(snapshot.missing_required)
+            + len(snapshot.present_required)
+            + len(snapshot.missing_tuning)
+            + len(snapshot.present_tuning)
+        )
+        self.assertEqual(total, len(rc._declarations()))
+
+
+class TestSoulfrayStagePoolProbe(TestCase):
+    """Both directions: a stage without a pool must flip the probe."""
+
+    def test_missing_when_a_stage_has_no_pool(self) -> None:
+        from world.conditions.factories import ConditionStageFactory
+        from world.magic.audere import SOULFRAY_CONDITION_NAME
+
+        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        ConditionStageFactory(condition=template, stage_order=1, consequence_pool=None)
+        result = rc._probe_soulfray_stage_pools()
+        self.assertFalse(result.present)
+
+    def test_present_when_every_stage_has_a_pool(self) -> None:
+        from actions.factories import ConsequencePoolFactory
+        from world.conditions.factories import ConditionStageFactory
+        from world.magic.audere import SOULFRAY_CONDITION_NAME
+
+        template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        ConditionStageFactory(
+            condition=template, stage_order=1, consequence_pool=ConsequencePoolFactory()
+        )
+        result = rc._probe_soulfray_stage_pools()
+        self.assertTrue(result.present)
+
+
+class TestEscalationCurveProbe(TestCase):
+    def test_missing_with_no_rows(self) -> None:
+        self.assertFalse(rc._probe_escalation_curves().present)
+
+    def test_present_when_a_row_has_a_default_curve(self) -> None:
+        from world.combat.constants import StakesLevel
+        from world.combat.factories import EscalationCurveFactory
+        from world.combat.models import StakesEscalationModifier
+
+        curve = EscalationCurveFactory()
+        StakesEscalationModifier.objects.create(stakes_level=StakesLevel.LOCAL, default_curve=curve)
+        result = rc._probe_escalation_curves()
+        self.assertTrue(result.present)
