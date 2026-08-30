@@ -66,36 +66,96 @@ class ApplyMissionRewardBatchEmptyTests(TestCase):
         self.assertEqual(result.failed, ())
 
 
-class ApplyMissionRewardBatchLegendPointsStubSealTests(TestCase):
-    """LP queue rows stub-seal: applied=False, failure_reason references DESIGN §13.3."""
+class ApplyMissionRewardBatchLegendPointsTests(TestCase):
+    """LP queue rows pay priced Legend and flip applied (#3468).
 
-    def setUp(self) -> None:
-        self.actor = CharacterSheetFactory(character__db_key="LpBatchActor").character
-        self.deed = MissionDeedRecordFactory(actor=self.actor.sheet_data)
-        self.line = MissionDeedRewardLineFactory(
-            deed=self.deed,
+    Replaces ApplyMissionRewardBatchLegendPointsStubSealTests, which asserted
+    the sealed state — a row that failed every pass with a DESIGN §13.3 trace
+    and never paid. That was the bug, not the contract.
+    """
+
+    def _row(self, *, risk_tier: int, amount: int, level: int = 3, band_max: int = 3):
+        from world.classes.factories import CharacterClassLevelFactory
+
+        actor = CharacterSheetFactory(
+            character__db_key=f"LpActor{risk_tier}{amount}{level}{band_max}"
+        )
+        CharacterClassLevelFactory(character=actor, level=level, is_primary=True)
+        deed = MissionDeedRecordFactory(actor=actor)
+        # level_band_max is the THREAT LEVEL — the character level the mission
+        # was written for. risk_tier is how dangerous it is. Different scales.
+        deed.instance.template.risk_tier = risk_tier
+        deed.instance.template.level_band_min = max(1, band_max - 1)
+        deed.instance.template.level_band_max = band_max
+        deed.instance.template.save(update_fields=["risk_tier", "level_band_min", "level_band_max"])
+        line = MissionDeedRewardLineFactory(
+            deed=deed,
+            recipient=actor,
             kind=DeedRewardKind.POST_CRON,
             sink=DeedRewardSink.LEGEND_POINTS,
-            amount=25,
+            amount=amount,
         )
-        self.row = MissionRewardQueueFactory(line=self.line)
+        return MissionRewardQueueFactory(line=line), actor
 
-    def test_lp_row_remains_unapplied_after_batch(self) -> None:
+    def test_dangerous_mission_mints_a_deed_stamped_at_station(self) -> None:
+        from world.societies.models import LegendEntry
+
+        row, actor = self._row(risk_tier=5, amount=5_000, level=3)
         result = apply_mission_reward_batch()
-        self.assertEqual(result.applied, ())
-        self.assertEqual(len(result.failed), 1)
-        self.row.refresh_from_db()
-        self.assertFalse(self.row.applied)
-        self.assertIsNone(self.row.applied_at)
 
-    def test_lp_failure_reason_mentions_design_and_lp(self) -> None:
+        self.assertEqual(len(result.applied), 1)
+        row.refresh_from_db()
+        self.assertTrue(row.applied)
+        self.assertIsNotNone(row.applied_at)
+        entry = LegendEntry.objects.get(persona=actor.primary_persona)
+        # Station is min(level 3, tier 5) = 3.
+        self.assertEqual(entry.earned_at_level, 3)
+        self.assertGreater(entry.base_value, 0)
+
+    def test_declared_amount_caps_the_priced_value(self) -> None:
+        """line.amount is the author's ceiling, not the payout (ADR-0249)."""
+        from world.societies.models import LegendEntry
+
+        row, actor = self._row(risk_tier=5, amount=7, level=3)
         apply_mission_reward_batch()
-        self.row.refresh_from_db()
-        self.assertIn("DESIGN", self.row.failure_reason)
-        self.assertIn("13.3", self.row.failure_reason)
-        self.assertIn("LP", self.row.failure_reason)
+        row.refresh_from_db()
+        self.assertTrue(row.applied)
+        entry = LegendEntry.objects.get(persona=actor.primary_persona)
+        self.assertEqual(entry.base_value, 7)
+
+    def test_safe_mission_applies_the_row_and_mints_nothing(self) -> None:
+        """The regression guard for this whole issue.
+
+        A tier-1 mission is below the Legend floor, so it pays nothing. The row
+        must still flip applied — "correctly priced to zero" is a settled
+        outcome, not a fault. Leaving it unapplied would recreate the bug
+        #3468 fixed, in a new disguise: a row failing forever, silently.
+        """
+        from world.societies.models import LegendEntry
+
+        row, actor = self._row(risk_tier=1, amount=5_000, level=3)
+        result = apply_mission_reward_batch()
+
+        self.assertEqual(len(result.applied), 1)
+        self.assertEqual(result.failed, ())
+        row.refresh_from_db()
+        self.assertTrue(row.applied)
+        self.assertFalse(LegendEntry.objects.filter(persona=actor.primary_persona).exists())
+
+    def test_overlevelled_earner_applies_the_row_and_mints_nothing(self) -> None:
+        """Same rule from the other direction: a tier-4 run is no danger at 20."""
+        from world.societies.models import LegendEntry
+
+        # Mission banded for level 4; the earner is level 20. compute_effective_risk
+        # decays HIGH far below the floor at that gap, so they earn nothing.
+        row, actor = self._row(risk_tier=4, amount=5_000, level=20, band_max=4)
+        apply_mission_reward_batch()
+        row.refresh_from_db()
+        self.assertTrue(row.applied)
+        self.assertFalse(LegendEntry.objects.filter(persona=actor.primary_persona).exists())
 
     def test_lp_row_count_unchanged(self) -> None:
+        self._row(risk_tier=5, amount=25)
         before = MissionRewardQueue.objects.count()
         apply_mission_reward_batch()
         self.assertEqual(MissionRewardQueue.objects.count(), before)
@@ -154,9 +214,13 @@ class ApplyMissionRewardBatchMixedQueueTests(TestCase):
         result = apply_mission_reward_batch()
         touched_ids = {row.pk for row in result.applied} | {row.pk for row in result.failed}
         self.assertEqual(touched_ids, {self.lp_row.pk, self.resonance_row.pk})
-        # Per-row outcome: LP stub-seals (fails); RESONANCE grants for real.
-        self.assertEqual({row.pk for row in result.failed}, {self.lp_row.pk})
-        self.assertEqual({row.pk for row in result.applied}, {self.resonance_row.pk})
+        # #3468: both sinks now succeed. LP used to stub-seal into result.failed;
+        # a tier-1 mission prices its Legend to zero, which is a SETTLED outcome
+        # and applies the row rather than failing it.
+        self.assertEqual(result.failed, ())
+        self.assertEqual(
+            {row.pk for row in result.applied}, {self.lp_row.pk, self.resonance_row.pk}
+        )
 
     def test_pre_applied_row_is_not_reprocessed(self) -> None:
         apply_mission_reward_batch()
@@ -205,12 +269,17 @@ class ApplyMissionRewardBatchIdempotencyTests(TestCase):
         self.lp_row = MissionRewardQueueFactory(line=self.lp_line)
         self.resonance_row = MissionRewardQueueFactory(line=self.resonance_line)
 
-    def test_double_run_keeps_lp_applied_false_and_resonance_applied_true(self) -> None:
+    def test_double_run_applies_both_sinks_once(self) -> None:
+        """#3468: idempotency is now uniform. LP rows used to never flip.
+
+        Before, an LP row was re-selected and re-failed on every pass forever,
+        which is what made the missing payout invisible.
+        """
         apply_mission_reward_batch()
         apply_mission_reward_batch()
         self.lp_row.refresh_from_db()
         self.resonance_row.refresh_from_db()
-        self.assertFalse(self.lp_row.applied)
+        self.assertTrue(self.lp_row.applied)
         self.assertTrue(self.resonance_row.applied)
 
     def test_double_run_does_not_duplicate_rows(self) -> None:
@@ -283,20 +352,25 @@ class ApplyMissionRewardBatchPerRowAtomicityTests(TestCase):
         finally:
             cron_module._grant_legend_points = original
 
-        # All three should appear in result.failed (each was caught).
+        # #3468: only the row that actually raised fails. A and C used to fail
+        # too, because every LP row raised the stub-seal NotImplementedError —
+        # which meant this test proved per-row atomicity using three failures
+        # where only one was a real fault. Now it proves the sharper thing: a
+        # genuine exception on the middle row does not block its neighbours.
         failed_pks = {row.pk for row in result.failed}
-        self.assertEqual(failed_pks, {self.row_a.pk, boom_pk, self.row_c.pk})
+        self.assertEqual(failed_pks, {boom_pk})
+        self.assertEqual({row.pk for row in result.applied}, {self.row_a.pk, self.row_c.pk})
 
-        # Per-row atomicity: rows A and C have a DESIGN-flavoured failure
-        # reason; row B has the RuntimeError surfaced as its failure reason.
+        # Per-row atomicity: A and C applied cleanly on either side of B's
+        # raise, and only B carries a failure reason.
         self.row_a.refresh_from_db()
         self.row_b.refresh_from_db()
         self.row_c.refresh_from_db()
-        self.assertFalse(self.row_a.applied)
+        self.assertTrue(self.row_a.applied)
         self.assertFalse(self.row_b.applied)
-        self.assertFalse(self.row_c.applied)
-        self.assertIn("DESIGN", self.row_a.failure_reason)
-        self.assertIn("DESIGN", self.row_c.failure_reason)
+        self.assertTrue(self.row_c.applied)
+        self.assertEqual(self.row_a.failure_reason, "")
+        self.assertEqual(self.row_c.failure_reason, "")
         self.assertIn(boom_msg, self.row_b.failure_reason)
 
 
