@@ -2,19 +2,22 @@
 
 Phase 5b.1 wrote :class:`MissionRewardQueue` rows for every POST_CRON
 reward line. Phase 5b.2 is the *cron* that walks those queued rows and
-grants the underlying reward downstream. The RESONANCE grant is implemented
-(#1737); the LEGEND_POINTS grant remains stub-sealed:
+grants the underlying reward downstream. Both sinks are implemented:
 
-  * LEGEND_POINTS — the LP grant entry point requires richer line shape
-    than the queue carries today (persona walk + LegendSourceType + title).
-    See DESIGN §13.3.
-  * RESONANCE — implemented (#1737): resolves the recipient's CharacterSheet
-    and calls grant_resonance with source=GainSource.MISSION_REWARD.
+  * RESONANCE (#1737) — resolves the recipient's CharacterSheet and calls
+    grant_resonance with source=GainSource.MISSION_REWARD.
+  * LEGEND_POINTS (#3468) — prices the award against the mission's own
+    risk_tier and the earner's station, then mints a solo deed. Stub-sealed
+    until #3468; DESIGN §13.3 recorded the blocker as "richer line shape"
+    (persona walk + LegendSourceType + title), all of which the queue row
+    always reached through ``row.line``. What was genuinely missing was a
+    *price*, which #3463/ADR-0249 supplied.
 
-The LP helper raises :class:`NotImplementedError` with a structured DESIGN
-message; the batch catches the raise, populates ``failure_reason``, and
-leaves the row at ``applied=False``. The RESONANCE helper succeeds and flips
-the row to ``applied=True``.
+Both helpers succeed and flip the row to ``applied=True``. A LEGEND_POINTS
+row that prices to zero — an over-levelled earner, or a mission below the
+Legend floor — still applies, because "correctly priced to nothing" is a
+settled outcome and not a fault. Leaving it unapplied would recreate the bug
+#3468 fixed: a row that fails forever and silently never pays.
 
 Per-row :func:`transaction.atomic` keeps a fault on row N from corrupting
 adjacent rows; the batch returns separate applied/failed tuples for each
@@ -35,13 +38,10 @@ from world.missions.types import RewardBatchResult
 
 logger = logging.getLogger(__name__)
 
-# Per-sink stub-seal messages. LP references DESIGN §13.3 — the missions
-# design doc section that explains why the LP grant needs a richer payload
-# than the queue carries today.
-_LP_STUB_MSG = (
-    "DESIGN §13.3 — LP grant entry point requires richer line shape: "
-    "persona walk + LegendSourceType + title. Awaiting payload-enrichment phase."
-)
+# Lazy-row LegendSourceType name for mission-earned Legend, following the
+# get_or_create idiom every other deed source uses (LegendSourceType has no
+# fixed enum of members, so rows are created on first use, not fixture-seeded).
+_MISSION_SOURCE_TYPE_NAME = "Mission"
 
 # MissionRewardQueue.failure_reason is a CharField(max_length=500); clip
 # anything longer when we surface unexpected exceptions.
@@ -49,16 +49,60 @@ _FAILURE_REASON_MAX = 500
 
 
 def _grant_legend_points(row: MissionRewardQueue) -> None:
-    """Stub-sealed LP grant entry point.
+    """Pay the Legend a mission deed's LEGEND_POINTS line promised (#3468).
 
-    The canonical LP grant function expects a per-persona walk plus a
-    :class:`LegendSourceType` (lookup) plus a title — none of which the
-    queue row carries today. Until the payload-enrichment phase lands, this
-    helper raises a structured NotImplementedError so the cron records a
-    "tried but blocked" trace on the row rather than silently flipping
-    ``applied=True``.
+    Stub-sealed until now. The blocker DESIGN §13.3 recorded was that the queue
+    row lacked "a per-persona walk plus a LegendSourceType plus a title" — all
+    three are reachable from ``row.line`` today, and #3463 supplied the missing
+    fourth thing nobody had written down: a *price*.
+
+    Priced, never asserted (ADR-0249). ``line.amount`` is the author's declared
+    ceiling; the mission's own ``risk_tier`` is the settled reality; Legend pays
+    the weaker, capped by the earner's station and floored at nothing below
+    ``LEGEND_RISK_FLOOR``.
+
+    **A zero price still applies the row.** An over-levelled earner, or a
+    mission below the floor, is a *settled outcome* — not a fault. Leaving the
+    row unapplied would recreate this issue's own bug (a queue row that fails
+    forever and silently never pays) in a new disguise, so the only difference
+    is whether a deed is minted.
     """
-    raise NotImplementedError(_LP_STUB_MSG)
+    from world.missions.services.legend_pricing import (  # noqa: PLC0415
+        mission_settlement_context,
+        priced_legend_value,
+    )
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.societies.models import LegendSourceType  # noqa: PLC0415
+    from world.societies.services import create_solo_deed  # noqa: PLC0415
+
+    line = row.line
+    sheet = line.recipient
+    template = line.deed.instance.template
+    settled_risk, station = mission_settlement_context(template, sheet)
+    value = priced_legend_value(line.amount or 0, settled_risk, station)
+    if value <= 0:
+        logger.info(
+            "Mission LP row %s priced to zero (tier=%s, band_max=%s, station=%s) — "
+            "applied with no deed minted.",
+            row.pk,
+            template.risk_tier,
+            template.level_band_max,
+            station,
+        )
+        return
+
+    persona = active_persona_for_sheet(sheet) or sheet.primary_persona
+    source_type, _created = LegendSourceType.objects.get_or_create(
+        name=_MISSION_SOURCE_TYPE_NAME,
+        defaults={"description": "Deeds done on contract — missions run and survived."},
+    )
+    create_solo_deed(
+        persona,
+        f"Mission deed: {template.name}",
+        source_type,
+        value,
+        earned_at_level=station,
+    )
 
 
 def _grant_resonance(row: MissionRewardQueue) -> None:
@@ -105,10 +149,8 @@ def _apply_one(row: MissionRewardQueue) -> str | None:
             line_pk=row.line_id,
         )
 
-    # Success path. RESONANCE grants now reach here and succeed (#1737).
-    # LEGEND_POINTS still always raises via _grant_legend_points's
-    # DESIGN §13.3 stub-seal (out of scope for #1737), so this path is
-    # LP-unreachable but RESONANCE-reachable.
+    # Success path, reached by both sinks since #3468 — including a
+    # LEGEND_POINTS row that priced to zero, which is settled, not failed.
     row.applied = True
     row.applied_at = timezone.now()
     row.failure_reason = ""
@@ -126,20 +168,16 @@ def apply_mission_reward_batch() -> RewardBatchResult:
     """Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.
 
     Each row is processed in its own savepoint (:func:`transaction.atomic`)
-    so a fault on row N does not corrupt rows N-1 or N+1. ``_grant_legend_points``
-    still always raises :class:`NotImplementedError` with a DESIGN §13.3
-    message — the cron catches that, records the message on the row's
-    ``failure_reason``, and leaves ``applied=False``. ``_grant_resonance`` now
-    succeeds (#1737): it calls the atomic ``grant_resonance()``, and on return
-    this function flips the row to ``applied=True``.
+    so a fault on row N does not corrupt rows N-1 or N+1. Both
+    ``_grant_legend_points`` (#3468) and ``_grant_resonance`` (#1737) succeed
+    and flip the row to ``applied=True``.
 
-    Idempotency now works differently per sink. LEGEND_POINTS rows never
-    flip ``applied``, so rerunning the batch simply re-selects and re-fails
-    them the same way every time. RESONANCE rows hold because (1) the
-    ``applied=False`` filter below stops re-selecting a row once it
-    succeeds, and (2) ``grant_resonance()`` is itself wrapped in
-    :func:`transaction.atomic`, so a row can never end up applied without
-    the resonance grant having actually committed (or vice versa) — a crash
+    Idempotency is now uniform across both sinks (#3468 — LEGEND_POINTS rows
+    used to never flip ``applied``, so the batch re-selected and re-failed
+    them forever). It holds because (1) the ``applied=False`` filter below
+    stops re-selecting a row once it succeeds, and (2) each grant is itself
+    wrapped in :func:`transaction.atomic`, so a row can never end up applied
+    without its grant having actually committed (or vice versa) — a crash
     mid-grant leaves the row unapplied and safe to retry.
 
     Returns:
@@ -170,10 +208,6 @@ def apply_mission_reward_batch() -> RewardBatchResult:
         try:
             with transaction.atomic():
                 outcome = _apply_one(row)
-        except NotImplementedError as exc:
-            _record_failure(row, str(exc))
-            failed.append(row)
-            continue
         except MissionRewardRoutingError as exc:
             _record_failure(row, exc.user_message)
             failed.append(row)

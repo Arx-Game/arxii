@@ -49,6 +49,7 @@ class Command(BaseCommand):
         violations: list[str] = []
         violations.extend(self._check_route_rewards())
         violations.extend(self._check_renown_awards())
+        violations.extend(self._check_unbanded_templates())
 
         if not violations:
             self.stdout.write("No legend floor violations found.")
@@ -56,6 +57,31 @@ class Command(BaseCommand):
             self.stdout.write(f"{len(violations)} legend floor violation(s):")
             for v in violations:
                 self.stdout.write(v)
+
+    def _check_unbanded_templates(self) -> list[str]:
+        """Templates that promise Legend they can never pay (#3468).
+
+        The #2051 authoring floor asks "is the declared tier high enough".
+        Settlement asks a second question the authoring gate cannot: **is the
+        mission banded at a character level at all**. A LEGEND_POINTS line on a
+        template with no ``level_band_max`` prices to no station and therefore
+        no Legend, however high its risk_tier — it passes authoring and pays
+        nothing, which is exactly the silent failure #3468 fixed one layer down.
+        """
+        violations: list[str] = []
+        for reward in MissionOptionRouteReward.objects.filter(
+            sink=DeedRewardSink.LEGEND_POINTS,
+        ).select_related("route__option__node__template"):
+            template = _template_for_reward(reward)
+            if template is None:
+                continue
+            if template.risk_tier >= LEGEND_RISK_FLOOR_TIER and not template.level_band_max:
+                violations.append(
+                    f"  Reward {reward.pk} → template '{template.name}' "
+                    f"(risk_tier={template.risk_tier}, no level_band_max — "
+                    f"prices to zero Legend)"
+                )
+        return violations
 
     def _check_route_rewards(self) -> list[str]:
         """Check MissionOptionRouteReward rows with LEGEND_POINTS sink."""

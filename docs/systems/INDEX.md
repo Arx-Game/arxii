@@ -1344,6 +1344,14 @@ Social structures, organizations, reputation, and legend tracking.
   questions. A battle with no staked beat has no target level, hence no station, hence
   no advancement Legend. ADR-0122's curation survives (RESCUE/ROUT/BREACH, per-kind
   titles) and its standout stacking is preserved battle-side.
+- **Mission Legend (#3468):** both mission Legend paths price through
+  `world.missions.services.legend_pricing`. A mission is its own settled context —
+  its template's `risk_tier` is the declaration and its `level_band_max` is the
+  threat level, so no `StakeContractActivation` is consulted (which is what makes the
+  deferred POST_CRON payout tractable, since the contract has long closed by cron
+  time). `_grant_legend_points` is unsealed: a queued `LEGEND_POINTS` row now mints a
+  priced solo deed stamped at station, and a row that prices to **zero** still flips
+  `applied` — "correctly priced to nothing" is a settled outcome, not a fault.
 - **Legend settlement (#3463, ADR-0249):** Legend is **settled at the end of a story
   unit**, never minted at the act. `world.societies.legend_settlement.settle_legend_for`
   is the single seam: per-person peril floor (risk priced against each earner's OWN
