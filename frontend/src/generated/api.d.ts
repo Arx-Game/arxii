@@ -90,7 +90,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/achievements/character-titles/': {
+  '/api/achievements/persona-titles/': {
     parameters: {
       query?: never;
       header?: never;
@@ -98,12 +98,13 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List a character's earned, displayable titles (#1522).
+     * @description List a persona's earned, displayable titles (#1522, #3466).
      *
      *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
-     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     *     read any persona's titles. Filter by ``persona`` (== Persona pk, required). Not filterable by
+     *     character sheet on purpose — see ``PersonaTitleFilterSet``.
      */
-    get: operations['achievements_character_titles_list'];
+    get: operations['achievements_persona_titles_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -112,7 +113,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/achievements/character-titles/{id}/': {
+  '/api/achievements/persona-titles/{id}/': {
     parameters: {
       query?: never;
       header?: never;
@@ -120,12 +121,13 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List a character's earned, displayable titles (#1522).
+     * @description List a persona's earned, displayable titles (#1522, #3466).
      *
      *     Titles are cosmetic and public — a character shows them off — so any authenticated user can
-     *     read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+     *     read any persona's titles. Filter by ``persona`` (== Persona pk, required). Not filterable by
+     *     character sheet on purpose — see ``PersonaTitleFilterSet``.
      */
-    get: operations['achievements_character_titles_retrieve'];
+    get: operations['achievements_persona_titles_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -25753,19 +25755,6 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
-    /**
-     * @description Serializer for an earned, displayable character title (#1522).
-     *
-     *     Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
-     *     title's player-facing name comes from the linked TITLE ``RewardDefinition``.
-     */
-    CharacterTitle: {
-      readonly id: number;
-      readonly title: string;
-      readonly reward_key: string;
-      /** Format: date-time */
-      readonly earned_at: string;
-    };
     /** @description Read-only vitals payload for the character sheet panel (#521). */
     CharacterVitals: {
       health: number;
@@ -38553,6 +38542,21 @@ export interface components {
       readonly position: components['schemas']['PositionSummary'] | null;
     };
     /**
+     * @description Serializer for an earned, displayable character title (#1522, #3466).
+     *
+     *     Cosmetic display only — the mechanical reward attaches to the achievement, not here.
+     *     ``title`` reads ``display_name`` so it works for both branches (an authored TITLE
+     *     ``RewardDefinition`` or a deed's own name); ``reward_key`` is null on the deed branch,
+     *     since there is no ``RewardDefinition`` to key by.
+     */
+    PersonaTitle: {
+      readonly id: number;
+      readonly title: string;
+      readonly reward_key: string | null;
+      /** Format: date-time */
+      readonly earned_at: string;
+    };
+    /**
      * @description * `primary` - Primary
      *     * `established` - Established
      *     * `temporary` - Temporary
@@ -45181,10 +45185,11 @@ export interface operations {
       };
     };
   };
-  achievements_character_titles_list: {
+  achievements_persona_titles_list: {
     parameters: {
-      query?: {
-        character_sheet?: number;
+      query: {
+        /** @description Persona id (required) -- returns that persona's earned titles. */
+        persona: number;
       };
       header?: never;
       path?: never;
@@ -45197,17 +45202,17 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CharacterTitle'][];
+          'application/json': components['schemas']['PersonaTitle'][];
         };
       };
     };
   };
-  achievements_character_titles_retrieve: {
+  achievements_persona_titles_retrieve: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this character title. */
+        /** @description A unique integer value identifying this persona title. */
         id: number;
       };
       cookie?: never;
@@ -45219,7 +45224,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CharacterTitle'];
+          'application/json': components['schemas']['PersonaTitle'];
         };
       };
     };

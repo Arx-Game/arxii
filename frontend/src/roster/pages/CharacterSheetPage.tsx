@@ -59,6 +59,12 @@ export function CharacterSheetPage() {
   // (heat, org memberships/reputation) onto this sheet.
   const viewedMyEntry = myEntries?.find((e) => e.id === entryId);
   const viewedPersonaId = viewedMyEntry?.primary_persona_id ?? null;
+  // For the Titles tab (#3466): titles are persona-scoped now, so the panel needs the
+  // presented persona's id, not the CharacterSheet pk. Own-view already has it
+  // (`viewedPersonaId` above); a foreign, non-privileged view's `sheetPayload.personas` comes
+  // back from the server pre-filtered to exactly one entry — the presented persona — so its
+  // id is the same fallback. Never fetch separately just to resolve this.
+  const titlesPersonaId = viewedPersonaId ?? sheetPayload?.personas[0]?.id ?? null;
   // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
   // resolve the active character's roster entry. Null when no character is active → no secrets.
   const activeCharacterName = useAppSelector((state) => state.game.active);
@@ -204,9 +210,9 @@ export function CharacterSheetPage() {
         </TabsContent>
 
         <TabsContent value="titles" className="space-y-4">
-          {/* Titles are cosmetic and public — render for any viewer. character.id is the
-              CharacterSheet pk the titles API filters by. */}
-          <TitlesPanel characterSheetId={entry.character.id} />
+          {/* Titles are cosmetic and public — render for any viewer. Persona-scoped (#3466):
+              see titlesPersonaId above for how it's resolved without a second fetch. */}
+          <TitlesPanel personaId={titlesPersonaId} />
         </TabsContent>
 
         <TabsContent value="distinctions" className="space-y-4">

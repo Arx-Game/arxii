@@ -1,22 +1,23 @@
 /**
- * TitlesPanel (#1522) — a character's earned, displayable titles.
+ * TitlesPanel (#1522, #3466) — a persona's earned, displayable titles.
  *
  * The web Titles tab, mirroring the telnet `sheet/titles` section. Titles are cosmetic and
- * public (a character shows them off), so the panel renders for any viewer. Each title is the
- * name of a TITLE-type reward attached to an achievement the character earned.
+ * public (a character shows them off), so the panel renders for any viewer. Each title is
+ * either the name of a TITLE-type reward attached to an achievement, or a deed's own name —
+ * always the one PERSONA (face) that earned it, never the character sheet as a whole.
  */
 
 import { Loader2 } from 'lucide-react';
 
-import { useCharacterTitles } from '../queries';
+import { usePersonaTitles } from '../queries';
 
 interface Props {
-  /** CharacterSheet pk (shared with the character ObjectDB pk). */
-  characterSheetId: number;
+  /** Persona pk whose titles to show; null while the caller hasn't resolved one yet. */
+  personaId: number | null;
 }
 
-export function TitlesPanel({ characterSheetId }: Props) {
-  const { data: titles, isLoading } = useCharacterTitles(characterSheetId);
+export function TitlesPanel({ personaId }: Props) {
+  const { data: titles, isLoading } = usePersonaTitles(personaId);
 
   if (isLoading) {
     return (

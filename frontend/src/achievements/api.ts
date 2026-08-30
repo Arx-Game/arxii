@@ -8,24 +8,26 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
 
-export type CharacterTitle = components['schemas']['CharacterTitle'];
+export type PersonaTitle = components['schemas']['PersonaTitle'];
 
 interface PaginatedTitles {
-  results: CharacterTitle[];
+  results: PersonaTitle[];
 }
 
 /**
- * Fetch a character's earned, displayable titles (newest first).
- * GET /api/achievements/character-titles/?character_sheet={id}
+ * Fetch a persona's earned, displayable titles (newest first).
+ * GET /api/achievements/persona-titles/?persona={id}
+ *
+ * Titles are scoped to the PERSONA that earned them, not the character sheet (#3466) — a
+ * deed earned behind a mask titles the mask, never the sheet. `persona` is required by the
+ * backend (400 if absent, since the endpoint has no pagination).
  *
  * The achievements API isn't globally paginated, so the list endpoint returns a bare array;
  * tolerate a paginated `{results}` shape too in case pagination is added later.
  */
-export async function fetchCharacterTitles(characterSheetId: number): Promise<CharacterTitle[]> {
-  const res = await apiFetch(
-    `/api/achievements/character-titles/?character_sheet=${characterSheetId}`
-  );
+export async function fetchPersonaTitles(personaId: number): Promise<PersonaTitle[]> {
+  const res = await apiFetch(`/api/achievements/persona-titles/?persona=${personaId}`);
   if (!res.ok) throw new Error('Failed to load titles');
-  const data = (await res.json()) as CharacterTitle[] | PaginatedTitles;
+  const data = (await res.json()) as PersonaTitle[] | PaginatedTitles;
   return Array.isArray(data) ? data : data.results;
 }
