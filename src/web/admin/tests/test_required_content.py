@@ -408,3 +408,75 @@ class TestRequiredContentFragmentView(TestCase):
         self.client.force_login(self.super)
         resp = self.client.get(reverse("admin_ops"))
         self.assertIn('id="panel-ops-required-content"', resp.content.decode())
+
+
+class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, TestCase):
+    """The panel must render consequence/consumer/missing text, not just a label.
+
+    A test that only checks the label would pass against a template that
+    dropped every other column - see the delete-the-column experiment noted
+    in the Task 3 fix report for #3444.
+    """
+
+    LABEL = "Distinctive Sentinel Label Zyzzyva"
+    CONSUMER = "world/example_detail.py:99 distinctive_consumer_fn()"
+    CONSEQUENCE = "Distinctive consequence text: the sentinel test breaks quietly."
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.accounts.models import AccountDB
+
+        cls.super = AccountDB.objects.create_superuser(
+            "rcdetailroot", "rcdetail@example.com", "pw-123456"
+        )
+
+    def _dependency(self, probe: rc.ContentProbe, key: str) -> rc.ContentDependency:
+        return rc.ContentDependency(
+            key=key,
+            label=self.LABEL,
+            tier=rc.DependencyTier.REQUIRED,
+            consumer=self.CONSUMER,
+            consequence=self.CONSEQUENCE,
+            probe=probe,
+        )
+
+    def test_missing_dependency_detail_renders_in_the_panel(self) -> None:
+        from django.urls import reverse
+
+        probe = rc.CustomProbe(
+            fn=lambda: rc.ProbeResult(
+                present=False,
+                missing=("Widget-Alpha",),
+                detail="Widget-Alpha row is absent from this database.",
+            )
+        )
+        dep = self._dependency(probe, "detail-render-missing")
+
+        self.client.force_login(self.super)
+        with self.patch_declarations((dep,)):
+            resp = self.client.get(reverse("admin_ops_required_content"))
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(self.LABEL, body)
+        self.assertIn(self.CONSUMER, body)
+        self.assertIn(self.CONSEQUENCE, body)
+        self.assertIn("Widget-Alpha", body)
+        self.assertIn("Widget-Alpha row is absent from this database.", body)
+
+    def test_all_present_renders_the_nothing_missing_state(self) -> None:
+        from django.urls import reverse
+
+        probe = rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True))
+        dep = self._dependency(probe, "detail-render-present")
+
+        self.client.force_login(self.super)
+        with self.patch_declarations((dep,)):
+            resp = self.client.get(reverse("admin_ops_required_content"))
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(
+            "Nothing missing. Every required content dependency resolved against this database.",
+            body,
+        )
