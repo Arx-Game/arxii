@@ -16,6 +16,7 @@ from world.societies.models import (
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
+    LegendLevelCalibration,
     LegendSourceType,
     LegendSpread,
     NeighborhoodTurf,
@@ -619,6 +620,24 @@ class LegendEventAdmin(admin.ModelAdmin):
         return obj.deeds.count()
 
     deed_count.short_description = "Deeds"
+
+
+@admin.register(LegendLevelCalibration)
+class LegendLevelCalibrationAdmin(admin.ModelAdmin):
+    """Admin interface for the Rite of Honors per-level dials (#3466)."""
+
+    list_display = [
+        "level",
+        "honor_hares_required",
+        "honor_value_added",
+        "deed_title_threshold",
+    ]
+    list_editable = [
+        "honor_hares_required",
+        "honor_value_added",
+        "deed_title_threshold",
+    ]
+    ordering = ["level"]
 
 
 @admin.register(SpreadingConfig)

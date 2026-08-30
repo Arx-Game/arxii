@@ -19,6 +19,7 @@ from world.societies.models import (
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
+    LegendLevelCalibration,
     LegendSourceType,
     LegendSpread,
     Organization,
@@ -325,6 +326,18 @@ class CovenantLegendCreditFactory(factory_django.DjangoModelFactory):
 
     entry = factory.SubFactory(LegendEntryFactory)
     covenant = factory.SubFactory("world.covenants.factories.CovenantFactory")
+
+
+class LegendLevelCalibrationFactory(factory_django.DjangoModelFactory):
+    """Factory for LegendLevelCalibration rows."""
+
+    class Meta:
+        model = LegendLevelCalibration
+
+    level = factory.Sequence(lambda n: n)
+    honor_hares_required = 1
+    honor_value_added = 10
+    deed_title_threshold = 100
 
 
 # Specialized factories for common test scenarios

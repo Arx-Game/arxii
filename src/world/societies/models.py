@@ -1783,6 +1783,43 @@ class LegendSettlementConfig(SharedMemoryModel):
         )
 
 
+class LegendLevelCalibration(SharedMemoryModel):
+    """Per-level dials for honoring a deed and for deed-granted titles (#3466).
+
+    One row per character level. Sibling of ``RiskCalibration``, which keys by risk
+    tier as this keys by level. Authored content: **nothing in code invents these
+    numbers**, and lookups are deliberately unguarded - a missing row raises so the
+    admin required-content panel surfaces it, rather than a silent default quietly
+    mispricing every honor. Do not add a ``try``/``except`` or a ``.first() or ...``
+    fallback at any call site.
+    """
+
+    level = models.PositiveSmallIntegerField(
+        unique=True,
+        help_text="The character level this row prices. Level 0 is meaningful: a deed "
+        "settled at station 0 was won outside a perilous stakes contract.",
+    )
+    honor_hares_required = models.PositiveSmallIntegerField(
+        help_text="Golden Hares a character of this level surrenders to honor a deed.",
+    )
+    honor_value_added = models.PositiveIntegerField(
+        help_text="Legend a voice at this level adds to a deed, before the event ceiling "
+        "clamps it.",
+    )
+    deed_title_threshold = models.PositiveIntegerField(
+        help_text="base_value a deed at this station must reach before it grants its "
+        "earner a title.",
+    )
+
+    class Meta:
+        ordering = ["level"]
+        verbose_name = "legend level calibration"
+        verbose_name_plural = "legend level calibrations"
+
+    def __str__(self) -> str:
+        return f"Level {self.level} legend calibration"
+
+
 class LegendContribution(SharedMemoryModel):
     """What one character actually did during a staked unit (#3463).
 
