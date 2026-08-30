@@ -224,3 +224,149 @@ class TestEscalationCurveProbe(TestCase):
         StakesEscalationModifier.objects.create(stakes_level=StakesLevel.LOCAL, default_curve=curve)
         result = rc._probe_escalation_curves()
         self.assertTrue(result.present)
+
+
+class TestAudereMajoraThresholdsProbe(TestCase):
+    """Both directions: any boundary level missing must flip the probe."""
+
+    def test_missing_when_a_boundary_level_is_absent(self) -> None:
+        from world.magic.factories import ensure_audere_majora_threshold
+
+        ensure_audere_majora_threshold(boundary_level=5)
+        ensure_audere_majora_threshold(boundary_level=10)
+        ensure_audere_majora_threshold(boundary_level=15)
+        # boundary_level=20 deliberately left absent.
+        result = rc._probe_audere_majora_thresholds()
+        self.assertFalse(result.present)
+        self.assertIn("20", result.missing)
+
+    def test_present_when_all_four_boundary_levels_exist(self) -> None:
+        from world.magic.factories import ensure_audere_majora_threshold
+
+        for level in (5, 10, 15, 20):
+            ensure_audere_majora_threshold(boundary_level=level)
+        result = rc._probe_audere_majora_thresholds()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestCapabilityBridgesProbe(TestCase):
+    """Patches build_capability_power_panel per the brief - no real corpus needed."""
+
+    def test_missing_when_the_zero_bucket_is_non_empty(self) -> None:
+        panel = mock.Mock(zero_bucket=["Some Capability"])
+        with mock.patch(
+            "web.admin.tuning.capability_power_analytics.build_capability_power_panel",
+            return_value=panel,
+        ):
+            result = rc._probe_capability_bridges()
+        self.assertFalse(result.present)
+
+    def test_present_when_the_zero_bucket_is_empty(self) -> None:
+        panel = mock.Mock(zero_bucket=[])
+        with mock.patch(
+            "web.admin.tuning.capability_power_analytics.build_capability_power_panel",
+            return_value=panel,
+        ):
+            result = rc._probe_capability_bridges()
+        self.assertTrue(result.present)
+
+
+class TestTravelSpeedModifierTargetProbe(TestCase):
+    """A row named right but filed under the wrong category must report missing."""
+
+    def test_missing_when_the_category_is_wrong(self) -> None:
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        wrong_category = ModifierCategoryFactory(name="combat")
+        ModifierTargetFactory(name="travel_speed", category=wrong_category)
+        result = rc._probe_travel_speed_modifier_target()
+        self.assertFalse(result.present)
+
+    def test_present_when_the_category_matches(self) -> None:
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        travel_category = ModifierCategoryFactory(name="travel")
+        ModifierTargetFactory(name="travel_speed", category=travel_category)
+        result = rc._probe_travel_speed_modifier_target()
+        self.assertTrue(result.present)
+
+
+class TestGossipCheckTypeProbe(TestCase):
+    """A Gossip CheckType filed under the wrong category must report missing."""
+
+    def test_missing_when_the_category_is_wrong(self) -> None:
+        from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+        from world.secrets.constants import GOSSIP_CHECK_TYPE_NAME
+
+        wrong_category = CheckCategoryFactory(name="Combat")
+        CheckTypeFactory(name=GOSSIP_CHECK_TYPE_NAME, category=wrong_category)
+        result = rc._probe_gossip_check_type()
+        self.assertFalse(result.present)
+
+    def test_present_when_the_category_matches(self) -> None:
+        from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+        from world.secrets.constants import GOSSIP_CHECK_TYPE_NAME
+
+        social_category = CheckCategoryFactory(name="Social")
+        CheckTypeFactory(name=GOSSIP_CHECK_TYPE_NAME, category=social_category)
+        result = rc._probe_gossip_check_type()
+        self.assertTrue(result.present)
+
+
+class TestGossipSpecializationProbe(TestCase):
+    """A Gossip Specialization filed under the wrong parent skill must report missing."""
+
+    def test_missing_when_the_parent_skill_trait_is_wrong(self) -> None:
+        from world.skills.factories import SkillFactory, SpecializationFactory
+
+        wrong_skill = SkillFactory(trait__name="Deception")
+        SpecializationFactory(name="Gossip", parent_skill=wrong_skill)
+        result = rc._probe_gossip_specialization()
+        self.assertFalse(result.present)
+
+    def test_present_when_the_parent_skill_trait_matches(self) -> None:
+        from world.skills.factories import SkillFactory, SpecializationFactory
+
+        persuasion_skill = SkillFactory(trait__name="Persuasion")
+        SpecializationFactory(name="Gossip", parent_skill=persuasion_skill)
+        result = rc._probe_gossip_specialization()
+        self.assertTrue(result.present)
+
+
+class TestWillpowerStatTraitProbe(TestCase):
+    """A willpower Trait of the wrong trait_type must report missing."""
+
+    def test_missing_when_the_trait_type_is_wrong(self) -> None:
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitType
+
+        TraitFactory(name="willpower", trait_type=TraitType.SKILL)
+        result = rc._probe_willpower_stat_trait()
+        self.assertFalse(result.present)
+
+    def test_present_when_the_trait_type_matches(self) -> None:
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitType
+
+        TraitFactory(name="willpower", trait_type=TraitType.STAT)
+        result = rc._probe_willpower_stat_trait()
+        self.assertTrue(result.present)
+
+
+class TestHostileSocialConsentCategoryProbe(TestCase):
+    """A row named 'Hostile' under the wrong key must report missing (key, not name)."""
+
+    def test_missing_when_the_key_is_wrong(self) -> None:
+        from world.consent.factories import SocialConsentCategoryFactory
+
+        SocialConsentCategoryFactory(key="antagonism", name="Hostile")
+        result = rc._probe_hostile_social_consent_category()
+        self.assertFalse(result.present)
+
+    def test_present_when_the_key_matches(self) -> None:
+        from world.consent.factories import SocialConsentCategoryFactory
+
+        SocialConsentCategoryFactory(key="hostile", name="Hostile")
+        result = rc._probe_hostile_social_consent_category()
+        self.assertTrue(result.present)

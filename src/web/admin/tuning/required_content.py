@@ -825,29 +825,32 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 label="ModifierTarget", names=(FASHION_PRESENTATION_MODIFIER_TARGET_NAME,)
             ),
         ),
-        # --- ModifierTarget: tuning (documented numeric fallback) -------------------------
+        # --- ModifierTarget: required, but guarded - a shipped feature goes silently
+        # inert rather than crashing. Each is a real bonus/penalty term a character
+        # should feel; absent the row, that term silently reads as 0/random instead
+        # of raising, so a staff member reading the panel needs the consequence
+        # string (not the tier) to know "no traceback, just missing" from "crash."
         ContentDependency(
             key="armor-soak-modifier-target",
             label="ModifierTarget",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer="world/combat/services.py:11565 _resonant_armor_soak()",
             consequence=(
-                "Armor soak from resonant/magical modifiers falls back to 0 - "
-                "combat runs, just without that bonus. Documented at the call site "
-                "as an intentional fallback (combat never hard-depends on seed "
-                "order)."
+                "Armor soak from resonant/magical modifiers silently falls back to "
+                "0 soak for every character - no traceback, the bonus just never "
+                "applies."
             ),
             probe=NamedRowsProbe(label="ModifierTarget", names=(ARMOR_SOAK_TARGET_NAME,)),
         ),
         ContentDependency(
             key="consider-bias-direction-modifier-target",
             label="ModifierTarget",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer="world/combat/consider.py:128 bias_direction()",
             consequence=(
-                "The consider check's optimism/pessimism skew falls back to a "
-                "random direction instead of an authored bias - a worse, not "
-                "broken, outcome."
+                "The consider check's optimism/pessimism skew silently falls back "
+                "to a random direction instead of the authored bias - no "
+                "traceback, just a worse read every time."
             ),
             probe=NamedRowsProbe(label="ModifierTarget", names=("consider_bias_direction",)),
         ),
@@ -855,11 +858,12 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ContentDependency(
             key="travel-speed-modifier-target",
             label="ModifierTarget",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer="world/travel/services.py:138 compute_travel_time()",
             consequence=(
-                "Per-character travel speed modifiers (weather, magic) fall back "
-                "to 0 - travel still resolves, just without that adjustment."
+                "Per-character travel speed modifiers (weather, magic) silently "
+                "fall back to 0 - no traceback, travel just never gets that "
+                "adjustment."
             ),
             probe=CustomProbe(fn=_probe_travel_speed_modifier_target),
         ),
@@ -943,35 +947,36 @@ def _declarations() -> tuple[ContentDependency, ...]:
         ContentDependency(
             key="stakes-escalation-curves",
             label="StakesEscalationModifier",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer=(
                 "world/combat/escalation.py (assign_default_escalation_curve, "
                 "_stakes_intensity_step_bonus)"
             ),
             consequence=(
                 "A high-stakes fight with no authored curve for its stakes level "
-                "never auto-escalates - it still runs, but a GM must set its "
-                "escalation curve by hand instead of it happening automatically."
+                "silently never auto-escalates - no traceback, a GM must notice "
+                "and set its escalation curve by hand instead of it happening "
+                "automatically."
             ),
             probe=CustomProbe(fn=_probe_escalation_curves),
         ),
         ContentDependency(
             key="capability-power-bridges",
             label="CapabilityType",
-            tier=DependencyTier.TUNING,
+            tier=DependencyTier.REQUIRED,
             consumer=(
                 "web.admin.tuning.capability_power_analytics.build_capability_power_panel "
                 "(Capabilities tuning panel)"
             ),
             consequence=(
-                "Capabilities with no authored combat-power bridge fall into the "
-                "zero bucket on the Capabilities tuning panel - they still function "
-                "in play, they just contribute nothing measurable to combat power "
-                "analytics."
+                "Capabilities with no authored combat-power bridge silently fall "
+                "into the zero bucket on the Capabilities tuning panel - they "
+                "still function in play, but the shipped combat-power analytics "
+                "feature reports nothing measurable for them, with no traceback."
             ),
             probe=CustomProbe(fn=_probe_capability_bridges),
         ),
-        # --- TUNING tier: singleton config tables (fallback = a zero'd-out term) ---------
+        # --- TUNING tier: singleton config tables (dormant-by-design, not yet set) -------
         ContentDependency(
             key="capability-power-config",
             label="CapabilityPowerConfig",
