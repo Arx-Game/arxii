@@ -606,25 +606,72 @@ class LegendRequirementWiredIntoUnlockCheckTests(TestCase):
         )
         return unlock
 
-    def test_legend_requirement_blocks_when_total_below_minimum(self) -> None:
+    @staticmethod
+    def _deed(sheet, *, value: int, station: int):
+        """A LegendEntry on this sheet's primary persona at a given station."""
+        from world.societies.models import LegendEntry, LegendSourceType
+
+        source_type, _ = LegendSourceType.objects.get_or_create(name="Test Deeds")
+        return LegendEntry.objects.create(
+            persona=sheet.primary_persona,
+            title="A deed",
+            source_type=source_type,
+            base_value=value,
+            earned_at_level=station,
+        )
+
+    def test_legend_requirement_blocks_when_banded_total_below_minimum(self) -> None:
         from world.progression.services.spends import check_requirements_for_unlock
 
         sheet = CharacterSheetFactory()
-        unlock = self._make_unlock_with_legend_req()
-        with mock.patch("world.societies.services.get_character_legend_total", return_value=10):
-            met, failed = check_requirements_for_unlock(sheet.character, unlock)
+        unlock = self._make_unlock_with_legend_req()  # target_level 3, offset 1 -> band >= 2
+        self._deed(sheet, value=10, station=2)
+        met, failed = check_requirements_for_unlock(sheet.character, unlock)
         assert met is False
         assert failed
 
-    def test_legend_requirement_passes_when_total_meets_minimum(self) -> None:
+    def test_legend_requirement_passes_on_banded_deeds(self) -> None:
         from world.progression.services.spends import check_requirements_for_unlock
 
         sheet = CharacterSheetFactory()
         unlock = self._make_unlock_with_legend_req()
-        with mock.patch("world.societies.services.get_character_legend_total", return_value=75):
-            met, failed = check_requirements_for_unlock(sheet.character, unlock)
+        # station 3 -> counted, and multiplied by station on read: 30 * 3 = 90 >= 50.
+        self._deed(sheet, value=30, station=3)
+        met, failed = check_requirements_for_unlock(sheet.character, unlock)
         assert met is True
         assert failed == []
+
+    def test_deeds_below_the_band_do_not_qualify(self) -> None:
+        """#3463: a bank accrued at a lower station stops qualifying once you climb.
+
+        Unlock targets level 3 with offset 1, so the band is station >= 2. A pile
+        of station-1 legend — earned while development points ticked — is worth
+        plenty in fame terms and nothing toward this step.
+        """
+        from world.progression.services.spends import check_requirements_for_unlock
+
+        sheet = CharacterSheetFactory()
+        unlock = self._make_unlock_with_legend_req()
+        self._deed(sheet, value=5_000, station=1)
+        met, failed = check_requirements_for_unlock(sheet.character, unlock)
+        assert met is False
+        assert failed
+
+    def test_station_zero_never_qualifies_however_large(self) -> None:
+        """Safe play cannot advance you, at any level, at any value.
+
+        Station 0 marks a deed won outside a perilous stakes contract — a
+        masterwork, a feast, a lockpick. Real Legend for fame and spread;
+        qualifies nothing.
+        """
+        from world.progression.services.spends import check_requirements_for_unlock
+
+        sheet = CharacterSheetFactory()
+        unlock = self._make_unlock_with_legend_req()
+        self._deed(sheet, value=1_000_000, station=0)
+        met, failed = check_requirements_for_unlock(sheet.character, unlock)
+        assert met is False
+        assert failed
 
 
 # ---------------------------------------------------------------------------
