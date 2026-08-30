@@ -298,7 +298,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     trigger — every automatic trigger_kind leaves it blank.
 
     A boss beat (#3445) passes ``subject_opponent`` plus ``subject_phase_number``
-    instead of ``subject_sheet``, and dedups on that tuple — one surge per boss
+    instead of ``subject_sheet``, and dedups on that tuple - one surge per boss
     per phase, so a multi-phase boss surges at each transition while the #2642
     re-break loop cannot repeat itself.
     """
