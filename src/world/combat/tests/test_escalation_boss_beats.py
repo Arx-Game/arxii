@@ -205,16 +205,36 @@ class BossBeatSurgeLegTests(TestCase):
     def test_enraging_transition_with_zero_amount_surges_nobody(self):
         """boss_enrage_spike_intensity_amount=0 disables the beat (#3445) - it must
 
-        NOT silently fall back to a plain BOSS_PHASE beat. ``self.curve`` keeps its
-        setUp phase amount (2, non-zero) so this isolates the enrage leg specifically.
+        NOT silently fall back to a plain BOSS_PHASE beat. Stages a genuine
+        enraging transition end to end (the ``BossPhaseSeamTests`` shape, in this
+        same file) via ``check_and_advance_boss_phase`` rather than calling
+        ``apply_boss_phase_surge`` with ``enraged`` hardcoded, so the
+        ``damage_multiplier`` comparison inside ``_surge_on_phase_transition`` is
+        the thing actually under test, not bypassed. A non-zero
+        ``boss_phase_spike_intensity_amount`` on the same curve means a wrong
+        fallback to a plain BOSS_PHASE beat would show up as a record, not silence.
         """
-        self.curve.boss_enrage_spike_intensity_amount = 0
-        self.curve.save(update_fields=["boss_enrage_spike_intensity_amount"])
+        curve = EscalationCurveFactory(
+            boss_enrage_spike_intensity_amount=0,
+            boss_phase_spike_intensity_amount=3,
+        )
+        encounter = CombatEncounterFactory(escalation_curve=curve, round_number=3)
+        boss = BossOpponentFactory(encounter=encounter, health=40, max_health=100, current_phase=1)
+        participant = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        begin_engagement(
+            participant.character_sheet.character, EngagementType.COMBAT, source=encounter
+        )
+        BossPhaseFactory(
+            opponent=boss,
+            phase_number=2,
+            health_trigger_percentage=0.5,
+            damage_multiplier=Decimal("2.5"),
+        )
 
-        apply_boss_phase_surge(opponent=self.boss, enraged=True)
+        phase = check_and_advance_boss_phase(boss)
 
-        self.assertEqual(self._intensity(), 0)
-        self.assertFalse(DramaticSurgeRecord.objects.exists())
+        self.assertIsNotNone(phase)
+        self.assertEqual(DramaticSurgeRecord.objects.count(), 0)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
