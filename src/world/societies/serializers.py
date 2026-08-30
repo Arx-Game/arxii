@@ -663,10 +663,28 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
 
     anchor_event = deed.event
     sheet = viewer_persona.character_sheet
-    # Authored content: unguarded on purpose (see LegendLevelCalibration's
-    # docstring) — a missing row is a content gap the admin required-content
-    # panel surfaces, never a silent fallback price.
-    calibration = LegendLevelCalibration.objects.get(level=sheet.current_level)
+    # READ PATH ONLY — deliberately NOT a bare ``.get()`` (contrast
+    # ``honor_deed``'s own lookup in ``world.societies.honors``, and this
+    # module's ``_dispatch_rite_of_honors`` write path, both of which stay
+    # unguarded and must still raise ``DoesNotExist`` when a level has no
+    # authored calibration row). The no-guard policy exists so a missing
+    # authored row can never be silently substituted with a fake default while
+    # gameplay *proceeds* on wrong numbers — that property is fully preserved
+    # here, since nothing below invents a number and the write path still
+    # refuses hard. What changes is only that reading a deed page stops being
+    # collateral damage: ``CharacterSheet.current_level`` is 0 for any
+    # character with no class assignments yet, so an un-authored level-0 row
+    # would otherwise 500 every brand-new player's first deed-page view, for a
+    # reason that has nothing to do with reading a deed. Surfacing the gap is
+    # the admin required-content panel's job, not a 500 on a page view.
+    calibration = LegendLevelCalibration.objects.filter(level=sheet.current_level).first()
+    if calibration is None:
+        return {
+            "allowed": False,
+            "reason": "The Rite of Honors is not configured for your level yet.",
+            "hares_required": None,
+            "value_added": None,
+        }
     hares_required = calibration.honor_hares_required
     headroom = max(anchor_event.base_value - deed.base_value, 0)
     value_added = min(calibration.honor_value_added, headroom)
@@ -745,12 +763,17 @@ class LegendHonorSerializer(serializers.ModelSerializer):
 
 
 class CanHonorSerializer(serializers.Serializer):
-    """Eligibility preview computed by ``_compute_can_honor`` — never persisted."""
+    """Eligibility preview computed by ``_compute_can_honor`` — never persisted.
+
+    ``hares_required``/``value_added`` are null exactly when the viewer's level has
+    no authored ``LegendLevelCalibration`` row — the rite has no price to show yet,
+    not zero (see ``_compute_can_honor``'s read-path comment).
+    """
 
     allowed = serializers.BooleanField(read_only=True)
     reason = serializers.CharField(read_only=True, allow_null=True)
-    hares_required = serializers.IntegerField(read_only=True)
-    value_added = serializers.IntegerField(read_only=True)
+    hares_required = serializers.IntegerField(read_only=True, allow_null=True)
+    value_added = serializers.IntegerField(read_only=True, allow_null=True)
 
 
 class DeedDetailSerializer(serializers.ModelSerializer):

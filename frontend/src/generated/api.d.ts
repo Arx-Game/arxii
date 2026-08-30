@@ -25046,12 +25046,18 @@ export interface components {
       readonly is_tradition_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
-    /** @description Eligibility preview computed by ``_compute_can_honor`` — never persisted. */
+    /**
+     * @description Eligibility preview computed by ``_compute_can_honor`` — never persisted.
+     *
+     *     ``hares_required``/``value_added`` are null exactly when the viewer's level has
+     *     no authored ``LegendLevelCalibration`` row — the rite has no price to show yet,
+     *     not zero (see ``_compute_can_honor``'s read-path comment).
+     */
     CanHonor: {
       readonly allowed: boolean;
       readonly reason: string | null;
-      readonly hares_required: number;
-      readonly value_added: number;
+      readonly hares_required: number | null;
+      readonly value_added: number | null;
     };
     /**
      * @description Read/response serializer for CanonReview (#2003).

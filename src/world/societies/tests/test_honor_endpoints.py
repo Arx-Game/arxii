@@ -23,6 +23,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME
 from world.character_sheets.factories import CharacterSheetFactory
+from world.classes.factories import CharacterClassLevelFactory
 from world.currency.services import mint_favor_token
 from world.magic.factories import CharacterAuraFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory, RosterTenureFactory
@@ -35,7 +36,7 @@ from world.societies.factories import (
     OrganizationFactory,
 )
 from world.societies.knowledge_services import grant_deed_knowledge
-from world.societies.models import LegendEntry, LegendHonor
+from world.societies.models import LegendEntry, LegendHonor, LegendLevelCalibration
 from world.societies.seeds import ensure_rite_of_honors_ritual
 
 
@@ -184,6 +185,61 @@ class HonorEndpointsTests(APITestCase):
         self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("already honored", second.data["detail"].lower())
         self.assertEqual(LegendHonor.objects.count(), 1)
+
+    def test_can_honor_false_when_viewers_level_has_no_calibration_row(self) -> None:
+        """A brand-new player's level has no authored row (ruling, coordinator).
+
+        ``CharacterSheet.current_level`` is 0 for any character with no class
+        assignments — but a real gap can happen at ANY level a level design never
+        got around to authoring, so this proves it with a level (7) nobody seeded
+        a calibration row for, not level 0. The GET must still 200: an unrelated
+        read surface must never 500 because a level's rite price is unauthored.
+        """
+        CharacterClassLevelFactory(character=self.honorer_sheet, level=7)
+        self.honorer_sheet.invalidate_class_level_cache()
+        self.assertFalse(
+            LegendLevelCalibration.objects.filter(level=7).exists(),
+            "test fixture bug: a level-7 calibration row exists",
+        )
+        self._grant_knowledge()
+        self.client.force_authenticate(user=self.honorer_account)
+
+        response = self.client.get(reverse("societies:deed-detail", args=[self.deed.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        can_honor = response.data["can_honor"]
+        self.assertFalse(can_honor["allowed"])
+        self.assertIsNotNone(can_honor["reason"])
+        self.assertIsNone(can_honor["hares_required"])
+        self.assertIsNone(can_honor["value_added"])
+
+    def test_post_honor_still_fails_hard_when_calibration_row_missing(self) -> None:
+        """The write path keeps the bare ``.get()`` — it must still fail hard, never 200/silently.
+
+        Contrast with the read-path test above: ``can_honor`` degrades gracefully,
+        but ``honor_deed``'s own calibration lookup (``world.societies.honors``,
+        unchanged by this ruling) is deliberately still unguarded, so a POST against
+        an unauthored level must propagate ``LegendLevelCalibration.DoesNotExist`` all
+        the way to the API's generic exception handler (``web.api.exceptions.
+        custom_exception_handler``, which turns any unhandled exception into a 500 —
+        this repo's uniform "fails hard" shape for a server-side bug, distinct from
+        the player-safe 400s ``HonorRefused`` maps to) rather than silently doing
+        nothing or inventing a price.
+        """
+        CharacterClassLevelFactory(character=self.honorer_sheet, level=7)
+        self.honorer_sheet.invalidate_class_level_cache()
+        self._mint_hare(self.honorer_sheet)
+        self._grant_knowledge()
+        self.client.force_authenticate(user=self.honorer_account)
+
+        response = self.client.post(
+            reverse("societies:deed-honor", args=[self.deed.pk]),
+            {"journal_title": "A Great Deed", "journal_body": "They fought bravely and won."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertEqual(LegendHonor.objects.count(), 0)
 
     def test_payload_contains_no_account_identifiers(self) -> None:
         self._mint_hare(self.honorer_sheet)

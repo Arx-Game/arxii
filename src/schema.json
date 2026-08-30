@@ -41523,8 +41523,12 @@ components:
       - name
     CanHonor:
       type: object
-      description: Eligibility preview computed by ``_compute_can_honor`` — never
-        persisted.
+      description: |-
+        Eligibility preview computed by ``_compute_can_honor`` — never persisted.
+
+        ``hares_required``/``value_added`` are null exactly when the viewer's level has
+        no authored ``LegendLevelCalibration`` row — the rite has no price to show yet,
+        not zero (see ``_compute_can_honor``'s read-path comment).
       properties:
         allowed:
           type: boolean
@@ -41536,9 +41540,11 @@ components:
         hares_required:
           type: integer
           readOnly: true
+          nullable: true
         value_added:
           type: integer
           readOnly: true
+          nullable: true
       required:
       - allowed
       - hares_required
