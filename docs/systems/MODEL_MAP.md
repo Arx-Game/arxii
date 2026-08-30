@@ -335,11 +335,6 @@
   - achievement -> achievements.Achievement [FK]
   - earned_by_tenure -> roster.RosterTenure [FK]
 
-### CharacterTitle
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - reward -> achievements.RewardDefinition [FK]
-
 ### ConditionStatRule
 **Foreign Keys:**
   - stat -> achievements.StatDefinition [FK]
@@ -351,6 +346,12 @@
   - discovered_by_tenure -> roster.RosterTenure [FK]
   - shared_with_tenures -> roster.RosterTenure [M2M]
 
+### PersonaTitle
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - reward -> achievements.RewardDefinition [FK] (nullable)
+  - legend_entry -> societies.LegendEntry [FK] (nullable)
+
 ### RewardDefinition
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -359,7 +360,7 @@
   - distinction -> distinctions.Distinction [FK] (nullable)
 **Pointed to by:**
   - achievement_rewards <- achievements.AchievementReward
-  - character_titles <- achievements.CharacterTitle
+  - persona_titles <- achievements.PersonaTitle
 
 ### StatDefinition
 **Foreign Keys:**
@@ -382,6 +383,7 @@
 - `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'AchievementGrantResult' - Grant an achievement to one or more characters simultaneously.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
 - `increment_stat_for_group(character_sheets: 'list[CharacterSheet]', stat: 'StatDefinition', amount: 'int' = 1) -> 'None' - Increment a stat for several sheets as one simultaneous group moment.`
+- `maybe_grant_deed_title(deed: 'LegendEntry') -> 'PersonaTitle | None' - Mint a title when a deed crosses its station's threshold (#3466).`
 
 
 ## world.action_points
@@ -1437,7 +1439,6 @@
   - roster_entry <- roster.RosterEntry
   - stat_trackers <- achievements.StatTracker
   - achievements <- achievements.CharacterAchievement
-  - titles <- achievements.CharacterTitle
   - action_points <- action_points.ActionPointPool
   - conjured_obstacles <- areas.PositionEdge
   - ramparts <- areas.Rampart
@@ -4707,7 +4708,7 @@
 ### Service Functions
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
 - `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
-- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
 - `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
 - `entry_visible_via_bequest(entry: 'JournalEntry', viewer_sheet: 'CharacterSheet | None') -> 'bool' - Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).`
@@ -8050,6 +8051,7 @@
   - thumbnail -> evennia_extensions.Media [FK] (nullable)
   - properties -> mechanics.Property [M2M]
 **Pointed to by:**
+  - titles <- achievements.PersonaTitle
   - food_transfers_initiated <- agriculture.FoodTransfer
   - promoted_assets <- assets.NPCAsset
   - asset_ownerships <- assets.NPCAsset
@@ -8840,6 +8842,7 @@
   - societies_aware -> societies.Society [M2M]
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
+  - titles <- achievements.PersonaTitle
   - spread_assist_targets <- societies.SpreadAssistTarget
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
@@ -8863,6 +8866,8 @@
   - created_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
   - deeds <- societies.LegendEntry
+
+### LegendLevelCalibration
 
 ### LegendSettlementConfig
 
@@ -9214,7 +9219,7 @@
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' - Sum the legend this character earned that was credited to covenants where they held ``role``.`

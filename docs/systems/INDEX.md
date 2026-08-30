@@ -3368,7 +3368,9 @@ gains a discoverable content item for the first time.
   natural key `key`; `CONTENT_MODELS` since #2832),
   `AchievementReward` (per-achievement reward with optional `reward_value` amount, or an
   explicit rank for DISTINCTION; composite natural key `(achievement, reward)`; `CONTENT_MODELS` since #2832),
-  `CharacterTitle` (earned display-only title record; FK → TITLE `RewardDefinition`),
+  `PersonaTitle` (earned display-only title record on a `Persona`, not the character sheet,
+  #3466; exactly one of `reward` (TITLE `RewardDefinition`) or `legend_entry`
+  (`societies.LegendEntry`) is set — see `maybe_grant_deed_title`),
   `ConditionStatRule` (bridge: condition event type → stat increment; composite natural key
   `(stat, condition, event_type)`; `CONTENT_MODELS` since #2832),
   **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any

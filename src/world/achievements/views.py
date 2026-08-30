@@ -1,6 +1,7 @@
 """API views for the achievements system."""
 
 from django.db.models import Prefetch
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
@@ -10,7 +11,7 @@ from world.achievements.models import (
     Achievement,
     AchievementReward,
     CharacterAchievement,
-    CharacterTitle,
+    PersonaTitle,
 )
 from world.achievements.serializers import (
     AchievementListSerializer,
@@ -90,6 +91,22 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
         )
 
 
+class CharacterTitleFilterSet(django_filters.FilterSet):
+    """Filter ``PersonaTitle`` by the owning character (#3466).
+
+    ``character_sheet`` traverses the persona FK rather than naming a direct model
+    field, since titles retargeted onto ``Persona``. Kept as a stepping stone for the
+    existing route/param names; the persona-scoped read-surface rename (route +
+    ``?persona=``) is a separate, later change.
+    """
+
+    character_sheet = django_filters.NumberFilter(field_name="persona__character_sheet")
+
+    class Meta:
+        model = PersonaTitle
+        fields = ["character_sheet"]
+
+
 class CharacterTitleViewSet(ReadOnlyModelViewSet):
     """List a character's earned, displayable titles (#1522).
 
@@ -102,8 +119,8 @@ class CharacterTitleViewSet(ReadOnlyModelViewSet):
     serializer_class = CharacterTitleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["character_sheet"]
+    filterset_class = CharacterTitleFilterSet
 
     def get_queryset(self):  # type: ignore[override]
         """Earned titles with the title's reward prefetched, newest first."""
-        return CharacterTitle.objects.select_related("reward").order_by("-earned_at")
+        return PersonaTitle.objects.select_related("reward").order_by("-earned_at")

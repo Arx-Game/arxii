@@ -126,10 +126,10 @@ class SheetSecretSectionTests(TestCase):
 
     def test_titles_section_lists_earned_titles(self) -> None:
         from world.achievements.factories import RewardDefinitionFactory
-        from world.achievements.models import CharacterTitle
+        from world.achievements.models import PersonaTitle
 
         reward = RewardDefinitionFactory(name="Hot Flex But Okay")
-        CharacterTitle.objects.create(character_sheet=self.viewer_sheet, reward=reward)
+        PersonaTitle.objects.create(persona=self.viewer_sheet.primary_persona, reward=reward)
         out = self._run("", switches=["titles"])
         assert "Hot Flex But Okay" in out
 

@@ -18,15 +18,17 @@ from world.achievements.models import (
     Achievement,
     AchievementStatRequirement,
     CharacterAchievement,
-    CharacterTitle,
     Discovery,
+    PersonaTitle,
     StatDefinition,
     StatTracker,
 )
 from world.achievements.types import AchievementGrantResult
+from world.societies.models import LegendLevelCalibration
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.societies.models import LegendEntry
 
 logger = logging.getLogger(__name__)
 
@@ -324,8 +326,30 @@ def _achievement_reward_source():
 
 
 def _grant_title(character_sheet: CharacterSheet, reward) -> None:
-    """Record an earned title (idempotent via the unique (sheet, reward) constraint)."""
-    CharacterTitle.objects.get_or_create(character_sheet=character_sheet, reward=reward)
+    """Grant an achievement title to the character's PRIMARY persona (#3466).
+
+    Achievements are sheet-level facts about who someone is, so the title belongs to
+    their real identity. Using ``active_persona`` here would stamp an achievement onto
+    whatever disguise happened to be worn when a stat ticked over.
+    """
+    PersonaTitle.objects.get_or_create(persona=character_sheet.primary_persona, reward=reward)
+
+
+def maybe_grant_deed_title(deed: LegendEntry) -> PersonaTitle | None:
+    """Mint a title when a deed crosses its station's threshold (#3466).
+
+    The title's text is the deed's own name, so whoever established the deed named it.
+    It lands on ``deed.persona`` - the face that did it - which is what keeps an honor
+    from ever outing anyone.
+
+    Raises ``LegendLevelCalibration.DoesNotExist`` when the station has no authored row.
+    That is deliberate: see the model's docstring.
+    """
+    calibration = LegendLevelCalibration.objects.get(level=deed.earned_at_level)
+    if deed.base_value < calibration.deed_title_threshold:
+        return None
+    title, _ = PersonaTitle.objects.get_or_create(persona=deed.persona, legend_entry=deed)
+    return title
 
 
 def _grant_bonus(character_sheet: CharacterSheet, reward, reward_value: str) -> None:
@@ -419,7 +443,7 @@ def apply_achievement_rewards(character_sheet: CharacterSheet, achievement: Achi
     (#1522, #2037).
 
     Called once per newly-earned (sheet, achievement) by ``grant_achievement``. Mechanical rewards
-    attach to the *achievement*, not the title: TITLE records a ``CharacterTitle`` (cosmetic), BONUS
+    attach to the *achievement*, not the title: TITLE records a ``PersonaTitle`` (cosmetic), BONUS
     materializes a ``CharacterModifier`` on the reward's target, PRESTIGE bumps the persona's
     deed-prestige, DISTINCTION grants/ranks-up the linked Distinction via the shared
     ``grant_distinction`` seam. COSMETIC is a no-op until that system lands. Cross-app deps are

@@ -2,7 +2,7 @@
 granted on earn.
 
 The reward-application engine: when an achievement is earned, its rewards attach to the
-*character* — a CharacterTitle (cosmetic), a CharacterModifier on the bonus target (e.g. +5
+*character* — a PersonaTitle (cosmetic), a CharacterModifier on the bonus target (e.g. +5
 allure), a flat prestige bump, and a Distinction grant/rank-up via the shared
 ``grant_distinction`` seam — all applied by grant_achievement.
 """
@@ -15,7 +15,7 @@ from world.achievements.factories import (
     AchievementRewardFactory,
     RewardDefinitionFactory,
 )
-from world.achievements.models import CharacterTitle
+from world.achievements.models import PersonaTitle
 from world.achievements.services import grant_achievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
@@ -45,7 +45,7 @@ class RewardApplicationTests(TestCase):
     def test_title_reward_grants_a_character_title(self) -> None:
         self._add_reward(RewardType.TITLE)
         grant_achievement(self.achievement, [self.sheet])
-        assert CharacterTitle.objects.filter(character_sheet=self.sheet).count() == 1
+        assert PersonaTitle.objects.filter(persona=self.sheet.primary_persona).count() == 1
 
     def test_bonus_reward_grants_a_modifier_read_by_get_modifier_total(self) -> None:
         self._add_reward(RewardType.BONUS, value="5", modifier_target=self.allure)
@@ -67,7 +67,7 @@ class RewardApplicationTests(TestCase):
         self._add_reward(RewardType.BONUS, value="5", modifier_target=self.allure)
         self._add_reward(RewardType.PRESTIGE, value="5000")
         grant_achievement(self.achievement, [self.sheet])
-        assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()
+        assert PersonaTitle.objects.filter(persona=self.sheet.primary_persona).exists()
         assert get_modifier_total(self.sheet, self.allure) == 5
         self.sheet.primary_persona.refresh_from_db()
         assert self.sheet.primary_persona.total_prestige >= 5000
@@ -155,7 +155,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
         cd = CharacterDistinction.objects.get(character=self.sheet, distinction=self.distinction)
         assert cd.rank == 1
-        assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()
+        assert PersonaTitle.objects.filter(persona=self.sheet.primary_persona).exists()
 
     def test_re_earning_does_not_double_rank_up(self) -> None:
         self._add_reward()
@@ -181,4 +181,4 @@ class DistinctionRewardApplicationTests(TestCase):
         assert not CharacterDistinction.objects.filter(
             character=self.sheet, distinction=self.distinction
         ).exists()
-        assert CharacterTitle.objects.filter(character_sheet=self.sheet).exists()
+        assert PersonaTitle.objects.filter(persona=self.sheet.primary_persona).exists()

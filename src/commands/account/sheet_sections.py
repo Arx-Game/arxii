@@ -291,11 +291,11 @@ def _render_titles_section(command: Command) -> list[str]:
     Mirrors the web Titles tab. Titles are cosmetic — the mechanical reward attached to the
     achievement, not the title. Scoped to the active (viewing) character.
     """
-    from world.achievements.models import CharacterTitle  # noqa: PLC0415
+    from world.achievements.models import PersonaTitle  # noqa: PLC0415
 
     viewer = _viewer_sheet(command)
     titles = list(
-        CharacterTitle.objects.filter(character_sheet=viewer)
+        PersonaTitle.objects.filter(persona=viewer.primary_persona)
         .select_related("reward")
         .order_by("-earned_at")
     )

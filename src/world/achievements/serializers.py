@@ -6,8 +6,8 @@ from world.achievements.models import (
     Achievement,
     AchievementReward,
     CharacterAchievement,
-    CharacterTitle,
     Discovery,
+    PersonaTitle,
     StatTracker,
 )
 from world.roster.models import RosterTenure
@@ -125,7 +125,7 @@ class CharacterTitleSerializer(serializers.ModelSerializer):
     reward_key = serializers.CharField(source="reward.key", read_only=True)
 
     class Meta:
-        model = CharacterTitle
+        model = PersonaTitle
         fields = ["id", "title", "reward_key", "earned_at"]
         read_only_fields = fields
 

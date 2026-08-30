@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.achievements.factories import RewardDefinitionFactory
-from world.achievements.models import CharacterTitle
+from world.achievements.models import PersonaTitle
 from world.character_sheets.factories import CharacterSheetFactory
 
 TITLES_URL = "/api/achievements/character-titles/"
@@ -28,7 +28,7 @@ class CharacterTitleApiTest(APITestCase):
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
     def test_lists_a_characters_titles(self) -> None:
-        CharacterTitle.objects.create(character_sheet=self.sheet, reward=self.reward)
+        PersonaTitle.objects.create(persona=self.sheet.primary_persona, reward=self.reward)
         self.client.force_authenticate(user=self.user)
         response = self.client.get(TITLES_URL, {"character_sheet": self.sheet.pk})
         assert response.status_code == status.HTTP_200_OK
@@ -38,9 +38,9 @@ class CharacterTitleApiTest(APITestCase):
         assert rows[0]["reward_key"] == self.reward.key
 
     def test_filters_by_character_sheet(self) -> None:
-        CharacterTitle.objects.create(character_sheet=self.sheet, reward=self.reward)
+        PersonaTitle.objects.create(persona=self.sheet.primary_persona, reward=self.reward)
         other_reward = RewardDefinitionFactory(name="Other Title")
-        CharacterTitle.objects.create(character_sheet=self.other_sheet, reward=other_reward)
+        PersonaTitle.objects.create(persona=self.other_sheet.primary_persona, reward=other_reward)
         self.client.force_authenticate(user=self.user)
         response = self.client.get(TITLES_URL, {"character_sheet": self.other_sheet.pk})
         assert response.status_code == status.HTTP_200_OK

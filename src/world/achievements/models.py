@@ -7,6 +7,7 @@ and awards achievements when thresholds are met.
 """
 
 from django.db import models
+from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -24,6 +25,9 @@ from world.roster.models import RosterTenure
 # constant keeps the lazy "app_label.ModelName" reference consistent across the
 # several models in this file that link to a character.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+# String model reference for the Persona FK target (#3466), matching
+# `world/societies/models.py:46`.
+PERSONA_MODEL = "arxii.Persona"
 
 
 class StatDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -543,35 +547,61 @@ class ConditionStatRule(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.condition.name} {self.event_type} → {self.stat.key}"
 
 
-class CharacterTitle(SharedMemoryModel):
-    """A title a character has earned and may display (#1522).
+class PersonaTitle(SharedMemoryModel):
+    """A title a persona has earned and may display (#1522, retargeted #3466).
 
-    The cosmetic/display record of an earned title. Mechanical rewards do NOT live here — they
-    attach to the *achievement* and are applied by ``apply_achievement_rewards``; this row just
-    says "this character holds this title." Granted when an achievement carrying a TITLE reward is
-    earned.
+    Hangs on the **Persona**, not the CharacterSheet: a title is how the world names a
+    face, and the legend system it draws from is persona-scoped throughout. This is also
+    what makes an honor safe - a deed earned behind a mask titles the mask, and can never
+    surface on the character sheet and out the player.
+
+    Exactly one of ``reward`` (an authored achievement title) or ``legend_entry`` (a deed
+    that crossed its station's threshold) is set.
     """
 
-    character_sheet = models.ForeignKey(
-        CHARACTER_SHEET_MODEL,
-        on_delete=models.CASCADE,
-        related_name="titles",
-    )
+    persona = models.ForeignKey(PERSONA_MODEL, on_delete=models.CASCADE, related_name="titles")
     reward = models.ForeignKey(
         RewardDefinition,
         on_delete=models.CASCADE,
-        related_name="character_titles",
+        related_name="persona_titles",
+        null=True,
+        blank=True,
         help_text="The TITLE-type RewardDefinition this title comes from.",
+    )
+    legend_entry = models.ForeignKey(
+        "arxii.LegendEntry",
+        on_delete=models.CASCADE,
+        related_name="titles",
+        null=True,
+        blank=True,
+        help_text="The deed whose name this title is (#3466).",
     )
     earned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["character_sheet", "reward"]
+        ordering = ["persona", "reward", "legend_entry"]
         constraints = [
+            models.CheckConstraint(
+                condition=Q(reward__isnull=False, legend_entry__isnull=True)
+                | Q(reward__isnull=True, legend_entry__isnull=False),
+                name="personatitle_exactly_one_source",
+            ),
             models.UniqueConstraint(
-                fields=["character_sheet", "reward"], name="unique_character_title"
+                fields=["persona", "reward"],
+                name="unique_persona_reward_title",
+                condition=Q(reward__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["persona", "legend_entry"],
+                name="unique_persona_deed_title",
+                condition=Q(legend_entry__isnull=False),
             ),
         ]
 
+    @property
+    def display_name(self) -> str:
+        """The player-facing name, from whichever branch is set."""
+        return self.reward.name if self.reward_id else self.legend_entry.title
+
     def __str__(self) -> str:
-        return f"{self.character_sheet}: {self.reward.name}"
+        return f"{self.persona}: {self.display_name}"
