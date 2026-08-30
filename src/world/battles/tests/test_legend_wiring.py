@@ -20,9 +20,6 @@ from world.battles.conclusion_hooks import (
     register_battle_conclusion_hook,
 )
 from world.battles.constants import (
-    BATTLE_LEGEND_DECISIVE_VALUE,
-    BATTLE_LEGEND_MARGINAL_VALUE,
-    BATTLE_LEGEND_STANDOUT_VALUE,
     STANDOUT_SUCCESS_LEVEL,
     BattleActionKind,
     BattleOutcome,
@@ -40,6 +37,7 @@ from world.battles.legend_wiring import apply_battle_legend_awards
 from world.battles.services import conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
 from world.military.factories import MilitaryUnitFactory
+from world.societies.constants import RenownRisk
 from world.societies.models import LegendEntry, LegendEvent
 
 
@@ -53,22 +51,68 @@ class ApplyBattleLegendAwardsTests(TestCase):
         self.battle = BattleFactory(name="Siege of the Salt Marsh")
         self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
         self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.activation = self._stake_the_battle()
+
+    def _stake_the_battle(self, *, target_level: int = 3, held: bool = True):
+        """Give the battle a staked beat with a locked, resolved contract.
+
+        Required since #3467: a battle prices its Legend from the beat it was
+        fought over. A battle with no staked beat has no target level, so no
+        station, so no advancement Legend — these tests are about who earns and
+        how much, so they need a real war to be fought over.
+        """
+        from world.stories.constants import StakeResolutionColumn
+        from world.stories.factories import (
+            BeatFactory,
+            EpisodeFactory,
+            EpisodeSceneFactory,
+            StakeFactory,
+            StakeOutcomeFactory,
+        )
+        from world.stories.models import StakeContractActivation
+
+        episode = EpisodeFactory()
+        EpisodeSceneFactory(episode=episode, scene=self.battle.scene)
+        beat = BeatFactory(episode=episode, risk=RenownRisk.EXTREME, target_level=target_level)
+        activation = StakeContractActivation.objects.create(
+            beat=beat,
+            party_average_level=target_level,
+            declared_target_level=target_level,
+            declared_risk=RenownRisk.EXTREME,
+            effective_risk=RenownRisk.EXTREME,
+            is_ready=True,
+        )
+        stake = StakeFactory(beat=beat)
+        StakeOutcomeFactory(
+            stake=stake,
+            activation=activation,
+            column=StakeResolutionColumn.WIN if held else StakeResolutionColumn.LOSS,
+        )
+        return activation
+
+    def _levelled(self, level: int = 3):
+        """A sheet at a level inside the beat's band — station and risk both real."""
+        from world.classes.factories import CharacterClassLevelFactory
+
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=sheet, level=level, is_primary=True)
+        return sheet
 
     def _restore_hooks(self) -> None:
         conclusion_hooks._HOOKS[:] = self._saved_hooks
 
     def test_decisive_win_awards_event_to_participants_and_commander(self) -> None:
-        winner_sheet = CharacterSheetFactory()
+        winner_sheet = self._levelled()
         BattleParticipantFactory(
             battle=self.battle, side=self.attacker_side, character_sheet=winner_sheet
         )
-        commander_sheet = CharacterSheetFactory()
+        commander_sheet = self._levelled()
         BattleUnitFactory(
             battle=self.battle,
             side=self.attacker_side,
             military_unit=MilitaryUnitFactory(commander=commander_sheet),
         )
-        loser_sheet = CharacterSheetFactory()
+        loser_sheet = self._levelled()
         BattleParticipantFactory(
             battle=self.battle, side=self.defender_side, character_sheet=loser_sheet
         )
@@ -77,15 +121,23 @@ class ApplyBattleLegendAwardsTests(TestCase):
 
         event = LegendEvent.objects.get(scene=self.battle.scene)
         self.assertEqual(event.title, f"Victory at {self.battle.name}")
-        self.assertEqual(event.base_value, BATTLE_LEGEND_DECISIVE_VALUE)
+        # #3467: priced from the beat's risk tier, not a flat per-outcome constant.
+        self.assertGreater(event.base_value, 0)
 
         entries = LegendEntry.objects.filter(event=event)
         winner_personas = {winner_sheet.primary_persona.pk, commander_sheet.primary_persona.pk}
         self.assertEqual({e.persona_id for e in entries}, winner_personas)
         self.assertFalse(LegendEntry.objects.filter(persona=loser_sheet.primary_persona).exists())
 
-    def test_marginal_win_uses_marginal_value(self) -> None:
-        winner_sheet = CharacterSheetFactory()
+    def test_marginal_win_still_pays_the_winning_side(self) -> None:
+        """#3467: the decisive/marginal split no longer picks a flat value.
+
+        It survives only to name the winning side; what the war pays comes from
+        its beat's risk and each earner's station. Replaces
+        test_marginal_win_uses_marginal_value, which asserted the retired
+        BATTLE_LEGEND_MARGINAL_VALUE constant.
+        """
+        winner_sheet = self._levelled()
         BattleParticipantFactory(
             battle=self.battle, side=self.attacker_side, character_sheet=winner_sheet
         )
@@ -93,14 +145,14 @@ class ApplyBattleLegendAwardsTests(TestCase):
         conclude_battle(battle=self.battle, outcome=BattleOutcome.ATTACKER_MARGINAL)
 
         event = LegendEvent.objects.get(scene=self.battle.scene)
-        self.assertEqual(event.base_value, BATTLE_LEGEND_MARGINAL_VALUE)
+        self.assertGreater(event.base_value, 0)
 
     def test_losing_side_standout_rescue_earns_stacking_solo_deed(self) -> None:
-        winner_sheet = CharacterSheetFactory()
+        winner_sheet = self._levelled()
         BattleParticipantFactory(
             battle=self.battle, side=self.attacker_side, character_sheet=winner_sheet
         )
-        rescuer_sheet = CharacterSheetFactory()
+        rescuer_sheet = self._levelled()
         rescuer_participant = BattleParticipantFactory(
             battle=self.battle, side=self.defender_side, character_sheet=rescuer_sheet
         )
@@ -119,7 +171,7 @@ class ApplyBattleLegendAwardsTests(TestCase):
             persona=rescuer_sheet.primary_persona, event__isnull=True
         )
         self.assertEqual(standout.title, f"Daring rescue at {self.battle.name}")
-        self.assertEqual(standout.base_value, BATTLE_LEGEND_STANDOUT_VALUE)
+        self.assertGreater(standout.base_value, 0)
         self.assertEqual(standout.scene, self.battle.scene)
 
         # The victory event still fired for the winning side.
@@ -138,7 +190,7 @@ class ApplyBattleLegendAwardsTests(TestCase):
         self.assertFalse(LegendEvent.objects.filter(scene=self.battle.scene).exists())
 
     def test_second_call_does_not_duplicate(self) -> None:
-        winner_sheet = CharacterSheetFactory()
+        winner_sheet = self._levelled()
         BattleParticipantFactory(
             battle=self.battle, side=self.attacker_side, character_sheet=winner_sheet
         )

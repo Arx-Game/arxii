@@ -111,6 +111,12 @@ class SettlementParticipant:
     persona: Persona
     level: int
     crucial_success_level: int | None = None
+    #: An authored title for this participant's standout deed, when the source
+    #: has a better name for it than the generic one. Battles curate these per
+    #: dramatic action kind ("Daring rescue at X") and a name is the whole point
+    #: of a legendary deed, so the seam carries it rather than flattening every
+    #: standout to one string.
+    standout_title: str | None = None
     #: This character's OWN effective risk, priced against their level rather
     #: than the party's average (#3463). A level-10 standing in a fight pitched
     #: at level 5 was not personally in danger, and earns nothing for it however
@@ -371,9 +377,10 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
         value = round(risk_award * fraction)
         if value <= 0:
             continue
+        deed_title = participant.standout_title or f"{title}: a deed remembered"
         entry = create_solo_deed(
             participant.persona,
-            f"{title}: a deed remembered"[:200],
+            deed_title[:200],
             source_type,
             value,
             scene=scene,

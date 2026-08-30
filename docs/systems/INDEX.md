@@ -1336,6 +1336,14 @@ Social structures, organizations, reputation, and legend tracking.
 - **Telnet:** `org <subverb>` command (`favor`/`disfavor <person> in <org>=<citation>` added #3290); `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
 - **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` (+ `respond` detail action, #3412 — `POST /offers/{id}/respond/` accept/decline via the existing `membership_services` functions, no staff bypass, matching telnet's `accept org`/`decline org`), `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
+- **Battle Legend (#3467):** `apply_battle_legend_awards` delegates to
+  `world.battles.legend_settlement`. A battle prices from the beat it was fought over
+  (`activate_stakes_for_battle` locks that contract), so the flat 25/12/15 constants are
+  retired. ADR-0080 is preserved: a war's *stakes* stay un-scaled by who turned up,
+  while each individual's *Legend* prices on their own `personal_risk` — different
+  questions. A battle with no staked beat has no target level, hence no station, hence
+  no advancement Legend. ADR-0122's curation survives (RESCUE/ROUT/BREACH, per-kind
+  titles) and its standout stacking is preserved battle-side.
 - **Mission Legend (#3468):** both mission Legend paths price through
   `world.missions.services.legend_pricing`. A mission is its own settled context —
   its template's `risk_tier` is the declaration and its `level_band_max` is the
