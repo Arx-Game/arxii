@@ -433,7 +433,6 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
             _mint_ceremony_deed(
                 officiant_sheet,
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
-                officiant_cut,
             )
     bump_devotion(officiant_sheet, ceremony.being, config.devotion_officiant)
 
@@ -809,9 +808,7 @@ def _award_honoree(  # noqa: PLR0913 — keyword-only; each arg is a distinct ta
         if s.target_honoree_id is None or s.target_honoree_id == honoree.pk
     )
     amount = (base + speech_levels * speech_prestige_base) * multiplier // 100
-    _mint_ceremony_deed(
-        honoree.honoree_sheet, title, amount, archetypes=archetypes, scene=deed_scene
-    )
+    _mint_ceremony_deed(honoree.honoree_sheet, title, archetypes=archetypes, scene=deed_scene)
     honoree.prestige_awarded = amount
     honoree.save(update_fields=["prestige_awarded"])
     return amount
@@ -870,23 +867,9 @@ def _conversion_archetypes(
     return [archetype] if archetype is not None else []
 
 
-def _rite_was_perilous() -> bool:
-    """Did this rite put the celebrant's life at stake (#3463)?
-
-    Always False today, and named rather than inlined: a perilous rite is real
-    and ruled in, but it reaches Legend through the stakes-contract settlement
-    seam (``world.societies.legend_settlement``), not through the ceremony
-    reward path, which has no contract to consult. This is the seam a future
-    rite-under-stakes surface plugs into, so "why is this always False" has an
-    answer in place instead of reading as dead code.
-    """
-    return False
-
-
 def _mint_ceremony_deed(
     sheet: "CharacterSheet",
     title: str,
-    value: int,
     *,
     archetypes: "list[PhilosophicalArchetype] | None" = None,
     scene=None,
@@ -910,18 +893,24 @@ def _mint_ceremony_deed(
         name=CEREMONY_LEGEND_SOURCE,
         defaults={"description": "Rites and ceremonies — honors spoken over the worthy."},
     )
-    # #3463 — a rite that risked nothing mints no Legend. The honoree's
-    # prestige (base_honoree_prestige + offering prestige) is computed
-    # separately and untouched: a great ceremony still confers standing, it
-    # just does not confer might. A rite that genuinely endangered the
-    # celebrant settles through its stakes contract, at a real station.
-    if not _rite_was_perilous():
-        return
+    # #3463 — a rite that risked nothing is worth no song, so the deed is
+    # minted at ZERO rather than not minted at all. The row itself is
+    # load-bearing: a conversion ceremony's deed is what carries the
+    # scandal archetypes that route the #1464 fork, and removing it breaks
+    # the scandal system outright (caught by
+    # ConversionScandalForkTests erroring, not merely failing).
+    #
+    # Same shape as the crime deeds in doors.py / inventory.py: keep the row
+    # for what rides on it, drop the Legend. The honoree's prestige
+    # (base_honoree_prestige + offering prestige) is computed separately and
+    # is untouched — a great ceremony still confers standing, just not might.
+    # A rite that genuinely endangered the celebrant reaches Legend through
+    # the stakes settlement seam, at a real station.
     create_solo_deed(
         persona,
         title,
         source_type,
-        value,
+        0,
         description="PLACEHOLDER — ceremony deed prose pending Apostate rewrite.",
         archetypes=archetypes,
         scene=scene,

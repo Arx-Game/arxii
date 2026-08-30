@@ -602,15 +602,20 @@ class CeremonyFlowTests(TestCase):
         with mock.patch("world.ceremonies.services.execute_will"):
             finish_ceremony(ceremony=ceremony)
 
-        # The honoree's ceremony deed should include the 75 legend from the item.
+        # #3463: the ceremony deed is now minted at ZERO — a rite that risked
+        # nothing is worth no song. The row survives because a conversion
+        # ceremony's deed carries the scandal archetypes that route the #1464
+        # fork, so the assertion moves to what the offering actually feeds now:
+        # the honoree's PRESTIGE. Offerings still make a funeral grander; they
+        # just no longer make the dead legendary.
         honoree_deed = LegendEntry.objects.filter(
             persona=dead.primary_persona,
             source_type__name="Ceremony",
         ).first()
         self.assertIsNotNone(honoree_deed)
-        # Base honoree prestige (50) + offering gold (15*1=15) + legend (75) = 140
-        # before multiplier. Just assert it exceeds the no-legend baseline.
-        self.assertGreater(honoree_deed.base_value, 75)
+        self.assertEqual(honoree_deed.base_value, 0)
+        honoree = ceremony.honorees.get(honoree_sheet=dead)
+        self.assertGreater(honoree.prestige_awarded, 0)
 
         # The maker's deed survives — item was destroyed but deed is not.
         self.assertTrue(LegendEntry.objects.filter(pk=deed.pk).exists())
