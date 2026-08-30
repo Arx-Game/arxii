@@ -2,8 +2,9 @@
 
 from unittest.mock import MagicMock, patch
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
@@ -48,7 +49,12 @@ from world.combat.factories import (
 from world.combat.interaction_services import render_encounter_outcome_narration
 from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
 from world.combat.serializers import EncounterDetailSerializer, EncounterListSerializer
-from world.combat.services import _classify_encounter_outcome, complete_encounter, resolve_round
+from world.combat.services import (
+    _classify_encounter_outcome,
+    _increment_completion_counters,
+    complete_encounter,
+    resolve_round,
+)
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -482,6 +488,39 @@ class CompletionCounterGroupAchievementTests(_CompletionSeamTestBase):
             CharacterAchievement.objects.filter(
                 character_sheet=fled.character_sheet, achievement=achievement
             ).exists()
+        )
+
+    def test_participant_buckets_are_ordered_not_left_to_the_database(self) -> None:
+        """The counters read participants with an explicit ORDER BY (#3319).
+
+        ``grant_achievement`` hands the primary ``Discovery.discovered_by_tenure``
+        slot to the FIRST sheet in the list it is given, so the order these buckets
+        are built in is player-visible credit, not an implementation detail. Left
+        unordered, Postgres returns participants in heap order -- which shifts as
+        soon as ``_apply_aftermath_rules`` rewrites a row -- and the named
+        discoverer of a party win changed from run to run. The sibling test above
+        asserts the resulting credit; this one asserts the ordering that makes it
+        reproducible, because on SQLite (which hands back rowid order by luck) that
+        assertion passes whether or not the ORDER BY is there.
+        """
+        encounter = self._make_encounter()
+        self._add_pc(encounter)
+        self._add_pc(encounter)
+
+        with CaptureQueriesContext(connection) as captured:
+            _increment_completion_counters(encounter, EncounterOutcome.VICTORY)
+
+        participant_selects = [
+            query["sql"]
+            for query in captured.captured_queries
+            if query["sql"].startswith("SELECT")
+            and 'FROM "arxii_combatparticipant"' in query["sql"]
+        ]
+        self.assertEqual(len(participant_selects), 1, "expected one participant read")
+        self.assertIn(
+            "ORDER BY",
+            participant_selects[0][-120:],
+            "completion counters read participants unordered",
         )
 
 
