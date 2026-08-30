@@ -1336,6 +1336,14 @@ Social structures, organizations, reputation, and legend tracking.
 - **Telnet:** `org <subverb>` command (`favor`/`disfavor <person> in <org>=<citation>` added #3290); `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
 - **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` (+ `respond` detail action, #3412 — `POST /offers/{id}/respond/` accept/decline via the existing `membership_services` functions, no staff bypass, matching telnet's `accept org`/`decline org`), `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
+- **Mission Legend (#3468):** both mission Legend paths price through
+  `world.missions.services.legend_pricing`. A mission is its own settled context —
+  its template's `risk_tier` is the declaration and its `level_band_max` is the
+  threat level, so no `StakeContractActivation` is consulted (which is what makes the
+  deferred POST_CRON payout tractable, since the contract has long closed by cron
+  time). `_grant_legend_points` is unsealed: a queued `LEGEND_POINTS` row now mints a
+  priced solo deed stamped at station, and a row that prices to **zero** still flips
+  `applied` — "correctly priced to nothing" is a settled outcome, not a fault.
 - **Legend settlement (#3463, ADR-0249):** Legend is **settled at the end of a story
   unit**, never minted at the act. `world.societies.legend_settlement.settle_legend_for`
   is the single seam: per-person peril floor (risk priced against each earner's OWN

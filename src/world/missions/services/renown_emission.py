@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 
 from world.missions.constants import RewardGroupRule
 from world.missions.models import MissionRenownAward
+from world.missions.services.legend_pricing import mission_settlement_context
 
 if TYPE_CHECKING:
     from world.missions.models import (
@@ -183,7 +184,11 @@ def _fire_award(
     """Fire one award on one persona."""
     from world.societies.renown import fire_renown_award  # noqa: PLC0415
 
-    settled_risk, station = _mission_settlement_context(award, persona)
+    # #3468: the pricing rule is shared with the deferred POST_CRON grant and
+    # lives in one place now (missions.services.legend_pricing). A mission is
+    # its own settled context — its template's risk_tier IS what was at stake.
+    template = award.route.option.node.template
+    settled_risk, station = mission_settlement_context(template, persona.character_sheet)
     return fire_renown_award(
         persona=persona,
         magnitude=award.magnitude or None,
@@ -194,41 +199,6 @@ def _fire_award(
         settled_risk=settled_risk,
         station=station,
     )
-
-
-def _mission_settlement_context(
-    award: MissionRenownAward, persona: Persona
-) -> tuple[str | None, int]:
-    """The mission's own priced risk + this earner's station (#3463, ADR-0249).
-
-    Legend is no longer paid from an authored declaration alone, so a mission
-    award needs to say what was actually at stake. A mission states that in its
-    template's ``risk_tier``, which ``risk_tier_to_renown_risk`` already maps
-    onto the ``RenownRisk`` ladder for the #2051 legend floor — so the mission
-    IS the settled context, and this reads it rather than inventing one.
-
-    Station is ``min(earner level, the mission's risk tier)``: a mission's
-    declared tier is the closest thing it has to a threat level, and capping at
-    the earner's own level is the same rule everywhere else — you cannot bank
-    above your station or by slumming a low-tier run.
-
-    **Deliberately minimal.** #3468 wires missions properly through
-    ``settle_legend_for``, including the deferred POST_CRON payout whose grant
-    function is still stub-sealed. This exists so the change that made Legend
-    settled did not silently zero every mission award in the meantime, which it
-    otherwise would have.
-    """
-    from world.missions.constants import risk_tier_to_renown_risk  # noqa: PLC0415
-    from world.societies.legend_settlement import station_for  # noqa: PLC0415
-
-    template = award.route.option.node.template
-    risk_tier = int(template.risk_tier or 0)
-    if risk_tier <= 0:
-        return None, 0
-    # Persona.character_sheet is a non-null FK — direct access, no defensive
-    # getattr. A persona without a sheet is a broken row, not a case to paper over.
-    level = persona.character_sheet.current_level
-    return risk_tier_to_renown_risk(risk_tier), station_for(level, risk_tier)
 
 
 def _award_title(award: MissionRenownAward) -> str:
