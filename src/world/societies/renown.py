@@ -441,7 +441,7 @@ def _priced_legend(
     *,
     structurally_perilous: bool = False,
 ) -> int:
-    """What this award actually pays in Legend (#3463, ADR-0245).
+    """What this award actually pays in Legend (#3463, ADR-0249).
 
     ``declared_risk`` is the authored wager on the ``RenownAwardConfig`` — the
     ceiling on how legendary this event type may be. ``settled_risk`` is the
@@ -632,7 +632,7 @@ def _apply_renown_award(  # noqa: PLR0913
     defaults from magnitude; ``society_overrides`` overrides computed
     per-society deltas. TEMPORARY personas skip reputation writes.
 
-    **``risk`` is a declared wager, not a payout (#3463, ADR-0245).** It is
+    **``risk`` is a declared wager, not a payout (#3463, ADR-0249).** It is
     the author's ceiling on how legendary this event *type* can be. What
     actually pays is ``settled_risk`` — the level-priced effective risk from a
     real stakes contract — capped by the declaration. A caller with no staked

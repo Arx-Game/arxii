@@ -129,7 +129,7 @@ class FireRenownAwardRiskTests(TestCase):
         self.assertIsNone(result.legend_entry_id)
 
     def test_declared_risk_alone_mints_no_legend(self) -> None:
-        """#3463/ADR-0245: a declared wager is not a payout.
+        """#3463/ADR-0249: a declared wager is not a payout.
 
         This is the safe-grind hole closed. Before, an author setting
         risk=EXTREME on any config paid 1500 to anyone, at any level, with

@@ -254,6 +254,7 @@ treat those names as hints to confirm, not gospel.
 - [0246 - The offscreen-act gate extends the dead-gate choke point](0246-the-offscreen-act-gate-extends-the-dead-gate-choke-point.md) (#3412 slice 3; extends the #2287 dead gate; related ADR-0245)
 - [0247 - State-3 mode coherence: live-connection redirect and sheet-in-new-tab](0247-state-3-mode-coherence-live-connection-redirect-and-sheet-in-new-tab.md) (#3412 slice 4; extends ADR-0241; related ADR-0246)
 - [0248 - Cast-time capability effects ride the condition channel; grant tables mean standing possession](0248-cast-time-capability-effects-ride-the-condition-channel.md) (#3449; strips the three inert grant families, extends ADR-0144/0169)
+- [0249 - Declared risk is a wager, not a payout: Legend is settled, not asserted](0249-declared-risk-is-a-wager-not-a-payout.md) (#3463; extends ADR-0066/0076, generalizes ADR-0122 past Battle, preserves ADR-0077 and reconciles with ADR-0080)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

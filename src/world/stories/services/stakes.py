@@ -462,7 +462,7 @@ def settled_risk_for_beat(beat: Beat) -> str:
     ``target_level`` and nothing jeopardy-checked, so it pays nothing —
     previously this path fell back to the raw declared ``Beat.risk`` and paid
     the full authored tier ungated, which is the same "trust the authored
-    number" hole ADR-0245 closes on the Renown side.
+    number" hole ADR-0249 closes on the Renown side.
     """
     activation = get_open_activation(beat)
     return activation.effective_risk if activation is not None else RenownRisk.NONE

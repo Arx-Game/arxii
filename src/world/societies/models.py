@@ -1489,7 +1489,7 @@ class LegendEntry(AbstractLegendRecord):
     # LegendRequirement band at any level. So this one column is both the
     # peril gate ("could this have killed you") and the staleness gate ("was
     # this recent enough to qualify you for the step you're taking").
-    # Deliberately NOT reach — reach is Renown's axis (see ADR-0245).
+    # Deliberately NOT reach — reach is Renown's axis (see ADR-0249).
     earned_at_level = models.PositiveSmallIntegerField(
         default=0,
         db_index=True,

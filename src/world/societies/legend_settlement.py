@@ -178,7 +178,7 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
 
     Args:
         effective_risk: The unit's level-priced risk. NOT the authored
-            declaration — see ADR-0245; a declared value passed here would
+            declaration — see ADR-0249; a declared value passed here would
             reopen the exact hole this module closes.
         target_level: The threat's level, for station.
         held_fraction: Severity-weighted share of objectives held, 0.0-1.0.
