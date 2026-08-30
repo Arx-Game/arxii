@@ -57,7 +57,16 @@ def _make_scene_in_realm(realm):
 class ExtendDeedAwarenessTests(TestCase):
     def test_no_scene_returns_empty(self) -> None:
         persona = _make_primary_persona()
-        deed = fire_renown_award(persona=persona, risk=RenownRisk.LOW)
+        deed = fire_renown_award(
+            # #3463: these tests are about AWARENESS SPREADING, not the peril
+            # gate. Legend needs priced proof of peril now, and LOW/MODERATE are
+            # below the floor, so the award is stated at EXTREME with a settled
+            # context to give the spread machinery a real deed to work on.
+            persona=persona,
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=1,
+        )
         from world.societies.models import LegendEntry
 
         entry = LegendEntry.objects.get(pk=deed.legend_entry_id)
@@ -68,7 +77,16 @@ class ExtendDeedAwarenessTests(TestCase):
     def test_extending_to_realm_with_societies_extends_awareness(self) -> None:
         persona = _make_primary_persona()
         # Originating realm A — deed fires with no awareness.
-        deed = fire_renown_award(persona=persona, risk=RenownRisk.LOW)
+        deed = fire_renown_award(
+            # #3463: these tests are about AWARENESS SPREADING, not the peril
+            # gate. Legend needs priced proof of peril now, and LOW/MODERATE are
+            # below the floor, so the award is stated at EXTREME with a settled
+            # context to give the spread machinery a real deed to work on.
+            persona=persona,
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=1,
+        )
         from world.societies.models import LegendEntry
 
         entry = LegendEntry.objects.get(pk=deed.legend_entry_id)
@@ -95,8 +113,14 @@ class ExtendDeedAwarenessTests(TestCase):
         area_a = AreaFactory(realm=realm_a)
 
         result = fire_renown_award(
+            # #3463: these tests are about AWARENESS SPREADING, not the peril
+            # gate. Legend needs priced proof of peril now, and LOW/MODERATE are
+            # below the floor, so the award is stated at EXTREME with a settled
+            # context to give the spread machinery a real deed to work on.
             persona=persona,
-            risk=RenownRisk.LOW,
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=1,
             archetypes=[archetype],
             origin_area=area_a,
         )
@@ -136,7 +160,16 @@ class SpreadDeedIntegrationTests(TestCase):
 
         persona = _make_primary_persona()
         spreader = _make_primary_persona()
-        deed_result = fire_renown_award(persona=persona, risk=RenownRisk.MODERATE)
+        deed_result = fire_renown_award(
+            # #3463: these tests are about AWARENESS SPREADING, not the peril
+            # gate. Legend needs priced proof of peril now, and LOW/MODERATE are
+            # below the floor, so the award is stated at EXTREME with a settled
+            # context to give the spread machinery a real deed to work on.
+            persona=persona,
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=1,
+        )
         from world.societies.models import LegendEntry
 
         deed = LegendEntry.objects.get(pk=deed_result.legend_entry_id)
