@@ -2329,6 +2329,7 @@
   - encounter -> combat.CombatEncounter [FK]
   - participant -> combat.CombatParticipant [FK]
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - subject_opponent -> combat.CombatOpponent [FK] (nullable)
 
 ### DuelChallenge
 **Foreign Keys:**

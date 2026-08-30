@@ -1370,6 +1370,13 @@ def _build_combat_result(
 def _vulnerability_intensity_bonus(action: CombatRoundAction) -> int:
     """Return the break-bar vulnerability intensity bonus if the action's
     target opponent is currently vulnerable, else 0.
+
+    NOT the escalation currency. This is a POWER-ledger term: it rides
+    ``use_technique(power_intensity_bonus=...)`` and never touches
+    ``CharacterEngagement.intensity_modifier``, which is what the escalation tick
+    and every dramatic surge write (``world/combat/escalation.py``). Two different
+    "intensity" concepts share the word in this module - see
+    ``world/combat/AGENT_GLOSSARY.md``.
     """
     target = action.focused_opponent_target
     if target is None or target.vulnerability_rounds_remaining <= 0:
@@ -7336,6 +7343,8 @@ def check_and_advance_boss_phase(
     - ``probing_current`` is reset to zero.
     - If the new phase has a ``probing_threshold``, it overwrites the
       opponent's ``probing_threshold``.
+    - A dramatic surge fires for every ACTIVE PC (#3445): BOSS_ENRAGE when the
+      phase raises damage_multiplier, else BOSS_PHASE.
 
     Args:
         opponent: The boss opponent to check.
@@ -7351,6 +7360,7 @@ def check_and_advance_boss_phase(
     )
 
     health_pct = opponent.health_percentage
+    previous_multiplier = opponent.damage_multiplier
 
     for phase in phases:
         if phase.health_trigger_percentage is None:
@@ -7358,9 +7368,30 @@ def check_and_advance_boss_phase(
         if health_pct <= phase.health_trigger_percentage:
             _apply_phase_transition(opponent, phase)
             _spawn_reinforcements(opponent.encounter, phase)
+            _surge_on_phase_transition(opponent, phase, previous_multiplier)
             return phase
 
     return None
+
+
+def _surge_on_phase_transition(
+    opponent: CombatOpponent,
+    phase: BossPhase,
+    previous_multiplier: Decimal,
+) -> None:
+    """Fire the boss-beat surge for a transition that just landed (#3445).
+
+    The beat is BOSS_ENRAGE when the new phase makes the boss hit harder and
+    BOSS_PHASE otherwise - mutually exclusive, so one transition is one surge.
+    A phase that only grants ``extra_actions`` is a plain phase beat, per the
+    issue's ratified decision 1.
+    """
+    from world.combat.escalation import apply_boss_phase_surge  # noqa: PLC0415
+
+    apply_boss_phase_surge(
+        opponent=opponent,
+        enraged=phase.damage_multiplier > previous_multiplier,
+    )
 
 
 def _apply_phase_transition(opponent: CombatOpponent, phase: BossPhase) -> None:
@@ -10735,6 +10766,10 @@ def assess_break_bar(
     Called from resolve_round's post-pass, AFTER the clash post-pass resolves
     this round's clashes (so the HOLD feed can see a LOCK-clash win that
     resolved this same round).
+
+    When the bar reaches 0 a BOSS_BREAK dramatic surge also fires for every
+    ACTIVE PC (#3445), once per boss per phase - the re-break loop does not
+    repeat it.
     """
     round_number = encounter.round_number
     bosses = list(
@@ -10789,6 +10824,9 @@ def _assess_boss_break_bar(
     boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
     if broke_this_round:
         _broadcast_break_celebration(encounter, boss)
+        from world.combat.escalation import apply_boss_break_surge  # noqa: PLC0415
+
+        apply_boss_break_surge(opponent=boss)
 
 
 def _break_bar_events_this_round(

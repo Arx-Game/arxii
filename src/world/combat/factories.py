@@ -1473,6 +1473,9 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
     spike_minimum_track_points = 1
     peril_spike_intensity_amount = 3
     hated_foe_spike_intensity_amount = 3
+    boss_phase_spike_intensity_amount = 2
+    boss_enrage_spike_intensity_amount = 4
+    boss_break_spike_intensity_amount = 4
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:

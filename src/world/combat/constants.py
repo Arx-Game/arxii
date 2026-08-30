@@ -77,6 +77,9 @@ class SurgeTriggerKind(models.TextChoices):
     HATED_FOE = "hated_foe", "Hated Foe"
     HIGH_STAKES = "high_stakes", "High Stakes"
     INTERFERENCE = "interference", "Interference"
+    BOSS_PHASE = "boss_phase", "Boss Phase Transition"
+    BOSS_ENRAGE = "boss_enrage", "Boss Enrage"
+    BOSS_BREAK = "boss_break", "Boss Wall Broken"
     GM_MANUAL = "gm_manual", "GM Manual"
 
 

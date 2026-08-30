@@ -6564,12 +6564,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   "available actions" endpoint excludes REGISTRY maneuvers without `ActionTemplate`
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
-  trigger_kind, subject_sheet=None, reason="")` (`world/combat/escalation.py`) — the one write
+  trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
+  subject_phase_number=None)` (`world/combat/escalation.py`) — the one write
   path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
-  GM_MANUAL). `reason` (#3387) persists onto the record as GM-stated provenance for a manual
-  trigger only — every automatic leg leaves it blank; never broadcast to the room. Three new
-  trigger legs alongside the
+  GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
+  record as GM-stated provenance for a manual trigger only — every automatic leg leaves it
+  blank; never broadcast to the room. Three new trigger legs alongside the
   existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
   `CONDITION_APPLIED`, filtered via `world.vitals.peril_resolution
   .acute_peril_condition_names()`), hated-foe (checked on encounter join and NPC opponent add,
@@ -6580,7 +6581,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `peril_spike_intensity_amount` / `hated_foe_spike_intensity_amount` / `surge_narration`
   (generic `{character}`-only template). Surfaced to the web combat panel via
   `EncounterDetailSerializer.surge_beats` (owner/GM-scoped provenance) and broadcast to the
-  room via `room.msg_contents(...)` (telnet).
+  room via `room.msg_contents(...)` (telnet). The boss legs (#3445) - `apply_boss_phase_surge`
+  / `apply_boss_break_surge`, `world/combat/escalation.py` - fire from
+  `check_and_advance_boss_phase` and `_assess_boss_break_bar`, magnitudes authored on
+  `EscalationCurve.boss_{phase,enrage,break}_spike_intensity_amount`, deduped per boss per
+  phase (ADR-0250).
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
