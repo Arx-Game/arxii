@@ -13,7 +13,6 @@ from world.areas.positioning.serializers import (
 from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
 from world.scenes.constants import (
-    DecisiveCheckMarkerStatus,
     ScenePrivacyMode,
     SceneRoundMode,
     SceneRoundStartReason,
@@ -489,23 +488,17 @@ class SceneDetailSerializer(SceneListSerializer):
 
     @staticmethod
     def _resolve_declared_risk(obj: Scene) -> str | None:
-        if obj.running_beat_id is not None:
-            return obj.running_beat.risk
-        encounter = (
-            obj.combat_encounters.filter(completed_at__isnull=True)
-            .select_related("story_beat")
-            .first()
-        )
-        if encounter is not None and encounter.story_beat_id is not None:
-            return encounter.story_beat.risk
-        marker = (
-            obj.decisive_markers.filter(status=DecisiveCheckMarkerStatus.PENDING)
-            .select_related("beat")
-            .first()
-        )
-        if marker is not None:
-            return marker.beat.risk
-        return None
+        """Delegates the precedence chain to ``world.scenes.beat_selectors``.
+
+        Extracted in #3463 because Legend settlement must resolve the SAME beat
+        this badge reports. Two copies would drift, and the drift would mean the
+        badge telling a player what they are risking while settlement paid them
+        for something else.
+        """
+        from world.scenes.beat_selectors import running_beat_for_scene  # noqa: PLC0415
+
+        beat = running_beat_for_scene(obj)
+        return beat.risk if beat is not None else None
 
 
 class ScenesSpotlightSerializer(serializers.Serializer):

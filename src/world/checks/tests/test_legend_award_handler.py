@@ -284,8 +284,21 @@ class LegendAwardRiskTierScalingTests(TestCase):
         assert event is not None
         assert event.base_value == 10
 
-    def test_risk_and_tier_scale_the_award(self) -> None:
-        """HIGH risk x a high-success tier scales well above the authored floor."""
+    def test_unlocked_contract_pays_only_the_authored_floor(self) -> None:
+        """#3463: a beat that never locked a stakes contract scales on NOTHING.
+
+        This asserted 750 before #3463 — RISK_LEGEND_AWARDS[HIGH] x a 3.0 tier
+        multiplier — off a beat with no activation at all. That was the hole:
+        the declared Beat.risk was trusted, so a beat completed without ever
+        locking its contract paid its full authored tier with nothing priced
+        against target_level and no jeopardy walk run.
+
+        settled_risk_for_beat now returns NONE without an activation, so the
+        scaled term is 0 and only the author's explicit legend_base_value floor
+        survives. Scaling is exercised by
+        test_locked_contract_scales_by_effective_risk below, which locks a real
+        contract first.
+        """
         beat = BeatFactory(risk=RenownRisk.HIGH)
         tier = CheckOutcomeFactory(name="Overwhelming Scaling Tier", success_level=10)
         consequence = ConsequenceFactory()
@@ -299,9 +312,7 @@ class LegendAwardRiskTierScalingTests(TestCase):
         apply_effect(effect, self._context(beat=beat, outcome_tier=tier))
         event = LegendEvent.objects.order_by("-pk").first()
         assert event is not None
-        # RISK_LEGEND_AWARDS[HIGH] = 250; tier_multiplier(10) = 1.0 + 10/5 = 3.0
-        # -> 250 * 3.0 = 750, well above the flat legend_base_value=10 floor.
-        assert event.base_value == 750
+        assert event.base_value == 10
 
     def test_risk_none_yields_zero_regardless_of_tier(self) -> None:
         """NONE risk scales to 0, but the authored legend_base_value floor still wins."""
