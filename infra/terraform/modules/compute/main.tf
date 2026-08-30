@@ -21,6 +21,14 @@ resource "linode_instance" "host" {
 
   lifecycle {
     prevent_destroy = true
+    # authorized_keys is a create-time-only attribute (ForceNew): editing the
+    # ARXII_AUTHORIZED_KEYS variable would otherwise plan a full instance
+    # replacement, which prevent_destroy then hard-fails (2026-08-30: adding a
+    # second admin key bricked the button this way). Post-boot key management
+    # belongs to the base role's authorized_key task, which reads the same
+    # tofu output on every converge — cloud-init only needs the key list that
+    # existed at first boot.
+    ignore_changes = [authorized_keys]
   }
 }
 
