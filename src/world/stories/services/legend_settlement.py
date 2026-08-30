@@ -24,6 +24,7 @@ from world.societies.legend_settlement import (
 )
 from world.stories.constants import StakeResolutionColumn
 from world.stories.models import RiskCalibration, StakeOutcome
+from world.stories.services.stakes import compute_effective_risk
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -119,6 +120,21 @@ def participants_for_activation(
                 persona=persona,
                 level=sheet.current_level,
                 crucial_success_level=best_crucial.get(sheet.pk),
+                # #3463 — priced against THIS character's level, not the party
+                # average the contract locked. compute_effective_risk is the
+                # same ADR-0077 ladder; feeding it one level instead of the
+                # party's mean is the whole of the personal-risk filter.
+                #
+                # Deliberately computed from the DECLARED risk, so it works for
+                # Battle too: ADR-0080 keeps a war's stakes un-scaled by who
+                # turned up, which is right for the objective, but a demigod on
+                # that field still risked nothing personally and earns nothing.
+                # The two rules govern different questions and do not conflict.
+                personal_risk=compute_effective_risk(
+                    activation.declared_risk,
+                    activation.declared_target_level,
+                    sheet.current_level,
+                ),
             )
         )
     return participants

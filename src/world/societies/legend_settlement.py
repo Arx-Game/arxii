@@ -12,11 +12,15 @@ tier. This module replaces all of that with one priced settlement.
 
 The rules it enforces, in order:
 
-1. **Peril floor.** The unit's *effective* risk (level-priced per ADR-0077, and
-   forced to NONE when the contract was unready — which includes the case where
-   removal-from-play was never reachable from the failure branch, ADR-0076) must
-   reach ``LEGEND_RISK_FLOOR``. Below it, nothing mints. Not a reduced award:
-   zero. Advancement by playing it safe is impossible, not slow.
+1. **Peril floor, applied PER PERSON.** Risk is priced against each earner's
+   own level, not the party's average, and must reach ``LEGEND_RISK_FLOOR`` for
+   *that person* before they earn anything. Below it, they mint nothing — not a
+   reduced award, zero. "We basically need all legend rewards to go through a
+   filter that determines their personal degree of risk; if they had very
+   little, it should be essentially zero" (Tehom, 2026-08-30). A level-10 hero
+   who obliterates a company of level-1 mooks was never in danger, and the
+   fact that the mooks were lethal to everyone else does not make it a song
+   about them. Personal risk is table stakes.
 2. **Outcome.** The shared deed pays on the severity-weighted share of objectives
    actually held. Beat the monsters but let the town burn and you are paid for
    the monsters, not the town.
@@ -107,6 +111,13 @@ class SettlementParticipant:
     persona: Persona
     level: int
     crucial_success_level: int | None = None
+    #: This character's OWN effective risk, priced against their level rather
+    #: than the party's average (#3463). A level-10 standing in a fight pitched
+    #: at level 5 was not personally in danger, and earns nothing for it however
+    #: real the danger was to everyone else. Consumers compute this; societies
+    #: must not import the stories-side pricing (ADR-0010). None falls back to
+    #: the contract-wide risk, which is the pre-personal-filter behaviour.
+    personal_risk: str | None = None
 
 
 @dataclass(frozen=True)
@@ -191,19 +202,32 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
     if not participants:
         return SettlementReport(minted=False, reason="no participants resolved for the unit")
 
-    if not structurally_perilous and not risk_meets_legend_floor(effective_risk):
-        return SettlementReport(
-            minted=False,
-            reason=(
-                f"effective risk {effective_risk!r} is below the Legend floor "
-                f"{LEGEND_RISK_FLOOR!r} — nothing was at stake for this party"
-            ),
-        )
-
     if held_fraction <= 0:
         return SettlementReport(
             minted=False,
             reason="no objective was held; the shared deed pays nothing",
+        )
+
+    # The peril floor is a PER-PERSON filter (#3463). Everyone who was not
+    # personally in danger drops out here, however dangerous the unit was to
+    # the rest of the party.
+    stations: dict[int, int] = {}
+    for participant in participants:
+        risk = participant.personal_risk or effective_risk
+        if not structurally_perilous and not risk_meets_legend_floor(risk):
+            continue
+        station = station_for(participant.level, target_level)
+        if station > 0:
+            stations[participant.persona.pk] = station
+
+    paid = [p for p in participants if p.persona.pk in stations]
+    if not paid:
+        return SettlementReport(
+            minted=False,
+            reason=(
+                f"nobody was personally at risk: every participant priced below "
+                f"the Legend floor {LEGEND_RISK_FLOOR!r}, or had no station"
+            ),
         )
 
     risk_award = risk_award_override or RISK_LEGEND_AWARDS.get(effective_risk, 0)
@@ -218,14 +242,6 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
             minted=False,
             reason="the priced award rounded to zero",
         )
-
-    stations: dict[int, int] = {}
-    for participant in participants:
-        station = station_for(participant.level, target_level)
-        if station > 0:
-            stations[participant.persona.pk] = station
-
-    paid = [p for p in participants if p.persona.pk in stations]
     if not paid:
         return SettlementReport(
             minted=False,
@@ -284,13 +300,16 @@ def settle_standouts_only(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     mints its actor a much smaller solo deed. The peril floor still applies —
     a spectacular lockpick with nothing at stake is not a song.
     """
-    if not risk_meets_legend_floor(effective_risk):
+    at_risk = [
+        p for p in participants if risk_meets_legend_floor(p.personal_risk or effective_risk)
+    ]
+    if not at_risk:
         return SettlementReport(
             minted=False,
-            reason=f"effective risk {effective_risk!r} is below the Legend floor",
+            reason="nobody was personally at risk; a lost unit still owes no song",
         )
     standouts = _mint_standouts(
-        participants=participants,
+        participants=at_risk,
         risk_award=RISK_LEGEND_AWARDS.get(effective_risk, 0),
         target_level=target_level,
         source_type=source_type,
@@ -334,6 +353,14 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     minted: list[LegendEntry] = []
     for participant in participants:
         if participant.persona.pk in already_paid:
+            continue
+        # Same per-person peril filter as the shared deed: brilliance is only a
+        # song when the person performing it was themselves at risk. A
+        # untouchable hero's flourish on a battlefield that could not hurt them
+        # is not a consolation deed.
+        if participant.personal_risk is not None and not risk_meets_legend_floor(
+            participant.personal_risk
+        ):
             continue
         level = participant.crucial_success_level
         if level is None or level < min_success_level:
