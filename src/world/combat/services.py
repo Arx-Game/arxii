@@ -9359,12 +9359,14 @@ def _increment_completion_counters(encounter: CombatEncounter, outcome: Encounte
         increment_combat_counter_for_group,
     )
 
-    # Ordered by join order (#3319): the bucket lists below are handed to
-    # ``increment_stat_for_group`` -> ``grant_achievement``, which gives the primary
-    # ``Discovery.discovered_by_tenure`` slot to the FIRST sheet in the list and shares
-    # the rest. An unordered queryset leaves that to Postgres row order, which shifts
-    # whenever ``_apply_aftermath_rules`` rewrites a participant row -- so who is named
-    # the discoverer of a party win varied run to run. Earliest joiner takes the slot.
+    # Ordered by join order (#3319). Nothing player-facing rides on this: the bucket
+    # lists go to ``increment_stat_for_group`` -> ``grant_achievement``, which puts the
+    # first sheet in the primary ``Discovery.discovered_by_tenure`` FK and the rest in
+    # ``shared_with_tenures``, and #3063 ruled that split invisible -- every member of a
+    # group discovery reads identically as "shared". Unordered, though, the split fell
+    # out of Postgres heap order, which shifts whenever ``_apply_aftermath_rules``
+    # rewrites a participant row, and made the arbitrary choice unreproducible run to
+    # run. Ordering by pk keeps it stable without making it mean anything.
     participants = (
         CombatParticipant.objects.filter(encounter=encounter)
         .select_related("character_sheet")
