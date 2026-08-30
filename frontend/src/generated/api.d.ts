@@ -25049,9 +25049,12 @@ export interface components {
     /**
      * @description Eligibility preview computed by ``_compute_can_honor`` — never persisted.
      *
-     *     ``hares_required``/``value_added`` are null exactly when the viewer's level has
-     *     no authored ``LegendLevelCalibration`` row — the rite has no price to show yet,
-     *     not zero (see ``_compute_can_honor``'s read-path comment).
+     *     ``hares_required``/``value_added`` are null whenever ``allowed`` is false for a
+     *     reason that stops the check before a price is ever computed — an eligibility
+     *     refusal (own deed, unknown deed, already honored, ...) or an unconfigured
+     *     level's missing ``LegendLevelCalibration`` row alike. Only null, never zero:
+     *     the rite has no price to show, not a free one (see ``_compute_can_honor``'s
+     *     read-path comment for why eligibility always wins over "not configured").
      */
     CanHonor: {
       readonly allowed: boolean;

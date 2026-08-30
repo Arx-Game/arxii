@@ -32,6 +32,7 @@ from world.societies.constants import DeedKnowledgeSource
 from world.societies.factories import (
     LegendEntryFactory,
     LegendEventFactory,
+    LegendHonorFactory,
     LegendLevelCalibrationFactory,
     OrganizationFactory,
 )
@@ -149,6 +150,36 @@ class HonorEndpointsTests(APITestCase):
         self.assertEqual(can_honor["hares_required"], 1)
         self.assertEqual(can_honor["value_added"], 10)
 
+    def test_can_honor_reason_prioritizes_eligibility_over_unconfigured_level(self) -> None:
+        """Review finding 1: eligibility beats "not configured", exactly mirroring
+
+        ``honor_deed``'s own check order (world/societies/honors.py:207-229) —
+        eligibility (own-deed/knowledge/already-honored) runs before price. A
+        viewer who has ALREADY honored this deed AND whose level has no
+        calibration row must be told "You have already honored this deed.",
+        never sent to ask staff about configuration — that would be true but
+        would name the wrong cause, and honor_deed itself never even reaches
+        the calibration lookup for someone already ineligible.
+        """
+        CharacterClassLevelFactory(character=self.honorer_sheet, level=7)
+        self.honorer_sheet.invalidate_class_level_cache()
+        self.assertFalse(
+            LegendLevelCalibration.objects.filter(level=7).exists(),
+            "test fixture bug: a level-7 calibration row exists",
+        )
+        self._grant_knowledge()
+        LegendHonorFactory(deed=self.deed, honorer=self.honorer_persona)
+        self.client.force_authenticate(user=self.honorer_account)
+
+        response = self.client.get(reverse("societies:deed-detail", args=[self.deed.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        can_honor = response.data["can_honor"]
+        self.assertFalse(can_honor["allowed"])
+        self.assertIn("already honored", can_honor["reason"].lower())
+        self.assertIsNone(can_honor["hares_required"])
+        self.assertIsNone(can_honor["value_added"])
+
     def test_post_honor_creates_legend_honor_and_returns_201(self) -> None:
         self._mint_hare(self.honorer_sheet)
         self._grant_knowledge()
@@ -241,22 +272,34 @@ class HonorEndpointsTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
         self.assertEqual(LegendHonor.objects.count(), 0)
 
-    def test_payload_contains_no_account_identifiers(self) -> None:
-        self._mint_hare(self.honorer_sheet)
-        self._grant_knowledge()
-        self.client.force_authenticate(user=self.honorer_account)
-        self.client.post(
-            reverse("societies:deed-honor", args=[self.deed.pk]),
-            {"journal_title": "A Great Deed", "journal_body": "They fought bravely and won."},
-            format="json",
-        )
-
-        response = self.client.get(reverse("societies:deed-detail", args=[self.deed.pk]))
+    def _assert_no_account_identifiers(self, response) -> None:
         body = json.dumps(response.data)
         self.assertNotIn(self.honorer_account.username, body)
         self.assertNotIn(self.honorer_account.email, body)
         self.assertNotIn(self.honoree_account.username, body)
         self.assertNotIn(self.honoree_account.email, body)
+
+    def test_payload_contains_no_account_identifiers(self) -> None:
+        """Covers all three response bodies this endpoint set can return.
+
+        Same account-free serializer (``LegendHonorSerializer`` / persona id+name
+        only) backs the GET deed-detail body and both POST honor bodies below — but
+        this is the test guarding a privacy property, so it checks every body that
+        shape reaches, not just one of them.
+        """
+        self._mint_hare(self.honorer_sheet)
+        self._grant_knowledge()
+        self.client.force_authenticate(user=self.honorer_account)
+        honor_response = self.client.post(
+            reverse("societies:deed-honor", args=[self.deed.pk]),
+            {"journal_title": "A Great Deed", "journal_body": "They fought bravely and won."},
+            format="json",
+        )
+        self.assertEqual(honor_response.status_code, status.HTTP_201_CREATED, honor_response.data)
+        self._assert_no_account_identifiers(honor_response)
+
+        detail_response = self.client.get(reverse("societies:deed-detail", args=[self.deed.pk]))
+        self._assert_no_account_identifiers(detail_response)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
@@ -312,3 +355,13 @@ class EstablishEndpointTests(APITestCase):
         new_deed = LegendEntry.objects.get(pk=honor.deed_id)
         self.assertEqual(new_deed.title, "He Held the Door")
         self.assertEqual(new_deed.persona_id, self.honoree_persona.pk)
+
+        # Same account-free serializer as the deed-detail/honor bodies — the
+        # establish POST response is the third body this endpoint set can
+        # return, and the privacy test in HonorEndpointsTests only covers the
+        # other two.
+        body = json.dumps(response.data)
+        self.assertNotIn(self.honorer_account.username, body)
+        self.assertNotIn(self.honorer_account.email, body)
+        self.assertNotIn(self.honoree_account.username, body)
+        self.assertNotIn(self.honoree_account.email, body)

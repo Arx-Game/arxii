@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.scenes.models import Persona
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 from world.societies.houses.models import Domain, Title
 from world.societies.models import (
     LegendEntry,
@@ -623,26 +628,26 @@ _NO_ACTIVE_PERSONA_REASON = "You need an active persona to honor a deed."
 def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> dict:
     """Read-only eligibility preview for the Rite of Honors (#3466 Task 9).
 
-    Mirrors ``honor_deed``'s (``world.societies.honors``) amplify-branch checks
-    without any side effect — no row lock, no token resolution, no write. Every
-    ``reason`` string is the same player-safe ``HonorRefused.user_message`` the
-    service itself would raise, so a refusal shown here and a refusal returned by
-    the POST ``honor`` action never drift apart. None of these name anything the
-    viewer could not already see elsewhere on this same payload (the deed's own
-    title/persona, or the Hare count this same response already discloses).
+    Mirrors ``honor_deed``'s (``world.societies.honors``, lines 207-229) amplify-
+    branch check order exactly — eligibility first, price last — without any side
+    effect of its own: no row lock, no token resolution, no write. Every ``reason``
+    string is the same player-safe ``HonorRefused.user_message`` the service itself
+    would raise, so a refusal shown here and a refusal returned by the POST
+    ``honor`` action never drift apart, AND a viewer who fails on two grounds at
+    once (e.g. already honored this deed AND their level has no calibration row)
+    is told the eligibility reason, not the price one — exactly the reason
+    ``honor_deed`` itself would give, since it never reaches the price step for
+    an ineligible caller. None of these name anything the viewer could not already
+    see elsewhere on this same payload (the deed's own title/persona, or the Hare
+    count this same response already discloses).
     """
     from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
     from world.currency.models import FavorTokenDetails  # noqa: PLC0415
     from world.societies.honors import (  # noqa: PLC0415
-        AlreadyHonoredError,
-        CannotHonorOwnDeedError,
         DeedAtCeilingError,
-        EventMintedNothingRefusal,
         InsufficientHaresError,
         NoAnchorEventError,
-        UnknownDeedError,
     )
-    from world.societies.knowledge_services import knows_deed  # noqa: PLC0415
     from world.societies.models import LegendLevelCalibration  # noqa: PLC0415
 
     if viewer_persona is None:
@@ -663,15 +668,36 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
 
     anchor_event = deed.event
     sheet = viewer_persona.character_sheet
-    # READ PATH ONLY — deliberately NOT a bare ``.get()`` (contrast
-    # ``honor_deed``'s own lookup in ``world.societies.honors``, and this
-    # module's ``_dispatch_rite_of_honors`` write path, both of which stay
-    # unguarded and must still raise ``DoesNotExist`` when a level has no
-    # authored calibration row). The no-guard policy exists so a missing
-    # authored row can never be silently substituted with a fake default while
-    # gameplay *proceeds* on wrong numbers — that property is fully preserved
-    # here, since nothing below invents a number and the write path still
-    # refuses hard. What changes is only that reading a deed page stops being
+
+    # Eligibility gates, in honor_deed's own order — ALL evaluated before price,
+    # exactly like honor_deed's Step 2 running before its Step 3. A reason found
+    # here always wins over "not configured": honor_deed itself never reaches the
+    # calibration lookup for an ineligible caller, so neither should this preview.
+    eligibility_reason = _can_honor_eligibility_reason(
+        viewer_persona=viewer_persona, deed=deed, sheet=sheet, anchor_event=anchor_event
+    )
+    if eligibility_reason is not None:
+        # honor_deed never computes a price for an ineligible caller either —
+        # there is nothing wrong to report, so hares_required/value_added stay
+        # null rather than a stale or misleading number.
+        return {
+            "allowed": False,
+            "reason": eligibility_reason,
+            "hares_required": None,
+            "value_added": None,
+        }
+
+    # Only reached once eligibility is clear — mirrors honor_deed's Step 3
+    # (price) running after its Step 2 (eligibility). READ PATH ONLY —
+    # deliberately NOT a bare ``.get()`` (contrast ``honor_deed``'s own lookup
+    # in ``world.societies.honors``, and this module's
+    # ``_dispatch_rite_of_honors`` write path, both of which stay unguarded and
+    # must still raise ``DoesNotExist`` when a level has no authored
+    # calibration row). The no-guard policy exists so a missing authored row
+    # can never be silently substituted with a fake default while gameplay
+    # *proceeds* on wrong numbers — that property is fully preserved here,
+    # since nothing below invents a number and the write path still refuses
+    # hard. What changes is only that reading a deed page stops being
     # collateral damage: ``CharacterSheet.current_level`` is 0 for any
     # character with no class assignments yet, so an un-authored level-0 row
     # would otherwise 500 every brand-new player's first deed-page view, for a
@@ -687,36 +713,70 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
         }
     hares_required = calibration.honor_hares_required
     headroom = max(anchor_event.base_value - deed.base_value, 0)
+
+    # Affordability before the ceiling check — honor_deed's own Step 3 (resolve
+    # tokens, raising InsufficientHaresError) runs before its Step 4 (headroom,
+    # raising DeedAtCeilingError).
+    academy = Organization.objects.get(name=SHROUDWATCH_ACADEMY_NAME)
+    available = FavorTokenDetails.objects.filter(
+        issuing_organization=academy,
+        redeemed_at__isnull=True,
+        item_instance__holder_character_sheet=sheet,
+        item_instance__destroyed_at__isnull=True,
+    ).count()
+    price_reason: str | None = None
+    if available < hares_required:
+        price_reason = InsufficientHaresError(hares_required).user_message
+    elif headroom <= 0:
+        price_reason = DeedAtCeilingError().user_message
+
     value_added = min(calibration.honor_value_added, headroom)
 
-    reason: str | None = None
-    if deed.persona.character_sheet_id == sheet.pk:
-        reason = CannotHonorOwnDeedError().user_message
-    elif not anchor_event.deeds.filter(is_active=True).exists():
-        reason = EventMintedNothingRefusal().user_message
-    elif not knows_deed(persona=viewer_persona, deed=deed):
-        reason = UnknownDeedError().user_message
-    elif LegendHonor.objects.filter(deed=deed, honorer=viewer_persona).exists():
-        reason = AlreadyHonoredError().user_message
-    elif headroom <= 0:
-        reason = DeedAtCeilingError().user_message
-    else:
-        academy = Organization.objects.get(name=SHROUDWATCH_ACADEMY_NAME)
-        available = FavorTokenDetails.objects.filter(
-            issuing_organization=academy,
-            redeemed_at__isnull=True,
-            item_instance__holder_character_sheet=sheet,
-            item_instance__destroyed_at__isnull=True,
-        ).count()
-        if available < hares_required:
-            reason = InsufficientHaresError(hares_required).user_message
-
     return {
-        "allowed": reason is None,
-        "reason": reason,
+        "allowed": price_reason is None,
+        "reason": price_reason,
         "hares_required": hares_required,
         "value_added": value_added,
     }
+
+
+def _can_honor_eligibility_reason(
+    *,
+    viewer_persona: Persona,
+    deed: LegendEntry,
+    sheet: CharacterSheet,
+    anchor_event: LegendEvent,
+) -> str | None:
+    """The eligibility half of ``_compute_can_honor``, split out for complexity (C901).
+
+    Mirrors ``honor_deed``'s eligibility gates in the SAME order (event-proved-
+    peril, own-deed, knowledge, already-honored) — none of these need the
+    calibration row, so all run before price, exactly like ``honor_deed``'s own
+    Step 2 running before its Step 3.
+    """
+    from world.societies.honors import (  # noqa: PLC0415
+        AlreadyHonoredError,
+        CannotHonorOwnDeedError,
+        EventMintedNothingRefusal,
+        UnknownDeedError,
+    )
+    from world.societies.knowledge_services import knows_deed  # noqa: PLC0415
+
+    if not anchor_event.deeds.filter(is_active=True).exists():
+        # Unreachable from THIS view in practice: DeedViewSet's queryset is
+        # itself filtered to is_active=True deeds, so the deed being previewed
+        # is always one of its own event's active deeds — this branch can never
+        # be the one that fires here. Kept anyway for symmetry with honor_deed's
+        # own check order (and in case a future caller reaches this helper with
+        # a deed outside that queryset), not because it is expected to trigger.
+        return EventMintedNothingRefusal().user_message
+    if deed.persona.character_sheet_id == sheet.pk:
+        return CannotHonorOwnDeedError().user_message
+    if not knows_deed(persona=viewer_persona, deed=deed):
+        return UnknownDeedError().user_message
+    if LegendHonor.objects.filter(deed=deed, honorer=viewer_persona).exists():
+        return AlreadyHonoredError().user_message
+    return None
 
 
 class _JournalSummarySerializer(serializers.Serializer):
@@ -765,9 +825,12 @@ class LegendHonorSerializer(serializers.ModelSerializer):
 class CanHonorSerializer(serializers.Serializer):
     """Eligibility preview computed by ``_compute_can_honor`` — never persisted.
 
-    ``hares_required``/``value_added`` are null exactly when the viewer's level has
-    no authored ``LegendLevelCalibration`` row — the rite has no price to show yet,
-    not zero (see ``_compute_can_honor``'s read-path comment).
+    ``hares_required``/``value_added`` are null whenever ``allowed`` is false for a
+    reason that stops the check before a price is ever computed — an eligibility
+    refusal (own deed, unknown deed, already honored, ...) or an unconfigured
+    level's missing ``LegendLevelCalibration`` row alike. Only null, never zero:
+    the rite has no price to show, not a free one (see ``_compute_can_honor``'s
+    read-path comment for why eligibility always wins over "not configured").
     """
 
     allowed = serializers.BooleanField(read_only=True)
