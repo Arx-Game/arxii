@@ -174,15 +174,21 @@ Achievement-sourced BONUS modifiers ARE read by `get_modifier_total`: `get_modif
 counts *recognized* non-distinction sources (`achievement_reward`, `residence_comfort`) as flat
 addends — orphaned/bare (UNKNOWN) sources still contribute nothing (#909).
 
-## Displaying earned titles (#1522)
+## Displaying earned titles (#1522, #3466)
 
 Titles are cosmetic and **public** — a character shows them off — so display is ungated.
-`CharacterTitleViewSet` (`GET /api/achievements/character-titles/?character_sheet=<id>`,
+`CharacterTitleViewSet` (`GET /api/achievements/character-titles/?persona=<id>`,
 `CharacterTitleSerializer` → the `PersonaTitle` schema: `title`, `reward_key`, `earned_at`)
-lists a character's earned titles, newest first. Faces: the telnet `sheet/titles` section
-(`commands.account.sheet_sections._render_titles_section`, registered in `SHEET_SECTIONS`) and the
-React **Titles** tab (`frontend/src/achievements/TitlesPanel` on `CharacterSheetPage`). The title's
-player-facing name is the linked TITLE `RewardDefinition.name`.
+lists a persona's earned titles, newest first. Filterable by `persona` **only** — deliberately
+not by `character_sheet`, which would traverse from a sheet to every one of its personas
+(including masks) and reopen the sheet-to-mask link #3466 exists to close. Faces: the telnet
+`sheet/titles` section (`commands.account.sheet_sections._render_titles_section`, registered in
+`SHEET_SECTIONS`, scoped to the viewer's `primary_persona`) and the React **Titles** tab
+(`frontend/src/achievements/TitlesPanel` on `CharacterSheetPage` — still queries the old
+`?character_sheet=` param as of #3466 Task 3; the frontend retarget is a separate later task).
+Both surfaces read `title.display_name`, which resolves to whichever branch is set
+(`reward.name` or `legend_entry.title`) - never read `title.reward.name` directly, it is `None`
+on the deed branch.
 
 ## StatHandler (handlers.py)
 

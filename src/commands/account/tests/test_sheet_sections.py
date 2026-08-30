@@ -133,5 +133,14 @@ class SheetSecretSectionTests(TestCase):
         out = self._run("", switches=["titles"])
         assert "Hot Flex But Okay" in out
 
+    def test_titles_section_lists_a_deed_branch_title_by_its_display_name(self) -> None:
+        from world.achievements.models import PersonaTitle
+        from world.societies.factories import LegendEntryFactory
+
+        deed = LegendEntryFactory(persona=self.viewer_sheet.primary_persona, title="Slew the Wyrm")
+        PersonaTitle.objects.create(persona=self.viewer_sheet.primary_persona, legend_entry=deed)
+        out = self._run("", switches=["titles"])
+        assert "Slew the Wyrm" in out
+
     def test_titles_section_empty(self) -> None:
         assert "no titles" in self._run("", switches=["titles"]).lower()

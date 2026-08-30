@@ -296,7 +296,7 @@ def _render_titles_section(command: Command) -> list[str]:
     viewer = _viewer_sheet(command)
     titles = list(
         PersonaTitle.objects.filter(persona=viewer.primary_persona)
-        .select_related("reward")
+        .select_related("reward", "legend_entry")
         .order_by("-earned_at")
     )
     return _format_titles(titles)
@@ -306,7 +306,7 @@ def _format_titles(titles: list) -> list[str]:
     if not titles:
         return ["You have earned no titles."]
     lines = ["|wYour titles:|n"]
-    lines.extend(f"  {title.reward.name}" for title in titles)
+    lines.extend(f"  {title.display_name}" for title in titles)
     return lines
 
 

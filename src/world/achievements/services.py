@@ -24,7 +24,6 @@ from world.achievements.models import (
     StatTracker,
 )
 from world.achievements.types import AchievementGrantResult
-from world.societies.models import LegendLevelCalibration
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -345,6 +344,8 @@ def maybe_grant_deed_title(deed: LegendEntry) -> PersonaTitle | None:
     Raises ``LegendLevelCalibration.DoesNotExist`` when the station has no authored row.
     That is deliberate: see the model's docstring.
     """
+    from world.societies.models import LegendLevelCalibration  # noqa: PLC0415
+
     calibration = LegendLevelCalibration.objects.get(level=deed.earned_at_level)
     if deed.base_value < calibration.deed_title_threshold:
         return None

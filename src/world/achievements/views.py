@@ -91,27 +91,26 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
         )
 
 
-class CharacterTitleFilterSet(django_filters.FilterSet):
-    """Filter ``PersonaTitle`` by the owning character (#3466).
+class PersonaTitleFilterSet(django_filters.FilterSet):
+    """Filter ``PersonaTitle`` by owning persona only (#3466).
 
-    ``character_sheet`` traverses the persona FK rather than naming a direct model
-    field, since titles retargeted onto ``Persona``. Kept as a stepping stone for the
-    existing route/param names; the persona-scoped read-surface rename (route +
-    ``?persona=``) is a separate, later change.
+    Deliberately NOT filterable by ``character_sheet``: traversing from a sheet to
+    ALL of its personas would return a masked persona's titles alongside the primary's,
+    reopening exactly the sheet-to-mask link this retarget exists to close. Titles are
+    persona-scoped now, so ``?persona=<id>`` is the honest (and only safe) parameter.
     """
-
-    character_sheet = django_filters.NumberFilter(field_name="persona__character_sheet")
 
     class Meta:
         model = PersonaTitle
-        fields = ["character_sheet"]
+        fields = ["persona"]
 
 
 class CharacterTitleViewSet(ReadOnlyModelViewSet):
-    """List a character's earned, displayable titles (#1522).
+    """List a persona's earned, displayable titles (#1522, #3466).
 
     Titles are cosmetic and public — a character shows them off — so any authenticated user can
-    read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+    read any persona's titles. Filter by ``persona`` (== Persona pk). Not filterable by
+    character sheet on purpose — see ``PersonaTitleFilterSet``.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
@@ -119,8 +118,8 @@ class CharacterTitleViewSet(ReadOnlyModelViewSet):
     serializer_class = CharacterTitleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_class = CharacterTitleFilterSet
+    filterset_class = PersonaTitleFilterSet
 
     def get_queryset(self):  # type: ignore[override]
-        """Earned titles with the title's reward prefetched, newest first."""
-        return PersonaTitle.objects.select_related("reward").order_by("-earned_at")
+        """Earned titles with the title's reward/deed prefetched, newest first."""
+        return PersonaTitle.objects.select_related("reward", "legend_entry").order_by("-earned_at")
