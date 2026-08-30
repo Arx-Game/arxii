@@ -49,6 +49,13 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Ritual
 
+#: Dotted path ``Ritual.service_function_path`` dispatches to (#3466 Task 8).
+#: The seeded row (``world.societies.seeds.ensure_rite_of_honors_ritual``) and
+#: any test fixture must match this constant exactly — ``dispatch_ritual`` ->
+#: ``_dispatch_service`` (``world/magic/services/ritual_dispatch.py``) resolves
+#: it via ``importlib.import_module`` + ``getattr``; the string IS the binding.
+HONORS_SERVICE_PATH = "world.societies.honors.honor_deed"
+
 
 class HonorRefused(Exception):
     """Base for every refusal in the Rite of Honors. Carries a player-safe ``user_message``."""

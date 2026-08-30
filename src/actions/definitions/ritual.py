@@ -76,6 +76,7 @@ class PerformRitualAction(Action):
             XPInsufficient,
         )
         from world.magic.services.ritual_dispatch import dispatch_ritual  # noqa: PLC0415
+        from world.societies.honors import HonorRefused  # noqa: PLC0415
 
         ritual = kwargs.pop("ritual", None)
         if ritual is None:
@@ -130,6 +131,7 @@ class PerformRitualAction(Action):
             XPInsufficient,
             GhostTutorError,
             RitualPoolError,
+            HonorRefused,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 

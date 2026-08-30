@@ -6,7 +6,11 @@ session path).
 
 Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name>``                       — perform a ritual by name
-    ``ritual <name> key=value [key=value]``  — with ritual parameters
+    ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
+        e.g. ``thread=<id>``/``tradition_id=<id>``)
+    ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
+        — free-text grammar special-cased for the Rite of Honors (#3466); see
+        ``_resolve_honors_args`` below for why this one ritual gets its own parser.
 
 Multi-participant session path:
     ``ritual sessions``                              — list pending sessions
@@ -24,17 +28,27 @@ for single-actor rituals — both converge on the same service functions.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q
 
 from actions.definitions.ritual import PerformRitualAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.parsing import parse_kv_and_flags
+
+if TYPE_CHECKING:
+    from world.magic.models import Ritual
 
 _THREAD_KWARG = "thread"
 _THREAD_ID_KEY = "thread_id"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
+
+#: Rite of Honors (#3466) telnet tokens — every one may run to multiple words
+#: (a persona's display name, a title, or free-prose journal body), so this
+#: ritual cannot go through ``_split_name_and_kwargs``'s int-only tokenizer.
+_HONORS_MULTIWORD_KEYS = frozenset({"honoree", "deed", "title", "body"})
+_HONORS_USAGE = "Usage: ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>"
 
 
 def _advancement_error_message(exc: Exception) -> str:
@@ -419,16 +433,17 @@ class CmdRitual(ArxCommand):
         self.caller.msg(f"Ritual session #{session_id} has been cancelled.")
 
     # ------------------------------------------------------------------
-    # Single-actor helpers (unchanged)
+    # Single-actor helpers
     # ------------------------------------------------------------------
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Parse ``ritual <name> [k=v ...]`` into action kwargs."""
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
         from world.magic.models import Ritual, Thread  # noqa: PLC0415
+        from world.societies.honors import HONORS_SERVICE_PATH  # noqa: PLC0415
 
         args = self.require_args("Perform which ritual?")
-        name, raw_kwargs = self._split_name_and_kwargs(args)
+        name, rest = self._split_name_and_rest(args)
 
         ritual = Ritual.objects.filter(
             name__iexact=name,
@@ -440,6 +455,20 @@ class CmdRitual(ArxCommand):
         if ritual is None:
             msg = f"You don't know how to perform '{name}'."
             raise CommandError(msg)
+
+        # The Rite of Honors (#3466) is the one single-actor ritual whose kwargs
+        # are not integers (a persona name, a title, free-prose journal body) —
+        # special-cased here rather than through `commands.ritual_adapters`,
+        # whose registry is consulted only on the session draft/join path
+        # (`_handle_draft`/`_handle_join` below), never on this single-actor
+        # branch. `honor_deed` itself must stay agnostic to telnet-vs-REST
+        # input shape (both dispatch paths call it with already-resolved model
+        # instances), so name-to-Persona / id-to-LegendEntry resolution belongs
+        # here, not inside the service function.
+        if ritual.service_function_path == HONORS_SERVICE_PATH:
+            return self._resolve_honors_args(ritual, rest)
+
+        raw_kwargs = self._parse_int_kwargs(rest)
 
         service_kwargs: dict[str, Any] = {}
         thread_id = raw_kwargs.pop(_THREAD_ID_KEY, None)
@@ -469,32 +498,88 @@ class CmdRitual(ArxCommand):
         components = self._gather_components()
         return {"ritual": ritual, "components_provided": components, **service_kwargs}
 
-    def _split_name_and_kwargs(self, args: str) -> tuple[str, dict[str, int]]:
-        """Split into ritual name + trailing ``key=value`` int tokens."""
+    def _split_name_and_rest(self, args: str) -> tuple[str, str]:
+        """Split into ritual name + the raw (unparsed) trailing ``key=value`` text.
+
+        Name resolution must happen before kwarg parsing, since which parser
+        applies (int-only vs. the Rite of Honors' free-text one) depends on
+        which ritual this is.
+        """
         tokens = args.split()
-        kwargs: dict[str, int] = {}
         name_parts: list[str] = []
-        in_kwargs = False
-        for token in tokens:
+        rest_start = len(tokens)
+        for i, token in enumerate(tokens):
             if "=" in token and not token.startswith("="):
-                in_kwargs = True
-                key, _, value = token.partition("=")
-                try:
-                    parsed = int(value)
-                except ValueError as exc:
-                    msg = f"Ritual parameter '{key}' must be a number."
-                    raise CommandError(msg) from exc
-                kwargs[_THREAD_ID_KEY if key == _THREAD_KWARG else key] = parsed
-            elif in_kwargs:
-                msg = "Ritual parameters must come after the ritual name."
-                raise CommandError(msg)
-            else:
-                name_parts.append(token)
+                rest_start = i
+                break
+            name_parts.append(token)
         name = " ".join(name_parts).strip()
         if not name:
             msg = "Perform which ritual?"
             raise CommandError(msg)
-        return name, kwargs
+        return name, " ".join(tokens[rest_start:])
+
+    def _parse_int_kwargs(self, rest: str) -> dict[str, int]:
+        """Parse trailing ``key=value`` int tokens (every ritual but the Rite of Honors)."""
+        kwargs: dict[str, int] = {}
+        for token in rest.split():
+            if "=" not in token or token.startswith("="):
+                msg = "Ritual parameters must come after the ritual name."
+                raise CommandError(msg)
+            key, _, value = token.partition("=")
+            try:
+                parsed = int(value)
+            except ValueError as exc:
+                msg = f"Ritual parameter '{key}' must be a number."
+                raise CommandError(msg) from exc
+            kwargs[_THREAD_ID_KEY if key == _THREAD_KWARG else key] = parsed
+        return kwargs
+
+    def _resolve_honors_args(self, ritual: Ritual, rest: str) -> dict[str, Any]:
+        """Parse ``honoree=<name> deed=<id> title=<text> body=<text>`` (#3466).
+
+        Honoree resolves by exact Persona name, globally — never room-scoped —
+        because honoring is explicitly unrestricted by life-state or presence
+        (a posthumous honoree may be off-scene or dead). ``knows_deed``/
+        ``AlreadyHonoredError``/etc inside ``honor_deed`` itself are the real
+        eligibility gates; this only resolves names/ids to rows.
+        """
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.societies.models import LegendEntry  # noqa: PLC0415
+
+        kv, _flags = parse_kv_and_flags(
+            rest, multiword_keys=_HONORS_MULTIWORD_KEYS, known_flags=frozenset()
+        )
+
+        honoree_name = kv.get("honoree", "").strip()
+        deed_raw = kv.get("deed", "").strip()
+        journal_title = kv.get("title", "").strip()
+        journal_body = kv.get("body", "").strip()
+        if not (honoree_name and deed_raw and journal_title and journal_body):
+            raise CommandError(_HONORS_USAGE)
+
+        honoree_persona = Persona.objects.filter(name__iexact=honoree_name).first()
+        if honoree_persona is None:
+            msg = f"No one named '{honoree_name}' is known to have any deeds."
+            raise CommandError(msg)
+
+        try:
+            deed_id = int(deed_raw)
+        except ValueError as exc:
+            msg = "Deed id must be a number."
+            raise CommandError(msg) from exc
+        deed = LegendEntry.objects.filter(pk=deed_id).first()
+        if deed is None:
+            msg = f"No deed found with id {deed_id}."
+            raise CommandError(msg)
+
+        return {
+            "ritual": ritual,
+            "honoree_persona": honoree_persona,
+            "deed": deed,
+            "journal_title": journal_title,
+            "journal_body": journal_body,
+        }
 
     def _gather_components(self) -> list[Any]:
         """Collect ItemInstance rows for the caller's carried items."""
