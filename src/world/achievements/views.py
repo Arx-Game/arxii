@@ -17,7 +17,7 @@ from world.achievements.serializers import (
     AchievementListSerializer,
     AchievementSerializer,
     CharacterAchievementSerializer,
-    CharacterTitleSerializer,
+    PersonaTitleSerializer,
 )
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -94,28 +94,40 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
 class PersonaTitleFilterSet(django_filters.FilterSet):
     """Filter ``PersonaTitle`` by owning persona only (#3466).
 
+    ``persona`` is declared explicitly (rather than left to the ``Meta.fields``
+    auto-generated filter) so it can be marked ``required``: this view has no pagination
+    (see ``PersonaTitleViewSet``), so an unfiltered ``GET`` would otherwise return every
+    ``PersonaTitle`` row in the database, unbounded (a correctness/load bug, not a privacy
+    one -- the serializer exposes no owner field). ``DjangoFilterBackend.raise_exception``
+    defaults to True, so a missing/invalid ``persona`` becomes an HTTP 400 with a clear
+    per-field message, not a silent full-table scan.
+
     Deliberately NOT filterable by ``character_sheet``: traversing from a sheet to
     ALL of its personas would return a masked persona's titles alongside the primary's,
     reopening exactly the sheet-to-mask link this retarget exists to close. Titles are
     persona-scoped now, so ``?persona=<id>`` is the honest (and only safe) parameter.
     """
 
+    persona = django_filters.NumberFilter(
+        required=True, help_text="Persona id (required) -- returns that persona's earned titles."
+    )
+
     class Meta:
         model = PersonaTitle
         fields = ["persona"]
 
 
-class CharacterTitleViewSet(ReadOnlyModelViewSet):
+class PersonaTitleViewSet(ReadOnlyModelViewSet):
     """List a persona's earned, displayable titles (#1522, #3466).
 
     Titles are cosmetic and public — a character shows them off — so any authenticated user can
-    read any persona's titles. Filter by ``persona`` (== Persona pk). Not filterable by
+    read any persona's titles. Filter by ``persona`` (== Persona pk, required). Not filterable by
     character sheet on purpose — see ``PersonaTitleFilterSet``.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
-    serializer_class = CharacterTitleSerializer
+    serializer_class = PersonaTitleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = PersonaTitleFilterSet

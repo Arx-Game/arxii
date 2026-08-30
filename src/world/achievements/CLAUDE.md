@@ -177,18 +177,20 @@ addends — orphaned/bare (UNKNOWN) sources still contribute nothing (#909).
 ## Displaying earned titles (#1522, #3466)
 
 Titles are cosmetic and **public** — a character shows them off — so display is ungated.
-`CharacterTitleViewSet` (`GET /api/achievements/character-titles/?persona=<id>`,
-`CharacterTitleSerializer` → the `PersonaTitle` schema: `title`, `reward_key`, `earned_at`)
-lists a persona's earned titles, newest first. Filterable by `persona` **only** — deliberately
-not by `character_sheet`, which would traverse from a sheet to every one of its personas
-(including masks) and reopen the sheet-to-mask link #3466 exists to close. Faces: the telnet
-`sheet/titles` section (`commands.account.sheet_sections._render_titles_section`, registered in
-`SHEET_SECTIONS`, scoped to the viewer's `primary_persona`) and the React **Titles** tab
-(`frontend/src/achievements/TitlesPanel` on `CharacterSheetPage` — still queries the old
-`?character_sheet=` param as of #3466 Task 3; the frontend retarget is a separate later task).
-Both surfaces read `title.display_name`, which resolves to whichever branch is set
-(`reward.name` or `legend_entry.title`) - never read `title.reward.name` directly, it is `None`
-on the deed branch.
+`PersonaTitleViewSet` (`GET /api/achievements/persona-titles/?persona=<id>`,
+`PersonaTitleSerializer` → the `PersonaTitle` schema: `title`, `reward_key`, `earned_at`)
+lists a persona's earned titles, newest first. `persona` is **required** (`PersonaTitleFilterSet`
+declares it with `required=True`) — this view has no pagination, so an unfiltered `GET` would
+otherwise return every `PersonaTitle` row in the database; a missing/invalid `persona` 400s
+instead (`DjangoFilterBackend.raise_exception` default). Filterable by `persona` **only** —
+deliberately not by `character_sheet`, which would traverse from a sheet to every one of its
+personas (including masks) and reopen the sheet-to-mask link #3466 exists to close. Faces: the
+telnet `sheet/titles` section (`commands.account.sheet_sections._render_titles_section`,
+registered in `SHEET_SECTIONS`, scoped to the viewer's `primary_persona`) and the React
+**Titles** tab (`frontend/src/achievements/TitlesPanel`, retargeted to `?persona=` on
+`CharacterSheetPage`, #3466). Both surfaces read `title.display_name`, which resolves to
+whichever branch is set (`reward.name` or `legend_entry.title`) - never read `title.reward.name`
+directly, it is `None` on the deed branch.
 
 ## StatHandler (handlers.py)
 

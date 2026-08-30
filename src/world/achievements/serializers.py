@@ -114,7 +114,7 @@ class CharacterAchievementSerializer(serializers.ModelSerializer):
         return obj.is_discoverer()
 
 
-class CharacterTitleSerializer(serializers.ModelSerializer):
+class PersonaTitleSerializer(serializers.ModelSerializer):
     """Serializer for an earned, displayable character title (#1522, #3466).
 
     Cosmetic display only — the mechanical reward attaches to the achievement, not here.

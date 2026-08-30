@@ -1,8 +1,10 @@
-"""API tests for GET /api/achievements/character-titles/ (#1522, #3466).
+"""API tests for GET /api/achievements/persona-titles/ (#1522, #3466).
 
 A persona's earned titles are cosmetic and public — any authenticated user can read any
 persona's titles, filtered by ``persona``. Deliberately NOT filterable by character sheet:
-that would traverse from a sheet to all of its personas, including masks (#3466).
+that would traverse from a sheet to all of its personas, including masks (#3466). ``persona``
+is required (not merely optional): with ``pagination_class = None``, an unfiltered GET would
+otherwise return every ``PersonaTitle`` row in the database.
 """
 
 from rest_framework import status
@@ -16,10 +18,10 @@ from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import LegendEntryFactory
 
-TITLES_URL = "/api/achievements/character-titles/"
+TITLES_URL = "/api/achievements/persona-titles/"
 
 
-class CharacterTitleApiTest(APITestCase):
+class PersonaTitleApiTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory()
@@ -30,6 +32,13 @@ class CharacterTitleApiTest(APITestCase):
     def test_requires_authentication(self) -> None:
         response = self.client.get(TITLES_URL, {"persona": self.sheet.primary_persona.pk})
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_requires_persona_query_param(self) -> None:
+        """An unfiltered GET must 400, not return every title in the game (#3466)."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(TITLES_URL)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "persona" in response.data
 
     def test_lists_a_personas_titles(self) -> None:
         PersonaTitle.objects.create(persona=self.sheet.primary_persona, reward=self.reward)

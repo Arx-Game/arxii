@@ -3446,7 +3446,8 @@ gains a discoverable content item for the first time.
   `world/magic/services/path_magic.py` (`grant_path_magic`), `world/codex/services.py`
   (`grant_codex_entry`, #2899)
 - **API Endpoints:**
-  - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
+  - `GET /api/achievements/persona-titles/?persona=<id>` — a persona's earned titles, newest
+    first; `persona` is required (400 if absent), #3466
 - **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
   FK), covenants (`CovenantRole` inherits `DiscoverableContent`), codex (`CodexEntry` inherits
   `DiscoverableContent`; `codex.entries_learned` stat, #2899), narrative

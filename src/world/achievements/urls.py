@@ -5,7 +5,7 @@ from rest_framework.routers import DefaultRouter
 from world.achievements.views import (
     AchievementViewSet,
     CharacterAchievementViewSet,
-    CharacterTitleViewSet,
+    PersonaTitleViewSet,
 )
 
 router = DefaultRouter()
@@ -13,7 +13,7 @@ router.register("achievements", AchievementViewSet, basename="achievement")
 router.register(
     "character-achievements", CharacterAchievementViewSet, basename="character-achievement"
 )
-router.register("character-titles", CharacterTitleViewSet, basename="character-title")
+router.register("persona-titles", PersonaTitleViewSet, basename="persona-title")
 
 app_name = "achievements"
 urlpatterns = router.urls
