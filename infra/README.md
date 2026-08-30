@@ -472,8 +472,13 @@ Two things that catch people out:
   you see and audit the value in the UI. The Terraform variable is
   `list(string)`, so the value MUST be a JSON array like `["…"]`, not a bare
   line. To add more keys later (your laptop key for break-glass, another
-  admin's key), just extend the array:
-  `["ssh-ed25519 AAA… key1", "ssh-ed25519 BBB… key2"]`.
+  admin's key), just extend the array —
+  `["ssh-ed25519 AAA… key1", "ssh-ed25519 BBB… key2"]` — and re-run the
+  button: the base role's converge installs every key in the array for
+  `arxadmin`. (The instance's own cloud-init key list is create-time-only and
+  deliberately `ignore_changes`-frozen in Terraform — without that, editing
+  this variable planned a full instance replacement, which `prevent_destroy`
+  hard-failed; see `modules/compute/main.tf`.)
 - **Back up the private key to your password manager** (1Password, Bitwarden,
   etc.) before you close the terminal. If the GitHub Secret is ever lost or
   the runner can't reach the host for any reason, that file is your only
