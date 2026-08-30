@@ -240,9 +240,7 @@ def complete_event(event: Event) -> Event:
 # completion. Magnitudes PLACEHOLDER.
 
 CATERING_PRESTIGE_ITEM_CAP = 12
-CATERING_DEED_BASE_PER_POINT = 3
 CATERING_DEED_MINIMUM_SCORE = 2
-HOSPITALITY_SOURCE_TYPE_NAME = "Hospitality"
 
 
 def designate_catering_container(
@@ -347,10 +345,13 @@ def _catering_score(event: Event) -> int:
 
 
 def _award_catering_prestige(event: Event) -> None:
-    """Mint the host's Hospitality deed from the catered spread, if any."""
-    from world.societies.models import LegendSourceType  # noqa: PLC0415
-    from world.societies.services import create_solo_deed  # noqa: PLC0415
+    """The host's prestige and their house's stature from a catered spread.
 
+    Minted a Hospitality *Legend deed* until #3463. A feast risks nothing, so
+    under the bard test it is worth no song — prestige and stature only. The
+    function keeps its name because prestige is what it was always for; the
+    legend deed was the part that did not belong.
+    """
     score = _catering_score(event)
     if score < CATERING_DEED_MINIMUM_SCORE:
         return
@@ -360,17 +361,6 @@ def _award_catering_prestige(event: Event) -> None:
     )
     if host is None or host.persona is None:
         return
-    source_type, _created = LegendSourceType.objects.get_or_create(
-        name=HOSPITALITY_SOURCE_TYPE_NAME,
-        defaults={"description": "PLACEHOLDER: deeds of the table — hosting done grandly (#2852)."},
-    )
-    create_solo_deed(
-        host.persona,
-        f"Set a lavish table at {event.name}",
-        source_type,
-        score * CATERING_DEED_BASE_PER_POINT,
-        description="PLACEHOLDER: a spread remembered longer than the speeches.",
-    )
     _apply_grand_display(host.persona, score)
 
 
@@ -409,17 +399,12 @@ def _apply_grand_display(persona, score: int) -> None:
 GRANDEUR_COPPER_TO_POINT_RATE = 1000
 GRANDEUR_SCORE_CAP = 40
 GRANDEUR_DEED_MINIMUM_SCORE = 3
-GRANDEUR_DEED_BASE_PER_POINT = 5
-GRANDEUR_HONOREE_CUT_PERCENT = 30
-GRANDEUR_SOURCE_TYPE_NAME = "Grandeur"
+
 
 # Ceremony type keys whose honorees get an additive grandeur cut (#2357 amendments).
 # "coronation" is not yet a valid CeremonyTypeKey choice (lands with #2358) — the
 # plain string check is forward-compatible: no Ceremony row can carry that key
 # until #2358 adds it, so this simply never matches until then.
-_GRANDEUR_HONOREE_CEREMONY_KEYS = ("wedding", "coronation")
-
-
 def contribute_grandeur(  # noqa: PLR0913 - purse/treasury source pair is co-equal, mirrors transfer()
     event: Event,
     persona: Persona,
@@ -496,10 +481,12 @@ def _grandeur_score(event: Event) -> int:
 
 
 def _award_grandeur_prestige(event: Event) -> None:
-    """Mint the host's Grandeur deed from the event's spend, if any (#2357)."""
-    from world.societies.models import LegendSourceType  # noqa: PLC0415
-    from world.societies.services import create_solo_deed  # noqa: PLC0415
+    """The host's prestige and stature from the event's spend (#2357).
 
+    Minted a Grandeur *Legend deed* until #3463; coin buys fame and stature,
+    never Legend. The honoree cut went with it — see
+    ``_award_grandeur_honoree_cut``.
+    """
     score = _grandeur_score(event)
     if score < GRANDEUR_DEED_MINIMUM_SCORE:
         return
@@ -509,71 +496,7 @@ def _award_grandeur_prestige(event: Event) -> None:
     )
     if host is None or host.persona is None:
         return
-    source_type, _created = LegendSourceType.objects.get_or_create(
-        name=GRANDEUR_SOURCE_TYPE_NAME,
-        defaults={
-            "description": (
-                "PLACEHOLDER: wealth thrown at a night no one present will forget (#2357)."
-            )
-        },
-    )
-    create_solo_deed(
-        host.persona,
-        f"Threw a legendary {event.name}",
-        source_type,
-        score * GRANDEUR_DEED_BASE_PER_POINT,
-        description="PLACEHOLDER: coin become memory, memory become standing.",
-    )
     _apply_grand_display(host.persona, score)
-    _award_grandeur_honoree_cut(event, score, source_type)
-
-
-def _award_grandeur_honoree_cut(event: Event, score: int, source_type) -> None:
-    """Additive honoree cut when *event* has a linked, COMPLETED WEDDING/CORONATION ceremony.
-
-    Mirrors ``CeremonyConfig.officiant_cut_percent``'s shape: a percentage of
-    the host's grandeur deed value mints as a second deed per honoree,
-    additive to whatever ``finish_ceremony``'s own branch already awarded
-    them (ratified 2026-08-15 — the "in addition to" ceremony honoree
-    prestige). No cut fires for a plain grand ball with no linked ceremony,
-    nor for one that never solemnized: an event can complete independently of
-    its ceremony (two separate completion triggers, no ordering enforced
-    between them), so an ``abandon_ceremony``'d wedding — which awards its
-    honorees nothing (Decision 12) — must not still pay out a grandeur cut
-    for a marriage that never happened. Gated on
-    ``CeremonyStatus.COMPLETED``, not merely "linked."
-    """
-    from world.ceremonies.constants import CeremonyStatus  # noqa: PLC0415
-    from world.ceremonies.models import Ceremony  # noqa: PLC0415
-    from world.societies.services import create_solo_deed  # noqa: PLC0415
-
-    ceremony = (
-        Ceremony.objects.filter(
-            event=event,
-            ceremony_type__key__in=_GRANDEUR_HONOREE_CEREMONY_KEYS,
-            status=CeremonyStatus.COMPLETED,
-        )
-        .select_related("ceremony_type")
-        .first()
-    )
-    if ceremony is None:
-        return
-    honoree_value = score * GRANDEUR_DEED_BASE_PER_POINT * GRANDEUR_HONOREE_CUT_PERCENT // 100
-    if honoree_value <= 0:
-        return
-    for honoree in ceremony.honorees.select_related("honoree_sheet"):
-        # CharacterSheet.primary_persona raises Persona.DoesNotExist rather than
-        # returning None when the invariant is violated (world/character_sheets/
-        # models.py) — no None-guard needed, mirrors finish_ceremony's own
-        # unguarded use of the same property.
-        persona = honoree.honoree_sheet.primary_persona
-        create_solo_deed(
-            persona,
-            f"Honored by the grandeur of {event.name}",
-            source_type,
-            honoree_value,
-            description="PLACEHOLDER: a share of the night's splendor, theirs by right.",
-        )
 
 
 def cancel_event(event: Event) -> Event:

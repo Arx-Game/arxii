@@ -1336,6 +1336,22 @@ Social structures, organizations, reputation, and legend tracking.
 - **Telnet:** `org <subverb>` command (`favor`/`disfavor <person> in <org>=<citation>` added #3290); `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
 - **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` (+ `respond` detail action, #3412 — `POST /offers/{id}/respond/` accept/decline via the existing `membership_services` functions, no staff bypass, matching telnet's `accept org`/`decline org`), `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
+- **Legend settlement (#3463, ADR-0249):** Legend is **settled at the end of a story
+  unit**, never minted at the act. `world.societies.legend_settlement.settle_legend_for`
+  is the single seam: per-person peril floor (risk priced against each earner's OWN
+  level via `SettlementParticipant.personal_risk` — below the floor mints zero, not
+  less), held-objective share, station stamp (`LegendEntry.earned_at_level` =
+  `min(earner level, threat level)`), and a standout pass that pays brilliance even on
+  a lost unit (ADR-0122 generalized past `Battle`). New models: `LegendContribution`
+  (the ledger, written at the `perform_check` chokepoint; `success_level` is
+  SERVER-ONLY), `RenownMagnitudeAward` and `LegendSettlementConfig` (authored tuning,
+  with the Python constants demoted to fallbacks). `societies` stays the reusable
+  primitive — consumers adapt into the seam (ADR-0010);
+  `world.stories.services.legend_settlement` is the stakes-contract adapter and
+  `world.scenes.beat_selectors` shares the scene→running-beat precedence chain with
+  the #3433 risk badge. Station is stamped but NOT folded into `base_value`, and
+  `station_multiplier()` is applied on read by `LegendRequirement`, so retuning never
+  requires recomputing history and `CharacterLegendSummary` stays the tale-worth total.
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
 - **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
   `route_deed_reach` runs at scene-deed birth (`create_solo_deed` /

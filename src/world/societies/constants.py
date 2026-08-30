@@ -158,7 +158,14 @@ class RenownReach(models.TextChoices):
     WORLD = "world", "World"
 
 
-# Magnitude → numeric awards (admin-tunable starting points per the spec).
+# Magnitude → numeric awards.
+#
+# NOT admin-tunable, despite what this comment claimed until #3463: these are
+# Python constants and changing them needs a deploy. Legend's equivalent moved
+# to RiskCalibration.legend_award, which is a real per-risk-tier DB row staff
+# can edit; the table below stays the fallback for a tier with no calibration
+# row. Fame and prestige have no such row yet — if they need tuning, they want
+# the same treatment rather than a second constants edit.
 # Fame outscales prestige — a Very High event puts you instantly at
 # Household Name fame (10k threshold), but permanent prestige climbs slowly.
 MAGNITUDE_FAME_AWARDS: dict[str, int] = {
@@ -175,8 +182,63 @@ MAGNITUDE_PRESTIGE_AWARDS: dict[str, int] = {
     RenownMagnitude.VERY_HIGH.value: 300,
 }
 
-# Risk → legend base_value (added to LegendEntry; spreads extend it
-# further per the existing legend mechanics).
+# #3463 — the minimum EFFECTIVE risk at which any source may mint Legend.
+# Below this, a settled unit mints nothing at all: not a reduced award, zero.
+#
+# Generalized from world.missions.constants.LEGEND_RISK_FLOOR_TIER (#2051),
+# which enforced the same bar for one system only and keyed on a mission's
+# *declared* risk_tier. This one keys on EFFECTIVE risk — the value
+# compute_effective_risk (ADR-0077) prices against the beat's target_level —
+# which is what makes "challenging" mean challenging *to you*: a level-10
+# party's raid on level-4 content decays below the floor and pays nothing.
+#
+# Designer-tunable by code change only, deliberately: the bar for what is
+# worth a song is an invariant, not content.
+LEGEND_RISK_FLOOR: str = str(RenownRisk.HIGH.value)
+
+
+def resolve_legend_risk_floor() -> str:
+    """The authored Legend risk floor, falling back to the constant.
+
+    Reads ``LegendSettlementConfig`` (a staff-editable singleton) so the bar
+    for what is worth a song is tunable without a deploy. ``LEGEND_RISK_FLOOR``
+    below is the default the singleton is created with, and the fallback if the
+    row cannot be read at all.
+    """
+    from django.db import OperationalError, ProgrammingError  # noqa: PLC0415
+
+    from world.societies.models import LegendSettlementConfig  # noqa: PLC0415
+
+    try:
+        return str(LegendSettlementConfig.get_active_config().risk_floor)
+    except (ProgrammingError, OperationalError):
+        # The tuning table does not exist yet (mid-migrate, or a fresh DB being
+        # built). Narrowly these two: anything else is a real fault and should
+        # surface rather than silently pay out at the default floor.
+        return LEGEND_RISK_FLOOR
+
+
+def risk_meets_legend_floor(risk: str, floor: str | None = None) -> bool:
+    """Is this (EFFECTIVE, not declared) risk at or above the Legend floor?
+
+    Ordering comes from ``RenownRisk``'s own declaration order, weakest to
+    strongest, which is authoritative. ``world.stories.constants.RISK_LADDER``
+    is a hand-maintained copy of the same sequence used for effective-risk
+    ladder shifts; both agree, and this deliberately reads the enum rather
+    than the copy. An unknown value is treated as below the floor — the safe
+    direction, since the failure mode is minting Legend that was not earned.
+    """
+    ladder = list(RenownRisk.values)
+    try:
+        return ladder.index(risk) >= ladder.index(floor or resolve_legend_risk_floor())
+    except ValueError:
+        return False
+
+
+# Risk → legend base_value FALLBACK. The authored value is
+# RiskCalibration.legend_award (#3463); this table is what a tier with no
+# calibration row falls back to. Per Tehom's ruling (2026-08-29) every one of
+# these numbers is a lookup table first and a constant only as a default.
 RISK_LEGEND_AWARDS: dict[str, int] = {
     RenownRisk.NONE.value: 0,
     RenownRisk.LOW.value: 10,

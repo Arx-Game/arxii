@@ -1,1 +1,1 @@
-0191_alter_npcserviceoffer_kind_cluerevealofferdetails
+0194_legendsettlementconfig_renownmagnitudeaward

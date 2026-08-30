@@ -11,6 +11,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.classes.factories import CharacterClassLevelFactory
 from world.missions.constants import OptionKind, OptionSource, RewardGroupRule
 from world.missions.factories import (
     MissionDeedRecordFactory,
@@ -31,10 +32,16 @@ from world.societies.constants import (
 )
 
 
-def _make_holder_setup(template_name: str = "renown-emission-tmpl"):
-    """Build a MissionInstance with a contract-holder participant + a terminal route."""
+def _make_holder_setup(template_name: str = "renown-emission-tmpl", *, risk_tier: int = 1):
+    """Build a MissionInstance with a contract-holder participant + a terminal route.
+
+    ``risk_tier`` defaults to the factory's 1 (routine). Tests that need the
+    award to actually MINT a LegendEntry must raise it: since #3463 a mission's
+    own declared tier is what prices its Legend, and a tier-1 run is below the
+    floor, so it mints nothing however the award itself is authored.
+    """
     template = MissionTemplateFactory(
-        name=template_name, reward_group_rule=RewardGroupRule.ALL_EQUAL
+        name=template_name, reward_group_rule=RewardGroupRule.ALL_EQUAL, risk_tier=risk_tier
     )
     node = MissionNodeFactory(template=template, key="entry", is_entry=True)
     option = MissionOptionFactory(
@@ -46,7 +53,14 @@ def _make_holder_setup(template_name: str = "renown-emission-tmpl"):
     route = MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
     instance = MissionInstanceFactory(template=template)
     holder_char = CharacterFactory(db_key="RenownHolder")
-    CharacterSheetFactory(character=holder_char)
+    holder_sheet = CharacterSheetFactory(character=holder_char)
+    # #3463: Legend is capped by STATION, min(earner level, threat level), and
+    # CharacterSheet.current_level returns 0 for a character with no class
+    # assignments ("freshly created test characters, NPCs without classes").
+    # A level-0 earner has station 0 and earns nothing — correct for a
+    # classless NPC, wrong for a mission's contract holder, who in production
+    # always has a class. Give them one.
+    CharacterClassLevelFactory(character=holder_sheet, level=5, is_primary=True)
     holder = MissionParticipantFactory(
         instance=instance, character=holder_char.sheet_data, is_contract_holder=True
     )
@@ -175,7 +189,7 @@ class EmitRenownCriminalTaggingTests(TestCase):
         from world.missions.constants import DeedRewardKind, DeedRewardSink
         from world.missions.factories import MissionDeedRewardLineFactory
 
-        instance, route, deed, holder = _make_holder_setup("criminal-tagging-tmpl")
+        instance, route, deed, holder = _make_holder_setup("criminal-tagging-tmpl", risk_tier=5)
         theft = CrimeKindFactory(slug="theft", name="Theft")
         MissionDeedRewardLineFactory(
             deed=deed,
@@ -189,7 +203,9 @@ class EmitRenownCriminalTaggingTests(TestCase):
             magnitude=RenownMagnitude.MODERATE,
             # Risk-bearing: only such awards mint a LegendEntry — and a crime is
             # inherently risk-bearing, so this is the authoring shape anyway.
-            risk=RenownRisk.LOW,
+            # EXTREME since #3463: Legend pays on the weaker of the declaration
+            # and the mission's own priced tier, and both must clear the floor.
+            risk=RenownRisk.EXTREME,
             contract_holder_only=True,
         )
 
@@ -218,11 +234,14 @@ class EmitRenownLegendLinkTests(TestCase):
     """#2047 — emit_terminal_renown_awards links minted LegendEntry rows to the deed."""
 
     def test_legend_entries_linked_to_deed(self):
-        instance, route, deed, _ = _make_holder_setup("legend-link-tmpl")
+        # risk_tier 5 + EXTREME: this test is about the deed<->entry LINK, so
+        # the award has to actually mint one. Since #3463 that needs the mission
+        # itself to have been dangerous, not just the award to say so.
+        instance, route, deed, _ = _make_holder_setup("legend-link-tmpl", risk_tier=5)
         MissionRenownAward.objects.create(
             route=route,
             magnitude=RenownMagnitude.MODERATE,
-            risk=RenownRisk.LOW,
+            risk=RenownRisk.EXTREME,
             contract_holder_only=True,
         )
 

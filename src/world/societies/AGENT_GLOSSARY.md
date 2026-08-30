@@ -22,6 +22,25 @@ _Avoid_: alignment, morals, stats.
 
 **LegendEntry / Deed**:
 A single notable accomplishment ("deed") earned by a persona, carrying a base legend value that further telling can extend up to a spread cap. Legend itself is the permanent, accumulating metric of remarkable accomplishment.
+
+The bar is **"would bards make songs about this"** (#3463, ADR-0249). Legend is settled at the END of a story unit from what was at stake and what was held — never asserted at the moment of an act. Safe play mints **zero**, not less.
+_Avoid_: renown, fame, "legend total" when you mean the advancement subset, advancement points.
+
+**Settlement**:
+The one seam that prices a deed: `world.societies.legend_settlement.settle_legend_for`. Applies the per-person peril floor, the held-objective share, the station stamp and the standout pass, then mints. Every other system adapts its own world into this seam's system-agnostic inputs rather than minting directly.
+_Avoid_: award, payout, granting legend.
+
+**Station**:
+`min(earner class level, threat level)`, stamped on each entry as `earned_at_level`. You cannot bank above your station, and you cannot bank by slumming. It is **not** folded into `base_value` — the tale is worth the same whoever tells it — and `station_multiplier()` is applied on read by the advancement gate, so retuning it never requires recomputing history. A station of 0 means the deed was won outside a perilous stakes contract and qualifies no advancement at any level.
+_Avoid_: reach (a Renown axis on a different question), level, tier.
+
+**Contribution**:
+A `LegendContribution` row: what one character did during a staked unit, written at the `perform_check` chokepoint while a stakes contract is open. `success_level` is **server-only** and must never be serialized to another player. Read by settlement to find standouts.
+_Avoid_: action log, roll history.
+
+**Personal risk**:
+Each earner's risk priced against their OWN level rather than the party average. The peril floor is applied per person, so a character who was never in danger earns nothing however lethal the scene was to everyone else. Table stakes for any Legend at all.
+_Avoid_: party risk, effective risk (that is the contract-wide value).
 _Avoid_: feat, achievement (Achievement is a separate system), accomplishment record.
 
 **LegendSpread**:
@@ -30,6 +49,10 @@ _Avoid_: rumor, telling event, gossip record.
 
 **Renown**:
 The live award *mechanism* — `fire_renown_award` reading an authored `RenownAwardConfig` (Magnitude / Risk / Reach / Archetypes) — that fires a deed's downstream consequences: fame buffer, permanent prestige, the legend `base_value`, and per-society reputation deltas. Distinct from Legend, which is the metric Renown feeds.
+
+One event carries **three independent scales** (#676): Magnitude drives fame + prestige, Risk drives Legend, Archetypes drive reputation. They are orthogonal on purpose — a royal wedding is high Magnitude and NONE Risk: enormously famous, worth no Legend.
+
+`risk` is a **declared wager, not a payout** (#3463, ADR-0249). It is the author's ceiling on how legendary an event type may be; Legend pays on the weaker of that declaration and the level-priced settled reality, and mints nothing at all without a settled context. An authored `risk=EXTREME` on a config with no stakes behind it pays zero.
 _Avoid_: fame (fame is one output of Renown), reputation, the Legend total.
 
 **OrganizationRank**:

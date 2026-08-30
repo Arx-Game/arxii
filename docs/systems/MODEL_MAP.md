@@ -1,4 +1,3 @@
-warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/workspaces/arxii/.claude/worktrees/feature-3428-needs-design-pre-authored-npc-knowledge/.venv` and will be ignored; use `--active` to target the active environment instead
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
@@ -1461,6 +1460,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - character_class_levels <- classes.CharacterClassLevel
   - origin_slots <- character_creation.CharacterOriginSlot
   - audere_offers <- magic.PendingAudereOffer
+  - legend_contributions <- societies.LegendContribution
   - org_obligations <- societies.OrganizationObligation
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
@@ -1738,6 +1738,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - detect_situation_traps <- mechanics.SituationTrapLink
   - disarm_situation_traps <- mechanics.SituationTrapLink
   - context_consequence_pools <- mechanics.ContextConsequencePool
+  - legend_contributions <- societies.LegendContribution
   - situational_perks <- covenants.VowSituationalPerk
   - soulfrayconfig_set <- magic.SoulfrayConfig
   - threat_pool_entries <- combat.ThreatPoolEntry
@@ -2473,7 +2474,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 - `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent') -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind.`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + active INTENSITY_BUMP pull bonuses for the clash floor gate.`
-- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
+- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_anchor: 'CharacterSheet | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
 - `declare_charge(participant: 'CombatParticipant', technique: 'Technique', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).`
 - `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' - Write (or overwrite) a PC's clash contribution declaration for the current round.`
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a covering maneuver for an ally -- passives-only, auto-ready.`
@@ -2628,17 +2629,14 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - techniquecapabilitygrant_grants <- magic.TechniqueCapabilityGrant
   - technique_requirements <- magic.TechniqueCapabilityRequirement
   - style_requirements <- magic.StyleCapabilityRequirement
-  - auderemajorafaithvariantcapabilitygrant_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - techniquevariantcapabilitygrant_grants <- magic.TechniqueVariantCapabilityGrant
   - granted_by_roles <- covenants.CovenantRole
-  - signaturemotifbonuscapabilitygrant_grants <- magic.SignatureMotifBonusCapabilityGrant
   - techniquedraftcapabilitygrant_grants <- magic.TechniqueDraftCapabilityGrant
   - thread_pull_effects <- magic.ThreadPullEffect
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - military_units <- military.MilitaryUnit
   - military_unit_values <- military.MilitaryUnitCapability
   - assist_patterns <- missions.MissionAssistPattern
-  - miraclecapabilitygrant_grants <- worship.MiracleCapabilityGrant
 
 ### ConditionCapabilityEffect
 **Foreign Keys:**
@@ -4980,17 +4978,11 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
   - pending_offers <- magic.PendingAudereMajoraOffer
-  - capability_grants <- magic.AudereMajoraFaithVariantCapabilityGrant
   - condition_applications <- magic.AudereMajoraFaithVariantAppliedCondition
 
 ### AudereMajoraFaithVariantAppliedCondition
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
-  - faith_variant -> magic.AudereMajoraFaithVariant [FK]
-
-### AudereMajoraFaithVariantCapabilityGrant
-**Foreign Keys:**
-  - capability -> conditions.CapabilityType [FK]
   - faith_variant -> magic.AudereMajoraFaithVariant [FK]
 
 ### AudereMajoraThreshold
@@ -5640,18 +5632,12 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - required_facet -> magic.Facet [FK] (nullable)
   - required_resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
-  - capability_grants <- magic.SignatureMotifBonusCapabilityGrant
   - damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - condition_applications <- magic.SignatureMotifBonusAppliedCondition
 
 ### SignatureMotifBonusAppliedCondition
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
-  - signature_bonus -> magic.SignatureMotifBonus [FK]
-
-### SignatureMotifBonusCapabilityGrant
-**Foreign Keys:**
-  - capability -> conditions.CapabilityType [FK]
   - signature_bonus -> magic.SignatureMotifBonus [FK]
 
 ### SignatureMotifBonusDamageProfile
@@ -8831,6 +8817,13 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 **Pointed to by:**
   - claims <- societies.HouseClaim
 
+### LegendContribution
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - activation -> stories.StakeContractActivation [FK]
+  - check_type -> checks.CheckType [FK]
+  - stake -> stories.Stake [FK] (nullable)
+
 ### LegendDeedStory
 **Foreign Keys:**
   - deed -> societies.LegendEntry [FK]
@@ -8869,6 +8862,8 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - created_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
   - deeds <- societies.LegendEntry
+
+### LegendSettlementConfig
 
 ### LegendSourceType
 **Pointed to by:**
@@ -9131,6 +9126,8 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - display_object -> evennia.ObjectDB [OneToOne]
   - scope_society -> societies.Society [FK] (nullable)
 
+### RenownMagnitudeAward
+
 ### Society
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
@@ -9215,8 +9212,8 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - claims <- societies.HouseClaim
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' - Sum the legend this character earned that was credited to covenants where they held ``role``.`
@@ -9503,6 +9500,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
   - beat -> stories.Beat [FK]
   - template -> stories.StakeTemplate [FK] (nullable)
 **Pointed to by:**
+  - legend_contributions <- societies.LegendContribution
   - routing_for_transitions <- stories.TransitionRequiredOutcome
   - resolutions <- stories.StakeResolution
   - outcomes <- stories.StakeOutcome
@@ -9511,6 +9509,7 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 **Foreign Keys:**
   - beat -> stories.Beat [FK]
 **Pointed to by:**
+  - legend_contributions <- societies.LegendContribution
   - stake_outcomes <- stories.StakeOutcome
 
 ### StakeOutcome
@@ -10091,7 +10090,6 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
 **Pointed to by:**
-  - capability_grants <- worship.MiracleCapabilityGrant
   - condition_applications <- worship.MiracleAppliedCondition
   - damage_profiles <- worship.MiracleDamageProfile
   - performances <- worship.MiraclePerformance
@@ -10099,11 +10097,6 @@ warning: `VIRTUAL_ENV=.venv` does not match the project environment path `/works
 ### MiracleAppliedCondition
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
-  - miracle -> worship.Miracle [FK]
-
-### MiracleCapabilityGrant
-**Foreign Keys:**
-  - capability -> conditions.CapabilityType [FK]
   - miracle -> worship.Miracle [FK]
 
 ### MiracleDamageProfile

@@ -101,6 +101,32 @@ The central spine connecting every system in the game. Characters develop throug
 
 ## What's Needed for MVP
 
+### Legend settlement (#3463, ADR-0249) — BUILT
+
+Legend now settles at the end of a story unit instead of being minted at the act.
+`world.societies.legend_settlement.settle_legend_for` is the single seam; twelve
+mint sites were retargeted through it or zeroed.
+
+- **Per-person peril floor.** Risk priced against each earner's own level, not the
+  party average. Below the floor: zero, not a reduced award. A level-10
+  obliterating level-1 mooks earns nothing while the level-1 beside them earns.
+- **Held-objective share, station, standouts.** The shared deed pays the
+  severity-weighted fraction of stakes held; each entry is stamped
+  `min(earner level, threat level)`; a crucial contribution resolved brilliantly
+  pays even on a lost unit (ADR-0122 generalized past `Battle`).
+- **The advancement wall bands on station** — `LegendRequirement` counts only
+  recent-station deeds, so a bank accrued while development points ticked stops
+  qualifying. This is the second bottleneck working as designed alongside dp.
+- **Every number is authored** — `RiskCalibration.legend_award`,
+  `RenownMagnitudeAward`, `LegendSettlementConfig`; constants are fallbacks only.
+  All surface on the Game Setup inventory when unauthored.
+- **`RenownAwardConfig.risk` became a wager rather than a payout**, closing the
+  hole where an authored `risk=EXTREME` paid 1500 to anyone with nothing at stake.
+
+**Still to author (not code):** the escalating `minimum_legend` curve per
+`ClassLevelUnlock` — the wall itself. The machinery is built; the numbers are
+staff's. This is the remaining half of the "path step requirements engine" below.
+
 ### Legend (remaining)
 - Legend spreading check formula — exact social check mechanics and audience factor calculations (tuning, depends on check system integration)
 - Legend UI — viewing legendary deeds, writing deed stories, spreading interface

@@ -4,16 +4,13 @@ SQLite tier. Nothing is consumed here — every assertion is about tags on
 items that are still real and still in the world.
 """
 
-from unittest.mock import patch
-
 from django.test import TestCase
 from evennia import create_object
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.events.constants import EventStatus
-from world.events.models import CateringRole, EventCatering, EventHost
+from world.events.models import CateringRole, EventCatering
 from world.events.services import (
-    _award_catering_prestige,
     _catering_score,
     catering_history,
     designate_catering_container,
@@ -150,25 +147,6 @@ class CateringPrestigeTest(TestCase):
             designate_catering_container(self.event, self.character, table)
         self.assertEqual(_catering_score(self.event), 0)
 
-    def test_completion_mints_the_host_deed(self):
-        from world.items.factories import QualityTierFactory
-
-        host_persona = CharacterSheetFactory().primary_persona
-        EventHost.objects.create(event=self.event, persona=host_persona, is_primary=True)
-        master = QualityTierFactory(name="Masterwork", stat_multiplier="1.60")
-        for key in ("wine", "roast"):
-            tag_catered_provision(
-                _instance(self.sheet, key=key, consumable=True, quality=master),
-                self.amphora,
-                self.character,
-            )
-        with patch("world.societies.services.create_solo_deed") as deed:
-            _award_catering_prestige(self.event)
-        deed.assert_called_once()
-        self.assertEqual(deed.call_args.args[0], host_persona)
-
-
-class CateringSouvenirTest(TestCase):
     def test_an_item_remembers_every_event_it_served(self):
         from world.events.factories import EventFactory
 

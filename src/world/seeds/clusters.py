@@ -814,6 +814,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.progression.models import (  # noqa: PLC0415
         DuranceTrainingSite,
         KudosSourceCategory,
+        LegendRequirement,
         TraitRatingUnlock,
     )
     from world.projects.models import (  # noqa: PLC0415
@@ -832,11 +833,14 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         Title,
     )
     from world.societies.models import (  # noqa: PLC0415
+        LegendSettlementConfig,
         NeighborhoodTurf,
         PropagandaCampaignTier,
+        RenownMagnitudeAward,
         StanceArchetype,
     )
     from world.species.models import Species  # noqa: PLC0415
+    from world.stories.models import RiskCalibration  # noqa: PLC0415
     from world.tasking.models import TaskTemplate  # noqa: PLC0415
     from world.tavern_games.models import TavernGame  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
@@ -930,7 +934,28 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # seeds the level-2 ClassLevelUnlock + MajorGiftTechniqueRequirement gate
         # (#2440 ruling 4) — no standalone representative model (rides the
         # existing ClassLevelUnlock/requirement tables).
-        "progression": [DuranceTrainingSite],
+        # #3463 — the Legend advancement tables. LegendRequirement is the
+        # escalating wall; RiskCalibration / RenownMagnitudeAward /
+        # LegendSettlementConfig decide what a deed is worth.
+        #
+        # They live under "progression" rather than a cluster of their own
+        # because they are NOT seed data: every one falls back to a code
+        # default when unauthored, so none would error if missing, and the
+        # seeder/fixture line here is "would this error if missing". A
+        # dedicated key with no registered seeder would also break this
+        # function's stated invariant (one key per registered seeder).
+        #
+        # Surfacing them matters precisely BECAUSE nothing breaks: the failure
+        # mode is silent blandness — every tier paying its fallback and no wall
+        # to climb — which nobody would notice as an error. Sentinel on the
+        # Game Setup inventory, never a defensive guard around the lookups.
+        "progression": [
+            DuranceTrainingSite,
+            LegendRequirement,
+            RiskCalibration,
+            RenownMagnitudeAward,
+            LegendSettlementConfig,
+        ],
         # NPC services: the Great Archive Librarian role + self-study TRAIN offers
         # (#2440 ruling 5), the Academy Registrar's SETTLE_OBLIGATION offer, and an
         # ungated Academy generalist trainer (both #2428 whole-branch fix — the

@@ -1261,14 +1261,19 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
         assert beat.outcome == BeatOutcome.SUCCESS
         assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
 
-    def test_high_risk_tier_scales_legend_award_past_the_floor(self) -> None:
-        """A HIGH-risk beat scales the Legend award above legend_base_value end-to-end.
+    def test_completion_without_a_locked_contract_pays_only_the_floor(self) -> None:
+        """#3463: a beat with no ACTIVATED stakes contract scales on nothing.
 
-        RISK_LEGEND_AWARDS[HIGH]=250, tier_multiplier(success_level=6)=1.0+6/5=2.2,
-        so 250 * 2.2 = 550 — well above the authored legend_base_value=10 floor.
-        Proves record_outcome_tier_completion threads beat.risk and
-        outcome_tier.success_level through to _legend_award's scaling formula
-        rather than always falling back to the flat floor.
+        This asserted 550 before #3463 — RISK_LEGEND_AWARDS[HIGH] x a 2.2 tier
+        multiplier — from a beat whose risk was merely DECLARED. Nothing had
+        priced that risk against the beat's target_level and no jeopardy walk had
+        run, so it was the ungated path: author a risk, complete the beat, collect
+        the tier.
+
+        settled_risk_for_beat now returns NONE without an open activation, so only
+        the author's explicit legend_base_value floor survives. The scaling path
+        is exercised where it belongs, against a locked contract, in
+        world.societies.tests.test_legend_settlement.
         """
         source_type = LegendSourceTypeFactory()
         consequence = ConsequenceFactory(outcome_tier=self.decisive)
@@ -1303,7 +1308,7 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
         assert beat.outcome == BeatOutcome.SUCCESS
         event = LegendEvent.objects.order_by("-pk").first()
         assert event is not None
-        assert event.base_value == 550
+        assert event.base_value == 10
 
     def test_force_outcome_pending_gm_review_no_pool(self) -> None:
         """force_outcome=PENDING_GM_REVIEW resolves the beat without firing a pool.

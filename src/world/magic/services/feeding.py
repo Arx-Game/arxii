@@ -36,7 +36,13 @@ SIP_SAFE_RESERVE = 1
 RESTRAINT_CHECK_NAME = "fatigue_willpower"
 RESTRAINT_DIFFICULTY = 0
 FEEDING_KILL_CRIME_SLUG = "murder"
-FEEDING_KILL_DEED_BASE_VALUE = 10
+# 0 per #3463. This was a literal per-kill Legend award: draining a helpless
+# victim minted a deed worth 10. Nothing was at stake for the feeder, so under
+# the bard test it is worth no song. The deed row itself stays — it carries the
+# murder's crime tag, its evidence and its witnesses, none of which read
+# base_value. A feeding that genuinely could have killed the feeder settles
+# through the stakes contract like anything else.
+FEEDING_KILL_DEED_BASE_VALUE = 0
 
 # #3001 blood-magic taints: extraction is affinity-neutral; the METHOD carries
 # the taint. Authored CompromiseActType rows (content repo) resolved by name at

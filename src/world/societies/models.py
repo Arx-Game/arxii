@@ -35,6 +35,8 @@ from world.societies.constants import (
     ObligationOrigin,
     ObligationState,
     OrgAppealState,
+    RenownMagnitude,
+    RenownRisk,
     StandingDirection,
 )
 from world.societies.renown_config import RenownAwardConfig
@@ -1481,6 +1483,22 @@ class LegendEntry(AbstractLegendRecord):
         default=True,
         help_text="Whether this entry contributes to legend totals",
     )
+    # #3463 — the deed's STATION: min(earner class level, threat level) at
+    # settlement. 0 means "no station", which is what every deed minted
+    # outside a jeopardy-bearing stakes contract carries, and it satisfies no
+    # LegendRequirement band at any level. So this one column is both the
+    # peril gate ("could this have killed you") and the staleness gate ("was
+    # this recent enough to qualify you for the step you're taking").
+    # Deliberately NOT reach — reach is Renown's axis (see ADR-0249).
+    earned_at_level = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        help_text=(
+            "Station this deed was won at: min(earner level, threat level). "
+            "0 = no station (minted outside a perilous stakes contract); such a "
+            "deed still counts for fame and spread but qualifies no advancement."
+        ),
+    )
     updated_at = models.DateTimeField(auto_now=True)
     spread_multiplier = models.PositiveIntegerField(
         default=9,
@@ -1669,6 +1687,178 @@ class LegendDeedStory(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.author.name}'s account of: {self.deed.title}"
+
+
+class RenownMagnitudeAward(SharedMemoryModel):
+    """Staff-authored fame + prestige per RenownMagnitude tier (#3463).
+
+    Replaces the ``MAGNITUDE_FAME_AWARDS`` / ``MAGNITUDE_PRESTIGE_AWARDS``
+    Python dicts, which were labelled "admin-tunable" while needing a deploy to
+    change. Follows the pattern ``checks.OutcomeTierAward`` already documents:
+    "a staff-tunable DB row per canonical outcome tier, instead of a bespoke
+    Python threshold re-derivation".
+
+    The constants survive as the fallback for a tier with no row authored yet,
+    so an empty table behaves exactly as before rather than paying nothing.
+    """
+
+    magnitude = models.CharField(
+        max_length=20,
+        choices=RenownMagnitude.choices,
+        unique=True,
+    )
+    fame_award = models.PositiveIntegerField(
+        help_text="Fame buffer bump for an event of this magnitude.",
+    )
+    prestige_award = models.PositiveIntegerField(
+        help_text="Permanent prestige-from-deeds increment for this magnitude.",
+    )
+
+    class Meta:
+        verbose_name = "Renown Magnitude Award"
+        verbose_name_plural = "Renown Magnitude Awards"
+        ordering = ["magnitude"]
+
+    def __str__(self) -> str:
+        return f"RenownMagnitudeAward({self.magnitude}: {self.fame_award}f/{self.prestige_award}p)"
+
+
+class LegendSettlementConfig(SharedMemoryModel):
+    """Singleton tuning row for Legend settlement (#3463).
+
+    The dials that decide what is worth a song. Held as authored rows rather
+    than Python constants per Tehom's ruling (2026-08-29): lookup tables for
+    all of it, constants only as defaults when a table is not defined.
+
+    Singleton on pk=1, matching ``SpreadingConfig``'s established shape in this
+    same app — this is a tuning singleton for one subsystem, not a bespoke
+    model per mechanic.
+    """
+
+    risk_floor = models.CharField(
+        max_length=20,
+        choices=RenownRisk.choices,
+        default=RenownRisk.HIGH,
+        help_text=(
+            "Minimum EFFECTIVE risk at which any source may mint Legend. "
+            "Below this a settled unit mints zero, not a reduced award."
+        ),
+    )
+    standout_fraction_tenths = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Tenths of a participant's share that a standout contribution pays "
+            "its actor on a unit that was LOST. 2 = 0.2x. Brilliance in defeat "
+            "is deliberately 'much less', not a second full award."
+        ),
+    )
+    standout_min_success_level = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "Minimum success_level for a crucial contribution to count as a "
+            "standout. Mirrors battles' STANDOUT_SUCCESS_LEVEL (ADR-0122)."
+        ),
+    )
+
+    # Needed for cached_singleton(); mirrors SpreadingConfig's manager in this
+    # same app, which is the shape this singleton is modelled on.
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "Legend Settlement Configuration"
+        verbose_name_plural = "Legend Settlement Configuration"
+
+    @classmethod
+    def get_active_config(cls) -> "LegendSettlementConfig":
+        """Get or create the singleton settlement configuration (pk=1)."""
+        config = cls.objects.cached_singleton()
+        if config is None:
+            config, _created = cls.objects.get_or_create(pk=1)
+        return config
+
+    def __str__(self) -> str:
+        return (
+            f"LegendSettlementConfig(floor={self.risk_floor}, "
+            f"standout={self.standout_fraction_tenths / 10:.1f}x)"
+        )
+
+
+class LegendContribution(SharedMemoryModel):
+    """What one character actually did during a staked unit (#3463).
+
+    **Why this exists:** Legend settles at the end of a story unit from a record
+    of what each character did across it, not at the moment of each act. Nothing
+    else persists that record outside `Battle` — `CheckResult`
+    (`world.checks.types`) is a dataclass, so a scene or mission check leaves no
+    trace of who rolled what for which objective. This is that trace.
+
+    **Who writes it:** the `action.run()` seam, for every check resolved while a
+    stakes contract is open on the running beat.
+
+    **Who reads it:** `world.societies.legend_settlement.settle_legend_for`, which
+    pays the shared deed on objectives held and pays standout contributors a
+    smaller solo deed even when the unit was lost (generalizing ADR-0122's battle
+    standout pass).
+
+    ``success_level`` is **server-only** and must never be serialized to another
+    player — it exposes how good someone is. Mirrors the ``ConsiderReading``
+    precedent in ``world.combat.models``.
+    """
+
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="legend_contributions",
+        help_text="Who acted.",
+    )
+    activation = models.ForeignKey(
+        "arxii.StakeContractActivation",
+        on_delete=models.CASCADE,
+        related_name="legend_contributions",
+        help_text="The staked unit being settled; the contribution dies with it.",
+    )
+    check_type = models.ForeignKey(
+        "arxii.CheckType",
+        on_delete=models.PROTECT,
+        related_name="legend_contributions",
+        help_text="What kind of thing they did.",
+    )
+    stake = models.ForeignKey(
+        "arxii.Stake",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_contributions",
+        help_text="Which objective this served; null when the act served the beat at large.",
+    )
+    success_level = models.SmallIntegerField(
+        help_text="The check's success_level (-10 to +10). SERVER-ONLY — never serialize.",
+    )
+    was_crucial = models.BooleanField(
+        default=False,
+        help_text=(
+            "Derived at write time from the served stake's severity, never authored "
+            "per row. Crucial contributions carry the standout pass."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Legend Contribution"
+        verbose_name_plural = "Legend Contributions"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["activation", "character_sheet"],
+                name="legendcontrib_activation_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"LegendContribution(sheet={self.character_sheet_id}, "
+            f"activation={self.activation_id}, sl={self.success_level})"
+        )
 
 
 class PersonaDeedKnowledge(SharedMemoryModel):

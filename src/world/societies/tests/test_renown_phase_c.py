@@ -344,6 +344,12 @@ class FireRenownAwardOrgWiringTests(TestCase):
             persona=persona,
             magnitude=RenownMagnitude.HIGH,
             risk=RenownRisk.HIGH,
+            # #3463: org inflow is a fraction of the LEGEND awarded, so this
+            # test needs an award that actually mints legend. A declared risk
+            # alone no longer does; a settled contract at station 1 does, and
+            # station 1 keeps the expected value equal to the flat tier award.
+            settled_risk=RenownRisk.HIGH,
+            station=1,
         )
         covenant.organization.refresh_from_db()
         self.assertEqual(
@@ -364,6 +370,10 @@ class FireRenownAwardOrgWiringTests(TestCase):
             persona=temp,
             magnitude=RenownMagnitude.MODERATE,
             risk=RenownRisk.HIGH,
+            # See above (#3463) — the body-covenant route carries a fraction of
+            # minted legend, so the award needs a settled context to exercise.
+            settled_risk=RenownRisk.HIGH,
+            station=1,
         )
         # TEMPORARY persona earns fame + legend on itself, no normal inflow.
         self.assertEqual(result.org_inflow_org_ids, ())

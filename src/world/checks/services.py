@@ -78,6 +78,9 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
        the sole chokepoint for ``world.progression.services.skill_development
        .award_check_development``. Covers both the rolled path and the test-rig
        forced-outcome path (``_build_forced_check_result``) exactly once each.
+    9b. Record a ``LegendContribution`` (#3463) when the character is acting
+       under an open stakes contract, for end-of-unit Legend settlement. Hooked
+       here for the same reason as step 9, and on both paths for the same reason.
     10. Return CheckResult
 
     Args:
@@ -133,6 +136,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             stat_override=stat_override,
         )
         _award_check_development(character, check_type, effort_level)
+        _record_legend_contribution(character, check_type, result)
         return result
 
     breakdown = _compute_check_breakdown(
@@ -156,7 +160,60 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
 
     result = _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
     _award_check_development(character, check_type, effort_level)
+    _record_legend_contribution(character, check_type, result)
     return result
+
+
+def _record_legend_contribution(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    result: "CheckResult",
+) -> None:
+    """Record what this character just did, for end-of-unit Legend settlement (#3463).
+
+    Hooked at the SAME chokepoint as ``_award_check_development`` and for the
+    same reason its docstring gives: the action pipeline's public wrapper had
+    zero production callers, so hooking there meant nothing ever accrued. Combat
+    and scene resolution call ``perform_check`` directly, so this is the one
+    place every production check path passes through.
+
+    Writes only when the character is acting under an OPEN stakes contract —
+    otherwise there is nothing at stake, nothing to settle against, and no row
+    worth keeping. That keeps the ledger bounded to staked play rather than
+    logging every roll in the game.
+
+    ``was_crucial`` is derived from the served stake's severity, never authored
+    per row. It gates only the automatic standout pass; a moment can be
+    legendary without being mechanically decisive (see #3466), which is what
+    player nomination is for.
+
+    Skips silently for a character with no ``CharacterSheet`` (ephemeral NPC, GM
+    puppet, any non-character object) and for a result with no outcome.
+    """
+    if result.outcome is None:
+        return
+    sheet = character.character_sheet  # type: ignore[attr-defined] — typeclass extension
+    if sheet is None:
+        return
+
+    from world.scenes.beat_selectors import open_activation_for_scene  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.societies.models import LegendContribution  # noqa: PLC0415
+    from world.stories.constants import StakeSeverity  # noqa: PLC0415
+
+    activation = open_activation_for_scene(get_active_scene(character.location))
+    if activation is None:
+        return
+
+    stake = activation.beat.stakes.order_by("-severity").first()
+    LegendContribution.objects.create(
+        character_sheet=sheet,
+        activation=activation,
+        check_type=check_type,
+        stake=stake,
+        success_level=result.success_level,
+        was_crucial=stake is not None and stake.severity >= StakeSeverity.REMOVAL,
+    )
 
 
 def _award_check_development(

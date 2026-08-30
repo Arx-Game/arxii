@@ -128,14 +128,48 @@ class FireRenownAwardRiskTests(TestCase):
         self.assertEqual(result.legend_awarded, 0)
         self.assertIsNone(result.legend_entry_id)
 
-    def test_extreme_risk_creates_legend_entry(self) -> None:
+    def test_declared_risk_alone_mints_no_legend(self) -> None:
+        """#3463/ADR-0249: a declared wager is not a payout.
+
+        This is the safe-grind hole closed. Before, an author setting
+        risk=EXTREME on any config paid 1500 to anyone, at any level, with
+        nothing actually at stake. Fame, prestige and reputation are unaffected
+        — only Legend now demands priced proof of peril.
+        """
         persona = _make_primary_persona()
         result = fire_renown_award(persona=persona, risk=RenownRisk.EXTREME)
+        self.assertEqual(result.legend_awarded, 0)
+        self.assertIsNone(result.legend_entry_id)
+
+    def test_settled_risk_and_station_mint_legend(self) -> None:
+        """The same declaration pays once a real stakes contract backs it."""
+        persona = _make_primary_persona()
+        result = fire_renown_award(
+            persona=persona,
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=3,
+        )
         self.assertEqual(result.legend_awarded, RISK_LEGEND_AWARDS["extreme"])
         self.assertIsNotNone(result.legend_entry_id)
         entry = LegendEntry.objects.get(pk=result.legend_entry_id)
         self.assertEqual(entry.persona, persona)
+        # base_value is UNTUNED by station: the tale is worth the same whoever
+        # told it. Station is the stamp the advancement gate multiplies by.
         self.assertEqual(entry.base_value, RISK_LEGEND_AWARDS["extreme"])
+        self.assertEqual(entry.earned_at_level, 3)
+
+    def test_settled_risk_below_floor_mints_nothing(self) -> None:
+        """An over-levelled party's raid decays below the floor and pays zero."""
+        persona = _make_primary_persona()
+        result = fire_renown_award(
+            persona=persona,
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.LOW,
+            station=5,
+        )
+        self.assertEqual(result.legend_awarded, 0)
+        self.assertIsNone(result.legend_entry_id)
 
 
 class FireRenownAwardReachTests(TestCase):
@@ -325,6 +359,12 @@ class FireRenownAwardArchetypeTests(TestCase):
             persona=temp,
             magnitude=RenownMagnitude.MODERATE,
             risk=RenownRisk.HIGH,
+            # #3463: Legend needs priced proof of peril. The point of this test
+            # is that a TEMPORARY persona is not excluded from earning, so it
+            # supplies a real settled context rather than asserting a
+            # declaration pays.
+            settled_risk=RenownRisk.HIGH,
+            station=1,
         )
         self.assertEqual(result.fame_awarded, MAGNITUDE_FAME_AWARDS["moderate"])
         self.assertEqual(result.legend_awarded, RISK_LEGEND_AWARDS["high"])
@@ -346,7 +386,12 @@ class FireRenownAwardBundleTests(TestCase):
         result = fire_renown_award(
             persona=persona,
             magnitude=RenownMagnitude.HIGH,
-            risk=RenownRisk.MODERATE,
+            # MODERATE is below the Legend floor, so the bundle's legend axis
+            # needs a settled risk that reaches it for this smoke test to
+            # exercise every axis (#3463).
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=1,
             archetypes=[archetype],
             origin_area=area,
         )
@@ -408,7 +453,12 @@ class RenownAwardResultShapeTests(TestCase):
         result = fire_renown_award(
             persona=persona,
             magnitude=RenownMagnitude.MODERATE,
-            risk=RenownRisk.LOW,
+            # LOW is below the Legend floor (#3463); this test asserts the
+            # result dataclass carries every delta, so it needs an award that
+            # actually moves all of them.
+            risk=RenownRisk.EXTREME,
+            settled_risk=RenownRisk.EXTREME,
+            station=1,
         )
         self.assertEqual(result.persona_id, persona.pk)
         self.assertGreater(result.fame_awarded, 0)

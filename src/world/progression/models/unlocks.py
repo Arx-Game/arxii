@@ -624,6 +624,20 @@ class LegendRequirement(AbstractClassLevelRequirement):
     minimum_legend = models.PositiveIntegerField(
         help_text="Minimum total legend required",
     )
+    # #3463 — the staleness band. Only deeds whose STATION
+    # (LegendEntry.earned_at_level) is at or above (target level - offset)
+    # count. Legend stays permanent and monotonic for fame, murmur and common
+    # knowledge (ADR-0066/0054); this narrows only the ADVANCEMENT read, so a
+    # bank accumulated at level 1 while development points accrued stops
+    # qualifying you once you have advanced past it.
+    counts_from_level_offset = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "How many levels below this unlock's target a deed may have been won "
+            "at and still qualify. 1 = the step you're taking plus the one below it. "
+            "Deeds with station 0 (won outside a perilous stakes contract) never qualify."
+        ),
+    )
 
     class Meta:
         verbose_name = "Legend Requirement"
@@ -645,15 +659,71 @@ class LegendRequirement(AbstractClassLevelRequirement):
     def __str__(self) -> str:
         return f"Legend >= {self.minimum_legend}"
 
-    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
-        from world.societies.services import (  # noqa: PLC0415
-            get_character_legend_total,
-        )
+    def _station_floor(self, character: ObjectDB) -> int:
+        """Lowest station a deed may have been won at and still qualify.
 
-        total = get_character_legend_total(character)
+        Banded around the level this requirement gates. A ``ClassLevelUnlock``
+        states that directly; a thread crossing or path-entry gate (#1885,
+        #2538) has no target level, so the band centres on the character's
+        current level instead — "recent perilous deeds" means the same thing
+        either way. Floors at 1, since station 0 is the marker for a deed won
+        outside a perilous stakes contract and must never qualify.
+        """
+        if self.class_level_unlock_id is not None:
+            target = int(self.class_level_unlock.target_level)
+        else:
+            from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+            try:
+                target = character.sheet_data.current_level
+            except (CharacterSheet.DoesNotExist, AttributeError):
+                target = 1
+        return max(1, target - int(self.counts_from_level_offset))
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Count only Legend won at or near the station this step demands (#3463).
+
+        Deliberately NOT ``get_character_legend_total`` (the
+        ``CharacterLegendSummary`` matview), which stays the lifetime, monotonic
+        total serving fame, murmur, common knowledge, ranking displays and item
+        legend — all unchanged. Advancement is the one read that narrows, so a
+        bank accumulated at level 1 while development points accrued stops
+        qualifying once you have advanced past it.
+
+        A deed with station 0 — minted outside a perilous stakes contract —
+        satisfies no band at any level. That is how "safe play cannot advance
+        you" is enforced, by the same column.
+
+        A live aggregate rather than a second matview column: this runs once per
+        advancement attempt, which is rare, and the band varies per requirement.
+        """
+        from world.societies.legend_settlement import station_multiplier  # noqa: PLC0415
+        from world.societies.models import LegendEntry  # noqa: PLC0415
+
+        floor = self._station_floor(character)
+        qualifying = LegendEntry.objects.filter(
+            persona__character_sheet_id=character.pk,
+            is_active=True,
+            earned_at_level__gte=floor,
+        ).prefetch_related(
+            # Bare string is correct here: get_total_value() sums entry.spreads
+            # directly, so there is no filtered queryset or to_attr to declare.
+            "spreads"  # noqa: PREFETCH_STRING
+        )
+        # The station multiplier is applied HERE, on read, not baked into
+        # base_value at mint time. get_total_value() stays the deed's worth as
+        # a story — identical for everyone who was there, and what fame, spread,
+        # murmur and item legend all read. What station scales is how far the
+        # deed carries its earner, and deriving that on read means retuning the
+        # multiplier never requires recomputing a single historical row.
+        total = sum(
+            entry.get_total_value() * station_multiplier(entry.earned_at_level)
+            for entry in qualifying
+        )
+        gate = f"Legend {total} won at station >= {floor}"
         if total >= self.minimum_legend:
-            return True, f"Legend {total} meets requirement of {self.minimum_legend}"
-        return False, f"Legend {total} < {self.minimum_legend} required"
+            return True, f"{gate} meets requirement of {self.minimum_legend}"
+        return False, f"{gate} < {self.minimum_legend} required"
 
 
 class TierRequirement(AbstractClassLevelRequirement):

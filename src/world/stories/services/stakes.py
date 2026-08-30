@@ -440,10 +440,32 @@ def activate_stakes_contract(
 
 
 def effective_risk_for_beat(beat: Beat) -> str:
-    """Risk value Legend should pay on: open activation's effective risk,
-    else the declared Beat.risk (paths with no activation keep old behavior)."""
+    """Risk to DISPLAY: open activation's locked value, else the declared risk.
+
+    This is the consent-prompt / stakes-summary read (``stakes_summary_for_beat``).
+    Before a contract locks there is no priced value yet, so the declared risk is
+    the honest forecast to show a player deciding whether to opt in — reporting
+    NONE there would read as "nothing is at stake" when the truth is "nothing is
+    locked yet".
+
+    **Never pay Legend on this.** Use ``settled_risk_for_beat`` (#3463).
+    """
     activation = get_open_activation(beat)
     return activation.effective_risk if activation is not None else beat.risk
+
+
+def settled_risk_for_beat(beat: Beat) -> str:
+    """Risk to PAY on: open activation's locked value, else NONE (#3463).
+
+    The payout counterpart to ``effective_risk_for_beat``. A beat completed
+    without ever locking a contract has had nothing priced against its
+    ``target_level`` and nothing jeopardy-checked, so it pays nothing —
+    previously this path fell back to the raw declared ``Beat.risk`` and paid
+    the full authored tier ungated, which is the same "trust the authored
+    number" hole ADR-0249 closes on the Renown side.
+    """
+    activation = get_open_activation(beat)
+    return activation.effective_risk if activation is not None else RenownRisk.NONE
 
 
 def resolve_open_activation(beat: Beat) -> None:
