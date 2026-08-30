@@ -47,6 +47,21 @@ _Avoid_: feat, achievement (Achievement is a separate system), accomplishment re
 A single instance of a deed being retold or embellished, adding value (clamped to the deed's remaining spread capacity) and widening which societies are aware of it.
 _Avoid_: rumor, telling event, gossip record.
 
+**Honor / Rite of Honors** (`LegendHonor`, `honor_deed`, #3466):
+A character's paid, written testimony to another character's deed — a Golden Hare
+surrendered, a public journal written, and legend added to `LegendEntry.base_value`, always
+clamped to the ceiling the anchoring `LegendEvent.base_value` already proved (see
+ADR-0251). Also the seam that *establishes* a fresh solo deed for an act the automatic
+settlement never credited, when the honorer witnessed it. Unrestricted by life-state:
+honoring a dead character's deed is by design, never a bug.
+_Avoid_: **acclaim** — that word is taken: `ItemInstance.acclaim` is fashion esteem, whose
+help_text says "NEVER legend." **Spread** — spread is reach (which societies become aware),
+not size; an honor moves `base_value` directly, no spreading involved. **Deed story** —
+`LegendDeedStory` is the free account anyone may write and rewrite about a deed; an honor's
+mirrored journal costs a Hare and moves the number, the deed story does neither. Also NOT
+`GiveDeathKudosAction`'s display name **"Honor a Death"** (OOC kudos to a player for how they
+handled a death scene) and NOT `CeremonyHonoree` (the person a ceremony rite is held for).
+
 **Renown**:
 The live award *mechanism* — `fire_renown_award` reading an authored `RenownAwardConfig` (Magnitude / Risk / Reach / Archetypes) — that fires a deed's downstream consequences: fame buffer, permanent prestige, the legend `base_value`, and per-society reputation deltas. Distinct from Legend, which is the metric Renown feeds.
 

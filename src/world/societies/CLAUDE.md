@@ -24,6 +24,14 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`LegendDeedStory`**: Player-written narratives for deeds (one per author per deed)
 - **`CharacterLegendSummary`**: Materialized view for fast character legend totals (managed=False)
 - **`PersonaLegendSummary`**: Materialized view for fast persona legend totals (managed=False)
+- **`LegendLevelCalibration`** (#3466): Per-level dials for honoring a deed and deed-granted
+  titles (`honor_hares_required`, `honor_value_added`, `deed_title_threshold`). Authored
+  content, deliberately unguarded lookups (a missing row raises, surfacing on the admin
+  required-content panel rather than silently mispricing an honor) - uses SharedMemoryModel
+- **`LegendHonor`** (#3466): One paid, written testimony to one deed - who honored it, the
+  Hares spent, the value actually added (post-ceiling clamp), whether this honor established
+  the deed. Distinct from `LegendDeedStory`, the free account anyone may write. Story-
+  significant, never hard-deleted; struck via the deed's `is_active` flag instead
 
 ### `services.py`
 - **`create_solo_deed()`**: Create a deed not tied to an event
@@ -51,6 +59,25 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`appoint_office(*, organization, slug, holder, title="", feeds_check=None)`**: install/replace an office holder (idempotent per org+slug)
 - **`vacate_office(*, organization, slug)`**: clear the holder (no-op when absent)
 - **`office_holder(organization, slug)`** / **`holds_office(persona, organization, slug)`**: read seams. Domain management (`houses.services.can_administer_domain`) gates on `holds_office` for the `domain-steward` slug.
+
+### `honors.py` (#3466)
+The Rite of Honors. **`honor_deed(*, character_sheet, ritual, honoree_persona, deed=None,
+event=None, deed_title=None, journal_title, journal_body, **kwargs)`** — the ritual's
+`SERVICE`-dispatched target (`HONORS_SERVICE_PATH`), spending Golden Hares and a public
+journal entry to raise a witnessed deed's `base_value`, or to establish a fresh solo deed
+under an event that never credited it. Runs all eligibility and affordability checks inside
+one `transaction.atomic()` before any write. Every raise is a `HonorRefused` subclass
+carrying a player-safe `user_message`. Sized within the ceiling the anchoring `LegendEvent`
+already proved (**ADR-0251** — never above it), unrestricted by life-state (honoring the
+dead is by design, #3466 Decision 7). See `docs/systems/societies.md`'s Legend System
+section for the ceiling rule in full.
+
+### `seeds.py` (#3466)
+**`ensure_rite_of_honors_ritual()`**: idempotent `authored_or_sample` lookup/seed of the
+"Rite of Honors" `magic.Ritual` row — `SERVICE` execution kind dispatching to
+`HONORS_SERVICE_PATH`, single-actor, `hedge_accessible=False` (a Gifted rite by ruling: the
+Golden Hare cost doesn't change who may speak it). `RITE_OF_HONORS_NAME` is the natural-key
+constant both this seed and telnet's `ritual.py` lookup share.
 
 ### `types.py`
 - **`ReputationTier`**: Enum mapping hidden reputation values to named tiers
@@ -149,6 +176,25 @@ simply qualifies no advancement at any level. That is how "safe play cannot
 advance you" is enforced, and it is why per-act sites (lockpicking, theft, feeding
 kills) still write their deed rows for crime tags and witnesses while being worth
 nothing.
+
+**The Rite of Honors** (#3466, ADR-0251/ADR-0252) lets a character spend Golden Hares and
+write a public journal to raise a witnessed deed's `base_value` toward what its anchoring
+`LegendEvent` itself paid, or to establish a fresh solo deed for an extraordinary act the
+automatic settlement never credited. **Honoring is always clamped to the event's own
+ceiling** — `anchor_event.base_value - existing_base_value` — because peer judgment
+redistributes recognition inside an envelope a settled event already proved, and can never
+invent peril that did not happen; this is why the rite does not reopen what ADR-0249 closed.
+Establishing refuses when the honoree already has an active deed anchored to that event (one
+deed per act, not one per honorer), and a struck (`is_active=False`) deed neither proves
+peril, counts toward the station max, nor blocks a fresh deed. Unrestricted by life-state:
+honoring the dead is by design (`honors.py` adds no death check anywhere). See `honors.py`
+above for the service function and `docs/systems/societies.md` for the full write-up.
+
+**Titles hang on `Persona`, not `CharacterSheet`** (ADR-0252) — `achievements.PersonaTitle`
+retargeted #3466 so a deed earned behind a mask titles the mask and can never surface on the
+character sheet. Achievement-sourced titles still resolve to the PRIMARY persona, never the
+active one (a stat crossing a threshold is a fact about the character, not whatever disguise
+they happened to be wearing).
 
 ---
 

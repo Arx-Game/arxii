@@ -81,7 +81,9 @@ class EventMintedNothingRefusal(HonorRefused):
     """The anchoring event never minted a single deed — it proved no peril (#3466 Decision 1)."""
 
     def __init__(self) -> None:
-        super().__init__("That event never proved anyone's peril — there is nothing here to honor.")
+        super().__init__(
+            "That event never proved anyone's peril, so there is nothing here to honor."
+        )
 
 
 class CannotHonorOwnDeedError(HonorRefused):
@@ -125,7 +127,7 @@ class HonoreeAlreadyAnchoredError(HonorRefused):
 
     def __init__(self) -> None:
         super().__init__(
-            "This event already has a deed recorded for that act — honor the existing "
+            "This event already has a deed recorded for that act. Honor the existing "
             "deed instead of establishing a new one."
         )
 

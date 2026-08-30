@@ -3380,6 +3380,7 @@
 - `redeem_favor_token(token: 'FavorTokenDetails', *, redeemer_org: 'Organization') -> 'None' - Surrender a Golden Hare: the deed is called in, once (#2428).`
 - `redeem_instrument(*, instance: 'ItemInstance', to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' - Convert a physical coin back into ledger money (fee-free).`
 - `repay_principal(debt: 'DebtInstrument', amount: 'int') -> 'CurrencyTransfer' - Pay down (or off) a debt's principal, treasury→treasury (#927).`
+- `resolve_unredeemed_favor_tokens(*, sheet: 'CharacterSheet', org: 'Organization', count: 'int') -> 'list[FavorTokenDetails]' - The holder's ``count`` unredeemed tokens issued by ``org``, locked (#3466).`
 - `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' - One week's business result (#929). ``fortune`` is -100..100.`
 - `run_purse_drains() -> 'int' - DRAIN band: empty each holder's purse down to this week's income (#2613).`
 - `run_weekly_economy() -> 'dict[str, int]' - The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.`

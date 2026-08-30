@@ -992,8 +992,10 @@ actions, backends, and service functions.
   reputations, scoped to active persona; distinct from `renown`, which holds fame / prestige /
   *society* reputation); `covenant` (`sheet/covenant` — your covenant membership(s), role, rank,
   and which you're *engaged* in, from `CharacterCovenantRole`; read-only); `title`
-  (`sheet/titles`, #1522 — the earned, displayable titles your active character holds, from
-  `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab); `distinction`
+  (`sheet/titles`, #1522 — the earned, displayable titles your PRIMARY persona holds, from
+  `achievements.PersonaTitle` (retargeted from `CharacterSheet` onto `Persona`, #3466, ADR-0252
+  — a title names the face that earned it, so a deed earned behind a mask titles the mask and
+  never surfaces here); cosmetic, mirrors the web Titles tab); `distinction`
   (`sheet/distinction`, #1446 — your distinctions, secret-badged, over the shared
   `_build_distinctions` builder, mirroring the web Distinctions tab); `magic` (`sheet/magic`,
   #1446 — gifts/techniques/motif/aura/**resonance balances** (#2032) over the shared

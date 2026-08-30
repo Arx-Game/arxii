@@ -19,7 +19,7 @@ The central spine connecting every system in the game. Characters develop throug
 
 ## What Exists
 - **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). Skill, Specialization, CharacterSkillValue with development/rust tracking (skills). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
-- **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling
+- **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling. LegendHonor + LegendLevelCalibration (#3466) for the Rite of Honors — see below
 - **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
 - **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)
 - **Frontend:** XP/Kudos page in progression section (now also hosts `RandomScenePanel`,
@@ -127,9 +127,41 @@ mint sites were retargeted through it or zeroed.
 `ClassLevelUnlock` — the wall itself. The machinery is built; the numbers are
 staff's. This is the remaining half of the "path step requirements engine" below.
 
+### Rite of Honors (#3466, ADR-0251, ADR-0252) — BUILT
+
+A character spends Golden Hares and writes a public journal to honor another
+character's legendary deed — raising a witnessed deed's `base_value`, or
+establishing a fresh solo deed for an extraordinary act the automatic settlement
+never credited. `world.societies.honors.honor_deed` is the single seam,
+dispatched by a seeded "Rite of Honors" `magic.Ritual` row through both telnet
+(`ritual Rite of Honors ...`, free-text grammar special-cased for this one
+ritual) and the web (`DeedViewSet.honor` / `LegendEventViewSet.establish`, both
+converging on `PerformRitualAction`). It works posthumously by design — nothing
+in `honor_deed` checks life-state.
+
+- **The ceiling rule (ADR-0251).** Honoring is clamped to
+  `anchor_event.base_value - deed.base_value`: peer judgment redistributes
+  recognition inside an envelope a settled event already proved, and never
+  invents peril that never happened. This is why the rite does not reopen the
+  hole ADR-0249 closed. Establishing refuses when the honoree already has an
+  active deed anchored to that event (one deed per act, not one per honorer); a
+  struck (`is_active=False`) deed proves nothing and blocks nothing.
+- **The titles retarget (ADR-0252).** `achievements.PersonaTitle` (renamed from
+  `CharacterTitle`) now hangs on `Persona`, not `CharacterSheet` — a deed earned
+  behind a mask titles the mask and can never surface on the character sheet to
+  out the player. Achievement-sourced titles resolve to the sheet's PRIMARY
+  persona, never the active one.
+- **New models:** `LegendHonor` (the paid testimony), `LegendLevelCalibration`
+  (per-level Hare cost / value-added / title-threshold dials; authored,
+  deliberately-unguarded lookups).
+- **Web:** the single deed detail page (`frontend/src/legend/DeedPage`) the rite
+  needed — a deed, its honors, an honor form when eligible. **Not** deed
+  browsing, search, or the spreading interface — those remain on the "Legend
+  (remaining)" list below unchanged.
+
 ### Legend (remaining)
 - Legend spreading check formula — exact social check mechanics and audience factor calculations (tuning, depends on check system integration)
-- Legend UI — viewing legendary deeds, writing deed stories, spreading interface
+- Legend UI — viewing legendary deeds, writing deed stories, spreading interface (the Rite of Honors above built only the single deed page it needed, not this broader browse/search/spread surface)
 - Item legend — items carrying legend that transfers to possessors (depends on items system)
 - Organization legend sharing — org deeds shared to members by rank
 - Achievement stat hooks — firing legend.deeds_earned, legend.personal_total, legend.times_spread etc.
