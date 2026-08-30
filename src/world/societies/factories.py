@@ -10,6 +10,7 @@ import factory.django as factory_django
 
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.journals.factories import JournalEntryFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.constants import ObligationOrigin, ObligationState
@@ -19,6 +20,7 @@ from world.societies.models import (
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
+    LegendHonor,
     LegendLevelCalibration,
     LegendSourceType,
     LegendSpread,
@@ -338,6 +340,24 @@ class LegendLevelCalibrationFactory(factory_django.DjangoModelFactory):
     honor_hares_required = 1
     honor_value_added = 10
     deed_title_threshold = 100
+
+
+class LegendHonorFactory(factory_django.DjangoModelFactory):
+    """Factory for LegendHonor rows.
+
+    No django_get_or_create - intentionally omitted so that duplicate
+    (deed, honorer) pairs raise IntegrityError in tests that exercise
+    the DB constraint.
+    """
+
+    class Meta:
+        model = LegendHonor
+
+    deed = factory.SubFactory(LegendEntryFactory)
+    honorer = factory.SubFactory(PersonaFactory)
+    journal_entry = factory.SubFactory(JournalEntryFactory)
+    hares_spent = 1
+    value_added = 10
 
 
 # Specialized factories for common test scenarios

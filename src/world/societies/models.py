@@ -1813,11 +1813,79 @@ class LegendLevelCalibration(SharedMemoryModel):
 
     class Meta:
         ordering = ["level"]
-        verbose_name = "legend level calibration"
-        verbose_name_plural = "legend level calibrations"
+        verbose_name = "Legend Level Calibration"
+        verbose_name_plural = "Legend Level Calibrations"
 
     def __str__(self) -> str:
         return f"Level {self.level} legend calibration"
+
+
+class LegendHonor(SharedMemoryModel):
+    """One person's paid, written testimony to one deed (#3466).
+
+    An honor is the record of the Rite of Honors: Golden Hares surrendered, a public
+    journal written, and legend added to a deed within the ceiling its event proved.
+    Distinct from ``LegendDeedStory``, which is the free account anyone may write and
+    rewrite about a deed - an honor costs something and moves the number.
+
+    Story-significant: never hard-deleted. Staff strike a farcical honor by deactivating
+    its deed (``LegendEntry.is_active``), which zeroes the deed's value without
+    destroying who said what.
+    """
+
+    deed = models.ForeignKey(LegendEntry, on_delete=models.CASCADE, related_name="honors")
+    honorer = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.PROTECT,
+        related_name="honors_given",
+        help_text="The face that spoke. The journal is authored by their sheet, so an "
+        "honor is never anonymous.",
+    )
+    journal_entry = models.ForeignKey(
+        "arxii.JournalEntry",
+        on_delete=models.PROTECT,
+        related_name="legend_honors",
+        help_text="The public journal written as part of the rite.",
+    )
+    deed_story = models.ForeignKey(
+        "arxii.LegendDeedStory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legend_honors",
+        help_text="The mirrored account on the deed. Nullable: the author may later "
+        "rewrite or remove it through the ordinary deed-story surface.",
+    )
+    hares = models.ManyToManyField(
+        "arxii.FavorTokenDetails",
+        related_name="honors",
+        blank=True,
+        help_text="The Golden Hares surrendered, kept for provenance.",
+    )
+    hares_spent = models.PositiveSmallIntegerField(
+        help_text="Denormalized count of hares, so a deed page does not query the M2M "
+        "once per honor.",
+    )
+    value_added = models.PositiveIntegerField(
+        help_text="Legend this voice actually contributed, after the event ceiling "
+        "clamped it. May be less than the calibration row's value.",
+    )
+    established_deed = models.BooleanField(
+        default=False,
+        help_text="True when this honor is the one that created the deed.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Legend Honor"
+        verbose_name_plural = "Legend Honors"
+        constraints = [
+            models.UniqueConstraint(fields=["deed", "honorer"], name="unique_honor_per_honorer"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.honorer} honors {self.deed}"
 
 
 class LegendContribution(SharedMemoryModel):

@@ -3305,6 +3305,7 @@
   - item_instance -> items.ItemInstance [OneToOne]
   - issuing_organization -> societies.Organization [FK]
 **Pointed to by:**
+  - honors <- societies.LegendHonor
   - settled_obligations <- societies.OrganizationObligation
 
 ### IncomeDeclaration
@@ -4693,6 +4694,7 @@
   - revealed_by_settlement -> estates.EstateSettlement [FK] (nullable)
   - related_threads -> magic.Thread [M2M]
 **Pointed to by:**
+  - legend_honors <- societies.LegendHonor
   - responses <- journals.JournalEntry
   - tags <- journals.JournalTag
 
@@ -8080,6 +8082,7 @@
   - legend_entries <- societies.LegendEntry
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
+  - honors_given <- societies.LegendHonor
   - deed_knowledge <- societies.PersonaDeedKnowledge
   - proclamations <- societies.Proclamation
   - edicts_enacted <- societies.DomainEdict
@@ -8831,6 +8834,8 @@
 **Foreign Keys:**
   - deed -> societies.LegendEntry [FK]
   - author -> scenes.Persona [FK]
+**Pointed to by:**
+  - legend_honors <- societies.LegendHonor
 
 ### LegendEntry
 **Foreign Keys:**
@@ -8846,6 +8851,7 @@
   - spread_assist_targets <- societies.SpreadAssistTarget
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
+  - honors <- societies.LegendHonor
   - knowledge_rows <- societies.PersonaDeedKnowledge
   - covenant_credits <- societies.CovenantLegendCredit
   - audere_majora_crossing <- magic.AudereMajoraCrossing
@@ -8866,6 +8872,14 @@
   - created_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
   - deeds <- societies.LegendEntry
+
+### LegendHonor
+**Foreign Keys:**
+  - deed -> societies.LegendEntry [FK]
+  - honorer -> scenes.Persona [FK]
+  - journal_entry -> journals.JournalEntry [FK]
+  - deed_story -> societies.LegendDeedStory [FK] (nullable)
+  - hares -> currency.FavorTokenDetails [M2M]
 
 ### LegendLevelCalibration
 

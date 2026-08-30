@@ -16,6 +16,7 @@ from world.societies.models import (
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
+    LegendHonor,
     LegendLevelCalibration,
     LegendSourceType,
     LegendSpread,
@@ -104,6 +105,16 @@ class LegendDeedStoryInline(admin.TabularInline):
     fields = ["author", "text", "created_at", "updated_at"]
     readonly_fields = ["created_at", "updated_at"]
     raw_id_fields = ["author"]
+
+
+class LegendHonorInline(admin.TabularInline):
+    """Inline for displaying paid honors within a legend entry (#3466)."""
+
+    model = LegendHonor
+    extra = 0
+    fields = ["honorer", "value_added", "hares_spent", "established_deed", "created_at"]
+    readonly_fields = ["created_at"]
+    raw_id_fields = ["honorer", "journal_entry", "deed_story"]
 
 
 # =============================================================================
@@ -494,7 +505,7 @@ class LegendEntryAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at", "get_total_value"]
     raw_id_fields = ["persona", "event", "scene", "story"]
     filter_horizontal = ["societies_aware"]
-    inlines = [LegendSpreadInline, LegendDeedStoryInline]
+    inlines = [LegendSpreadInline, LegendDeedStoryInline, LegendHonorInline]
 
     fieldsets = (
         (
@@ -638,6 +649,18 @@ class LegendLevelCalibrationAdmin(admin.ModelAdmin):
         "deed_title_threshold",
     ]
     ordering = ["level"]
+
+
+@admin.register(LegendHonor)
+class LegendHonorAdmin(admin.ModelAdmin):
+    """Admin interface for the Rite of Honors paid-testimony ledger (#3466)."""
+
+    list_display = ["deed", "honorer", "value_added", "hares_spent", "created_at"]
+    list_filter = ["established_deed"]
+    search_fields = ["deed__title", "honorer__name"]
+    ordering = ["-created_at"]
+    readonly_fields = ["created_at"]
+    raw_id_fields = ["deed", "honorer", "journal_entry", "deed_story"]
 
 
 @admin.register(SpreadingConfig)
