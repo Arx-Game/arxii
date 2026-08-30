@@ -71,9 +71,11 @@ class ContentProbe:
         return False
 
     def resolve(self, known_names: frozenset[str] | None) -> ProbeResult:
-        """Resolve this probe against `known_names` (pre-fetched, lowercased row
-        names for this probe's model), or `None` when the probe fetches its own
-        data (an `AnyRowProbe`'s `.exists()`, a `CustomProbe`'s callable)."""
+        """Resolve this probe against `known_names` (pre-fetched, exact-case row
+        names for this probe's model - a `case_insensitive` probe casefolds both
+        sides itself inside its own `resolve()`), or `None` when the probe
+        fetches its own data (an `AnyRowProbe`'s `.exists()`, a
+        `FilteredRowProbe`'s filtered `.exists()`, a `CustomProbe`'s callable)."""
         raise NotImplementedError
 
 
@@ -1160,8 +1162,8 @@ def collect_required_content() -> RequiredContentSnapshot:
     case-sensitive and case-insensitive declarations (e.g. `ConditionTemplate`
     is all case-insensitive today, but nothing stops a future case-sensitive
     declaration on the same model), so the exact case must survive to
-    `resolve()` for it to decide. `AnyRowProbe` and `CustomProbe` resolve
-    themselves.
+    `resolve()` for it to decide. `AnyRowProbe`, `FilteredRowProbe`, and
+    `CustomProbe` all resolve themselves - none of them read `known_names`.
     """
     dependencies = build_registry(_declarations())
 
