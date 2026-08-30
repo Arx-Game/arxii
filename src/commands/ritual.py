@@ -9,8 +9,12 @@ Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
         e.g. ``thread=<id>``/``tradition_id=<id>``)
     ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
-        — free-text grammar special-cased for the Rite of Honors (#3466); see
-        ``_resolve_honors_args`` below for why this one ritual gets its own parser.
+        — amplify a witnessed deed; free-text grammar special-cased for the Rite
+        of Honors (#3466); see ``_resolve_honors_args`` below for why this one
+        ritual gets its own parser.
+    ``ritual Rite of Honors honoree=<name> event=<id> deed_title=<text> title=<text> body=<text>``
+        — establish a new deed under an event instead of amplifying an existing
+        one; exactly one of ``deed=``/``event=`` must be given.
 
 Multi-participant session path:
     ``ritual sessions``                              — list pending sessions
@@ -47,8 +51,26 @@ _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "c
 #: Rite of Honors (#3466) telnet tokens — every one may run to multiple words
 #: (a persona's display name, a title, or free-prose journal body), so this
 #: ritual cannot go through ``_split_name_and_kwargs``'s int-only tokenizer.
-_HONORS_MULTIWORD_KEYS = frozenset({"honoree", "deed", "title", "body"})
-_HONORS_USAGE = "Usage: ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>"
+#: Two forms: amplify (deed=<id>) or establish (event=<id> deed_title=<text>) —
+#: exactly one of deed=/event= must be given.
+_HONORS_MULTIWORD_KEYS = frozenset({"honoree", "deed", "event", "title", "deed_title", "body"})
+_HONORS_AMPLIFY_USAGE = (
+    "Usage: ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>"
+)
+_HONORS_ESTABLISH_USAGE = (
+    "Usage: ritual Rite of Honors honoree=<name> event=<id> deed_title=<text> "
+    "title=<text> body=<text>"
+)
+_HONORS_BOTH_GIVEN_MSG = (
+    "Give either deed=<id> (to amplify an existing deed) or event=<id> "
+    "(to establish a new one), not both."
+)
+_HONORS_NEITHER_GIVEN_MSG = (
+    "Give either deed=<id> (to amplify an existing deed) or event=<id> (to establish a new one)."
+)
+_HONORS_DEED_TITLE_WITHOUT_EVENT_MSG = (
+    "deed_title=<text> only makes sense together with event=<id> (establishing)."
+)
 
 
 def _advancement_error_message(exc: Exception) -> str:
@@ -536,16 +558,24 @@ class CmdRitual(ArxCommand):
         return kwargs
 
     def _resolve_honors_args(self, ritual: Ritual, rest: str) -> dict[str, Any]:
-        """Parse ``honoree=<name> deed=<id> title=<text> body=<text>`` (#3466).
+        """Parse the Rite of Honors' two forms (#3466):
 
-        Honoree resolves by exact Persona name, globally — never room-scoped —
-        because honoring is explicitly unrestricted by life-state or presence
-        (a posthumous honoree may be off-scene or dead). ``knows_deed``/
-        ``AlreadyHonoredError``/etc inside ``honor_deed`` itself are the real
-        eligibility gates; this only resolves names/ids to rows.
+        - amplify: ``honoree=<name> deed=<id> title=<text> body=<text>``
+        - establish: ``honoree=<name> event=<id> deed_title=<text> title=<text>
+          body=<text>``
+
+        Exactly one of ``deed=``/``event=`` selects the branch; giving both or
+        neither is refused here, by name, before ``honor_deed`` ever runs (that
+        service raises a plain ``ValueError`` for the same shape mistake, which
+        is not a player-safe message). Honoree resolves by exact Persona name,
+        globally — never room-scoped — because honoring is explicitly
+        unrestricted by life-state or presence (a posthumous honoree may be
+        off-scene or dead). ``knows_deed``/``AlreadyHonoredError``/
+        ``NotPresentToEstablishError``/etc inside ``honor_deed`` itself are the
+        real eligibility gates; this only resolves names/ids to rows and
+        enforces which form was given.
         """
         from world.scenes.models import Persona  # noqa: PLC0415
-        from world.societies.models import LegendEntry  # noqa: PLC0415
 
         kv, _flags = parse_kv_and_flags(
             rest, multiword_keys=_HONORS_MULTIWORD_KEYS, known_flags=frozenset()
@@ -553,15 +583,45 @@ class CmdRitual(ArxCommand):
 
         honoree_name = kv.get("honoree", "").strip()
         deed_raw = kv.get("deed", "").strip()
+        event_raw = kv.get("event", "").strip()
+        deed_title = kv.get("deed_title", "").strip()
         journal_title = kv.get("title", "").strip()
         journal_body = kv.get("body", "").strip()
-        if not (honoree_name and deed_raw and journal_title and journal_body):
-            raise CommandError(_HONORS_USAGE)
+
+        if deed_raw and event_raw:
+            raise CommandError(_HONORS_BOTH_GIVEN_MSG)
+        if not deed_raw and not event_raw:
+            raise CommandError(_HONORS_NEITHER_GIVEN_MSG)
+        if deed_title and not event_raw:
+            raise CommandError(_HONORS_DEED_TITLE_WITHOUT_EVENT_MSG)
+
+        establishing = bool(event_raw)
+        usage = _HONORS_ESTABLISH_USAGE if establishing else _HONORS_AMPLIFY_USAGE
+        if not (honoree_name and journal_title and journal_body):
+            raise CommandError(usage)
+        if establishing and not deed_title:
+            raise CommandError(usage)
 
         honoree_persona = Persona.objects.filter(name__iexact=honoree_name).first()
         if honoree_persona is None:
             msg = f"No one named '{honoree_name}' is known to have any deeds."
             raise CommandError(msg)
+
+        result: dict[str, Any] = {
+            "ritual": ritual,
+            "honoree_persona": honoree_persona,
+            "journal_title": journal_title,
+            "journal_body": journal_body,
+        }
+        if establishing:
+            result.update(self._resolve_honors_establish_fields(event_raw, deed_title))
+        else:
+            result.update(self._resolve_honors_amplify_fields(deed_raw))
+        return result
+
+    def _resolve_honors_amplify_fields(self, deed_raw: str) -> dict[str, Any]:
+        """Resolve ``deed=<id>`` to a ``LegendEntry`` for the amplify branch."""
+        from world.societies.models import LegendEntry  # noqa: PLC0415
 
         try:
             deed_id = int(deed_raw)
@@ -572,14 +632,22 @@ class CmdRitual(ArxCommand):
         if deed is None:
             msg = f"No deed found with id {deed_id}."
             raise CommandError(msg)
+        return {"deed": deed}
 
-        return {
-            "ritual": ritual,
-            "honoree_persona": honoree_persona,
-            "deed": deed,
-            "journal_title": journal_title,
-            "journal_body": journal_body,
-        }
+    def _resolve_honors_establish_fields(self, event_raw: str, deed_title: str) -> dict[str, Any]:
+        """Resolve ``event=<id>`` to a ``LegendEvent`` for the establish branch."""
+        from world.societies.models import LegendEvent  # noqa: PLC0415
+
+        try:
+            event_id = int(event_raw)
+        except ValueError as exc:
+            msg = "Event id must be a number."
+            raise CommandError(msg) from exc
+        event = LegendEvent.objects.filter(pk=event_id).first()
+        if event is None:
+            msg = f"No event found with id {event_id}."
+            raise CommandError(msg)
+        return {"event": event, "deed_title": deed_title}
 
     def _gather_components(self) -> list[Any]:
         """Collect ItemInstance rows for the caller's carried items."""

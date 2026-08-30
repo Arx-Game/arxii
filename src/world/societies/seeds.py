@@ -19,11 +19,14 @@ def ensure_rite_of_honors_ritual() -> Ritual | None:
 
     Dispatches via ``HONORS_SERVICE_PATH``
     (``world.societies.honors.honor_deed``) at perform time. Single-actor and
-    ``hedge_accessible=True`` — the rite spends Golden Hares, not anima, so it
-    must stay open to a character with no magical profile at all (#3001's
-    visibility-is-eligibility rule would otherwise close it to every
-    non-Gifted character, which breaks the feature for most of the player
-    base).
+    ``hedge_accessible=False`` (ruling) — this is a Gifted rite, deliberately:
+    a Gifted voice's praise is what gives the telling its weight, and that is
+    the entire point of channeling honoring through a ritual instead of a
+    plain journal post. #3001's visibility-is-eligibility rule
+    (``ritual_visible_to``, ``world/magic/services/ritual_pool.py``) closing
+    it to a character with no magical profile is correct here, not a gap —
+    the rite spending Golden Hares rather than anima doesn't change who may
+    speak it, any more than a Gifted rite with material components would.
 
     ``magic.ritual`` is a ``CONTENT_MODELS`` entry (mixed ownership, split by
     ``author_account__isnull`` — see ``core_management/content_export.py``),
@@ -49,7 +52,7 @@ def ensure_rite_of_honors_ritual() -> Ritual | None:
                 "weight to the deed itself, whether the one who did it is "
                 "still standing or not."
             ),
-            "hedge_accessible": True,
+            "hedge_accessible": False,
             "glimpse_eligible": False,
             "execution_kind": RitualExecutionKind.SERVICE,
             "service_function_path": HONORS_SERVICE_PATH,

@@ -21,8 +21,9 @@ from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import mint_favor_token
 from world.magic.constants import ParticipationRule, RitualExecutionKind
+from world.magic.factories import CharacterAuraFactory
 from world.magic.models import Ritual
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
 from world.societies.constants import DeedKnowledgeSource
 from world.societies.factories import (
     LegendEntryFactory,
@@ -32,7 +33,7 @@ from world.societies.factories import (
 )
 from world.societies.honors import HONORS_SERVICE_PATH
 from world.societies.knowledge_services import grant_deed_knowledge
-from world.societies.models import LegendHonor
+from world.societies.models import LegendEntry, LegendHonor
 from world.societies.seeds import RITE_OF_HONORS_NAME, ensure_rite_of_honors_ritual
 
 
@@ -53,9 +54,10 @@ class EnsureRiteOfHonorsRitualTests(TestCase):
         assert rite.execution_kind == RitualExecutionKind.SERVICE
         assert rite.service_function_path == HONORS_SERVICE_PATH
         assert rite.participation_rule == ParticipationRule.SINGLE_ACTOR
-        # #3001: no Gifted-check anywhere in this rite's framework — it must
-        # stay visible to a character with no magical profile at all.
-        assert rite.hedge_accessible is True
+        # Ruling: this is a Gifted rite, deliberately — a Gifted voice's praise
+        # is what gives the telling its weight. hedge_accessible=False closes it
+        # to a character with no magical profile (ritual_visible_to).
+        assert rite.hedge_accessible is False
 
     def test_seed_is_idempotent(self) -> None:
         first = ensure_rite_of_honors_ritual()
@@ -94,6 +96,10 @@ class PerformRiteOfHonorsDispatchTests(TestCase):
     def setUp(self) -> None:
         self.honorer_sheet, self.honorer_persona = _sheet_with_persona()
         self.honoree_sheet, self.honoree_persona = _sheet_with_persona()
+        # hedge_accessible=False (ruling): the performer needs a magical
+        # profile or PerformRitualAction refuses the ritual outright, before
+        # honor_deed ever runs.
+        CharacterAuraFactory(character=self.honorer_sheet)
         self.scene = SceneFactory()
         self.event = LegendEventFactory(base_value=100, scene=self.scene)
         self.deed = LegendEntryFactory(
@@ -163,7 +169,12 @@ def _make_cmd(caller: object, args: str) -> CmdRitual:
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class RiteOfHonorsTelnetGrammarTests(TestCase):
-    """``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``."""
+    """Both telnet forms (#3466 Ruling 2):
+
+    - amplify: ``ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>``
+    - establish: ``ritual Rite of Honors honoree=<name> event=<id> deed_title=<text>
+      title=<text> body=<text>``
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -176,6 +187,9 @@ class RiteOfHonorsTelnetGrammarTests(TestCase):
     def setUp(self) -> None:
         self.honorer_sheet, self.honorer_persona = _sheet_with_persona()
         self.honoree_sheet, self.honoree_persona = _sheet_with_persona()
+        # hedge_accessible=False (ruling): the performer needs a magical
+        # profile or PerformRitualAction refuses the ritual outright.
+        CharacterAuraFactory(character=self.honorer_sheet)
         self.scene = SceneFactory()
         self.event = LegendEventFactory(base_value=100, scene=self.scene)
         self.deed = LegendEntryFactory(
@@ -184,6 +198,17 @@ class RiteOfHonorsTelnetGrammarTests(TestCase):
         grant_deed_knowledge(
             deed=self.deed, personas=[self.honorer_persona], source=DeedKnowledgeSource.WITNESSED
         )
+        # A SEPARATE event for the establish-path tests: self.event already
+        # anchors self.honoree_persona (via self.deed), which
+        # HonoreeAlreadyAnchoredError would trip. This one has someone else's
+        # deed (proving it minted something) but nothing yet for the honoree,
+        # and the honorer witnessed its scene (NotPresentToEstablishError
+        # otherwise) — mirrors HonorDeedSuccessTests' fixture in test_honors.py.
+        self.establish_event = LegendEventFactory(base_value=100, scene=self.scene)
+        LegendEntryFactory(
+            persona=PersonaFactory(), event=self.establish_event, base_value=10, earned_at_level=0
+        )
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
         mint_favor_token(self.academy, self.honorer_sheet, provenance_note="A deed done")
         self.character = self.honorer_sheet.character
         self.character.msg = MagicMock()
@@ -200,6 +225,8 @@ class RiteOfHonorsTelnetGrammarTests(TestCase):
         assert kwargs["deed"] == self.deed
         assert kwargs["journal_title"] == "A Great Deed"
         assert kwargs["journal_body"] == "They fought bravely and won"
+        assert "event" not in kwargs
+        assert "deed_title" not in kwargs
 
     def test_end_to_end_via_func_creates_legend_honor(self) -> None:
         args = (
@@ -226,4 +253,61 @@ class RiteOfHonorsTelnetGrammarTests(TestCase):
         args = f"Rite of Honors honoree={self.honoree_persona.name} deed={self.deed.pk} title=T"
         cmd = _make_cmd(self.character, args)
         with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_resolves_honoree_and_event_for_establish(self) -> None:
+        args = (
+            f"Rite of Honors honoree={self.honoree_persona.name} event={self.establish_event.pk} "
+            "deed_title=He Held the Door title=A Great Deed "
+            "body=They fought bravely and won"
+        )
+        cmd = _make_cmd(self.character, args)
+        kwargs = cmd.resolve_action_args()
+        assert kwargs["ritual"] == self.rite
+        assert kwargs["honoree_persona"] == self.honoree_persona
+        assert kwargs["event"] == self.establish_event
+        assert kwargs["deed_title"] == "He Held the Door"
+        assert kwargs["journal_title"] == "A Great Deed"
+        assert kwargs["journal_body"] == "They fought bravely and won"
+        assert "deed" not in kwargs
+
+    def test_end_to_end_establish_via_func_creates_solo_deed_and_honor(self) -> None:
+        deeds_before = LegendEntry.objects.count()
+        args = (
+            f"Rite of Honors honoree={self.honoree_persona.name} event={self.establish_event.pk} "
+            "deed_title=He Held the Door title=A Great Deed "
+            "body=They fought bravely and won"
+        )
+        cmd = _make_cmd(self.character, args)
+        cmd.func()
+        assert LegendHonor.objects.count() == 1
+        assert LegendEntry.objects.count() == deeds_before + 1
+        honor = LegendHonor.objects.get()
+        assert honor.established_deed is True
+        new_deed = LegendEntry.objects.get(pk=honor.deed_id)
+        assert new_deed.title == "He Held the Door"
+        assert new_deed.persona_id == self.honoree_persona.pk
+
+    def test_giving_both_deed_and_event_is_refused(self) -> None:
+        args = (
+            f"Rite of Honors honoree={self.honoree_persona.name} deed={self.deed.pk} "
+            f"event={self.establish_event.pk} deed_title=T title=T body=B"
+        )
+        cmd = _make_cmd(self.character, args)
+        with self.assertRaisesMessage(CommandError, "not both"):
+            cmd.resolve_action_args()
+
+    def test_giving_neither_deed_nor_event_is_refused(self) -> None:
+        args = f"Rite of Honors honoree={self.honoree_persona.name} title=T body=B"
+        cmd = _make_cmd(self.character, args)
+        with self.assertRaisesMessage(CommandError, "Give either deed="):
+            cmd.resolve_action_args()
+
+    def test_deed_title_without_event_is_refused(self) -> None:
+        args = (
+            f"Rite of Honors honoree={self.honoree_persona.name} deed={self.deed.pk} "
+            "deed_title=T title=T body=B"
+        )
+        cmd = _make_cmd(self.character, args)
+        with self.assertRaisesMessage(CommandError, "deed_title="):
             cmd.resolve_action_args()

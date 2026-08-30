@@ -199,7 +199,11 @@ actions, backends, and service functions.
     Kwargs are integers only (`thread=<id>`/`tradition_id=<id>`/etc) EXCEPT for one
     special case:
     - `ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>` (#3466)
-      — the one single-actor ritual with free-text kwargs (a persona name, a title, a
+      — amplify a witnessed deed — OR
+      `ritual Rite of Honors honoree=<name> event=<id> deed_title=<text> title=<text> body=<text>`
+      — establish a new one; exactly one of `deed=`/`event=` must be given (both or
+      neither is refused, by name; `deed_title=` without `event=` is refused too).
+      The one single-actor ritual with free-text kwargs (a persona name, a title, a
       journal body). `resolve_action_args` looks the ritual up by name first, then
       branches to `_resolve_honors_args` (built on the shared `parse_kv_and_flags`
       multiword tokenizer, `commands/parsing.py`) when
@@ -207,8 +211,9 @@ actions, backends, and service functions.
       (`world.societies.honors.HONORS_SERVICE_PATH`). `honoree` resolves to a `Persona`
       by exact name, globally — never room-scoped, since honoring is unrestricted by
       presence or life-state (Decision 7: a posthumous honoree may be off-scene or
-      dead). `deed` resolves to a `LegendEntry` by pk. This resolution lives here, not
-      in `commands.ritual_adapters` (that registry is consulted only on the session
+      dead). `deed` resolves to a `LegendEntry` by pk; `event` resolves to a
+      `LegendEvent` by pk. This resolution lives here, not in
+      `commands.ritual_adapters` (that registry is consulted only on the session
       draft/join path below) and not inside `honor_deed` itself (shared with the REST
       dispatch path, which passes already-resolved model instances —
       `world/societies/honors.py`).
