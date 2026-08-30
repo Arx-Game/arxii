@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,8 +66,10 @@ function DeedAccounts({ personaId, deedId }: { personaId: number; deedId: number
 /**
  * Recent deeds — the last N LegendEntry rows, newest first. Phase G API
  * caps the list (default 20). Each row shows title, date, and base
- * legend value; spread totals and societies_aware are surfaced when the
- * deed-detail view lands as a follow-up.
+ * legend value; the title links through to the deed's own page
+ * (`/deeds/:id`, #3466 Task 10) — its honors, what people wrote, and the
+ * honor form. Spread totals and societies_aware are surfaced there too as
+ * the view fills out.
  */
 export function DeedsLogCard({ deeds, personaId }: Props) {
   return (
@@ -82,7 +85,9 @@ export function DeedsLogCard({ deeds, personaId }: Props) {
             {deeds.map((deed) => (
               <li key={deed.id} className="border-b pb-2 last:border-b-0">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-medium">{deed.title}</span>
+                  <Link to={`/deeds/${deed.id}`} className="font-medium hover:underline">
+                    {deed.title}
+                  </Link>
                   <span className="text-xs text-muted-foreground">
                     {formatDate(deed.created_at)}
                   </span>
