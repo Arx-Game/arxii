@@ -110,6 +110,19 @@ bucketed by outcome â€” won / lost / fled, or winner / loser / fled for a DUEL â
 reciprocation (`world/relationships/services.py::create_first_impression`'s reciprocation
 block, `increment_stat_for_group([source, target], stat_def)`).
 
+**The caller's list order IS the credit order (#3319).** Because the crossing set is
+built in caller order and the first entry takes `discovered_by_tenure`, a caller that
+builds its list straight off an unordered queryset hands that slot to the database. On
+Postgres that is heap order, which shifts the moment any row in the table is rewritten
+(combat's `_apply_aftermath_rules` does exactly that before the counters run), so the
+named discoverer of a party win came out differently from run to run and the
+`test_mixed_won_fled_party_shares_discovery_among_winners_only` regression test went red
+intermittently for months. Any queryset feeding a group grant needs an explicit
+`.order_by(...)` stating whose claim comes first -- combat orders participants by pk, so
+the earliest joiner takes the slot. The display rule above softens what is at stake (the
+group case renders symmetrically as "shared") but does not remove it: the FK is stored,
+admin-visible, and `Discovery.discovered_by_tenure` is what a later feature would read.
+
 ### CharacterAchievement
 Records when a character earned an achievement.
 - Required `earned_by_tenure` FK -> `roster.RosterTenure` (`on_delete=PROTECT`, #3055):

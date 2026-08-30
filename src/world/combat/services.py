@@ -9359,8 +9359,16 @@ def _increment_completion_counters(encounter: CombatEncounter, outcome: Encounte
         increment_combat_counter_for_group,
     )
 
-    participants = CombatParticipant.objects.filter(encounter=encounter).select_related(
-        "character_sheet"
+    # Ordered by join order (#3319): the bucket lists below are handed to
+    # ``increment_stat_for_group`` -> ``grant_achievement``, which gives the primary
+    # ``Discovery.discovered_by_tenure`` slot to the FIRST sheet in the list and shares
+    # the rest. An unordered queryset leaves that to Postgres row order, which shifts
+    # whenever ``_apply_aftermath_rules`` rewrites a participant row -- so who is named
+    # the discoverer of a party win varied run to run. Earliest joiner takes the slot.
+    participants = (
+        CombatParticipant.objects.filter(encounter=encounter)
+        .select_related("character_sheet")
+        .order_by("pk")
     )
 
     if encounter.encounter_type == EncounterType.DUEL:
