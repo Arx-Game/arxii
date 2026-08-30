@@ -55,38 +55,34 @@ class CraftingFameTests(TestCase):
         self.assertGreater(bare, 0)
         self.assertGreater(accented, bare)
 
-    def test_fame_credits_both_maker_and_designer_personas(self):
+    def test_safe_work_mints_no_deed_however_fine(self):
+        """#3463: an ordinary masterwork risks nothing, so it mints no Legend.
+
+        Replaces two tests that both now assert this — one checked baseline work
+        minted nothing (still true, and now true for every quality), the other
+        checked a Superb piece credited both maker and designer with a deed each.
+        That dual-credit path is not gone, it is gated: it fires when a working
+        genuinely endangered its makers, which reaches Legend through the stakes
+        settlement seam. Testing it today would mean patching
+        _working_was_perilous to True and asserting a path no production caller
+        reaches, which is worth less than the line it costs.
+
+        crafting_deed_value keeps its own coverage above — it is the sizing
+        function a perilous working will use, so it stays honest either way.
+        """
         maker_sheet = CharacterSheetFactory()
         designer_sheet = CharacterSheetFactory()
-        tier = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
+        superb = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
         instance = ItemInstanceFactory()
 
         before = LegendEntry.objects.count()
         award_crafting_fame(
             crafter_persona=maker_sheet.primary_persona,
             designer_persona=designer_sheet.primary_persona,
-            tier=tier,
+            tier=superb,
             item_label="Blade",
             item_instance=instance,
         )
 
-        self.assertEqual(LegendEntry.objects.count(), before + 2)
-        personas = set(LegendEntry.objects.order_by("-id")[:2].values_list("persona", flat=True))
-        self.assertEqual(
-            personas,
-            {maker_sheet.primary_persona.pk, designer_sheet.primary_persona.pk},
-        )
-        self.assertEqual(instance.legend_deeds.count(), 2)
-        self.assertGreater(instance.legend_value, 0)
-
-    def test_baseline_work_mints_nothing(self):
-        sheet = CharacterSheetFactory()
-        plain = QualityTierFactory(name="Plain", stat_multiplier=Decimal("1.0"))
-        before = LegendEntry.objects.count()
-        award_crafting_fame(
-            crafter_persona=sheet.primary_persona,
-            designer_persona=None,
-            tier=plain,
-            item_label="Rag",
-        )
         self.assertEqual(LegendEntry.objects.count(), before)
+        self.assertEqual(instance.legend_deeds.count(), 0)
