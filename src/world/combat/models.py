@@ -3394,6 +3394,28 @@ class EscalationCurve(SharedMemoryModel):
         help_text="Intensity spike for the locked duelist when a non-locked PC "
         "interferes with the duel (#2020).",
     )
+    boss_phase_spike_intensity_amount = models.PositiveIntegerField(
+        default=2,
+        help_text=(
+            "Intensity spike for every ACTIVE PC when a boss crosses into a new phase "
+            "without hitting harder (#3445). 0 disables this beat for the curve."
+        ),
+    )
+    boss_enrage_spike_intensity_amount = models.PositiveIntegerField(
+        default=4,
+        help_text=(
+            "Intensity spike for every ACTIVE PC when a phase transition raises the "
+            "boss's damage_multiplier (#3445). 0 disables this beat for the curve."
+        ),
+    )
+    boss_break_spike_intensity_amount = models.PositiveIntegerField(
+        default=4,
+        help_text=(
+            "Intensity spike for every ACTIVE PC when a boss's break bar reaches zero "
+            "(#3445). Fires once per boss per phase, so the re-break loop cannot repeat "
+            "it. 0 disables this beat for the curve."
+        ),
+    )
     surge_narration = models.TextField(
         blank=True,
         help_text=(
@@ -3424,6 +3446,11 @@ class DramaticSurgeRecord(SharedMemoryModel):
     Postgres never matches NULL=NULL — a single constraint spanning the
     nullable subject_sheet column would let subjectless (HIGH_STAKES)
     duplicates through.
+
+    A boss beat (subject_opponent set) dedups differently: on
+    ``(encounter, participant, trigger_kind, subject_opponent,
+    subject_phase_number)`` instead, so a multi-phase boss surges once per
+    phase rather than once per encounter (#3445).
     """
 
     encounter = models.ForeignKey(
@@ -3444,6 +3471,30 @@ class DramaticSurgeRecord(SharedMemoryModel):
         blank=True,
         related_name="+",
         help_text="The bonded ally / hated foe this surge is about; null for HIGH_STAKES.",
+    )
+    subject_opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The boss whose beat produced this surge (#3445); null for every "
+            "non-boss trigger_kind. CASCADE rather than SET_NULL: nulling it would "
+            "drop the row into the subject-less slice of the unique index and could "
+            "raise IntegrityError on delete. Nothing deletes a CombatOpponent in "
+            "production, so no audit history is lost in practice."
+        ),
+    )
+    subject_phase_number = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The boss's current_phase at the moment of the beat (#3445) - the "
+            "discriminator that lets phase 2 and phase 3 each surge while the #2642 "
+            "re-break loop (bar stays at zero, window re-opens each round) cannot. "
+            "Set exactly when subject_opponent is set."
+        ),
     )
     amount = models.PositiveIntegerField()
     round_number = models.PositiveIntegerField()
@@ -3470,8 +3521,32 @@ class DramaticSurgeRecord(SharedMemoryModel):
             ),
             models.UniqueConstraint(
                 fields=["encounter", "participant", "trigger_kind"],
-                condition=models.Q(subject_sheet__isnull=True),
+                condition=models.Q(subject_sheet__isnull=True, subject_opponent__isnull=True),
                 name="unique_surge_without_subject",
+            ),
+            models.UniqueConstraint(
+                fields=[
+                    "encounter",
+                    "participant",
+                    "trigger_kind",
+                    "subject_opponent",
+                    "subject_phase_number",
+                ],
+                condition=models.Q(subject_opponent__isnull=False),
+                name="unique_surge_boss_beat",
+            ),
+            models.CheckConstraint(
+                check=~(
+                    models.Q(subject_sheet__isnull=False) & models.Q(subject_opponent__isnull=False)
+                ),
+                name="surge_subject_sheet_xor_opponent",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(subject_opponent__isnull=True, subject_phase_number__isnull=True)
+                    | models.Q(subject_opponent__isnull=False, subject_phase_number__isnull=False)
+                ),
+                name="surge_boss_beat_needs_phase_number",
             ),
         ]
 
