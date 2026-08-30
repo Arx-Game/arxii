@@ -16,6 +16,7 @@ from world.classes.factories import CharacterClassLevelFactory
 from world.currency.models import FavorTokenDetails
 from world.currency.services import mint_favor_token
 from world.journals.models import JournalEntry, WeeklyJournalXP
+from world.scenes.constants import PersonaType
 from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
 from world.societies.constants import DeedKnowledgeSource
 from world.societies.factories import (
@@ -30,6 +31,7 @@ from world.societies.honors import (
     CannotHonorOwnDeedError,
     DeedAtCeilingError,
     EventMintedNothingRefusal,
+    HonoreeAlreadyAnchoredError,
     InsufficientHaresError,
     NotPresentToEstablishError,
     UnknownDeedError,
@@ -73,12 +75,16 @@ class HonorDeedRefusalTests(TestCase):
     def _mint_hare(self) -> FavorTokenDetails:
         return mint_favor_token(self.academy, self.honorer_sheet, provenance_note="A deed done")
 
-    def _assert_nothing_consumed(self, token: FavorTokenDetails | None) -> None:
+    def _assert_nothing_consumed(
+        self, token: FavorTokenDetails | None, deed_count_before: int | None = None
+    ) -> None:
         if token is not None:
             token.refresh_from_db()
             assert token.redeemed_at is None
         assert not JournalEntry.objects.exists()
         assert not LegendHonor.objects.exists()
+        if deed_count_before is not None:
+            assert LegendEntry.objects.count() == deed_count_before
 
     def test_cannot_honor_your_own_deed(self) -> None:
         own_deed = LegendEntryFactory(
@@ -98,6 +104,37 @@ class HonorDeedRefusalTests(TestCase):
                 journal_body="b",
             )
         self._assert_nothing_consumed(token)
+
+    def test_cannot_honor_own_deed_even_through_a_different_mask(self) -> None:
+        """The check is CharacterSheet-level, not persona-level (honors.py's own-deed check).
+
+        A naive ``deed.persona_id == honorer_persona.pk`` comparison would miss this: the
+        deed is authored by a SECOND, established persona on the honorer's own sheet, not
+        by the persona attempting to honor it.
+        """
+        masked_persona = PersonaFactory(
+            character_sheet=self.honorer_sheet, persona_type=PersonaType.ESTABLISHED
+        )
+        masked_deed = LegendEntryFactory(
+            persona=masked_persona, event=self.event, base_value=20, earned_at_level=0
+        )
+        grant_deed_knowledge(
+            deed=masked_deed,
+            personas=[self.honorer_persona],
+            source=DeedKnowledgeSource.WITNESSED,
+        )
+        token = self._mint_hare()
+        deed_count_before = LegendEntry.objects.count()
+        with self.assertRaises(CannotHonorOwnDeedError):
+            honor_deed(
+                character_sheet=self.honorer_sheet,
+                ritual=None,
+                honoree_persona=masked_persona,
+                deed=masked_deed,
+                journal_title="t",
+                journal_body="b",
+            )
+        self._assert_nothing_consumed(token, deed_count_before)
 
     def test_cannot_honor_the_same_deed_twice(self) -> None:
         grant_deed_knowledge(
@@ -124,6 +161,7 @@ class HonorDeedRefusalTests(TestCase):
     def test_event_that_minted_nothing_is_refused(self) -> None:
         empty_event = LegendEventFactory(base_value=100)
         token = self._mint_hare()
+        deed_count_before = LegendEntry.objects.count()
         with self.assertRaises(EventMintedNothingRefusal):
             honor_deed(
                 character_sheet=self.honorer_sheet,
@@ -134,7 +172,31 @@ class HonorDeedRefusalTests(TestCase):
                 journal_title="t",
                 journal_body="b",
             )
-        self._assert_nothing_consumed(token)
+        self._assert_nothing_consumed(token, deed_count_before)
+
+    def test_struck_deed_does_not_count_as_proof_of_peril(self) -> None:
+        """A staff-struck (is_active=False) entry doesn't prove the event minted anything."""
+        struck_only_event = LegendEventFactory(base_value=100)
+        LegendEntryFactory(
+            persona=PersonaFactory(),
+            event=struck_only_event,
+            base_value=50,
+            earned_at_level=0,
+            is_active=False,
+        )
+        token = self._mint_hare()
+        deed_count_before = LegendEntry.objects.count()
+        with self.assertRaises(EventMintedNothingRefusal):
+            honor_deed(
+                character_sheet=self.honorer_sheet,
+                ritual=None,
+                honoree_persona=self.honoree_persona,
+                event=struck_only_event,
+                deed_title="An uncredited act",
+                journal_title="t",
+                journal_body="b",
+            )
+        self._assert_nothing_consumed(token, deed_count_before)
 
     def test_deed_already_at_ceiling_is_refused(self) -> None:
         at_ceiling = LegendEntryFactory(
@@ -172,18 +234,91 @@ class HonorDeedRefusalTests(TestCase):
         self._assert_nothing_consumed(None)
 
     def test_establishing_without_presence_is_refused(self) -> None:
+        # A fresh event the honoree has no deed on yet — self.event already carries
+        # self.deed for self.honoree_persona, which would trip the "already anchored"
+        # refusal instead of the one this test targets.
+        unwitnessed_event = LegendEventFactory(base_value=100, scene=SceneFactory())
+        LegendEntryFactory(
+            persona=PersonaFactory(), event=unwitnessed_event, base_value=10, earned_at_level=0
+        )
         token = self._mint_hare()
+        deed_count_before = LegendEntry.objects.count()
         with self.assertRaises(NotPresentToEstablishError):
             honor_deed(
                 character_sheet=self.honorer_sheet,
                 ritual=None,
                 honoree_persona=self.honoree_persona,
-                event=self.event,
+                event=unwitnessed_event,
                 deed_title="An uncredited act",
                 journal_title="t",
                 journal_body="b",
             )
-        self._assert_nothing_consumed(token)
+        self._assert_nothing_consumed(token, deed_count_before)
+
+    def test_establishing_refused_when_honoree_already_has_a_settled_deed_on_event(
+        self,
+    ) -> None:
+        """One deed per act (#3466 Finding 2): many voices grow ONE deed, not one each.
+
+        self.deed (from setUp) already anchors self.honoree_persona to self.event, exactly
+        as an automatic settlement pass would have. Establishing a second one for the same
+        act must be refused in favor of honoring the existing deed.
+        """
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        token = self._mint_hare()
+        deed_count_before = LegendEntry.objects.count()
+        with self.assertRaises(HonoreeAlreadyAnchoredError):
+            honor_deed(
+                character_sheet=self.honorer_sheet,
+                ritual=None,
+                honoree_persona=self.honoree_persona,
+                event=self.event,
+                deed_title="A second telling of the same act",
+                journal_title="t",
+                journal_body="b",
+            )
+        self._assert_nothing_consumed(token, deed_count_before)
+
+    def test_establishing_refused_when_honoree_already_has_an_established_deed_on_event(
+        self,
+    ) -> None:
+        """Same rule, but the pre-existing deed came from an EARLIER honor, not settlement."""
+        fresh_event = LegendEventFactory(base_value=100, scene=self.scene)
+        LegendEntryFactory(
+            persona=PersonaFactory(), event=fresh_event, base_value=10, earned_at_level=0
+        )
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        self._mint_hare()
+        honor_deed(
+            character_sheet=self.honorer_sheet,
+            ritual=None,
+            honoree_persona=self.honoree_persona,
+            event=fresh_event,
+            deed_title="He held the door",
+            journal_title="t",
+            journal_body="b",
+        )
+
+        second_honorer_sheet, second_honorer_persona = _sheet_with_persona()
+        InteractionFactory(persona=second_honorer_persona, scene=self.scene)
+        second_token = mint_favor_token(
+            self.academy, second_honorer_sheet, provenance_note="A deed done"
+        )
+        deed_count_before = LegendEntry.objects.count()
+        with self.assertRaises(HonoreeAlreadyAnchoredError):
+            honor_deed(
+                character_sheet=second_honorer_sheet,
+                ritual=None,
+                honoree_persona=self.honoree_persona,
+                event=fresh_event,
+                deed_title="A different telling of the same act",
+                journal_title="t2",
+                journal_body="b2",
+            )
+        second_token.refresh_from_db()
+        assert second_token.redeemed_at is None
+        assert LegendEntry.objects.count() == deed_count_before
+        assert not LegendHonor.objects.filter(honorer=second_honorer_persona).exists()
 
     def test_amplifying_without_knowledge_is_refused(self) -> None:
         token = self._mint_hare()
@@ -244,6 +379,14 @@ class HonorDeedSuccessTests(TestCase):
         self.token = mint_favor_token(
             self.academy, self.honorer_sheet, provenance_note="A deed done"
         )
+        # A SEPARATE event for the establish-path tests below: self.event already
+        # anchors self.honoree_persona (via self.deed), which the "one deed per act"
+        # refusal (#3466 Finding 2) would otherwise trip. This one has someone else's
+        # deed (proving it minted something) but nothing yet for the honoree.
+        self.establish_event = LegendEventFactory(base_value=100, scene=self.scene)
+        LegendEntryFactory(
+            persona=PersonaFactory(), event=self.establish_event, base_value=10, earned_at_level=0
+        )
 
     def test_amplifying_raises_base_value_by_the_calibrated_amount(self) -> None:
         honor_deed(
@@ -278,7 +421,7 @@ class HonorDeedSuccessTests(TestCase):
             character_sheet=self.honorer_sheet,
             ritual=None,
             honoree_persona=self.honoree_persona,
-            event=self.event,
+            event=self.establish_event,
             deed_title="He held the door",
             journal_title="t",
             journal_body="b",
@@ -286,15 +429,16 @@ class HonorDeedSuccessTests(TestCase):
         assert honor.established_deed is True
         new_deed = LegendEntry.objects.get(pk=honor.deed_id)
         assert new_deed.pk != self.deed.pk
-        assert new_deed.event_id == self.event.pk
+        assert new_deed.event_id == self.establish_event.pk
         assert new_deed.title == "He held the door"
         assert new_deed.persona_id == self.honoree_persona.pk
 
     def test_established_deed_station_is_min_of_honoree_level_and_event_max(self) -> None:
         InteractionFactory(persona=self.honorer_persona, scene=self.scene)
-        # self.deed already sits at earned_at_level=0; add a higher-station sibling.
+        # self.establish_event already carries a station-0 sibling (from setUp);
+        # add a higher-station one too.
         LegendEntryFactory(
-            persona=PersonaFactory(), event=self.event, base_value=10, earned_at_level=5
+            persona=PersonaFactory(), event=self.establish_event, base_value=10, earned_at_level=5
         )
         CharacterClassLevelFactory(character=self.honoree_sheet, level=3)
         self.honoree_sheet.invalidate_class_level_cache()
@@ -307,13 +451,41 @@ class HonorDeedSuccessTests(TestCase):
             character_sheet=self.honorer_sheet,
             ritual=None,
             honoree_persona=self.honoree_persona,
-            event=self.event,
+            event=self.establish_event,
             deed_title="He held the door",
             journal_title="t",
             journal_body="b",
         )
         new_deed = LegendEntry.objects.get(pk=honor.deed_id)
         assert new_deed.earned_at_level == 3
+
+    def test_struck_deed_does_not_count_toward_station_max(self) -> None:
+        """A staff-struck sibling (is_active=False) must not raise the established station."""
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        LegendEntryFactory(
+            persona=PersonaFactory(),
+            event=self.establish_event,
+            base_value=10,
+            earned_at_level=9,
+            is_active=False,
+        )
+        CharacterClassLevelFactory(character=self.honoree_sheet, level=9)
+        self.honoree_sheet.invalidate_class_level_cache()
+        # Station lands at 0 (see the assertion below), and setUpTestData already
+        # carries a level=0 calibration row (unique per level) — nothing more to seed.
+        honor = honor_deed(
+            character_sheet=self.honorer_sheet,
+            ritual=None,
+            honoree_persona=self.honoree_persona,
+            event=self.establish_event,
+            deed_title="He held the door",
+            journal_title="t",
+            journal_body="b",
+        )
+        new_deed = LegendEntry.objects.get(pk=honor.deed_id)
+        # min(honoree level 9, max ACTIVE station 0 from setUp's baseline entry) == 0,
+        # not 9 — the struck level-9 sibling must not count.
+        assert new_deed.earned_at_level == 0
 
     def test_journal_is_public_and_earns_no_weekly_xp(self) -> None:
         honor = honor_deed(
@@ -361,7 +533,7 @@ class HonorDeedSuccessTests(TestCase):
             character_sheet=self.honorer_sheet,
             ritual=None,
             honoree_persona=self.honoree_persona,
-            event=self.event,
+            event=self.establish_event,
             deed_title="He held the door",
             journal_title="t",
             journal_body="b",

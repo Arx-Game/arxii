@@ -105,6 +105,20 @@ class UnknownDeedError(HonorRefused):
         super().__init__("You do not know of this deed, so you cannot honor it.")
 
 
+class HonoreeAlreadyAnchoredError(HonorRefused):
+    """The honoree already has a deed anchored to this event (#3466 — one deed per act).
+
+    Settled automatically or established by an earlier honor, it makes no difference:
+    many voices are meant to grow ONE deed, never each mint their own for the same act.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This event already has a deed recorded for that act — honor the existing "
+            "deed instead of establishing a new one."
+        )
+
+
 class DeedAtCeilingError(HonorRefused):
     """The deed already carries as much legend as its event ever proved (Decision 2)."""
 
@@ -172,7 +186,7 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 raise ValueError(msg)
             anchor_event = event
 
-        if not anchor_event.deeds.exists():
+        if not anchor_event.deeds.filter(is_active=True).exists():
             raise EventMintedNothingRefusal
 
         # --- Step 2: eligibility -------------------------------------------
@@ -182,6 +196,8 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if establishing:
             if honoree_persona.character_sheet_id == character_sheet.pk:
                 raise CannotHonorOwnDeedError
+            if anchor_event.deeds.filter(persona=honoree_persona).exists():
+                raise HonoreeAlreadyAnchoredError
             if not deed_title:
                 msg = "honor_deed requires deed_title when establishing a new deed."
                 raise ValueError(msg)
@@ -218,9 +234,9 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
         # --- Step 5: establish, or raise -------------------------------------
         if establishing:
-            max_station = anchor_event.deeds.aggregate(models.Max("earned_at_level"))[
-                "earned_at_level__max"
-            ]
+            max_station = anchor_event.deeds.filter(is_active=True).aggregate(
+                models.Max("earned_at_level")
+            )["earned_at_level__max"]
             station = min(honoree_persona.character_sheet.current_level, max_station or 0)
             deed = create_solo_deed(
                 honoree_persona,
