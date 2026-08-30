@@ -3,7 +3,7 @@ Tests for progression models.
 """
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase, tag
+from django.test import TestCase
 from evennia.accounts.models import AccountDB
 import pytest
 
@@ -207,13 +207,16 @@ class CharacterUnlockModelTest(TestCase):
             )
 
 
-@tag("postgres")
 class LegendRequirementTests(TestCase):
     """Tests for LegendRequirement model.
 
-    PG-only: ``LegendRequirement.is_met_by_character`` queries
-    ``societies_characterlegendsummary``, a Postgres materialized view.
-    On the SQLite tier the view doesn't exist; this class is skipped.
+    **No longer PG-only (#3463, ADR-0249).** ``is_met_by_character`` used to read
+    ``societies_characterlegendsummary``, a Postgres materialized view, which is
+    why this class carried ``@tag("postgres")`` and was skipped on the SQLite
+    tier. It now runs a live band-filtered aggregate over ``LegendEntry`` — the
+    matview stays the lifetime tale-worth total for fame and murmur, and
+    advancement is the one read that narrows. So the tag is dropped and these
+    run on the fast tier, where a gate this load-bearing belongs.
     """
 
     @classmethod
@@ -256,18 +259,41 @@ class LegendRequirementTests(TestCase):
         from world.societies.factories import LegendEntryFactory
         from world.societies.models import refresh_legend_views
 
-        LegendEntryFactory(persona=self.identity.primary_persona, base_value=60)
+        # Station 5 sits inside the band for a level-5 unlock at the default
+        # offset of 1. Without a station the deed is "won outside a perilous
+        # stakes contract" and qualifies nothing, however large (#3463).
+        # 60 x station 5 = 300, comfortably past the 50 threshold.
+        LegendEntryFactory(persona=self.identity.primary_persona, base_value=60, earned_at_level=5)
         refresh_legend_views()
         met, msg = self.requirement.is_met_by_character(self.character)
         assert met
         assert "meets requirement" in msg
+
+    def test_station_zero_never_qualifies(self) -> None:
+        """A deed won outside a perilous stakes contract advances nobody (#3463).
+
+        Enormous value, no station: real Legend for fame, murmur and spread,
+        worth nothing toward a class level. This is how "safe play cannot
+        advance you" is enforced.
+        """
+        from world.societies.factories import LegendEntryFactory
+
+        LegendEntryFactory(
+            persona=self.identity.primary_persona, base_value=100_000, earned_at_level=0
+        )
+        met, _msg = self.requirement.is_met_by_character(self.character)
+        assert not met
 
     def test_not_met_when_legend_insufficient(self) -> None:
         """Character with insufficient legend should not meet requirement."""
         from world.societies.factories import LegendEntryFactory
         from world.societies.models import refresh_legend_views
 
-        LegendEntryFactory(persona=self.identity.primary_persona, base_value=10)
+        # 5 x station 5 = 25, short of the 50 threshold. The multiplier is why
+        # this is not simply "10": a deed's stored base_value is UNTUNED, and
+        # station_multiplier() is applied on read (#3463), so base 10 at station
+        # 5 would have read as exactly 50 and met the gate.
+        LegendEntryFactory(persona=self.identity.primary_persona, base_value=5, earned_at_level=5)
         refresh_legend_views()
         met, msg = self.requirement.is_met_by_character(self.character)
         assert not met

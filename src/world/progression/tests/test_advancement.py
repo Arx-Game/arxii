@@ -569,8 +569,16 @@ class AdvanceViaSessionLegendGatePGTests(TestCase):
         LegendRequirement.objects.create(
             class_level_unlock=unlock, minimum_legend=50, is_active=True
         )
+        # #3463: the gate bands on STATION. earned_at_level defaults to 0 —
+        # "won outside a perilous stakes contract" — which qualifies nothing at
+        # any level, so a deed for an advancement test has to state its station.
+        # Unlock targets level 3 with the default offset of 1, so the band is
+        # station >= 2; 3 sits inside it.
         LegendEntryFactory(
-            persona=inductee.primary_persona, base_value=legend_value, is_active=True
+            persona=inductee.primary_persona,
+            base_value=legend_value,
+            is_active=True,
+            earned_at_level=3,
         )
         refresh_legend_views()
         return session, inductee
