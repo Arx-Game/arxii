@@ -957,7 +957,11 @@ class BossPhase(AbstractPhaseConfig):
     )
     vulnerability_intensity_bonus = models.PositiveIntegerField(
         default=0,
-        help_text="Intensity bonus during window; from BreakBarConfig.",
+        help_text=(
+            "Intensity bonus during window; from BreakBarConfig. "
+            "Power-ledger term (feeds power_intensity_bonus), NOT the engagement's "
+            "intensity_modifier."
+        ),
     )
 
     class Meta:

@@ -1,1 +1,1 @@
-0196_alter_breakbarconfig_intensity_bonus_and_more
+0196_alter_bossphase_vulnerability_intensity_bonus_and_more
