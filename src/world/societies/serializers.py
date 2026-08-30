@@ -6,8 +6,12 @@ from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from world.scenes.models import Persona
 from world.societies.houses.models import Domain, Title
 from world.societies.models import (
+    LegendEntry,
+    LegendEvent,
+    LegendHonor,
     Organization,
     OrganizationMembership,
     OrganizationMembershipOffer,
@@ -611,3 +615,221 @@ class OrgAppealResolveInputSerializer(serializers.Serializer):
 
     verdict = serializers.ChoiceField(choices=["grant", "decline"])
     answer = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+_NO_ACTIVE_PERSONA_REASON = "You need an active persona to honor a deed."
+
+
+def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> dict:
+    """Read-only eligibility preview for the Rite of Honors (#3466 Task 9).
+
+    Mirrors ``honor_deed``'s (``world.societies.honors``) amplify-branch checks
+    without any side effect — no row lock, no token resolution, no write. Every
+    ``reason`` string is the same player-safe ``HonorRefused.user_message`` the
+    service itself would raise, so a refusal shown here and a refusal returned by
+    the POST ``honor`` action never drift apart. None of these name anything the
+    viewer could not already see elsewhere on this same payload (the deed's own
+    title/persona, or the Hare count this same response already discloses).
+    """
+    from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
+    from world.currency.models import FavorTokenDetails  # noqa: PLC0415
+    from world.societies.honors import (  # noqa: PLC0415
+        AlreadyHonoredError,
+        CannotHonorOwnDeedError,
+        DeedAtCeilingError,
+        EventMintedNothingRefusal,
+        InsufficientHaresError,
+        NoAnchorEventError,
+        UnknownDeedError,
+    )
+    from world.societies.knowledge_services import knows_deed  # noqa: PLC0415
+    from world.societies.models import LegendLevelCalibration  # noqa: PLC0415
+
+    if viewer_persona is None:
+        return {
+            "allowed": False,
+            "reason": _NO_ACTIVE_PERSONA_REASON,
+            "hares_required": 0,
+            "value_added": 0,
+        }
+
+    if deed.event_id is None:
+        return {
+            "allowed": False,
+            "reason": NoAnchorEventError().user_message,
+            "hares_required": 0,
+            "value_added": 0,
+        }
+
+    anchor_event = deed.event
+    sheet = viewer_persona.character_sheet
+    # Authored content: unguarded on purpose (see LegendLevelCalibration's
+    # docstring) — a missing row is a content gap the admin required-content
+    # panel surfaces, never a silent fallback price.
+    calibration = LegendLevelCalibration.objects.get(level=sheet.current_level)
+    hares_required = calibration.honor_hares_required
+    headroom = max(anchor_event.base_value - deed.base_value, 0)
+    value_added = min(calibration.honor_value_added, headroom)
+
+    reason: str | None = None
+    if deed.persona.character_sheet_id == sheet.pk:
+        reason = CannotHonorOwnDeedError().user_message
+    elif not anchor_event.deeds.filter(is_active=True).exists():
+        reason = EventMintedNothingRefusal().user_message
+    elif not knows_deed(persona=viewer_persona, deed=deed):
+        reason = UnknownDeedError().user_message
+    elif LegendHonor.objects.filter(deed=deed, honorer=viewer_persona).exists():
+        reason = AlreadyHonoredError().user_message
+    elif headroom <= 0:
+        reason = DeedAtCeilingError().user_message
+    else:
+        academy = Organization.objects.get(name=SHROUDWATCH_ACADEMY_NAME)
+        available = FavorTokenDetails.objects.filter(
+            issuing_organization=academy,
+            redeemed_at__isnull=True,
+            item_instance__holder_character_sheet=sheet,
+            item_instance__destroyed_at__isnull=True,
+        ).count()
+        if available < hares_required:
+            reason = InsufficientHaresError(hares_required).user_message
+
+    return {
+        "allowed": reason is None,
+        "reason": reason,
+        "hares_required": hares_required,
+        "value_added": value_added,
+    }
+
+
+class _JournalSummarySerializer(serializers.Serializer):
+    """The public journal an honor is mirrored onto — safe to inline in full."""
+
+    id = serializers.IntegerField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    body = serializers.CharField(read_only=True)
+
+
+class LegendHonorSerializer(serializers.ModelSerializer):
+    """One paid, written testimony to a deed (#3466 Task 9).
+
+    ``honorer`` is the persona id + display name ONLY — never the account. The
+    honorer's journal is public by construction (``honor_deed`` always writes
+    ``is_public=True``), so its body is safe to inline here rather than requiring
+    a second request.
+    """
+
+    honorer = serializers.SerializerMethodField()
+    journal = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LegendHonor
+        fields = [
+            "id",
+            "honorer",
+            "value_added",
+            "hares_spent",
+            "established_deed",
+            "created_at",
+            "journal",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.DictField())
+    def get_honorer(self, obj: LegendHonor) -> dict:
+        return {"id": obj.honorer_id, "name": obj.honorer.name}
+
+    @extend_schema_field(_JournalSummarySerializer())
+    def get_journal(self, obj: LegendHonor) -> dict:
+        journal = obj.journal_entry
+        return {"id": journal.pk, "title": journal.title, "body": journal.body}
+
+
+class CanHonorSerializer(serializers.Serializer):
+    """Eligibility preview computed by ``_compute_can_honor`` — never persisted."""
+
+    allowed = serializers.BooleanField(read_only=True)
+    reason = serializers.CharField(read_only=True, allow_null=True)
+    hares_required = serializers.IntegerField(read_only=True)
+    value_added = serializers.IntegerField(read_only=True)
+
+
+class DeedDetailSerializer(serializers.ModelSerializer):
+    """A deed's public detail page (#3466 Task 9): the React deed page's payload.
+
+    ``persona`` exposes id + name only (the face, never the account). ``ceiling``
+    is the anchoring event's ``base_value`` — null when the deed has no event, in
+    which case ``can_honor.reason`` says so in plain words (an unanchored deed
+    cannot be honored). ``can_honor`` needs ``context["viewer_persona"]``, set by
+    the viewset from the requester's active persona (or ``None``).
+    """
+
+    persona = serializers.SerializerMethodField()
+    event = serializers.SerializerMethodField()
+    ceiling = serializers.SerializerMethodField()
+    headroom = serializers.SerializerMethodField()
+    honors = LegendHonorSerializer(many=True, read_only=True)
+    can_honor = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LegendEntry
+        fields = [
+            "id",
+            "title",
+            "description",
+            "persona",
+            "base_value",
+            "ceiling",
+            "headroom",
+            "earned_at_level",
+            "event",
+            "honors",
+            "can_honor",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.DictField())
+    def get_persona(self, obj: LegendEntry) -> dict:
+        return {"id": obj.persona_id, "name": obj.persona.name}
+
+    @extend_schema_field(serializers.DictField(allow_null=True))
+    def get_event(self, obj: LegendEntry) -> dict | None:
+        if obj.event_id is None:
+            return None
+        return {"id": obj.event_id, "title": obj.event.title, "base_value": obj.event.base_value}
+
+    def get_ceiling(self, obj: LegendEntry) -> int | None:
+        return obj.event.base_value if obj.event_id is not None else None
+
+    def get_headroom(self, obj: LegendEntry) -> int | None:
+        if obj.event_id is None:
+            return None
+        return max(obj.event.base_value - obj.base_value, 0)
+
+    @extend_schema_field(CanHonorSerializer())
+    def get_can_honor(self, obj: LegendEntry) -> dict:
+        return _compute_can_honor(viewer_persona=self.context.get("viewer_persona"), deed=obj)
+
+
+class LegendEventSummarySerializer(serializers.ModelSerializer):
+    """Minimal list/retrieve payload for the establish-a-deed anchor (#3466 Task 9)."""
+
+    class Meta:
+        model = LegendEvent
+        fields = ["id", "title", "description", "base_value", "created_at"]
+        read_only_fields = fields
+
+
+class HonorDeedInputSerializer(serializers.Serializer):
+    """``POST /api/societies/deeds/{id}/honor/`` body (#3466 Task 9): amplify."""
+
+    journal_title = serializers.CharField(max_length=200)
+    journal_body = serializers.CharField(allow_blank=False)
+
+
+class EstablishDeedInputSerializer(serializers.Serializer):
+    """``POST /api/societies/events/{id}/establish/`` body (#3466 Task 9)."""
+
+    honoree_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    deed_title = serializers.CharField(max_length=200)
+    journal_title = serializers.CharField(max_length=200)
+    journal_body = serializers.CharField(allow_blank=False)

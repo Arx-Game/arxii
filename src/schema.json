@@ -32417,6 +32417,186 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrgAppeal'
           description: ''
+  /api/societies/deeds/:
+    get:
+      operationId: societies_deeds_list
+      description: |-
+        List/retrieve deeds (``LegendEntry``) + the ``honor`` action (#3466 Task 9).
+
+        Deeds are public legend, like ``ProclamationViewSet`` — any authenticated
+        player may read any deed, including one belonging to a persona they do not
+        play. ``can_honor`` is scoped to the requester's own active persona via
+        ``get_serializer_context``.
+      parameters:
+      - in: query
+        name: event
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: persona
+        schema:
+          type: number
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeedDetailList'
+          description: ''
+  /api/societies/deeds/{id}/:
+    get:
+      operationId: societies_deeds_retrieve
+      description: |-
+        List/retrieve deeds (``LegendEntry``) + the ``honor`` action (#3466 Task 9).
+
+        Deeds are public legend, like ``ProclamationViewSet`` — any authenticated
+        player may read any deed, including one belonging to a persona they do not
+        play. ``can_honor`` is scoped to the requester's own active persona via
+        ``get_serializer_context``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Legend Entry.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeedDetail'
+          description: ''
+  /api/societies/deeds/{id}/honor/:
+    post:
+      operationId: societies_deeds_honor_create
+      description: |-
+        ``POST /api/societies/deeds/{id}/honor/`` — amplify this deed.
+
+        Body: ``{journal_title, journal_body}``. The honoree is always this
+        deed's own persona — never chosen by the caller, so there is no implicit
+        "pick one" selection here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Legend Entry.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeedDetail'
+          description: ''
+  /api/societies/events/:
+    get:
+      operationId: societies_events_list
+      description: |-
+        List/retrieve legend events + the ``establish`` action (#3466 Task 9).
+
+        Public read, like ``DeedViewSet`` — an event is the shared anchor a deed's
+        honor ceiling is measured against, and browsing it is how the React deed page
+        finds an event to establish a new deed under.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: number
+      - in: query
+        name: story
+        schema:
+          type: number
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLegendEventSummaryList'
+          description: ''
+  /api/societies/events/{id}/:
+    get:
+      operationId: societies_events_retrieve
+      description: |-
+        List/retrieve legend events + the ``establish`` action (#3466 Task 9).
+
+        Public read, like ``DeedViewSet`` — an event is the shared anchor a deed's
+        honor ceiling is measured against, and browsing it is how the React deed page
+        finds an event to establish a new deed under.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this legend event.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegendEventSummary'
+          description: ''
+  /api/societies/events/{id}/establish/:
+    post:
+      operationId: societies_events_establish_create
+      description: |-
+        ``POST /api/societies/events/{id}/establish/`` — mint a fresh deed.
+
+        Body: ``{honoree_persona, deed_title, journal_title, journal_body}``.
+        ``honoree_persona`` must be given explicitly — establishing never picks
+        a default participant.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this legend event.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegendEventSummary'
+          description: ''
   /api/societies/memberships/:
     get:
       operationId: societies_memberships_list
@@ -41341,6 +41521,29 @@ components:
       - id
       - is_tradition_technique
       - name
+    CanHonor:
+      type: object
+      description: Eligibility preview computed by ``_compute_can_honor`` — never
+        persisted.
+      properties:
+        allowed:
+          type: boolean
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+          nullable: true
+        hares_required:
+          type: integer
+          readOnly: true
+        value_added:
+          type: integer
+          readOnly: true
+      required:
+      - allowed
+      - hares_required
+      - reason
+      - value_added
     CanonReview:
       type: object
       description: |-
@@ -46080,6 +46283,76 @@ components:
       - increments
       - name
       - tier_prerequisites
+    DeedDetail:
+      type: object
+      description: |-
+        A deed's public detail page (#3466 Task 9): the React deed page's payload.
+
+        ``persona`` exposes id + name only (the face, never the account). ``ceiling``
+        is the anchoring event's ``base_value`` — null when the deed has no event, in
+        which case ``can_honor.reason`` says so in plain words (an unanchored deed
+        cannot be honored). ``can_honor`` needs ``context["viewer_persona"]``, set by
+        the viewset from the requester's active persona (or ``None``).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+          description: Short name for this legend record
+        description:
+          type: string
+          readOnly: true
+          description: Description of what happened
+        persona:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        base_value:
+          type: integer
+          readOnly: true
+          description: Base legend value
+        ceiling:
+          type: integer
+          nullable: true
+          readOnly: true
+        headroom:
+          type: integer
+          nullable: true
+          readOnly: true
+        earned_at_level:
+          type: integer
+          readOnly: true
+          description: 'Station this deed was won at: min(earner level, threat level).
+            0 = no station (minted outside a perilous stakes contract); such a deed
+            still counts for fame and spread but qualifies no advancement.'
+        event:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        honors:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegendHonor'
+          readOnly: true
+        can_honor:
+          allOf:
+          - $ref: '#/components/schemas/CanHonor'
+          readOnly: true
+      required:
+      - base_value
+      - can_honor
+      - ceiling
+      - description
+      - earned_at_level
+      - event
+      - headroom
+      - honors
+      - id
+      - persona
+      - title
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -53967,6 +54240,83 @@ components:
       - direction
       - id
       - reason
+    LegendEventSummary:
+      type: object
+      description: Minimal list/retrieve payload for the establish-a-deed anchor (#3466
+        Task 9).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+          description: Short name for this legend record
+        description:
+          type: string
+          readOnly: true
+          description: Description of what happened
+        base_value:
+          type: integer
+          readOnly: true
+          description: Base legend value
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - base_value
+      - created_at
+      - description
+      - id
+      - title
+    LegendHonor:
+      type: object
+      description: |-
+        One paid, written testimony to a deed (#3466 Task 9).
+
+        ``honorer`` is the persona id + display name ONLY — never the account. The
+        honorer's journal is public by construction (``honor_deed`` always writes
+        ``is_public=True``), so its body is safe to inline here rather than requiring
+        a second request.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        honorer:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        value_added:
+          type: integer
+          readOnly: true
+          description: Legend this voice actually contributed, after the event ceiling
+            clamped it. May be less than the calibration row's value.
+        hares_spent:
+          type: integer
+          readOnly: true
+          description: Denormalized count of hares, so a deed page does not query
+            the M2M once per honor.
+        established_deed:
+          type: boolean
+          readOnly: true
+          description: True when this honor is the one that created the deed.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        journal:
+          allOf:
+          - $ref: '#/components/schemas/_JournalSummary'
+          readOnly: true
+      required:
+      - created_at
+      - established_deed
+      - hares_spent
+      - honorer
+      - id
+      - journal
+      - value_added
     LevelC97Enum:
       enum:
       - 10
@@ -59635,6 +59985,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DecorationTemplate'
+    PaginatedDeedDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeedDetail'
     PaginatedDeedStoryList:
       type: object
       required:
@@ -60570,6 +60943,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LabStationDetails'
+    PaginatedLegendEventSummaryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegendEventSummary'
     PaginatedListenerPostList:
       type: object
       required:
@@ -80426,6 +80822,24 @@ components:
       - tier
       - tier_label
       - tier_multiplier
+    _JournalSummary:
+      type: object
+      description: The public journal an honor is mirrored onto — safe to inline in
+        full.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+      required:
+      - body
+      - id
+      - title
     _NearXPLockProspect:
       type: object
       description: One entry in the near-xp-lock list returned by ThreadHubSummaryView.

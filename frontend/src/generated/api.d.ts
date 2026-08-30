@@ -20039,6 +20039,146 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/deeds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve deeds (``LegendEntry``) + the ``honor`` action (#3466 Task 9).
+     *
+     *     Deeds are public legend, like ``ProclamationViewSet`` — any authenticated
+     *     player may read any deed, including one belonging to a persona they do not
+     *     play. ``can_honor`` is scoped to the requester's own active persona via
+     *     ``get_serializer_context``.
+     */
+    get: operations['societies_deeds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/deeds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve deeds (``LegendEntry``) + the ``honor`` action (#3466 Task 9).
+     *
+     *     Deeds are public legend, like ``ProclamationViewSet`` — any authenticated
+     *     player may read any deed, including one belonging to a persona they do not
+     *     play. ``can_honor`` is scoped to the requester's own active persona via
+     *     ``get_serializer_context``.
+     */
+    get: operations['societies_deeds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/deeds/{id}/honor/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description ``POST /api/societies/deeds/{id}/honor/`` — amplify this deed.
+     *
+     *     Body: ``{journal_title, journal_body}``. The honoree is always this
+     *     deed's own persona — never chosen by the caller, so there is no implicit
+     *     "pick one" selection here.
+     */
+    post: operations['societies_deeds_honor_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/events/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve legend events + the ``establish`` action (#3466 Task 9).
+     *
+     *     Public read, like ``DeedViewSet`` — an event is the shared anchor a deed's
+     *     honor ceiling is measured against, and browsing it is how the React deed page
+     *     finds an event to establish a new deed under.
+     */
+    get: operations['societies_events_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/events/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve legend events + the ``establish`` action (#3466 Task 9).
+     *
+     *     Public read, like ``DeedViewSet`` — an event is the shared anchor a deed's
+     *     honor ceiling is measured against, and browsing it is how the React deed page
+     *     finds an event to establish a new deed under.
+     */
+    get: operations['societies_events_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/events/{id}/establish/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description ``POST /api/societies/events/{id}/establish/`` — mint a fresh deed.
+     *
+     *     Body: ``{honoree_persona, deed_title, journal_title, journal_body}``.
+     *     ``honoree_persona`` must be given explicitly — establishing never picks
+     *     a default participant.
+     */
+    post: operations['societies_events_establish_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/memberships/': {
     parameters: {
       query?: never;
@@ -24906,6 +25046,13 @@ export interface components {
       readonly is_tradition_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
+    /** @description Eligibility preview computed by ``_compute_can_honor`` — never persisted. */
+    CanHonor: {
+      readonly allowed: boolean;
+      readonly reason: string | null;
+      readonly hares_required: number;
+      readonly value_added: number;
+    };
     /**
      * @description Read/response serializer for CanonReview (#2003).
      *
@@ -27033,6 +27180,36 @@ export interface components {
       weekly_upkeep_cost?: number;
       increments: components['schemas']['PolishIncrement'][];
       tier_prerequisites: string[];
+    };
+    /**
+     * @description A deed's public detail page (#3466 Task 9): the React deed page's payload.
+     *
+     *     ``persona`` exposes id + name only (the face, never the account). ``ceiling``
+     *     is the anchoring event's ``base_value`` — null when the deed has no event, in
+     *     which case ``can_honor.reason`` says so in plain words (an unanchored deed
+     *     cannot be honored). ``can_honor`` needs ``context["viewer_persona"]``, set by
+     *     the viewset from the requester's active persona (or ``None``).
+     */
+    DeedDetail: {
+      readonly id: number;
+      /** @description Short name for this legend record */
+      readonly title: string;
+      /** @description Description of what happened */
+      readonly description: string;
+      readonly persona: {
+        [key: string]: unknown;
+      };
+      /** @description Base legend value */
+      readonly base_value: number;
+      readonly ceiling: number | null;
+      readonly headroom: number | null;
+      /** @description Station this deed was won at: min(earner level, threat level). 0 = no station (minted outside a perilous stakes contract); such a deed still counts for fame and spread but qualifies no advancement. */
+      readonly earned_at_level: number;
+      readonly event: {
+        [key: string]: unknown;
+      } | null;
+      readonly honors: components['schemas']['LegendHonor'][];
+      readonly can_honor: components['schemas']['CanHonor'];
     };
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
@@ -30846,6 +31023,41 @@ export interface components {
       /** Format: date-time */
       created_at: string;
     };
+    /** @description Minimal list/retrieve payload for the establish-a-deed anchor (#3466 Task 9). */
+    LegendEventSummary: {
+      readonly id: number;
+      /** @description Short name for this legend record */
+      readonly title: string;
+      /** @description Description of what happened */
+      readonly description: string;
+      /** @description Base legend value */
+      readonly base_value: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description One paid, written testimony to a deed (#3466 Task 9).
+     *
+     *     ``honorer`` is the persona id + display name ONLY — never the account. The
+     *     honorer's journal is public by construction (``honor_deed`` always writes
+     *     ``is_public=True``), so its body is safe to inline here rather than requiring
+     *     a second request.
+     */
+    LegendHonor: {
+      readonly id: number;
+      readonly honorer: {
+        [key: string]: unknown;
+      };
+      /** @description Legend this voice actually contributed, after the event ceiling clamped it. May be less than the calibration row's value. */
+      readonly value_added: number;
+      /** @description Denormalized count of hares, so a deed page does not query the M2M once per honor. */
+      readonly hares_spent: number;
+      /** @description True when this honor is the one that created the deed. */
+      readonly established_deed: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly journal: components['schemas']['_JournalSummary'];
+    };
     /**
      * @description * `10` - Building
      *     * `20` - Neighborhood
@@ -33871,6 +34083,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['DecorationTemplate'][];
     };
+    PaginatedDeedDetailList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DeedDetail'][];
+    };
     PaginatedDeedStoryList: {
       /** @example 123 */
       count: number;
@@ -34455,6 +34682,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['LabStationDetails'][];
+    };
+    PaginatedLegendEventSummaryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['LegendEventSummary'][];
     };
     PaginatedListenerPostList: {
       /** @example 123 */
@@ -45005,6 +45247,12 @@ export interface components {
       tier_multiplier: number;
       next_tier: string | null;
       next_tier_threshold: number | null;
+    };
+    /** @description The public journal an honor is mirrored onto — safe to inline in full. */
+    _JournalSummary: {
+      readonly id: number;
+      readonly title: string;
+      readonly body: string;
     };
     /** @description One entry in the near-xp-lock list returned by ThreadHubSummaryView. */
     _NearXPLockProspect: {
@@ -72709,6 +72957,142 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrgAppeal'];
+        };
+      };
+    };
+  };
+  societies_deeds_list: {
+    parameters: {
+      query?: {
+        event?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDeedDetailList'];
+        };
+      };
+    };
+  };
+  societies_deeds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Legend Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeedDetail'];
+        };
+      };
+    };
+  };
+  societies_deeds_honor_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Legend Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeedDetail'];
+        };
+      };
+    };
+  };
+  societies_events_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        scene?: number;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedLegendEventSummaryList'];
+        };
+      };
+    };
+  };
+  societies_events_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this legend event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LegendEventSummary'];
+        };
+      };
+    };
+  };
+  societies_events_establish_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this legend event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LegendEventSummary'];
         };
       };
     };

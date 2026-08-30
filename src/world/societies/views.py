@@ -13,6 +13,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.societies.filters import (
+    DeedFilter,
+    LegendEventFilter,
     OrganizationFilter,
     OrganizationMembershipFilter,
     OrganizationMembershipOfferFilter,
@@ -21,6 +23,9 @@ from world.societies.filters import (
     StandingDeclarationFilter,
 )
 from world.societies.models import (
+    LegendEntry,
+    LegendEvent,
+    LegendHonor,
     Organization,
     OrganizationMembership,
     OrganizationMembershipOffer,
@@ -31,6 +36,11 @@ from world.societies.models import (
 )
 from world.societies.permissions import IsOwnMembership, active_persona_q
 from world.societies.serializers import (
+    DeedDetailSerializer,
+    EstablishDeedInputSerializer,
+    HonorDeedInputSerializer,
+    LegendEventSummarySerializer,
+    LegendHonorSerializer,
     OrganizationMembershipOfferSerializer,
     OrganizationMembershipSerializer,
     OrganizationRankSerializer,
@@ -622,3 +632,137 @@ class OrgAppealViewSet(
         if not result.success:
             return Response({"detail": result.message}, status=400)
         return Response(self.get_serializer(self._refetch(appeal)).data)
+
+
+def _dispatch_rite_of_honors(actor, **kwargs):
+    """Dispatch the Rite of Honors ritual through ``PerformRitualAction`` (#3466 Task 9).
+
+    Both telnet (``commands.ritual.CmdRitual``) and web converge on
+    ``actions.definitions.ritual.PerformRitualAction`` — this view never calls
+    ``world.societies.honors.honor_deed`` directly, mirroring
+    ``world.magic.views.RitualPerformView``. Returns the ``ActionResult``; the
+    caller maps a failure's ``message`` (already a ``HonorRefused.user_message``,
+    per the action's own catch) to HTTP 400.
+    """
+    from actions.definitions.ritual import PerformRitualAction  # noqa: PLC0415
+    from world.magic.models import Ritual  # noqa: PLC0415
+    from world.societies.seeds import RITE_OF_HONORS_NAME  # noqa: PLC0415
+
+    ritual = Ritual.objects.get(name=RITE_OF_HONORS_NAME)
+    return PerformRitualAction().run(actor, ritual=ritual, **kwargs)
+
+
+class DeedViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve deeds (``LegendEntry``) + the ``honor`` action (#3466 Task 9).
+
+    Deeds are public legend, like ``ProclamationViewSet`` — any authenticated
+    player may read any deed, including one belonging to a persona they do not
+    play. ``can_honor`` is scoped to the requester's own active persona via
+    ``get_serializer_context``.
+    """
+
+    queryset = (
+        LegendEntry.objects.filter(is_active=True)
+        .select_related("persona", "event")
+        .prefetch_related(
+            "honors__honorer",  # noqa: PREFETCH_STRING
+            "honors__journal_entry",  # noqa: PREFETCH_STRING
+        )
+        .order_by("-created_at")
+    )
+    serializer_class = DeedDetailSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = DeedFilter
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["viewer_persona"] = _active_persona_for_request(self.request)
+        return context
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def honor(self, request, pk=None):
+        """``POST /api/societies/deeds/{id}/honor/`` — amplify this deed.
+
+        Body: ``{journal_title, journal_body}``. The honoree is always this
+        deed's own persona — never chosen by the caller, so there is no implicit
+        "pick one" selection here.
+        """
+        deed = self.get_object()
+        persona = _active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
+
+        payload = HonorDeedInputSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+
+        result = _dispatch_rite_of_honors(
+            persona.character_sheet.character,
+            honoree_persona=deed.persona,
+            deed=deed,
+            journal_title=data["journal_title"],
+            journal_body=data["journal_body"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+
+        honor = LegendHonor.objects.select_related("honorer", "journal_entry").get(
+            deed_id=deed.pk, honorer=persona
+        )
+        return Response(LegendHonorSerializer(honor).data, status=201)
+
+
+class LegendEventViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve legend events + the ``establish`` action (#3466 Task 9).
+
+    Public read, like ``DeedViewSet`` — an event is the shared anchor a deed's
+    honor ceiling is measured against, and browsing it is how the React deed page
+    finds an event to establish a new deed under.
+    """
+
+    queryset = LegendEvent.objects.select_related("source_type", "scene", "story").order_by(
+        "-created_at"
+    )
+    serializer_class = LegendEventSummarySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = LegendEventFilter
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def establish(self, request, pk=None):
+        """``POST /api/societies/events/{id}/establish/`` — mint a fresh deed.
+
+        Body: ``{honoree_persona, deed_title, journal_title, journal_body}``.
+        ``honoree_persona`` must be given explicitly — establishing never picks
+        a default participant.
+        """
+        event = self.get_object()
+        persona = _active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": _NO_ACTIVE_PERSONA_MESSAGE}, status=400)
+
+        payload = EstablishDeedInputSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+
+        result = _dispatch_rite_of_honors(
+            persona.character_sheet.character,
+            honoree_persona=data["honoree_persona"],
+            event=event,
+            deed_title=data["deed_title"],
+            journal_title=data["journal_title"],
+            journal_body=data["journal_body"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+
+        honor = (
+            LegendHonor.objects.select_related("honorer", "journal_entry")
+            .filter(deed__event_id=event.pk, honorer=persona, established_deed=True)
+            .order_by("-created_at")
+            .first()
+        )
+        return Response(LegendHonorSerializer(honor).data, status=201)

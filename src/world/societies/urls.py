@@ -5,6 +5,8 @@ from rest_framework.routers import DefaultRouter
 
 from world.societies.ranking_views import RankingDisplayViewSet
 from world.societies.views import (
+    DeedViewSet,
+    LegendEventViewSet,
     OrganizationMembershipOfferViewSet,
     OrganizationMembershipViewSet,
     OrganizationRankViewSet,
@@ -39,6 +41,8 @@ router.register(
     basename="standing-declaration",
 )
 router.register(r"appeals", OrgAppealViewSet, basename="organization-appeal")
+router.register(r"deeds", DeedViewSet, basename="deed")
+router.register(r"events", LegendEventViewSet, basename="legend-event")
 
 urlpatterns = [
     path("", include(router.urls)),

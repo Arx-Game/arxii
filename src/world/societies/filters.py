@@ -5,6 +5,8 @@ from __future__ import annotations
 import django_filters
 
 from world.societies.models import (
+    LegendEntry,
+    LegendEvent,
     Organization,
     OrganizationMembership,
     OrganizationMembershipOffer,
@@ -82,3 +84,25 @@ class OrgAppealFilter(django_filters.FilterSet):
     class Meta:
         model = OrgAppeal
         fields = ["organization", "state", "petitioner_persona"]
+
+
+class DeedFilter(django_filters.FilterSet):
+    """Filters for ``LegendEntry`` (#3466 Task 9) — the deed detail/list API."""
+
+    persona = django_filters.NumberFilter(field_name="persona_id")
+    event = django_filters.NumberFilter(field_name="event_id")
+
+    class Meta:
+        model = LegendEntry
+        fields = ["persona", "event"]
+
+
+class LegendEventFilter(django_filters.FilterSet):
+    """Filters for ``LegendEvent`` (#3466 Task 9) — the establish-a-deed anchor API."""
+
+    scene = django_filters.NumberFilter(field_name="scene_id")
+    story = django_filters.NumberFilter(field_name="story_id")
+
+    class Meta:
+        model = LegendEvent
+        fields = ["scene", "story"]
