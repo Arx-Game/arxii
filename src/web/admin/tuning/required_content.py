@@ -47,15 +47,26 @@ class ContentProbe:
     """Base class for a single row-presence check.
 
     A subclass declares what it checks (which rows, which model); `resolve()`
-    performs the check and reports the result. `model_label()` is the batching
-    seam: a probe that names a model returns that model's label so the collector
-    can group same-model probes onto a single query instead of one per probe.
+    performs the check and reports the result. `model_label()` is the display/
+    grouping seam: a probe that names a model returns that model's label, so
+    the collector (and a later panel) can report or group by model without
+    knowing each probe's concrete type. `participates_in_name_batch()` is the
+    narrower seam that actually drives collector batching: only a
+    `NamedRowsProbe` shares a single `values_list` query across declarations
+    naming the same model - `AnyRowProbe` also has a `model_label()` (it names
+    a model too) but resolves its own `.exists()` query per declaration, so it
+    must not be folded into that batch.
     """
 
     def model_label(self) -> str | None:
         """The `arxii` app model label this probe checks, or `None` if it isn't
         one the collector can batch (e.g. a `CustomProbe`)."""
         return None
+
+    def participates_in_name_batch(self) -> bool:
+        """Whether the collector should pool this probe's `model_label()` into
+        the shared known-names query rather than let the probe resolve itself."""
+        return False
 
     def resolve(self, known_names: frozenset[str] | None) -> ProbeResult:
         """Resolve this probe against `known_names` (pre-fetched, lowercased row
@@ -79,6 +90,9 @@ class NamedRowsProbe(ContentProbe):
 
     def model_label(self) -> str | None:
         return self.label
+
+    def participates_in_name_batch(self) -> bool:
+        return True
 
     def resolve(self, known_names: frozenset[str] | None) -> ProbeResult:
         known = known_names or frozenset()
@@ -188,11 +202,13 @@ def collect_required_content() -> RequiredContentSnapshot:
     """
     dependencies = build_registry(_declarations())
 
-    named_labels = {
-        dependency.probe.label
-        for dependency in dependencies
-        if isinstance(dependency.probe, NamedRowsProbe)
-    }
+    named_labels: set[str] = set()
+    for dependency in dependencies:
+        probe = dependency.probe
+        label = probe.model_label()
+        if probe.participates_in_name_batch() and label is not None:
+            named_labels.add(label)
+
     known_names_by_label: dict[str, frozenset[str]] = {}
     for label in named_labels:
         model = apps.get_model("arxii", label)
@@ -207,9 +223,10 @@ def collect_required_content() -> RequiredContentSnapshot:
 
     for dependency in dependencies:
         probe = dependency.probe
-        known_names = (
-            known_names_by_label[probe.label] if isinstance(probe, NamedRowsProbe) else None
-        )
+        known_names: frozenset[str] | None = None
+        probe_label = probe.model_label()
+        if probe.participates_in_name_batch() and probe_label is not None:
+            known_names = known_names_by_label[probe_label]
         result = probe.resolve(known_names)
         row = DependencyRow(dependency=dependency, result=result)
         if dependency.tier == DependencyTier.REQUIRED:

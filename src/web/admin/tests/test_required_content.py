@@ -71,6 +71,31 @@ class TestCustomProbe(TestCase):
         self.assertEqual(result.detail, "nope")
 
 
+class TestModelLabel(TestCase):
+    """`model_label()` and `participates_in_name_batch()` on each probe kind.
+
+    `collect_required_content` routes its batching grouping through these two
+    methods rather than through `isinstance` + direct attribute access, so a
+    regression in either would silently break batching with no other test
+    catching it.
+    """
+
+    def test_named_rows_probe_reports_its_label_and_batches(self) -> None:
+        probe = rc.NamedRowsProbe(label="ConditionTemplate", names=("Mounted",))
+        self.assertEqual(probe.model_label(), "ConditionTemplate")
+        self.assertTrue(probe.participates_in_name_batch())
+
+    def test_any_row_probe_reports_its_label_but_does_not_batch(self) -> None:
+        probe = rc.AnyRowProbe(label="LevelPowerConfig")
+        self.assertEqual(probe.model_label(), "LevelPowerConfig")
+        self.assertFalse(probe.participates_in_name_batch())
+
+    def test_custom_probe_reports_no_label_and_does_not_batch(self) -> None:
+        probe = rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True))
+        self.assertIsNone(probe.model_label())
+        self.assertFalse(probe.participates_in_name_batch())
+
+
 class DeclarationPatchMixin:
     @contextmanager
     def patch_declarations(self, deps):
