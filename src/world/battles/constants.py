@@ -256,14 +256,13 @@ SET_ENVIRONMENT_VP = 4
 VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY = 30
 VEHICLE_HAZARD_BASE_DAMAGE = 20
 
-# Win-gated LegendEntry wiring (#2184). Only the winning side mints a Victory
-# LegendEvent — DECISIVE outweighs MARGINAL, mirroring DECISIVE_MARGIN's own
-# distinction. Standout deeds are a separate, smaller-value pass available to
-# BOTH sides (a losing-side rescue is still legend-worthy) — see
-# world.battles.legend_wiring.apply_battle_legend_awards.
-BATTLE_LEGEND_DECISIVE_VALUE = 25
-BATTLE_LEGEND_MARGINAL_VALUE = 12
-BATTLE_LEGEND_STANDOUT_VALUE = 15
+# BATTLE_LEGEND_DECISIVE_VALUE / _MARGINAL_ / _STANDOUT_ were removed in #3467.
+# They were flat per-outcome payouts (25/12/15) authored before Legend was
+# settled. What a battle pays now comes from its beat's risk tier through
+# RiskCalibration.legend_award, priced per person by station and personal risk
+# in world.battles.legend_settlement — the same rules as every other source.
+# Win-gating survives as the held-objective share; the standout pass survives
+# as ADR-0122's curation (see STANDOUT_SUCCESS_LEVEL and DRAMATIC_KINDS below).
 
 # success_level > 0 is already "success" (BattleActionDeclaration.success_level
 # help_text); STANDOUT_SUCCESS_LEVEL is set clearly above bare success (1) so a
