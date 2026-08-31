@@ -467,13 +467,13 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
         """
         from world.roster.services.staff_characters import (  # noqa: PLC0415
             StaffMintError,
-            mint_staff_character,
+            mint_gm_character,
         )
 
         body = MintBuilderCharacterRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         try:
-            character = mint_staff_character(request.user, body.validated_data["name"])
+            character = mint_gm_character(request.user, body.validated_data["name"])
         except StaffMintError as exc:
             return Response({"detail": exc.user_message}, status=400)
         return Response(

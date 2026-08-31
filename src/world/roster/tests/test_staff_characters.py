@@ -6,16 +6,17 @@ from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.gm.factories import GMProfileFactory
 from world.roster.models import Roster, RosterEntry, RosterTenure
 from world.roster.models.choices import RosterType
 from world.roster.seeds import ensure_rosters
-from world.roster.services.staff_characters import StaffMintError, mint_staff_character
+from world.roster.services.staff_characters import StaffMintError, mint_gm_character
 
 
 class MintStaffCharacterServiceTests(TestCase):
     def test_mint_creates_full_working_set(self) -> None:
         account = AccountFactory(username="staffer", is_staff=True)
-        character = mint_staff_character(account, "Apostate Builder")
+        character = mint_gm_character(account, "Apostate Builder")
         assert character.db_key == "Apostate Builder"
         sheet = character.sheet_data
         entry = RosterEntry.objects.get(character_sheet=sheet)
@@ -25,16 +26,20 @@ class MintStaffCharacterServiceTests(TestCase):
         assert tenure.approved_date is not None
 
     def test_duplicate_name_refused(self) -> None:
+        # Two distinct accounts (#3478 added a one-GM-character-per-account
+        # guard that would otherwise fire first on a same-account retry,
+        # masking the name-uniqueness check this test targets).
         account = AccountFactory(username="staffer2", is_staff=True)
-        mint_staff_character(account, "Twin Name")
+        other_account = AccountFactory(username="staffer2b", is_staff=True)
+        mint_gm_character(account, "Twin Name")
         with self.assertRaises(StaffMintError) as caught:
-            mint_staff_character(account, "twin name")
+            mint_gm_character(other_account, "twin name")
         assert "already exists" in caught.exception.user_message
 
     def test_blank_name_refused(self) -> None:
         account = AccountFactory(username="staffer3", is_staff=True)
         with self.assertRaises(StaffMintError):
-            mint_staff_character(account, "   ")
+            mint_gm_character(account, "   ")
 
     def test_mint_on_seeded_db_reuses_the_npcs_shelf(self) -> None:
         """#3426 regression: the seeded shelf is named "NPCs", not "NPC".
@@ -51,11 +56,38 @@ class MintStaffCharacterServiceTests(TestCase):
         assert seeded_npc_roster.name == "NPCs"
 
         account = AccountFactory(username="seeded_staffer", is_staff=True)
-        character = mint_staff_character(account, "Seeded Story NPC")
+        character = mint_gm_character(account, "Seeded Story NPC")
 
         entry = RosterEntry.objects.get(character_sheet=character.sheet_data)
         assert entry.roster_id == seeded_npc_roster.pk
         assert Roster.objects.filter(roster_type=RosterType.NPC).count() == 1
+
+
+class MintGmCharacterRoleAwareTests(TestCase):
+    """Role-aware typeclass selection + one-GM-character-per-account guard (#3478)."""
+
+    def setUp(self) -> None:
+        self.staff_account = AccountFactory(username="role_staff", is_staff=True)
+        self.gm_account = AccountFactory(username="role_gm")
+        GMProfileFactory(account=self.gm_account)
+        self.plain_account = AccountFactory(username="role_plain")
+
+    def test_staff_account_mints_staff_typeclass(self):
+        char = mint_gm_character(self.staff_account, "Overseer")
+        self.assertEqual(char.db_typeclass_path, "typeclasses.gm_characters.StaffCharacter")
+
+    def test_gm_account_mints_gm_typeclass(self):
+        char = mint_gm_character(self.gm_account, "Storyteller")
+        self.assertEqual(char.db_typeclass_path, "typeclasses.gm_characters.GMCharacter")
+
+    def test_plain_account_is_refused(self):
+        with self.assertRaises(StaffMintError):
+            mint_gm_character(self.plain_account, "Wannabe")
+
+    def test_second_gm_character_is_refused(self):
+        mint_gm_character(self.gm_account, "Storyteller")
+        with self.assertRaises(StaffMintError):
+            mint_gm_character(self.gm_account, "Storyteller Two")
 
 
 class MintBuilderCharacterEndpointTests(APITestCase):
