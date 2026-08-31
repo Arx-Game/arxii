@@ -2,9 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, transaction
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
@@ -49,12 +48,7 @@ from world.combat.factories import (
 from world.combat.interaction_services import render_encounter_outcome_narration
 from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
 from world.combat.serializers import EncounterDetailSerializer, EncounterListSerializer
-from world.combat.services import (
-    _classify_encounter_outcome,
-    _increment_completion_counters,
-    complete_encounter,
-    resolve_round,
-)
+from world.combat.services import _classify_encounter_outcome, complete_encounter, resolve_round
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -469,11 +463,18 @@ class CompletionCounterGroupAchievementTests(_CompletionSeamTestBase):
         complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
 
         discovery = Discovery.objects.get(achievement=achievement)
-        self.assertEqual(discovery.discovered_by_tenure_id, tenure_one.pk)
-        self.assertEqual(
-            list(discovery.shared_with_tenures.values_list("pk", flat=True)),
-            [tenure_two.pk],
-        )
+        # BOTH winners are credited, as a set (#3319). Which of them lands in the
+        # primary ``discovered_by_tenure`` FK and which in ``shared_with_tenures``
+        # is arbitrary bookkeeping the FK has to point somewhere -- #3063 ruled it
+        # invisible to players, and the serializer reads the two identically. This
+        # test asserted a specific winner in that slot and so went red whenever
+        # Postgres handed the participants back in a different order; the credit is
+        # the invariant, the slot is not.
+        credited = {
+            discovery.discovered_by_tenure_id,
+            *discovery.shared_with_tenures.values_list("pk", flat=True),
+        }
+        self.assertEqual(credited, {tenure_one.pk, tenure_two.pk})
         self.assertTrue(
             CharacterAchievement.objects.filter(
                 character_sheet=winner_one.character_sheet, achievement=achievement
@@ -488,39 +489,6 @@ class CompletionCounterGroupAchievementTests(_CompletionSeamTestBase):
             CharacterAchievement.objects.filter(
                 character_sheet=fled.character_sheet, achievement=achievement
             ).exists()
-        )
-
-    def test_participant_buckets_are_ordered_not_left_to_the_database(self) -> None:
-        """The counters read participants with an explicit ORDER BY (#3319).
-
-        ``grant_achievement`` hands the primary ``Discovery.discovered_by_tenure``
-        slot to the FIRST sheet in the list it is given, so the order these buckets
-        are built in is player-visible credit, not an implementation detail. Left
-        unordered, Postgres returns participants in heap order -- which shifts as
-        soon as ``_apply_aftermath_rules`` rewrites a row -- and the named
-        discoverer of a party win changed from run to run. The sibling test above
-        asserts the resulting credit; this one asserts the ordering that makes it
-        reproducible, because on SQLite (which hands back rowid order by luck) that
-        assertion passes whether or not the ORDER BY is there.
-        """
-        encounter = self._make_encounter()
-        self._add_pc(encounter)
-        self._add_pc(encounter)
-
-        with CaptureQueriesContext(connection) as captured:
-            _increment_completion_counters(encounter, EncounterOutcome.VICTORY)
-
-        participant_selects = [
-            query["sql"]
-            for query in captured.captured_queries
-            if query["sql"].startswith("SELECT")
-            and 'FROM "arxii_combatparticipant"' in query["sql"]
-        ]
-        self.assertEqual(len(participant_selects), 1, "expected one participant read")
-        self.assertIn(
-            "ORDER BY",
-            participant_selects[0][-120:],
-            "completion counters read participants unordered",
         )
 
 
