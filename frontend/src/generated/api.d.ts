@@ -77697,9 +77697,9 @@ export interface operations {
   };
   weather_conditions_retrieve: {
     parameters: {
-      query: {
-        /** @description ObjectDB id of the room to read conditions for. */
-        room_id: number;
+      query?: {
+        /** @description ObjectDB id of the room to read conditions for. Omitted, the caller's selected character's current room is used (404 when there is no selection or the character is nowhere). */
+        room_id?: number;
       };
       header?: never;
       path?: never;

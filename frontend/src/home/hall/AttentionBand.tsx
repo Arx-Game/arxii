@@ -24,7 +24,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { CountChip, Plate, PlateHead } from '@/components/folio';
-import { useUnreadMailCount } from '@/mail/queries';
+import { useMailQuery, useUnreadMailCount } from '@/mail/queries';
 import { fetchMyEventInvitations, respondToInvitation } from '@/events/queries';
 import type { EventInvitation } from '@/events/types';
 import { usePendingMembershipOffersQuery, useRespondToMembershipOffer } from '@/societies/queries';
@@ -119,6 +119,12 @@ function OfferRow({ offer }: { offer: OrganizationMembershipOffer }) {
 
 export function AttentionBand({ characters }: { characters: MyRosterEntry[] }) {
   const unreadMail = useUnreadMailCount();
+  // The paginated list's total distinguishes "no mail at all" from "all read"
+  // for the row's state line — read mail stays reviewable either way, so the
+  // row is always a live link, never a dead placeholder (Dan's copy ruling,
+  // 2026-08-31).
+  const { data: mailPage } = useMailQuery(1);
+  const totalMail = mailPage?.count ?? 0;
 
   const { data: invitationsPage } = useQuery({
     queryKey: invitationsKey,
@@ -172,19 +178,26 @@ export function AttentionBand({ characters }: { characters: MyRosterEntry[] }) {
         Your Attention
       </PlateHead>
 
-      <div className="space-y-1 border-b pb-3">
+      <div className={characterGroups.length === 0 ? 'space-y-1' : 'space-y-1 border-b pb-3'}>
         <div className="flex items-center justify-between text-sm">
           <Link to="/profile/mail" className="hover:underline">
             Mail
           </Link>
-          <CountChip count={unreadMail} label="unread messages" />
+          {unreadMail > 0 ? (
+            <CountChip count={unreadMail} label="unread messages" />
+          ) : (
+            // Empty-vs-all-read are different facts and read differently;
+            // nothing renders until the list has answered which it is.
+            mailPage != null && (
+              <span className="text-muted-foreground">
+                {totalMail > 0 ? 'Nothing unread.' : 'Empty, alas.'}
+              </span>
+            )
+          )}
         </div>
       </div>
 
-      {characterGroups.length === 0 ? (
-        // PLACEHOLDER copy
-        <p className="pt-3 text-sm text-muted-foreground">All is tended, for now.</p>
-      ) : (
+      {characterGroups.length > 0 && (
         <div className="space-y-4 pt-3">
           {characterGroups.map((entry) => {
             const invites = invitationsByEntry.get(entry.id) ?? [];

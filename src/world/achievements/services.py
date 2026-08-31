@@ -124,10 +124,13 @@ def grant_achievement(
 
         discovery = None
         if is_first_discovery:
-            # The Discovery slot goes to the first (triggering) sheet in the list --
-            # callers order this deliberately for party grants. can_earn_achievements
-            # already filtered out sheets with no current tenure above, so this is
-            # guaranteed to resolve.
+            # The Discovery slot goes to the first sheet in the list. For a
+            # sequential earn that is the triggering sheet and the FK is meaningful;
+            # for a simultaneous party grant it is bookkeeping -- the FK is NOT NULL
+            # and has to point somewhere, and #3063 ruled the split invisible, so no
+            # caller need order its list to win the slot and no reader may treat it
+            # as a privilege (#3319). can_earn_achievements already filtered out
+            # sheets with no current tenure above, so this is guaranteed to resolve.
             discovering_sheet = character_sheets[0]
             discovering_tenure = discovering_sheet.roster_entry_or_none.current_tenure
             discovery = Discovery.objects.create(

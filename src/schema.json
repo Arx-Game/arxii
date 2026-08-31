@@ -38041,8 +38041,9 @@ paths:
         name: room_id
         schema:
           type: integer
-        description: ObjectDB id of the room to read conditions for.
-        required: true
+        description: ObjectDB id of the room to read conditions for. Omitted, the
+          caller's selected character's current room is used (404 when there is no
+          selection or the character is nowhere).
       tags:
       - weather
       security:
