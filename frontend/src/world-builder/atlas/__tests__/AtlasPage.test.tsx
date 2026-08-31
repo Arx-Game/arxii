@@ -9,6 +9,7 @@ import { AtlasPage } from '../AtlasPage';
 vi.mock('../../queries', () => ({
   useWorldBuilderAreasQuery: vi.fn(),
   useAreaManagerQuery: vi.fn(),
+  useRoomDetailQuery: vi.fn(),
   useRoomSearchQuery: vi.fn(),
 }));
 
@@ -17,15 +18,27 @@ vi.mock('../AreaPage', () => ({
     areaId,
     onDescend,
     onOpenAreaDoc,
+    highlightRoomId,
   }: {
     areaId: number;
     onDescend: (next: { kind: string; id: number }) => void;
     onOpenAreaDoc: (id: number) => void;
+    highlightRoomId?: number | null;
   }) => (
-    <div data-testid="mock-area-page" data-area-id={areaId}>
+    <div
+      data-testid="mock-area-page"
+      data-area-id={areaId}
+      data-highlight-room-id={highlightRoomId ?? ''}
+    >
       <button onClick={() => onDescend({ kind: 'roomdoc', id: 999 })}>descend</button>
       <button onClick={() => onOpenAreaDoc(areaId)}>edit</button>
     </div>
+  ),
+}));
+
+vi.mock('../../document/RoomDocument', () => ({
+  RoomDocument: ({ roomId }: { roomId: number }) => (
+    <div data-testid="mock-room-document" data-room-id={roomId} />
   ),
 }));
 
@@ -35,9 +48,8 @@ vi.mock('../IndexRail', () => ({
   ),
 }));
 
-const { useWorldBuilderAreasQuery, useAreaManagerQuery, useRoomSearchQuery } = await import(
-  '../../queries'
-);
+const { useWorldBuilderAreasQuery, useAreaManagerQuery, useRoomDetailQuery, useRoomSearchQuery } =
+  await import('../../queries');
 
 function makeArea(overrides: Partial<WorldBuilderArea> = {}): WorldBuilderArea {
   return {
@@ -105,6 +117,7 @@ function mockQueries(
     return { data: areaManagers[areaId], isLoading: false } as never;
   });
   vi.mocked(useRoomSearchQuery).mockReturnValue({ data: hits, isLoading: false } as never);
+  vi.mocked(useRoomDetailQuery).mockReturnValue({ data: undefined, isLoading: false } as never);
 }
 
 describe('AtlasPage', () => {
@@ -161,7 +174,7 @@ describe('AtlasPage', () => {
     expect(await screen.findByTestId('areadoc-placeholder')).toBeInTheDocument();
   });
 
-  it('descends into a roomdoc placeholder from AreaPage', async () => {
+  it('descends into the room document from AreaPage', async () => {
     window.localStorage.setItem(
       'world-builder-atlas:anon:last-location',
       JSON.stringify({ kind: 'area', id: 5 })
@@ -171,10 +184,10 @@ describe('AtlasPage', () => {
     renderWithProviders(<AtlasPage />);
     await userEvent.click(screen.getByText('descend'));
 
-    expect(await screen.findByTestId('roomdoc-placeholder')).toBeInTheDocument();
+    expect(await screen.findByTestId('mock-room-document')).toHaveAttribute('data-room-id', '999');
   });
 
-  it('opens the room search dialog and navigates to a hit', async () => {
+  it('a search hit lands on its PARENT grid, highlighted — not straight into the room document', async () => {
     window.localStorage.setItem(
       'world-builder-atlas:anon:last-location',
       JSON.stringify({ kind: 'area', id: 5 })
@@ -201,6 +214,26 @@ describe('AtlasPage', () => {
 
     await userEvent.click(await screen.findByTestId('room-search-hit'));
 
-    expect(await screen.findByTestId('roomdoc-placeholder')).toBeInTheDocument();
+    const areaPage = await screen.findByTestId('mock-area-page');
+    expect(areaPage).toHaveAttribute('data-area-id', '5');
+    expect(areaPage).toHaveAttribute('data-highlight-room-id', '42');
+    expect(screen.queryByTestId('mock-room-document')).not.toBeInTheDocument();
+  });
+
+  it('a hit with no area falls back to opening its document directly', async () => {
+    window.localStorage.setItem(
+      'world-builder-atlas:anon:last-location',
+      JSON.stringify({ kind: 'area', id: 5 })
+    );
+    mockQueries({ 5: makeManager(centralWard) }, [
+      { id: 43, name: 'Orphan Room', area_id: null, area_name: null, floor: 0, fixture_key: null },
+    ]);
+
+    renderWithProviders(<AtlasPage />);
+    await userEvent.click(screen.getByTestId('open-room-search'));
+    await userEvent.type(screen.getByTestId('room-search-input'), 'orph');
+    await userEvent.click(await screen.findByTestId('room-search-hit'));
+
+    expect(await screen.findByTestId('mock-room-document')).toHaveAttribute('data-room-id', '43');
   });
 });

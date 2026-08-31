@@ -157,7 +157,85 @@ describe('AddDialog — rooms mode payload assembly', () => {
       exit: { roomId: 6, exitName: 'west' },
     });
   });
+});
 
+describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
+  it('digs a new room when the typed name matches nothing in roomOptions', async () => {
+    const { onConfirm } = renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'The Undercroft');
+    expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Dig it');
+    expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent('dug as a placeholder');
+
+    await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'down');
+    await userEvent.type(screen.getByTestId('add-dialog-exit-back'), 'up');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'exit',
+      name: 'The Undercroft',
+      matchedRoomId: null,
+      exitThere: 'down',
+      exitBack: 'up',
+    });
+  });
+
+  it('links to an existing room when the typed name matches exactly (case-insensitive)', async () => {
+    const { onConfirm } = renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'the kitchen');
+    expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Link it');
+    expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent(
+      'joins two rooms that already exist'
+    );
+
+    await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'north');
+    await userEvent.type(screen.getByTestId('add-dialog-exit-back'), 'south');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'exit',
+      name: 'the kitchen',
+      matchedRoomId: 6,
+      exitThere: 'north',
+      exitBack: 'south',
+    });
+  });
+
+  it('shows link suggestions as the destination is typed, and clicking one fills the field', async () => {
+    renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'kit');
+    const suggestion = screen.getByTestId('add-dialog-exit-suggestion');
+    expect(suggestion).toHaveTextContent('link to The Kitchen');
+
+    await userEvent.click(suggestion);
+    expect(screen.getByTestId('add-dialog-name')).toHaveValue('The Kitchen');
+    expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Link it');
+  });
+
+  it('fires onDestinationInput as the destination changes, for caller-side live search', async () => {
+    const onDestinationInput = vi.fn();
+    renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS, onDestinationInput });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'ab');
+    expect(onDestinationInput).toHaveBeenCalledWith('a');
+    expect(onDestinationInput).toHaveBeenCalledWith('ab');
+  });
+
+  it('disables submit until both a destination and an "exit there" name are set', async () => {
+    renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS });
+    expect(screen.getByTestId('add-dialog-submit')).toBeDisabled();
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'The Undercroft');
+    expect(screen.getByTestId('add-dialog-submit')).toBeDisabled();
+
+    await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'down');
+    expect(screen.getByTestId('add-dialog-submit')).not.toBeDisabled();
+  });
+});
+
+describe('AddDialog — rooms mode reopen reset', () => {
   it('resets its fields whenever it reopens', async () => {
     const onConfirm = vi.fn();
     const { rerender } = renderWithProviders(

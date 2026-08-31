@@ -1,8 +1,9 @@
 /**
- * AddDialog (#3477 Task 5) — the Lattice's realize dialog: turns a planned
- * square into a real area or room. Copy rule: leads with the name field, no
- * heading ceremony (`DialogTitle` stays screen-reader-only), Cancel in the
- * footer, primary button reads "Add" — never "Make It Real".
+ * AddDialog (#3477 Task 5, exit mode added Task 6) — the Lattice's realize
+ * dialog: turns a planned square into a real area or room. Copy rule: leads
+ * with the name field, no heading ceremony (`DialogTitle` stays
+ * screen-reader-only), Cancel in the footer, primary button reads "Add" —
+ * never "Make It Real" (areas/rooms modes) or "Link it"/"Dig it" (exit mode).
  *
  * Areas mode hides the connection rows entirely (an area has no exits) and
  * hands back `{kind:'area', name}`; the caller (`Lattice`) dispatches
@@ -14,6 +15,17 @@
  * only *assembles* the payload — it never dispatches `staff_link_rooms`
  * itself, since the new room's id doesn't exist until the dig lands; the
  * caller resolves the link once the tile appears (see `Lattice.tsx`).
+ *
+ * Exit mode (#3477 Task 6, `RoomDocument`'s "⊕ dig or link an exit…") is the
+ * prototype's implicit dig/link fork: one "Leads to" field, no mode toggle to
+ * pre-answer it. Typing a name that exactly matches one of `roomOptions`
+ * (case-insensitive) means "link to that room" — the caller dispatches
+ * `staff_link_rooms`; any other text means "dig a new room by that name" —
+ * the caller dispatches `staff_dig_room` (unplaced, same pattern as
+ * `Lattice`'s own dig-then-link-when-the-id-appears flow, since neither
+ * action returns the new row's id). This dialog only computes which fork
+ * applies (`matchedRoomId`) and hands back the raw field values — it never
+ * dispatches anything itself, matching the other two modes' contract.
  */
 import { useEffect, useState } from 'react';
 
@@ -54,17 +66,28 @@ export type AddDialogRealizePayload =
       name: string;
       entrance: AddDialogConnection | null;
       exit: AddDialogConnection | null;
+    }
+  | {
+      kind: 'exit';
+      /** The typed "Leads to" name — the dig name when `matchedRoomId` is null. */
+      name: string;
+      /** Set when `name` exactly (case-insensitively) matched a `roomOptions` entry. */
+      matchedRoomId: number | null;
+      exitThere: string;
+      exitBack: string;
     };
 
 export interface AddDialogProps {
-  mode: 'areas' | 'rooms';
+  mode: 'areas' | 'rooms' | 'exit';
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (payload: AddDialogRealizePayload) => void;
-  /** Rooms mode only — pick targets for the connection rows. */
+  /** Rooms mode: pick targets for the connection rows. Exit mode: the dig/link match pool. */
   roomOptions?: AddDialogRoomOption[];
   /** Rooms mode only — the plotted cell's one adjacent realized room, if any. */
   defaultNeighbor?: AddDialogNeighbor | null;
+  /** Exit mode only — fires as "Leads to" changes, so the caller can live-search room names. */
+  onDestinationInput?: (value: string) => void;
 }
 
 interface RowState {
@@ -84,6 +107,7 @@ export function AddDialog({
   onConfirm,
   roomOptions = [],
   defaultNeighbor = null,
+  onDestinationInput,
 }: AddDialogProps) {
   const [name, setName] = useState('');
   const [entrance, setEntrance] = useState<RowState>(() =>
@@ -92,21 +116,50 @@ export function AddDialog({
   const [exit, setExit] = useState<RowState>(() =>
     initialRow(defaultNeighbor?.roomId ?? null, defaultNeighbor?.outName ?? 'out')
   );
+  const [exitThere, setExitThere] = useState('');
+  const [exitBack, setExitBack] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setName('');
     setEntrance(initialRow(defaultNeighbor?.roomId ?? null, defaultNeighbor?.intoName ?? 'in'));
     setExit(initialRow(defaultNeighbor?.roomId ?? null, defaultNeighbor?.outName ?? 'out'));
+    setExitThere('');
+    setExitBack('');
   }, [open, defaultNeighbor]);
 
-  const canSubmit = name.trim() !== '';
+  const canSubmit =
+    mode === 'exit' ? name.trim() !== '' && exitThere.trim() !== '' : name.trim() !== '';
   const freeStanding = mode === 'rooms' && entrance.removed && exit.removed;
+
+  // Exit mode's implicit fork — an exact (case-insensitive) name match means
+  // "link to that room," anything else means "dig a new one by that name."
+  const trimmedDestination = name.trim();
+  const matched =
+    mode === 'exit'
+      ? (roomOptions.find(
+          (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
+        ) ?? null)
+      : null;
+  const suggestions =
+    mode === 'exit' && trimmedDestination !== ''
+      ? roomOptions
+          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
+          .slice(0, 4)
+      : [];
 
   const submit = () => {
     const trimmedName = name.trim();
     if (mode === 'areas') {
       onConfirm({ kind: 'area', name: trimmedName });
+    } else if (mode === 'exit') {
+      onConfirm({
+        kind: 'exit',
+        name: trimmedName,
+        matchedRoomId: matched?.id ?? null,
+        exitThere: exitThere.trim(),
+        exitBack: exitBack.trim(),
+      });
     } else {
       const entranceConnection: AddDialogConnection | null =
         !entrance.removed && entrance.roomId != null
@@ -126,22 +179,87 @@ export function AddDialog({
     onOpenChange(false);
   };
 
+  const dialogTitle = mode === 'areas' ? 'New area' : mode === 'exit' ? 'New exit' : 'New room';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogTitle className="sr-only">{mode === 'areas' ? 'New area' : 'New room'}</DialogTitle>
+        <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="add-dialog-name">{mode === 'areas' ? 'Area name' : 'Room name'}</Label>
+            <Label htmlFor="add-dialog-name">
+              {mode === 'areas' ? 'Area name' : mode === 'exit' ? 'Leads to' : 'Room name'}
+            </Label>
             <Input
               id="add-dialog-name"
               autoFocus
               value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={mode === 'areas' ? 'The Grand Foyer' : 'The Wine Cellar'}
+              onChange={(event) => {
+                setName(event.target.value);
+                if (mode === 'exit') onDestinationInput?.(event.target.value);
+              }}
+              placeholder={
+                mode === 'areas'
+                  ? 'The Grand Foyer'
+                  : mode === 'exit'
+                    ? 'name the room — existing rooms match as you type'
+                    : 'The Wine Cellar'
+              }
+              autoComplete="off"
               data-testid="add-dialog-name"
             />
           </div>
+
+          {mode === 'exit' && suggestions.length > 0 && (
+            <div className="grid gap-1" data-testid="add-dialog-exit-suggestions">
+              {suggestions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="text-left text-sm text-muted-foreground hover:text-primary"
+                  onClick={() => setName(option.name)}
+                  data-testid="add-dialog-exit-suggestion"
+                >
+                  ⇢ link to {option.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {mode === 'exit' && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="add-dialog-exit-there">Exit there</Label>
+                <Input
+                  id="add-dialog-exit-there"
+                  value={exitThere}
+                  onChange={(event) => setExitThere(event.target.value)}
+                  placeholder="west"
+                  data-testid="add-dialog-exit-there"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="add-dialog-exit-back">Exit back</Label>
+                <Input
+                  id="add-dialog-exit-back"
+                  value={exitBack}
+                  onChange={(event) => setExitBack(event.target.value)}
+                  placeholder="east"
+                  data-testid="add-dialog-exit-back"
+                />
+              </div>
+              <p
+                className="font-body text-xs italic text-muted-foreground"
+                data-testid="add-dialog-exit-note"
+              >
+                {trimmedDestination === ''
+                  ? 'name the room this exit leads to'
+                  : matched
+                    ? 'joins two rooms that already exist — nothing new is made'
+                    : 'dug as a placeholder for the writing pass — you stay here'}
+              </p>
+            </>
+          )}
 
           {mode === 'rooms' && (
             <>
@@ -176,7 +294,7 @@ export function AddDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSubmit} data-testid="add-dialog-submit">
-            Add
+            {mode === 'exit' ? (matched ? 'Link it' : 'Dig it') : 'Add'}
           </Button>
         </DialogFooter>
       </DialogContent>

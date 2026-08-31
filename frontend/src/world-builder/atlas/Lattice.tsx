@@ -49,9 +49,12 @@ import { useAccount } from '@/store/hooks';
 import { AddDialog, type AddDialogConnection, type AddDialogRealizePayload } from './AddDialog';
 import {
   boundsContaining,
+  CARDINALS,
   carveCell,
   cellKey,
   computeFloorRail,
+  directionBetween,
+  FANCIFUL_EXIT_NAME,
   growBounds,
   growFloor,
   parseCellKey,
@@ -91,24 +94,14 @@ export interface LatticeProps {
   runAction: (key: string, kwargs: Record<string, unknown>) => void;
   /** Areas mode only — the level new child areas realize at (`create_area`'s `level`). */
   childAreaLevel?: number;
+  /**
+   * A search-hit landing on this grid (#3477 Task 6, spec §1) — the matching
+   * tile gets a brief highlight ring. The caller (`AtlasPage`) owns clearing
+   * it (a timeout); Lattice only renders whichever id it's handed.
+   */
+  highlightTileId?: number | null;
 }
 
-interface Cardinal {
-  name: string;
-  opposite: string;
-  dx: number;
-  dy: number;
-}
-
-/** North renders as +y, matching `world.areas.constants.DIRECTIONS` exactly. */
-const CARDINALS: Cardinal[] = [
-  { name: 'north', opposite: 'south', dx: 0, dy: 1 },
-  { name: 'south', opposite: 'north', dx: 0, dy: -1 },
-  { name: 'east', opposite: 'west', dx: 1, dy: 0 },
-  { name: 'west', opposite: 'east', dx: -1, dy: 0 },
-];
-
-const FANCIFUL_EXIT_NAME = 'a fated passage';
 const DRAG_THRESHOLD_PX = 5;
 
 function findAdjacent(tiles: LatticeTile[], x: number, y: number): LatticeTile | null {
@@ -117,12 +110,6 @@ function findAdjacent(tiles: LatticeTile[], x: number, y: number): LatticeTile |
     if (hit) return hit;
   }
   return null;
-}
-
-function directionBetween(a: LatticeTile, b: LatticeTile): Cardinal | null {
-  const dx = (b.gridX ?? 0) - (a.gridX ?? 0);
-  const dy = (b.gridY ?? 0) - (a.gridY ?? 0);
-  return CARDINALS.find((dir) => dir.dx === dx && dir.dy === dy) ?? null;
 }
 
 function slugify(value: string): string {
@@ -153,6 +140,7 @@ export function Lattice({
   onRealize,
   runAction,
   childAreaLevel,
+  highlightTileId = null,
 }: LatticeProps) {
   const account = useAccount();
   const accountId = account?.id ?? 'anon';
@@ -378,7 +366,7 @@ export function Lattice({
         parent_id: nodeId,
       });
       pendingAreaPlacementsRef.current.set(payload.name, { x, y });
-    } else {
+    } else if (payload.kind === 'room') {
       runAction('staff_dig_room', {
         area_id: nodeId,
         name: payload.name,
@@ -566,11 +554,13 @@ export function Lattice({
                     type="button"
                     data-cell-key={key}
                     data-testid={`lattice-tile-${tile.id}`}
+                    data-highlighted={highlightTileId === tile.id ? 'true' : undefined}
                     className={cn(
                       'flex min-h-24 flex-col rounded-none border bg-card px-2 py-1.5 text-left',
                       tile.unpublished && 'border-dashed',
                       draggingId === tile.id && 'opacity-60',
-                      dragOverKey === key && draggingId !== tile.id && 'ring-2 ring-primary'
+                      dragOverKey === key && draggingId !== tile.id && 'ring-2 ring-primary',
+                      highlightTileId === tile.id && 'animate-pulse ring-2 ring-primary'
                     )}
                     onPointerDown={(event) => handlePointerDown(tile, event)}
                     onContextMenu={(event) => event.preventDefault()}

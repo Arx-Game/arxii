@@ -34,6 +34,8 @@ export interface AreaPageProps {
   areaId: number;
   onDescend: (next: AtlasView) => void;
   onOpenAreaDoc: (areaId: number) => void;
+  /** A search hit landing here (#3477 Task 6) — passed straight through to the Lattice. */
+  highlightRoomId?: number | null;
 }
 
 function areaToTile(area: WorldBuilderArea): LatticeTile {
@@ -63,7 +65,12 @@ function roomToTile(room: WorldBuilderRoom, kindLabel: string): LatticeTile {
   };
 }
 
-export function AreaPage({ areaId, onDescend, onOpenAreaDoc }: AreaPageProps) {
+export function AreaPage({
+  areaId,
+  onDescend,
+  onOpenAreaDoc,
+  highlightRoomId = null,
+}: AreaPageProps) {
   const { data: manager, isLoading } = useAreaManagerQuery(areaId);
   const area = manager?.area;
   const isBuilding = area?.level === BUILDING_LEVEL;
@@ -146,6 +153,7 @@ export function AreaPage({ areaId, onDescend, onOpenAreaDoc }: AreaPageProps) {
           onOpen={handleLatticeOpen}
           runAction={runAction}
           childAreaLevel={isBuilding ? undefined : childLevelOf(area.level)}
+          highlightTileId={highlightRoomId}
         />
       </div>
     </section>

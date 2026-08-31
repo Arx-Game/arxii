@@ -24,6 +24,41 @@ export function parseCellKey(key: CellKey): [number, number] {
   return [x, y];
 }
 
+export interface Cardinal {
+  name: string;
+  opposite: string;
+  dx: number;
+  dy: number;
+}
+
+/**
+ * North renders as +y, matching `world.areas.constants.DIRECTIONS` exactly.
+ * Shared by `Lattice.tsx` and `document/Compass.tsx` (#3477 Task 6) — the
+ * manuscript's 3×3 "where you stand" neighborhood needs the exact same
+ * cardinal-naming/fallback math for its own ⊕-a-neighbor dig, so it lives
+ * here rather than in either component (both are `react-refresh`-only-
+ * exports-components files).
+ */
+export const CARDINALS: Cardinal[] = [
+  { name: 'north', opposite: 'south', dx: 0, dy: 1 },
+  { name: 'south', opposite: 'north', dx: 0, dy: -1 },
+  { name: 'east', opposite: 'west', dx: 1, dy: 0 },
+  { name: 'west', opposite: 'east', dx: -1, dy: 0 },
+];
+
+/** A non-cardinal (diagonal) neighbor still gets a real exit — just an unnamed one. */
+export const FANCIFUL_EXIT_NAME = 'a fated passage';
+
+/** The cardinal direction from `a` to `b`, or `null` when they aren't cardinally adjacent. */
+export function directionBetween(
+  a: { gridX: number | null; gridY: number | null },
+  b: { gridX: number | null; gridY: number | null }
+): Cardinal | null {
+  const dx = (b.gridX ?? 0) - (a.gridX ?? 0);
+  const dy = (b.gridY ?? 0) - (a.gridY ?? 0);
+  return CARDINALS.find((dir) => dir.dx === dx && dir.dy === dy) ?? null;
+}
+
 export interface LatticeBounds {
   minX: number;
   maxX: number;

@@ -5,26 +5,44 @@
  *
  * Owns navigation state (`useAtlasState`) and routes the current view to its
  * body: an area (ward-or-building alike — `AreaPage` branches on level), a
- * room's manuscript ('roomdoc', mounted by Task 6's `RoomDocument`), or an
- * area's document ('areadoc', mounted by Task 7's `AreaDocument`) — both
- * placeholders here until those tasks land.
+ * room's manuscript ('roomdoc', Task 6's `RoomDocument`), or an area's
+ * document ('areadoc', mounted by Task 7's `AreaDocument` — still a
+ * placeholder here until that task lands).
  *
  * `lens` is the read-only visitor seam from the spec (§1): a typed prop union
  * with exactly one implemented member. Every render below assumes the
  * warrant lens (staff/GM, read-write); a future 'visitor' lens would need its
  * own read-only bodies, not built here.
+ *
+ * Search-hit navigation (spec §1, upgraded Task 6): a hit lands on its
+ * PARENT grid with the room highlighted, not straight into the room
+ * document — the T4 interim behavior (open the manuscript directly) was a
+ * placeholder wired against `roomdoc-placeholder`, since there was nothing
+ * else to land on yet. `highlightRoomId` is plain local state (not part of
+ * `useAtlasState`'s persisted trail — a highlight is a one-shot visual cue,
+ * never something worth remembering across a reload) that self-clears after
+ * a few seconds.
  */
 import { useEffect, useState } from 'react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
-import { useAreaManagerQuery, useRoomSearchQuery, useWorldBuilderAreasQuery } from '../queries';
+import { RoomDocument } from '../document/RoomDocument';
+import {
+  useAreaManagerQuery,
+  useRoomDetailQuery,
+  useRoomSearchQuery,
+  useWorldBuilderAreasQuery,
+} from '../queries';
 import { AreaPage } from './AreaPage';
 import { areaViewKind } from './constants';
 import { FolioCrumb, type FolioCrumbEntry } from './FolioCrumb';
 import { IndexRail } from './IndexRail';
 import { useAtlasState, type AtlasView } from './useAtlasState';
+
+/** How long a search-hit highlight ring stays lit before fading on its own. */
+const HIGHLIGHT_DURATION_MS = 2500;
 
 export interface AtlasPageProps {
   /** The read-only visitor lens (spec §1) — typed now, NOT implemented. */
@@ -37,6 +55,13 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
   const { view, setView, pinned, isPinned, togglePinned, recents } = useAtlasState();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [highlightRoomId, setHighlightRoomId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (highlightRoomId == null) return;
+    const timer = window.setTimeout(() => setHighlightRoomId(null), HIGHLIGHT_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [highlightRoomId]);
 
   const { data: rootsPage } = useWorldBuilderAreasQuery({ hasParent: false });
   useEffect(() => {
@@ -47,13 +72,21 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
     }
   }, [view, rootsPage, setView]);
 
+  const isRoomDoc = view?.kind === 'roomdoc';
   const areaId = view && (view.kind === 'area' || view.kind === 'roomgrid') ? view.id : null;
   const { data: manager } = useAreaManagerQuery(areaId);
+  const { data: roomDetail } = useRoomDetailQuery(isRoomDoc ? view.id : null);
   const { data: searchResults } = useRoomSearchQuery(searchTerm);
 
-  const crumbEntries: FolioCrumbEntry[] = manager?.breadcrumb ?? [];
+  const crumbEntries: FolioCrumbEntry[] =
+    isRoomDoc && roomDetail
+      ? [...roomDetail.breadcrumb, { id: roomDetail.room.id, name: roomDetail.room.name }]
+      : (manager?.breadcrumb ?? []);
 
   const handleSelect = (next: AtlasView, name?: string) => setView(next, name ?? `#${next.id}`);
+  /** "Next unpublished"/Compass-neighbor navigation (#3477 Task 6) — a plain
+   * view swap, deliberately NOT recorded into Recent (no `name` passed). */
+  const handleNavigateRoom = (roomId: number) => handleSelect({ kind: 'roomdoc', id: roomId });
 
   return (
     <div className="grid h-screen grid-cols-[270px_1fr]" data-testid="atlas-page">
@@ -68,7 +101,9 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
               onClick={() =>
                 togglePinned({
                   ...view,
-                  name: manager?.area.name ?? `#${view.id}`,
+                  name: isRoomDoc
+                    ? (roomDetail?.room.name ?? `#${view.id}`)
+                    : (manager?.area.name ?? `#${view.id}`),
                   visitedAt: new Date().toISOString(),
                 })
               }
@@ -92,11 +127,14 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
             areaId={view.id}
             onDescend={handleSelect}
             onOpenAreaDoc={(id) => handleSelect({ kind: 'areadoc', id })}
+            highlightRoomId={highlightRoomId}
           />
         ) : view?.kind === 'roomdoc' ? (
-          <div className="p-8 text-sm text-muted-foreground" data-testid="roomdoc-placeholder">
-            The room document mounts here.
-          </div>
+          <RoomDocument
+            roomId={view.id}
+            onNavigateRoom={handleNavigateRoom}
+            onDeleted={(deletedAreaId) => handleSelect({ kind: 'roomgrid', id: deletedAreaId })}
+          />
         ) : view?.kind === 'areadoc' ? (
           <div className="p-8 text-sm text-muted-foreground" data-testid="areadoc-placeholder">
             The area document mounts here.
@@ -132,7 +170,17 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
                 type="button"
                 className="px-2 py-1 text-left text-sm hover:bg-accent"
                 onClick={() => {
-                  handleSelect({ kind: 'roomdoc', id: hit.id }, hit.name);
+                  // Land on the room's parent grid, highlighted — not
+                  // straight into its manuscript (spec §1). A room with no
+                  // area at all (shouldn't normally happen) falls back to
+                  // opening its document directly, since there's no grid
+                  // to land on.
+                  if (hit.area_id != null) {
+                    handleSelect({ kind: 'roomgrid', id: hit.area_id });
+                    setHighlightRoomId(hit.id);
+                  } else {
+                    handleSelect({ kind: 'roomdoc', id: hit.id }, hit.name);
+                  }
                   setSearchOpen(false);
                 }}
                 data-testid="room-search-hit"

@@ -21,8 +21,8 @@ vi.mock('../../useWorldBuilderActor', () => ({
 // the Lattice's own gesture mechanics (that's Lattice.test.tsx's job) — a
 // thin stub keeps this file a unit test of AreaPage's wiring only.
 vi.mock('../Lattice', () => ({
-  Lattice: ({ mode, tiles, onOpen }: LatticeProps) => (
-    <div data-testid="lattice-mock" data-mode={mode}>
+  Lattice: ({ mode, tiles, onOpen, highlightTileId }: LatticeProps) => (
+    <div data-testid="lattice-mock" data-mode={mode} data-highlight-tile-id={highlightTileId ?? ''}>
       {tiles.map((tile) => (
         <button key={tile.id} data-testid={`mock-tile-${tile.id}`} onClick={() => onOpen(tile)}>
           {tile.name}
@@ -254,6 +254,16 @@ describe('AreaPage', () => {
     await userEvent.click(screen.getByTestId('mock-tile-200'));
 
     expect(onDescend).toHaveBeenCalledWith({ kind: 'roomdoc', id: 200 });
+  });
+
+  it('passes highlightRoomId through to the Lattice as highlightTileId', () => {
+    mockQueries({ areaManagers: { 1: makeManager(ward, [cityCenter]) }, wardChildren: [] });
+
+    renderWithProviders(
+      <AreaPage areaId={1} onDescend={vi.fn()} onOpenAreaDoc={vi.fn()} highlightRoomId={100} />
+    );
+
+    expect(screen.getByTestId('lattice-mock')).toHaveAttribute('data-highlight-tile-id', '100');
   });
 
   it('opens a Lattice area tile at its own level', async () => {

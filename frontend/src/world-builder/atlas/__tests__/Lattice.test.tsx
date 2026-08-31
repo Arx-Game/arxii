@@ -509,3 +509,23 @@ describe('Lattice — sketch persistence', () => {
     expect(screen.getByTestId('lattice-cell-0-0')).toHaveAttribute('data-cell-state', 'empty');
   });
 });
+
+describe('Lattice — search-hit highlight (#3477 Task 6)', () => {
+  it('marks the matching tile when highlightTileId is set, and no other tile', () => {
+    const tiles = [
+      makeTile({ id: 1, gridX: 0, gridY: 0 }),
+      makeTile({ id: 2, gridX: 1, gridY: 0 }),
+    ];
+    renderLattice({ tiles, highlightTileId: 1 });
+
+    expect(screen.getByTestId('lattice-tile-1')).toHaveAttribute('data-highlighted', 'true');
+    expect(screen.getByTestId('lattice-tile-2')).not.toHaveAttribute('data-highlighted');
+  });
+
+  it('highlights nothing when highlightTileId is null', () => {
+    const tiles = [makeTile({ id: 1, gridX: 0, gridY: 0 })];
+    renderLattice({ tiles, highlightTileId: null });
+
+    expect(screen.getByTestId('lattice-tile-1')).not.toHaveAttribute('data-highlighted');
+  });
+});
