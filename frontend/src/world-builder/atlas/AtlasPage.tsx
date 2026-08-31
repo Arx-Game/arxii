@@ -6,8 +6,7 @@
  * Owns navigation state (`useAtlasState`) and routes the current view to its
  * body: an area (ward-or-building alike — `AreaPage` branches on level), a
  * room's manuscript ('roomdoc', Task 6's `RoomDocument`), or an area's
- * document ('areadoc', mounted by Task 7's `AreaDocument` — still a
- * placeholder here until that task lands).
+ * document ('areadoc', Task 7's `AreaDocument`).
  *
  * `lens` is the read-only visitor seam from the spec (§1): a typed prop union
  * with exactly one implemented member. Every render below assumes the
@@ -28,6 +27,7 @@ import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
+import { AreaDocument } from '../document/AreaDocument';
 import { RoomDocument } from '../document/RoomDocument';
 import {
   useAreaManagerQuery,
@@ -73,7 +73,12 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
   }, [view, rootsPage, setView]);
 
   const isRoomDoc = view?.kind === 'roomdoc';
-  const areaId = view && (view.kind === 'area' || view.kind === 'roomgrid') ? view.id : null;
+  // 'areadoc' included: the area document is the area, so the manager query
+  // feeds its crumb and pin name the same way the grid views' do.
+  const areaId =
+    view && (view.kind === 'area' || view.kind === 'roomgrid' || view.kind === 'areadoc')
+      ? view.id
+      : null;
   const { data: manager } = useAreaManagerQuery(areaId);
   const { data: roomDetail } = useRoomDetailQuery(isRoomDoc ? view.id : null);
   const { data: searchResults } = useRoomSearchQuery(searchTerm);
@@ -136,9 +141,21 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
             onDeleted={(deletedAreaId) => handleSelect({ kind: 'roomgrid', id: deletedAreaId })}
           />
         ) : view?.kind === 'areadoc' ? (
-          <div className="p-8 text-sm text-muted-foreground" data-testid="areadoc-placeholder">
-            The area document mounts here.
-          </div>
+          <AreaDocument
+            areaId={view.id}
+            onDeleted={(parentAreaId) => {
+              // Land on the parent's grid; a deleted root falls back to the
+              // first root (the same default the view==null effect uses).
+              if (parentAreaId != null) {
+                handleSelect({ kind: 'area', id: parentAreaId });
+              } else {
+                const firstRoot = rootsPage?.results?.[0];
+                if (firstRoot) {
+                  handleSelect({ kind: areaViewKind(firstRoot.level), id: firstRoot.id });
+                }
+              }
+            }}
+          />
         ) : (
           <div className="p-8 text-sm text-muted-foreground" data-testid="atlas-loading">
             Loading the atlas…

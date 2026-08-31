@@ -42,6 +42,21 @@ vi.mock('../../document/RoomDocument', () => ({
   ),
 }));
 
+vi.mock('../../document/AreaDocument', () => ({
+  AreaDocument: ({
+    areaId,
+    onDeleted,
+  }: {
+    areaId: number;
+    onDeleted: (parentAreaId: number | null) => void;
+  }) => (
+    <div data-testid="mock-area-document" data-area-id={areaId}>
+      <button onClick={() => onDeleted(1)}>deleted-with-parent</button>
+      <button onClick={() => onDeleted(null)}>deleted-root</button>
+    </div>
+  ),
+}));
+
 vi.mock('../IndexRail', () => ({
   IndexRail: ({ current }: { current: { kind: string; id: number } | null }) => (
     <div data-testid="mock-index-rail">{current ? `${current.kind}:${current.id}` : 'none'}</div>
@@ -161,7 +176,7 @@ describe('AtlasPage', () => {
     expect(await screen.findByTestId('mock-area-page')).toHaveAttribute('data-area-id', '1');
   });
 
-  it("opens the areadoc placeholder from AreaPage's ✎ Edit", async () => {
+  it("opens the area document from AreaPage's ✎ Edit", async () => {
     window.localStorage.setItem(
       'world-builder-atlas:anon:last-location',
       JSON.stringify({ kind: 'area', id: 5 })
@@ -171,7 +186,33 @@ describe('AtlasPage', () => {
     renderWithProviders(<AtlasPage />);
     await userEvent.click(screen.getByText('edit'));
 
-    expect(await screen.findByTestId('areadoc-placeholder')).toBeInTheDocument();
+    expect(await screen.findByTestId('mock-area-document')).toHaveAttribute('data-area-id', '5');
+  });
+
+  it("a deleted area's document lands on the parent's page", async () => {
+    window.localStorage.setItem(
+      'world-builder-atlas:anon:last-location',
+      JSON.stringify({ kind: 'areadoc', id: 5 })
+    );
+    mockQueries({ 5: makeManager(centralWard), 1: makeManager(nitera) });
+
+    renderWithProviders(<AtlasPage />);
+    await userEvent.click(screen.getByText('deleted-with-parent'));
+
+    expect(await screen.findByTestId('mock-area-page')).toHaveAttribute('data-area-id', '1');
+  });
+
+  it('a deleted ROOT area falls back to the first root', async () => {
+    window.localStorage.setItem(
+      'world-builder-atlas:anon:last-location',
+      JSON.stringify({ kind: 'areadoc', id: 5 })
+    );
+    mockQueries({ 5: makeManager(centralWard), 1: makeManager(nitera) });
+
+    renderWithProviders(<AtlasPage />);
+    await userEvent.click(screen.getByText('deleted-root'));
+
+    expect(await screen.findByTestId('mock-area-page')).toHaveAttribute('data-area-id', '1');
   });
 
   it('descends into the room document from AreaPage', async () => {
