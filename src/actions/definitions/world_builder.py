@@ -6,11 +6,14 @@ stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
 blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
 #3291 description-variant pair, and ``author_clue``, #3432), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
-``author_clue`` is gated by ``StaffOnlyPrerequisite`` alone (no
-ownership/tenancy standing — this is staff tooling, not a player-facing
-builder); ``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)``
-instead (staff bypass built in) — canon-creating clue authorship is a SENIOR+
-GM power, not staff-only, per the #3432 owner ruling. Each is a thin wrapper
+``author_clue`` is gated by ``BuildWarrantPrerequisite`` alone (#3477 — staff
+bypass unconditionally, same as the ``StaffOnlyPrerequisite`` it replaces;
+non-staff GMs additionally pass with an ``AreaBuildGrant`` over the resolved
+``area_id``/``room_id`` kwarg — no ownership/tenancy standing otherwise, this
+is staff/warrant tooling, not a player-facing builder); ``author_clue`` gates
+at ``MinimumGMLevelPrerequisite(SENIOR)`` instead (staff bypass built in) —
+canon-creating clue authorship is a SENIOR+ GM power, not staff-only, per the
+#3432 owner ruling. Each is a thin wrapper
 over the Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid
 primitives + ``promote_to_authored``/``suggest_fixture_key``) and
 ``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
@@ -41,7 +44,7 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite, StaffOnlyPrerequisite
+from actions.prerequisites import BuildWarrantPrerequisite, MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 from world.gm.constants import GMLevel
 
@@ -441,7 +444,7 @@ class _WorldBuilderAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [StaffOnlyPrerequisite()]
+        return [BuildWarrantPrerequisite()]
 
 
 @dataclass

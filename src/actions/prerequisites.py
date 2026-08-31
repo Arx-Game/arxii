@@ -133,6 +133,80 @@ class StaffOnlyPrerequisite(Prerequisite):
 
 
 @dataclass
+class BuildWarrantPrerequisite(Prerequisite):
+    """Staff bypass, or an ``AreaBuildGrant`` (#3477) over the resolved target area.
+
+    Mirrors ``StaffOnlyPrerequisite``'s staff check exactly -- same
+    ``is_staff_observer(actor)`` call, same "Staff only." refusal -- so every
+    existing staff-actor world_builder test (#2449) keeps passing unchanged
+    after this class replaces ``StaffOnlyPrerequisite`` on the registry: staff
+    pass implicitly, with zero ``AreaBuildGrant`` rows in play.
+
+    Non-staff: resolves the target ``Area`` from the action's kwargs (the
+    kwargs-via-context convention) -- ``area_id`` directly, or ``room_id``'s
+    ``RoomProfile.area``. When neither kwarg is present (or resolves to
+    nothing), this refuses exactly as ``StaffOnlyPrerequisite`` would -- GM
+    scoping for those actions lands once the frontend passes explicit area
+    context, not here. This is a documented gap, not a bug: today every
+    world_builder action carries an ``area_id`` or ``room_id`` kwarg, so the
+    fallback only ever bites a future area-less action.
+
+    ``level_param``, when set, names a kwarg holding the ``AreaLevel`` the
+    action creates/acts on (e.g. a hypothetical ``CreateAreaAction`` override
+    naming its ``level`` kwarg) -- the grant's ``max_level`` must be at or
+    above it. Unset (the default every current world_builder action uses)
+    checks against ``AreaLevel.BUILDING``, the finest granularity and what
+    every room/exit/fixture verb in this module actually touches.
+    """
+
+    level_param: str | None = None
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.areas.constants import AreaLevel  # noqa: PLC0415
+        from world.areas.models import Area  # noqa: PLC0415
+        from world.gm.services import has_build_warrant  # noqa: PLC0415
+
+        if is_staff_observer(actor):
+            return True, ""
+
+        kwargs = (context or {}).get("kwargs", {})
+        area_id = kwargs.get("area_id")
+        room_id = kwargs.get("room_id")
+        area: Area | None = None
+        if area_id:
+            area = Area.objects.filter(pk=area_id).first()
+        elif room_id:
+            profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("area").first()
+            area = profile.area if profile else None
+
+        if area is None:
+            return False, "Staff only."
+
+        try:
+            account = actor.active_account
+        except AttributeError:
+            account = None
+        if account is None:
+            return False, "Staff only."
+
+        level = (
+            kwargs.get(self.level_param, AreaLevel.BUILDING)
+            if self.level_param
+            else AreaLevel.BUILDING
+        )
+        if has_build_warrant(account, area=area, level=level):
+            return True, ""
+        return False, "No build grant covers this area."
+
+
+@dataclass
 class MinimumGMLevelPrerequisite(Prerequisite):
     """Actor must hold at least ``minimum_level`` GM trust, with a staff bypass (#2117).
 

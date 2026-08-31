@@ -19,6 +19,7 @@ from world.gm.constants import (
     TableRequestStatus,
 )
 from world.gm.models import (
+    AreaBuildGrant,
     CatalogSuggestion,
     GMLevelChange,
     GMProfile,
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from evennia_extensions.models import PlayerData, RoomProfile
+    from world.areas.models import Area
     from world.character_sheets.models import CharacterSheet
     from world.distinctions.models import CharacterDistinction, Distinction
     from world.gm.models import TableUpdateRequest
@@ -92,6 +94,46 @@ def get_notification_target_for_gm(gm_profile: GMProfile) -> CharacterSheet | No
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."
 )
+
+
+# ---------------------------------------------------------------------------
+# Area build warrants (#3477) — non-staff world-builder access.
+# ---------------------------------------------------------------------------
+
+
+def has_build_warrant(account: AccountDB | None, *, area: Area, level: int) -> bool:
+    """Whether ``account`` may build-author at ``level`` within ``area``'s subtree.
+
+    Staff bypass unconditionally. Otherwise requires an ``AreaBuildGrant``
+    whose ``area`` is ``area`` itself or one of its ``AreaClosure`` ancestors
+    (subtree descent), with ``max_level`` at or above ``level``.
+
+    The direct-area match (``grant.area == area``) is checked first and never
+    touches ``AreaClosure`` — the common non-descent case stays off the
+    materialized view entirely. The closure walk (mirrors
+    ``world.locations.services._room_profile_and_ancestors``'s idiom) only
+    runs when the account holds at least one sufficiently-levelled grant that
+    didn't match directly, so a plain "no grant at all" refusal is also
+    matview-free.
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from world.areas.models import AreaClosure  # noqa: PLC0415
+
+    if is_staff_observer(account):
+        return True
+    if account is None:
+        return False
+
+    grants = AreaBuildGrant.objects.filter(account=account, max_level__gte=level)
+    if not grants.exists():
+        return False
+    if grants.filter(area=area).exists():
+        return True
+
+    ancestor_ids = AreaClosure.objects.filter(descendant_id=area.pk).values_list(
+        "ancestor_id", flat=True
+    )
+    return grants.filter(area_id__in=ancestor_ids).exists()
 
 
 @transaction.atomic

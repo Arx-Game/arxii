@@ -561,6 +561,14 @@ coupled to the action's kwarg names by the base class.
 ### Prerequisite implementations (`prerequisites.py`)
 
 - **`StaffOnlyPrerequisite`** — actor's account must be staff.
+- **`BuildWarrantPrerequisite`** (#3477) — staff bypass (same check/message as
+  `StaffOnlyPrerequisite`), else resolves the target `Area` from the `area_id`/
+  `room_id` kwarg and requires an `AreaBuildGrant` (`world.gm.models`) covering
+  it — the grant's own area or an `AreaClosure` ancestor (subtree descent),
+  `max_level` at or above the optional `level_param`-named kwarg (default
+  `AreaLevel.BUILDING`). No area-resolvable kwarg ⇒ behaves exactly like
+  `StaffOnlyPrerequisite`. Gates every `world_builder.py` action except
+  `author_clue`; read side is `world.gm.services.has_build_warrant`.
 - **`HasCharacterSheetPrerequisite`** — actor has an attached `CharacterSheet`.
 - **`HoldsItemPrerequisite`** — actor holds the `item` kwarg.
 - **`ItemUsablePrerequisite`** — item template has `on_use_pool` (is usable); consumables

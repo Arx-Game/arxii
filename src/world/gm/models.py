@@ -12,6 +12,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.areas.constants import AreaLevel
 from world.contributors.models import CreditedContent
 from world.gm.constants import (
     CatalogSuggestionProposalKind,
@@ -86,6 +87,60 @@ class GMProfile(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMProfile({self.account.username}, {self.get_level_display()})"
+
+
+class AreaBuildGrant(SharedMemoryModel):
+    """A GM's build-rights warrant over an area subtree (#3477).
+
+    Non-staff world-builder access. ``BuildWarrantPrerequisite``
+    (``actions.prerequisites``) composes this into the staff-only gate the
+    #2449 canvas actions used to carry alone: staff still bypass
+    unconditionally; a GM instead needs an explicit grant whose ``area`` is
+    the target area itself or one of its ``world.areas.AreaClosure``
+    ancestors (subtree descent), capped by ``max_level`` (the broadest
+    ``AreaLevel`` the grant may create/act on -- a BUILDING-capped grant
+    cannot mint a new WARD). Multiple grants over the same account/area are
+    allowed (e.g. a widened cap layered on top); ``has_build_warrant``
+    (``world.gm.services``) is the read side.
+    """
+
+    account = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.CASCADE,
+        related_name="build_grants",
+    )
+    area = models.ForeignKey(
+        "arxii.Area",
+        on_delete=models.PROTECT,
+        related_name="build_grants",
+    )
+    max_level = models.IntegerField(
+        choices=AreaLevel.choices,
+        default=AreaLevel.BUILDING,
+        help_text="Broadest AreaLevel this grant may create/act on within the subtree.",
+    )
+    room_budget = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Cap on rooms this grant may dig. None = uncounted.",
+    )
+    granted_by = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Area Build Grant"
+        verbose_name_plural = "Area Build Grants"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return (
+            f"AreaBuildGrant({self.account.username}, {self.area.name}, "
+            f"max={self.get_max_level_display()})"
+        )
 
 
 class GMApplication(SharedMemoryModel):
