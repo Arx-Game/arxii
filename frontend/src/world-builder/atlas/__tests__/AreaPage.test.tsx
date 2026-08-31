@@ -108,6 +108,12 @@ const foyerUnpublishedRoom = makeRoom({
   area_id: 2,
   published_at: null,
 });
+const foyerPublishedRoom = makeRoom({
+  id: 201,
+  name: 'Fountain Court',
+  area_id: 2,
+  published_at: '2026-01-01T00:00:00Z',
+});
 
 function mockQueries({
   areaManagers,
@@ -177,17 +183,19 @@ describe('AreaPage', () => {
     expect(onDescend).toHaveBeenCalledWith({ kind: 'roomdoc', id: 100 });
   });
 
-  it("shows a BUILDING child's own unpublished room count", () => {
+  it("shows a BUILDING child's own room total alongside its unpublished count", () => {
     mockQueries({
       areaManagers: {
         1: makeManager(ward, []),
-        2: makeManager(foyer, [foyerUnpublishedRoom]),
+        2: makeManager(foyer, [foyerUnpublishedRoom, foyerPublishedRoom]),
       },
       wardChildren: [foyer],
     });
 
     renderWithProviders(<AreaPage areaId={1} onDescend={vi.fn()} onOpenAreaDoc={vi.fn()} />);
-    expect(screen.getByTestId('ledger-area-row')).toHaveTextContent('1 unpublished');
+    const row = screen.getByTestId('ledger-area-row');
+    expect(row).toHaveTextContent('1 unpublished');
+    expect(screen.getByTestId('ledger-area-kind')).toHaveTextContent('2 rooms');
   });
 
   it('calls onOpenAreaDoc from the ✎ Edit affordance', async () => {

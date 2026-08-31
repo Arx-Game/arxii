@@ -195,6 +195,10 @@ describe('AtlasPage', () => {
     expect(screen.getByText('Find a room')).toBeInTheDocument();
 
     await userEvent.type(screen.getByTestId('room-search-input'), 'kit');
+    // Live filtering: the search hook is re-invoked with each typed term, not
+    // just called once on dialog open.
+    expect(useRoomSearchQuery).toHaveBeenCalledWith('kit');
+
     await userEvent.click(await screen.findByTestId('room-search-hit'));
 
     expect(await screen.findByTestId('roomdoc-placeholder')).toBeInTheDocument();

@@ -21,12 +21,10 @@ import { Input } from '@/components/ui/input';
 
 import { useAreaManagerQuery, useRoomSearchQuery, useWorldBuilderAreasQuery } from '../queries';
 import { AreaPage } from './AreaPage';
+import { areaViewKind } from './constants';
 import { FolioCrumb, type FolioCrumbEntry } from './FolioCrumb';
 import { IndexRail } from './IndexRail';
 import { useAtlasState, type AtlasView } from './useAtlasState';
-
-/** Mirrors `world.areas.constants.AreaLevel.BUILDING` (see `types.ts`'s `AREA_LEVELS`). */
-const BUILDING_LEVEL = 10;
 
 export interface AtlasPageProps {
   /** The read-only visitor lens (spec §1) — typed now, NOT implemented. */
@@ -45,10 +43,7 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
     if (view != null) return;
     const firstRoot = rootsPage?.results?.[0];
     if (firstRoot) {
-      setView(
-        { kind: firstRoot.level === BUILDING_LEVEL ? 'roomgrid' : 'area', id: firstRoot.id },
-        firstRoot.name
-      );
+      setView({ kind: areaViewKind(firstRoot.level), id: firstRoot.id }, firstRoot.name);
     }
   }, [view, rootsPage, setView]);
 

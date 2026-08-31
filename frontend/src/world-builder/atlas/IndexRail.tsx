@@ -16,19 +16,24 @@
  * carries no unpublished-room rollup, and computing one across an arbitrary
  * subtree would mean fetching every area's manager payload up front. A true
  * cross-area rollup needs a backend aggregate this task doesn't add.
+ *
+ * The rail's chrome is a single `Plate` (fix round 1) rather than a hand-rolled
+ * bordered `<aside>`; section titles and inline level/status tags are all
+ * `PlateHead` (as a heading for section titles, as an inline `span` — sized
+ * down — for per-row tags) instead of four independently hand-rolled
+ * uppercase/tracked/muted label recipes.
  */
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
+import { Plate, PlateHead } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
 import { useAreaManagerQuery, useWorldBuilderAreasQuery } from '../queries';
 import type { WorldBuilderArea } from '../types';
+import { areaViewKind, BUILDING_LEVEL } from './constants';
 import type { AtlasHistoryEntry, AtlasView } from './useAtlasState';
-
-/** Mirrors `world.areas.constants.AreaLevel.BUILDING` (see `types.ts`'s `AREA_LEVELS`). */
-const BUILDING_LEVEL = 10;
 
 export interface IndexRailProps {
   current: AtlasView | null;
@@ -43,49 +48,47 @@ export function IndexRail({ current, onSelect, pinned, recents }: IndexRailProps
   const roots = rootsPage?.results ?? [];
 
   return (
-    <aside
-      className="flex h-full flex-col overflow-y-auto border-r bg-card"
-      aria-label="Your territory"
-      data-testid="index-rail"
-    >
-      <div className="border-b px-4 py-3">
-        <h1 className="theme-heading text-base font-semibold [font-variant:small-caps]">
-          The Atlas
-        </h1>
-        <p
-          className="mt-1 font-body text-xs italic text-muted-foreground"
-          data-testid="index-scope"
-        >
-          {account?.is_staff
-            ? 'Staff warrant: every area.'
-            : account?.is_gm
-              ? "Your GM warrant roots at the areas you've been granted."
-              : 'Read-only.'}
-        </p>
-      </div>
+    <aside className="h-full" aria-label="Your territory" data-testid="index-rail">
+      <Plate className="flex h-full flex-col overflow-y-auto rounded-none">
+        <div className="border-b p-4">
+          <h1 className="theme-heading text-base font-semibold [font-variant:small-caps]">
+            The Atlas
+          </h1>
+          <p
+            className="mt-1 font-body text-xs italic text-muted-foreground"
+            data-testid="index-scope"
+          >
+            {account?.is_staff
+              ? 'Staff warrant: every area.'
+              : account?.is_gm
+                ? "Your GM warrant roots at the areas you've been granted."
+                : 'Read-only.'}
+          </p>
+        </div>
 
-      <div className="flex-1 py-2" data-testid="index-tree">
-        {isLoading && <p className="px-4 text-xs text-muted-foreground">Loading…</p>}
-        {roots.map((area) => (
-          <TreeNode key={area.id} area={area} depth={0} current={current} onSelect={onSelect} />
-        ))}
-      </div>
+        <div className="flex-1 py-2" data-testid="index-tree">
+          {isLoading && <p className="px-4 text-xs text-muted-foreground">Loading…</p>}
+          {roots.map((area) => (
+            <TreeNode key={area.id} area={area} depth={0} current={current} onSelect={onSelect} />
+          ))}
+        </div>
 
-      <UnpublishedJump current={current} onSelect={onSelect} />
-      <IndexSection
-        title="Pinned"
-        testId="index-pinned"
-        entries={pinned}
-        onSelect={onSelect}
-        empty="Nothing pinned yet."
-      />
-      <IndexSection
-        title="Recent"
-        testId="index-recent"
-        entries={recents}
-        onSelect={onSelect}
-        empty="Nothing visited yet."
-      />
+        <UnpublishedJump current={current} onSelect={onSelect} />
+        <IndexSection
+          title="Pinned"
+          testId="index-pinned"
+          entries={pinned}
+          onSelect={onSelect}
+          empty="Nothing pinned yet."
+        />
+        <IndexSection
+          title="Recent"
+          testId="index-recent"
+          entries={recents}
+          onSelect={onSelect}
+          empty="Nothing visited yet."
+        />
+      </Plate>
     </aside>
   );
 }
@@ -133,14 +136,14 @@ function TreeNode({ area, depth, current, onSelect }: TreeNodeProps) {
         <button
           type="button"
           className="flex-1 truncate text-left text-sm"
-          onClick={() => onSelect({ kind: isLeaf ? 'roomgrid' : 'area', id: area.id }, area.name)}
+          onClick={() => onSelect({ kind: areaViewKind(area.level), id: area.id }, area.name)}
           data-testid="index-area-node"
           data-area-id={area.id}
         >
           {area.name}
-          <span className="ml-1.5 text-[0.6rem] uppercase tracking-wide text-muted-foreground">
+          <PlateHead as="span" className="ml-1.5 text-[0.6rem] tracking-wide">
             {area.level_display}
-          </span>
+          </PlateHead>
         </button>
       </div>
       {expanded && (
@@ -165,12 +168,13 @@ function TreeNode({ area, depth, current, onSelect }: TreeNodeProps) {
             >
               <span className="truncate">{room.name}</span>
               {!room.published_at && (
-                <span
-                  className="text-[0.6rem] uppercase tracking-wide text-muted-foreground"
+                <PlateHead
+                  as="span"
+                  className="text-[0.6rem] tracking-wide"
                   data-testid="index-room-unpublished"
                 >
                   unpublished
-                </span>
+                </PlateHead>
               )}
             </button>
           ))}
@@ -195,9 +199,9 @@ function UnpublishedJump({ current, onSelect }: UnpublishedJumpProps) {
 
   return (
     <div className="border-t px-2 py-2" data-testid="index-unpublished">
-      <div className="px-2 text-[0.66rem] uppercase tracking-wide text-muted-foreground">
+      <PlateHead as="div" className="px-2">
         Unpublished rooms — {unpublished.length}
-      </div>
+      </PlateHead>
       {unpublished.map((room) => (
         <button
           key={room.id}
@@ -224,9 +228,9 @@ interface IndexSectionProps {
 function IndexSection({ title, testId, entries, onSelect, empty }: IndexSectionProps) {
   return (
     <div className="border-t px-2 py-2" data-testid={testId}>
-      <div className="px-2 text-[0.66rem] uppercase tracking-wide text-muted-foreground">
+      <PlateHead as="div" className="px-2">
         {title}
-      </div>
+      </PlateHead>
       {entries.length === 0 && (
         <p className="px-2 py-1 font-body text-xs italic text-muted-foreground">{empty}</p>
       )}

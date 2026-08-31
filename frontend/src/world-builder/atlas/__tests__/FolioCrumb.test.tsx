@@ -33,6 +33,20 @@ describe('FolioCrumb', () => {
     expect(onSelect).not.toHaveBeenCalledWith(3);
   });
 
+  it('shows a level tag beside the current node (and every ancestor that has one)', () => {
+    render(<FolioCrumb entries={entries} onSelect={vi.fn()} />);
+
+    const levelTags = screen.getAllByTestId('folio-crumb-level');
+    expect(levelTags).toHaveLength(3);
+    expect(screen.getByTestId('folio-crumb-current').parentElement).toHaveTextContent('Ward');
+    expect(levelTags.map((tag) => tag.textContent)).toEqual(['World', 'City', 'Ward']);
+  });
+
+  it('omits the level tag when an entry carries no level_display', () => {
+    render(<FolioCrumb entries={[{ id: 1, name: 'Nitera' }]} onSelect={vi.fn()} />);
+    expect(screen.queryByTestId('folio-crumb-level')).not.toBeInTheDocument();
+  });
+
   it('renders caller-supplied right-side controls', () => {
     render(
       <FolioCrumb entries={entries} onSelect={vi.fn()}>
