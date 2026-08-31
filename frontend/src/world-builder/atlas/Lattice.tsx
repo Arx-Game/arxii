@@ -635,6 +635,12 @@ export function Lattice({
                           event.stopPropagation();
                           updateSketch((prev) => unplanCell(prev, key));
                         }}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          updateSketch((prev) => unplanCell(prev, key));
+                        }}
                         data-testid={`lattice-unplan-${x}-${y}`}
                       >
                         ✕
