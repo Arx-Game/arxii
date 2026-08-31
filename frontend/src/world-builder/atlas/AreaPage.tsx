@@ -1,33 +1,66 @@
 /**
- * AreaPage (#3477 Task 4) — one Atlas page: an area's header, its children as
- * ledger rows, and the lattice slot Task 5's `<Lattice/>` mounts into.
+ * AreaPage (#3477 Task 4/5) — one Atlas page: an area's header, its children
+ * as ledger rows, and the Lattice (Task 5) beneath them.
  *
  * "Children" branches on the area's own level (mirrors the prototype's
  * ward-vs-building split): an area above BUILDING can hold child areas
  * (fetched lazily here) *and* direct rooms of its own (open-air rooms sitting
- * right on the ward, not inside any building) — both render as ledger rows.
- * A BUILDING-level area holds only rooms, and those rooms are the lattice's
- * job to draw (Task 5), not a ledger — so a building page skips the ledger
- * entirely and goes straight to the lattice slot.
+ * right on the ward, not inside any building) — both render as ledger rows
+ * *and* as Lattice tiles (`'areas'` mode). A BUILDING-level area holds only
+ * rooms — no ledger, straight to the Lattice (`'rooms'` mode).
+ *
+ * The old disabled "⊕ add a building…" ledger row (Task 4 placeholder) is
+ * gone — the Lattice's own empty-cell click is that affordance now, for real.
  *
  * Per-child "unpublished"/room-total counts (a BUILDING child's own room
  * tally) cost one extra `useAreaManagerQuery` per BUILDING child currently
  * listed in this ledger — bounded by this area's own direct children, not
  * the whole tree, so it stays cheap; see `ChildAreaRow`.
  */
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import { Plate, PlateHead } from '@/components/folio';
 import { cn } from '@/lib/utils';
 
-import { useAreaManagerQuery, useWorldBuilderAreasQuery } from '../queries';
-import type { WorldBuilderArea, WorldBuilderRoom } from '../types';
-import { areaViewKind, BUILDING_LEVEL } from './constants';
+import { useAreaManagerQuery, useWorldBuilderAction, useWorldBuilderAreasQuery } from '../queries';
+import type { WorldBuilderActionKey, WorldBuilderArea, WorldBuilderRoom } from '../types';
+import { useWorldBuilderActor } from '../useWorldBuilderActor';
+import { areaViewKind, BUILDING_LEVEL, childLevelOf } from './constants';
+import { Lattice, type LatticeTile } from './Lattice';
 import type { AtlasView } from './useAtlasState';
 
 export interface AreaPageProps {
   areaId: number;
   onDescend: (next: AtlasView) => void;
   onOpenAreaDoc: (areaId: number) => void;
+}
+
+function areaToTile(area: WorldBuilderArea): LatticeTile {
+  return {
+    id: area.id,
+    kind: 'area',
+    name: area.name,
+    kindLabel: area.level_display,
+    unpublished: false,
+    gridX: area.grid_x,
+    gridY: area.grid_y,
+    floor: 0,
+    level: area.level,
+  };
+}
+
+function roomToTile(room: WorldBuilderRoom, kindLabel: string): LatticeTile {
+  return {
+    id: room.id,
+    kind: 'room',
+    name: room.name,
+    kindLabel,
+    unpublished: !room.published_at,
+    gridX: room.grid_x,
+    gridY: room.grid_y,
+    floor: room.floor,
+  };
 }
 
 export function AreaPage({ areaId, onDescend, onOpenAreaDoc }: AreaPageProps) {
@@ -42,6 +75,18 @@ export function AreaPage({ areaId, onDescend, onOpenAreaDoc }: AreaPageProps) {
   const childAreas = childrenPage?.results ?? [];
   const rooms = manager?.rooms ?? [];
 
+  const characterId = useWorldBuilderActor();
+  const { mutate: runMutation } = useWorldBuilderAction(characterId ?? 0, areaId);
+  const runAction = (key: string, kwargs: Record<string, unknown>) => {
+    if (characterId == null) {
+      toast.error(
+        'Select a character to build as; builder actions dispatch through your played character.'
+      );
+      return;
+    }
+    runMutation({ key: key as WorldBuilderActionKey, kwargs });
+  };
+
   if (isLoading || !area) {
     return (
       <div className="p-8 text-sm text-muted-foreground" data-testid="area-page-loading">
@@ -49,6 +94,18 @@ export function AreaPage({ areaId, onDescend, onOpenAreaDoc }: AreaPageProps) {
       </div>
     );
   }
+
+  const tiles: LatticeTile[] = isBuilding
+    ? rooms.map((room) => roomToTile(room, 'room'))
+    : [...childAreas.map(areaToTile), ...rooms.map((room) => roomToTile(room, 'open-air room'))];
+
+  const handleLatticeOpen = (tile: LatticeTile) => {
+    if (tile.kind === 'area') {
+      onDescend({ kind: areaViewKind(tile.level ?? BUILDING_LEVEL), id: tile.id });
+    } else {
+      onDescend({ kind: 'roomdoc', id: tile.id });
+    }
+  };
 
   return (
     <section className="max-w-5xl px-8 py-6" data-testid="area-page">
@@ -78,19 +135,19 @@ export function AreaPage({ areaId, onDescend, onOpenAreaDoc }: AreaPageProps) {
           {rooms.map((room) => (
             <LedgerRoomRow key={`room-${room.id}`} room={room} onSelect={onDescend} />
           ))}
-          <button
-            type="button"
-            disabled
-            title="Realizing a plan wires up once the lattice lands."
-            className="flex w-full items-center gap-2 px-3 py-2 text-left font-body text-sm italic text-muted-foreground disabled:cursor-default disabled:opacity-70"
-            data-testid="area-add-row"
-          >
-            ⊕ add a building, or dig an open-air room…
-          </button>
         </Plate>
       )}
 
-      <div data-testid="lattice-slot" className="mt-6" />
+      <div className="mt-6" data-testid="lattice-slot">
+        <Lattice
+          mode={isBuilding ? 'rooms' : 'areas'}
+          nodeId={areaId}
+          tiles={tiles}
+          onOpen={handleLatticeOpen}
+          runAction={runAction}
+          childAreaLevel={isBuilding ? undefined : childLevelOf(area.level)}
+        />
+      </div>
     </section>
   );
 }

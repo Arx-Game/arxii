@@ -5,10 +5,31 @@ import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import type { WorldBuilderArea, WorldBuilderAreaManager, WorldBuilderRoom } from '../../types';
 import { AreaPage } from '../AreaPage';
+import type { LatticeProps } from '../Lattice';
 
 vi.mock('../../queries', () => ({
   useAreaManagerQuery: vi.fn(),
   useWorldBuilderAreasQuery: vi.fn(),
+  useWorldBuilderAction: vi.fn(() => ({ mutate: vi.fn() })),
+}));
+
+vi.mock('../../useWorldBuilderActor', () => ({
+  useWorldBuilderActor: () => 1,
+}));
+
+// AreaPage's own tests care about which tiles/mode it hands the Lattice, not
+// the Lattice's own gesture mechanics (that's Lattice.test.tsx's job) — a
+// thin stub keeps this file a unit test of AreaPage's wiring only.
+vi.mock('../Lattice', () => ({
+  Lattice: ({ mode, tiles, onOpen }: LatticeProps) => (
+    <div data-testid="lattice-mock" data-mode={mode}>
+      {tiles.map((tile) => (
+        <button key={tile.id} data-testid={`mock-tile-${tile.id}`} onClick={() => onOpen(tile)}>
+          {tile.name}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 const { useAreaManagerQuery, useWorldBuilderAreasQuery } = await import('../../queries');
@@ -142,7 +163,7 @@ describe('AreaPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders children (sub-areas and direct rooms) as ledger rows plus an add row', () => {
+  it('renders children (sub-areas and direct rooms) as ledger rows, and both as Lattice tiles', () => {
     mockQueries({
       areaManagers: { 1: makeManager(ward, [cityCenter]) },
       wardChildren: [foyer],
@@ -159,8 +180,9 @@ describe('AreaPage', () => {
     expect(roomRows[0]).toHaveTextContent('City Center');
     expect(roomRows[0]).toHaveTextContent('unpublished');
 
-    expect(screen.getByTestId('area-add-row')).toBeInTheDocument();
-    expect(screen.getByTestId('area-add-row')).toBeDisabled();
+    expect(screen.getByTestId('lattice-mock')).toHaveAttribute('data-mode', 'areas');
+    expect(screen.getByTestId('mock-tile-2')).toHaveTextContent('The Grand Foyer');
+    expect(screen.getByTestId('mock-tile-100')).toHaveTextContent('City Center');
   });
 
   it('descends into a child area on click', async () => {
@@ -217,6 +239,33 @@ describe('AreaPage', () => {
     renderWithProviders(<AreaPage areaId={2} onDescend={vi.fn()} onOpenAreaDoc={vi.fn()} />);
 
     expect(screen.queryByTestId('area-ledger')).not.toBeInTheDocument();
-    expect(screen.getByTestId('lattice-slot')).toBeInTheDocument();
+    expect(screen.getByTestId('lattice-mock')).toHaveAttribute('data-mode', 'rooms');
+    expect(screen.getByTestId('mock-tile-200')).toHaveTextContent('Gallery Stair');
+  });
+
+  it('opens a Lattice room tile as a room document', async () => {
+    mockQueries({
+      areaManagers: { 2: makeManager(foyer, [foyerUnpublishedRoom]) },
+      wardChildren: [],
+    });
+    const onDescend = vi.fn();
+
+    renderWithProviders(<AreaPage areaId={2} onDescend={onDescend} onOpenAreaDoc={vi.fn()} />);
+    await userEvent.click(screen.getByTestId('mock-tile-200'));
+
+    expect(onDescend).toHaveBeenCalledWith({ kind: 'roomdoc', id: 200 });
+  });
+
+  it('opens a Lattice area tile at its own level', async () => {
+    mockQueries({
+      areaManagers: { 1: makeManager(ward, []) },
+      wardChildren: [foyer],
+    });
+    const onDescend = vi.fn();
+
+    renderWithProviders(<AreaPage areaId={1} onDescend={onDescend} onOpenAreaDoc={vi.fn()} />);
+    await userEvent.click(screen.getByTestId('mock-tile-2'));
+
+    expect(onDescend).toHaveBeenCalledWith({ kind: 'roomgrid', id: 2 });
   });
 });
