@@ -340,6 +340,7 @@ def _upsert_single_room(
     Returns:
         ``(profile, room_obj)`` — the RoomProfile and the Evennia object.
     """
+    from django.utils import timezone  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
 
     from evennia_extensions.models import ObjectDisplayData, RoomProfile  # noqa: PLC0415
@@ -360,9 +361,15 @@ def _upsert_single_room(
             key=room_data["key"],
             nohome=True,
         )
+        # #3477 — a grid_import is a restore of previously-live world content
+        # (the content repo is downstream/bootstrap-only, ADR-0238), not a
+        # staff canvas dig awaiting review, so unlike
+        # world.areas.grid_services.create_room's origin=AUTHORED path this
+        # room is born published: stamp published_at=now() explicitly rather
+        # than leaving it to the field's own now()-on-create default.
         profile, _ = RoomProfile.objects.update_or_create(
             objectdb=room_obj,
-            defaults={**room_fields, "fixture_key": fixture_key},
+            defaults={**room_fields, "fixture_key": fixture_key, "published_at": timezone.now()},
         )
         result.created_rooms += 1
 

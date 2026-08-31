@@ -695,11 +695,16 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
             "Stamped by staff_publish_room when this room is live in the world "
             "(#3477); defaults to now() so an ordinary room is live the moment it "
             "exists. Null = unpublished/WIP — not enterable and its exits hidden "
-            "except to a story-runner (GM/Staff). world.areas.grid_services.create_room "
-            "(the staff world-builder canvas dig) is the one path that overrides this "
-            "default to None: a canvas-dug room is born unpublished until staff "
-            "reviews it and calls staff_publish_room — re-publishing just refreshes "
-            "the stamp (idempotent; no separate 'done' flag)."
+            "except to a story-runner (GM/Staff). Two paths override this default "
+            "explicitly, in opposite directions: world.areas.grid_services."
+            "create_room's origin=AUTHORED branch (the staff world-builder canvas "
+            "dig) sets it to None — a canvas-dug room is born unpublished until "
+            "staff reviews it and calls staff_publish_room, which just refreshes "
+            "the stamp on a re-call (idempotent; no separate 'done' flag) — while "
+            "core_management.grid_import._upsert_single_room's new-room branch "
+            "stamps now() explicitly: a grid_import is a restore of previously-live "
+            "world content (the content repo is downstream/bootstrap-only, "
+            "ADR-0238), not a canvas dig awaiting review, so it is born published."
         ),
     )
 

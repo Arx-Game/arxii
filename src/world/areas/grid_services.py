@@ -287,6 +287,10 @@ def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
     if room_profile.fixture_key is not None and room_profile.fixture_key != key:
         msg = "This room already has a different fixture key; keys are permanent once set."
         raise GridServiceError(msg)
+    # #3477 — published_at is deliberately left untouched: promotion acts on an
+    # already-live, already-occupied PLAYER/STORY room, not a fresh canvas dig,
+    # so its existing published state (born published, per the field default)
+    # carries over as-is.
     room_profile.origin = GridOrigin.AUTHORED
     room_profile.fixture_key = key
     room_profile.save(update_fields=["origin", "fixture_key"])

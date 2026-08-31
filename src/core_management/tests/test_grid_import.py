@@ -121,6 +121,32 @@ class GridImportTests(TestCase):
         self.assertEqual(modifier.stat_key, StatKey.ORDER)
         self.assertEqual(modifier.value, 3)
 
+    def test_fresh_import_births_rooms_published(self) -> None:
+        """#3477 — a grid_import is a restore of previously-live content (ADR-0238),
+        not a staff canvas dig awaiting review, so a freshly-imported room is born
+        published, not stuck NULL like a fresh ``staff_dig_room``."""
+        export_grid_bundles(self.root)
+        ObjectDB.objects.filter(
+            pk__in=[
+                self.grid.north_exit.pk,
+                self.grid.south_exit.pk,
+                self.grid.stray_exit.pk,
+                self.grid.taproom_obj.pk,
+                self.grid.market_obj.pk,
+                self.grid.player_room_obj.pk,
+            ]
+        ).delete()
+        self.grid.city.delete()
+        self.grid.region.delete()
+
+        result = load_grid_bundles(self.root)
+
+        self.assertEqual(result.created_rooms, 2)
+        taproom = RoomProfile.objects.get(fixture_key="arx-city/golden-hart-taproom")
+        market = RoomProfile.objects.get(fixture_key="arx-city/market-square")
+        self.assertIsNotNone(taproom.published_at)
+        self.assertIsNotNone(market.published_at)
+
     def test_reimport_updates_in_place(self) -> None:
         export_grid_bundles(self.root)
         original_pk = self.grid.taproom_obj.pk
