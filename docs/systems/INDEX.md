@@ -2230,7 +2230,10 @@ Character lifecycle management with web-first applications and player anonymity.
   per-row queries); `MyRosterEntrySerializer.get_unread_narrative_count` reads the
   annotation off `obj.__dict__` when present, falling back to a direct count on the
   unannotated `select`-endpoint path. Drives the "Your Characters" band's tidings
-  `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section.
+  `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section. The same
+  band (`CharactersBand`) carries an extra grid tile for a staff/GM account
+  (`account.is_gm`/`is_staff`) — `GMSlot` (#3478), the Hall's GM onboarding/edit
+  surface; see the GM section's "GM onboarding lives on the Hall" entry.
 - **The offscreen-act gate (#3412 slice 3, ADR-0246):** `MyRosterEntrySerializer` also
   exposes `lifecycle_state` (plain read-only `CharField` mirror of
   `CharacterSheet.lifecycle_state`, no annotation, no migration), letting the Hall's
@@ -2376,7 +2379,16 @@ GM at a given level may author (#2000, ADR-0097).
   `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
   `IsAdminUser`; `GET`/`PATCH /api/gm/profiles/mine/` (#3478) — the requesting account's
   own `GMProfile` via `GMProfileMineSerializer`, `contact_times`/`ooc_info` writable,
-  `level` read-only, 404 for a non-GM account), `GMTableViewSet` (`/api/gm/tables/`; staff sees all, GMs their own,
+  `level` read-only, 404 for a non-GM account; `POST /api/gm/profiles/character/` (#3478)
+  mints the account's own GM/Staff character via `mint_gm_character`
+  (`world.roster.services.staff_characters`, role-aware: staff mints
+  `typeclasses.gm_characters.StaffCharacter`, an approved GM mints `GMCharacter`, anyone
+  else refused; one GM/Staff character per account, enforced via an active
+  `RosterTenure` on an existing GM/Staff-typeclassed character), returning
+  `character_id`/`name`, a `StaffMintError` surfacing as 400 — both typeclasses'
+  `get_display_name` append an unconditional `(GM)` tag
+  (`typeclasses/gm_characters.py`'s `_MechanicallyImmuneCharacterMixin`)), `GMTableViewSet`
+  (`/api/gm/tables/`; staff sees all, GMs their own,
   players tables where an active persona holds membership; `archive`/`transfer_ownership`
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
@@ -2392,6 +2404,18 @@ GM at a given level may author (#2000, ADR-0097).
   (count from `gm_application_queue(gm)`) and `open_invites` (this GM's unclaimed,
   unexpired `GMRosterInvite` rows) as the tile source for those same recruitment
   surfaces (#3268).
+- **GM onboarding lives on the Hall (#3478):** the Hall's GM slot
+  (`frontend/src/home/hall/GMSlot.tsx`) is the sole surface for both
+  `mine`/`character` endpoints above — `CreateGMCharacterDialog` mints via
+  `mintGMCharacter`, `EditGMProfileDialog` edits `contact_times`/`ooc_info`; the slot
+  hides its edit affordance rather than rendering the 404 for a staff account with no
+  `GMProfile` row. **This replaced the world-builder page's inline mint form**
+  (`mint-builder-character`, #3283's original staff-only stopgap): that endpoint and
+  its frontend caller (`mintBuilderCharacter`, `frontend/src/world-builder/api.ts`)
+  are deleted; `WorldBuilderPage`'s no-actor banner
+  (`data-testid="world-builder-actor-banner"`) is now a plain "set up your GM Profile
+  from the Hall" message linking to `/`. See `docs/roadmap/tooling.md`'s "GM
+  onboarding moves to the Hall" entry and `gm-system.md`'s Phase 9.
 - **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>

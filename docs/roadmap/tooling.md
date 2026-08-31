@@ -3,6 +3,19 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-08-31, #3478 — GM onboarding moves to the Hall; mint banner removed)
+
+The staff-mint form the world-builder actor banner grew below (#3283) is gone.
+`POST /api/world-builder/areas/mint-builder-character/` and its frontend caller
+(`mintBuilderCharacter`, `frontend/src/world-builder/api.ts`) are deleted; a
+role-aware `mint_gm_character` (`world.roster.services.staff_characters`) replaced
+it at `POST /api/gm/profiles/character/`, onboarding both staff and approved GMs
+(not staff alone) through the Hall's GM slot instead. The world-builder page's
+no-actor banner (`WorldBuilderPage`, `data-testid="world-builder-actor-banner"`)
+now just points at the Hall ("set up your GM Profile from the Hall" + a Link to
+`/`) rather than minting inline. See `docs/roadmap/gm-system.md`'s Phase 9 for the
+full rundown.
+
 ## Built (2026-08-20, #3283 — field feedback: staff mint, breadcrumbs, room editor page)
 
 First real authoring session on the deployed builder produced three fixes.
