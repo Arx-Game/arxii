@@ -565,8 +565,14 @@ coupled to the action's kwarg names by the base class.
   `StaffOnlyPrerequisite`), else resolves the target `Area` from the `area_id`/
   `room_id` kwarg and requires an `AreaBuildGrant` (`world.gm.models`) covering
   it — the grant's own area or an `AreaClosure` ancestor (subtree descent),
-  `max_level` at or above the optional `level_param`-named kwarg (default
-  `AreaLevel.BUILDING`). No area-resolvable kwarg ⇒ behaves exactly like
+  `max_level` at or above the level checked. With `level_param` unset (the
+  default every `world_builder.py` action but `edit_area` uses), that's a
+  fixed `AreaLevel.BUILDING` floor. With `level_param` set (`edit_area` only,
+  #3477 fix round 1), it's the STRICTER of the resolved area's current
+  `level` and the named kwarg's value, if present — a bare kwarg-only check
+  would let a BUILDING-capped grant reclassify a WARD it holds directly past
+  its own ceiling, or edit an already-above-ceiling area by omitting `level`
+  from the call. No area-resolvable kwarg ⇒ behaves exactly like
   `StaffOnlyPrerequisite`. Gates every `world_builder.py` action except
   `author_clue`; read side is `world.gm.services.has_build_warrant`.
 - **`HasCharacterSheetPrerequisite`** — actor has an attached `CharacterSheet`.

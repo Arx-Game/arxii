@@ -18,6 +18,8 @@ NOT_HOLDING_MESSAGE = "You aren't holding that."
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.areas.models import Area
+
 
 def resolve_actor_sheet(actor: ObjectDB) -> Any:
     """Return the actor's ``CharacterSheet``, or ``None`` if they have none."""
@@ -152,14 +154,57 @@ class BuildWarrantPrerequisite(Prerequisite):
     fallback only ever bites a future area-less action.
 
     ``level_param``, when set, names a kwarg holding the ``AreaLevel`` the
-    action creates/acts on (e.g. a hypothetical ``CreateAreaAction`` override
-    naming its ``level`` kwarg) -- the grant's ``max_level`` must be at or
-    above it. Unset (the default every current world_builder action uses)
-    checks against ``AreaLevel.BUILDING``, the finest granularity and what
-    every room/exit/fixture verb in this module actually touches.
+    action creates/acts on (e.g. ``EditAreaAction``'s own ``level`` kwarg) --
+    the grant's ``max_level`` must be at or above it. Unset (the default
+    every world_builder action but ``EditAreaAction`` uses) checks against
+    ``AreaLevel.BUILDING``, the finest granularity and what every room/exit/
+    fixture verb in this module actually touches.
+
+    When ``level_param`` is set, the level actually checked is the STRICTER
+    of the resolved area's current ``level`` and the incoming kwarg (if
+    present) -- not the kwarg alone (#3477 fix round 1). Otherwise a
+    BUILDING-capped grant could reclassify a WARD past its own ceiling in one
+    call (the kwarg alone would pass), or edit an area already above the
+    ceiling by touching only unrelated fields (no ``level`` kwarg sent, so
+    the kwarg-alone check would default to BUILDING and pass regardless of
+    where the area already sits).
     """
 
     level_param: str | None = None
+
+    @staticmethod
+    def _resolve_target_area(kwargs: dict) -> Area | None:
+        """``area_id`` directly, or ``room_id``'s ``RoomProfile.area``; else ``None``."""
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.areas.models import Area  # noqa: PLC0415
+
+        area_id = kwargs.get("area_id")
+        if area_id:
+            return Area.objects.filter(pk=area_id).first()
+        room_id = kwargs.get("room_id")
+        if room_id:
+            profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("area").first()
+            return profile.area if profile else None
+        return None
+
+    def _resolve_required_level(self, area: Area, kwargs: dict) -> int:
+        """Fixed ``AreaLevel.BUILDING`` floor, or (with ``level_param`` set) the
+
+        stricter of the area's current level and the named kwarg's value (#3477
+        fix round 1) -- see the class docstring for why the kwarg alone isn't enough.
+        """
+        from contextlib import suppress  # noqa: PLC0415
+
+        from world.areas.constants import AreaLevel  # noqa: PLC0415
+
+        if not self.level_param:
+            return AreaLevel.BUILDING
+        level = area.level
+        kwarg_level = kwargs.get(self.level_param)
+        if kwarg_level is not None:
+            with suppress(TypeError, ValueError):
+                level = max(level, int(kwarg_level))
+        return level
 
     def is_met(
         self,
@@ -168,24 +213,13 @@ class BuildWarrantPrerequisite(Prerequisite):
         context: dict | None = None,
     ) -> tuple[bool, str]:
         from core_management.permissions import is_staff_observer  # noqa: PLC0415
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-        from world.areas.constants import AreaLevel  # noqa: PLC0415
-        from world.areas.models import Area  # noqa: PLC0415
         from world.gm.services import has_build_warrant  # noqa: PLC0415
 
         if is_staff_observer(actor):
             return True, ""
 
         kwargs = (context or {}).get("kwargs", {})
-        area_id = kwargs.get("area_id")
-        room_id = kwargs.get("room_id")
-        area: Area | None = None
-        if area_id:
-            area = Area.objects.filter(pk=area_id).first()
-        elif room_id:
-            profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("area").first()
-            area = profile.area if profile else None
-
+        area = self._resolve_target_area(kwargs)
         if area is None:
             return False, "Staff only."
 
@@ -196,11 +230,7 @@ class BuildWarrantPrerequisite(Prerequisite):
         if account is None:
             return False, "Staff only."
 
-        level = (
-            kwargs.get(self.level_param, AreaLevel.BUILDING)
-            if self.level_param
-            else AreaLevel.BUILDING
-        )
+        level = self._resolve_required_level(area, kwargs)
         if has_build_warrant(account, area=area, level=level):
             return True, ""
         return False, "No build grant covers this area."

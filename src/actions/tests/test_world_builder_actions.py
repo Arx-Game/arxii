@@ -30,7 +30,7 @@ from world.clues.factories import ClueFactory, ClueTriggerFactory, RoomClueFacto
 from world.clues.models import Clue, ClueTrigger, RoomClue
 from world.codex.factories import CodexEntryFactory
 from world.gm.constants import GMLevel
-from world.gm.factories import GMProfileFactory
+from world.gm.factories import AreaBuildGrantFactory, GMProfileFactory
 from world.magic.factories import PortalAnchorFactory, PortalAnchorKindFactory
 from world.magic.models import PortalAnchor
 from world.room_features.factories import RoomFeatureInstanceFactory
@@ -188,6 +188,54 @@ class EditAreaActionTests(TestCase):
             Area.objects.filter(pk=self.area.pk).values_list("parent_id", flat=True).first()
         )
         assert raw_parent_id is None
+
+    def test_staff_can_set_any_level(self) -> None:
+        """Staff behavior is unaffected by the #3477 warrant-ceiling fix."""
+        from actions.definitions.world_builder import EditAreaAction
+
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, level=int(AreaLevel.WORLD))
+        assert result.success
+        self.area.refresh_from_db()
+        assert self.area.level == AreaLevel.WORLD
+
+    def test_building_capped_grant_refuses_level_above_ceiling(self) -> None:
+        """#3477 fix round 1 -- a BUILDING-capped grant can't reclassify a WARD to WORLD.
+
+        Direct-area-match path (grant.area == self.area), untagged so SQLite runs it.
+        """
+        from actions.definitions.world_builder import EditAreaAction
+
+        gm = _gm_actor(GMLevel.STARTING, "EditAreaGMOverCeiling")
+        AreaBuildGrantFactory(account=gm.db_account, area=self.area, max_level=AreaLevel.BUILDING)
+        result = EditAreaAction().run(gm, area_id=self.area.pk, level=int(AreaLevel.WORLD))
+        assert not result.success
+        self.area.refresh_from_db()
+        assert self.area.level == AreaLevel.WARD
+
+    def test_grant_below_areas_current_level_refuses_even_without_level_kwarg(self) -> None:
+        """#3477 fix round 1 -- editing an area already above your ceiling is refused,
+
+        even when the edit itself never touches ``level``.
+        """
+        from actions.definitions.world_builder import EditAreaAction
+
+        gm = _gm_actor(GMLevel.STARTING, "EditAreaGMAboveCeilingNoLevelKwarg")
+        AreaBuildGrantFactory(account=gm.db_account, area=self.area, max_level=AreaLevel.BUILDING)
+        result = EditAreaAction().run(gm, area_id=self.area.pk, name="Sneaky Rename")
+        assert not result.success
+        self.area.refresh_from_db()
+        assert self.area.name == "Old Name"
+
+    def test_within_ceiling_grant_passes(self) -> None:
+        """A grant whose max_level covers the area's current level still works."""
+        from actions.definitions.world_builder import EditAreaAction
+
+        gm = _gm_actor(GMLevel.STARTING, "EditAreaGMWithinCeiling")
+        AreaBuildGrantFactory(account=gm.db_account, area=self.area, max_level=AreaLevel.WARD)
+        result = EditAreaAction().run(gm, area_id=self.area.pk, name="Renamed By GM")
+        assert result.success
+        self.area.refresh_from_db()
+        assert self.area.name == "Renamed By GM"
 
 
 class StaffDigRoomActionTests(TestCase):

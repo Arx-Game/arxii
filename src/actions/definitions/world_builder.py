@@ -6,14 +6,19 @@ stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
 blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
 #3291 description-variant pair, and ``author_clue``, #3432), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
-``author_clue`` is gated by ``BuildWarrantPrerequisite`` alone (#3477 — staff
-bypass unconditionally, same as the ``StaffOnlyPrerequisite`` it replaces;
-non-staff GMs additionally pass with an ``AreaBuildGrant`` over the resolved
-``area_id``/``room_id`` kwarg — no ownership/tenancy standing otherwise, this
-is staff/warrant tooling, not a player-facing builder); ``author_clue`` gates
-at ``MinimumGMLevelPrerequisite(SENIOR)`` instead (staff bypass built in) —
-canon-creating clue authorship is a SENIOR+ GM power, not staff-only, per the
-#3432 owner ruling. Each is a thin wrapper
+``author_clue``/``edit_area`` is gated by ``BuildWarrantPrerequisite()`` (the
+base class default) alone (#3477 — staff bypass unconditionally, same as the
+``StaffOnlyPrerequisite`` it replaces; non-staff GMs additionally pass with an
+``AreaBuildGrant`` over the resolved ``area_id``/``room_id`` kwarg, checked
+against the fixed ``AreaLevel.BUILDING`` floor — no ownership/tenancy standing
+otherwise, this is staff/warrant tooling, not a player-facing builder);
+``edit_area`` overrides to ``BuildWarrantPrerequisite(level_param="level")``
+instead (#3477 fix round 1) since it's the one action that can reclassify an
+area's ``level`` in place — the ceiling check there is the stricter of the
+area's current level and the incoming ``level`` kwarg, not a fixed floor;
+``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)`` instead (staff
+bypass built in) — canon-creating clue authorship is a SENIOR+ GM power, not
+staff-only, per the #3432 owner ruling. Each is a thin wrapper
 over the Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid
 primitives + ``promote_to_authored``/``suggest_fixture_key``) and
 ``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
@@ -508,11 +513,23 @@ class EditAreaAction(_WorldBuilderAction):
     with ``promote_to_authored``'s guard). Setting a climate below REGION
     level succeeds but the result message warns: each climate-bearing area
     rolls its own weather, so per-ward climates mean per-ward weather.
+
+    Gated by ``BuildWarrantPrerequisite(level_param="level")`` rather than the
+    base class's bare default (#3477 fix round 1): this is the one
+    world_builder action that can reclassify an area's ``level`` in place, so
+    a GM's ``AreaBuildGrant.max_level`` ceiling must be checked against the
+    stricter of the area's current level and the incoming ``level`` kwarg —
+    otherwise a BUILDING-capped grant could edit a WARD it directly holds (the
+    bare default only ever checks BUILDING) or reclassify past its own
+    ceiling in the same call.
     """
 
     key: str = "edit_area"
     name: str = "Edit Area"
     icon: str = "map"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [BuildWarrantPrerequisite(level_param="level")]
 
     def execute(
         self,

@@ -261,16 +261,48 @@ class BuildWarrantPrerequisiteTests(TestCase):
         self.assertFalse(met)
         self.assertEqual(reason, "No build grant covers this area.")
 
-    def test_level_param_default_is_building(self) -> None:
-        """No ``level`` kwarg present, ``level_param`` set -- defaults to BUILDING."""
-        actor, account = _gm_actor_and_account(db_key="LevelParamDefault")
+    def test_level_param_no_kwarg_checks_areas_current_level(self) -> None:
+        """No ``level`` kwarg present -- checked against the area's OWN current level,
+
+        not a fixed floor (#3477 fix round 1): a BUILDING-capped grant on a WARD-level
+        area is refused even for an edit that never touches ``level`` -- editing an
+        area already above your ceiling is refused, not just raising it further.
+        """
+        actor, account = _gm_actor_and_account(db_key="LevelParamNoKwargAboveCeiling")
         area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.BUILDING)
+        met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
+            actor, context={"kwargs": {"area_id": area.pk}}
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
+
+    def test_level_param_no_kwarg_within_ceiling_passes(self) -> None:
+        """No ``level`` kwarg present, area's current level is within the grant's cap."""
+        actor, account = _gm_actor_and_account(db_key="LevelParamNoKwargWithinCeiling")
+        area = AreaFactory(level=AreaLevel.BUILDING)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.BUILDING)
         met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
             actor, context={"kwargs": {"area_id": area.pk}}
         )
         self.assertTrue(met)
         self.assertEqual(reason, "")
+
+    def test_level_param_kwarg_cannot_exceed_ceiling_even_below_areas_level(self) -> None:
+        """A grant covering the area's current (higher) level still can't raise it further.
+
+        Area is already WARD; grant is capped at WARD (covers the area as-is); sending
+        ``level=WORLD`` must still be refused -- the incoming kwarg is the stricter side
+        of the max() here, not the area's current level.
+        """
+        actor, account = _gm_actor_and_account(db_key="LevelParamKwargAboveCeiling")
+        area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
+            actor, context={"kwargs": {"area_id": area.pk, "level": int(AreaLevel.WORLD)}}
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
 
     @tag("postgres")  # closure descent -- see world.gm.tests.test_area_build_grant
     def test_area_id_kwarg_descent_passes(self) -> None:
