@@ -11,6 +11,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 
+import { Link } from 'react-router-dom';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,12 +24,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { GhostCell } from '@/map-canvas/ghosts';
-import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { AreaArrangeCanvas } from '../components/AreaArrangeCanvas';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
-import { mintBuilderCharacter } from '../api';
 import { AreaTreePanel } from '../components/AreaTreePanel';
 import { EditAreaDialog } from '../components/EditAreaDialog';
 import { CreateAreaDialog } from '../components/CreateAreaDialog';
@@ -59,9 +59,6 @@ export function WorldBuilderPage() {
   // #3269 place-mode: an unplaced room awaiting a ghost-cell click.
   const [placeModeRoomId, setPlaceModeRoomId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [mintName, setMintName] = useState('');
-  const [minting, setMinting] = useState(false);
-  const queryClient = useQueryClient();
   const [arrangeMode, setArrangeMode] = useState(false);
   const [editAreaOpen, setEditAreaOpen] = useState(false);
   const { data: childAreasPage } = useWorldBuilderAreasQuery(
@@ -195,35 +192,10 @@ export function WorldBuilderPage() {
           data-testid="world-builder-actor-banner"
         >
           <span className="flex-1">
-            You need a character to build as. Staff can mint an OOC builder character here — no
-            character creation required.
+            You need a character to act as — set up your GM Profile from the Hall.
           </span>
-          <Input
-            className="h-8 w-48"
-            value={mintName}
-            onChange={(event) => setMintName(event.target.value)}
-            placeholder="Builder name"
-            data-testid="mint-name-input"
-          />
-          <Button
-            size="sm"
-            disabled={!mintName.trim() || minting}
-            data-testid="mint-submit"
-            onClick={async () => {
-              setMinting(true);
-              try {
-                const made = await mintBuilderCharacter(mintName.trim());
-                toast.success(`${made.name} created - you can build as them immediately.`);
-                setMintName('');
-                await queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
-              } catch (error) {
-                toast.error(error instanceof Error ? error.message : 'Mint failed.');
-              } finally {
-                setMinting(false);
-              }
-            }}
-          >
-            Create staff character
+          <Button size="sm" asChild>
+            <Link to="/">Go to the Hall</Link>
           </Button>
         </div>
       )}

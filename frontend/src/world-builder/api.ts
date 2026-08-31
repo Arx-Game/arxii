@@ -44,19 +44,6 @@ export function fetchAreaManager(areaId: number): Promise<WorldBuilderAreaManage
   return getJson(`/api/world-builder/areas/${areaId}/manager/`, 'Failed to load the area map.');
 }
 
-/** Mint an OOC staff builder character (#3283). */
-export async function mintBuilderCharacter(
-  name: string
-): Promise<{ character_id: number; name: string }> {
-  const res = await apiFetch('/api/world-builder/areas/mint-builder-character/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) await throwApiError(res, 'Failed to create the character.');
-  return (await res.json()) as { character_id: number; name: string };
-}
-
 /** Selection-time room detail (#3269): exit profiles, comfort, ambient rows. */
 export function fetchRoomDetail(roomId: number): Promise<WorldBuilderRoomDetail> {
   const qs = new URLSearchParams({ room_id: String(roomId) }).toString();

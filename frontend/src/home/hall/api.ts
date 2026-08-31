@@ -22,9 +22,9 @@ export async function fetchClockState(): Promise<ClockState> {
  * Mint the account's own GM/Staff character (#3478) — role gating
  * (staff -> `StaffCharacter`, approved GM -> `GMCharacter`, anyone else
  * refused) is entirely server-side (`mint_gm_character`). This endpoint
- * moved from world-builder's `mint-builder-character` (#3283); mirrors the
- * shape of `mintBuilderCharacter` in `world-builder/api.ts`, which Task 6
- * deletes once this becomes the Hall's only GM-onboarding path.
+ * replaced world-builder's `mint-builder-character` (#3283); the
+ * world-builder page no longer mints — it points a characterless GM at
+ * this Hall flow instead (`WorldBuilderPage`'s no-actor banner, #3478 Task 6).
  */
 export async function mintGMCharacter(
   name: string
