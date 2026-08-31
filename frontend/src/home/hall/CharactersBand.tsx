@@ -21,6 +21,14 @@
  * gets a short PLACEHOLDER state label instead). "Clear Active Character"
  * and card selection stay unaffected — this is a display-only fix, same as
  * the plate's own gate/display split.
+ *
+ * The Hall's GM slot (#3478 task 5): `characters` (from
+ * `MyRosterEntry.character_type`, Task 3) can carry at most one non-"PC"
+ * entry per account — the account's own GM or Staff character. That entry
+ * is pulled out of the PC grid and handed to `GMSlot`, an extra grid tile
+ * rendered only for `is_gm`/`is_staff` accounts (never for a plain player,
+ * even if `characters` somehow carried a GM entry that isn't theirs — it
+ * can't, `mine` is account-scoped, but the guard is cheap insurance).
  */
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -29,8 +37,9 @@ import { cn } from '@/lib/utils';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
 import { dockedStateLabel } from '@/roster/lifecycleDisplay';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useAccount, useAppDispatch, useAppSelector } from '@/store/hooks';
 import { hydrateActiveCharacter } from '@/store/gameSlice';
+import { GMSlot } from './GMSlot';
 
 function getInitials(name: string): string {
   return name
@@ -89,6 +98,7 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
 
 export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) {
   const dispatch = useAppDispatch();
+  const account = useAccount();
   const activeEntryId = useAppSelector((state) => state.game.activeEntryId);
   const selectMutation = useSelectCharacterMutation();
 
@@ -103,13 +113,17 @@ export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) 
     selectMutation.mutate(null);
   };
 
+  const pcs = characters.filter((entry) => entry.character_type === 'PC');
+  const gmEntry = characters.find((entry) => entry.character_type !== 'PC');
+  const showGMSlot = !!account?.is_gm || !!account?.is_staff;
+
   return (
     <Plate className="p-4">
       <PlateHead as="h2" className="mb-3">
         Your Characters
       </PlateHead>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {characters.map((entry) => (
+        {pcs.map((entry) => (
           <CharacterCard
             key={entry.id}
             entry={entry}
@@ -117,6 +131,13 @@ export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) 
             onSelect={handleSelect}
           />
         ))}
+        {showGMSlot && (
+          <GMSlot
+            gmEntry={gmEntry}
+            isDocked={gmEntry != null && gmEntry.id === activeEntryId}
+            onSelect={handleSelect}
+          />
+        )}
       </div>
       <div className="mt-3 flex justify-end">
         <Button

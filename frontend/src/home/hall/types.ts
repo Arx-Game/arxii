@@ -10,3 +10,11 @@ import type { components } from '@/generated/api';
  * (mis-inferred) array the schema claims.
  */
 export type ClockState = components['schemas']['ClockState'];
+
+/**
+ * `GET/PATCH /api/gm/profiles/mine/` (#3478 Task 1) — the requesting
+ * account's own GM profile. `id`/`level`/`level_display` are read-only;
+ * `contact_times`/`ooc_info` are the only writable fields, edited from the
+ * Hall's GM slot (`EditGMProfileDialog`).
+ */
+export type GMProfileMine = components['schemas']['GMProfileMine'];
