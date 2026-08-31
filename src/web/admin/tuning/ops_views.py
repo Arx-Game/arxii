@@ -25,6 +25,7 @@ from web.admin.tuning.metrics import (
     story_series,
     story_snapshot,
 )
+from web.admin.tuning.required_content import collect_required_content
 from web.admin.tuning.tech_health import collect_tech_health
 from web.admin.tuning.views import superuser_required
 from world.currency.constants import format_coppers
@@ -145,3 +146,18 @@ def ops_tech_fragment(request: HttpRequest) -> HttpResponse:
     ]
     context = {"health": health, "idmapper_rows": idmapper_rows}
     return render(request, "admin/tuning/_tech_panel.html", context)
+
+
+@superuser_required
+def ops_required_content_fragment(request: HttpRequest) -> HttpResponse:
+    """Required-content sentinel: authored rows the code hard-depends on (#3444).
+
+    Reports which declared content dependencies are absent from THIS database.
+    Seeds prove nothing here (they are clone-bootstrap and E2E scaffolding only,
+    ADR-0238), so the only authority is the database being asked.
+    """
+    return render(
+        request,
+        "admin/tuning/_required_content_panel.html",
+        {"snapshot": collect_required_content()},
+    )

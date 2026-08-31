@@ -8075,11 +8075,16 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   locationless encounters inside nested transaction savepoints that are always rolled
   back (isolation contract in the module docstring) — nothing it does is ever persisted,
   and existing `EncounterScalingConfig` tuning is never overwritten.
-- **Game Ops** (`/admin/_ops/`, `admin_ops`) — five panels: progression, economy,
+- **Game Ops** (`/admin/_ops/`, `admin_ops`) - six panels: progression, economy,
   story/GM, and reports-queue analytics (`web/admin/tuning/metrics.py` —
-  `progression_series`, `economy_series`, `story_series`, `reports_snapshot`, etc.), plus
-  a refresh-on-demand Technical Health panel (`tech_health.py` — `collect_tech_health`:
-  idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
+  `progression_series`, `economy_series`, `story_series`, `reports_snapshot`, etc.), a
+  refresh-on-demand Technical Health panel (`tech_health.py` - `collect_tech_health`:
+  idmapper RAM, process RSS/CPU, open system errors, deploy SHA), and a required-content
+  sentinel panel (`required_content.py`, #3444) - `_declarations()` is the single place
+  a new content dependency (a code path's hard dependency on a specific authored
+  database row) gets registered, and `collect_required_content()` probes the live
+  database for each one, since no repo artifact can answer the question (ADR-0238). See
+  `docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
   `core_management.content_fixtures.load_world_content`; linked from the Game Setup

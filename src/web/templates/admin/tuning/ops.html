@@ -8,6 +8,11 @@
   <p>Live-game analytics: progression throughput, the economy, story/GM activity, and the
     player-submissions queue.</p>
 
+  <section class="tuning-panel" id="panel-ops-required-content"
+           hx-get="{% url 'admin_ops_required_content' %}" hx-trigger="load">
+    <p>Loading required-content sentinel&hellip;</p>
+  </section>
+
   <section class="tuning-panel" id="panel-ops-progression"
            hx-get="{% url 'admin_ops_progression' %}" hx-trigger="load">
     <p>Loading progression analytics&hellip;</p>

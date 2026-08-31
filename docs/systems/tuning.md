@@ -279,8 +279,9 @@ provenance summary.
 
 Parallel structure to Game Tuning: a page skeleton (`src/web/templates/admin/tuning/ops.html`)
 of HTMX-loaded panels, all gated by the same `superuser_required` from `tuning/views.py`.
-Five panels total — four pure-read analytics panels from `metrics.py` plus a
-Technical Health panel from `tech_health.py`:
+Six panels total - four pure-read analytics panels from `metrics.py`, a Technical
+Health panel from `tech_health.py`, and a Required-Content sentinel panel from
+`required_content.py`:
 
 | Panel | Fragment view | URL name |
 |---|---|---|
@@ -289,6 +290,7 @@ Technical Health panel from `tech_health.py`:
 | Story/GM | `ops_story_fragment` | `admin_ops_story` |
 | Reports | `ops_reports_fragment` | `admin_ops_reports` |
 | Technical Health | `ops_tech_fragment` | `admin_ops_tech` |
+| Required content | `ops_required_content_fragment` | `admin_ops_required_content` |
 
 Views live in `src/web/admin/tuning/ops_views.py`.
 
@@ -345,6 +347,49 @@ Unlike the other Ops panels, Technical Health is admin-triggered on demand (a Re
 button, `hx-trigger="click from:#panel-tech-refresh, load delay:1s"` in `ops.html`)
 rather than loaded plainly on page load, since walking the idmapper cache with
 `pympler.asizeof` can be slow with a large cache.
+
+### Required-content sentinel - `src/web/admin/tuning/required_content.py`
+
+Some code paths hard-depend on a specific authored database row - a named
+`ConditionTemplate`, a `CheckType`, a tuning config singleton - rather than on the
+shape of a table, and nothing enforces that dependency at the database layer. This
+module is the registry of those dependencies (#3444): `_declarations()` is the
+single place a new content dependency gets registered, each row naming its consumer
+(`file:line function()`) and the consequence a player or staff member experiences
+when the row is absent.
+
+- `ContentDependency` (frozen dataclass): `key`, `label`, `tier`, `consumer`,
+  `consequence`, `probe`. `DependencyTier` is `REQUIRED` (a code path a player or
+  staff member can hit today breaks or goes silently inert) or `TUNING` (a config
+  singleton the game runs without, just with worse numbers).
+- Four probe shapes, all subclasses of `ContentProbe`: `NamedRowsProbe` (every one
+  of a set of names exists on a model, case-sensitive by default - opt into
+  `case_insensitive=True` only for a declaration whose consumer itself resolves
+  case-insensitively, which today is exactly the `ConditionTemplate` declarations
+  via `ConditionTemplate.get_by_name`), `AnyRowProbe` (a singleton/config table has
+  at least one row), `FilteredRowProbe` (a row matching an exact compound filter
+  exists on a model - a name filed under the wrong parent category, the wrong
+  `trait_type`, the wrong key column, where a name-only probe would be a false
+  green), and `CustomProbe` (delegates to an arbitrary callable for a composite,
+  cross-model invariant `FilteredRowProbe` can't express, such as the Surrounded
+  isolation bundle needing a `ConditionTemplate`, a `ConsequencePool`, and a
+  `ConditionStage` all to exist together).
+- `collect_required_content() -> RequiredContentSnapshot` batches every
+  `NamedRowsProbe` sharing a model label onto one `values_list("name", flat=True)`
+  query per label (exact case, not lowercased - a `case_insensitive=True` probe
+  casefolds on its own inside `resolve()`), rather than one query per declaration,
+  then resolves every declared dependency against that pre-fetched set (or its own
+  query, for `AnyRowProbe`/`FilteredRowProbe`/`CustomProbe`). `RequiredContentSnapshot`
+  sorts the result into `missing_required`, `present_required`, `missing_tuning`,
+  `present_tuning`.
+
+The panel probes the live database because no repo artifact can answer the
+question: seeds under `world/seeds/` are clone-bootstrap and E2E scaffolding only,
+never a stand-in for the corpus, and the database is the single master copy of
+authored content (ADR-0238). See
+`docs/adr/0251-content-dependencies-are-a-live-db-registry.md` for the rejected
+alternatives (try/except guards at the lookups, a repo-side manifest, a Django
+system check, per-package declaration files).
 
 ## Content-repo load surface — `/admin/_content_load/` (#1220)
 
@@ -415,6 +460,8 @@ mirrors the gate `game_setup_views.py` and the seed views already use (ADR-0022)
   form/cache flow.
 - `src/web/admin/tests/test_ops_views.py`, `test_ops_metrics.py` — Ops panels and
   `metrics.py`'s query helpers.
+- `src/web/admin/tests/test_required_content.py` - the required-content registry
+  and collector, both directions (present and missing) per probe shape.
 - `src/web/admin/tests/test_content_load_views.py` — content-load confirm/run flow.
 - `src/world/combat/tests/test_simulation.py` — the simulator's isolation contract
   (nothing persists across a batch) and outcome tallying.

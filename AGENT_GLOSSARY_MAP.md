@@ -506,11 +506,25 @@ touching live content. Read+preview only; edits still flow through normal admin 
 `docs/systems/tuning.md`. _Avoid_: balance panel, difficulty editor.
 
 **Game Ops dashboard**:
-The superuser-only admin page at `/admin/_ops/` (`admin_ops`) with five HTMX-fragment panels —
-progression, economy, story/GM, player-submissions reports, and a refresh-on-demand Technical
-Health snapshot — for watching the live game's throughput and process health. See
-`docs/systems/tuning.md`. _Avoid_: GM dashboard (that term names the separate `gm` app's
-table-management surface), monitoring page.
+The superuser-only admin page at `/admin/_ops/` (`admin_ops`) with six HTMX-fragment panels -
+progression, economy, story/GM, player-submissions reports, a refresh-on-demand Technical
+Health snapshot, and a required-content sentinel - for watching the live game's throughput and
+process health. See `docs/systems/tuning.md`. _Avoid_: GM dashboard (that term names the
+separate `gm` app's table-management surface), monitoring page.
+
+**content dependency**:
+A specific authored database row a code path hard-depends on - a named `ConditionTemplate`, a
+`CheckType`, a tuning config singleton - declared as a `ContentDependency` row in
+`src/web/admin/tuning/required_content.py`'s `_declarations()` table. Tiered REQUIRED (a code
+path a player or staff member can hit today breaks or goes silently inert if the row is
+missing) or TUNING (a config singleton the game runs without, just with worse numbers). See
+`docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
+
+**required-content sentinel**:
+The Game Ops panel (`ops_required_content_fragment`, `admin_ops_required_content`) that
+reports which declared content dependencies are absent from the live database, probed by
+`collect_required_content()`. Not a repo-side check - only the database actually being asked
+can answer the question (ADR-0238).
 
 **Monte Carlo simulation (tuning)**:
 `world.combat.simulation.run_party_vs_boss_simulation` — a batch of independent, fully-synthetic
