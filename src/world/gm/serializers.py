@@ -164,6 +164,19 @@ class GMProfileMineSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "level", "level_display"]
 
 
+class MintGMCharacterRequestSerializer(serializers.Serializer):
+    """POST body for the #3478 GM-character mint (moved from world-builder, #3283)."""
+
+    name = serializers.CharField(max_length=80)
+
+
+class MintGMCharacterResultSerializer(serializers.Serializer):
+    """Result of the #3478 GM-character mint."""
+
+    character_id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class GMLevelChangeSerializer(serializers.ModelSerializer):
     """Read-only audit row for a staff-driven GM trust-level change (#2000)."""
 

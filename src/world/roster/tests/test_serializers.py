@@ -630,3 +630,8 @@ class MyRosterEntrySerializerTestCase(TestCase):
 
         data = MyRosterEntrySerializer(entry).data
         assert data["lifecycle_state"] == LifecycleState.CAPTURED
+
+    def test_character_type_defaults_to_pc(self):
+        """#3478 — character_type exposes the account payload's typeclass mapping."""
+        data = MyRosterEntrySerializer(self.entry).data
+        assert data["character_type"] == "PC"

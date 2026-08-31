@@ -1,9 +1,13 @@
-"""Staff OOC character mint (#3283) — service + endpoint."""
+"""Staff OOC character mint (#3283) — service layer.
+
+The endpoint that fronts ``mint_gm_character`` moved from the world-builder
+app to ``/api/gm/profiles/character/`` (#3478 Task 3); its tests live in
+``world.gm.tests.test_mint_gm_character_endpoint``.
+"""
 
 from __future__ import annotations
 
 from django.test import TestCase
-from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.factories import GMProfileFactory
@@ -88,31 +92,3 @@ class MintGmCharacterRoleAwareTests(TestCase):
         mint_gm_character(self.gm_account, "Storyteller")
         with self.assertRaises(StaffMintError):
             mint_gm_character(self.gm_account, "Storyteller Two")
-
-
-class MintBuilderCharacterEndpointTests(APITestCase):
-    def test_staff_mints_via_endpoint(self) -> None:
-        account = AccountFactory(username="endpoint_staff", is_staff=True)
-        self.client.force_authenticate(user=account)
-        response = self.client.post(
-            "/api/world-builder/areas/mint-builder-character/",
-            {"name": "Endpoint Builder"},
-            format="json",
-        )
-        assert response.status_code == 201, response.content
-        assert response.data["name"] == "Endpoint Builder"
-        entry = RosterEntry.objects.get(character_sheet_id=response.data["character_id"])
-        assert entry.roster.name == "NPCs"
-
-    def test_non_staff_rejected(self) -> None:
-        account = AccountFactory(username="endpoint_player", is_staff=False)
-        self.client.force_authenticate(user=account)
-        response = self.client.post(
-            "/api/world-builder/areas/mint-builder-character/",
-            {"name": "Sneaky Builder"},
-            format="json",
-        )
-        assert response.status_code in (403, 404)
-        assert not RosterEntry.objects.filter(
-            character_sheet__character__db_key="Sneaky Builder"
-        ).exists()

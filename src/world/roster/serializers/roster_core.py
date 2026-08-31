@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from rest_framework import serializers
 
+from web.api.character_type import derive_character_type
 from world.roster.models import Roster, RosterEntry
 from world.roster.serializers.characters import CharacterSerializer
 from world.roster.serializers.media import TenureMediaSerializer
@@ -113,6 +114,10 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # list without a second query -- the value is one of world.roster.models
     # .choices.RosterType (e.g. "NPC", "Active").
     roster_type = serializers.CharField(source="roster.roster_type", read_only=True)
+    # High-level typeclass grouping (#3478) -- "PC" | "GM" | "STAFF", the same
+    # mapping the account payload's AvailableCharacterSerializer uses. Lets the
+    # GM-profile UI distinguish its own GM character from ordinary PCs.
+    character_type = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -126,8 +131,12 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "unread_narrative_count",
             "lifecycle_state",
             "roster_type",
+            "character_type",
         )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
+
+    def get_character_type(self, obj: RosterEntry) -> str:
+        return derive_character_type(obj.character_sheet.character)
 
     def get_profile_picture_url(self, obj: RosterEntry) -> str | None:
         """Return the cloudinary URL for the entry's profile picture, or None."""

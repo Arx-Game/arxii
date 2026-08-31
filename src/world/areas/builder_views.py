@@ -34,8 +34,6 @@ from world.areas.filters import AreaFilter
 from world.areas.grid_services import exits_from_rooms
 from world.areas.models import Area
 from world.areas.serializers import (
-    MintBuilderCharacterRequestSerializer,
-    MintBuilderCharacterResultSerializer,
     WorldBuilderAreaManagerSerializer,
     WorldBuilderAreaSerializer,
     WorldBuilderRoomDetailSerializer,
@@ -452,36 +450,6 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             for p in hits
         ]
         return Response(WorldBuilderRoomHitSerializer(payload, many=True).data)
-
-    @extend_schema(
-        request=MintBuilderCharacterRequestSerializer,
-        responses={201: MintBuilderCharacterResultSerializer},
-    )
-    @action(detail=False, methods=["post"], url_path="mint-builder-character")
-    def mint_builder_character(self, request: Request) -> Response:
-        """POST /api/world-builder/areas/mint-builder-character/ (#3283).
-
-        Mints an OOC staff character (character + sheet + persona + NPC-shelf
-        roster entry + active tenure on the requesting account) so staff never
-        touch the CG wizard for a working builder character.
-        """
-        from world.roster.services.staff_characters import (  # noqa: PLC0415
-            StaffMintError,
-            mint_gm_character,
-        )
-
-        body = MintBuilderCharacterRequestSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        try:
-            character = mint_gm_character(request.user, body.validated_data["name"])
-        except StaffMintError as exc:
-            return Response({"detail": exc.user_message}, status=400)
-        return Response(
-            MintBuilderCharacterResultSerializer(
-                {"character_id": character.pk, "name": character.db_key}
-            ).data,
-            status=201,
-        )
 
     @extend_schema(responses={200: WorldBuilderRoomDetailSerializer})
     @action(detail=False, methods=["get"], url_path="room-detail")

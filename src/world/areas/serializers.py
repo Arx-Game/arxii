@@ -247,19 +247,6 @@ class WorldBuilderCatalogsSerializer(serializers.Serializer):
     beginnings = WorldBuilderIdNameSerializer(many=True)
 
 
-class MintBuilderCharacterRequestSerializer(serializers.Serializer):
-    """POST body for the #3283 staff-character mint."""
-
-    name = serializers.CharField(max_length=80)
-
-
-class MintBuilderCharacterResultSerializer(serializers.Serializer):
-    """Result of the #3283 staff-character mint."""
-
-    character_id = serializers.IntegerField()
-    name = serializers.CharField()
-
-
 class WorldBuilderBreadcrumbSerializer(serializers.Serializer):
     """One ancestor link in the area hierarchy chain (#3283)."""
 
