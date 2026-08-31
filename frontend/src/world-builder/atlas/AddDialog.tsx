@@ -27,7 +27,7 @@
  * applies (`matchedRoomId`) and hands back the raw field values — it never
  * dispatches anything itself, matching the other two modes' contract.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
@@ -119,14 +119,22 @@ export function AddDialog({
   const [exitThere, setExitThere] = useState('');
   const [exitBack, setExitBack] = useState('');
 
+  // Reset ONLY on the closed→open transition. `defaultNeighbor` is read
+  // through a ref because both callers rebuild it every render — with it in
+  // the deps, a background refetch re-rendering the parent while the dialog
+  // is open would wipe whatever the user has half-typed (review finding,
+  // #3477 fix round 2).
+  const defaultNeighborRef = useRef(defaultNeighbor);
+  defaultNeighborRef.current = defaultNeighbor;
   useEffect(() => {
     if (!open) return;
+    const neighbor = defaultNeighborRef.current;
     setName('');
-    setEntrance(initialRow(defaultNeighbor?.roomId ?? null, defaultNeighbor?.intoName ?? 'in'));
-    setExit(initialRow(defaultNeighbor?.roomId ?? null, defaultNeighbor?.outName ?? 'out'));
+    setEntrance(initialRow(neighbor?.roomId ?? null, neighbor?.intoName ?? 'in'));
+    setExit(initialRow(neighbor?.roomId ?? null, neighbor?.outName ?? 'out'));
     setExitThere('');
     setExitBack('');
-  }, [open, defaultNeighbor]);
+  }, [open]);
 
   const canSubmit =
     mode === 'exit' ? name.trim() !== '' && exitThere.trim() !== '' : name.trim() !== '';

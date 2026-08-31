@@ -503,11 +503,16 @@ class _WorldBuilderAction(Action):
 
     warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room", "room_id"),)
     warrant_level_param: ClassVar[str | None] = None
+    warrant_adds_rooms: ClassVar[bool] = False
+    warrant_rooms_count_param: ClassVar[str | None] = None
 
     def get_prerequisites(self) -> list[Prerequisite]:
         return [
             BuildWarrantPrerequisite(
-                targets=self.warrant_targets, level_param=self.warrant_level_param
+                targets=self.warrant_targets,
+                level_param=self.warrant_level_param,
+                adds_rooms=self.warrant_adds_rooms,
+                rooms_count_param=self.warrant_rooms_count_param,
             )
         ]
 
@@ -640,6 +645,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
     name: str = "Dig World Room"
     icon: str = "hammer"
     warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room_container", "area_id"),)
+    warrant_adds_rooms: ClassVar[bool] = True
 
     def execute(
         self,
@@ -2008,6 +2014,7 @@ class StaffDuplicateRoomAction(_WorldBuilderAction):
         ("room", "room_id"),
         ("room_container", "area_id"),
     )
+    warrant_adds_rooms: ClassVar[bool] = True
 
     def execute(
         self,
@@ -2171,6 +2178,8 @@ class StaffBatchDigAction(_WorldBuilderAction):
         ("room_container", "area_id"),
         ("room", "from_room_id"),
     )
+    warrant_adds_rooms: ClassVar[bool] = True
+    warrant_rooms_count_param: ClassVar[str | None] = "count"
 
     def execute(  # noqa: PLR0911 — a validation ladder; each refusal is one message
         self,

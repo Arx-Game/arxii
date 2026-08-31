@@ -136,6 +136,70 @@ def has_build_warrant(account: AccountDB | None, *, area: Area, level: int) -> b
     return grants.filter(area_id__in=ancestor_ids).exists()
 
 
+def has_room_budget_capacity(
+    account: AccountDB | None, *, area: Area, rooms_needed: int = 1
+) -> bool:
+    """Whether digging ``rooms_needed`` more room(s) under ``area`` fits some
+    covering grant's ``room_budget`` — the warrant's third question (#3477
+    spec §3), enforced by ``BuildWarrantPrerequisite`` on the room-creating
+    verbs only.
+
+    A budget caps the TOTAL rooms in the grant's subtree, deliberately
+    creator-agnostic: rooms carry no creator attribution column, grantors
+    size budgets against the subtree they hand over, and the permit phase
+    anchors each grant to a fresh subtree where total == the build. A
+    ``room_budget`` of ``None`` is uncounted; any covering grant with
+    capacity (or no cap) suffices when several are layered.
+
+    ``areas_areaclosure`` is absent on the SQLite fast tier (same known gap
+    ``builder_views`` degrades around; CI's PG parity is the gate) — on a
+    closure failure this degrades to direct-area coverage and direct-area
+    room counts.
+    """
+    from django.db import OperationalError  # noqa: PLC0415
+
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.models import AreaClosure  # noqa: PLC0415
+
+    if is_staff_observer(account):
+        return True
+    if account is None:
+        return False
+
+    grants = list(AreaBuildGrant.objects.filter(account=account))
+    if not grants:
+        return False
+    covering = [grant for grant in grants if grant.area_id == area.pk]
+    if len(covering) < len(grants):
+        try:
+            ancestor_ids = set(
+                AreaClosure.objects.filter(descendant_id=area.pk).values_list(
+                    "ancestor_id", flat=True
+                )
+            )
+        except OperationalError:
+            ancestor_ids = set()
+        covering += [grant for grant in grants if grant.area_id in ancestor_ids]
+
+    for grant in covering:
+        if grant.room_budget is None:
+            return True
+        try:
+            subtree_ids = set(
+                AreaClosure.objects.filter(ancestor_id=grant.area_id).values_list(
+                    "descendant_id", flat=True
+                )
+            )
+        except OperationalError:
+            subtree_ids = set()
+        subtree_ids.add(grant.area_id)
+        current = RoomProfile.objects.filter(area_id__in=subtree_ids).count()
+        if current + rooms_needed <= grant.room_budget:
+            return True
+    return False
+
+
 @transaction.atomic
 def create_table(gm: GMProfile, name: str, description: str = "") -> GMTable:
     """Create a new GM table owned by the given GM."""

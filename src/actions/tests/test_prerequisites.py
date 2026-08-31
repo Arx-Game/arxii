@@ -494,3 +494,83 @@ class BuildWarrantPrerequisiteTests(TestCase):
         )
         self.assertTrue(met)
         self.assertEqual(reason, "")
+
+
+class RoomBudgetCapacityTests(TestCase):
+    """#3477 fix round 2 — the warrant's third question, is there budget left,
+    enforced on the room-creating verbs. Budget caps TOTAL rooms in the
+    grant's subtree (creator-agnostic — see ``has_room_budget_capacity``).
+    Direct-grant shapes only here (SQLite-safe); subtree counting rides the
+    closure and is CI's PG parity to sweep.
+    """
+
+    DIG = (("room_container", "area_id"),)
+
+    def test_uncounted_budget_always_has_capacity(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="BudgetUncounted")
+        area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(targets=self.DIG, adds_rooms=True).is_met(
+            actor, context={"kwargs": {"area_id": area.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_spent_budget_refuses_a_dig(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="BudgetSpent")
+        area = AreaFactory(level=AreaLevel.WARD)
+        RoomProfileFactory(area=area)
+        RoomProfileFactory(area=area)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD, room_budget=2)
+        met, reason = BuildWarrantPrerequisite(targets=self.DIG, adds_rooms=True).is_met(
+            actor, context={"kwargs": {"area_id": area.pk}}
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "That build grant's room budget is spent.")
+
+    def test_budget_with_headroom_passes(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="BudgetHeadroom")
+        area = AreaFactory(level=AreaLevel.WARD)
+        RoomProfileFactory(area=area)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD, room_budget=3)
+        met, reason = BuildWarrantPrerequisite(targets=self.DIG, adds_rooms=True).is_met(
+            actor, context={"kwargs": {"area_id": area.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_batch_dig_count_must_fit_in_one_gulp(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="BudgetBatch")
+        area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD, room_budget=3)
+        prereq = BuildWarrantPrerequisite(
+            targets=self.DIG, adds_rooms=True, rooms_count_param="count"
+        )
+        met, _ = prereq.is_met(actor, context={"kwargs": {"area_id": area.pk, "count": 3}})
+        self.assertTrue(met)
+        met, reason = prereq.is_met(actor, context={"kwargs": {"area_id": area.pk, "count": 4}})
+        self.assertFalse(met)
+        self.assertEqual(reason, "That build grant's room budget is spent.")
+
+    def test_a_layered_uncapped_grant_lifts_a_spent_one(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="BudgetLayered")
+        area = AreaFactory(level=AreaLevel.WARD)
+        RoomProfileFactory(area=area)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD, room_budget=1)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(targets=self.DIG, adds_rooms=True).is_met(
+            actor, context={"kwargs": {"area_id": area.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_non_creating_actions_ignore_a_spent_budget(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="BudgetIgnoredOnEdit")
+        area = AreaFactory(level=AreaLevel.WARD)
+        room_profile = RoomProfileFactory(area=area)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD, room_budget=1)
+        met, reason = BuildWarrantPrerequisite(targets=(("room", "room_id"),)).is_met(
+            actor, context={"kwargs": {"room_id": room_profile.objectdb_id}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")

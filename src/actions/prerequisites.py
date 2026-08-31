@@ -139,6 +139,7 @@ class StaffOnlyPrerequisite(Prerequisite):
 # dict keys in ``_resolve_kind`` and need no named constant.
 WARRANT_KIND_AREA = "area"
 WARRANT_KIND_PARENT = "parent"
+WARRANT_KIND_ROOM_CONTAINER = "room_container"
 
 
 @dataclass
@@ -198,10 +199,22 @@ class BuildWarrantPrerequisite(Prerequisite):
       caller-supplied area. Level = ``AreaLevel.BUILDING``. ``"line"`` and
       ``"emit"`` honor the row's room-vs-area scope discriminator; a
       generic-pool emit (neither FK set) resolves to nothing and refuses.
+
+    ``adds_rooms`` (the room-creating verbs: dig, batch dig, duplicate) also
+    checks the warrant's third question -- is there budget left -- via
+    ``has_room_budget_capacity`` against the destination (the resolved
+    ``"room_container"`` area, else the source room's area for a same-area
+    duplicate); ``rooms_count_param`` names the kwarg holding how many rooms
+    the call mints (``staff_batch_dig``'s ``count``), defaulting to one.
+    ``staff_move_room`` deliberately does NOT consume budget: a move mints
+    nothing, and charging it would refuse an at-budget GM's internal
+    reorganization.
     """
 
     targets: tuple[tuple[str, str], ...] = ()
     level_param: str | None = None
+    adds_rooms: bool = False
+    rooms_count_param: str | None = None
 
     def _resolve_kind(self, kind: str, pk: object) -> Area | None:
         """One declared target's ``Area``, through the target row's own FK chain."""
@@ -313,18 +326,7 @@ class BuildWarrantPrerequisite(Prerequisite):
             return True, ""
 
         kwargs = (context or {}).get("kwargs", {})
-        resolved: list[tuple[str, Area]] = []
-        for kind, param in self.targets:
-            pk = kwargs.get(param)
-            if not pk:
-                continue
-            area = self._resolve_kind(kind, pk)
-            if area is None:
-                # A named target that doesn't resolve is refused, never
-                # skipped -- skipping would let a garbled id downgrade a
-                # two-target action to a one-target check.
-                return False, "Staff only."
-            resolved.append((kind, area))
+        resolved = self._resolve_declared_targets(kwargs)
         if not resolved:
             return False, "Staff only."
 
@@ -339,7 +341,52 @@ class BuildWarrantPrerequisite(Prerequisite):
             level = self._resolve_required_level(kind, area, kwargs)
             if not has_build_warrant(account, area=area, level=level):
                 return False, "No build grant covers this area."
+
+        budget_reason = self._room_budget_reason(account, resolved, kwargs)
+        if budget_reason is not None:
+            return False, budget_reason
         return True, ""
+
+    def _resolve_declared_targets(self, kwargs: dict) -> list[tuple[str, Area]] | None:
+        """Resolve every declared-and-present target, or None on any failure.
+
+        A named target that doesn't resolve fails the WHOLE resolution, never
+        gets skipped -- skipping would let a garbled id downgrade a two-target
+        action to a one-target check. An empty result (nothing declared was
+        present) is also None: refuse like ``StaffOnlyPrerequisite``.
+        """
+        resolved: list[tuple[str, Area]] = []
+        for kind, param in self.targets:
+            pk = kwargs.get(param)
+            if not pk:
+                continue
+            area = self._resolve_kind(kind, pk)
+            if area is None:
+                return None
+            resolved.append((kind, area))
+        return resolved or None
+
+    def _room_budget_reason(
+        self, account: Any, resolved: list[tuple[str, Area]], kwargs: dict
+    ) -> str | None:
+        """A refusal reason when ``adds_rooms`` and no covering grant has budget, else None."""
+        if not self.adds_rooms:
+            return None
+        from world.gm.services import has_room_budget_capacity  # noqa: PLC0415
+
+        destination = next(
+            (area for kind, area in resolved if kind == WARRANT_KIND_ROOM_CONTAINER),
+            resolved[0][1],
+        )
+        rooms_needed = 1
+        if self.rooms_count_param:
+            from contextlib import suppress  # noqa: PLC0415
+
+            with suppress(TypeError, ValueError):
+                rooms_needed = max(1, int(kwargs.get(self.rooms_count_param)))
+        if has_room_budget_capacity(account, area=destination, rooms_needed=rooms_needed):
+            return None
+        return "That build grant's room budget is spent."
 
 
 @dataclass

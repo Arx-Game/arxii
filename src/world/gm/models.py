@@ -101,7 +101,10 @@ class AreaBuildGrant(SharedMemoryModel):
     ``AreaLevel`` the grant may create/act on -- a BUILDING-capped grant
     cannot mint a new WARD). Multiple grants over the same account/area are
     allowed (e.g. a widened cap layered on top); ``has_build_warrant``
-    (``world.gm.services``) is the read side.
+    (``world.gm.services``) is the read side, with
+    ``has_room_budget_capacity`` answering the ``room_budget`` question on
+    the room-creating verbs (budget caps TOTAL rooms in the grant's subtree
+    — creator-agnostic; see that function's docstring).
     """
 
     account = models.ForeignKey(

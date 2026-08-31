@@ -579,7 +579,12 @@ coupled to the action's kwarg names by the base class.
   `"variant"`/`"room_clue"`/`"clue_trigger"`/`"anchor"`, all BUILDING) which
   resolve through the row's own FK chain. Nothing declared/resolved ⇒ behaves
   exactly like `StaffOnlyPrerequisite` (keeps root-area creation and
-  generic-pool emits staff-only). Actions declare via the
+  generic-pool emits staff-only). The room-creating verbs (dig, batch dig,
+  duplicate — `warrant_adds_rooms`, with `warrant_rooms_count_param` for
+  batch's `count`) additionally answer the warrant's third question via
+  `world.gm.services.has_room_budget_capacity` — `room_budget` caps TOTAL
+  rooms in the grant's subtree, creator-agnostic; a move consumes none.
+  Actions declare via the
   `_WorldBuilderAction.warrant_targets`/`warrant_level_param` ClassVars; gates
   every `world_builder.py` action except `author_clue`; read side is
   `world.gm.services.has_build_warrant`.
