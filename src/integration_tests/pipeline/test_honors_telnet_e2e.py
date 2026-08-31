@@ -148,6 +148,10 @@ class RiteOfHonorsJourneyE2ETest(TestCase):
         honoree_sheet = _sheet_at_level(5)
         honoree_persona = honoree_sheet.primary_persona
         BattleParticipantFactory(battle=battle, side=defender_side, character_sheet=honoree_sheet)
+        # The HONOREE must also have witnessed the anchoring event (#3466
+        # whole-branch-review C2) -- HonoreeNotPresentToEstablishError otherwise.
+        # Being a BattleParticipant alone does not record scene presence.
+        InteractionFactory(persona=honoree_persona, scene=battle.scene)
 
         conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
 

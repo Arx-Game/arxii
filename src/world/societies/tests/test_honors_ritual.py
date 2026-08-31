@@ -209,6 +209,9 @@ class RiteOfHonorsTelnetGrammarTests(TestCase):
             persona=PersonaFactory(), event=self.establish_event, base_value=10, earned_at_level=0
         )
         InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        # The HONOREE must also have witnessed the anchoring event (#3466
+        # whole-branch-review C2) -- HonoreeNotPresentToEstablishError otherwise.
+        InteractionFactory(persona=self.honoree_persona, scene=self.scene)
         mint_favor_token(self.academy, self.honorer_sheet, provenance_note="A deed done")
         self.character = self.honorer_sheet.character
         self.character.msg = MagicMock()

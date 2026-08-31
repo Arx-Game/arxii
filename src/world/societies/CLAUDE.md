@@ -185,10 +185,16 @@ ceiling** — `anchor_event.base_value - existing_base_value` — because peer j
 redistributes recognition inside an envelope a settled event already proved, and can never
 invent peril that did not happen; this is why the rite does not reopen what ADR-0249 closed.
 Establishing refuses when the honoree already has an active deed anchored to that event (one
-deed per act, not one per honorer), and a struck (`is_active=False`) deed neither proves
-peril, counts toward the station max, nor blocks a fresh deed. Unrestricted by life-state:
-honoring the dead is by design (`honors.py` adds no death check anywhere). See `honors.py`
-above for the service function and `docs/systems/societies.md` for the full write-up.
+deed per act, not one per honorer — the event row is locked to serialize concurrent
+establishes), and ALSO refuses when the honoree was never a witness of that event
+(`HonoreeNotPresentToEstablishError`) — the honorer's presence alone is not enough, or a
+witness could mint peril for someone who was never there. A struck (`is_active=False`) deed
+neither proves peril, counts toward the station max, nor blocks a fresh deed, and cannot be
+amplified (`DeedNotActiveError`). The `LegendHonor.honorer` recorded is always the acting
+character's PRIMARY persona, never whatever face is active — the rite is always performed as
+yourself (mirrors `_grant_title`'s reasoning). Unrestricted by life-state: honoring the dead is
+by design (`honors.py` adds no death check anywhere). See `honors.py` above for the service
+function and `docs/systems/societies.md` for the full write-up.
 
 **Titles hang on `Persona`, not `CharacterSheet`** (ADR-0252) — `achievements.PersonaTitle`
 retargeted #3466 so a deed earned behind a mask titles the mask and can never surface on the

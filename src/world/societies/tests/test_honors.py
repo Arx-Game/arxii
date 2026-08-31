@@ -18,6 +18,7 @@ from world.currency.services import mint_favor_token
 from world.journals.models import JournalEntry, WeeklyJournalXP
 from world.scenes.constants import PersonaType
 from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
+from world.scenes.services import set_active_persona
 from world.societies.constants import DeedKnowledgeSource
 from world.societies.factories import (
     LegendEntryFactory,
@@ -30,8 +31,10 @@ from world.societies.honors import (
     AlreadyHonoredError,
     CannotHonorOwnDeedError,
     DeedAtCeilingError,
+    DeedNotActiveError,
     EventMintedNothingRefusal,
     HonoreeAlreadyAnchoredError,
+    HonoreeNotPresentToEstablishError,
     InsufficientHaresError,
     NotPresentToEstablishError,
     UnknownDeedError,
@@ -255,6 +258,60 @@ class HonorDeedRefusalTests(TestCase):
             )
         self._assert_nothing_consumed(token, deed_count_before)
 
+    def test_establishing_refused_when_honoree_was_not_present(self) -> None:
+        """#3466 whole-branch-review C2: gating only the honorer's presence would let a
+        witness mint a full-ceiling deed for someone who was never at the event --
+        inventing peril the honoree never faced. The honoree must witness too.
+        """
+        honoree_absent_event = LegendEventFactory(base_value=100, scene=self.scene)
+        LegendEntryFactory(
+            persona=PersonaFactory(),
+            event=honoree_absent_event,
+            base_value=10,
+            earned_at_level=0,
+        )
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        token = self._mint_hare()
+        deed_count_before = LegendEntry.objects.count()
+        with self.assertRaises(HonoreeNotPresentToEstablishError):
+            honor_deed(
+                character_sheet=self.honorer_sheet,
+                ritual=None,
+                honoree_persona=self.honoree_persona,
+                event=honoree_absent_event,
+                deed_title="An uncredited act",
+                journal_title="t",
+                journal_body="b",
+            )
+        self._assert_nothing_consumed(token, deed_count_before)
+
+    def test_amplifying_a_struck_deed_is_refused(self) -> None:
+        """#3466 whole-branch-review I1: a struck deed is worth nothing everywhere its
+        value is read, so amplifying it must be refused explicitly, not merely fall
+        through to DeedAtCeilingError by coincidence.
+        """
+        struck = LegendEntryFactory(
+            persona=self.honoree_persona,
+            event=self.event,
+            base_value=20,
+            earned_at_level=0,
+            is_active=False,
+        )
+        grant_deed_knowledge(
+            deed=struck, personas=[self.honorer_persona], source=DeedKnowledgeSource.WITNESSED
+        )
+        token = self._mint_hare()
+        with self.assertRaises(DeedNotActiveError):
+            honor_deed(
+                character_sheet=self.honorer_sheet,
+                ritual=None,
+                honoree_persona=self.honoree_persona,
+                deed=struck,
+                journal_title="t",
+                journal_body="b",
+            )
+        self._assert_nothing_consumed(token)
+
     def test_establishing_refused_when_honoree_already_has_a_settled_deed_on_event(
         self,
     ) -> None:
@@ -288,6 +345,7 @@ class HonorDeedRefusalTests(TestCase):
             persona=PersonaFactory(), event=fresh_event, base_value=10, earned_at_level=0
         )
         InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        InteractionFactory(persona=self.honoree_persona, scene=self.scene)
         self._mint_hare()
         honor_deed(
             character_sheet=self.honorer_sheet,
@@ -387,6 +445,10 @@ class HonorDeedSuccessTests(TestCase):
         LegendEntryFactory(
             persona=PersonaFactory(), event=self.establish_event, base_value=10, earned_at_level=0
         )
+        # The HONOREE must also have witnessed the anchoring event (#3466
+        # whole-branch-review C2) -- every establish-path test below shares this
+        # scene, so this covers them all in one place.
+        InteractionFactory(persona=self.honoree_persona, scene=self.scene)
 
     def test_amplifying_raises_base_value_by_the_calibrated_amount(self) -> None:
         honor_deed(
@@ -586,6 +648,50 @@ class HonorDeedSuccessTests(TestCase):
         assert self.deed.base_value == 35
         title = PersonaTitle.objects.get(persona=self.honoree_persona, legend_entry=self.deed)
         assert title.display_name == self.deed.title
+
+    def test_establishing_succeeds_when_honoree_was_present(self) -> None:
+        """The success half of #3466 whole-branch-review C2's presence gate.
+
+        setUp already grants ``self.honoree_persona`` an Interaction in
+        ``self.scene`` — this asserts that presence is sufficient, not merely that
+        its absence refuses (covered by ``HonorDeedRefusalTests
+        .test_establishing_refused_when_honoree_was_not_present``).
+        """
+        InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        honor = honor_deed(
+            character_sheet=self.honorer_sheet,
+            ritual=None,
+            honoree_persona=self.honoree_persona,
+            event=self.establish_event,
+            deed_title="He held the door",
+            journal_title="t",
+            journal_body="b",
+        )
+        assert LegendHonor.objects.filter(pk=honor.pk).exists()
+
+    def test_honorer_recorded_as_primary_persona_even_when_masked(self) -> None:
+        """#3466 whole-branch-review C1: the rite is always performed as yourself.
+
+        A mask worn at rite time must never be recorded as ``LegendHonor.honorer`` —
+        the public journal (authored by ``character_sheet``) and the mirrored scene
+        pose (``_post_declaration``, always the PRIMARY persona) already reveal the
+        real identity, so recording the mask there would be a deterministic
+        mask-to-real link.
+        """
+        mask = PersonaFactory(
+            character_sheet=self.honorer_sheet, persona_type=PersonaType.TEMPORARY
+        )
+        set_active_persona(self.honorer_sheet, mask)
+        honor = honor_deed(
+            character_sheet=self.honorer_sheet,
+            ritual=None,
+            honoree_persona=self.honoree_persona,
+            deed=self.deed,
+            journal_title="t",
+            journal_body="b",
+        )
+        assert honor.honorer_id == self.honorer_persona.pk
+        assert honor.honorer_id != mask.pk
 
 
 class HonorDeedPosthumousTests(TestCase):

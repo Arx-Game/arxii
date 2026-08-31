@@ -26,7 +26,6 @@ from world.currency.services import redeem_favor_token, resolve_unredeemed_favor
 from world.journals.services import create_journal_entry
 from world.npc_services.effects import NoAvailableFavorTokenError
 from world.scenes.models import Persona
-from world.scenes.services import active_persona_for_sheet
 from world.societies.constants import DeedKnowledgeSource
 from world.societies.knowledge_services import (
     grant_deed_knowledge,
@@ -107,6 +106,24 @@ class NotPresentToEstablishError(HonorRefused):
         super().__init__("You were not there to establish this deed.")
 
 
+class HonoreeNotPresentToEstablishError(HonorRefused):
+    """The HONOREE must also have witnessed the anchoring event (whole-branch-review C2).
+
+    Gating only the honorer's presence lets a witness mint a full-ceiling deed for
+    someone who was never at the event — inventing peril the honoree never faced,
+    which is the one thing this rite must never do. Presence is checked against the
+    same ``scene_witness_personas`` list the honorer is checked against, never a
+    sheet-wide "already has a deed here" scope (that would become a mask-identity
+    oracle — see the module docstring / #3466 whole-branch-review C2).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The person you are honoring was not present at that event, so there is "
+            "no peril of theirs to honor there."
+        )
+
+
 class UnknownDeedError(HonorRefused):
     """Amplifying a deed requires already knowing of it (#3466 Decision 6)."""
 
@@ -137,6 +154,18 @@ class DeedAtCeilingError(HonorRefused):
 
     def __init__(self) -> None:
         super().__init__("This deed's legend already matches everything its event proved.")
+
+
+class DeedNotActiveError(HonorRefused):
+    """A struck (``is_active=False``) deed cannot be amplified (whole-branch-review I1).
+
+    A struck deed is worth nothing everywhere its value is read (``get_total_value``,
+    both materialized views) — spending Hares to raise a ``base_value`` no read path
+    will ever surface would be a paid rite for nothing.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("This deed has been struck and can no longer be honored.")
 
 
 class InsufficientHaresError(HonorRefused):
@@ -197,13 +226,27 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
             if event is None:
                 msg = "honor_deed requires either an existing deed or an event to establish under."
                 raise ValueError(msg)
-            anchor_event = event
+            # Lock the event row so two concurrent establishes against the SAME
+            # event serialize behind this transaction's commit (whole-branch-review
+            # C3) — without this, two honorers can both read "no anchored deed yet"
+            # and both create one. The amplify branch above gets equivalent
+            # serialization for free via the deed's own select_for_update(); the
+            # establish branch creates no row to lock ahead of time, so the event
+            # itself is what has to be locked.
+            anchor_event = LegendEvent.objects.select_for_update().get(pk=event.pk)
 
         if not anchor_event.deeds.filter(is_active=True).exists():
             raise EventMintedNothingRefusal
 
         # --- Step 2: eligibility -------------------------------------------
-        honorer_persona = active_persona_for_sheet(character_sheet)
+        # Always resolved as the PRIMARY persona (whole-branch-review C1) — never
+        # the active/masked one. `_grant_title` (world.achievements.services) makes
+        # the identical argument: an honor is a named public act (a public journal
+        # + a scene pose already posted under the primary persona via
+        # `_post_declaration`), so recording a mask as `LegendHonor.honorer` while
+        # publishing under the real name is a deterministic mask-to-real link. The
+        # rite is always performed as yourself.
+        honorer_persona = character_sheet.primary_persona
         establishing = deed is None
 
         if establishing:
@@ -219,9 +262,19 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
             )
             if honorer_persona not in witnesses:
                 raise NotPresentToEstablishError
+            # The HONOREE must also have witnessed the event (whole-branch-review
+            # C2) — gating only the honorer let a witness mint a full-ceiling deed
+            # for someone who was never there, inventing peril they never faced.
+            # Deliberately checked against the same witness list, never widened to
+            # a sheet-wide "already has a deed here" scope (that would become a
+            # mask-identity oracle — see `HonoreeAlreadyAnchoredError`'s docstring).
+            if honoree_persona not in witnesses:
+                raise HonoreeNotPresentToEstablishError
         else:
             if deed.persona.character_sheet_id == character_sheet.pk:
                 raise CannotHonorOwnDeedError
+            if not deed.is_active:
+                raise DeedNotActiveError
             if not knows_deed(persona=honorer_persona, deed=deed):
                 raise UnknownDeedError
             if LegendHonor.objects.filter(deed=deed, honorer=honorer_persona).exists():

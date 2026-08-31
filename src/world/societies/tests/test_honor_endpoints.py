@@ -334,6 +334,9 @@ class EstablishEndpointTests(APITestCase):
         LegendEntryFactory(persona=PersonaFactory(), event=self.event, base_value=10)
         # Presence: NotPresentToEstablishError otherwise.
         InteractionFactory(persona=self.honorer_persona, scene=self.scene)
+        # The HONOREE must also have witnessed the event (#3466 whole-branch-review
+        # C2): HonoreeNotPresentToEstablishError otherwise.
+        InteractionFactory(persona=self.honoree_persona, scene=self.scene)
 
     def test_establish_creates_deed_and_honor(self) -> None:
         deeds_before = LegendEntry.objects.count()
