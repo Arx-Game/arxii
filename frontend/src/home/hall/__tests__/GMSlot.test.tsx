@@ -162,6 +162,17 @@ describe('GMSlot', () => {
     expect(screen.getByRole('link', { name: /tables/i })).toHaveAttribute('href', '/tables');
   });
 
+  it('links to the character sheet for portrait/description editing', () => {
+    mockAccount = { is_gm: true };
+    mockMineData = approvedMineData;
+    renderWithProviders(<GMSlot gmEntry={gmEntry} isDocked={false} onSelect={vi.fn()} />);
+
+    expect(screen.getByRole('link', { name: /sheet/i })).toHaveAttribute(
+      'href',
+      `/characters/${gmEntry.character_id}`
+    );
+  });
+
   it('clicking the edit affordance opens the edit dialog', async () => {
     const user = userEvent.setup();
     mockAccount = { is_gm: true };

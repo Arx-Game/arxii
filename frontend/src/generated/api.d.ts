@@ -36905,6 +36905,13 @@ export interface components {
       staff_response?: string;
       status?: components['schemas']['StatusBa9Enum'];
     };
+    /** @description The requesting GM's own profile: operational fields are writable (#3478). */
+    PatchedGMProfileMineRequest: {
+      /** @description When players can reach this GM (freeform, shown on their GM card). */
+      contact_times?: string;
+      /** @description OOC information for players: style, expectations, boundaries. */
+      ooc_info?: string;
+    };
     /** @description Serializer for persona memberships at GM tables. */
     PatchedGMTableMembershipRequest: {
       table?: number;
@@ -57029,7 +57036,11 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGMProfileMineRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

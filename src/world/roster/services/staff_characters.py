@@ -119,6 +119,11 @@ def mint_gm_character(account: AccountDB, name: str) -> ObjectDB:
         raise StaffMintError(msg)
 
     gm_typeclasses = tuple(TYPECLASS_TO_CHARACTER_TYPE)
+    # No select_for_update on this check: a double-submit racing between the
+    # exists() read and the mint below could both pass and mint two GM
+    # characters. Accepted per the same norm check_story_npc_cap documents --
+    # the account is bound to one real person, so the worst case is a rare
+    # manual cleanup, not a security or data-integrity issue.
     already = RosterTenure.objects.filter(
         player_data__account=account,
         end_date__isnull=True,

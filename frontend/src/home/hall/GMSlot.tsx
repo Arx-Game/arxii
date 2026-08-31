@@ -11,8 +11,10 @@
  *   identically, both are "the GM slot"): the same card chrome as
  *   `CharacterCard` (avatar, name, tidings count, persona tiles, selectable
  *   to dock via the band's `handleSelect`), plus a small "(GM)" chip, an
- *   edit affordance opening `EditGMProfileDialog`, and a link to the
- *   existing Tables page (never a duplicate of it). `CharacterCard` itself
+ *   edit affordance opening `EditGMProfileDialog`, a link to the character's
+ *   sheet (portrait/description are edited there "like any character," per
+ *   the spec — `EditGMProfileDialog` only covers the GM-specific fields), and
+ *   a link to the existing Tables page (never a duplicate of it). `CharacterCard` itself
  *   is private to `CharactersBand.tsx` and has no room for the extra chip/
  *   edit/link chrome, so this is a sibling using the same primitives rather
  *   than a prop-widened `CharacterCard`.
@@ -130,8 +132,14 @@ export function GMSlot({ gmEntry, isDocked, onSelect }: GMSlotProps) {
           className="mt-2 justify-center"
         />
         <Link
-          to="/tables"
+          to={`/characters/${gmEntry.character_id}`}
           className="mt-2 block text-center font-body text-xs text-muted-foreground underline"
+        >
+          Sheet
+        </Link>
+        <Link
+          to="/tables"
+          className="block text-center font-body text-xs text-muted-foreground underline"
         >
           Tables
         </Link>

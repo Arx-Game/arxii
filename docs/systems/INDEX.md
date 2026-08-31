@@ -2718,12 +2718,12 @@ GM at a given level may author (#2000, ADR-0097).
   (`world.roster.services.staff_characters`) — JUNIOR+ `GMProfile` (staff bypass) +
   the new `GMLevelCap.max_story_npcs` per-level cap (most-restrictive/refuse when
   unconfigured; enforced by the shared `check_story_npc_cap`), delegating to
-  `mint_staff_character`'s working set (#3283 — Character + sheet + PRIMARY persona
-  + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to the GM's own
-  account, the same tenure the persona picker and telnet `@ic` key on).
-  `description` writes `CharacterSheet.additional_desc` via
-  `set_physical_description`. In-scope bugfix: `mint_staff_character`'s shelf
-  lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
+  `_mint_character_working_set` for the working set (#3283 — Character + sheet +
+  PRIMARY persona + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to
+  the GM's own account, the same tenure the persona picker and telnet `@ic` key
+  on). `description` writes `CharacterSheet.additional_desc` via
+  `set_physical_description`. In-scope bugfix: `_mint_character_working_set`'s
+  shelf lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
   `roster/seeds.py`'s seeded shelf is named "NPCs", so the old lookup missed it and
   collided on create). Heavyweight sibling: `finalize_gm_character(draft,
   claim_as_npc=True)` (`world.character_creation.services`) lands a full-CG

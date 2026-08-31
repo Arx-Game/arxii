@@ -210,7 +210,7 @@ class GMProfileViewSet(
         summary = gm_evidence_summary(profile)
         return Response(GMEvidenceSummarySerializer(summary).data)
 
-    @extend_schema(responses={200: GMProfileMineSerializer})
+    @extend_schema(request=GMProfileMineSerializer, responses={200: GMProfileMineSerializer})
     @action(detail=False, methods=["get", "patch"], url_path="mine")
     def mine(self, request: Request) -> Response:
         """GET/PATCH the requesting account's own GM profile (#3478)."""
@@ -221,7 +221,6 @@ class GMProfileViewSet(
             body = GMProfileMineSerializer(profile, data=request.data, partial=True)
             body.is_valid(raise_exception=True)
             body.save()
-            profile.refresh_from_db()
         return Response(GMProfileMineSerializer(profile).data)
 
     @extend_schema(

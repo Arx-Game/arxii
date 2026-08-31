@@ -14280,6 +14280,11 @@ paths:
       description: GET/PATCH the requesting account's own GM profile (#3478).
       tags:
       - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedGMProfileMineRequest'
       security:
       - cookieAuth: []
       responses:
@@ -64478,6 +64483,18 @@ components:
           description: Staff feedback on the application.
         status:
           $ref: '#/components/schemas/StatusBa9Enum'
+    PatchedGMProfileMineRequest:
+      type: object
+      description: 'The requesting GM''s own profile: operational fields are writable
+        (#3478).'
+      properties:
+        contact_times:
+          type: string
+          description: When players can reach this GM (freeform, shown on their GM
+            card).
+        ooc_info:
+          type: string
+          description: 'OOC information for players: style, expectations, boundaries.'
     PatchedGMTableMembershipRequest:
       type: object
       description: Serializer for persona memberships at GM tables.

@@ -132,7 +132,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             RosterEntry.objects.filter(
                 character_sheet__character__in=available_characters,
             )
-            .select_related("roster")
+            .select_related("roster", "character_sheet__character")
             .annotate(
                 unread_narrative_count=Count(
                     "character_sheet__narrative_message_deliveries",
