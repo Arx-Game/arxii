@@ -78,6 +78,7 @@ describe('useAccountQuery hydration (#3412)', () => {
         unread_narrative_count: 0,
         lifecycle_state: 'ALIVE',
         roster_type: 'Active',
+        character_type: 'PC',
       },
     });
 
@@ -144,6 +145,7 @@ describe('useAccountQuery hydration (#3412)', () => {
         unread_narrative_count: 0,
         lifecycle_state: 'ALIVE',
         roster_type: 'Active',
+        character_type: 'PC',
       },
     });
 

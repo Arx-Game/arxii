@@ -198,6 +198,7 @@ describe('Header', () => {
       unread_narrative_count: 0,
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
+      character_type: 'PC',
     };
 
     it("renders no chip when there is no selection (byte-for-byte today's header)", () => {

@@ -8940,6 +8940,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/profiles/character/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/gm/profiles/character/ — mint the account's GM character (#3478). */
+    post: operations['gm_profiles_character_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/profiles/mine/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET/PATCH the requesting account's own GM profile (#3478). */
+    get: operations['gm_profiles_mine_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description GET/PATCH the requesting account's own GM profile (#3478). */
+    patch: operations['gm_profiles_mine_partial_update'];
+    trace?: never;
+  };
   '/api/gm/queue/': {
     parameters: {
       query?: never;
@@ -23158,29 +23193,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/world-builder/areas/mint-builder-character/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description POST /api/world-builder/areas/mint-builder-character/ (#3283).
-     *
-     *     Mints an OOC staff character (character + sheet + persona + NPC-shelf
-     *     roster entry + active tenure on the requesting account) so staff never
-     *     touch the CG wizard for a working builder character.
-     */
-    post: operations['world_builder_areas_mint_builder_character_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/world-builder/areas/room-detail/': {
     parameters: {
       query?: never;
@@ -29056,6 +29068,16 @@ export interface components {
        */
       readonly approved_at: string;
     };
+    /** @description The requesting GM's own profile: operational fields are writable (#3478). */
+    GMProfileMine: {
+      readonly id: number;
+      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level_display: string;
+      /** @description When players can reach this GM (freeform, shown on their GM card). */
+      contact_times?: string;
+      /** @description OOC information for players: style, expectations, boundaries. */
+      ooc_info?: string;
+    };
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -31131,12 +31153,12 @@ export interface components {
      * @enum {string}
      */
     MinRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
-    /** @description POST body for the #3283 staff-character mint. */
-    MintBuilderCharacterRequestRequest: {
+    /** @description POST body for the #3478 GM-character mint (moved from world-builder, #3283). */
+    MintGMCharacterRequestRequest: {
       name: string;
     };
-    /** @description Result of the #3283 staff-character mint. */
-    MintBuilderCharacterResult: {
+    /** @description Result of the #3478 GM-character mint. */
+    MintGMCharacterResult: {
       character_id: number;
       name: string;
     };
@@ -32103,6 +32125,7 @@ export interface components {
       readonly unread_narrative_count: number;
       readonly lifecycle_state: string;
       readonly roster_type: string;
+      readonly character_type: string;
     };
     /**
      * @description A player's own story-room access grants (#2450 Fix 2 — spec Decision 1 web surface).
@@ -56957,6 +56980,67 @@ export interface operations {
       };
     };
   };
+  gm_profiles_character_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MintGMCharacterRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MintGMCharacterResult'];
+        };
+      };
+    };
+  };
+  gm_profiles_mine_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfileMine'];
+        };
+      };
+    };
+  };
+  gm_profiles_mine_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfileMine'];
+        };
+      };
+    };
+  };
   gm_queue_list: {
     parameters: {
       query?: {
@@ -77276,29 +77360,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorldBuilderAreaManager'];
-        };
-      };
-    };
-  };
-  world_builder_areas_mint_builder_character_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['MintBuilderCharacterRequestRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['MintBuilderCharacterResult'];
         };
       };
     };

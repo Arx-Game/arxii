@@ -14238,6 +14238,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMProfile'
           description: ''
+  /api/gm/profiles/character/:
+    post:
+      operationId: gm_profiles_character_create
+      description: POST /api/gm/profiles/character/ — mint the account's GM character
+        (#3478).
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintGMCharacterRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintGMCharacterResult'
+          description: ''
+  /api/gm/profiles/mine/:
+    get:
+      operationId: gm_profiles_mine_retrieve
+      description: GET/PATCH the requesting account's own GM profile (#3478).
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMProfileMine'
+          description: ''
+    patch:
+      operationId: gm_profiles_mine_partial_update
+      description: GET/PATCH the requesting account's own GM profile (#3478).
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMProfileMine'
+          description: ''
   /api/gm/queue/:
     get:
       operationId: gm_queue_list
@@ -37903,32 +37954,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorldBuilderAreaManager'
           description: ''
-  /api/world-builder/areas/mint-builder-character/:
-    post:
-      operationId: world_builder_areas_mint_builder_character_create
-      description: |-
-        POST /api/world-builder/areas/mint-builder-character/ (#3283).
-
-        Mints an OOC staff character (character + sheet + persona + NPC-shelf
-        roster entry + active tenure on the requesting account) so staff never
-        touch the CG wizard for a working builder character.
-      tags:
-      - world-builder
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MintBuilderCharacterRequestRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MintBuilderCharacterResult'
-          description: ''
   /api/world-builder/areas/room-detail/:
     get:
       operationId: world_builder_areas_room_detail_retrieve
@@ -50262,6 +50287,32 @@ components:
       - id
       - level
       - level_display
+    GMProfileMine:
+      type: object
+      description: 'The requesting GM''s own profile: operational fields are writable
+        (#3478).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        level:
+          allOf:
+          - $ref: '#/components/schemas/NewLevelEnum'
+          readOnly: true
+        level_display:
+          type: string
+          readOnly: true
+        contact_times:
+          type: string
+          description: When players can reach this GM (freeform, shown on their GM
+            card).
+        ooc_info:
+          type: string
+          description: 'OOC information for players: style, expectations, boundaries.'
+      required:
+      - id
+      - level
+      - level_display
     GMRosterInvite:
       type: object
       description: For GM create/list operations on invites for their own characters.
@@ -54565,9 +54616,10 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
-    MintBuilderCharacterRequestRequest:
+    MintGMCharacterRequestRequest:
       type: object
-      description: 'POST body for the #3283 staff-character mint.'
+      description: 'POST body for the #3478 GM-character mint (moved from world-builder,
+        #3283).'
       properties:
         name:
           type: string
@@ -54575,9 +54627,9 @@ components:
           maxLength: 80
       required:
       - name
-    MintBuilderCharacterResult:
+    MintGMCharacterResult:
       type: object
-      description: 'Result of the #3283 staff-character mint.'
+      description: 'Result of the #3478 GM-character mint.'
       properties:
         character_id:
           type: integer
@@ -56399,9 +56451,13 @@ components:
         roster_type:
           type: string
           readOnly: true
+        character_type:
+          type: string
+          readOnly: true
       required:
       - active_persona_id
       - character_id
+      - character_type
       - id
       - lifecycle_state
       - name

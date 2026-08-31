@@ -44,6 +44,7 @@ function makeRosterEntries(): MyRosterEntry[] {
       unread_narrative_count: 0,
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
+      character_type: 'PC',
     },
     {
       id: 2,
@@ -55,6 +56,7 @@ function makeRosterEntries(): MyRosterEntry[] {
       unread_narrative_count: 0,
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
+      character_type: 'PC',
     },
   ];
 }
