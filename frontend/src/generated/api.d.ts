@@ -42481,6 +42481,7 @@ export interface components {
       /** Format: date-time */
       published_at: string | null;
       needs_prose: boolean;
+      art_url: string | null;
       stats: components['schemas']['WorldBuilderRoomStat'][];
       area_id: number | null;
       size_units: number | null;
@@ -44665,6 +44666,12 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    /** @description One AmbientEmoteCondition leaf, nested in a room-detail ambient line (#3477). */
+    WorldBuilderAmbientCondition: {
+      id: number;
+      condition_type: string;
+      label: string;
+    };
     /** @description Entry-line/linger-emit counts for the Atmosphere section (#3269). */
     WorldBuilderAmbientCounts: {
       lines: number;
@@ -44682,6 +44689,7 @@ export interface components {
       id: number;
       arriver_body: string;
       bystander_body: string;
+      conditions: components['schemas']['WorldBuilderAmbientCondition'][];
     };
     /**
      * @description Area-tree node for the staff world-builder canvas (#2449).
@@ -44717,6 +44725,8 @@ export interface components {
       readonly dominant_society: string | null;
       /** @description The inherited climate + its source, e.g. "Temperate (from Arx Region)". */
       readonly effective_climate: string | null;
+      /** @description The area's effective art (#3477): most-specific-wins up the hierarchy. */
+      readonly art_url: string | null;
       readonly description: string;
       /** @description Evennia colour tag for this area in the `where` hierarchy path (e.g. '|y', '|520'). Inherited by descendants that leave their own colour blank, so a colour set on a region/house cascades down. Author-set flavour (#1463). */
       readonly color: string;
@@ -44836,6 +44846,7 @@ export interface components {
       /** Format: date-time */
       published_at: string | null;
       needs_prose: boolean;
+      art_url: string | null;
       stats: components['schemas']['WorldBuilderRoomStat'][];
       area_id: number | null;
       size_units: number | null;

@@ -75377,6 +75377,9 @@ components:
           nullable: true
         needs_prose:
           type: boolean
+        art_url:
+          type: string
+          nullable: true
         stats:
           type: array
           items:
@@ -75437,6 +75440,7 @@ components:
       required:
       - ambient_counts
       - area_id
+      - art_url
       - clue_triggers
       - clues
       - default_blueprint
@@ -79558,6 +79562,21 @@ components:
       required:
       - choice
       - persona_id
+    WorldBuilderAmbientCondition:
+      type: object
+      description: One AmbientEmoteCondition leaf, nested in a room-detail ambient
+        line (#3477).
+      properties:
+        id:
+          type: integer
+        condition_type:
+          type: string
+        label:
+          type: string
+      required:
+      - condition_type
+      - id
+      - label
     WorldBuilderAmbientCounts:
       type: object
       description: Entry-line/linger-emit counts for the Atmosphere section (#3269).
@@ -79602,9 +79621,14 @@ components:
           type: string
         bystander_body:
           type: string
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderAmbientCondition'
       required:
       - arriver_body
       - bystander_body
+      - conditions
       - id
     WorldBuilderArea:
       type: object
@@ -79685,6 +79709,12 @@ components:
           description: The inherited climate + its source, e.g. "Temperate (from Arx
             Region)".
           readOnly: true
+        art_url:
+          type: string
+          nullable: true
+          description: 'The area''s effective art (#3477): most-specific-wins up the
+            hierarchy.'
+          readOnly: true
         description:
           type: string
           readOnly: true
@@ -79700,6 +79730,7 @@ components:
           - $ref: '#/components/schemas/PermitEligibilityEnum'
           readOnly: true
       required:
+      - art_url
       - children_count
       - climate
       - color
@@ -80017,6 +80048,9 @@ components:
           nullable: true
         needs_prose:
           type: boolean
+        art_url:
+          type: string
+          nullable: true
         stats:
           type: array
           items:
@@ -80073,6 +80107,7 @@ components:
       required:
       - ambient_counts
       - area_id
+      - art_url
       - clue_triggers
       - clues
       - default_blueprint

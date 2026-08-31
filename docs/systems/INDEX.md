@@ -1089,7 +1089,7 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Forty-one
+  staff canvas share one substrate instead of two drifting copies. Forty-three
   REGISTRY actions (`src/actions/definitions/world_builder.py`,
   `category="world_builder"`, `target_type=SELF`) — `create_area`/`edit_area`/
   `staff_dig_room`/`staff_edit_room`/
@@ -1146,7 +1146,21 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   standing check, no currency cost — see magic.md's "Portal travel" section). The
   grid bundle format gains `clues`/`clue_triggers`/`portal_anchors` sidecar sections;
   see the "Investigation & Discovery" system entry below for the clue-side
-  model/action detail.
+  model/action detail. **Area art cascade + ambient-condition authoring (#3477 Task
+  3):** `Area.art` (FK to `arxii.Media`, mirrors `PageBackground.art`'s shape) resolves
+  most-specific-wins down the hierarchy like climate/realm; area and room payloads gain
+  `art_url` (`WorldBuilderAreaSerializer.get_art_url` walks the area chain directly, the
+  same inline-cascade convention as `get_effective_climate` on that serializer;
+  `world.locations.services.resolve_area_art(room_profile)` is the room-level entry
+  point — a room's own `ObjectDisplayData.thumbnail` wins outright, else it falls back to
+  the area cascade). Two new REGISTRY actions, `staff_add_ambient_condition`/
+  `staff_remove_ambient_condition`, wire the pre-existing (BUILT NOT WIRED)
+  `AmbientEmoteCondition` model to the canvas — kwargs `line_id`/`condition_type`/
+  `target_id` plus per-type extras (`minimum_value` for RESONANCE_MIN, `min_fame_tier`/
+  optional `perceiving_society_id` for RENOWN_MIN; LEGEND_DEED needs no ref). The
+  room-detail payload's `ambient_lines` now nest a `conditions` list
+  (`{id, condition_type, label}`; `world.narrative.ambient_content.describe_condition`
+  renders the label).
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1175,7 +1189,9 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Key Functions:** `effective_value(room, stat_key=… | resonance=… | damage_type=…)` (single-axis
   polymorphic read), `effective_values_for_rooms()` (bulk), `hazard_is_covered()`,
   `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
-  cascade, #1514/#1522), `character_comfort_summary()`/`comfort_mitigation()` (per-character
+  cascade, #1514/#1522), `resolve_area_art(room_profile)` (#3477 — a room's own
+  `ObjectDisplayData.thumbnail` wins outright, else most-specific-wins up `Area.art`, mirroring
+  `get_effective_climate`), `character_comfort_summary()`/`comfort_mitigation()` (per-character
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
   `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
   `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or

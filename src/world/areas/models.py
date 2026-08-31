@@ -38,6 +38,18 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
             "hierarchy (see weather.services.get_effective_climate), like realm."
         ),
     )
+    art = models.ForeignKey(
+        "arxii.Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Area art (#3477). Resolves most-specific-wins down the hierarchy for a room "
+            "with no thumbnail of its own (see world.locations.services.resolve_area_art), "
+            "like climate."
+        ),
+    )
     dominant_society = models.ForeignKey(
         "arxii.Society",
         null=True,

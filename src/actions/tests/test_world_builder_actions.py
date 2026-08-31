@@ -1424,6 +1424,136 @@ class PhaseBRoomAuthoringTests(TestCase):
         assert emit.key == "dusty-plaza-emit-001"
         assert emit.gate_stat_key == "crime"
 
+    def test_add_species_condition_round_trip(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAddAmbientConditionAction,
+            StaffRemoveAmbientConditionAction,
+        )
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+        from world.species.factories import SpeciesFactory
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        species = SpeciesFactory()
+        result = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="species",
+            target_id=species.pk,
+        )
+        assert result.success, result.message
+        condition = AmbientEmoteCondition.objects.get(line=line)
+        assert condition.condition_type == "species"
+        assert condition.species_id == species.pk
+
+        removed = StaffRemoveAmbientConditionAction().run(self.staff, condition_id=condition.pk)
+        assert removed.success, removed.message
+        assert not AmbientEmoteCondition.objects.filter(pk=condition.pk).exists()
+
+    def test_add_resonance_min_condition_requires_minimum_value(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.magic.factories import ResonanceFactory
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        resonance = ResonanceFactory()
+        missing = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="resonance_min",
+            target_id=resonance.pk,
+        )
+        assert not missing.success
+        assert not AmbientEmoteCondition.objects.filter(line=line).exists()
+
+        result = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="resonance_min",
+            target_id=resonance.pk,
+            minimum_value=25,
+        )
+        assert result.success, result.message
+        condition = AmbientEmoteCondition.objects.get(line=line)
+        assert condition.resonance_id == resonance.pk
+        assert condition.minimum_value == 25
+
+    def test_add_distinction_condition(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.distinctions.factories import DistinctionFactory
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        distinction = DistinctionFactory()
+        result = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="distinction",
+            target_id=distinction.pk,
+        )
+        assert result.success, result.message
+        condition = AmbientEmoteCondition.objects.get(line=line)
+        assert condition.distinction_id == distinction.pk
+
+    def test_add_renown_min_condition_with_perceiving_society(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+        from world.societies.factories import SocietyFactory
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        society = SocietyFactory()
+        result = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="renown_min",
+            min_fame_tier="celebrity",
+            perceiving_society_id=society.pk,
+        )
+        assert result.success, result.message
+        condition = AmbientEmoteCondition.objects.get(line=line)
+        assert condition.min_fame_tier == "celebrity"
+        assert condition.perceiving_society_id == society.pk
+
+    def test_add_legend_deed_condition_needs_no_ref(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        result = StaffAddAmbientConditionAction().run(
+            self.staff, line_id=line.pk, condition_type="legend_deed"
+        )
+        assert result.success, result.message
+        condition = AmbientEmoteCondition.objects.get(line=line)
+        assert condition.condition_type == "legend_deed"
+
+    def test_add_condition_rejects_unknown_type(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        result = StaffAddAmbientConditionAction().run(
+            self.staff, line_id=line.pk, condition_type="not_a_real_type"
+        )
+        assert not result.success
+
+    def test_add_condition_no_such_line(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+
+        result = StaffAddAmbientConditionAction().run(
+            self.staff, line_id=999999, condition_type="legend_deed"
+        )
+        assert not result.success
+
+    def test_remove_condition_no_such_row(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAmbientConditionAction
+
+        result = StaffRemoveAmbientConditionAction().run(self.staff, condition_id=999999)
+        assert not result.success
+
     def test_feature_fiat_runs_the_real_strategy(self) -> None:
         """A SOCIAL_HUB fiat install must land the traffic modifier + flag —
         proof the fiat path runs the identical per-kind handler."""

@@ -23,6 +23,7 @@ const room: WorldBuilderRoom = {
   exported_at: null,
   published_at: null,
   needs_prose: false,
+  art_url: null,
   stats: [],
   area_id: 1,
   size_units: null,

@@ -1,11 +1,13 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Forty-one REGISTRY actions (eleven original + six discovery/portal-authoring
+Forty-three REGISTRY actions (eleven original + six discovery/portal-authoring
 #2451, plus the #3269 recoverability pair, the Phase B room-authoring set:
 stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
 blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
-#3291 description-variant pair, ``author_clue`` (#3432), and
-``staff_publish_room`` (#3477 Task 2)), all
+#3291 description-variant pair, ``author_clue`` (#3432),
+``staff_publish_room`` (#3477 Task 2), and the ``staff_add_ambient_condition``/
+``staff_remove_ambient_condition`` pair (#3477 Task 3 — wires the pre-existing
+``AmbientEmoteCondition`` model to the canvas)), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
 ``author_clue``/``edit_area`` is gated by ``BuildWarrantPrerequisite()`` (the
 base class default) alone (#3477 — staff bypass unconditionally, same as the
@@ -114,6 +116,14 @@ def _resolve_clue_trigger(clue_trigger_id: Any) -> ClueTrigger | None:
         .select_related("room_profile", "clue")
         .first()
     )
+
+
+def _resolve_ambient_line(line_id: Any) -> Any | None:
+    from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+    if not line_id:
+        return None
+    return AmbientEmoteLine.objects.filter(pk=line_id).first()
 
 
 def _resolve_portal_anchor(anchor_id: Any) -> PortalAnchor | None:
@@ -1329,6 +1339,126 @@ class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
             note = " (It carried a writer credit; the content repo copy is untouched.)"
         emit.delete()
         return ActionResult(success=True, message=f"Ambient emit removed.{note}")
+
+
+def _apply_ambient_condition_ref(
+    condition: Any, condition_type: str, kwargs: dict[str, Any]
+) -> str | None:
+    """Resolve + attach the ref field(s) a condition_type requires onto ``condition``.
+
+    Mutates ``condition`` in place; returns an error message, or None on success.
+    LEGEND_DEED needs no ref field and always succeeds as a no-op.
+    """
+    from world.narrative.constants import ConditionType  # noqa: PLC0415
+
+    target_id = kwargs.get("target_id")
+    if condition_type == ConditionType.SPECIES:
+        from world.species.models import Species  # noqa: PLC0415
+
+        species = Species.objects.filter(pk=target_id or 0).first()
+        if species is None:
+            return "No such species."
+        condition.species = species
+    elif condition_type == ConditionType.RESONANCE_MIN:
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(pk=target_id or 0).first()
+        if resonance is None:
+            return "No such resonance."
+        condition.resonance = resonance
+        condition.minimum_value = kwargs.get("minimum_value")
+    elif condition_type == ConditionType.DISTINCTION:
+        from world.distinctions.models import Distinction  # noqa: PLC0415
+
+        distinction = Distinction.objects.filter(pk=target_id or 0).first()
+        if distinction is None:
+            return "No such distinction."
+        condition.distinction = distinction
+    elif condition_type == ConditionType.RENOWN_MIN:
+        condition.min_fame_tier = (kwargs.get("min_fame_tier") or "").strip()
+        perceiving_society_id = kwargs.get("perceiving_society_id")
+        if perceiving_society_id:
+            from world.societies.models import Society  # noqa: PLC0415
+
+            society = Society.objects.filter(pk=perceiving_society_id).first()
+            if society is None:
+                return "No such society."
+            condition.perceiving_society = society
+    # LEGEND_DEED needs no ref field — no-op.
+    return None
+
+
+@dataclass
+class StaffAddAmbientConditionAction(_WorldBuilderAction):
+    """Attach one condition to an ambient entry line (#3477).
+
+    Wires the pre-existing ``AmbientEmoteCondition`` model — BUILT NOT WIRED before this
+    action — to the world-builder canvas. Kwargs: ``line_id``, ``condition_type`` (a
+    ``world.narrative.constants.ConditionType`` value), and ``target_id`` for the type's
+    required ref row (species/resonance/distinction pk). RESONANCE_MIN also needs
+    ``minimum_value``; RENOWN_MIN needs ``min_fame_tier`` (a FameTier value) and takes an
+    optional ``perceiving_society_id``; SPECIES/DISTINCTION take only ``target_id``.
+    LEGEND_DEED needs none of the above — a bare presence-of-deeds check.
+    """
+
+    key: str = "staff_add_ambient_condition"
+    name: str = "Add Ambient Condition"
+    icon: str = "filter"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.narrative.constants import ConditionType  # noqa: PLC0415
+        from world.narrative.models import AmbientEmoteCondition  # noqa: PLC0415
+
+        line = _resolve_ambient_line(kwargs.get("line_id"))
+        if line is None:
+            return ActionResult(success=False, message="No such ambient line.")
+        condition_type = (kwargs.get("condition_type") or "").strip()
+        if condition_type not in ConditionType.values:
+            options = ", ".join(ConditionType.values)
+            return ActionResult(
+                success=False, message=f"No '{condition_type}' condition type. Options: {options}."
+            )
+
+        condition = AmbientEmoteCondition(line=line, condition_type=condition_type)
+        ref_error = _apply_ambient_condition_ref(condition, condition_type, kwargs)
+        if ref_error is not None:
+            return ActionResult(success=False, message=ref_error)
+
+        try:
+            condition.save()
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        return ActionResult(success=True, message="Ambient condition added.")
+
+
+@dataclass
+class StaffRemoveAmbientConditionAction(_WorldBuilderAction):
+    """Remove an ambient condition. Kwarg: ``condition_id``."""
+
+    key: str = "staff_remove_ambient_condition"
+    name: str = "Remove Ambient Condition"
+    icon: str = "filter-x"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.narrative.models import AmbientEmoteCondition  # noqa: PLC0415
+
+        condition = AmbientEmoteCondition.objects.filter(pk=kwargs.get("condition_id") or 0).first()
+        if condition is None:
+            return ActionResult(success=False, message="No such ambient condition.")
+        condition.delete()
+        return ActionResult(success=True, message="Ambient condition removed.")
 
 
 @dataclass

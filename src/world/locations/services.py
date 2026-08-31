@@ -8,7 +8,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from evennia_extensions.constants import RoomEnclosure
-from evennia_extensions.models import RoomProfile
+from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from evennia_extensions.services.exits import effective_enclosure_for_room
 from world.areas.models import AreaClosure
 from world.conditions.models import DamageType
@@ -241,6 +241,31 @@ def _resolve_room_climate(profile: RoomProfile | None) -> tuple[Climate | None, 
     if climate is None:
         return None, 0
     return climate, current_temperature_shift()
+
+
+def resolve_area_art(room_profile: RoomProfile | None) -> str | None:
+    """The room's effective art URL (#3477): thumbnail-first, then area cascade.
+
+    A room's own ``ObjectDisplayData.thumbnail`` (an explicit per-room image) always wins
+    outright. Absent that, walks the room's area upward for the nearest ``Area.art``,
+    mirroring ``get_effective_climate``'s most-specific-wins convention. Returns None when
+    neither the room nor any ancestor area designates art.
+    """
+    if room_profile is None:
+        return None
+    display_data = (
+        ObjectDisplayData.objects.filter(object_id=room_profile.objectdb_id)
+        .select_related("thumbnail")
+        .first()
+    )
+    if display_data is not None and display_data.thumbnail_id is not None:
+        return display_data.thumbnail.cloudinary_url
+    node = room_profile.area
+    while node is not None:
+        if node.art_id is not None:
+            return node.art.cloudinary_url
+        node = node.parent
+    return None
 
 
 def effective_value(

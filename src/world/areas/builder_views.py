@@ -299,6 +299,8 @@ def _authoring_catalogs() -> dict:
 def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
     """The per-room payload dicts (#3283) — single source for the area
     manager payload and the full-page room editor's one-room fetch."""
+    from world.locations.services import resolve_area_art  # noqa: PLC0415
+
     room_ids = [p.objectdb_id for p in profiles]
     descriptions = {
         row.object_id: row.permanent_description
@@ -326,6 +328,7 @@ def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
             "exported_at": p.exported_at,
             "published_at": p.published_at,
             "needs_prose": _needs_prose(descriptions.get(p.objectdb_id, "")),
+            "art_url": resolve_area_art(p),
             "stats": stats_by_room.get(p.objectdb_id, []),
             "area_id": p.area_id,
             "size_units": p.size.units if p.size_id else None,
@@ -519,6 +522,7 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             # areas_areaclosure is absent on the SQLite fast tier (known gap;
             # CI's PG parity is the gate) — degrade to a neutral block.
             comfort = {"level": 5, "points": 0, "amenity": 0, "axes": []}
+        from world.narrative.ambient_content import describe_condition  # noqa: PLC0415
         from world.narrative.models import AmbientEmit, AmbientEmoteLine  # noqa: PLC0415
 
         ambient_lines = [
@@ -526,6 +530,16 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
                 "id": line.pk,
                 "arriver_body": line.arriver_body,
                 "bystander_body": line.bystander_body,
+                "conditions": [
+                    {
+                        "id": condition.pk,
+                        "condition_type": condition.condition_type,
+                        "label": describe_condition(condition),
+                    }
+                    for condition in line.conditions.select_related(
+                        "species", "resonance", "distinction", "perceiving_society"
+                    )
+                ],
             }
             for line in AmbientEmoteLine.objects.filter(room_profile=profile)
         ]

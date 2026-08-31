@@ -62,6 +62,7 @@ class WorldBuilderAreaSerializer(serializers.ModelSerializer):
     climate = serializers.SerializerMethodField()
     dominant_society = serializers.SerializerMethodField()
     effective_climate = serializers.SerializerMethodField()
+    art_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Area
@@ -80,6 +81,7 @@ class WorldBuilderAreaSerializer(serializers.ModelSerializer):
             "climate",
             "dominant_society",
             "effective_climate",
+            "art_url",
             "description",
             "color",
             "permit_eligibility",
@@ -102,6 +104,15 @@ class WorldBuilderAreaSerializer(serializers.ModelSerializer):
             if node.climate_id is not None:
                 suffix = "" if node.pk == obj.pk else f" (from {node.name})"
                 return f"{node.climate.name}{suffix}"
+            node = node.parent
+        return None
+
+    def get_art_url(self, obj: Area) -> str | None:
+        """The area's effective art (#3477): most-specific-wins up the hierarchy."""
+        node = obj
+        while node is not None:
+            if node.art_id is not None:
+                return node.art.cloudinary_url
             node = node.parent
         return None
 
@@ -212,10 +223,19 @@ class WorldBuilderComfortSerializer(serializers.Serializer):
     axes = WorldBuilderComfortAxisSerializer(many=True)
 
 
+class WorldBuilderAmbientConditionSerializer(serializers.Serializer):
+    """One AmbientEmoteCondition leaf, nested in a room-detail ambient line (#3477)."""
+
+    id = serializers.IntegerField()
+    condition_type = serializers.CharField()
+    label = serializers.CharField()
+
+
 class WorldBuilderAmbientLineSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     arriver_body = serializers.CharField(allow_blank=True)
     bystander_body = serializers.CharField(allow_blank=True)
+    conditions = WorldBuilderAmbientConditionSerializer(many=True)
 
 
 class WorldBuilderAmbientEmitSerializer(serializers.Serializer):
@@ -290,6 +310,9 @@ class WorldBuilderRoomSerializer(serializers.Serializer):
     # non-story-runners, until staff_publish_room stamps it.
     published_at = serializers.DateTimeField(allow_null=True)
     needs_prose = serializers.BooleanField()
+    # #3477 — most-specific-wins art cascade (room thumbnail, else area chain);
+    # see world.locations.services.resolve_area_art.
+    art_url = serializers.CharField(allow_null=True)
     stats = WorldBuilderRoomStatSerializer(many=True)
     area_id = serializers.IntegerField(allow_null=True)
     size_units = serializers.IntegerField(allow_null=True)
