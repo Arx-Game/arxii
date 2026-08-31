@@ -293,9 +293,11 @@ def _build_room_fields(room_data: dict, area: Area, size: object | None) -> dict
     Returns:
         A dict of field name to value suitable for ``update_or_create`` defaults.
     """
+    from django.utils.dateparse import parse_datetime  # noqa: PLC0415
+
     from world.areas.constants import GridOrigin  # noqa: PLC0415
 
-    return {
+    fields = {
         "area": area,
         "origin": GridOrigin.AUTHORED,
         "is_public": room_data["is_public"],
@@ -308,6 +310,16 @@ def _build_room_fields(room_data: dict, area: Area, size: object | None) -> dict
         "floor": room_data["floor"],
         "default_blueprint": _resolve_blueprint(room_data.get("default_blueprint")),
     }
+    # #3477 fix round 2: carry publish state through the bundle like origin/
+    # enclosure — an unpublished WIP room restores as unpublished, on create and
+    # update alike. A bundle written before the field existed omits the key
+    # (absent-vs-null matters, hence the sentinel); only then does the create
+    # branch's born-published default apply.
+    missing = object()
+    raw = room_data.get("published_at", missing)
+    if raw is not missing:
+        fields["published_at"] = parse_datetime(raw) if raw else None
+    return fields
 
 
 def _resolve_blueprint(name: str | None):
@@ -363,14 +375,12 @@ def _upsert_single_room(
         )
         # #3477 — a grid_import is a restore of previously-live world content
         # (the content repo is downstream/bootstrap-only, ADR-0238), not a
-        # staff canvas dig awaiting review, so unlike
-        # world.areas.grid_services.create_room's origin=AUTHORED path this
-        # room is born published: stamp published_at=now() explicitly rather
-        # than leaving it to the field's own now()-on-create default.
-        profile, _ = RoomProfile.objects.update_or_create(
-            objectdb=room_obj,
-            defaults={**room_fields, "fixture_key": fixture_key, "published_at": timezone.now()},
-        )
+        # staff canvas dig awaiting review. The bundle's own published_at (in
+        # room_fields when the bundle carries the key — fix round 2) is the
+        # truth; only a pre-field legacy bundle falls back to born-published.
+        defaults = {**room_fields, "fixture_key": fixture_key}
+        defaults.setdefault("published_at", timezone.now())
+        profile, _ = RoomProfile.objects.update_or_create(objectdb=room_obj, defaults=defaults)
         result.created_rooms += 1
 
     ObjectDisplayData.objects.update_or_create(
