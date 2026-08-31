@@ -28,6 +28,11 @@ vi.mock('@/narrative/queries', () => ({
   useGemits: (...args: unknown[]) => mockUseGemits(...args),
 }));
 
+const mockUseWeatherConditions = vi.fn();
+vi.mock('@/weather/queries', () => ({
+  useWeatherConditions: (...args: unknown[]) => mockUseWeatherConditions(...args),
+}));
+
 const mockTidingsFeed = vi.fn();
 vi.mock('@/tidings/components/TidingsFeed', () => ({
   TidingsFeed: (props: { viewerId: number }) => {
@@ -76,6 +81,7 @@ function setDefaultMocks() {
   });
   mockFetchEvents.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
   mockUseGemits.mockReturnValue({ data: { count: 0, next: null, previous: null, results: [] } });
+  mockUseWeatherConditions.mockReturnValue({ data: null });
 }
 
 describe('WorldBand', () => {
@@ -84,12 +90,47 @@ describe('WorldBand', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the calendar plate fields plainly (no invented calendar lore)', () => {
+  it('renders the Time plate fields plainly (no invented calendar lore)', () => {
     setDefaultMocks();
     renderWithProviders(<WorldBand />);
 
+    expect(screen.getByText('Time')).toBeInTheDocument();
     expect(screen.getByText(/Year 1247, Month 3, Day 12/)).toBeInTheDocument();
     expect(screen.getByText(/Summer, Day/)).toBeInTheDocument();
+  });
+
+  it('an unset clock reads "Time is currently frozen."', () => {
+    setDefaultMocks();
+    mockUseClockQuery.mockReturnValue({ data: undefined });
+    renderWithProviders(<WorldBand />);
+
+    expect(screen.getByText('Time is currently frozen.')).toBeInTheDocument();
+  });
+
+  it('shows the docked character-s local weather on the Time plate when conditions resolve', () => {
+    setDefaultMocks();
+    mockUseWeatherConditions.mockReturnValue({
+      data: {
+        ic_time: '2026-08-20T12:00:00Z',
+        phase: 'day',
+        season: 'summer',
+        moon_phase: null,
+        weather_type: 'Storm',
+        emit_text: 'rain lashes down',
+      },
+    });
+    renderWithProviders(<WorldBand />);
+
+    expect(screen.getByTestId('time-plate-weather')).toHaveTextContent('Storm where you stand.');
+  });
+
+  it('empty occasions read "No events scheduled. How indolent."', async () => {
+    setDefaultMocks();
+    renderWithProviders(<WorldBand />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No events scheduled. How indolent.')).toBeInTheDocument();
+    });
   });
 
   it('requests upcoming events for the Occasions plate and renders them', async () => {
