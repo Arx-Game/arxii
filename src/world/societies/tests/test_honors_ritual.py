@@ -246,6 +246,36 @@ class RiteOfHonorsTelnetGrammarTests(TestCase):
         with self.assertRaises(CommandError):
             cmd.resolve_action_args()
 
+    def test_ambiguous_honoree_name_raises_command_error(self) -> None:
+        """#3466 whole-branch-review I3: Persona names are not globally unique.
+
+        ``unique_persona_name_per_character`` is per-CHARACTER, so two different
+        characters can share a persona name — a paid, irreversible rite must
+        refuse rather than silently pick the first match.
+        """
+        _, other_persona = _sheet_with_persona()
+        other_persona.name = self.honoree_persona.name
+        other_persona.save(update_fields=["name"])
+        args = (
+            f"Rite of Honors honoree={self.honoree_persona.name} deed={self.deed.pk} title=T body=B"
+        )
+        cmd = _make_cmd(self.character, args)
+        with self.assertRaisesMessage(CommandError, "More than one persona"):
+            cmd.resolve_action_args()
+
+    def test_amplify_honoree_mismatched_with_deed_is_refused(self) -> None:
+        """#3466 whole-branch-review I3: amplify ignores honoree_persona entirely.
+
+        ``honor_deed``'s amplify branch honors whoever ``deed.persona`` is, not
+        whoever ``honoree=`` names — a mismatch must be a refused error, not a
+        silently-dropped no-op that costs Hares to honor the wrong person.
+        """
+        _other_sheet, other_persona = _sheet_with_persona()
+        args = f"Rite of Honors honoree={other_persona.name} deed={self.deed.pk} title=T body=B"
+        cmd = _make_cmd(self.character, args)
+        with self.assertRaisesMessage(CommandError, "honoree= must name the deed's own persona"):
+            cmd.resolve_action_args()
+
     def test_non_numeric_deed_raises_command_error(self) -> None:
         args = f"Rite of Honors honoree={self.honoree_persona.name} deed=notanumber title=T body=B"
         cmd = _make_cmd(self.character, args)

@@ -71,7 +71,12 @@ def create_solo_deed(  # noqa: PLR0913
     earned_at_level: int = 0,
     event: LegendEvent | None = None,
 ) -> LegendEntry:
-    """Create a legend deed not tied to a shared event.
+    """Create a solo legend deed, optionally anchored to a shared event's ceiling.
+
+    "Solo" describes the deed's crediting (one persona, not a shared-event mint's
+    multi-participant fan-out) — `event` (#3466) may still link it back to the
+    `LegendEvent` it was established under, distinct from a deed `create_legend_event`
+    mints directly for every participant.
 
     Args:
         persona: The persona earning legend for this deed.

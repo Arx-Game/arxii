@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 
-from django.test import override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -39,6 +39,7 @@ from world.societies.factories import (
 from world.societies.knowledge_services import grant_deed_knowledge
 from world.societies.models import LegendEntry, LegendHonor, LegendLevelCalibration
 from world.societies.seeds import ensure_rite_of_honors_ritual
+from world.societies.serializers import EstablishDeedInputSerializer
 
 
 def _active_primary_persona(*, account):
@@ -244,6 +245,41 @@ class HonorEndpointsTests(APITestCase):
         self.assertIsNone(can_honor["hares_required"])
         self.assertIsNone(can_honor["value_added"])
 
+    def test_can_honor_false_when_deeds_station_has_no_calibration_row(self) -> None:
+        """#3466 whole-branch-review I2: the DEED's station, not just the honorer's level.
+
+        ``honor_deed`` also calls ``maybe_grant_deed_title`` at the end, which does its
+        own bare ``.get(level=deed.earned_at_level)`` -- a SECOND calibration lookup,
+        for the deed's station, distinct from the honorer-level one the earlier test
+        above covers. A viewer whose own level (0) has a row must still be refused a
+        preview promise for a deed whose STATION has no row, or the POST would raise
+        ``DoesNotExist`` uncaught (a 500) right after the preview said ``allowed: true``.
+        """
+        unconfigured_station_deed = LegendEntryFactory(
+            event=self.event, base_value=20, earned_at_level=7
+        )
+        self.assertFalse(
+            LegendLevelCalibration.objects.filter(level=7).exists(),
+            "test fixture bug: a level-7 calibration row exists",
+        )
+        grant_deed_knowledge(
+            deed=unconfigured_station_deed,
+            personas=[self.honorer_persona],
+            source=DeedKnowledgeSource.WITNESSED,
+        )
+        self.client.force_authenticate(user=self.honorer_account)
+
+        response = self.client.get(
+            reverse("societies:deed-detail", args=[unconfigured_station_deed.pk])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        can_honor = response.data["can_honor"]
+        self.assertFalse(can_honor["allowed"])
+        self.assertIsNotNone(can_honor["reason"])
+        self.assertIsNone(can_honor["hares_required"])
+        self.assertIsNone(can_honor["value_added"])
+
     def test_post_honor_still_fails_hard_when_calibration_row_missing(self) -> None:
         """The write path keeps the bare ``.get()`` — it must still fail hard, never 200/silently.
 
@@ -368,3 +404,32 @@ class EstablishEndpointTests(APITestCase):
         self.assertNotIn(self.honorer_account.email, body)
         self.assertNotIn(self.honoree_account.username, body)
         self.assertNotIn(self.honoree_account.email, body)
+
+
+class EstablishDeedInputSerializerTests(TestCase):
+    """``honoree_persona`` excludes ``is_system=True`` narrator/GM personas (#3466 Minor)."""
+
+    def test_system_persona_is_rejected(self) -> None:
+        system_persona = PersonaFactory(is_system=True)
+        serializer = EstablishDeedInputSerializer(
+            data={
+                "honoree_persona": system_persona.pk,
+                "deed_title": "T",
+                "journal_title": "T",
+                "journal_body": "B",
+            }
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("honoree_persona", serializer.errors)
+
+    def test_ordinary_persona_is_accepted(self) -> None:
+        persona = PersonaFactory(is_system=False)
+        serializer = EstablishDeedInputSerializer(
+            data={
+                "honoree_persona": persona.pk,
+                "deed_title": "T",
+                "journal_title": "T",
+                "journal_body": "B",
+            }
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)

@@ -232,7 +232,7 @@ class CmdRitual(ArxCommand):
             )
             lines.append(
                 f"  [#{s.pk}] {s.ritual.name}"
-                f" (by {s.initiator.character.db_key}) — {participant_summary}"
+                f" (by {s.initiator.character.db_key}): {participant_summary}"
             )
         self.caller.msg("\n".join(lines))
 
@@ -383,7 +383,7 @@ class CmdRitual(ArxCommand):
             return True
         except ClassLevelAdvancementError as exc:
             raise CommandError(_advancement_error_message(exc)) from exc
-        self.caller.msg(f"The rite is complete — session #{session_id}.")
+        self.caller.msg(f"The rite is complete: session #{session_id}.")
         return True
 
     def _handle_decline(self, rest: str) -> None:
@@ -434,7 +434,7 @@ class CmdRitual(ArxCommand):
         try:
             fire_session(session=session)
         except ThresholdNotMetError:
-            msg = f"Session #{session_id} cannot fire yet — not all participants have responded."
+            msg = f"Session #{session_id} cannot fire yet, not all participants have responded."
             raise CommandError(msg) from None
         except ClassLevelAdvancementError as exc:
             raise CommandError(_advancement_error_message(exc)) from exc
@@ -567,13 +567,22 @@ class CmdRitual(ArxCommand):
         Exactly one of ``deed=``/``event=`` selects the branch; giving both or
         neither is refused here, by name, before ``honor_deed`` ever runs (that
         service raises a plain ``ValueError`` for the same shape mistake, which
-        is not a player-safe message). Honoree resolves by exact Persona name,
-        globally — never room-scoped — because honoring is explicitly
+        is not a player-safe message). Honoree resolves by exact (case-insensitive)
+        Persona name, globally — never room-scoped — because honoring is explicitly
         unrestricted by life-state or presence (a posthumous honoree may be
-        off-scene or dead). ``knows_deed``/``AlreadyHonoredError``/
-        ``NotPresentToEstablishError``/etc inside ``honor_deed`` itself are the
-        real eligibility gates; this only resolves names/ids to rows and
-        enforces which form was given.
+        off-scene or dead). Persona names are NOT globally unique
+        (``unique_persona_name_per_character`` is per-character, #3466
+        whole-branch-review I3), so more than one match is refused with a
+        disambiguation message rather than silently picking the first
+        (this repo's no-implicit-first-item-selection rule) — a paid, irreversible
+        rite is exactly the wrong place to guess. On the amplify branch, the
+        resolved ``honoree_persona`` must match the resolved deed's own persona:
+        the amplify service call ignores ``honoree_persona`` entirely (it honors
+        whoever ``deed`` belongs to), so a mismatched ``honoree=`` would otherwise
+        silently honor someone other than who was named — refused here instead.
+        ``knows_deed``/``AlreadyHonoredError``/``NotPresentToEstablishError``/etc
+        inside ``honor_deed`` itself are the real eligibility gates; this only
+        resolves names/ids to rows and enforces which form was given.
         """
         from world.scenes.models import Persona  # noqa: PLC0415
 
@@ -602,10 +611,17 @@ class CmdRitual(ArxCommand):
         if establishing and not deed_title:
             raise CommandError(usage)
 
-        honoree_persona = Persona.objects.filter(name__iexact=honoree_name).first()
-        if honoree_persona is None:
+        honoree_matches = list(Persona.objects.filter(name__iexact=honoree_name))
+        if not honoree_matches:
             msg = f"No one named '{honoree_name}' is known to have any deeds."
             raise CommandError(msg)
+        if len(honoree_matches) > 1:
+            msg = (
+                f"More than one persona is named '{honoree_name}', so a GM will need to "
+                "resolve this by id."
+            )
+            raise CommandError(msg)
+        honoree_persona = honoree_matches[0]
 
         result: dict[str, Any] = {
             "ritual": ritual,
@@ -616,7 +632,18 @@ class CmdRitual(ArxCommand):
         if establishing:
             result.update(self._resolve_honors_establish_fields(event_raw, deed_title))
         else:
-            result.update(self._resolve_honors_amplify_fields(deed_raw))
+            amplify_fields = self._resolve_honors_amplify_fields(deed_raw)
+            deed = amplify_fields["deed"]
+            # The amplify service call ignores `honoree_persona` entirely (it
+            # honors whoever `deed.persona` is) — verify the named honoree
+            # actually matches, rather than silently dropping a mismatch.
+            if deed.persona_id != honoree_persona.pk:
+                msg = (
+                    f"Deed #{deed.pk} belongs to {deed.persona.name}, not "
+                    f"{honoree_persona.name}. honoree= must name the deed's own persona."
+                )
+                raise CommandError(msg)
+            result.update(amplify_fields)
         return result
 
     def _resolve_honors_amplify_fields(self, deed_raw: str) -> dict[str, Any]:

@@ -463,6 +463,32 @@ def redeem_favor_token(token: FavorTokenDetails, *, redeemer_org: Organization) 
         locked.save(update_fields=["redeemed_at"])
 
 
+def _unredeemed_favor_tokens_queryset(*, sheet: CharacterSheet, org: Organization):
+    """The shared predicate: ``sheet``'s unredeemed Golden Hares issued by ``org``.
+
+    Extracted (#3466 whole-branch-review Minor) so the filter exists exactly once —
+    ``resolve_unredeemed_favor_tokens`` locks and slices it for the real (write-path)
+    resolution; ``count_unredeemed_favor_tokens`` just counts it for a read-only
+    preview. Neither locks nor orders on its own.
+    """
+    return FavorTokenDetails.objects.filter(
+        issuing_organization=org,
+        redeemed_at__isnull=True,
+        item_instance__holder_character_sheet=sheet,
+        item_instance__destroyed_at__isnull=True,
+    )
+
+
+def count_unredeemed_favor_tokens(*, sheet: CharacterSheet, org: Organization) -> int:
+    """How many of ``org``'s unredeemed Golden Hares ``sheet`` holds (#3466).
+
+    Read-only — never locks, never redeems. For an affordability *preview* (e.g.
+    ``world.societies.serializers._compute_can_honor``); the real resolution that
+    actually claims tokens for a write is ``resolve_unredeemed_favor_tokens`` below.
+    """
+    return _unredeemed_favor_tokens_queryset(sheet=sheet, org=org).count()
+
+
 def resolve_unredeemed_favor_tokens(
     *, sheet: CharacterSheet, org: Organization, count: int
 ) -> list[FavorTokenDetails]:
@@ -480,13 +506,8 @@ def resolve_unredeemed_favor_tokens(
     from world.npc_services.effects import NoAvailableFavorTokenError  # noqa: PLC0415
 
     tokens = list(
-        FavorTokenDetails.objects.select_for_update()
-        .filter(
-            issuing_organization=org,
-            redeemed_at__isnull=True,
-            item_instance__holder_character_sheet=sheet,
-            item_instance__destroyed_at__isnull=True,
-        )
+        _unredeemed_favor_tokens_queryset(sheet=sheet, org=org)
+        .select_for_update()
         .order_by("pk")[:count]
     )
     if len(tokens) < count:

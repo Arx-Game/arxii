@@ -209,14 +209,21 @@ actions, backends, and service functions.
       multiword tokenizer, `commands/parsing.py`) when
       `ritual.service_function_path == HONORS_SERVICE_PATH`
       (`world.societies.honors.HONORS_SERVICE_PATH`). `honoree` resolves to a `Persona`
-      by exact name, globally — never room-scoped, since honoring is unrestricted by
-      presence or life-state (Decision 7: a posthumous honoree may be off-scene or
-      dead). `deed` resolves to a `LegendEntry` by pk; `event` resolves to a
-      `LegendEvent` by pk. This resolution lives here, not in
-      `commands.ritual_adapters` (that registry is consulted only on the session
-      draft/join path below) and not inside `honor_deed` itself (shared with the REST
-      dispatch path, which passes already-resolved model instances —
-      `world/societies/honors.py`).
+      by exact (case-insensitive) name, globally — never room-scoped, since honoring is
+      unrestricted by presence or life-state (Decision 7: a posthumous honoree may be
+      off-scene or dead). Persona names are NOT globally unique
+      (`unique_persona_name_per_character` is per-character) — more than one match
+      refuses with a disambiguation message rather than silently picking the first
+      (#3466 whole-branch-review I3, this repo's no-implicit-first-item-selection
+      rule). On the amplify form, the resolved `honoree` is additionally checked
+      against the resolved deed's own `persona` — the amplify service call ignores
+      `honoree_persona` entirely (it always honors `deed.persona`), so a mismatch is
+      refused here rather than silently honoring someone other than who was named.
+      `deed` resolves to a `LegendEntry` by pk; `event` resolves to a `LegendEvent` by
+      pk. This resolution lives here, not in `commands.ritual_adapters` (that registry
+      is consulted only on the session draft/join path below) and not inside
+      `honor_deed` itself (shared with the REST dispatch path, which passes
+      already-resolved model instances — `world/societies/honors.py`).
   - `ritual sessions` — list pending sessions
   - `ritual draft <name> invite=<char>[,<char>] [<extra k=v ...>]`
     — draft a session; extra kwargs are adapter-specific (see `ritual_adapters.py`):

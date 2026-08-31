@@ -642,7 +642,7 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
     count this same response already discloses).
     """
     from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
-    from world.currency.models import FavorTokenDetails  # noqa: PLC0415
+    from world.currency.services import count_unredeemed_favor_tokens  # noqa: PLC0415
     from world.societies.honors import (  # noqa: PLC0415
         DeedAtCeilingError,
         InsufficientHaresError,
@@ -654,16 +654,16 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
         return {
             "allowed": False,
             "reason": _NO_ACTIVE_PERSONA_REASON,
-            "hares_required": 0,
-            "value_added": 0,
+            "hares_required": None,
+            "value_added": None,
         }
 
     if deed.event_id is None:
         return {
             "allowed": False,
             "reason": NoAnchorEventError().user_message,
-            "hares_required": 0,
-            "value_added": 0,
+            "hares_required": None,
+            "value_added": None,
         }
 
     anchor_event = deed.event
@@ -711,6 +711,21 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
             "hares_required": None,
             "value_added": None,
         }
+    # ``honor_deed`` also calls ``maybe_grant_deed_title`` at the end, which does its
+    # own bare ``.get(level=deed.earned_at_level)`` lookup — a SECOND calibration row,
+    # for the DEED's station, distinct from the honorer-level row just above (whole-
+    # branch-review I2). Without this check, a viewer whose own level has a row but
+    # whose target deed's station does not gets told ``allowed: true`` with a price
+    # here, then the POST raises ``LegendLevelCalibration.DoesNotExist`` uncaught — a
+    # 500 the preview promised was fine. The write path keeps failing hard; this only
+    # stops the preview from promising what the write cannot deliver.
+    if not LegendLevelCalibration.objects.filter(level=deed.earned_at_level).exists():
+        return {
+            "allowed": False,
+            "reason": "The Rite of Honors is not configured for this deed's station yet.",
+            "hares_required": None,
+            "value_added": None,
+        }
     hares_required = calibration.honor_hares_required
     headroom = max(anchor_event.base_value - deed.base_value, 0)
 
@@ -718,12 +733,7 @@ def _compute_can_honor(*, viewer_persona: Persona | None, deed: LegendEntry) -> 
     # tokens, raising InsufficientHaresError) runs before its Step 4 (headroom,
     # raising DeedAtCeilingError).
     academy = Organization.objects.get(name=SHROUDWATCH_ACADEMY_NAME)
-    available = FavorTokenDetails.objects.filter(
-        issuing_organization=academy,
-        redeemed_at__isnull=True,
-        item_instance__holder_character_sheet=sheet,
-        item_instance__destroyed_at__isnull=True,
-    ).count()
+    available = count_unredeemed_favor_tokens(sheet=sheet, org=academy)
     price_reason: str | None = None
     if available < hares_required:
         price_reason = InsufficientHaresError(hares_required).user_message
@@ -913,9 +923,16 @@ class HonorDeedInputSerializer(serializers.Serializer):
 
 
 class EstablishDeedInputSerializer(serializers.Serializer):
-    """``POST /api/societies/events/{id}/establish/`` body (#3466 Task 9)."""
+    """``POST /api/societies/events/{id}/establish/`` body (#3466 Task 9).
 
-    honoree_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    ``honoree_persona`` excludes ``is_system=True`` rows (whole-branch-review Minor)
+    — those are OOC narrator/GM identities, never a character a deed can be
+    established for.
+    """
+
+    honoree_persona = serializers.PrimaryKeyRelatedField(
+        queryset=Persona.objects.filter(is_system=False)
+    )
     deed_title = serializers.CharField(max_length=200)
     journal_title = serializers.CharField(max_length=200)
     journal_body = serializers.CharField(allow_blank=False)

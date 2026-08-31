@@ -6,7 +6,11 @@ from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.models import FavorTokenDetails
-from world.currency.services import mint_favor_token, redeem_favor_token
+from world.currency.services import (
+    count_unredeemed_favor_tokens,
+    mint_favor_token,
+    redeem_favor_token,
+)
 from world.items.constants import OwnershipEventType
 from world.items.models import ItemInstance, OwnershipEvent
 from world.societies.factories import OrganizationFactory
@@ -89,6 +93,31 @@ class RedeemFavorTokenTests(TestCase):
         # Refused redemption leaves the token outstanding.
         row = FavorTokenDetails.objects.get(pk=self.token.pk)
         self.assertIsNone(row.redeemed_at)
+
+
+class CountUnredeemedFavorTokensTests(TestCase):
+    """The read-only count half of ``resolve_unredeemed_favor_tokens`` (#3466).
+
+    Shares the exact same filter predicate (``_unredeemed_favor_tokens_queryset``)
+    -- these cases mirror what ``resolve_unredeemed_favor_tokens`` itself would
+    resolve, just counted instead of locked and sliced.
+    """
+
+    def setUp(self):
+        self.org = OrganizationFactory()
+        self.other_org = OrganizationFactory()
+        self.sheet = CharacterSheetFactory()
+
+    def test_counts_only_unredeemed_tokens_from_the_named_org(self):
+        mint_favor_token(self.org, self.sheet, provenance_note="One")
+        redeemed = mint_favor_token(self.org, self.sheet, provenance_note="Two")
+        redeem_favor_token(redeemed, redeemer_org=self.org)
+        mint_favor_token(self.other_org, self.sheet, provenance_note="A different org")
+
+        assert count_unredeemed_favor_tokens(sheet=self.sheet, org=self.org) == 1
+
+    def test_zero_when_holder_has_none(self):
+        assert count_unredeemed_favor_tokens(sheet=self.sheet, org=self.org) == 0
 
 
 class FavorTokenTradeableTests(TestCase):

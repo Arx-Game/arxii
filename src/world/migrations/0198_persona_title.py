@@ -48,6 +48,18 @@ def backwards(apps, schema_editor):
     Every title migrated forwards came from a PRIMARY persona (this migration's own
     forwards guarantees it, and nothing else grants titles pre-#3466), so
     ``persona.character_sheet_id`` is exactly the value ``forwards`` read it from.
+
+    THIS MIGRATION IS FORWARD-ONLY IN PRACTICE, and this function will never actually
+    run to completion (whole-branch-review Minor). Reversing a migration replays its
+    operations in reverse order, so the reverse of the later ``RemoveField(...,
+    "character_sheet")`` operation below — an ``AddField`` re-adding that column as
+    the NOT NULL FK it originally was, with no default — runs BEFORE this RunPython's
+    reverse (this ``backwards`` function) ever gets a chance to backfill it. On any
+    table already holding rows (which every populated deploy has), that AddField
+    fails outright: Postgres refuses to add a NOT-NULL column with no default to a
+    non-empty table. Keeping this function is still worth it for readability (it
+    documents the intended data mapping precisely, and would work if invoked in
+    isolation) — just never rely on ``migrate arxii 0195`` succeeding past this point.
     """
     PersonaTitle = apps.get_model("arxii", "PersonaTitle")
     Persona = apps.get_model("arxii", "Persona")
