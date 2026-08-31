@@ -68,8 +68,7 @@ function OccasionsPlate() {
         Occasions
       </PlateHead>
       {events.length === 0 ? (
-        // PLACEHOLDER copy
-        <p className="text-sm text-muted-foreground">Nothing scheduled just now.</p>
+        <p className="text-sm text-muted-foreground">Nothing upcoming. How indolent.</p>
       ) : (
         <div className="divide-y">
           {events.slice(0, 5).map((event) => (
@@ -94,8 +93,7 @@ function CrierPlate() {
         The Crier
       </PlateHead>
       {gemits.length === 0 ? (
-        // PLACEHOLDER copy
-        <p className="text-sm text-muted-foreground">The city has nothing to cry today.</p>
+        <p className="text-sm text-muted-foreground">No news. A little unsettling.</p>
       ) : (
         <ul className="space-y-2">
           {gemits.map((gemit) => (

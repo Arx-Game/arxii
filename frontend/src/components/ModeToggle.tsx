@@ -7,7 +7,13 @@ type OrderedTheme = (typeof THEME_ORDER)[number];
 
 export function ModeToggle() {
   const { theme, setTheme } = useTheme();
-  const current = (theme ?? 'system') as OrderedTheme;
+  // next-themes hands back whatever localStorage holds, unvalidated — a stale
+  // value from an older deploy is not in THEME_ORDER, which used to render an
+  // ICONLESS (but clickable) button whose first click "switched to" light
+  // (indexOf -1 + 1 = 0). Treat anything unrecognized as system.
+  const current: OrderedTheme = THEME_ORDER.includes(theme as OrderedTheme)
+    ? (theme as OrderedTheme)
+    : 'system';
   const next = THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length];
 
   return (

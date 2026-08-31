@@ -15,8 +15,10 @@ import type { EventInvitation } from '@/events/types';
 import type { OrganizationMembershipOffer } from '@/societies/types';
 
 const mockUnreadMail = vi.fn(() => 0);
+const mockMailQuery = vi.fn();
 vi.mock('@/mail/queries', () => ({
   useUnreadMailCount: () => mockUnreadMail(),
+  useMailQuery: () => mockMailQuery(),
 }));
 
 const mockFetchInvitations = vi.fn();
@@ -88,6 +90,7 @@ const offer: OrganizationMembershipOffer = {
 
 function setDefaultMocks() {
   mockUnreadMail.mockReturnValue(0);
+  mockMailQuery.mockReturnValue({ data: { count: 0, next: null, previous: null, results: [] } });
   mockFetchInvitations.mockResolvedValue({ count: 0, next: null, previous: null, results: [] });
   mockOffersQuery.mockReturnValue({ data: { count: 0, next: null, previous: null, results: [] } });
 }
@@ -120,15 +123,35 @@ describe('AttentionBand', () => {
     expect(screen.getByTitle('3 unread messages')).toBeInTheDocument();
   });
 
-  it('renders the empty-attention quiet line when no character has anything pending', async () => {
+  it('an empty mailbox reads "Empty, alas." and no character groups render', async () => {
     setDefaultMocks();
     renderWithProviders(<AttentionBand characters={[aria, bianca]} />);
 
     await waitFor(() => {
-      expect(screen.getByText('All is tended, for now.')).toBeInTheDocument();
+      expect(screen.getByText('Empty, alas.')).toBeInTheDocument();
     });
     expect(screen.queryByText('Aria')).not.toBeInTheDocument();
     expect(screen.queryByText('Bianca')).not.toBeInTheDocument();
+  });
+
+  it('mail with nothing unread reads "Nothing unread." and stays a live link', async () => {
+    setDefaultMocks();
+    mockMailQuery.mockReturnValue({ data: { count: 4, next: null, previous: null, results: [] } });
+    renderWithProviders(<AttentionBand characters={[]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Nothing unread.')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: 'Mail' })).toHaveAttribute('href', '/profile/mail');
+  });
+
+  it('shows neither mail state line while the mail list is still loading', async () => {
+    setDefaultMocks();
+    mockMailQuery.mockReturnValue({ data: undefined });
+    renderWithProviders(<AttentionBand characters={[]} />);
+
+    expect(screen.queryByText('Empty, alas.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nothing unread.')).not.toBeInTheDocument();
   });
 
   it('groups a pending tidings count under its own character, not others', async () => {
