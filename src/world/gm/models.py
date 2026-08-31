@@ -69,6 +69,16 @@ class GMProfile(SharedMemoryModel):
         blank=True,
         help_text="Stubbed — will be stamped by future story-update activity hooks.",
     )
+    contact_times = models.TextField(
+        blank=True,
+        default="",
+        help_text="When players can reach this GM (freeform, shown on their GM card).",
+    )
+    ooc_info = models.TextField(
+        blank=True,
+        default="",
+        help_text="OOC information for players: style, expectations, boundaries.",
+    )
 
     class Meta:
         verbose_name = "GM Profile"

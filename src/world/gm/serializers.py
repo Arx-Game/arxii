@@ -153,6 +153,17 @@ class GMProfileSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class GMProfileMineSerializer(serializers.ModelSerializer):
+    """The requesting GM's own profile: operational fields are writable (#3478)."""
+
+    level_display = serializers.CharField(source="get_level_display", read_only=True)
+
+    class Meta:
+        model = GMProfile
+        fields = ["id", "level", "level_display", "contact_times", "ooc_info"]
+        read_only_fields = ["id", "level", "level_display"]
+
+
 class GMLevelChangeSerializer(serializers.ModelSerializer):
     """Read-only audit row for a staff-driven GM trust-level change (#2000)."""
 

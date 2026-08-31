@@ -47,6 +47,7 @@ from world.gm.serializers import (
     GMEvidenceSummarySerializer,
     GMInviteClaimSerializer,
     GMInviteRevokeSerializer,
+    GMProfileMineSerializer,
     GMProfileSerializer,
     GMRosterInviteSerializer,
     GMSummonOfferSerializer,
@@ -206,6 +207,20 @@ class GMProfileViewSet(
         profile = self.get_object()
         summary = gm_evidence_summary(profile)
         return Response(GMEvidenceSummarySerializer(summary).data)
+
+    @extend_schema(responses={200: GMProfileMineSerializer})
+    @action(detail=False, methods=["get", "patch"], url_path="mine")
+    def mine(self, request: Request) -> Response:
+        """GET/PATCH the requesting account's own GM profile (#3478)."""
+        profile = GMProfile.objects.filter(account=request.user).first()
+        if profile is None:
+            return Response(status=404)
+        if request.method == "PATCH":
+            body = GMProfileMineSerializer(profile, data=request.data, partial=True)
+            body.is_valid(raise_exception=True)
+            body.save()
+            profile.refresh_from_db()
+        return Response(GMProfileMineSerializer(profile).data)
 
 
 class GMTableViewSet(viewsets.ModelViewSet):

@@ -2283,7 +2283,9 @@ Player-GM identity, tables, roster recruitment, and the trust ladder that caps w
 GM at a given level may author (#2000, ADR-0097).
 
 - **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
-  `last_active_at` stub), `GMApplication` (freeform text, staff response, one PENDING
+  `last_active_at` stub, `contact_times`/`ooc_info` freeform `TextField`s (#3478) —
+  writable only through the GM's own `mine` endpoint below), `GMApplication` (freeform
+  text, staff response, one PENDING
   per account), `GMTable` (a GM's working group; ACTIVE/ARCHIVED lifecycle),
   `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
   (single-use recruitment code, public or private-with-email-match, 30-day default
@@ -2372,7 +2374,9 @@ GM at a given level may author (#2000, ADR-0097).
   players, list/review/update for staff — approval auto-creates a `GMProfile`),
   `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
   `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
-  `IsAdminUser`), `GMTableViewSet` (`/api/gm/tables/`; staff sees all, GMs their own,
+  `IsAdminUser`; `GET`/`PATCH /api/gm/profiles/mine/` (#3478) — the requesting account's
+  own `GMProfile` via `GMProfileMineSerializer`, `contact_times`/`ooc_info` writable,
+  `level` read-only, 404 for a non-GM account), `GMTableViewSet` (`/api/gm/tables/`; staff sees all, GMs their own,
   players tables where an active persona holds membership; `archive`/`transfer_ownership`
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
