@@ -562,19 +562,27 @@ coupled to the action's kwarg names by the base class.
 
 - **`StaffOnlyPrerequisite`** — actor's account must be staff.
 - **`BuildWarrantPrerequisite`** (#3477) — staff bypass (same check/message as
-  `StaffOnlyPrerequisite`), else resolves the target `Area` from the `area_id`/
-  `room_id` kwarg and requires an `AreaBuildGrant` (`world.gm.models`) covering
-  it — the grant's own area or an `AreaClosure` ancestor (subtree descent),
-  `max_level` at or above the level checked. With `level_param` unset (the
-  default every `world_builder.py` action but `edit_area` uses), that's a
-  fixed `AreaLevel.BUILDING` floor. With `level_param` set (`edit_area` only,
-  #3477 fix round 1), it's the STRICTER of the resolved area's current
-  `level` and the named kwarg's value, if present — a bare kwarg-only check
-  would let a BUILDING-capped grant reclassify a WARD it holds directly past
-  its own ceiling, or edit an already-above-ceiling area by omitting `level`
-  from the call. No area-resolvable kwarg ⇒ behaves exactly like
-  `StaffOnlyPrerequisite`. Gates every `world_builder.py` action except
-  `author_clue`; read side is `world.gm.services.has_build_warrant`.
+  `StaffOnlyPrerequisite`), else requires an `AreaBuildGrant` (`world.gm.models`)
+  covering EVERY target the action DECLARES via its `targets` tuple of
+  `(kind, kwarg_name)` pairs (fix round 2) — the grant's own area or an
+  `AreaClosure` ancestor (subtree descent), `max_level` at or above the level
+  checked. Resolution reads ONLY declared kwargs (dispatch passes raw client
+  kwargs through `execute(**kwargs)`, which ignores extras — an undeclared
+  `area_id` must never be what the warrant checks), all present targets must
+  pass (two-place actions like `staff_move_room` check source AND destination),
+  and a present-but-unresolvable target refuses. Kinds: `"area"` (act ON the
+  area — level is the area's OWN level, maxed with the `level_param` kwarg
+  when set, so remove/promote/reclassify respect the ceiling), `"parent"`
+  (create-child — level is the incoming child's `level_param` kwarg),
+  `"room_container"` (dig into — fixed `AreaLevel.BUILDING`), and the
+  row-anchored kinds (`"room"`/`"exit"`/`"place"`/`"line"`/`"emit"`/
+  `"variant"`/`"room_clue"`/`"clue_trigger"`/`"anchor"`, all BUILDING) which
+  resolve through the row's own FK chain. Nothing declared/resolved ⇒ behaves
+  exactly like `StaffOnlyPrerequisite` (keeps root-area creation and
+  generic-pool emits staff-only). Actions declare via the
+  `_WorldBuilderAction.warrant_targets`/`warrant_level_param` ClassVars; gates
+  every `world_builder.py` action except `author_clue`; read side is
+  `world.gm.services.has_build_warrant`.
 - **`HasCharacterSheetPrerequisite`** — actor has an attached `CharacterSheet`.
 - **`HoldsItemPrerequisite`** — actor holds the `item` kwarg.
 - **`ItemUsablePrerequisite`** — item template has `on_use_pool` (is usable); consumables

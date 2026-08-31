@@ -134,9 +134,16 @@ class StaffOnlyPrerequisite(Prerequisite):
         return False, "Staff only."
 
 
+# BuildWarrantPrerequisite target kinds with non-BUILDING level semantics
+# (see the class docstring's kind table); the row-anchored kinds are plain
+# dict keys in ``_resolve_kind`` and need no named constant.
+WARRANT_KIND_AREA = "area"
+WARRANT_KIND_PARENT = "parent"
+
+
 @dataclass
 class BuildWarrantPrerequisite(Prerequisite):
-    """Staff bypass, or an ``AreaBuildGrant`` (#3477) over the resolved target area.
+    """Staff bypass, or an ``AreaBuildGrant`` (#3477) over EVERY declared target area.
 
     Mirrors ``StaffOnlyPrerequisite``'s staff check exactly -- same
     ``is_staff_observer(actor)`` call, same "Staff only." refusal -- so every
@@ -144,67 +151,115 @@ class BuildWarrantPrerequisite(Prerequisite):
     after this class replaces ``StaffOnlyPrerequisite`` on the registry: staff
     pass implicitly, with zero ``AreaBuildGrant`` rows in play.
 
-    Non-staff: resolves the target ``Area`` from the action's kwargs (the
-    kwargs-via-context convention) -- ``area_id`` directly, or ``room_id``'s
-    ``RoomProfile.area``. When neither kwarg is present (or resolves to
-    nothing), this refuses exactly as ``StaffOnlyPrerequisite`` would -- GM
-    scoping for those actions lands once the frontend passes explicit area
-    context, not here. This is a documented gap, not a bug: today every
-    world_builder action carries an ``area_id`` or ``room_id`` kwarg, so the
-    fallback only ever bites a future area-less action.
+    Non-staff: ``targets`` declares, per action, which kwargs name the things
+    the action touches and how each resolves to an ``Area`` -- a tuple of
+    ``(kind, kwarg_name)`` pairs. Resolution reads ONLY declared kwargs
+    (#3477 fix round 2): dispatch passes raw client kwargs straight through
+    ``execute(**kwargs)``, which silently ignores extras, so an UNdeclared
+    ``area_id`` riding alongside a ``room_id`` must never be what the warrant
+    is checked against -- otherwise any grant holder could spoof the check
+    onto rooms in areas they hold no grant over by naming their own area.
 
-    ``level_param``, when set, names a kwarg holding the ``AreaLevel`` the
-    action creates/acts on (e.g. ``EditAreaAction``'s own ``level`` kwarg) --
-    the grant's ``max_level`` must be at or above it. Unset (the default
-    every world_builder action but ``EditAreaAction`` uses) checks against
-    ``AreaLevel.BUILDING``, the finest granularity and what every room/exit/
-    fixture verb in this module actually touches.
+    Every declared-and-present target must pass (same fix round): actions that
+    span two places -- ``staff_move_room``/``staff_duplicate_room`` name a
+    source room AND a destination area -- need the warrant over BOTH, or a
+    granted GM could pull any room in the world into their own subtree by
+    passing only legitimate kwargs. A declared kwarg that is absent is
+    skipped (optional kwargs, e.g. duplicate's same-area default); a declared
+    kwarg that is present but resolves to nothing refuses; and when NOTHING
+    resolves at all -- no declared kwarg present, or ``targets`` empty (the
+    dataclass default) -- this refuses exactly as ``StaffOnlyPrerequisite``
+    would. That fallback is what keeps root-area creation (``create_area``
+    with no ``parent_id``) and generic-pool ambient emits (neither room nor
+    area FK set) staff-only: no grant can cover "nowhere."
 
-    When ``level_param`` is set, the level actually checked is the STRICTER
-    of the resolved area's current ``level`` and the incoming kwarg (if
-    present) -- not the kwarg alone (#3477 fix round 1). Otherwise a
-    BUILDING-capped grant could reclassify a WARD past its own ceiling in one
-    call (the kwarg alone would pass), or edit an area already above the
-    ceiling by touching only unrelated fields (no ``level`` kwarg sent, so
-    the kwarg-alone check would default to BUILDING and pass regardless of
-    where the area already sits).
+    Target kinds and their required-level semantics:
 
-    ``line_param``, when set, names a kwarg holding an ``AmbientEmoteLine`` pk
-    (#3477 Task 3 fix round 1) -- the target area resolves through the line's
-    own ``room_profile.area`` (ROOM-scoped) or ``area`` (AREA-scoped) FK,
-    whichever its ``parent_type`` discriminator selects. Used by
-    ``staff_add_ambient_condition``/``staff_remove_ambient_condition``, which
-    carry no ``area_id``/``room_id`` kwarg of their own to resolve against --
-    without this, a non-staff GM with a covering ``AreaBuildGrant`` was always
-    refused (unlike the sibling ambient-line/-emit add verbs), since the
-    default resolution falls through to "Staff only." when neither kwarg is
-    present. Resolving via the line itself (rather than trusting a
-    caller-supplied ``room_id``) also means the check can't be spoofed by
-    naming an unrelated room/area the caller happens to hold a grant over.
+    - ``"area"`` -- the kwarg names the ``Area`` the action acts ON (edit,
+      remove, promote). Level = the STRICTER of the area's own current
+      ``level`` and, with ``level_param`` set, the named kwarg's value
+      (#3477 fix rounds 1-2). Acting on the area itself is an act at that
+      area's altitude: a BUILDING-capped grant that happens to sit on a WARD
+      row covers building rooms *inside* it, never deleting/promoting/
+      reclassifying the ward itself.
+    - ``"parent"`` -- the kwarg names the ``Area`` a new CHILD is created
+      under (``create_area``). Level = the incoming child's ``level_param``
+      kwarg when parseable, else ``AreaLevel.BUILDING`` (``execute`` refuses
+      a missing/garbled level anyway) -- the parent's own altitude is NOT
+      the bar, or no grant below WORLD could ever add a child anywhere.
+    - ``"room_container"`` -- the kwarg names the ``Area`` rooms are dug
+      into (``staff_dig_room``/``staff_batch_dig``/move-destination). Level =
+      ``AreaLevel.BUILDING``: putting rooms inside your territory is the
+      finest-grained act regardless of the container's own altitude.
+    - ``"room"``, ``"exit"``, ``"place"``, ``"line"``, ``"emit"``,
+      ``"variant"``, ``"room_clue"``, ``"clue_trigger"``, ``"anchor"`` --
+      the kwarg names a room (ObjectDB pk) or a room-/area-anchored row,
+      resolved to its containing ``Area`` through its OWN FK chain, never a
+      caller-supplied area. Level = ``AreaLevel.BUILDING``. ``"line"`` and
+      ``"emit"`` honor the row's room-vs-area scope discriminator; a
+      generic-pool emit (neither FK set) resolves to nothing and refuses.
     """
 
+    targets: tuple[tuple[str, str], ...] = ()
     level_param: str | None = None
-    line_param: str | None = None
 
-    def _resolve_target_area(self, kwargs: dict) -> Area | None:
-        """``area_id`` directly, ``room_id``'s ``RoomProfile.area``, or (with
-        ``line_param`` set) the named ``AmbientEmoteLine``'s own room/area; else ``None``.
-        """
-        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    def _resolve_kind(self, kind: str, pk: object) -> Area | None:
+        """One declared target's ``Area``, through the target row's own FK chain."""
+        from evennia.objects.models import ObjectDB as ObjectDBModel  # noqa: PLC0415
+
+        from evennia_extensions.models import RoomDescVariant, RoomProfile  # noqa: PLC0415
         from world.areas.models import Area  # noqa: PLC0415
+        from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
+        from world.magic.models.portals import PortalAnchor  # noqa: PLC0415
+        from world.narrative.models import AmbientEmit  # noqa: PLC0415
+        from world.scenes.place_models import Place  # noqa: PLC0415
 
-        area_id = kwargs.get("area_id")
-        if area_id:
-            return Area.objects.filter(pk=area_id).first()
-        room_id = kwargs.get("room_id")
-        if room_id:
-            profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("area").first()
+        def room_area(objectdb_id: object) -> Area | None:
+            profile = (
+                RoomProfile.objects.filter(objectdb_id=objectdb_id).select_related("area").first()
+            )
             return profile.area if profile else None
-        if self.line_param:
-            line_id = kwargs.get(self.line_param)
-            if line_id:
-                return self._area_for_ambient_line(line_id)
-        return None
+
+        def exit_area(exit_pk: object) -> Area | None:
+            exit_obj = ObjectDBModel.objects.filter(pk=exit_pk).first()
+            if exit_obj is None or exit_obj.db_location_id is None:
+                return None
+            return room_area(exit_obj.db_location_id)
+
+        def place_area(place_pk: object) -> Area | None:
+            place = Place.objects.filter(pk=place_pk).select_related("room__area").first()
+            return place.room.area if place and place.room_id else None
+
+        def emit_area(emit_pk: object) -> Area | None:
+            emit = (
+                AmbientEmit.objects.filter(pk=emit_pk)
+                .select_related("room_profile__area", "area")
+                .first()
+            )
+            if emit is None:
+                return None
+            return emit.room_profile.area if emit.room_profile_id else emit.area
+
+        def room_row_area(model: type, row_pk: object) -> Area | None:
+            row = model.objects.filter(pk=row_pk).select_related("room_profile__area").first()
+            return row.room_profile.area if row else None
+
+        resolvers: dict[str, Any] = {
+            "area": lambda v: Area.objects.filter(pk=v).first(),
+            "parent": lambda v: Area.objects.filter(pk=v).first(),
+            "room_container": lambda v: Area.objects.filter(pk=v).first(),
+            "room": room_area,
+            "exit": exit_area,
+            "place": place_area,
+            "line": self._area_for_ambient_line,
+            "emit": emit_area,
+            "variant": lambda v: room_row_area(RoomDescVariant, v),
+            "room_clue": lambda v: room_row_area(RoomClue, v),
+            "clue_trigger": lambda v: room_row_area(ClueTrigger, v),
+            "anchor": lambda v: room_row_area(PortalAnchor, v),
+        }
+        resolver = resolvers.get(kind)
+        return resolver(pk) if resolver else None
 
     @staticmethod
     def _area_for_ambient_line(line_id: object) -> Area | None:
@@ -225,24 +280,25 @@ class BuildWarrantPrerequisite(Prerequisite):
             return line.area
         return None
 
-    def _resolve_required_level(self, area: Area, kwargs: dict) -> int:
-        """Fixed ``AreaLevel.BUILDING`` floor, or (with ``level_param`` set) the
-
-        stricter of the area's current level and the named kwarg's value (#3477
-        fix round 1) -- see the class docstring for why the kwarg alone isn't enough.
-        """
+    def _resolve_required_level(self, kind: str, area: Area, kwargs: dict) -> int:
+        """Per-kind level semantics -- see the class docstring's kind table."""
         from contextlib import suppress  # noqa: PLC0415
 
         from world.areas.constants import AreaLevel  # noqa: PLC0415
 
-        if not self.level_param:
-            return AreaLevel.BUILDING
-        level = area.level
-        kwarg_level = kwargs.get(self.level_param)
-        if kwarg_level is not None:
+        kwarg_level: int | None = None
+        if self.level_param and kwargs.get(self.level_param) is not None:
             with suppress(TypeError, ValueError):
-                level = max(level, int(kwarg_level))
-        return level
+                kwarg_level = int(kwargs[self.level_param])
+
+        if kind == WARRANT_KIND_AREA:
+            level = area.level
+            if kwarg_level is not None:
+                level = max(level, kwarg_level)
+            return level
+        if kind == WARRANT_KIND_PARENT:
+            return kwarg_level if kwarg_level is not None else AreaLevel.BUILDING
+        return AreaLevel.BUILDING
 
     def is_met(
         self,
@@ -257,8 +313,19 @@ class BuildWarrantPrerequisite(Prerequisite):
             return True, ""
 
         kwargs = (context or {}).get("kwargs", {})
-        area = self._resolve_target_area(kwargs)
-        if area is None:
+        resolved: list[tuple[str, Area]] = []
+        for kind, param in self.targets:
+            pk = kwargs.get(param)
+            if not pk:
+                continue
+            area = self._resolve_kind(kind, pk)
+            if area is None:
+                # A named target that doesn't resolve is refused, never
+                # skipped -- skipping would let a garbled id downgrade a
+                # two-target action to a one-target check.
+                return False, "Staff only."
+            resolved.append((kind, area))
+        if not resolved:
             return False, "Staff only."
 
         try:
@@ -268,10 +335,11 @@ class BuildWarrantPrerequisite(Prerequisite):
         if account is None:
             return False, "Staff only."
 
-        level = self._resolve_required_level(area, kwargs)
-        if has_build_warrant(account, area=area, level=level):
-            return True, ""
-        return False, "No build grant covers this area."
+        for kind, area in resolved:
+            level = self._resolve_required_level(kind, area, kwargs)
+            if not has_build_warrant(account, area=area, level=level):
+                return False, "No build grant covers this area."
+        return True, ""
 
 
 @dataclass

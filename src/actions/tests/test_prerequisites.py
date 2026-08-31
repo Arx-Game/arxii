@@ -194,12 +194,17 @@ def _gm_actor_and_account(level: str = GMLevel.STARTING, *, db_key: str = "Build
 
 
 class BuildWarrantPrerequisiteTests(TestCase):
-    """BuildWarrantPrerequisite (#3477) -- staff bypass, else an AreaBuildGrant.
+    """BuildWarrantPrerequisite (#3477) -- staff bypass, else an AreaBuildGrant
+    over every declared target (#3477 fix round 2: declarative ``targets``).
 
     Only the direct-area-match cases run here untagged (SQLite-safe, see
     ``has_build_warrant``'s docstring); subtree descent is covered by
     ``world.gm.tests.test_area_build_grant`` under ``@tag("postgres")``.
     """
+
+    ROOM = (("room", "room_id"),)
+    AREA = (("area", "area_id"),)
+    LINE = (("line", "line_id"),)
 
     def test_staff_bypasses_with_no_kwargs_and_no_grants(self) -> None:
         actor = _plain_actor(db_key="BuildWarrantStaff", is_staff=True)
@@ -207,65 +212,199 @@ class BuildWarrantPrerequisiteTests(TestCase):
         self.assertTrue(met)
         self.assertEqual(reason, "")
 
-    def test_no_area_kwarg_non_staff_refused_like_staff_only(self) -> None:
+    def test_no_declared_kwarg_non_staff_refused_like_staff_only(self) -> None:
         actor, _account = _gm_actor_and_account(db_key="NoAreaKwarg")
-        met, reason = BuildWarrantPrerequisite().is_met(actor)
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA).is_met(actor)
+        self.assertFalse(met)
+        self.assertEqual(reason, "Staff only.")
+
+    def test_empty_targets_non_staff_refused_regardless_of_kwargs(self) -> None:
+        """The dataclass default declares nothing, so nothing can authorize."""
+        actor, account = _gm_actor_and_account(db_key="EmptyTargets")
+        area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite().is_met(
+            actor, context={"kwargs": {"area_id": area.pk}}
+        )
         self.assertFalse(met)
         self.assertEqual(reason, "Staff only.")
 
     def test_actor_with_no_resolvable_account_refused(self) -> None:
         actor = CharacterFactory(db_key="NoAccountBuildWarrant")
         area = AreaFactory(level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite().is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA).is_met(
             actor, context={"kwargs": {"area_id": area.pk}}
         )
         self.assertFalse(met)
         self.assertEqual(reason, "Staff only.")
 
-    def test_area_id_kwarg_no_grant_refused(self) -> None:
+    def test_area_target_no_grant_refused(self) -> None:
         actor, _account = _gm_actor_and_account(db_key="NoGrantAreaId")
         area = AreaFactory(level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite().is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA).is_met(
             actor, context={"kwargs": {"area_id": area.pk}}
         )
         self.assertFalse(met)
         self.assertEqual(reason, "No build grant covers this area.")
 
-    def test_area_id_kwarg_direct_grant_passes(self) -> None:
+    def test_area_target_direct_grant_passes(self) -> None:
         actor, account = _gm_actor_and_account(db_key="DirectGrantAreaId")
         area = AreaFactory(level=AreaLevel.WARD)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite().is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA).is_met(
             actor, context={"kwargs": {"area_id": area.pk}}
         )
         self.assertTrue(met)
         self.assertEqual(reason, "")
 
-    def test_room_id_kwarg_resolves_area_via_room_profile(self) -> None:
+    def test_room_target_resolves_area_via_room_profile(self) -> None:
         actor, account = _gm_actor_and_account(db_key="DirectGrantRoomId")
         area = AreaFactory(level=AreaLevel.WARD)
         room_profile = RoomProfileFactory(area=area)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite().is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.ROOM).is_met(
             actor, context={"kwargs": {"room_id": room_profile.objectdb_id}}
         )
         self.assertTrue(met)
         self.assertEqual(reason, "")
 
-    def test_line_param_kwarg_resolves_room_scoped_line(self) -> None:
+    def test_undeclared_area_id_cannot_spoof_a_room_check(self) -> None:
+        """#3477 fix round 2 (review finding): a room-targeted action ignores a
+        caller-supplied ``area_id`` entirely -- a grant over one's own area must
+        not authorize acting on a room in an ungranted area."""
+        actor, account = _gm_actor_and_account(db_key="SpoofAreaId")
+        granted = AreaFactory(level=AreaLevel.WARD, name="SpoofGranted")
+        ungranted = AreaFactory(level=AreaLevel.WARD, name="SpoofUngranted")
+        victim_room = RoomProfileFactory(area=ungranted)
+        AreaBuildGrantFactory(account=account, area=granted, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(targets=self.ROOM).is_met(
+            actor,
+            context={"kwargs": {"room_id": victim_room.objectdb_id, "area_id": granted.pk}},
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
+
+    def test_two_targets_require_the_warrant_over_both(self) -> None:
+        """#3477 fix round 2 (review finding): ``staff_move_room``'s shape -- a
+        grant over only the destination must not pull an ungranted room in."""
+        actor, account = _gm_actor_and_account(db_key="MoveBothSides")
+        destination = AreaFactory(level=AreaLevel.WARD, name="MoveDest")
+        source_area = AreaFactory(level=AreaLevel.WARD, name="MoveSource")
+        source_room = RoomProfileFactory(area=source_area)
+        AreaBuildGrantFactory(account=account, area=destination, max_level=AreaLevel.WARD)
+        targets = (("room", "room_id"), ("room_container", "area_id"))
+        met, reason = BuildWarrantPrerequisite(targets=targets).is_met(
+            actor,
+            context={"kwargs": {"room_id": source_room.objectdb_id, "area_id": destination.pk}},
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
+        # Granting the source area too satisfies both targets.
+        AreaBuildGrantFactory(account=account, area=source_area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(targets=targets).is_met(
+            actor,
+            context={"kwargs": {"room_id": source_room.objectdb_id, "area_id": destination.pk}},
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_area_kind_checks_the_areas_own_level_without_level_param(self) -> None:
+        """#3477 fix round 2 (review finding): ``staff_remove_area``/``promote_area``
+        act ON the area, so a BUILDING-capped grant sitting on a WARD row must not
+        delete or promote the ward itself."""
+        actor, account = _gm_actor_and_account(db_key="RemoveAreaCeiling")
+        ward = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=ward, max_level=AreaLevel.BUILDING)
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA).is_met(
+            actor, context={"kwargs": {"area_id": ward.pk}}
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
+
+    def test_room_container_kind_checks_building_level_regardless_of_altitude(self) -> None:
+        """Digging rooms INTO a ward is a BUILDING-level act -- the standard
+        "rooms and buildings only" grant covers it even though the ward itself
+        sits above the ceiling."""
+        actor, account = _gm_actor_and_account(db_key="DigIntoWard")
+        ward = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=ward, max_level=AreaLevel.BUILDING)
+        met, reason = BuildWarrantPrerequisite(targets=(("room_container", "area_id"),)).is_met(
+            actor, context={"kwargs": {"area_id": ward.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_parent_kind_checks_the_incoming_child_level(self) -> None:
+        """``create_area``'s shape: the bar is the CHILD's level, not the parent's."""
+        actor, account = _gm_actor_and_account(db_key="CreateChildLevel")
+        ward = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=ward, max_level=AreaLevel.BUILDING)
+        prereq = BuildWarrantPrerequisite(targets=(("parent", "parent_id"),), level_param="level")
+        met, _ = prereq.is_met(
+            actor,
+            context={"kwargs": {"parent_id": ward.pk, "level": int(AreaLevel.BUILDING)}},
+        )
+        self.assertTrue(met)
+        met, reason = prereq.is_met(
+            actor, context={"kwargs": {"parent_id": ward.pk, "level": int(AreaLevel.WARD)}}
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
+
+    def test_parent_kind_without_parent_refused(self) -> None:
+        """Root-area creation (no ``parent_id``) stays staff-only -- no grant
+        can cover "nowhere"."""
+        actor, account = _gm_actor_and_account(db_key="RootCreation")
+        ward = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=ward, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(
+            targets=(("parent", "parent_id"),), level_param="level"
+        ).is_met(actor, context={"kwargs": {"level": int(AreaLevel.CONTINENT)}})
+        self.assertFalse(met)
+        self.assertEqual(reason, "Staff only.")
+
+    def test_present_but_unresolvable_target_refuses_instead_of_skipping(self) -> None:
+        """A garbled id on a two-target action must not downgrade it to a
+        one-target check."""
+        actor, account = _gm_actor_and_account(db_key="GarbledTarget")
+        destination = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=account, area=destination, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(
+            targets=(("room", "room_id"), ("room_container", "area_id"))
+        ).is_met(actor, context={"kwargs": {"room_id": 999999999, "area_id": destination.pk}})
+        self.assertFalse(met)
+        self.assertEqual(reason, "Staff only.")
+
+    def test_exit_kind_resolves_through_the_source_room(self) -> None:
+        actor, account = _gm_actor_and_account(db_key="ExitKindGrant")
+        area = AreaFactory(level=AreaLevel.WARD)
+        room_profile = RoomProfileFactory(area=area)
+        exit_obj = ObjectDBFactory(
+            db_key="north",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=room_profile.objectdb,
+        )
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(targets=(("exit", "exit_id"),)).is_met(
+            actor, context={"kwargs": {"exit_id": exit_obj.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_line_target_resolves_room_scoped_line(self) -> None:
         """#3477 Task 3 fix round 1 -- a room-scoped line resolves via room_profile.area."""
         actor, account = _gm_actor_and_account(db_key="LineParamRoomScoped")
         area = AreaFactory(level=AreaLevel.WARD)
         room_profile = RoomProfileFactory(area=area)
         line = AmbientEmoteLineFactory(room_profile=room_profile)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.LINE).is_met(
             actor, context={"kwargs": {"line_id": line.pk}}
         )
         self.assertTrue(met)
         self.assertEqual(reason, "")
 
-    def test_line_param_kwarg_resolves_area_scoped_line_directly(self) -> None:
+    def test_line_target_resolves_area_scoped_line_directly(self) -> None:
         """An AREA-scoped line (no room_profile) resolves via its own ``area`` FK."""
         actor, account = _gm_actor_and_account(db_key="LineParamAreaScoped")
         area = AreaFactory(level=AreaLevel.WARD)
@@ -273,45 +412,29 @@ class BuildWarrantPrerequisiteTests(TestCase):
             parent_type=LocationParentType.AREA, area=area, room_profile=None
         )
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.LINE).is_met(
             actor, context={"kwargs": {"line_id": line.pk}}
         )
         self.assertTrue(met)
         self.assertEqual(reason, "")
 
-    def test_line_param_kwarg_no_grant_refused(self) -> None:
-        """A GM with no covering grant is refused, same as the room_id/area_id paths."""
+    def test_line_target_no_grant_refused(self) -> None:
         actor, _account = _gm_actor_and_account(db_key="LineParamNoGrant")
         area = AreaFactory(level=AreaLevel.WARD)
         room_profile = RoomProfileFactory(area=area)
         line = AmbientEmoteLineFactory(room_profile=room_profile)
-        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.LINE).is_met(
             actor, context={"kwargs": {"line_id": line.pk}}
         )
         self.assertFalse(met)
         self.assertEqual(reason, "No build grant covers this area.")
-
-    def test_line_param_no_kwarg_refused_like_staff_only(self) -> None:
-        """No ``line_id`` kwarg present -- falls through exactly like the base class does
-        with no ``area_id``/``room_id``."""
-        actor, _account = _gm_actor_and_account(db_key="LineParamMissingKwarg")
-        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(actor)
-        self.assertFalse(met)
-        self.assertEqual(reason, "Staff only.")
-
-    def test_line_param_staff_bypasses_regardless_of_line_kwarg(self) -> None:
-        """Staff pass unconditionally, same as every other BuildWarrantPrerequisite shape."""
-        actor = _plain_actor(db_key="LineParamStaffBypass", is_staff=True)
-        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(actor)
-        self.assertTrue(met)
-        self.assertEqual(reason, "")
 
     def test_level_param_ceiling_refuses_direct_match(self) -> None:
         """A BUILDING-capped grant can't authorize a WARD-level ``level`` kwarg."""
         actor, account = _gm_actor_and_account(db_key="LevelCeiling")
         area = AreaFactory(level=AreaLevel.WARD)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.BUILDING)
-        met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA, level_param="level").is_met(
             actor, context={"kwargs": {"area_id": area.pk, "level": int(AreaLevel.WARD)}}
         )
         self.assertFalse(met)
@@ -327,7 +450,7 @@ class BuildWarrantPrerequisiteTests(TestCase):
         actor, account = _gm_actor_and_account(db_key="LevelParamNoKwargAboveCeiling")
         area = AreaFactory(level=AreaLevel.WARD)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.BUILDING)
-        met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA, level_param="level").is_met(
             actor, context={"kwargs": {"area_id": area.pk}}
         )
         self.assertFalse(met)
@@ -338,7 +461,7 @@ class BuildWarrantPrerequisiteTests(TestCase):
         actor, account = _gm_actor_and_account(db_key="LevelParamNoKwargWithinCeiling")
         area = AreaFactory(level=AreaLevel.BUILDING)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.BUILDING)
-        met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA, level_param="level").is_met(
             actor, context={"kwargs": {"area_id": area.pk}}
         )
         self.assertTrue(met)
@@ -354,19 +477,19 @@ class BuildWarrantPrerequisiteTests(TestCase):
         actor, account = _gm_actor_and_account(db_key="LevelParamKwargAboveCeiling")
         area = AreaFactory(level=AreaLevel.WARD)
         AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite(level_param="level").is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA, level_param="level").is_met(
             actor, context={"kwargs": {"area_id": area.pk, "level": int(AreaLevel.WORLD)}}
         )
         self.assertFalse(met)
         self.assertEqual(reason, "No build grant covers this area.")
 
     @tag("postgres")  # closure descent -- see world.gm.tests.test_area_build_grant
-    def test_area_id_kwarg_descent_passes(self) -> None:
+    def test_area_target_descent_passes(self) -> None:
         actor, account = _gm_actor_and_account(db_key="DescentAreaId")
         ward = AreaFactory(level=AreaLevel.WARD)
         building = AreaFactory(level=AreaLevel.BUILDING, parent=ward)
         AreaBuildGrantFactory(account=account, area=ward, max_level=AreaLevel.WARD)
-        met, reason = BuildWarrantPrerequisite().is_met(
+        met, reason = BuildWarrantPrerequisite(targets=self.AREA).is_met(
             actor, context={"kwargs": {"area_id": building.pk}}
         )
         self.assertTrue(met)

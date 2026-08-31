@@ -9,28 +9,30 @@ blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
 ``staff_remove_ambient_condition`` pair (#3477 Task 3 — wires the pre-existing
 ``AmbientEmoteCondition`` model to the canvas)), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
-``author_clue``/``edit_area``/the ambient-condition pair is gated by
-``BuildWarrantPrerequisite()`` (the base class default) alone (#3477 — staff
-bypass unconditionally, same as the ``StaffOnlyPrerequisite`` it replaces;
-non-staff GMs additionally pass with an ``AreaBuildGrant`` over the resolved
-``area_id``/``room_id`` kwarg, checked against the fixed ``AreaLevel.BUILDING``
-floor — no ownership/tenancy standing otherwise, this is staff/warrant
-tooling, not a player-facing builder); ``edit_area`` overrides to
-``BuildWarrantPrerequisite(level_param="level")`` instead (#3477 fix round 1)
-since it's the one action that can reclassify an area's ``level`` in place —
-the ceiling check there is the stricter of the area's current level and the
-incoming ``level`` kwarg, not a fixed floor; ``staff_add_ambient_condition``/
-``staff_remove_ambient_condition`` override to
-``BuildWarrantPrerequisite(line_param="line_id")`` instead (#3477 Task 3 fix
-round 1) since neither carries an ``area_id``/``room_id`` kwarg of its own —
-the warrant resolves through the named ``AmbientEmoteLine``'s own room/area,
-which also means a caller can't spoof the check with an unrelated room/area
-(the sibling ``staff_remove_ambient_line``/``staff_remove_ambient_emit``
-verbs share this same no-area-kwarg gap and are refused for every non-staff
-caller today — a pre-existing issue, not swept here); ``author_clue`` gates
-at ``MinimumGMLevelPrerequisite(SENIOR)`` instead (staff bypass built in) —
-canon-creating clue authorship is a SENIOR+ GM power, not staff-only, per the
-#3432 owner ruling. Each is a thin wrapper
+``author_clue`` is gated by
+``BuildWarrantPrerequisite`` (#3477 — staff bypass unconditionally, same as
+the ``StaffOnlyPrerequisite`` it replaces; non-staff GMs additionally pass
+with an ``AreaBuildGrant`` covering every declared target). Each action
+DECLARES its warrant targets via the ``warrant_targets`` ClassVar — a
+``(kind, kwarg_name)`` tuple the base ``get_prerequisites`` hands to the
+prerequisite (#3477 fix round 2; see ``BuildWarrantPrerequisite``'s docstring
+for the kind table and level semantics). Declarative targets are the fix for
+three review findings at once: an undeclared caller-supplied ``area_id`` can
+no longer spoof the check onto a room the grant doesn't cover (dispatch
+passes raw kwargs through ``execute(**kwargs)``, which ignores extras);
+two-place actions (``staff_move_room``/``staff_duplicate_room``) require the
+warrant over BOTH the source room's area and the destination; and the
+row-anchored verbs (exits, places, variants, emits, placed clues/triggers/
+anchors) resolve through their own FK chains instead of refusing every
+warranted non-staff GM as "Staff only.". ``edit_area``/``create_area`` add
+``warrant_level_param="level"`` — for ``edit_area`` the ceiling check is the
+stricter of the area's current level and the incoming ``level`` kwarg (#3477
+fix round 1); ``staff_remove_area``/``promote_area`` use the ``"area"`` kind,
+whose level is the area's OWN level (a BUILDING-capped grant on a ward row
+builds inside the ward but never deletes/promotes the ward itself);
+``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)`` instead
+(staff bypass built in) — canon-creating clue authorship is a SENIOR+ GM
+power, not staff-only, per the #3432 owner ruling. Each is a thin wrapper
 over the Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid
 primitives + ``promote_to_authored``/``suggest_fixture_key``) and
 ``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
@@ -60,7 +62,7 @@ only refuses when the drop would leave an occupied room with zero exits.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from evennia.objects.models import ObjectDB
 
@@ -467,14 +469,28 @@ def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) ->
 
 @dataclass
 class _WorldBuilderAction(Action):
-    """Shared shape for the staff world-builder canvas verbs (#2449)."""
+    """Shared shape for the staff world-builder canvas verbs (#2449).
+
+    ``warrant_targets`` declares which kwargs the warrant check resolves and
+    how (#3477 fix round 2) — see ``BuildWarrantPrerequisite``. The default
+    covers the most common shape (a single ``room_id``); every action whose
+    kwargs differ MUST override it, or non-staff grant holders are refused
+    ("Staff only.") on kwargs the check can't resolve.
+    """
 
     category: str = "world_builder"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room", "room_id"),)
+    warrant_level_param: ClassVar[str | None] = None
+
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [BuildWarrantPrerequisite()]
+        return [
+            BuildWarrantPrerequisite(
+                targets=self.warrant_targets, level_param=self.warrant_level_param
+            )
+        ]
 
 
 @dataclass
@@ -487,6 +503,8 @@ class CreateAreaAction(_WorldBuilderAction):
     key: str = "create_area"
     name: str = "Create Area"
     icon: str = "map"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("parent", "parent_id"),)
+    warrant_level_param: ClassVar[str | None] = "level"
 
     def execute(
         self,
@@ -552,9 +570,8 @@ class EditAreaAction(_WorldBuilderAction):
     key: str = "edit_area"
     name: str = "Edit Area"
     icon: str = "map"
-
-    def get_prerequisites(self) -> list[Prerequisite]:
-        return [BuildWarrantPrerequisite(level_param="level")]
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("area", "area_id"),)
+    warrant_level_param: ClassVar[str | None] = "level"
 
     def execute(
         self,
@@ -603,6 +620,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
     key: str = "staff_dig_room"
     name: str = "Dig World Room"
     icon: str = "hammer"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room_container", "area_id"),)
 
     def execute(
         self,
@@ -780,6 +798,10 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
     key: str = "staff_link_rooms"
     name: str = "Link World Rooms"
     icon: str = "link"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room", "room_a_id"),
+        ("room", "room_b_id"),
+    )
 
     def execute(
         self,
@@ -825,6 +847,7 @@ class StaffUnlinkRoomsAction(_WorldBuilderAction):
     key: str = "staff_unlink_rooms"
     name: str = "Unlink World Rooms"
     icon: str = "unlink"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("exit", "exit_id"),)
 
     def execute(
         self,
@@ -856,6 +879,7 @@ class StaffRenameExitAction(_WorldBuilderAction):
     key: str = "staff_rename_exit"
     name: str = "Rename World Exit"
     icon: str = "pencil"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("exit", "exit_id"),)
 
     def execute(
         self,
@@ -978,6 +1002,7 @@ class StaffRemoveAreaAction(_WorldBuilderAction):
     key: str = "staff_remove_area"
     name: str = "Remove Area"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("area", "area_id"),)
 
     def execute(
         self,
@@ -1026,6 +1051,10 @@ class StaffMoveRoomAction(_WorldBuilderAction):
     key: str = "staff_move_room"
     name: str = "Move World Room"
     icon: str = "move"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room", "room_id"),
+        ("room_container", "area_id"),
+    )
 
     def execute(
         self,
@@ -1162,6 +1191,7 @@ class StaffEditPlaceAction(_WorldBuilderAction):
     key: str = "staff_edit_place"
     name: str = "Edit Place"
     icon: str = "pencil"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("place", "place_id"),)
 
     def execute(
         self,
@@ -1190,6 +1220,7 @@ class StaffRemovePlaceAction(_WorldBuilderAction):
     key: str = "staff_remove_place"
     name: str = "Remove Place"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("place", "place_id"),)
 
     def execute(
         self,
@@ -1257,6 +1288,7 @@ class StaffRemoveAmbientLineAction(_WorldBuilderAction):
     key: str = "staff_remove_ambient_line"
     name: str = "Remove Ambient Line"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("line", "line_id"),)
 
     def execute(
         self,
@@ -1331,6 +1363,7 @@ class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
     key: str = "staff_remove_ambient_emit"
     name: str = "Remove Ambient Emit"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("emit", "emit_id"),)
 
     def execute(
         self,
@@ -1413,12 +1446,7 @@ class StaffAddAmbientConditionAction(_WorldBuilderAction):
     key: str = "staff_add_ambient_condition"
     name: str = "Add Ambient Condition"
     icon: str = "filter"
-
-    def get_prerequisites(self) -> list[Prerequisite]:
-        # No area_id/room_id kwarg on this action -- resolve the warrant target through
-        # the line itself (#3477 Task 3 fix round 1), same as the other ambient verbs get
-        # via room_id.
-        return [BuildWarrantPrerequisite(line_param="line_id")]
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("line", "line_id"),)
 
     def execute(
         self,
@@ -1469,9 +1497,7 @@ class StaffRemoveAmbientConditionAction(_WorldBuilderAction):
     key: str = "staff_remove_ambient_condition"
     name: str = "Remove Ambient Condition"
     icon: str = "filter-x"
-
-    def get_prerequisites(self) -> list[Prerequisite]:
-        return [BuildWarrantPrerequisite(line_param="line_id")]
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("line", "line_id"),)
 
     def execute(
         self,
@@ -1552,6 +1578,7 @@ class StaffRemoveRoomDescVariantAction(_WorldBuilderAction):
     key: str = "staff_remove_room_desc_variant"
     name: str = "Remove Room Description Variant"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("variant", "variant_id"),)
 
     def execute(
         self,
@@ -1872,6 +1899,7 @@ class StaffSetExitDetailAction(_WorldBuilderAction):
     key: str = "staff_set_exit_detail"
     name: str = "Set Exit Detail"
     icon: str = "door-open"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("exit", "exit_id"),)
 
     def execute(
         self,
@@ -1923,6 +1951,10 @@ class StaffDuplicateRoomAction(_WorldBuilderAction):
     key: str = "staff_duplicate_room"
     name: str = "Duplicate Room"
     icon: str = "copy"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room", "room_id"),
+        ("room_container", "area_id"),
+    )
 
     def execute(
         self,
@@ -2082,6 +2114,10 @@ class StaffBatchDigAction(_WorldBuilderAction):
     key: str = "staff_batch_dig"
     name: str = "Batch Dig"
     icon: str = "rows"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room_container", "area_id"),
+        ("room", "from_room_id"),
+    )
 
     def execute(  # noqa: PLR0911 — a validation ladder; each refusal is one message
         self,
@@ -2170,6 +2206,7 @@ class PromoteAreaAction(_WorldBuilderAction):
     key: str = "promote_area"
     name: str = "Promote Area"
     icon: str = "star"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("area", "area_id"),)
 
     def execute(
         self,
@@ -2385,6 +2422,7 @@ class StaffRemoveClueAction(_WorldBuilderAction):
     key: str = "staff_remove_clue"
     name: str = "Remove Room Clue"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room_clue", "room_clue_id"),)
 
     def execute(
         self,
@@ -2442,6 +2480,7 @@ class StaffRemoveClueTriggerAction(_WorldBuilderAction):
     key: str = "staff_remove_clue_trigger"
     name: str = "Remove Clue Trigger"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("clue_trigger", "clue_trigger_id"),)
 
     def execute(
         self,
@@ -2519,6 +2558,7 @@ class StaffRemovePortalAnchorAction(_WorldBuilderAction):
     key: str = "staff_remove_portal_anchor"
     name: str = "Dissolve Portal Anchor"
     icon: str = "door-closed"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("anchor", "anchor_id"),)
 
     def execute(
         self,
