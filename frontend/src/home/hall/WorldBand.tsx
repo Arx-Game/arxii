@@ -1,13 +1,14 @@
 /**
- * "The World" band (#3412 slice 2) — the state-2 general skim: the calendar,
- * upcoming Occasions, and The Crier (gemits) are account-independent
- * ambiance; the persona tidings digest is docked-only (tidings-split
- * ruling — public awareness scopes to the ACTIVE character, never the
- * account, mirrors `TidingsPage`).
+ * "The World" band (#3412 slice 2) — the state-2 general skim: Time (the IC
+ * clock, plus the docked character's local weather — renamed from "The
+ * Calendar", which read as a schedule and collided with Occasions; Dan's
+ * ruling 2026-08-31), upcoming Occasions, and The Crier (gemits) are
+ * account-independent ambiance; the persona tidings digest is docked-only
+ * (tidings-split ruling — public awareness scopes to the ACTIVE character,
+ * never the account, mirrors `TidingsPage`).
  *
  * No month-name helper exists anywhere in the frontend (verified #3412 T3
- * recon) — the calendar renders the clock's raw fields, no invented
- * calendar lore.
+ * recon) — Time renders the clock's raw fields, no invented calendar lore.
  */
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -18,6 +19,7 @@ import type { EventListItem, PaginatedResponse } from '@/events/types';
 import { useGemits } from '@/narrative/queries';
 import { TidingsFeed } from '@/tidings/components/TidingsFeed';
 import { useAppSelector } from '@/store/hooks';
+import { useWeatherConditions } from '@/weather/queries';
 import { useClockQuery } from './queries';
 
 function capitalize(s: string): string {
@@ -28,13 +30,21 @@ function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-function CalendarPlate() {
+function TimePlate() {
   const { data: clock } = useClockQuery();
+  const { sessions, active, activeEntryId } = useAppSelector((state) => state.game);
+  const sessionRoomId = active ? (sessions[active]?.room?.id ?? null) : null;
+  // With no live session room, the server resolves the docked character's own
+  // room (durable selection, #3412) — weather only reads for someone who IS
+  // somewhere, so the query stays off entirely with nothing docked.
+  const { data: conditions } = useWeatherConditions(sessionRoomId, {
+    fallbackToSelection: activeEntryId != null,
+  });
 
   return (
     <Plate className="p-4">
       <PlateHead as="h2" className="mb-2">
-        The Calendar
+        Time
       </PlateHead>
       {clock ? (
         <div className="space-y-1 text-sm">
@@ -48,8 +58,16 @@ function CalendarPlate() {
           </p>
         </div>
       ) : (
-        // PLACEHOLDER copy
-        <p className="text-sm text-muted-foreground">The clock is quiet.</p>
+        <p className="text-sm text-muted-foreground">Time is currently frozen.</p>
+      )}
+      {conditions?.weather_type && (
+        <p
+          className="mt-1 text-sm text-muted-foreground"
+          title={conditions.emit_text ?? undefined}
+          data-testid="time-plate-weather"
+        >
+          {conditions.weather_type} where you stand.
+        </p>
       )}
     </Plate>
   );
@@ -68,7 +86,7 @@ function OccasionsPlate() {
         Occasions
       </PlateHead>
       {events.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing upcoming. How indolent.</p>
+        <p className="text-sm text-muted-foreground">No events scheduled. How indolent.</p>
       ) : (
         <div className="divide-y">
           {events.slice(0, 5).map((event) => (
@@ -126,7 +144,7 @@ export function WorldBand() {
 
   return (
     <div className="space-y-4">
-      <CalendarPlate />
+      <TimePlate />
       <OccasionsPlate />
       <CrierPlate />
       {dockedEntryId != null && <TidingsDigestPlate viewerId={dockedEntryId} />}

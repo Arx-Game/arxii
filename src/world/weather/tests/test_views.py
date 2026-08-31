@@ -29,9 +29,54 @@ class WeatherConditionsApiTest(APITestCase):
         response = self.client.get(CONDITIONS_URL, {"room_id": self.room.pk})
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
-    def test_missing_room_id_is_400(self) -> None:
+    def test_missing_room_id_without_selection_is_404(self) -> None:
+        """Omitted room_id falls back to the caller's selected character (#3539) —
+        no selection means there is nowhere to read conditions for."""
         self.client.force_authenticate(user=self.user)
-        assert self.client.get(CONDITIONS_URL).status_code == status.HTTP_400_BAD_REQUEST
+        assert self.client.get(CONDITIONS_URL).status_code == status.HTTP_404_NOT_FOUND
+
+    def test_missing_room_id_resolves_the_selected_characters_room(self) -> None:
+        """The Hall's Time plate has no live session room; the durable selection
+        (PlayerData.selected_entry, #3412) names whose room to read."""
+        from evennia_extensions.factories import CharacterFactory
+        from evennia_extensions.models import PlayerData
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import RosterEntryFactory
+
+        GameClockFactory(anchor_ic_time=datetime(1010, 7, 15, 12, 0, tzinfo=UTC), paused=True)
+        storm = WeatherTypeFactory(name="Storm")
+        RegionWeatherStateFactory(area=self.region, weather_type=storm)
+
+        char = CharacterFactory(db_key="HallDocked", location=self.room)
+        CharacterSheetFactory(character=char)
+        entry = RosterEntryFactory(character_sheet__character=char)
+        player_data, _ = PlayerData.objects.get_or_create(account=self.user)
+        player_data.selected_entry = entry
+        player_data.save()
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(CONDITIONS_URL)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["weather_type"] == "Storm"
+        assert response.data["season"] == "summer"
+
+    def test_missing_room_id_with_locationless_selection_is_404(self) -> None:
+        """Selection is not presence — a selected character standing nowhere
+        yields no conditions rather than an error."""
+        from evennia_extensions.factories import CharacterFactory
+        from evennia_extensions.models import PlayerData
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import RosterEntryFactory
+
+        char = CharacterFactory(db_key="HallNowhere")
+        CharacterSheetFactory(character=char)
+        entry = RosterEntryFactory(character_sheet__character=char)
+        player_data, _ = PlayerData.objects.get_or_create(account=self.user)
+        player_data.selected_entry = entry
+        player_data.save()
+
+        self.client.force_authenticate(user=self.user)
+        assert self.client.get(CONDITIONS_URL).status_code == status.HTTP_404_NOT_FOUND
 
     def test_unknown_room_is_404(self) -> None:
         self.client.force_authenticate(user=self.user)

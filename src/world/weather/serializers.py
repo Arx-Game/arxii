@@ -8,9 +8,13 @@ from world.weather.types import ConditionsSummary
 
 
 class ConditionsRequestSerializer(serializers.Serializer):
-    """Query-param validation for the conditions read — a required room id."""
+    """Query-param validation for the conditions read.
 
-    room_id = serializers.IntegerField()
+    ``room_id`` optional since the Hall's Time plate (#3539): omitted, the view
+    resolves the caller's selected character's current room instead.
+    """
+
+    room_id = serializers.IntegerField(required=False)
 
 
 class ConditionsSerializer(serializers.Serializer):
