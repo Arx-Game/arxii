@@ -19,9 +19,11 @@ from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import AreaBuildGrantFactory, GMProfileFactory
+from world.locations.constants import LocationParentType
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import CharacterResonanceFactory, RitualFactory
 from world.magic.models import PendingRitualEffect
+from world.narrative.factories import AmbientEmoteLineFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
@@ -247,6 +249,60 @@ class BuildWarrantPrerequisiteTests(TestCase):
         met, reason = BuildWarrantPrerequisite().is_met(
             actor, context={"kwargs": {"room_id": room_profile.objectdb_id}}
         )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_line_param_kwarg_resolves_room_scoped_line(self) -> None:
+        """#3477 Task 3 fix round 1 -- a room-scoped line resolves via room_profile.area."""
+        actor, account = _gm_actor_and_account(db_key="LineParamRoomScoped")
+        area = AreaFactory(level=AreaLevel.WARD)
+        room_profile = RoomProfileFactory(area=area)
+        line = AmbientEmoteLineFactory(room_profile=room_profile)
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(
+            actor, context={"kwargs": {"line_id": line.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_line_param_kwarg_resolves_area_scoped_line_directly(self) -> None:
+        """An AREA-scoped line (no room_profile) resolves via its own ``area`` FK."""
+        actor, account = _gm_actor_and_account(db_key="LineParamAreaScoped")
+        area = AreaFactory(level=AreaLevel.WARD)
+        line = AmbientEmoteLineFactory(
+            parent_type=LocationParentType.AREA, area=area, room_profile=None
+        )
+        AreaBuildGrantFactory(account=account, area=area, max_level=AreaLevel.WARD)
+        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(
+            actor, context={"kwargs": {"line_id": line.pk}}
+        )
+        self.assertTrue(met)
+        self.assertEqual(reason, "")
+
+    def test_line_param_kwarg_no_grant_refused(self) -> None:
+        """A GM with no covering grant is refused, same as the room_id/area_id paths."""
+        actor, _account = _gm_actor_and_account(db_key="LineParamNoGrant")
+        area = AreaFactory(level=AreaLevel.WARD)
+        room_profile = RoomProfileFactory(area=area)
+        line = AmbientEmoteLineFactory(room_profile=room_profile)
+        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(
+            actor, context={"kwargs": {"line_id": line.pk}}
+        )
+        self.assertFalse(met)
+        self.assertEqual(reason, "No build grant covers this area.")
+
+    def test_line_param_no_kwarg_refused_like_staff_only(self) -> None:
+        """No ``line_id`` kwarg present -- falls through exactly like the base class does
+        with no ``area_id``/``room_id``."""
+        actor, _account = _gm_actor_and_account(db_key="LineParamMissingKwarg")
+        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(actor)
+        self.assertFalse(met)
+        self.assertEqual(reason, "Staff only.")
+
+    def test_line_param_staff_bypasses_regardless_of_line_kwarg(self) -> None:
+        """Staff pass unconditionally, same as every other BuildWarrantPrerequisite shape."""
+        actor = _plain_actor(db_key="LineParamStaffBypass", is_staff=True)
+        met, reason = BuildWarrantPrerequisite(line_param="line_id").is_met(actor)
         self.assertTrue(met)
         self.assertEqual(reason, "")
 

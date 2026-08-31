@@ -1554,6 +1554,94 @@ class PhaseBRoomAuthoringTests(TestCase):
         result = StaffRemoveAmbientConditionAction().run(self.staff, condition_id=999999)
         assert not result.success
 
+    def test_add_condition_warrant_holding_gm_passes(self) -> None:
+        """#3477 Task 3 fix round 1 -- a non-staff GM with a covering AreaBuildGrant can
+        add a condition, unlike before the fix (always refused, no area_id/room_id kwarg
+        for BuildWarrantPrerequisite to resolve against)."""
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        gm = _gm_actor(GMLevel.STARTING, "AmbientConditionWarrantGM")
+        AreaBuildGrantFactory(account=gm.db_account, area=self.area, max_level=AreaLevel.BUILDING)
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        result = StaffAddAmbientConditionAction().run(
+            gm, line_id=line.pk, condition_type="legend_deed"
+        )
+        assert result.success, result.message
+        assert AmbientEmoteCondition.objects.filter(line=line).exists()
+
+    def test_add_condition_gm_outside_grant_refused(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        gm = _gm_actor(GMLevel.STARTING, "AmbientConditionNoGrantGM")
+        other_area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=gm.db_account, area=other_area, max_level=AreaLevel.BUILDING)
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        result = StaffAddAmbientConditionAction().run(
+            gm, line_id=line.pk, condition_type="legend_deed"
+        )
+        assert not result.success
+        assert not AmbientEmoteCondition.objects.filter(line=line).exists()
+
+    def test_remove_condition_warrant_holding_gm_passes(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        gm = _gm_actor(GMLevel.STARTING, "AmbientConditionRemoveWarrantGM")
+        AreaBuildGrantFactory(account=gm.db_account, area=self.area, max_level=AreaLevel.BUILDING)
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        condition = AmbientEmoteConditionFactory(
+            line=line, condition_type="legend_deed", species=None
+        )
+        result = StaffRemoveAmbientConditionAction().run(
+            gm, condition_id=condition.pk, line_id=line.pk
+        )
+        assert result.success, result.message
+        assert not AmbientEmoteCondition.objects.filter(pk=condition.pk).exists()
+
+    def test_remove_condition_gm_outside_grant_refused(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        gm = _gm_actor(GMLevel.STARTING, "AmbientConditionRemoveNoGrantGM")
+        other_area = AreaFactory(level=AreaLevel.WARD)
+        AreaBuildGrantFactory(account=gm.db_account, area=other_area, max_level=AreaLevel.BUILDING)
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        condition = AmbientEmoteConditionFactory(
+            line=line, condition_type="legend_deed", species=None
+        )
+        result = StaffRemoveAmbientConditionAction().run(
+            gm, condition_id=condition.pk, line_id=line.pk
+        )
+        assert not result.success
+        assert AmbientEmoteCondition.objects.filter(pk=condition.pk).exists()
+
+    def test_remove_condition_line_id_mismatch_refused(self) -> None:
+        """Spoof guard: a grant covering an unrelated line's room can't be used to delete
+        a condition on a different line, even by naming that unrelated line's id."""
+        from actions.definitions.world_builder import StaffRemoveAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        gm = _gm_actor(GMLevel.STARTING, "AmbientConditionSpoofGM")
+        AreaBuildGrantFactory(account=gm.db_account, area=self.area, max_level=AreaLevel.BUILDING)
+        other_room = RoomProfileFactory(area=self.area)
+        other_line = AmbientEmoteLineFactory(room_profile=other_room)
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        condition = AmbientEmoteConditionFactory(
+            line=line, condition_type="legend_deed", species=None
+        )
+        result = StaffRemoveAmbientConditionAction().run(
+            gm, condition_id=condition.pk, line_id=other_line.pk
+        )
+        assert not result.success
+        assert AmbientEmoteCondition.objects.filter(pk=condition.pk).exists()
+
     def test_feature_fiat_runs_the_real_strategy(self) -> None:
         """A SOCIAL_HUB fiat install must land the traffic modifier + flag —
         proof the fiat path runs the identical per-kind handler."""

@@ -379,3 +379,23 @@ class ResolveAreaArtTests(TestCase):
 
     def test_none_when_no_room_profile(self) -> None:
         self.assertIsNone(resolve_area_art(None))
+
+    def test_precomputed_thumbnail_url_skips_query_and_wins(self) -> None:
+        """#3477 fix round 1 — a supplied thumbnail_url skips the ObjectDisplayData query."""
+        ward_media = MediaFactory(player_data=None, slug="ward-art-precomputed")
+        ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        # No ObjectDisplayData row exists at all — a precomputed thumbnail_url still wins,
+        # and zero queries confirms the per-room ObjectDisplayData lookup was skipped.
+        with self.assertNumQueries(0):
+            result = resolve_area_art(profile, thumbnail_url="https://example.test/precomputed.png")
+        self.assertEqual(result, "https://example.test/precomputed.png")
+
+    def test_precomputed_none_thumbnail_falls_back_to_area_cascade(self) -> None:
+        """thumbnail_url=None means "resolved to no thumbnail" — cascade still runs."""
+        ward_media = MediaFactory(player_data=None, slug="ward-art-precomputed-none")
+        ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        with self.assertNumQueries(0):
+            result = resolve_area_art(profile, thumbnail_url=None)
+        self.assertEqual(result, ward_media.cloudinary_url)

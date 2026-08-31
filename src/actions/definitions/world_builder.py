@@ -9,19 +9,28 @@ blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
 ``staff_remove_ambient_condition`` pair (#3477 Task 3 — wires the pre-existing
 ``AmbientEmoteCondition`` model to the canvas)), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
-``author_clue``/``edit_area`` is gated by ``BuildWarrantPrerequisite()`` (the
-base class default) alone (#3477 — staff bypass unconditionally, same as the
-``StaffOnlyPrerequisite`` it replaces; non-staff GMs additionally pass with an
-``AreaBuildGrant`` over the resolved ``area_id``/``room_id`` kwarg, checked
-against the fixed ``AreaLevel.BUILDING`` floor — no ownership/tenancy standing
-otherwise, this is staff/warrant tooling, not a player-facing builder);
-``edit_area`` overrides to ``BuildWarrantPrerequisite(level_param="level")``
-instead (#3477 fix round 1) since it's the one action that can reclassify an
-area's ``level`` in place — the ceiling check there is the stricter of the
-area's current level and the incoming ``level`` kwarg, not a fixed floor;
-``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)`` instead (staff
-bypass built in) — canon-creating clue authorship is a SENIOR+ GM power, not
-staff-only, per the #3432 owner ruling. Each is a thin wrapper
+``author_clue``/``edit_area``/the ambient-condition pair is gated by
+``BuildWarrantPrerequisite()`` (the base class default) alone (#3477 — staff
+bypass unconditionally, same as the ``StaffOnlyPrerequisite`` it replaces;
+non-staff GMs additionally pass with an ``AreaBuildGrant`` over the resolved
+``area_id``/``room_id`` kwarg, checked against the fixed ``AreaLevel.BUILDING``
+floor — no ownership/tenancy standing otherwise, this is staff/warrant
+tooling, not a player-facing builder); ``edit_area`` overrides to
+``BuildWarrantPrerequisite(level_param="level")`` instead (#3477 fix round 1)
+since it's the one action that can reclassify an area's ``level`` in place —
+the ceiling check there is the stricter of the area's current level and the
+incoming ``level`` kwarg, not a fixed floor; ``staff_add_ambient_condition``/
+``staff_remove_ambient_condition`` override to
+``BuildWarrantPrerequisite(line_param="line_id")`` instead (#3477 Task 3 fix
+round 1) since neither carries an ``area_id``/``room_id`` kwarg of its own —
+the warrant resolves through the named ``AmbientEmoteLine``'s own room/area,
+which also means a caller can't spoof the check with an unrelated room/area
+(the sibling ``staff_remove_ambient_line``/``staff_remove_ambient_emit``
+verbs share this same no-area-kwarg gap and are refused for every non-staff
+caller today — a pre-existing issue, not swept here); ``author_clue`` gates
+at ``MinimumGMLevelPrerequisite(SENIOR)`` instead (staff bypass built in) —
+canon-creating clue authorship is a SENIOR+ GM power, not staff-only, per the
+#3432 owner ruling. Each is a thin wrapper
 over the Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid
 primitives + ``promote_to_authored``/``suggest_fixture_key``) and
 ``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
@@ -1405,6 +1414,12 @@ class StaffAddAmbientConditionAction(_WorldBuilderAction):
     name: str = "Add Ambient Condition"
     icon: str = "filter"
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        # No area_id/room_id kwarg on this action -- resolve the warrant target through
+        # the line itself (#3477 Task 3 fix round 1), same as the other ambient verbs get
+        # via room_id.
+        return [BuildWarrantPrerequisite(line_param="line_id")]
+
     def execute(
         self,
         actor: ObjectDB,
@@ -1440,11 +1455,23 @@ class StaffAddAmbientConditionAction(_WorldBuilderAction):
 
 @dataclass
 class StaffRemoveAmbientConditionAction(_WorldBuilderAction):
-    """Remove an ambient condition. Kwarg: ``condition_id``."""
+    """Remove an ambient condition. Kwargs: ``condition_id``, ``line_id``.
+
+    ``line_id`` names the condition's own line (#3477 Task 3 fix round 1) -- this action
+    has no ``area_id``/``room_id`` kwarg of its own, so
+    ``BuildWarrantPrerequisite(line_param="line_id")`` needs it to resolve a non-staff GM's
+    warrant. Refused (not silently ignored) when the condition doesn't actually belong to
+    the named line, so a warrant covering an unrelated line/room/area can't be used to
+    delete a condition outside it. Staff bypass the warrant check entirely and may omit
+    ``line_id``.
+    """
 
     key: str = "staff_remove_ambient_condition"
     name: str = "Remove Ambient Condition"
     icon: str = "filter-x"
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [BuildWarrantPrerequisite(line_param="line_id")]
 
     def execute(
         self,
@@ -1457,6 +1484,14 @@ class StaffRemoveAmbientConditionAction(_WorldBuilderAction):
         condition = AmbientEmoteCondition.objects.filter(pk=kwargs.get("condition_id") or 0).first()
         if condition is None:
             return ActionResult(success=False, message="No such ambient condition.")
+        line_id = kwargs.get("line_id")
+        if line_id:
+            try:
+                line_id = int(line_id)
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message="Invalid line_id.")
+            if condition.line_id != line_id:
+                return ActionResult(success=False, message="That condition isn't on that line.")
         condition.delete()
         return ActionResult(success=True, message="Ambient condition removed.")
 

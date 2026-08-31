@@ -298,6 +298,52 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
         # private_room's own thumbnail wins over the area's art.
         self.assertEqual(rooms_by_id[self.private_room.pk]["art_url"], room_media.cloudinary_url)
 
+    def test_room_rows_art_url_does_not_query_per_room(self) -> None:
+        """#3477 fix round 1 — resolve_area_art must not run a query per room in the loop.
+
+        ``_room_rows`` bulk-fetches ``ObjectDisplayData`` (with its thumbnail) once and
+        passes each room's precomputed ``thumbnail_url`` into ``resolve_area_art``, so the
+        total query count must not grow as more rooms are added to the same area.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from evennia_extensions.factories import MediaFactory
+        from world.areas.builder_views import _room_rows
+
+        area_media = MediaFactory(player_data=None, slug="ward-art-query-test")
+        self.area.art = area_media
+        self.area.save(update_fields=["art"])
+        room_media = MediaFactory(player_data=None, slug="room-thumb-query-test")
+        ObjectDisplayData.objects.create(object=self.private_room, thumbnail=room_media)
+
+        def _profiles():
+            return list(
+                RoomProfile.objects.filter(area=self.area).select_related(
+                    "objectdb", "size", "default_blueprint"
+                )
+            )
+
+        with CaptureQueriesContext(connection) as before:
+            rows = _room_rows(_profiles())
+        baseline_query_count = len(before.captured_queries)
+
+        for i in range(5):
+            _room_in(self.area, name=f"Extra Room {i}")
+
+        with CaptureQueriesContext(connection) as after:
+            _room_rows(_profiles())
+        scaled_query_count = len(after.captured_queries)
+
+        self.assertEqual(
+            baseline_query_count,
+            scaled_query_count,
+            "query count must not scale with room count (art_url N+1 regression)",
+        )
+        rows_by_id = {r["id"]: r for r in rows}
+        self.assertEqual(rows_by_id[self.public_room.pk]["art_url"], area_media.cloudinary_url)
+        self.assertEqual(rows_by_id[self.private_room.pk]["art_url"], room_media.cloudinary_url)
+
 
 class WorldBuilderRoomDetailTests(WorldBuilderApiBase):
     """The selection-time room-detail endpoint (#3269); ambient-line conditions (#3477)."""

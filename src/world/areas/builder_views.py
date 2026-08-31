@@ -302,9 +302,18 @@ def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
     from world.locations.services import resolve_area_art  # noqa: PLC0415
 
     room_ids = [p.objectdb_id for p in profiles]
-    descriptions = {
-        row.object_id: row.permanent_description
-        for row in ObjectDisplayData.objects.filter(object_id__in=room_ids)
+    display_rows = {
+        row.object_id: row
+        for row in ObjectDisplayData.objects.filter(object_id__in=room_ids).select_related(
+            "thumbnail"
+        )
+    }
+    descriptions = {object_id: row.permanent_description for object_id, row in display_rows.items()}
+    # Precomputed per-room thumbnail URLs (or None) so resolve_area_art doesn't re-query
+    # ObjectDisplayData per room below — one bulk query above covers every room.
+    thumbnail_urls = {
+        object_id: (row.thumbnail.cloudinary_url if row.thumbnail_id else None)
+        for object_id, row in display_rows.items()
     }
     occupant_counts = _occupant_counts(room_ids)
     stats_by_room = _stat_sidecars(profiles)
@@ -328,7 +337,7 @@ def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
             "exported_at": p.exported_at,
             "published_at": p.published_at,
             "needs_prose": _needs_prose(descriptions.get(p.objectdb_id, "")),
-            "art_url": resolve_area_art(p),
+            "art_url": resolve_area_art(p, thumbnail_url=thumbnail_urls.get(p.objectdb_id)),
             "stats": stats_by_room.get(p.objectdb_id, []),
             "area_id": p.area_id,
             "size_units": p.size.units if p.size_id else None,

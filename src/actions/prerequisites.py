@@ -168,13 +168,28 @@ class BuildWarrantPrerequisite(Prerequisite):
     ceiling by touching only unrelated fields (no ``level`` kwarg sent, so
     the kwarg-alone check would default to BUILDING and pass regardless of
     where the area already sits).
+
+    ``line_param``, when set, names a kwarg holding an ``AmbientEmoteLine`` pk
+    (#3477 Task 3 fix round 1) -- the target area resolves through the line's
+    own ``room_profile.area`` (ROOM-scoped) or ``area`` (AREA-scoped) FK,
+    whichever its ``parent_type`` discriminator selects. Used by
+    ``staff_add_ambient_condition``/``staff_remove_ambient_condition``, which
+    carry no ``area_id``/``room_id`` kwarg of their own to resolve against --
+    without this, a non-staff GM with a covering ``AreaBuildGrant`` was always
+    refused (unlike the sibling ambient-line/-emit add verbs), since the
+    default resolution falls through to "Staff only." when neither kwarg is
+    present. Resolving via the line itself (rather than trusting a
+    caller-supplied ``room_id``) also means the check can't be spoofed by
+    naming an unrelated room/area the caller happens to hold a grant over.
     """
 
     level_param: str | None = None
+    line_param: str | None = None
 
-    @staticmethod
-    def _resolve_target_area(kwargs: dict) -> Area | None:
-        """``area_id`` directly, or ``room_id``'s ``RoomProfile.area``; else ``None``."""
+    def _resolve_target_area(self, kwargs: dict) -> Area | None:
+        """``area_id`` directly, ``room_id``'s ``RoomProfile.area``, or (with
+        ``line_param`` set) the named ``AmbientEmoteLine``'s own room/area; else ``None``.
+        """
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
         from world.areas.models import Area  # noqa: PLC0415
 
@@ -185,6 +200,29 @@ class BuildWarrantPrerequisite(Prerequisite):
         if room_id:
             profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("area").first()
             return profile.area if profile else None
+        if self.line_param:
+            line_id = kwargs.get(self.line_param)
+            if line_id:
+                return self._area_for_ambient_line(line_id)
+        return None
+
+    @staticmethod
+    def _area_for_ambient_line(line_id: object) -> Area | None:
+        """The area a given ``AmbientEmoteLine`` pk resolves to, by its own discriminator."""
+        from world.locations.constants import LocationParentType  # noqa: PLC0415
+        from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+        line = (
+            AmbientEmoteLine.objects.filter(pk=line_id)
+            .select_related("room_profile__area", "area")
+            .first()
+        )
+        if line is None:
+            return None
+        if line.parent_type == LocationParentType.ROOM:
+            return line.room_profile.area if line.room_profile_id else None
+        if line.parent_type == LocationParentType.AREA:
+            return line.area
         return None
 
     def _resolve_required_level(self, area: Area, kwargs: dict) -> int:
