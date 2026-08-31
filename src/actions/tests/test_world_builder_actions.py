@@ -380,6 +380,55 @@ class StaffEditRoomActionTests(TestCase):
         assert display.permanent_description == "No sheet needed."
 
 
+class StaffPublishRoomActionTests(TestCase):
+    """#3477 Task 2: staff_publish_room stamps RoomProfile.published_at."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("PublishRoomStaff")
+        self.player = _player_actor("PublishRoomPlayer")
+        area = AreaFactory(level=AreaLevel.WARD)
+        self.profile = RoomProfileFactory(area=area)
+        # RoomProfileFactory's rooms are born published (the field's default —
+        # see #3477); reset to unpublished to exercise the AUTHORED-canvas case
+        # this action actually exists for.
+        self.profile.published_at = None
+        self.profile.save(update_fields=["published_at"])
+
+    def test_staff_publishes_room(self) -> None:
+        from actions.definitions.world_builder import StaffPublishRoomAction
+
+        result = StaffPublishRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
+        assert result.success
+        self.profile.refresh_from_db()
+        assert self.profile.published_at is not None
+
+    def test_republish_is_idempotent_and_refreshes_stamp(self) -> None:
+        from actions.definitions.world_builder import StaffPublishRoomAction
+
+        StaffPublishRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
+        self.profile.refresh_from_db()
+        first_stamp = self.profile.published_at
+
+        result = StaffPublishRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
+        assert result.success
+        self.profile.refresh_from_db()
+        assert self.profile.published_at >= first_stamp
+
+    def test_non_staff_rejected(self) -> None:
+        from actions.definitions.world_builder import StaffPublishRoomAction
+
+        result = StaffPublishRoomAction().run(self.player, room_id=self.profile.objectdb_id)
+        assert not result.success
+        self.profile.refresh_from_db()
+        assert self.profile.published_at is None
+
+    def test_no_such_room(self) -> None:
+        from actions.definitions.world_builder import StaffPublishRoomAction
+
+        result = StaffPublishRoomAction().run(self.staff, room_id=0)
+        assert not result.success
+
+
 class StaffLinkRoomsActionTests(TestCase):
     def setUp(self) -> None:
         self.staff = _staff_actor("LinkRoomsStaff")

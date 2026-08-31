@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.utils import timezone
 from django.utils.text import slugify
 
 from evennia_extensions.models import RoomProfile, RoomSizeTier
@@ -68,6 +69,13 @@ def create_room(  # noqa: PLR0913 — mirrors dig_room's full room-creation surf
     Cosmetic grid placement (``grid_x``/``grid_y``/``floor``) and authorship
     (``origin``/``fixture_key``) are the caller's responsibility to validate —
     this is a pure creation primitive with no budget or ownership checks.
+
+    #3477: an AUTHORED room (the staff world-builder canvas dig,
+    ``StaffDigRoomAction``) is born unpublished — ``published_at=None``, not
+    live in the world until ``staff_publish_room`` stamps it. A PLAYER room
+    (the owner-facing Room Builder, ``room_services.dig_room``, which shares
+    this same primitive) is born published — player housing has no staff
+    review gate.
     """
     from evennia.utils import create as evennia_create  # noqa: PLC0415
 
@@ -91,6 +99,7 @@ def create_room(  # noqa: PLR0913 — mirrors dig_room's full room-creation surf
             "floor": floor,
             "origin": origin,
             "fixture_key": fixture_key,
+            "published_at": None if origin == GridOrigin.AUTHORED else timezone.now(),
         },
     )
     _set_room_description(room, description)

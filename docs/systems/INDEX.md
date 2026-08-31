@@ -1089,19 +1089,32 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Thirty-nine REGISTRY
-  actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
-  `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
+  staff canvas share one substrate instead of two drifting copies. Forty-one
+  REGISTRY actions (`src/actions/definitions/world_builder.py`,
+  `category="world_builder"`, `target_type=SELF`) — `create_area`/`edit_area`/
+  `staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
-  `staff_remove_room`/`staff_remove_area`/`staff_move_room`/`promote_room`/
-  `promote_area` + the six #2451 discovery/portal verbs + the #3269 Phase B
-  room-authoring set (stats/places/ambient/feature/staffing/travel/blueprint/
-  bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the Phase C
-  area metadata) + the #3291 `staff_set_room_desc_variant`/
-  `staff_remove_room_desc_variant` pair — gated solely by
-  `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
-  GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
-  and always authors the new room outright; `staff_remove_room` refuses an
+  `staff_publish_room`/`staff_remove_room`/`staff_remove_area`/`staff_move_room`/
+  `promote_room`/`promote_area` + the six #2451 discovery/portal verbs + the #3269
+  Phase B room-authoring set (stats/places/ambient/feature/staffing/travel/
+  blueprint/bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the
+  Phase C area metadata) + the #3291 `staff_set_room_desc_variant`/
+  `staff_remove_room_desc_variant` pair — gated by `BuildWarrantPrerequisite`
+  (#3477 Task 1, replacing the old `StaffOnlyPrerequisite`: staff bypass
+  unconditionally, a non-staff GM additionally passes with an `AreaBuildGrant`
+  over the resolved area at the `BUILDING` floor — no ownership/tenancy standing
+  otherwise) except `edit_area` (the stricter level-aware variant) and
+  `author_clue` (`MinimumGMLevelPrerequisite(SENIOR)`, #3432). `staff_dig_room`
+  requires an AUTHORED area and always authors the new room outright — and, as of
+  #3477 Task 2, births it *unpublished*: `RoomProfile.published_at` defaults to
+  `now()` (an ordinary/PLAYER room is live immediately) but `create_room` sets it
+  to `NULL` for `origin=AUTHORED`, and an unpublished room does not exist in the
+  live world — not enterable (`ExitState.can_traverse`) and its exits hidden from
+  the room-state payload (`RoomStatePayloadSerializer._exit_hidden_from_looker`)
+  — for anyone but a story-runner (GM/Staff, `is_story_runner`). `staff_publish_room`
+  (kwarg `room_id`) stamps `published_at=now()`; idempotent (a re-publish just
+  refreshes the stamp), no unpublish verb, no separate "done" flag.
+  `staff_remove_room` refuses an
   already-exported room (report-never-delete pipeline territory, not the canvas);
   `staff_unlink_rooms`'s stranding guard is the narrower "would this drop leave an
   *occupied* room with zero exits" rule, not the Room Builder's anchor-room BFS

@@ -42478,6 +42478,8 @@ export interface components {
       origin: string;
       /** Format: date-time */
       exported_at: string | null;
+      /** Format: date-time */
+      published_at: string | null;
       needs_prose: boolean;
       stats: components['schemas']['WorldBuilderRoomStat'][];
       area_id: number | null;
@@ -44831,6 +44833,8 @@ export interface components {
       origin: string;
       /** Format: date-time */
       exported_at: string | null;
+      /** Format: date-time */
+      published_at: string | null;
       needs_prose: boolean;
       stats: components['schemas']['WorldBuilderRoomStat'][];
       area_id: number | null;

@@ -286,6 +286,9 @@ class WorldBuilderRoomSerializer(serializers.Serializer):
     fixture_key = serializers.CharField(allow_null=True)
     origin = serializers.CharField()
     exported_at = serializers.DateTimeField(allow_null=True)
+    # #3477 — null means unpublished/WIP: not enterable, exits hidden from
+    # non-story-runners, until staff_publish_room stamps it.
+    published_at = serializers.DateTimeField(allow_null=True)
     needs_prose = serializers.BooleanField()
     stats = WorldBuilderRoomStatSerializer(many=True)
     area_id = serializers.IntegerField(allow_null=True)

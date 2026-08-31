@@ -324,6 +324,7 @@ def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
             "fixture_key": p.fixture_key,
             "origin": p.origin,
             "exported_at": p.exported_at,
+            "published_at": p.published_at,
             "needs_prose": _needs_prose(descriptions.get(p.objectdb_id, "")),
             "stats": stats_by_room.get(p.objectdb_id, []),
             "area_id": p.area_id,

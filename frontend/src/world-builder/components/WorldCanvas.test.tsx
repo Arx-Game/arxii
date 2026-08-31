@@ -16,6 +16,7 @@ const baseRoom: WorldBuilderRoom = {
   fixture_key: null,
   origin: 'authored',
   exported_at: null,
+  published_at: null,
   needs_prose: false,
   stats: [],
   area_id: 1,

@@ -75371,6 +75371,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
         needs_prose:
           type: boolean
         stats:
@@ -75457,6 +75461,7 @@ components:
       - origin
       - places
       - portal_anchors
+      - published_at
       - size_name
       - size_units
       - starting_bindings
@@ -80006,6 +80011,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
         needs_prose:
           type: boolean
         stats:
@@ -80087,6 +80096,7 @@ components:
       - origin
       - places
       - portal_anchors
+      - published_at
       - size_name
       - size_units
       - starting_bindings

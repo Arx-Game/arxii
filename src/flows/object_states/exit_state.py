@@ -57,6 +57,25 @@ class ExitState(BaseState):
         room = self.obj.location
         return room is not None and self._actor_lacks_room_standing(actor, room)
 
+    def _destination_unpublished_for_actor(self, actor: "BaseState") -> bool:
+        """True when this exit's destination is unpublished and ``actor`` can't see it.
+
+        #3477: an unpublished room does not exist in the live world yet — not
+        even the door leading into it works — for anyone except a
+        story-runner (GM/Staff, ``is_story_runner`` — a plain attribute
+        declared ``False`` on the base ``Character`` typeclass, so every real
+        traversing actor has it with no fallback needed). A destination with
+        no ``RoomProfile`` at all (never true for a real ``Room`` typeclass,
+        but cheap to guard) is never treated as unpublished.
+        """
+        if actor.obj.is_story_runner:
+            return False
+        destination = self.obj.destination
+        if destination is None:
+            return False
+        profile = destination.room_profile_or_none
+        return profile is not None and profile.published_at is None
+
     def can_traverse(self, actor: "BaseState | None" = None) -> bool:
         """Return ``True`` if ``actor`` may traverse this exit.
 
@@ -68,6 +87,13 @@ class ExitState(BaseState):
         whether ``db.locked`` is also set. Deliberately not merged into the
         lock-check block above: the two gates are separate installable
         defenses with independent lifecycles.
+
+        An unpublished destination (#3477) is checked LAST, after the
+        door-specific gates: those only ever narrow an ``actor`` (real
+        Character) with a resolvable ``character_sheet``, while the publish
+        check reads ``actor.obj.is_story_runner`` unconditionally — keeping it
+        last means a non-Character actor synthesized in a lock/bars/window
+        test (which always fails one of those gates first) never reaches it.
 
         Args:
             actor: State attempting the action.
@@ -85,6 +111,9 @@ class ExitState(BaseState):
                 return False
 
         if profile is not None and actor is not None and self._bars_block_actor(profile, actor):
+            return False
+
+        if actor is not None and self._destination_unpublished_for_actor(actor):
             return False
 
         result = self._run_package_hook("can_traverse", actor)

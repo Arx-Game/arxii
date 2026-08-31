@@ -630,6 +630,7 @@ class ActionRegistryTests(TestCase):
             "staff_install_room_feature",
             "staff_move_room",
             "staff_place_room",
+            "staff_publish_room",
             "staff_remove_ambient_emit",
             "staff_remove_ambient_line",
             "staff_remove_area",

@@ -20,6 +20,7 @@ const baseRoom: WorldBuilderRoom = {
   fixture_key: 'arx-city/golden-hart-taproom',
   origin: 'authored',
   exported_at: null,
+  published_at: null,
   needs_prose: false,
   stats: [],
   area_id: 1,

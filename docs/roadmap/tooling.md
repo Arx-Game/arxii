@@ -3,6 +3,25 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-08-31, #3477 Task 2 — publish lifecycle)
+
+A canvas-dug (`origin=AUTHORED`) room is now born unpublished:
+`RoomProfile.published_at` defaults to `now()` (an ordinary PLAYER room, and
+every pre-existing room via the migration backfill, is live immediately) but
+`world.areas.grid_services.create_room` sets it to `NULL` for `origin=AUTHORED`.
+An unpublished room does not exist in the live world — `ExitState.can_traverse`
+refuses entry through any exit leading to one, and
+`RoomStatePayloadSerializer` omits such an exit from the room-state payload
+entirely — for anyone except a story-runner (GM/Staff, the `is_story_runner`
+typeclass attribute); a story-runner can walk in and see the exit to review the
+room before it goes live. The new `staff_publish_room` REGISTRY action
+(kwarg `room_id`, gated by the same `BuildWarrantPrerequisite` as its siblings)
+stamps `published_at=now()`; idempotent (a re-publish just refreshes the
+stamp) — no unpublish verb, no separate "done" flag. The staff area-manager
+payload (`WorldBuilderRoomSerializer`) gains a `published_at` field so the
+canvas can show unpublished rooms distinctly. Not built this task: a canvas
+UI affordance for the Publish action itself (a later task in the #3477 arc).
+
 ## Built (2026-08-31, #3478 — GM onboarding moves to the Hall; mint banner removed)
 
 The staff-mint form the world-builder actor banner grew below (#3283) is gone.

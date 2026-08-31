@@ -1,10 +1,11 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Forty REGISTRY actions (eleven original + six discovery/portal-authoring
+Forty-one REGISTRY actions (eleven original + six discovery/portal-authoring
 #2451, plus the #3269 recoverability pair, the Phase B room-authoring set:
 stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
 blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
-#3291 description-variant pair, and ``author_clue``, #3432), all
+#3291 description-variant pair, ``author_clue`` (#3432), and
+``staff_publish_room`` (#3477 Task 2)), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
 ``author_clue``/``edit_area`` is gated by ``BuildWarrantPrerequisite()`` (the
 base class default) alone (#3477 — staff bypass unconditionally, same as the
@@ -30,7 +31,12 @@ dispatch passes raw ints and staff building happens over the whole shared map,
 not from the actor's own position (#2163).
 
 ``staff_dig_room`` requires an AUTHORED area (canonical world rooms only — a
-STORY/PLAYER area is out of scope for this canvas). ``staff_remove_room``
+STORY/PLAYER area is out of scope for this canvas). Digging into an AUTHORED
+area therefore also births the room unpublished (#3477 — see
+``world.areas.grid_services.create_room``'s ``published_at=None`` default for
+that origin): it is not enterable and its exits are hidden from anyone but a
+story-runner (GM/Staff) until ``staff_publish_room`` stamps it — re-publishing
+is idempotent, and there is no unpublish verb. ``staff_remove_room``
 refuses a room that has actually shipped in an export bundle
 (``exported_at`` set, #3269 — a fixture key alone is a recoverable mistake):
 exported rooms come out via the report-never-delete pipeline (see
@@ -708,6 +714,41 @@ class StaffEditRoomAction(_WorldBuilderAction):
         if update_fields:
             profile.save(update_fields=update_fields)
         return ActionResult(success=True, message=f"{profile.objectdb.db_key} updated.")
+
+
+@dataclass
+class StaffPublishRoomAction(_WorldBuilderAction):
+    """Publish a world room, making it live: enterable, its exits visible.
+
+    Kwarg: ``room_id``. Idempotent — re-publishing a room refreshes the
+    stamp rather than refusing (#3477: "publish" means "this room is live
+    as of now," not a one-shot flag); there is no separate "done" state and
+    no unpublish verb — pulling a room back out of the live world is
+    ``staff_remove_room``'s job, not a state toggle here. Only
+    ``origin=AUTHORED`` rooms (dug via ``staff_dig_room``) are ever born
+    unpublished (see ``world.areas.grid_services.create_room``), but this
+    action doesn't gate on origin — stamping a PLAYER room (already
+    published at creation) is a harmless no-op refresh.
+    """
+
+    key: str = "staff_publish_room"
+    name: str = "Publish World Room"
+    icon: str = "check-circle"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils import timezone  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        profile.published_at = timezone.now()
+        profile.save(update_fields=["published_at"])
+        return ActionResult(success=True, message=f"{profile.objectdb.db_key} published.")
 
 
 @dataclass

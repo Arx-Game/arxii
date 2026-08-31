@@ -21,6 +21,7 @@ const room: WorldBuilderRoom = {
   fixture_key: null,
   origin: 'story',
   exported_at: null,
+  published_at: null,
   needs_prose: false,
   stats: [],
   area_id: 1,
