@@ -63,6 +63,30 @@ def _compile_condition_leaf(condition: AmbientEmoteCondition) -> dict:
     raise ValueError(msg)
 
 
+def describe_condition(condition: AmbientEmoteCondition) -> str:
+    """One human-readable line describing a condition leaf (#3477 authoring UI).
+
+    Mirrors ``_compile_condition_leaf``'s per-type branching but produces display text
+    instead of a DSL leaf — the world-builder room-detail payload's ``label`` field.
+    """
+    if condition.condition_type == ConditionType.SPECIES:
+        return f"Species: {condition.species.name}"
+    if condition.condition_type == ConditionType.RESONANCE_MIN:
+        return f"{condition.resonance.name} >= {condition.minimum_value}"
+    if condition.condition_type == ConditionType.DISTINCTION:
+        return f"Distinction: {condition.distinction.name}"
+    if condition.condition_type == ConditionType.RENOWN_MIN:
+        suffix = (
+            f" (as seen by {condition.perceiving_society.name})"
+            if condition.perceiving_society_id
+            else ""
+        )
+        return f"Fame >= {condition.get_min_fame_tier_display()}{suffix}"
+    if condition.condition_type == ConditionType.LEGEND_DEED:
+        return "Has common-knowledge deeds"
+    return condition.get_condition_type_display()
+
+
 def compile_line_filter(line: AmbientEmoteLine) -> dict | None:
     """Compile a line's conditions into a DSL filter dict, or None (always matches) for zero."""
     conditions = list(

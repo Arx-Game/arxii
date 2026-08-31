@@ -441,6 +441,7 @@
   - parent -> areas.Area [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
   - climate -> weather.Climate [FK] (nullable)
+  - art -> evennia_extensions.Media [FK] (nullable)
   - dominant_society -> societies.Society [FK] (nullable)
   - exile_destination -> evennia_extensions.RoomProfile [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
@@ -460,6 +461,7 @@
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - income_streams <- currency.OrgIncomeStream
+  - build_grants <- gm.AreaBuildGrant
   - story_ownership <- gm.StoryArea
   - name_cultures <- npc_services.NameCulture
   - default_permits_offered <- npc_services.PermitOfferDetails
@@ -3899,6 +3901,12 @@
 
 ## world.gm
 
+### AreaBuildGrant
+**Foreign Keys:**
+  - account -> evennia.AccountDB [FK]
+  - area -> areas.Area [FK]
+  - granted_by -> evennia.AccountDB [FK]
+
 ### CatalogSuggestion
 **Foreign Keys:**
   - submitted_by -> evennia.AccountDB [FK]
@@ -4061,6 +4069,7 @@
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' - Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
 - `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' - The review-pool rule (#2631 ruling): staff, or a GM with table access.`
+- `has_build_warrant(account: 'AccountDB | None', *, area: 'Area', level: 'int') -> 'bool' - Whether ``account`` may build-author at ``level`` within ``area``'s subtree.`
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' - ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' - Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' - Soft-leave a membership. No-op if already left.`
@@ -4903,6 +4912,7 @@
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' - Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' - Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' - Return ALL LocationOwnership rows (active and ended) for a`
+- `resolve_area_art(room_profile: 'RoomProfile | None') -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
 - `room_discomfort(room: 'DefaultObject') -> 'int' - Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' - The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' - Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`

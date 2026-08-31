@@ -1089,19 +1089,32 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Thirty-nine REGISTRY
-  actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
-  `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
+  staff canvas share one substrate instead of two drifting copies. Forty-three
+  REGISTRY actions (`src/actions/definitions/world_builder.py`,
+  `category="world_builder"`, `target_type=SELF`) — `create_area`/`edit_area`/
+  `staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
-  `staff_remove_room`/`staff_remove_area`/`staff_move_room`/`promote_room`/
-  `promote_area` + the six #2451 discovery/portal verbs + the #3269 Phase B
-  room-authoring set (stats/places/ambient/feature/staffing/travel/blueprint/
-  bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the Phase C
-  area metadata) + the #3291 `staff_set_room_desc_variant`/
-  `staff_remove_room_desc_variant` pair — gated solely by
-  `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
-  GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
-  and always authors the new room outright; `staff_remove_room` refuses an
+  `staff_publish_room`/`staff_remove_room`/`staff_remove_area`/`staff_move_room`/
+  `promote_room`/`promote_area` + the six #2451 discovery/portal verbs + the #3269
+  Phase B room-authoring set (stats/places/ambient/feature/staffing/travel/
+  blueprint/bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the
+  Phase C area metadata) + the #3291 `staff_set_room_desc_variant`/
+  `staff_remove_room_desc_variant` pair — gated by `BuildWarrantPrerequisite`
+  (#3477 Task 1, replacing the old `StaffOnlyPrerequisite`: staff bypass
+  unconditionally, a non-staff GM additionally passes with an `AreaBuildGrant`
+  over the resolved area at the `BUILDING` floor — no ownership/tenancy standing
+  otherwise) except `edit_area` (the stricter level-aware variant) and
+  `author_clue` (`MinimumGMLevelPrerequisite(SENIOR)`, #3432). `staff_dig_room`
+  requires an AUTHORED area and always authors the new room outright — and, as of
+  #3477 Task 2, births it *unpublished*: `RoomProfile.published_at` defaults to
+  `now()` (an ordinary/PLAYER room is live immediately) but `create_room` sets it
+  to `NULL` for `origin=AUTHORED`, and an unpublished room does not exist in the
+  live world — not enterable (`ExitState.can_traverse`) and its exits hidden from
+  the room-state payload (`RoomStatePayloadSerializer._exit_hidden_from_looker`)
+  — for anyone but a story-runner (GM/Staff, `is_story_runner`). `staff_publish_room`
+  (kwarg `room_id`) stamps `published_at=now()`; idempotent (a re-publish just
+  refreshes the stamp), no unpublish verb, no separate "done" flag.
+  `staff_remove_room` refuses an
   already-exported room (report-never-delete pipeline territory, not the canvas);
   `staff_unlink_rooms`'s stranding guard is the narrower "would this drop leave an
   *occupied* room with zero exits" rule, not the Room Builder's anchor-room BFS
@@ -1133,7 +1146,27 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   standing check, no currency cost — see magic.md's "Portal travel" section). The
   grid bundle format gains `clues`/`clue_triggers`/`portal_anchors` sidecar sections;
   see the "Investigation & Discovery" system entry below for the clue-side
-  model/action detail.
+  model/action detail. **Area art cascade + ambient-condition authoring (#3477 Task
+  3):** `Area.art` (FK to `arxii.Media`, mirrors `PageBackground.art`'s shape) resolves
+  most-specific-wins down the hierarchy like climate/realm; area and room payloads gain
+  `art_url` (`WorldBuilderAreaSerializer.get_art_url` walks the area chain directly, the
+  same inline-cascade convention as `get_effective_climate` on that serializer;
+  `world.locations.services.resolve_area_art(room_profile)` is the room-level entry
+  point — a room's own `ObjectDisplayData.thumbnail` wins outright, else it falls back to
+  the area cascade). Two new REGISTRY actions, `staff_add_ambient_condition`/
+  `staff_remove_ambient_condition`, wire the pre-existing (BUILT NOT WIRED)
+  `AmbientEmoteCondition` model to the canvas — kwargs `line_id`/`condition_type`/
+  `target_id` plus per-type extras (`minimum_value` for RESONANCE_MIN, `min_fame_tier`/
+  optional `perceiving_society_id` for RENOWN_MIN; LEGEND_DEED needs no ref). The
+  room-detail payload's `ambient_lines` now nest a `conditions` list
+  (`{id, condition_type, label}`; `world.narrative.ambient_content.describe_condition`
+  renders the label). Every ambient line/condition write re-derives the delivery
+  Trigger graph in place via `world.narrative.ambient_triggers.
+  resync_room_ambient_triggers`/`resync_area_ambient_triggers` (#3477 fix round 2) —
+  entry lines deliver only through pre-derived Triggers with frozen line groups
+  (`ensure_ambient_group_trigger`, moved there from `grid_import`, which now
+  delegates), so without the resync a canvas write was invisible until a re-import
+  ADR-0238 forbids on a populated database.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1162,7 +1195,9 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Key Functions:** `effective_value(room, stat_key=… | resonance=… | damage_type=…)` (single-axis
   polymorphic read), `effective_values_for_rooms()` (bulk), `hazard_is_covered()`,
   `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
-  cascade, #1514/#1522), `character_comfort_summary()`/`comfort_mitigation()` (per-character
+  cascade, #1514/#1522), `resolve_area_art(room_profile)` (#3477 — a room's own
+  `ObjectDisplayData.thumbnail` wins outright, else most-specific-wins up `Area.art`, mirroring
+  `get_effective_climate`), `character_comfort_summary()`/`comfort_mitigation()` (per-character
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
   `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
   `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or

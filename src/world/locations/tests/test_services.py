@@ -3,7 +3,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.factories import MediaFactory, RoomProfileFactory
+from evennia_extensions.models import ObjectDisplayData
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.locations.constants import (
@@ -14,7 +15,11 @@ from world.locations.constants import (
     StatKey,
 )
 from world.locations.models import LocationValueModifier, LocationValueOverride
-from world.locations.services import effective_value, upsert_room_resonance_modifier
+from world.locations.services import (
+    effective_value,
+    resolve_area_art,
+    upsert_room_resonance_modifier,
+)
 from world.magic.factories import ResonanceFactory
 
 
@@ -328,3 +333,69 @@ class UpsertRoomResonanceModifierTests(TestCase):
             ).count(),
             2,
         )
+
+
+class ResolveAreaArtTests(TestCase):
+    """resolve_area_art (#3477): room thumbnail wins over the area-art cascade,
+    which itself resolves most-specific-wins (mirrors get_effective_climate)."""
+
+    def test_room_thumbnail_wins_over_area_art(self) -> None:
+        ward_media = MediaFactory(player_data=None, slug="ward-art")
+        room_media = MediaFactory(player_data=None, slug="room-thumbnail")
+        ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        ObjectDisplayData.objects.create(object=profile.objectdb, thumbnail=room_media)
+        self.assertEqual(resolve_area_art(profile), room_media.cloudinary_url)
+
+    def test_falls_back_to_own_area_art(self) -> None:
+        ward_media = MediaFactory(player_data=None, slug="ward-art-2")
+        ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        self.assertEqual(resolve_area_art(profile), ward_media.cloudinary_url)
+
+    def test_falls_back_to_ancestor_area_art(self) -> None:
+        city_media = MediaFactory(player_data=None, slug="city-art")
+        city = AreaFactory(level=AreaLevel.CITY, art=city_media)
+        ward = AreaFactory(level=AreaLevel.WARD, parent=city)
+        profile = RoomProfileFactory(area=ward)
+        self.assertEqual(resolve_area_art(profile), city_media.cloudinary_url)
+
+    def test_nearest_area_wins_over_further_ancestor(self) -> None:
+        city_media = MediaFactory(player_data=None, slug="city-art-2")
+        ward_media = MediaFactory(player_data=None, slug="ward-art-3")
+        city = AreaFactory(level=AreaLevel.CITY, art=city_media)
+        ward = AreaFactory(level=AreaLevel.WARD, parent=city, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        self.assertEqual(resolve_area_art(profile), ward_media.cloudinary_url)
+
+    def test_none_when_unset_anywhere(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        self.assertIsNone(resolve_area_art(profile))
+
+    def test_none_when_no_area(self) -> None:
+        profile = RoomProfileFactory(area=None)
+        self.assertIsNone(resolve_area_art(profile))
+
+    def test_none_when_no_room_profile(self) -> None:
+        self.assertIsNone(resolve_area_art(None))
+
+    def test_precomputed_thumbnail_url_skips_query_and_wins(self) -> None:
+        """#3477 fix round 1 — a supplied thumbnail_url skips the ObjectDisplayData query."""
+        ward_media = MediaFactory(player_data=None, slug="ward-art-precomputed")
+        ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        # No ObjectDisplayData row exists at all — a precomputed thumbnail_url still wins,
+        # and zero queries confirms the per-room ObjectDisplayData lookup was skipped.
+        with self.assertNumQueries(0):
+            result = resolve_area_art(profile, thumbnail_url="https://example.test/precomputed.png")
+        self.assertEqual(result, "https://example.test/precomputed.png")
+
+    def test_precomputed_none_thumbnail_falls_back_to_area_cascade(self) -> None:
+        """thumbnail_url=None means "resolved to no thumbnail" — cascade still runs."""
+        ward_media = MediaFactory(player_data=None, slug="ward-art-precomputed-none")
+        ward = AreaFactory(level=AreaLevel.WARD, art=ward_media)
+        profile = RoomProfileFactory(area=ward)
+        with self.assertNumQueries(0):
+            result = resolve_area_art(profile, thumbnail_url=None)
+        self.assertEqual(result, ward_media.cloudinary_url)

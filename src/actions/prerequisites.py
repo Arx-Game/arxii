@@ -18,6 +18,8 @@ NOT_HOLDING_MESSAGE = "You aren't holding that."
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.areas.models import Area
+
 
 def resolve_actor_sheet(actor: ObjectDB) -> Any:
     """Return the actor's ``CharacterSheet``, or ``None`` if they have none."""
@@ -130,6 +132,261 @@ class StaffOnlyPrerequisite(Prerequisite):
         if is_staff_observer(actor):
             return True, ""
         return False, "Staff only."
+
+
+# BuildWarrantPrerequisite target kinds with non-BUILDING level semantics
+# (see the class docstring's kind table); the row-anchored kinds are plain
+# dict keys in ``_resolve_kind`` and need no named constant.
+WARRANT_KIND_AREA = "area"
+WARRANT_KIND_PARENT = "parent"
+WARRANT_KIND_ROOM_CONTAINER = "room_container"
+
+
+@dataclass
+class BuildWarrantPrerequisite(Prerequisite):
+    """Staff bypass, or an ``AreaBuildGrant`` (#3477) over EVERY declared target area.
+
+    Mirrors ``StaffOnlyPrerequisite``'s staff check exactly -- same
+    ``is_staff_observer(actor)`` call, same "Staff only." refusal -- so every
+    existing staff-actor world_builder test (#2449) keeps passing unchanged
+    after this class replaces ``StaffOnlyPrerequisite`` on the registry: staff
+    pass implicitly, with zero ``AreaBuildGrant`` rows in play.
+
+    Non-staff: ``targets`` declares, per action, which kwargs name the things
+    the action touches and how each resolves to an ``Area`` -- a tuple of
+    ``(kind, kwarg_name)`` pairs. Resolution reads ONLY declared kwargs
+    (#3477 fix round 2): dispatch passes raw client kwargs straight through
+    ``execute(**kwargs)``, which silently ignores extras, so an UNdeclared
+    ``area_id`` riding alongside a ``room_id`` must never be what the warrant
+    is checked against -- otherwise any grant holder could spoof the check
+    onto rooms in areas they hold no grant over by naming their own area.
+
+    Every declared-and-present target must pass (same fix round): actions that
+    span two places -- ``staff_move_room``/``staff_duplicate_room`` name a
+    source room AND a destination area -- need the warrant over BOTH, or a
+    granted GM could pull any room in the world into their own subtree by
+    passing only legitimate kwargs. A declared kwarg that is absent is
+    skipped (optional kwargs, e.g. duplicate's same-area default); a declared
+    kwarg that is present but resolves to nothing refuses; and when NOTHING
+    resolves at all -- no declared kwarg present, or ``targets`` empty (the
+    dataclass default) -- this refuses exactly as ``StaffOnlyPrerequisite``
+    would. That fallback is what keeps root-area creation (``create_area``
+    with no ``parent_id``) and generic-pool ambient emits (neither room nor
+    area FK set) staff-only: no grant can cover "nowhere."
+
+    Target kinds and their required-level semantics:
+
+    - ``"area"`` -- the kwarg names the ``Area`` the action acts ON (edit,
+      remove, promote). Level = the STRICTER of the area's own current
+      ``level`` and, with ``level_param`` set, the named kwarg's value
+      (#3477 fix rounds 1-2). Acting on the area itself is an act at that
+      area's altitude: a BUILDING-capped grant that happens to sit on a WARD
+      row covers building rooms *inside* it, never deleting/promoting/
+      reclassifying the ward itself.
+    - ``"parent"`` -- the kwarg names the ``Area`` a new CHILD is created
+      under (``create_area``). Level = the incoming child's ``level_param``
+      kwarg when parseable, else ``AreaLevel.BUILDING`` (``execute`` refuses
+      a missing/garbled level anyway) -- the parent's own altitude is NOT
+      the bar, or no grant below WORLD could ever add a child anywhere.
+    - ``"room_container"`` -- the kwarg names the ``Area`` rooms are dug
+      into (``staff_dig_room``/``staff_batch_dig``/move-destination). Level =
+      ``AreaLevel.BUILDING``: putting rooms inside your territory is the
+      finest-grained act regardless of the container's own altitude.
+    - ``"room"``, ``"exit"``, ``"place"``, ``"line"``, ``"emit"``,
+      ``"variant"``, ``"room_clue"``, ``"clue_trigger"``, ``"anchor"`` --
+      the kwarg names a room (ObjectDB pk) or a room-/area-anchored row,
+      resolved to its containing ``Area`` through its OWN FK chain, never a
+      caller-supplied area. Level = ``AreaLevel.BUILDING``. ``"line"`` and
+      ``"emit"`` honor the row's room-vs-area scope discriminator; a
+      generic-pool emit (neither FK set) resolves to nothing and refuses.
+
+    ``adds_rooms`` (the room-creating verbs: dig, batch dig, duplicate) also
+    checks the warrant's third question -- is there budget left -- via
+    ``has_room_budget_capacity`` against the destination (the resolved
+    ``"room_container"`` area, else the source room's area for a same-area
+    duplicate); ``rooms_count_param`` names the kwarg holding how many rooms
+    the call mints (``staff_batch_dig``'s ``count``), defaulting to one.
+    ``staff_move_room`` deliberately does NOT consume budget: a move mints
+    nothing, and charging it would refuse an at-budget GM's internal
+    reorganization.
+    """
+
+    targets: tuple[tuple[str, str], ...] = ()
+    level_param: str | None = None
+    adds_rooms: bool = False
+    rooms_count_param: str | None = None
+
+    def _resolve_kind(self, kind: str, pk: object) -> Area | None:
+        """One declared target's ``Area``, through the target row's own FK chain."""
+        from evennia.objects.models import ObjectDB as ObjectDBModel  # noqa: PLC0415
+
+        from evennia_extensions.models import RoomDescVariant, RoomProfile  # noqa: PLC0415
+        from world.areas.models import Area  # noqa: PLC0415
+        from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
+        from world.magic.models.portals import PortalAnchor  # noqa: PLC0415
+        from world.narrative.models import AmbientEmit  # noqa: PLC0415
+        from world.scenes.place_models import Place  # noqa: PLC0415
+
+        def room_area(objectdb_id: object) -> Area | None:
+            profile = (
+                RoomProfile.objects.filter(objectdb_id=objectdb_id).select_related("area").first()
+            )
+            return profile.area if profile else None
+
+        def exit_area(exit_pk: object) -> Area | None:
+            exit_obj = ObjectDBModel.objects.filter(pk=exit_pk).first()
+            if exit_obj is None or exit_obj.db_location_id is None:
+                return None
+            return room_area(exit_obj.db_location_id)
+
+        def place_area(place_pk: object) -> Area | None:
+            place = Place.objects.filter(pk=place_pk).select_related("room__area").first()
+            return place.room.area if place and place.room_id else None
+
+        def emit_area(emit_pk: object) -> Area | None:
+            emit = (
+                AmbientEmit.objects.filter(pk=emit_pk)
+                .select_related("room_profile__area", "area")
+                .first()
+            )
+            if emit is None:
+                return None
+            return emit.room_profile.area if emit.room_profile_id else emit.area
+
+        def room_row_area(model: type, row_pk: object) -> Area | None:
+            row = model.objects.filter(pk=row_pk).select_related("room_profile__area").first()
+            return row.room_profile.area if row else None
+
+        resolvers: dict[str, Any] = {
+            "area": lambda v: Area.objects.filter(pk=v).first(),
+            "parent": lambda v: Area.objects.filter(pk=v).first(),
+            "room_container": lambda v: Area.objects.filter(pk=v).first(),
+            "room": room_area,
+            "exit": exit_area,
+            "place": place_area,
+            "line": self._area_for_ambient_line,
+            "emit": emit_area,
+            "variant": lambda v: room_row_area(RoomDescVariant, v),
+            "room_clue": lambda v: room_row_area(RoomClue, v),
+            "clue_trigger": lambda v: room_row_area(ClueTrigger, v),
+            "anchor": lambda v: room_row_area(PortalAnchor, v),
+        }
+        resolver = resolvers.get(kind)
+        return resolver(pk) if resolver else None
+
+    @staticmethod
+    def _area_for_ambient_line(line_id: object) -> Area | None:
+        """The area a given ``AmbientEmoteLine`` pk resolves to, by its own discriminator."""
+        from world.locations.constants import LocationParentType  # noqa: PLC0415
+        from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+        line = (
+            AmbientEmoteLine.objects.filter(pk=line_id)
+            .select_related("room_profile__area", "area")
+            .first()
+        )
+        if line is None:
+            return None
+        if line.parent_type == LocationParentType.ROOM:
+            return line.room_profile.area if line.room_profile_id else None
+        if line.parent_type == LocationParentType.AREA:
+            return line.area
+        return None
+
+    def _resolve_required_level(self, kind: str, area: Area, kwargs: dict) -> int:
+        """Per-kind level semantics -- see the class docstring's kind table."""
+        from contextlib import suppress  # noqa: PLC0415
+
+        from world.areas.constants import AreaLevel  # noqa: PLC0415
+
+        kwarg_level: int | None = None
+        if self.level_param and kwargs.get(self.level_param) is not None:
+            with suppress(TypeError, ValueError):
+                kwarg_level = int(kwargs[self.level_param])
+
+        if kind == WARRANT_KIND_AREA:
+            level = area.level
+            if kwarg_level is not None:
+                level = max(level, kwarg_level)
+            return level
+        if kind == WARRANT_KIND_PARENT:
+            return kwarg_level if kwarg_level is not None else AreaLevel.BUILDING
+        return AreaLevel.BUILDING
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.gm.services import has_build_warrant  # noqa: PLC0415
+
+        if is_staff_observer(actor):
+            return True, ""
+
+        kwargs = (context or {}).get("kwargs", {})
+        resolved = self._resolve_declared_targets(kwargs)
+        if not resolved:
+            return False, "Staff only."
+
+        try:
+            account = actor.active_account
+        except AttributeError:
+            account = None
+        if account is None:
+            return False, "Staff only."
+
+        for kind, area in resolved:
+            level = self._resolve_required_level(kind, area, kwargs)
+            if not has_build_warrant(account, area=area, level=level):
+                return False, "No build grant covers this area."
+
+        budget_reason = self._room_budget_reason(account, resolved, kwargs)
+        if budget_reason is not None:
+            return False, budget_reason
+        return True, ""
+
+    def _resolve_declared_targets(self, kwargs: dict) -> list[tuple[str, Area]] | None:
+        """Resolve every declared-and-present target, or None on any failure.
+
+        A named target that doesn't resolve fails the WHOLE resolution, never
+        gets skipped -- skipping would let a garbled id downgrade a two-target
+        action to a one-target check. An empty result (nothing declared was
+        present) is also None: refuse like ``StaffOnlyPrerequisite``.
+        """
+        resolved: list[tuple[str, Area]] = []
+        for kind, param in self.targets:
+            pk = kwargs.get(param)
+            if not pk:
+                continue
+            area = self._resolve_kind(kind, pk)
+            if area is None:
+                return None
+            resolved.append((kind, area))
+        return resolved or None
+
+    def _room_budget_reason(
+        self, account: Any, resolved: list[tuple[str, Area]], kwargs: dict
+    ) -> str | None:
+        """A refusal reason when ``adds_rooms`` and no covering grant has budget, else None."""
+        if not self.adds_rooms:
+            return None
+        from world.gm.services import has_room_budget_capacity  # noqa: PLC0415
+
+        destination = next(
+            (area for kind, area in resolved if kind == WARRANT_KIND_ROOM_CONTAINER),
+            resolved[0][1],
+        )
+        rooms_needed = 1
+        if self.rooms_count_param:
+            from contextlib import suppress  # noqa: PLC0415
+
+            with suppress(TypeError, ValueError):
+                rooms_needed = max(1, int(kwargs.get(self.rooms_count_param)))
+        if has_room_budget_capacity(account, area=destination, rooms_needed=rooms_needed):
+            return None
+        return "That build grant's room budget is spent."
 
 
 @dataclass

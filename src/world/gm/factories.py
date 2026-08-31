@@ -12,6 +12,7 @@ from evennia_extensions.factories import AccountFactory
 from world.areas.constants import AreaLevel, GridOrigin
 from world.gm.constants import CatalogSuggestionProposalKind, GMApplicationStatus, GMLevel
 from world.gm.models import (
+    AreaBuildGrant,
     CatalogSuggestion,
     CheckTypeSituationFit,
     ConsequencePoolGuide,
@@ -42,6 +43,16 @@ class GMProfileFactory(factory_django.DjangoModelFactory):
     level = GMLevel.STARTING
     approved_at = factory.LazyFunction(timezone.now)
     approved_by = factory.SubFactory(AccountFactory)
+
+
+class AreaBuildGrantFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = AreaBuildGrant
+
+    account = factory.SubFactory(AccountFactory)
+    area = factory.SubFactory("world.areas.factories.AreaFactory")
+    max_level = AreaLevel.BUILDING
+    granted_by = factory.SubFactory(AccountFactory)
 
 
 class GMApplicationFactory(factory_django.DjangoModelFactory):

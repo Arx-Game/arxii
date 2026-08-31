@@ -3,6 +3,50 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-08-31, #3477 Tasks 3–7 — the Atlas and the documents)
+
+The grid-first canvas front door is replaced by the two-surface builder the
+spec ratified (`frontend/src/world-builder/atlas/` + `document/`; `AtlasPage`
+is the routed page). **Atlas** (navigation): warrant-scoped index rail with
+pins/recents (`IndexRail`, `useAtlasState`), folio ancestry crumb, `AreaPage`
+ledger rows + the `Lattice` — one snapped grid at every altitude with
+plot-then-realize planning squares, right-click carving/voids, edge growth,
+drag-to-swap arranging (`staff_move_room`'s first dispatch), and WIP dimming
+from `published_at`. Cross-world search lands on the hit's parent grid with
+the room highlighted. **Room Document** (`RoomDocument`): full-width drafted
+name/prose (`useDraft`, per-room localStorage), Save/Publish/delete savebar
+("Next unpublished" trance loop included), seasonal/day-night `VariantsPanel`
+wiring the #3291 backend's first UI, exits band + `ExitEditorDialog`
+(`staff_set_exit_detail`), the dig-trinity exit `AddDialog`, a 3×3 `Compass`,
+and read-only `Marginalia` panels fed by the payload. **Area Document**
+(`AreaDocument`): the same manuscript pattern per Dan's every-altitude ruling —
+drafted area prose via `edit_area`, area marginalia, the reused #3269
+`EditAreaDialog` as the metadata door, delete via `staff_remove_area` (its
+first button). Room/area art resolves most-specific-wins up the ancestor chain
+(`resolve_area_art`, Task 3) and ambient lines carry authorable conditions.
+Not built (later phases per the spec): marginalia category *editors* beyond
+exits (categories-are-doors ruling), the visitor lens, player permits, the
+Resonance panel's real data, warrant-budget display.
+
+## Built (2026-08-31, #3477 Task 2 — publish lifecycle)
+
+A canvas-dug (`origin=AUTHORED`) room is now born unpublished:
+`RoomProfile.published_at` defaults to `now()` (an ordinary PLAYER room, and
+every pre-existing room via the migration backfill, is live immediately) but
+`world.areas.grid_services.create_room` sets it to `NULL` for `origin=AUTHORED`.
+An unpublished room does not exist in the live world — `ExitState.can_traverse`
+refuses entry through any exit leading to one, and
+`RoomStatePayloadSerializer` omits such an exit from the room-state payload
+entirely — for anyone except a story-runner (GM/Staff, the `is_story_runner`
+typeclass attribute); a story-runner can walk in and see the exit to review the
+room before it goes live. The new `staff_publish_room` REGISTRY action
+(kwarg `room_id`, gated by the same `BuildWarrantPrerequisite` as its siblings)
+stamps `published_at=now()`; idempotent (a re-publish just refreshes the
+stamp) — no unpublish verb, no separate "done" flag. The staff area-manager
+payload (`WorldBuilderRoomSerializer`) gains a `published_at` field so the
+canvas can show unpublished rooms distinctly. Not built this task: a canvas
+UI affordance for the Publish action itself (a later task in the #3477 arc).
+
 ## Built (2026-08-31, #3478 — GM onboarding moves to the Hall; mint banner removed)
 
 The staff-mint form the world-builder actor banner grew below (#3283) is gone.

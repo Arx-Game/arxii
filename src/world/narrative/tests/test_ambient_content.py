@@ -10,7 +10,11 @@ from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, Room
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import ResonanceFactory
-from world.narrative.ambient_content import compile_line_filter, deliver_ambient_group
+from world.narrative.ambient_content import (
+    compile_line_filter,
+    deliver_ambient_group,
+    describe_condition,
+)
 from world.narrative.constants import ConditionConnector, ConditionType, NarrativeCategory
 from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
 from world.narrative.models import NarrativeMessageDelivery
@@ -134,6 +138,61 @@ class CompileLineFilterTests(TestCase):
         compiled = compile_line_filter(line)
         self.assertIn("and", compiled)
         self.assertEqual(len(compiled["and"]), 2)
+
+
+class DescribeConditionTests(TestCase):
+    """describe_condition (#3477 authoring UI) — one label per condition_type."""
+
+    def test_species_label(self) -> None:
+        species = SpeciesFactory(name="Infernal")
+        condition = AmbientEmoteConditionFactory(
+            condition_type=ConditionType.SPECIES, species=species
+        )
+        self.assertEqual(describe_condition(condition), "Species: Infernal")
+
+    def test_resonance_min_label(self) -> None:
+        resonance = ResonanceFactory(name="Abyssal")
+        condition = AmbientEmoteConditionFactory(
+            condition_type=ConditionType.RESONANCE_MIN,
+            species=None,
+            resonance=resonance,
+            minimum_value=50,
+        )
+        self.assertEqual(describe_condition(condition), "Abyssal >= 50")
+
+    def test_distinction_label(self) -> None:
+        distinction = DistinctionFactory(name="The Iron Duelist", slug="the-iron-duelist")
+        condition = AmbientEmoteConditionFactory(
+            condition_type=ConditionType.DISTINCTION, species=None, distinction=distinction
+        )
+        self.assertEqual(describe_condition(condition), "Distinction: The Iron Duelist")
+
+    def test_renown_min_label_without_perceiving_society(self) -> None:
+        condition = AmbientEmoteConditionFactory(
+            condition_type=ConditionType.RENOWN_MIN,
+            species=None,
+            min_fame_tier=FameTier.CELEBRITY,
+        )
+        self.assertEqual(describe_condition(condition), "Fame >= Celebrity")
+
+    def test_renown_min_label_with_perceiving_society(self) -> None:
+        society = SocietyFactory(name="The Silver Court")
+        condition = AmbientEmoteConditionFactory(
+            condition_type=ConditionType.RENOWN_MIN,
+            species=None,
+            min_fame_tier=FameTier.CELEBRITY,
+            perceiving_society=society,
+        )
+        self.assertEqual(
+            describe_condition(condition),
+            "Fame >= Celebrity (as seen by The Silver Court)",
+        )
+
+    def test_legend_deed_label(self) -> None:
+        condition = AmbientEmoteConditionFactory(
+            condition_type=ConditionType.LEGEND_DEED, species=None
+        )
+        self.assertEqual(describe_condition(condition), "Has common-knowledge deeds")
 
 
 class DeliverAmbientGroupTests(TestCase):

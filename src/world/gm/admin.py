@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from world.gm.models import (
+    AreaBuildGrant,
     CatalogSuggestion,
     CheckTypeSituationFit,
     ConsequencePoolGuide,
@@ -31,6 +32,14 @@ class GMProfileAdmin(admin.ModelAdmin):
     list_filter = ["level"]
     raw_id_fields = ["account", "approved_by"]
     search_fields = ["account__username"]
+
+
+@admin.register(AreaBuildGrant)
+class AreaBuildGrantAdmin(admin.ModelAdmin):
+    list_display = ["account", "area", "max_level", "room_budget", "granted_by", "created_at"]
+    list_filter = ["max_level"]
+    raw_id_fields = ["account", "area", "granted_by"]
+    search_fields = ["account__username", "area__name"]
 
 
 @admin.register(GMApplication)

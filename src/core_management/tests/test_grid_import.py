@@ -121,6 +121,76 @@ class GridImportTests(TestCase):
         self.assertEqual(modifier.stat_key, StatKey.ORDER)
         self.assertEqual(modifier.value, 3)
 
+    def test_fresh_import_births_rooms_published(self) -> None:
+        """#3477 — a published room round-trips published: the bundle carries its
+        ``published_at`` (fix round 2) and the restore applies it, so a restored
+        live room is never stuck NULL like a fresh ``staff_dig_room``."""
+        export_grid_bundles(self.root)
+        ObjectDB.objects.filter(
+            pk__in=[
+                self.grid.north_exit.pk,
+                self.grid.south_exit.pk,
+                self.grid.stray_exit.pk,
+                self.grid.taproom_obj.pk,
+                self.grid.market_obj.pk,
+                self.grid.player_room_obj.pk,
+            ]
+        ).delete()
+        self.grid.city.delete()
+        self.grid.region.delete()
+
+        result = load_grid_bundles(self.root)
+
+        self.assertEqual(result.created_rooms, 2)
+        taproom = RoomProfile.objects.get(fixture_key="arx-city/golden-hart-taproom")
+        market = RoomProfile.objects.get(fixture_key="arx-city/market-square")
+        self.assertIsNotNone(taproom.published_at)
+        self.assertIsNotNone(market.published_at)
+
+    def _wipe_authored_graph(self) -> None:
+        ObjectDB.objects.filter(
+            pk__in=[
+                self.grid.north_exit.pk,
+                self.grid.south_exit.pk,
+                self.grid.stray_exit.pk,
+                self.grid.taproom_obj.pk,
+                self.grid.market_obj.pk,
+                self.grid.player_room_obj.pk,
+            ]
+        ).delete()
+        self.grid.city.delete()
+        self.grid.region.delete()
+
+    def test_unpublished_wip_room_round_trips_unpublished(self) -> None:
+        """#3477 fix round 2 (review finding) — restoring a bundle into an empty
+        database must not silently publish a WIP room: the export carries the
+        NULL and the import preserves it."""
+        RoomProfile.objects.filter(pk=self.grid.taproom_obj.pk).update(published_at=None)
+        export_grid_bundles(self.root)
+        self._wipe_authored_graph()
+
+        load_grid_bundles(self.root)
+
+        taproom = RoomProfile.objects.get(fixture_key="arx-city/golden-hart-taproom")
+        market = RoomProfile.objects.get(fixture_key="arx-city/market-square")
+        self.assertIsNone(taproom.published_at)
+        self.assertIsNotNone(market.published_at)
+
+    def test_legacy_bundle_without_published_at_births_published(self) -> None:
+        """A bundle written before the field existed omits the key entirely — only
+        then does the create branch's born-published default apply."""
+        export_grid_bundles(self.root)
+        bundle = self._load_bundle("arx-city")
+        for room in bundle["rooms"]:
+            room.pop("published_at", None)
+        self._write_bundle("arx-city", bundle)
+        self._wipe_authored_graph()
+
+        load_grid_bundles(self.root)
+
+        taproom = RoomProfile.objects.get(fixture_key="arx-city/golden-hart-taproom")
+        self.assertIsNotNone(taproom.published_at)
+
     def test_reimport_updates_in_place(self) -> None:
         export_grid_bundles(self.root)
         original_pk = self.grid.taproom_obj.pk

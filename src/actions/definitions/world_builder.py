@@ -1,16 +1,38 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Forty REGISTRY actions (eleven original + six discovery/portal-authoring
+Forty-three REGISTRY actions (eleven original + six discovery/portal-authoring
 #2451, plus the #3269 recoverability pair, the Phase B room-authoring set:
 stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
 blueprint, starting-room bindings, exit detail, duplicate, batch dig, the
-#3291 description-variant pair, and ``author_clue``, #3432), all
+#3291 description-variant pair, ``author_clue`` (#3432),
+``staff_publish_room`` (#3477 Task 2), and the ``staff_add_ambient_condition``/
+``staff_remove_ambient_condition`` pair (#3477 Task 3 — wires the pre-existing
+``AmbientEmoteCondition`` model to the canvas)), all
 ``category="world_builder"``, ``target_type=SELF``. Every one of them except
-``author_clue`` is gated by ``StaffOnlyPrerequisite`` alone (no
-ownership/tenancy standing — this is staff tooling, not a player-facing
-builder); ``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)``
-instead (staff bypass built in) — canon-creating clue authorship is a SENIOR+
-GM power, not staff-only, per the #3432 owner ruling. Each is a thin wrapper
+``author_clue`` is gated by
+``BuildWarrantPrerequisite`` (#3477 — staff bypass unconditionally, same as
+the ``StaffOnlyPrerequisite`` it replaces; non-staff GMs additionally pass
+with an ``AreaBuildGrant`` covering every declared target). Each action
+DECLARES its warrant targets via the ``warrant_targets`` ClassVar — a
+``(kind, kwarg_name)`` tuple the base ``get_prerequisites`` hands to the
+prerequisite (#3477 fix round 2; see ``BuildWarrantPrerequisite``'s docstring
+for the kind table and level semantics). Declarative targets are the fix for
+three review findings at once: an undeclared caller-supplied ``area_id`` can
+no longer spoof the check onto a room the grant doesn't cover (dispatch
+passes raw kwargs through ``execute(**kwargs)``, which ignores extras);
+two-place actions (``staff_move_room``/``staff_duplicate_room``) require the
+warrant over BOTH the source room's area and the destination; and the
+row-anchored verbs (exits, places, variants, emits, placed clues/triggers/
+anchors) resolve through their own FK chains instead of refusing every
+warranted non-staff GM as "Staff only.". ``edit_area``/``create_area`` add
+``warrant_level_param="level"`` — for ``edit_area`` the ceiling check is the
+stricter of the area's current level and the incoming ``level`` kwarg (#3477
+fix round 1); ``staff_remove_area``/``promote_area`` use the ``"area"`` kind,
+whose level is the area's OWN level (a BUILDING-capped grant on a ward row
+builds inside the ward but never deletes/promotes the ward itself);
+``author_clue`` gates at ``MinimumGMLevelPrerequisite(SENIOR)`` instead
+(staff bypass built in) — canon-creating clue authorship is a SENIOR+ GM
+power, not staff-only, per the #3432 owner ruling. Each is a thin wrapper
 over the Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid
 primitives + ``promote_to_authored``/``suggest_fixture_key``) and
 ``world.locations.services.set_room_display_data(..., bypass_ownership=True)``.
@@ -22,7 +44,12 @@ dispatch passes raw ints and staff building happens over the whole shared map,
 not from the actor's own position (#2163).
 
 ``staff_dig_room`` requires an AUTHORED area (canonical world rooms only — a
-STORY/PLAYER area is out of scope for this canvas). ``staff_remove_room``
+STORY/PLAYER area is out of scope for this canvas). Digging into an AUTHORED
+area therefore also births the room unpublished (#3477 — see
+``world.areas.grid_services.create_room``'s ``published_at=None`` default for
+that origin): it is not enterable and its exits are hidden from anyone but a
+story-runner (GM/Staff) until ``staff_publish_room`` stamps it — re-publishing
+is idempotent, and there is no unpublish verb. ``staff_remove_room``
 refuses a room that has actually shipped in an export bundle
 (``exported_at`` set, #3269 — a fixture key alone is a recoverable mistake):
 exported rooms come out via the report-never-delete pipeline (see
@@ -35,13 +62,13 @@ only refuses when the drop would leave an occupied room with zero exits.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite, StaffOnlyPrerequisite
+from actions.prerequisites import BuildWarrantPrerequisite, MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 from world.gm.constants import GMLevel
 
@@ -100,6 +127,33 @@ def _resolve_clue_trigger(clue_trigger_id: Any) -> ClueTrigger | None:
         .select_related("room_profile", "clue")
         .first()
     )
+
+
+def _resolve_ambient_line(line_id: Any) -> Any | None:
+    from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+    if not line_id:
+        return None
+    return AmbientEmoteLine.objects.filter(pk=line_id).first()
+
+
+def _resync_ambient_for_line(line: Any) -> None:
+    """Re-derive the delivery Trigger graph after an ambient line/condition write
+    (#3477 fix round 2) — entry lines deliver only through pre-derived Triggers
+    with frozen line groups, so without this the write is invisible to room
+    entry until a re-import that ADR-0238 forbids on a populated database.
+    Safe on a just-deleted line: only its parent FK ids are read.
+    """
+    from world.locations.constants import LocationParentType  # noqa: PLC0415
+    from world.narrative.ambient_triggers import (  # noqa: PLC0415
+        resync_area_ambient_triggers,
+        resync_room_ambient_triggers,
+    )
+
+    if line.parent_type == LocationParentType.ROOM and line.room_profile_id:
+        resync_room_ambient_triggers(line.room_profile)
+    elif line.parent_type == LocationParentType.AREA and line.area_id:
+        resync_area_ambient_triggers(line.area)
 
 
 def _resolve_portal_anchor(anchor_id: Any) -> PortalAnchor | None:
@@ -434,14 +488,33 @@ def _stranded_occupied_room(rooms: set[ObjectDB], dropped_exit_ids: set[int]) ->
 
 @dataclass
 class _WorldBuilderAction(Action):
-    """Shared shape for the staff world-builder canvas verbs (#2449)."""
+    """Shared shape for the staff world-builder canvas verbs (#2449).
+
+    ``warrant_targets`` declares which kwargs the warrant check resolves and
+    how (#3477 fix round 2) — see ``BuildWarrantPrerequisite``. The default
+    covers the most common shape (a single ``room_id``); every action whose
+    kwargs differ MUST override it, or non-staff grant holders are refused
+    ("Staff only.") on kwargs the check can't resolve.
+    """
 
     category: str = "world_builder"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room", "room_id"),)
+    warrant_level_param: ClassVar[str | None] = None
+    warrant_adds_rooms: ClassVar[bool] = False
+    warrant_rooms_count_param: ClassVar[str | None] = None
+
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [StaffOnlyPrerequisite()]
+        return [
+            BuildWarrantPrerequisite(
+                targets=self.warrant_targets,
+                level_param=self.warrant_level_param,
+                adds_rooms=self.warrant_adds_rooms,
+                rooms_count_param=self.warrant_rooms_count_param,
+            )
+        ]
 
 
 @dataclass
@@ -454,6 +527,8 @@ class CreateAreaAction(_WorldBuilderAction):
     key: str = "create_area"
     name: str = "Create Area"
     icon: str = "map"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("parent", "parent_id"),)
+    warrant_level_param: ClassVar[str | None] = "level"
 
     def execute(
         self,
@@ -505,11 +580,22 @@ class EditAreaAction(_WorldBuilderAction):
     with ``promote_to_authored``'s guard). Setting a climate below REGION
     level succeeds but the result message warns: each climate-bearing area
     rolls its own weather, so per-ward climates mean per-ward weather.
+
+    Gated by ``BuildWarrantPrerequisite(level_param="level")`` rather than the
+    base class's bare default (#3477 fix round 1): this is the one
+    world_builder action that can reclassify an area's ``level`` in place, so
+    a GM's ``AreaBuildGrant.max_level`` ceiling must be checked against the
+    stricter of the area's current level and the incoming ``level`` kwarg —
+    otherwise a BUILDING-capped grant could edit a WARD it directly holds (the
+    bare default only ever checks BUILDING) or reclassify past its own
+    ceiling in the same call.
     """
 
     key: str = "edit_area"
     name: str = "Edit Area"
     icon: str = "map"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("area", "area_id"),)
+    warrant_level_param: ClassVar[str | None] = "level"
 
     def execute(
         self,
@@ -558,6 +644,8 @@ class StaffDigRoomAction(_WorldBuilderAction):
     key: str = "staff_dig_room"
     name: str = "Dig World Room"
     icon: str = "hammer"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room_container", "area_id"),)
+    warrant_adds_rooms: ClassVar[bool] = True
 
     def execute(
         self,
@@ -691,6 +779,41 @@ class StaffEditRoomAction(_WorldBuilderAction):
 
 
 @dataclass
+class StaffPublishRoomAction(_WorldBuilderAction):
+    """Publish a world room, making it live: enterable, its exits visible.
+
+    Kwarg: ``room_id``. Idempotent — re-publishing a room refreshes the
+    stamp rather than refusing (#3477: "publish" means "this room is live
+    as of now," not a one-shot flag); there is no separate "done" state and
+    no unpublish verb — pulling a room back out of the live world is
+    ``staff_remove_room``'s job, not a state toggle here. Only
+    ``origin=AUTHORED`` rooms (dug via ``staff_dig_room``) are ever born
+    unpublished (see ``world.areas.grid_services.create_room``), but this
+    action doesn't gate on origin — stamping a PLAYER room (already
+    published at creation) is a harmless no-op refresh.
+    """
+
+    key: str = "staff_publish_room"
+    name: str = "Publish World Room"
+    icon: str = "check-circle"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils import timezone  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        profile.published_at = timezone.now()
+        profile.save(update_fields=["published_at"])
+        return ActionResult(success=True, message=f"{profile.objectdb.db_key} published.")
+
+
+@dataclass
 class StaffLinkRoomsAction(_WorldBuilderAction):
     """Link two world rooms with a named exit pair — cross-area allowed.
 
@@ -700,6 +823,10 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
     key: str = "staff_link_rooms"
     name: str = "Link World Rooms"
     icon: str = "link"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room", "room_a_id"),
+        ("room", "room_b_id"),
+    )
 
     def execute(
         self,
@@ -745,6 +872,7 @@ class StaffUnlinkRoomsAction(_WorldBuilderAction):
     key: str = "staff_unlink_rooms"
     name: str = "Unlink World Rooms"
     icon: str = "unlink"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("exit", "exit_id"),)
 
     def execute(
         self,
@@ -776,6 +904,7 @@ class StaffRenameExitAction(_WorldBuilderAction):
     key: str = "staff_rename_exit"
     name: str = "Rename World Exit"
     icon: str = "pencil"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("exit", "exit_id"),)
 
     def execute(
         self,
@@ -898,6 +1027,7 @@ class StaffRemoveAreaAction(_WorldBuilderAction):
     key: str = "staff_remove_area"
     name: str = "Remove Area"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("area", "area_id"),)
 
     def execute(
         self,
@@ -946,6 +1076,10 @@ class StaffMoveRoomAction(_WorldBuilderAction):
     key: str = "staff_move_room"
     name: str = "Move World Room"
     icon: str = "move"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room", "room_id"),
+        ("room_container", "area_id"),
+    )
 
     def execute(
         self,
@@ -1082,6 +1216,7 @@ class StaffEditPlaceAction(_WorldBuilderAction):
     key: str = "staff_edit_place"
     name: str = "Edit Place"
     icon: str = "pencil"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("place", "place_id"),)
 
     def execute(
         self,
@@ -1110,6 +1245,7 @@ class StaffRemovePlaceAction(_WorldBuilderAction):
     key: str = "staff_remove_place"
     name: str = "Remove Place"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("place", "place_id"),)
 
     def execute(
         self,
@@ -1158,7 +1294,7 @@ class StaffAddAmbientLineAction(_WorldBuilderAction):
             return ActionResult(
                 success=False, message="Author at least one of arriver/bystander text."
             )
-        AmbientEmoteLine.objects.create(
+        line = AmbientEmoteLine.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=profile,
             arriver_body=arriver,
@@ -1167,6 +1303,7 @@ class StaffAddAmbientLineAction(_WorldBuilderAction):
             fire_chance=int(kwargs.get("fire_chance") or 100),
             cooldown_minutes=int(kwargs.get("cooldown_minutes") or 0),
         )
+        _resync_ambient_for_line(line)
         return ActionResult(success=True, message="Ambient entry line added.")
 
 
@@ -1177,6 +1314,7 @@ class StaffRemoveAmbientLineAction(_WorldBuilderAction):
     key: str = "staff_remove_ambient_line"
     name: str = "Remove Ambient Line"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("line", "line_id"),)
 
     def execute(
         self,
@@ -1190,6 +1328,7 @@ class StaffRemoveAmbientLineAction(_WorldBuilderAction):
         if line is None:
             return ActionResult(success=False, message="No such ambient line.")
         line.delete()
+        _resync_ambient_for_line(line)
         return ActionResult(success=True, message="Ambient entry line removed.")
 
 
@@ -1251,6 +1390,7 @@ class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
     key: str = "staff_remove_ambient_emit"
     name: str = "Remove Ambient Emit"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("emit", "emit_id"),)
 
     def execute(
         self,
@@ -1268,6 +1408,177 @@ class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
             note = " (It carried a writer credit; the content repo copy is untouched.)"
         emit.delete()
         return ActionResult(success=True, message=f"Ambient emit removed.{note}")
+
+
+def _apply_resonance_min_ref(condition: Any, kwargs: dict[str, Any]) -> str | None:
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    resonance = Resonance.objects.filter(pk=kwargs.get("target_id") or 0).first()
+    if resonance is None:
+        return "No such resonance."
+    condition.resonance = resonance
+    # Validated here, not left to save(): a non-int escapes the caller's
+    # ValidationError handler as an uncaught ValueError from the
+    # PositiveIntegerField's own prep (#3477 fix round 2).
+    try:
+        minimum_value = int(kwargs.get("minimum_value"))
+    except (TypeError, ValueError):
+        return "Minimum value must be a whole number."
+    if minimum_value < 1:
+        return "Minimum value must be at least 1."
+    condition.minimum_value = minimum_value
+    return None
+
+
+def _apply_renown_min_ref(condition: Any, kwargs: dict[str, Any]) -> str | None:
+    from world.societies.constants import FameTier  # noqa: PLC0415
+
+    tier = (kwargs.get("min_fame_tier") or "").strip()
+    # Validated here, not left to save(): save() calls clean(), never
+    # full_clean(), so a garbage tier would persist silently and later
+    # crash room entry in fame_tier_at_least's FAME_TIER_ORDER.index
+    # (#3477 fix round 2). Emptiness stays clean()'s refusal.
+    if tier and tier not in FameTier.values:
+        options = ", ".join(FameTier.values)
+        return f"No '{tier}' fame tier. Options: {options}."
+    condition.min_fame_tier = tier
+    perceiving_society_id = kwargs.get("perceiving_society_id")
+    if perceiving_society_id:
+        from world.societies.models import Society  # noqa: PLC0415
+
+        society = Society.objects.filter(pk=perceiving_society_id).first()
+        if society is None:
+            return "No such society."
+        condition.perceiving_society = society
+    return None
+
+
+def _apply_ambient_condition_ref(
+    condition: Any, condition_type: str, kwargs: dict[str, Any]
+) -> str | None:
+    """Resolve + attach the ref field(s) a condition_type requires onto ``condition``.
+
+    Mutates ``condition`` in place; returns an error message, or None on success.
+    LEGEND_DEED needs no ref field and always succeeds as a no-op.
+    """
+    from world.narrative.constants import ConditionType  # noqa: PLC0415
+
+    target_id = kwargs.get("target_id")
+    if condition_type == ConditionType.SPECIES:
+        from world.species.models import Species  # noqa: PLC0415
+
+        species = Species.objects.filter(pk=target_id or 0).first()
+        if species is None:
+            return "No such species."
+        condition.species = species
+    elif condition_type == ConditionType.RESONANCE_MIN:
+        return _apply_resonance_min_ref(condition, kwargs)
+    elif condition_type == ConditionType.DISTINCTION:
+        from world.distinctions.models import Distinction  # noqa: PLC0415
+
+        distinction = Distinction.objects.filter(pk=target_id or 0).first()
+        if distinction is None:
+            return "No such distinction."
+        condition.distinction = distinction
+    elif condition_type == ConditionType.RENOWN_MIN:
+        return _apply_renown_min_ref(condition, kwargs)
+    # LEGEND_DEED needs no ref field — no-op.
+    return None
+
+
+@dataclass
+class StaffAddAmbientConditionAction(_WorldBuilderAction):
+    """Attach one condition to an ambient entry line (#3477).
+
+    Wires the pre-existing ``AmbientEmoteCondition`` model — BUILT NOT WIRED before this
+    action — to the world-builder canvas. Kwargs: ``line_id``, ``condition_type`` (a
+    ``world.narrative.constants.ConditionType`` value), and ``target_id`` for the type's
+    required ref row (species/resonance/distinction pk). RESONANCE_MIN also needs
+    ``minimum_value``; RENOWN_MIN needs ``min_fame_tier`` (a FameTier value) and takes an
+    optional ``perceiving_society_id``; SPECIES/DISTINCTION take only ``target_id``.
+    LEGEND_DEED needs none of the above — a bare presence-of-deeds check.
+    """
+
+    key: str = "staff_add_ambient_condition"
+    name: str = "Add Ambient Condition"
+    icon: str = "filter"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("line", "line_id"),)
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.narrative.constants import ConditionType  # noqa: PLC0415
+        from world.narrative.models import AmbientEmoteCondition  # noqa: PLC0415
+
+        line = _resolve_ambient_line(kwargs.get("line_id"))
+        if line is None:
+            return ActionResult(success=False, message="No such ambient line.")
+        condition_type = (kwargs.get("condition_type") or "").strip()
+        if condition_type not in ConditionType.values:
+            options = ", ".join(ConditionType.values)
+            return ActionResult(
+                success=False, message=f"No '{condition_type}' condition type. Options: {options}."
+            )
+
+        condition = AmbientEmoteCondition(line=line, condition_type=condition_type)
+        ref_error = _apply_ambient_condition_ref(condition, condition_type, kwargs)
+        if ref_error is not None:
+            return ActionResult(success=False, message=ref_error)
+
+        try:
+            condition.save()
+        except ValidationError as exc:
+            return ActionResult(success=False, message="; ".join(exc.messages))
+        _resync_ambient_for_line(line)
+        return ActionResult(success=True, message="Ambient condition added.")
+
+
+@dataclass
+class StaffRemoveAmbientConditionAction(_WorldBuilderAction):
+    """Remove an ambient condition. Kwargs: ``condition_id``, ``line_id``.
+
+    ``line_id`` names the condition's own line (#3477 Task 3 fix round 1) -- this action
+    has no ``area_id``/``room_id`` kwarg of its own, so
+    ``BuildWarrantPrerequisite(line_param="line_id")`` needs it to resolve a non-staff GM's
+    warrant. Refused (not silently ignored) when the condition doesn't actually belong to
+    the named line, so a warrant covering an unrelated line/room/area can't be used to
+    delete a condition outside it. Staff bypass the warrant check entirely and may omit
+    ``line_id``.
+    """
+
+    key: str = "staff_remove_ambient_condition"
+    name: str = "Remove Ambient Condition"
+    icon: str = "filter-x"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("line", "line_id"),)
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.narrative.models import AmbientEmoteCondition  # noqa: PLC0415
+
+        condition = AmbientEmoteCondition.objects.filter(pk=kwargs.get("condition_id") or 0).first()
+        if condition is None:
+            return ActionResult(success=False, message="No such ambient condition.")
+        line_id = kwargs.get("line_id")
+        if line_id:
+            try:
+                line_id = int(line_id)
+            except (TypeError, ValueError):
+                return ActionResult(success=False, message="Invalid line_id.")
+            if condition.line_id != line_id:
+                return ActionResult(success=False, message="That condition isn't on that line.")
+        line = condition.line
+        condition.delete()
+        _resync_ambient_for_line(line)
+        return ActionResult(success=True, message="Ambient condition removed.")
 
 
 @dataclass
@@ -1326,6 +1637,7 @@ class StaffRemoveRoomDescVariantAction(_WorldBuilderAction):
     key: str = "staff_remove_room_desc_variant"
     name: str = "Remove Room Description Variant"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("variant", "variant_id"),)
 
     def execute(
         self,
@@ -1646,6 +1958,7 @@ class StaffSetExitDetailAction(_WorldBuilderAction):
     key: str = "staff_set_exit_detail"
     name: str = "Set Exit Detail"
     icon: str = "door-open"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("exit", "exit_id"),)
 
     def execute(
         self,
@@ -1697,6 +2010,11 @@ class StaffDuplicateRoomAction(_WorldBuilderAction):
     key: str = "staff_duplicate_room"
     name: str = "Duplicate Room"
     icon: str = "copy"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room", "room_id"),
+        ("room_container", "area_id"),
+    )
+    warrant_adds_rooms: ClassVar[bool] = True
 
     def execute(
         self,
@@ -1856,6 +2174,12 @@ class StaffBatchDigAction(_WorldBuilderAction):
     key: str = "staff_batch_dig"
     name: str = "Batch Dig"
     icon: str = "rows"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("room_container", "area_id"),
+        ("room", "from_room_id"),
+    )
+    warrant_adds_rooms: ClassVar[bool] = True
+    warrant_rooms_count_param: ClassVar[str | None] = "count"
 
     def execute(  # noqa: PLR0911 — a validation ladder; each refusal is one message
         self,
@@ -1944,6 +2268,7 @@ class PromoteAreaAction(_WorldBuilderAction):
     key: str = "promote_area"
     name: str = "Promote Area"
     icon: str = "star"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("area", "area_id"),)
 
     def execute(
         self,
@@ -2159,6 +2484,7 @@ class StaffRemoveClueAction(_WorldBuilderAction):
     key: str = "staff_remove_clue"
     name: str = "Remove Room Clue"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("room_clue", "room_clue_id"),)
 
     def execute(
         self,
@@ -2216,6 +2542,7 @@ class StaffRemoveClueTriggerAction(_WorldBuilderAction):
     key: str = "staff_remove_clue_trigger"
     name: str = "Remove Clue Trigger"
     icon: str = "trash"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("clue_trigger", "clue_trigger_id"),)
 
     def execute(
         self,
@@ -2293,6 +2620,7 @@ class StaffRemovePortalAnchorAction(_WorldBuilderAction):
     key: str = "staff_remove_portal_anchor"
     name: str = "Dissolve Portal Anchor"
     icon: str = "door-closed"
+    warrant_targets: ClassVar[tuple[tuple[str, str], ...]] = (("anchor", "anchor_id"),)
 
     def execute(
         self,
