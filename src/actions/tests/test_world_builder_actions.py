@@ -1967,3 +1967,140 @@ class PhaseCAreaMetadataTests(TestCase):
         result = EditAreaAction().run(self.staff, area_id=self.area.pk, climate=climate.name)
         assert result.success, result.message
         assert "below REGION" in result.message
+
+
+class AmbientResyncTests(TestCase):
+    """#3477 fix round 2 — ambient authoring writes re-derive the delivery
+    Trigger graph in place, so the canvas's line/condition edits are live
+    without the re-import ADR-0238 forbids on a populated database."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("AmbientResyncStaff")
+        self.area = AreaFactory(
+            name="Resync Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="resync-ward"
+        )
+        self.profile = RoomProfileFactory(area=self.area, grid_x=0, grid_y=0)
+
+    def _ambient_triggers(self, profile=None):
+        from flows.models import Trigger
+        from world.narrative.ambient_triggers import AMBIENT_TRIGGER_PREFIX
+
+        return Trigger.objects.filter(
+            obj=(profile or self.profile).objectdb,
+            trigger_definition__name__startswith=AMBIENT_TRIGGER_PREFIX,
+        ).select_related("trigger_definition__flow_definition")
+
+    def test_add_ambient_line_installs_delivery_trigger(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientLineAction
+        from world.narrative.models import AmbientEmoteLine
+
+        result = StaffAddAmbientLineAction().run(
+            self.staff, room_id=self.profile.objectdb_id, arriver_body="A hush falls."
+        )
+        assert result.success, result.message
+        line = AmbientEmoteLine.objects.get(room_profile=self.profile)
+        triggers = list(self._ambient_triggers())
+        assert len(triggers) == 1
+        step = triggers[0].trigger_definition.flow_definition.steps.first()
+        assert line.pk in step.parameters["line_ids"]
+
+    def test_condition_add_and_remove_regroup_the_trigger(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAddAmbientConditionAction,
+            StaffAddAmbientLineAction,
+            StaffRemoveAmbientConditionAction,
+        )
+        from world.narrative.ambient_content import compile_line_filter
+        from world.narrative.models import AmbientEmoteCondition, AmbientEmoteLine
+        from world.species.factories import SpeciesFactory
+
+        StaffAddAmbientLineAction().run(
+            self.staff, room_id=self.profile.objectdb_id, arriver_body="A hush falls."
+        )
+        line = AmbientEmoteLine.objects.get(room_profile=self.profile)
+        species = SpeciesFactory()
+
+        result = StaffAddAmbientConditionAction().run(
+            self.staff, line_id=line.pk, condition_type="species", target_id=species.pk
+        )
+        assert result.success, result.message
+        triggers = list(self._ambient_triggers())
+        assert len(triggers) == 1
+        assert triggers[0].trigger_definition.base_filter_condition == compile_line_filter(line)
+
+        condition = AmbientEmoteCondition.objects.get(line=line)
+        removed = StaffRemoveAmbientConditionAction().run(
+            self.staff, condition_id=condition.pk, line_id=line.pk
+        )
+        assert removed.success, removed.message
+        triggers = list(self._ambient_triggers())
+        assert len(triggers) == 1
+        assert triggers[0].trigger_definition.base_filter_condition is None
+
+    def test_remove_ambient_line_sweeps_the_stale_trigger(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAddAmbientLineAction,
+            StaffRemoveAmbientLineAction,
+        )
+        from world.narrative.models import AmbientEmoteLine
+
+        StaffAddAmbientLineAction().run(
+            self.staff, room_id=self.profile.objectdb_id, arriver_body="A hush falls."
+        )
+        line = AmbientEmoteLine.objects.get(room_profile=self.profile)
+        result = StaffRemoveAmbientLineAction().run(self.staff, line_id=line.pk)
+        assert result.success, result.message
+        assert not self._ambient_triggers().exists()
+
+    def test_area_scoped_condition_resyncs_every_room(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.locations.constants import LocationParentType
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.species.factories import SpeciesFactory
+
+        other = RoomProfileFactory(area=self.area, grid_x=1, grid_y=0)
+        line = AmbientEmoteLineFactory(
+            parent_type=LocationParentType.AREA, area=self.area, room_profile=None
+        )
+        species = SpeciesFactory()
+        result = StaffAddAmbientConditionAction().run(
+            self.staff, line_id=line.pk, condition_type="species", target_id=species.pk
+        )
+        assert result.success, result.message
+        assert self._ambient_triggers(self.profile).count() == 1
+        assert self._ambient_triggers(other).count() == 1
+
+    def test_resonance_minimum_value_must_be_a_whole_number(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.magic.factories import ResonanceFactory
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        resonance = ResonanceFactory()
+        result = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="resonance_min",
+            target_id=resonance.pk,
+            minimum_value="lots",
+        )
+        assert not result.success
+        assert "whole number" in result.message
+        assert not AmbientEmoteCondition.objects.filter(line=line).exists()
+
+    def test_renown_min_rejects_a_garbage_fame_tier(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientConditionAction
+        from world.narrative.factories import AmbientEmoteLineFactory
+        from world.narrative.models import AmbientEmoteCondition
+
+        line = AmbientEmoteLineFactory(room_profile=self.profile)
+        result = StaffAddAmbientConditionAction().run(
+            self.staff,
+            line_id=line.pk,
+            condition_type="renown_min",
+            min_fame_tier="famousish",
+        )
+        assert not result.success
+        assert "fame tier" in result.message
+        assert not AmbientEmoteCondition.objects.filter(line=line).exists()

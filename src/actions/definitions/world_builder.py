@@ -137,6 +137,25 @@ def _resolve_ambient_line(line_id: Any) -> Any | None:
     return AmbientEmoteLine.objects.filter(pk=line_id).first()
 
 
+def _resync_ambient_for_line(line: Any) -> None:
+    """Re-derive the delivery Trigger graph after an ambient line/condition write
+    (#3477 fix round 2) — entry lines deliver only through pre-derived Triggers
+    with frozen line groups, so without this the write is invisible to room
+    entry until a re-import that ADR-0238 forbids on a populated database.
+    Safe on a just-deleted line: only its parent FK ids are read.
+    """
+    from world.locations.constants import LocationParentType  # noqa: PLC0415
+    from world.narrative.ambient_triggers import (  # noqa: PLC0415
+        resync_area_ambient_triggers,
+        resync_room_ambient_triggers,
+    )
+
+    if line.parent_type == LocationParentType.ROOM and line.room_profile_id:
+        resync_room_ambient_triggers(line.room_profile)
+    elif line.parent_type == LocationParentType.AREA and line.area_id:
+        resync_area_ambient_triggers(line.area)
+
+
 def _resolve_portal_anchor(anchor_id: Any) -> PortalAnchor | None:
     from world.magic.models import PortalAnchor  # noqa: PLC0415
 
@@ -1269,7 +1288,7 @@ class StaffAddAmbientLineAction(_WorldBuilderAction):
             return ActionResult(
                 success=False, message="Author at least one of arriver/bystander text."
             )
-        AmbientEmoteLine.objects.create(
+        line = AmbientEmoteLine.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=profile,
             arriver_body=arriver,
@@ -1278,6 +1297,7 @@ class StaffAddAmbientLineAction(_WorldBuilderAction):
             fire_chance=int(kwargs.get("fire_chance") or 100),
             cooldown_minutes=int(kwargs.get("cooldown_minutes") or 0),
         )
+        _resync_ambient_for_line(line)
         return ActionResult(success=True, message="Ambient entry line added.")
 
 
@@ -1302,6 +1322,7 @@ class StaffRemoveAmbientLineAction(_WorldBuilderAction):
         if line is None:
             return ActionResult(success=False, message="No such ambient line.")
         line.delete()
+        _resync_ambient_for_line(line)
         return ActionResult(success=True, message="Ambient entry line removed.")
 
 
@@ -1383,6 +1404,49 @@ class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
         return ActionResult(success=True, message=f"Ambient emit removed.{note}")
 
 
+def _apply_resonance_min_ref(condition: Any, kwargs: dict[str, Any]) -> str | None:
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    resonance = Resonance.objects.filter(pk=kwargs.get("target_id") or 0).first()
+    if resonance is None:
+        return "No such resonance."
+    condition.resonance = resonance
+    # Validated here, not left to save(): a non-int escapes the caller's
+    # ValidationError handler as an uncaught ValueError from the
+    # PositiveIntegerField's own prep (#3477 fix round 2).
+    try:
+        minimum_value = int(kwargs.get("minimum_value"))
+    except (TypeError, ValueError):
+        return "Minimum value must be a whole number."
+    if minimum_value < 1:
+        return "Minimum value must be at least 1."
+    condition.minimum_value = minimum_value
+    return None
+
+
+def _apply_renown_min_ref(condition: Any, kwargs: dict[str, Any]) -> str | None:
+    from world.societies.constants import FameTier  # noqa: PLC0415
+
+    tier = (kwargs.get("min_fame_tier") or "").strip()
+    # Validated here, not left to save(): save() calls clean(), never
+    # full_clean(), so a garbage tier would persist silently and later
+    # crash room entry in fame_tier_at_least's FAME_TIER_ORDER.index
+    # (#3477 fix round 2). Emptiness stays clean()'s refusal.
+    if tier and tier not in FameTier.values:
+        options = ", ".join(FameTier.values)
+        return f"No '{tier}' fame tier. Options: {options}."
+    condition.min_fame_tier = tier
+    perceiving_society_id = kwargs.get("perceiving_society_id")
+    if perceiving_society_id:
+        from world.societies.models import Society  # noqa: PLC0415
+
+        society = Society.objects.filter(pk=perceiving_society_id).first()
+        if society is None:
+            return "No such society."
+        condition.perceiving_society = society
+    return None
+
+
 def _apply_ambient_condition_ref(
     condition: Any, condition_type: str, kwargs: dict[str, Any]
 ) -> str | None:
@@ -1402,13 +1466,7 @@ def _apply_ambient_condition_ref(
             return "No such species."
         condition.species = species
     elif condition_type == ConditionType.RESONANCE_MIN:
-        from world.magic.models import Resonance  # noqa: PLC0415
-
-        resonance = Resonance.objects.filter(pk=target_id or 0).first()
-        if resonance is None:
-            return "No such resonance."
-        condition.resonance = resonance
-        condition.minimum_value = kwargs.get("minimum_value")
+        return _apply_resonance_min_ref(condition, kwargs)
     elif condition_type == ConditionType.DISTINCTION:
         from world.distinctions.models import Distinction  # noqa: PLC0415
 
@@ -1417,15 +1475,7 @@ def _apply_ambient_condition_ref(
             return "No such distinction."
         condition.distinction = distinction
     elif condition_type == ConditionType.RENOWN_MIN:
-        condition.min_fame_tier = (kwargs.get("min_fame_tier") or "").strip()
-        perceiving_society_id = kwargs.get("perceiving_society_id")
-        if perceiving_society_id:
-            from world.societies.models import Society  # noqa: PLC0415
-
-            society = Society.objects.filter(pk=perceiving_society_id).first()
-            if society is None:
-                return "No such society."
-            condition.perceiving_society = society
+        return _apply_renown_min_ref(condition, kwargs)
     # LEGEND_DEED needs no ref field — no-op.
     return None
 
@@ -1478,6 +1528,7 @@ class StaffAddAmbientConditionAction(_WorldBuilderAction):
             condition.save()
         except ValidationError as exc:
             return ActionResult(success=False, message="; ".join(exc.messages))
+        _resync_ambient_for_line(line)
         return ActionResult(success=True, message="Ambient condition added.")
 
 
@@ -1518,7 +1569,9 @@ class StaffRemoveAmbientConditionAction(_WorldBuilderAction):
                 return ActionResult(success=False, message="Invalid line_id.")
             if condition.line_id != line_id:
                 return ActionResult(success=False, message="That condition isn't on that line.")
+        line = condition.line
         condition.delete()
+        _resync_ambient_for_line(line)
         return ActionResult(success=True, message="Ambient condition removed.")
 
 

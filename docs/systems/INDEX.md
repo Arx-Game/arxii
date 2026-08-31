@@ -1160,7 +1160,13 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   optional `perceiving_society_id` for RENOWN_MIN; LEGEND_DEED needs no ref). The
   room-detail payload's `ambient_lines` now nest a `conditions` list
   (`{id, condition_type, label}`; `world.narrative.ambient_content.describe_condition`
-  renders the label).
+  renders the label). Every ambient line/condition write re-derives the delivery
+  Trigger graph in place via `world.narrative.ambient_triggers.
+  resync_room_ambient_triggers`/`resync_area_ambient_triggers` (#3477 fix round 2) —
+  entry lines deliver only through pre-derived Triggers with frozen line groups
+  (`ensure_ambient_group_trigger`, moved there from `grid_import`, which now
+  delegates), so without the resync a canvas write was invisible until a re-import
+  ADR-0238 forbids on a populated database.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 

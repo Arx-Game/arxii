@@ -933,29 +933,14 @@ def _import_ambient_lines(
 
 
 def _ensure_ambient_trigger(room_objectdb: object, trigger_def: object) -> None:
-    """Idempotently install a derived ambient Trigger on a room (#2471 v2).
-
-    Mirrors world.battles.duel_wiring.install_champion_duel_trigger's get_or_create +
-    on_trigger_added(only when newly created) shape, PLUS copies the TriggerDefinition's
-    compiled filter onto the new Trigger row's additional_filter_condition — required
-    because flows.emit._trigger_should_fire (the live MOVED-dispatch path) only ever
-    consults Trigger.additional_filter_condition, never TriggerDefinition
-    .base_filter_condition. duel_wiring's trigger always has an empty base_filter_condition
-    (unconditional per-room fire) so it never needed this copy; the ambient case's
-    compiled SPECIES/RESONANCE/etc filter does. Mirrors the same copy-on-install step in
-    world.conditions.services._install_reactive_side_effects.
+    """Install one derived ambient Trigger on a room — moved to
+    ``world.narrative.ambient_triggers.ensure_ambient_trigger`` (#3477 fix
+    round 2) so the canvas resync path shares the import's implementation;
+    this thin alias keeps the import module's call sites and tests stable.
     """
-    from flows.models import Trigger  # noqa: PLC0415
+    from world.narrative.ambient_triggers import ensure_ambient_trigger  # noqa: PLC0415
 
-    trigger, created = Trigger.objects.get_or_create(
-        obj=room_objectdb,
-        trigger_definition=trigger_def,
-        defaults={"additional_filter_condition": trigger_def.base_filter_condition},
-    )
-    if created:
-        handler = room_objectdb.trigger_handler
-        if handler is not None:
-            handler.on_trigger_added(trigger)
+    ensure_ambient_trigger(room_objectdb, trigger_def)
 
 
 def _ensure_ambient_group_trigger(
@@ -965,72 +950,14 @@ def _ensure_ambient_group_trigger(
     line_ids: list[int],
     result: GridImportResult,
 ) -> object:
-    """Idempotently create (or refresh) the derived TriggerDefinition for one condition
-    group (#2471 v2). Name is deterministic from (scope, scope_key, filter digest), so
-    re-imports of unchanged content resolve to the same row (get_or_create by name);
-    changed content (new lines added to the same condition, or a changed filter under an
-    unlikely digest collision) refreshes the existing row's filter/parameters in place.
-    A condition group whose compiled filter actually changes gets a new digest, so a new
-    FlowDefinition/TriggerDefinition row-set is created rather than migrating the old
-    one in place; the old (now-orphaned) rows are never deleted or deactivated — same
-    report-never-delete deferral as this file's other sidecar types, not a bug.
-
-    ``TriggerDefinition`` carries ``CreditedContent`` (#3017): a row whose
-    ``written_by`` a staff admin has set is never overwritten here even when its
-    ``base_filter_condition`` would otherwise be refreshed (the digest-collision
-    branch above) - the row is left untouched and the conflict is appended to
-    ``result.reports``, same freeze the fixture loader and the weather seed apply
-    to their own credited rows. ``FlowDefinition`` (also ``CreditedContent``) is
-    only ever created-or-fetched-unchanged in this function (``get_or_create``
-    with no field updates on the existing-row path), so it needs no guard.
+    """Derive one condition group's TriggerDefinition — moved to
+    ``world.narrative.ambient_triggers.ensure_ambient_group_trigger`` (#3477
+    fix round 2, same sharing rationale as ``_ensure_ambient_trigger`` above);
+    the credited-row freeze (#3017) reports into ``result.reports``.
     """
-    import hashlib  # noqa: PLC0415
-    import json  # noqa: PLC0415
+    from world.narrative.ambient_triggers import ensure_ambient_group_trigger  # noqa: PLC0415
 
-    from flows.constants import EventName  # noqa: PLC0415
-    from flows.consts import FlowActionChoices  # noqa: PLC0415
-    from flows.factories import FlowStepDefinitionFactory  # noqa: PLC0415
-    from flows.models import FlowDefinition  # noqa: PLC0415
-    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
-
-    digest = hashlib.sha1(  # noqa: S324 (content-addressing, not security)
-        json.dumps(compiled_filter, sort_keys=True).encode()
-    ).hexdigest()[:12]
-    name = f"moved_ambient_{scope}_{scope_key}_{digest}"
-
-    flow, _ = FlowDefinition.objects.get_or_create(name=name)
-    step_parameters = {"payload": "@payload", "line_ids": sorted(line_ids)}
-    if not flow.steps.exists():
-        FlowStepDefinitionFactory(
-            flow=flow,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="world.narrative.ambient_content.deliver_ambient_group",
-            parameters=step_parameters,
-        )
-    else:
-        step = flow.steps.first()
-        if step.parameters != step_parameters:
-            step.parameters = step_parameters
-            step.save(update_fields=["parameters"])
-
-    trigger_def, created = TriggerDefinition.objects.get_or_create(
-        name=name,
-        defaults={
-            "event_name": EventName.MOVED,
-            "flow_definition": flow,
-            "base_filter_condition": compiled_filter,
-        },
-    )
-    if not created and trigger_def.base_filter_condition != compiled_filter:
-        if trigger_def.written_by_id is not None:
-            result.reports.append(
-                f"TriggerDefinition [{trigger_def.name}] is credited (written_by is set) "
-                "and differs from the grid pipeline's value. Row left untouched (#3017)."
-            )
-        else:
-            trigger_def.base_filter_condition = compiled_filter
-            trigger_def.save(update_fields=["base_filter_condition"])
-    return trigger_def
+    return ensure_ambient_group_trigger(scope, scope_key, compiled_filter, line_ids, result.reports)
 
 
 def _group_ambient_lines(
