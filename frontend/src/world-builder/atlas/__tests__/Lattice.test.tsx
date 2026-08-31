@@ -237,6 +237,33 @@ describe('Lattice — plot-then-realize', () => {
     });
   });
 
+  it('a pending dig-link resolves against the dig floor, not the currently viewed floor', async () => {
+    // A pre-existing room sits at (1,0) on floor 1 — the exact cell the
+    // floor-0 dig targets. Switching to floor 1 before the refetch lands
+    // must NOT hand it the links meant for the dug floor-0 room.
+    const neighbor = makeTile({ id: 5, name: 'The Gallery Stair', gridX: 0, gridY: 0, floor: 0 });
+    const upstairs = makeTile({ id: 8, name: 'The Loft', gridX: 1, gridY: 0, floor: 1 });
+    const { runAction, rerenderWith } = renderLattice({ nodeId: 42, tiles: [neighbor, upstairs] });
+
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'The Wine Cellar');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    await userEvent.click(screen.getByTestId('lattice-floor-1'));
+    expect(runAction).not.toHaveBeenCalledWith('staff_link_rooms', expect.anything());
+
+    const newRoom = makeTile({ id: 99, name: 'The Wine Cellar', gridX: 1, gridY: 0, floor: 0 });
+    rerenderWith({ tiles: [neighbor, upstairs, newRoom] });
+
+    expect(runAction).toHaveBeenCalledWith('staff_link_rooms', {
+      room_a_id: 99,
+      room_b_id: 5,
+      name_ab: 'west',
+      name_ba: 'east',
+    });
+  });
+
   it('areas mode resolves a pending create_area placement once the unplaced area appears', () => {
     const { runAction, rerenderWith } = renderLattice({
       mode: 'areas',

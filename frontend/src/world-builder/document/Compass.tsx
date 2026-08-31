@@ -63,10 +63,14 @@ export interface CompassProps {
 interface PendingLink {
   cellX: number;
   cellY: number;
+  /** Captured at dig time, like every other field here — the resolve effect
+   * must never read live component state (the viewer may have clicked through
+   * to a neighbor before the refetch lands, and `currentRoom` moves with
+   * them; the dialog's connection rows may also point at rooms other than
+   * the one being stood in, per the redirectable-rows ruling). */
   floor: number;
-  name: string;
-  entranceExitName: string;
-  exitExitName: string;
+  entrance: { roomId: number; exitName: string } | null;
+  exit: { roomId: number; exitName: string } | null;
 }
 
 function roomAt(rooms: WorldBuilderRoom[], x: number, y: number, floor: number) {
@@ -90,17 +94,38 @@ export function Compass({ areaId, currentRoom, rooms, onOpenRoom, runAction }: C
     if (!pending) return;
     const newRoom = roomAt(rooms, pending.cellX, pending.cellY, pending.floor);
     if (!newRoom) return;
-    // Mirrors `Lattice`'s own pendingLinksRef resolution exactly (room_a is
-    // the freshly dug room, room_b the room you were standing in) so the two
-    // ⊕ affordances can never disagree on which side gets which exit name.
-    runAction('staff_link_rooms', {
-      room_a_id: newRoom.id,
-      room_b_id: currentRoom.id,
-      name_ab: pending.exitExitName,
-      name_ba: pending.entranceExitName,
-    });
+    // Mirrors `Lattice`'s own pendingLinksRef resolution exactly — same
+    // paired-vs-one-sided dispatch shapes, connection targets from the
+    // dialog's own (removable, redirectable) rows — so the two ⊕
+    // affordances can never disagree on what a dig actually wires up.
+    const { entrance, exit } = pending;
+    if (entrance && exit && entrance.roomId === exit.roomId) {
+      runAction('staff_link_rooms', {
+        room_a_id: newRoom.id,
+        room_b_id: entrance.roomId,
+        name_ab: exit.exitName,
+        name_ba: entrance.exitName,
+      });
+    } else {
+      if (entrance) {
+        runAction('staff_link_rooms', {
+          room_a_id: entrance.roomId,
+          room_b_id: newRoom.id,
+          name_ab: entrance.exitName,
+          name_ba: entrance.exitName,
+        });
+      }
+      if (exit) {
+        runAction('staff_link_rooms', {
+          room_a_id: newRoom.id,
+          room_b_id: exit.roomId,
+          name_ab: exit.exitName,
+          name_ba: exit.exitName,
+        });
+      }
+    }
     pendingRef.current = null;
-  }, [rooms, currentRoom.id, runAction]);
+  }, [rooms, runAction]);
 
   const handleConfirm = (payload: AddDialogRealizePayload) => {
     if (!addCell || payload.kind !== 'room') return;
@@ -112,19 +137,18 @@ export function Compass({ areaId, currentRoom, rooms, onOpenRoom, runAction }: C
       grid_x: x,
       grid_y: y,
     });
-    // Both connection rows always point back at the room you're standing in
-    // (see `defaultNeighbor` below) — the exit/entrance names are all that
-    // varies, so one pending entry captures both directions.
-    const exitName = payload.exit?.exitName ?? payload.entrance?.exitName ?? FANCIFUL_EXIT_NAME;
-    const entranceName = payload.entrance?.exitName ?? payload.exit?.exitName ?? FANCIFUL_EXIT_NAME;
-    pendingRef.current = {
-      cellX: x,
-      cellY: y,
-      floor: currentRoom.floor,
-      name: payload.name,
-      entranceExitName: entranceName,
-      exitExitName: exitName,
-    };
+    // A removed row is honored (both removed = a deliberately free-standing
+    // room, no pending entry at all); a redirected row links to the room the
+    // dialog actually names, which need not be the one being stood in.
+    if (payload.entrance || payload.exit) {
+      pendingRef.current = {
+        cellX: x,
+        cellY: y,
+        floor: currentRoom.floor,
+        entrance: payload.entrance,
+        exit: payload.exit,
+      };
+    }
     setAddCell(null);
   };
 

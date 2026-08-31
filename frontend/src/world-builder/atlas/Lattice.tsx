@@ -128,8 +128,19 @@ function cellState(key: CellKey, sketch: LatticeSketch): 'planned' | 'void' | 'e
 }
 
 interface PendingLink {
+  x: number;
+  y: number;
+  /** Captured at dig time — the resolve effect must match the dug room's own
+   * floor, not whatever floor the rail has switched to since (a pre-existing
+   * room at the same (x,y) on the newly-viewed floor would receive the links
+   * and orphan the actually-dug room). */
+  floor: number;
   entrance: AddDialogConnection | null;
   exit: AddDialogConnection | null;
+}
+
+function pendingLinkKey(x: number, y: number, floor: number): string {
+  return `${x},${y}@${floor}`;
 }
 
 export function Lattice({
@@ -308,14 +319,17 @@ export function Lattice({
 
   // Cells awaiting an id that only the next `tiles` refetch will reveal —
   // see the module doc's "realize, then resolve" note.
-  const pendingLinksRef = useRef<Map<CellKey, PendingLink>>(new Map());
+  const pendingLinksRef = useRef<Map<string, PendingLink>>(new Map());
   const pendingAreaPlacementsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   useEffect(() => {
     for (const [key, pending] of pendingLinksRef.current) {
-      const [x, y] = parseCellKey(key);
       const newRoom = tiles.find(
-        (t) => t.kind === 'room' && t.gridX === x && t.gridY === y && t.floor === floor
+        (t) =>
+          t.kind === 'room' &&
+          t.gridX === pending.x &&
+          t.gridY === pending.y &&
+          t.floor === pending.floor
       );
       if (!newRoom) continue;
       const { entrance, exit } = pending;
@@ -352,7 +366,7 @@ export function Lattice({
       runAction('edit_area', { area_id: newArea.id, grid_x: pending.x, grid_y: pending.y });
       pendingAreaPlacementsRef.current.delete(name);
     }
-  }, [tiles, floor, runAction]);
+  }, [tiles, runAction]);
 
   const handleConfirmRealize = (payload: AddDialogRealizePayload) => {
     if (!addCell) return;
@@ -375,7 +389,10 @@ export function Lattice({
         grid_y: y,
       });
       if (payload.entrance || payload.exit) {
-        pendingLinksRef.current.set(cellKey(x, y), {
+        pendingLinksRef.current.set(pendingLinkKey(x, y, floor), {
+          x,
+          y,
+          floor,
           entrance: payload.entrance,
           exit: payload.exit,
         });

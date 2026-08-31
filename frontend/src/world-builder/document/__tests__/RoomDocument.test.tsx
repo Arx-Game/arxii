@@ -1,8 +1,27 @@
-import { screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
+import { store } from '@/store/store';
+
+// `renderWithProviders`'s own `rerender` remounts the whole tree (bare
+// element, different root type), which resets `pendingExitLinkRef` — the
+// dig-then-link test needs one stable provider tree across both renders,
+// same pattern as Compass.test.tsx.
+const stableQueryClient = new QueryClient();
+function wrap(ui: React.ReactNode) {
+  return (
+    <Provider store={store}>
+      <QueryClientProvider client={stableQueryClient}>
+        <MemoryRouter>{ui}</MemoryRouter>
+      </QueryClientProvider>
+    </Provider>
+  );
+}
 import type {
   WorldBuilderAreaManager,
   WorldBuilderRoom,
@@ -27,7 +46,13 @@ vi.mock('../Compass', () => ({
   ),
 }));
 vi.mock('../Marginalia', () => ({
-  Marginalia: () => <div data-testid="mock-marginalia" />,
+  Marginalia: ({ onAddExit }: { onAddExit: () => void }) => (
+    <div data-testid="mock-marginalia">
+      <button data-testid="mock-open-add-exit" onClick={onAddExit}>
+        add exit
+      </button>
+    </div>
+  ),
 }));
 vi.mock('../ExitEditorDialog', () => ({
   ExitEditorDialog: () => null,
@@ -40,7 +65,25 @@ vi.mock('../VariantsPanel', () => ({
   VariantsPanel: () => <div data-testid="mock-variants" />,
 }));
 vi.mock('../../atlas/AddDialog', () => ({
-  AddDialog: ({ open }: { open: boolean }) => (open ? <div data-testid="mock-add-dialog" /> : null),
+  AddDialog: ({ open, onConfirm }: { open: boolean; onConfirm: (payload: unknown) => void }) =>
+    open ? (
+      <div data-testid="mock-add-dialog">
+        <button
+          data-testid="mock-confirm-exit-dig"
+          onClick={() =>
+            onConfirm({
+              kind: 'exit',
+              name: 'The Cellar',
+              matchedRoomId: null,
+              exitThere: 'down',
+              exitBack: 'up',
+            })
+          }
+        >
+          dig it
+        </button>
+      </div>
+    ) : null,
 }));
 
 const { useRoomDetailQuery, useAreaManagerQuery, useWorldBuilderAction, useRoomSearchQuery } =
@@ -307,6 +350,57 @@ describe('RoomDocument', () => {
     const [, callbacks] = runMutation.mock.calls[0];
     callbacks.onSuccess({ success: true, message: 'Room removed.' });
     expect(onDeleted).toHaveBeenCalledWith(5);
+  });
+
+  it('exit dig: a same-area namesake links instead of digging a duplicate', async () => {
+    // The dialog's matchedRoomId rides the async search; a submit that
+    // outruns it reports null — the sibling list already in hand must catch
+    // the match before the dig fork wins.
+    const current = makeRoom({ id: 100 });
+    const namesake = makeRoom({ id: 200, name: 'The Cellar' });
+    mockQueries({ room: current, managerRooms: [current, namesake] });
+
+    renderWithProviders(<RoomDocument roomId={100} onNavigateRoom={vi.fn()} onDeleted={vi.fn()} />);
+    await userEvent.click(screen.getByTestId('mock-open-add-exit'));
+    await userEvent.click(screen.getByTestId('mock-confirm-exit-dig'));
+
+    expect(runMutation).toHaveBeenCalledWith({
+      key: 'staff_link_rooms',
+      kwargs: { room_a_id: 100, room_b_id: 200, name_ab: 'down', name_ba: 'up' },
+    });
+    expect(runMutation).not.toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'staff_dig_room' })
+    );
+  });
+
+  it('exit dig: the pending link resolves the NEW room by known-ids, then wires both ways', async () => {
+    const current = makeRoom({ id: 100 });
+    mockQueries({ room: current, managerRooms: [current] });
+
+    const { rerender } = render(
+      wrap(<RoomDocument roomId={100} onNavigateRoom={vi.fn()} onDeleted={vi.fn()} />)
+    );
+    await userEvent.click(screen.getByTestId('mock-open-add-exit'));
+    await userEvent.click(screen.getByTestId('mock-confirm-exit-dig'));
+
+    expect(runMutation).toHaveBeenCalledWith({
+      key: 'staff_dig_room',
+      kwargs: { area_id: 5, name: 'The Cellar' },
+    });
+    expect(runMutation).not.toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'staff_link_rooms' })
+    );
+
+    // The refetch lands with the dug room; only the id NOT known at dig time
+    // may receive the links.
+    const dug = makeRoom({ id: 300, name: 'The Cellar' });
+    mockQueries({ room: current, managerRooms: [current, dug] });
+    rerender(wrap(<RoomDocument roomId={100} onNavigateRoom={vi.fn()} onDeleted={vi.fn()} />));
+
+    expect(runMutation).toHaveBeenCalledWith({
+      key: 'staff_link_rooms',
+      kwargs: { room_a_id: 300, room_b_id: 100, name_ab: 'up', name_ba: 'down' },
+    });
   });
 
   it('delete: a refusal does not call onDeleted (the shared mutation hook already toasts the exact message)', async () => {

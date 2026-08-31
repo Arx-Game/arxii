@@ -86,6 +86,11 @@ interface PendingExitLink {
   destinationName: string;
   entranceExitName: string;
   exitExitName: string;
+  /** Sibling-room ids known at dig time — the freshly dug room is the one
+   * whose id was NOT here, so a pre-existing room with the same name (the
+   * area already had a "Cellar") can never be linked in its place while the
+   * new dig is stranded exitless and invisible. */
+  knownRoomIds: Set<number>;
 }
 
 function RoomDocumentBody({
@@ -139,7 +144,9 @@ function RoomDocumentBody({
     if (!pending) return;
     const rooms = manager?.rooms ?? [];
     const newRoom = rooms.find(
-      (r) => r.id !== roomId && r.name.toLowerCase() === pending.destinationName.toLowerCase()
+      (r) =>
+        !pending.knownRoomIds.has(r.id) &&
+        r.name.toLowerCase() === pending.destinationName.toLowerCase()
     );
     if (!newRoom) return;
     runAction('staff_link_rooms', {
@@ -154,10 +161,21 @@ function RoomDocumentBody({
 
   const handleExitConfirm = (payload: AddDialogRealizePayload) => {
     if (payload.kind !== 'exit') return;
-    if (payload.matchedRoomId != null) {
+    const siblingRooms = manager?.rooms ?? [];
+    // The dialog's matchedRoomId comes from the async search — a submit that
+    // outruns it would dig a duplicate of a room the user meant to link, so
+    // the same-area siblings (already in hand, synchronous) get a second
+    // chance at the match before the dig fork wins.
+    const matchedRoomId =
+      payload.matchedRoomId ??
+      siblingRooms.find(
+        (r) => r.id !== roomId && r.name.toLowerCase() === payload.name.trim().toLowerCase()
+      )?.id ??
+      null;
+    if (matchedRoomId != null) {
       runAction('staff_link_rooms', {
         room_a_id: roomId,
-        room_b_id: payload.matchedRoomId,
+        room_b_id: matchedRoomId,
         name_ab: payload.exitThere,
         name_ba: payload.exitBack,
       });
@@ -167,6 +185,7 @@ function RoomDocumentBody({
         destinationName: payload.name,
         entranceExitName: payload.exitThere,
         exitExitName: payload.exitBack,
+        knownRoomIds: new Set(siblingRooms.map((r) => r.id)),
       };
     } else {
       toast.error('This room has no area to dig into.');

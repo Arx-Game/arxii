@@ -64,6 +64,27 @@ vi.mock('../../atlas/AddDialog', () => ({
         >
           confirm
         </button>
+        <button
+          data-testid="mock-confirm-free-standing"
+          onClick={() =>
+            onConfirm({ kind: 'room', name: 'The Undercroft', entrance: null, exit: null })
+          }
+        >
+          confirm free-standing
+        </button>
+        <button
+          data-testid="mock-confirm-redirected"
+          onClick={() =>
+            onConfirm({
+              kind: 'room',
+              name: 'The Undercroft',
+              entrance: { roomId: 77, exitName: 'a side door' },
+              exit: null,
+            })
+          }
+        >
+          confirm redirected
+        </button>
       </div>
     ) : null,
 }));
@@ -188,6 +209,58 @@ describe('Compass', () => {
 
     const dugRoom = makeRoom({ id: 300, name: 'The Undercroft', grid_x: 1, grid_y: 0, floor: 0 });
     rerender(wrap(<Compass {...baseProps({ runAction, rooms: [dugRoom] })} />));
+
+    expect(runAction).toHaveBeenCalledWith('staff_link_rooms', {
+      room_a_id: 300,
+      room_b_id: 1,
+      name_ab: 'west',
+      name_ba: 'east',
+    });
+  });
+
+  it('removing both connection rows digs a genuinely free-standing room — no link', async () => {
+    const runAction = vi.fn();
+    const { rerender } = render(wrap(<Compass {...baseProps({ runAction })} />));
+    await userEvent.click(screen.getByTestId('compass-add-1-0'));
+    await userEvent.click(screen.getByTestId('mock-confirm-free-standing'));
+
+    const dugRoom = makeRoom({ id: 300, name: 'The Undercroft', grid_x: 1, grid_y: 0, floor: 0 });
+    rerender(wrap(<Compass {...baseProps({ runAction, rooms: [dugRoom] })} />));
+
+    expect(runAction).not.toHaveBeenCalledWith('staff_link_rooms', expect.anything());
+  });
+
+  it('a redirected entrance row links the room the dialog names, one-sided', async () => {
+    const runAction = vi.fn();
+    const { rerender } = render(wrap(<Compass {...baseProps({ runAction })} />));
+    await userEvent.click(screen.getByTestId('compass-add-1-0'));
+    await userEvent.click(screen.getByTestId('mock-confirm-redirected'));
+
+    const dugRoom = makeRoom({ id: 300, name: 'The Undercroft', grid_x: 1, grid_y: 0, floor: 0 });
+    rerender(wrap(<Compass {...baseProps({ runAction, rooms: [dugRoom] })} />));
+
+    expect(runAction).toHaveBeenCalledWith('staff_link_rooms', {
+      room_a_id: 77,
+      room_b_id: 300,
+      name_ab: 'a side door',
+      name_ba: 'a side door',
+    });
+    expect(runAction).toHaveBeenCalledTimes(2); // the dig + the one-sided link
+  });
+
+  it('links to the room the dig was made FROM, even after navigating before the refetch', async () => {
+    const runAction = vi.fn();
+    const { rerender } = render(wrap(<Compass {...baseProps({ runAction })} />));
+    await userEvent.click(screen.getByTestId('compass-add-1-0'));
+    await userEvent.click(screen.getByTestId('mock-confirm-dig'));
+
+    // The viewer clicks through to another room before the manager refetch
+    // lands; the pending link must keep pointing at room 1, not room 400.
+    const elsewhere = { id: 400, name: 'The Cellars', gridX: 5, gridY: 5, floor: 0 };
+    const dugRoom = makeRoom({ id: 300, name: 'The Undercroft', grid_x: 1, grid_y: 0, floor: 0 });
+    rerender(
+      wrap(<Compass {...baseProps({ runAction, currentRoom: elsewhere, rooms: [dugRoom] })} />)
+    );
 
     expect(runAction).toHaveBeenCalledWith('staff_link_rooms', {
       room_a_id: 300,
