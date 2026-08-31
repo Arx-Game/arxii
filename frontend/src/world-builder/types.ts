@@ -20,6 +20,9 @@ export type WorldBuilderActionKey =
   | 'edit_area'
   | 'staff_dig_room'
   | 'staff_edit_room'
+  | 'staff_publish_room'
+  | 'staff_set_room_desc_variant'
+  | 'staff_remove_room_desc_variant'
   | 'staff_link_rooms'
   | 'staff_unlink_rooms'
   | 'staff_rename_exit'
@@ -55,47 +58,22 @@ export type WorldBuilderActionKey =
   | 'staff_remove_portal_anchor';
 
 /** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
-export interface WorldBuilderBreadcrumbEntry {
-  id: number;
-  name: string;
-  level_display: string;
-}
+export type WorldBuilderBreadcrumbEntry = components['schemas']['WorldBuilderBreadcrumb'];
 
-export interface WorldBuilderRoomDetail {
-  id: number;
-  room: WorldBuilderRoom;
-  catalogs: WorldBuilderAreaManager['catalogs'];
-  breadcrumb: WorldBuilderBreadcrumbEntry[];
-  exits: {
-    id: number;
-    name: string;
-    to_room_id: number | null;
-    kind: string;
-    is_open: boolean;
-    aliases: string[];
-  }[];
-  comfort: {
-    level: number;
-    points: number;
-    amenity: number;
-    axes: {
-      key: string;
-      pressure: number;
-      mitigation: number;
-      net: number;
-      sheltered: boolean;
-    }[];
-  };
-  ambient_lines: { id: number; arriver_body: string; bystander_body: string }[];
-  ambient_emits: {
-    id: number;
-    key: string;
-    text: string;
-    gate_stat_key: string;
-    gate_min: number | null;
-    gate_max: number | null;
-  }[];
-}
+/**
+ * Thin alias over the generated schema (#3477 Task 6 — this used to be a
+ * hand-rolled duplicate that had drifted: it was missing `conditions` on
+ * ambient lines, entirely by hand where `WorldBuilderExitDetail`/
+ * `WorldBuilderComfort`/`WorldBuilderAmbientLine`/`WorldBuilderAmbientEmit`
+ * already exist generated. Aliasing keeps this one definition in sync with
+ * the backend serializer by construction.
+ */
+export type WorldBuilderRoomDetail = components['schemas']['WorldBuilderRoomDetail'];
+export type WorldBuilderExitDetail = components['schemas']['WorldBuilderExitDetail'];
+export type WorldBuilderComfort = components['schemas']['WorldBuilderComfort'];
+export type WorldBuilderAmbientLine = components['schemas']['WorldBuilderAmbientLine'];
+export type WorldBuilderAmbientCondition = components['schemas']['WorldBuilderAmbientCondition'];
+export type WorldBuilderRoomDescVariant = components['schemas']['WorldBuilderRoomDescVariant'];
 
 /** One cross-area room-search hit (#3269) — mirrors WorldBuilderRoomHitSerializer. */
 export interface WorldBuilderRoomHit {
@@ -126,4 +104,26 @@ export const ROOM_ENCLOSURES: { value: string; label: string }[] = [
   { value: 'roofed', label: 'Roofed' },
   { value: 'walled', label: 'Walled' },
   { value: 'sealed', label: 'Sealed' },
+];
+
+/** Mirrors `evennia_extensions.constants.ExitKind` — select options for ExitEditorDialog. */
+export const EXIT_KINDS: { value: string; label: string }[] = [
+  { value: 'door', label: 'Door' },
+  { value: 'window', label: 'Window' },
+];
+
+/** Mirrors `world.game_clock.constants.Season` — select options for VariantsPanel. */
+export const SEASONS: { value: string; label: string }[] = [
+  { value: 'spring', label: 'Spring' },
+  { value: 'summer', label: 'Summer' },
+  { value: 'autumn', label: 'Autumn' },
+  { value: 'winter', label: 'Winter' },
+];
+
+/** Mirrors `world.game_clock.constants.TimePhase` — select options for VariantsPanel. */
+export const TIME_PHASES: { value: string; label: string }[] = [
+  { value: 'dawn', label: 'Dawn' },
+  { value: 'day', label: 'Day' },
+  { value: 'dusk', label: 'Dusk' },
+  { value: 'night', label: 'Night' },
 ];

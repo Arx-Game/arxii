@@ -167,6 +167,25 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
         return caller, room
 
+    def _exit_hidden_from_looker(self, exit_state: BaseState, caller: BaseState) -> bool:
+        """True when ``exit_state`` leads to an unpublished room ``caller`` can't see.
+
+        #3477 — mirrors ``ExitState.can_traverse``'s publish gate: an
+        unpublished room does not exist in the live world, so its exits are
+        omitted from the room payload for anyone but a story-runner
+        (GM/Staff, ``is_story_runner``) — not just unenterable, invisible.
+        """
+        if caller.obj.is_story_runner:
+            return False
+        # A dangling one-way exit can have a null destination (nullable FK) —
+        # ``.destination`` itself is always a real Exit property (ExitState
+        # only ever wraps an Exit typeclass, see typeclasses.exits.Exit).
+        destination = exit_state.obj.destination
+        if destination is None:
+            return False
+        profile = destination.room_profile_or_none
+        return profile is not None and profile.published_at is None
+
     def _is_character(self, state: BaseState) -> bool:
         """Return True if the state wraps a puppeted object (has active sessions)."""
         try:
@@ -211,6 +230,9 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             if is_character and not can_perceive(caller.obj, obj.obj):
                 # #1225: a concealed-and-undetected character is imperceptible to
                 # this caller — omit entirely rather than merely masking the name.
+                continue
+
+            if isinstance(obj, ExitState) and self._exit_hidden_from_looker(obj, caller):
                 continue
 
             obj_serializer = ObjectStateSerializer(

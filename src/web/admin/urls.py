@@ -42,6 +42,7 @@ from web.admin.tuning.ops_views import (
     ops_economy_fragment,
     ops_progression_fragment,
     ops_reports_fragment,
+    ops_required_content_fragment,
     ops_story_fragment,
     ops_tech_fragment,
 )
@@ -141,6 +142,11 @@ urlpatterns = [
     path("_tuning/techniques/", tuning_techniques_fragment, name="admin_tuning_techniques"),
     path("_tuning/capabilities/", tuning_capabilities_fragment, name="admin_tuning_capabilities"),
     path("_ops/", ops_dashboard, name="admin_ops"),
+    path(
+        "_ops/required-content/",
+        ops_required_content_fragment,
+        name="admin_ops_required_content",
+    ),
     path("_ops/progression/", ops_progression_fragment, name="admin_ops_progression"),
     path("_ops/economy/", ops_economy_fragment, name="admin_ops_economy"),
     path("_ops/story/", ops_story_fragment, name="admin_ops_story"),

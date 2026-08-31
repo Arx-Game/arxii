@@ -47,6 +47,7 @@ describe('postSelectEntry', () => {
         unread_narrative_count: 0,
         lifecycle_state: 'ALIVE',
         roster_type: 'ACTIVE',
+        character_type: 'PC',
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
@@ -108,6 +109,7 @@ describe('useSelectCharacterMutation', () => {
         unread_narrative_count: 0,
         lifecycle_state: 'ALIVE',
         roster_type: 'ACTIVE',
+        character_type: 'PC',
       },
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));

@@ -12,6 +12,15 @@
  * band ambiance is account-independent) — only the character grid itself is
  * swapped out.
  *
+ * GM/staff zero-character exception (#3478 fix round — spec is binding: a
+ * GM/staff account "sees one extra slot alongside its characters," with no
+ * zero-character carve-out): the `WelcomePanel` remedy is still shown (a
+ * brand-new GM/staff account may also want the roster-browse/apply path),
+ * but `CharactersBand` renders alongside it whenever `is_gm`/`is_staff` is
+ * set — even with an empty `characters` array — so the GM slot's "Create GM
+ * Profile" affordance (`GMSlot`, task 5) is reachable before the account has
+ * ever picked up a PC. A plain player still gets the remedy alone.
+ *
  * Loading vs. empty (review fix): the zero-character remedy is a real
  * degradation state, not a loading placeholder — showing it while
  * `useMyRosterEntriesQuery` is still resolving would flash the "you have no
@@ -27,6 +36,7 @@ import { Plate, PlateHead } from '@/components/folio';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WelcomePanel } from '@/components/WelcomePanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useAccount } from '@/store/hooks';
 import { CharactersBand } from './hall/CharactersBand';
 import { OffscreenActsPlate } from './hall/OffscreenActsPlate';
 import { AttentionBand } from './hall/AttentionBand';
@@ -47,6 +57,8 @@ function CharactersLoadingSkeleton() {
 
 export function HallPage() {
   const { data: characters = [], isLoading } = useMyRosterEntriesQuery();
+  const account = useAccount();
+  const isGMOrStaff = !!account?.is_gm || !!account?.is_staff;
 
   return (
     <div className="container mx-auto space-y-4 px-4 py-6">
@@ -58,12 +70,16 @@ export function HallPage() {
           <CharactersLoadingSkeleton />
         </Plate>
       ) : characters.length === 0 ? (
-        <Plate className="p-4">
-          <PlateHead as="h2" className="mb-3">
-            Your Characters
-          </PlateHead>
-          <WelcomePanel />
-        </Plate>
+        <>
+          <Plate className="p-4">
+            <PlateHead as="h2" className="mb-3">
+              Your Characters
+            </PlateHead>
+            <WelcomePanel />
+          </Plate>
+          {/* GM/staff zero-character exception — see header doc comment. */}
+          {isGMOrStaff && <CharactersBand characters={characters} />}
+        </>
       ) : (
         <CharactersBand characters={characters} />
       )}

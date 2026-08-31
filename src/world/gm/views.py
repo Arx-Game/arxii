@@ -47,11 +47,14 @@ from world.gm.serializers import (
     GMEvidenceSummarySerializer,
     GMInviteClaimSerializer,
     GMInviteRevokeSerializer,
+    GMProfileMineSerializer,
     GMProfileSerializer,
     GMRosterInviteSerializer,
     GMSummonOfferSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
+    MintGMCharacterRequestSerializer,
+    MintGMCharacterResultSerializer,
     PromoteGMInputSerializer,
     TableUpdateRequestCreateSerializer,
     TableUpdateRequestSerializer,
@@ -206,6 +209,44 @@ class GMProfileViewSet(
         profile = self.get_object()
         summary = gm_evidence_summary(profile)
         return Response(GMEvidenceSummarySerializer(summary).data)
+
+    @extend_schema(request=GMProfileMineSerializer, responses={200: GMProfileMineSerializer})
+    @action(detail=False, methods=["get", "patch"], url_path="mine")
+    def mine(self, request: Request) -> Response:
+        """GET/PATCH the requesting account's own GM profile (#3478)."""
+        profile = GMProfile.objects.filter(account=request.user).first()
+        if profile is None:
+            return Response(status=404)
+        if request.method == "PATCH":
+            body = GMProfileMineSerializer(profile, data=request.data, partial=True)
+            body.is_valid(raise_exception=True)
+            body.save()
+        return Response(GMProfileMineSerializer(profile).data)
+
+    @extend_schema(
+        request=MintGMCharacterRequestSerializer,
+        responses={201: MintGMCharacterResultSerializer},
+    )
+    @action(detail=False, methods=["post"], url_path="character")
+    def character(self, request: Request) -> Response:
+        """POST /api/gm/profiles/character/ — mint the account's GM character (#3478)."""
+        from world.roster.services.staff_characters import (  # noqa: PLC0415
+            StaffMintError,
+            mint_gm_character,
+        )
+
+        body = MintGMCharacterRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            character = mint_gm_character(request.user, body.validated_data["name"])
+        except StaffMintError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response(
+            MintGMCharacterResultSerializer(
+                {"character_id": character.pk, "name": character.db_key}
+            ).data,
+            status=201,
+        )
 
 
 class GMTableViewSet(viewsets.ModelViewSet):

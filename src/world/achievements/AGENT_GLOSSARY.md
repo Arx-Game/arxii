@@ -32,7 +32,7 @@ _Avoid_: ability change, capability notification, technique grant (too narrow)
 A character sheet currently piloted by a regular player, i.e. holding a current, non-staff RosterTenure. Only eligible earners can earn a CharacterAchievement, claim a first-ever Discovery, receive rewards, or fire the stories reactivity hook. The single predicate is `can_earn_achievements` in `achievements/services.py`, enforced inside `grant_achievement` so every caller inherits it (#3024, ADR-0202).
 _Avoid_: ceremony eligible (the narrower pre-#3024 term), tenured sheet (staff tenures are still ineligible)
 
-**PersonaTitle** (retargeted from `CharacterTitle`, #3466, ADR-0252):
+**PersonaTitle** (retargeted from `CharacterTitle`, #3466, ADR-0253):
 The earned, displayable record of a title, hung on a **Persona**, never the CharacterSheet — a
 title names a face, and a deed earned behind a mask must title the mask, never surface on the
 character sheet and out the player wearing it. Exactly one of two branches is set: `reward` (an

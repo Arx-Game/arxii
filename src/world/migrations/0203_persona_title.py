@@ -70,7 +70,7 @@ def backwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0197_legendlevelcalibration")]
+    dependencies = [("arxii", "0202_legendlevelcalibration")]
 
     operations = [
         migrations.RenameModel(

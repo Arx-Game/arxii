@@ -3,8 +3,8 @@
 A JUNIOR+ GM stands up a Story NPC before a session and immediately gets a
 playable character: the persona picker and telnet ``@ic`` key off
 ``RosterTenure``, and ``mint_story_npc`` (``world.roster.services.staff_characters``)
-grants one to the requesting GM's account in the same mint that used to be
-staff-only (``mint_staff_character``). ``category="gm"``, gated by
+grants one to the requesting GM's account via the same working-set helper the
+staff-only ``mint_gm_character`` (#3478) uses. ``category="gm"``, gated by
 ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`` (staff bypass built in); the
 per-level cap (``GMLevelCap.max_story_npcs``) and the finer "missing GM
 profile"/"below JUNIOR" messaging are enforced inside the service itself, not

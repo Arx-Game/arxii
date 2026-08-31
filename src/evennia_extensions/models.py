@@ -8,6 +8,7 @@ from typing import Union
 from allauth.account.models import EmailAddress
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
@@ -683,6 +684,27 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
             "Stamped by grid_export when this room last shipped in a bundle (#3269). "
             "Null = never exported. Canvas deletion gates on THIS, not fixture_key — "
             "a keyed-but-unexported room is still a recoverable mistake."
+        ),
+    )
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        default=timezone.now,
+        help_text=(
+            "Stamped by staff_publish_room when this room is live in the world "
+            "(#3477); defaults to now() so an ordinary room is live the moment it "
+            "exists. Null = unpublished/WIP — not enterable and its exits hidden "
+            "except to a story-runner (GM/Staff). Two paths override this default "
+            "explicitly, in opposite directions: world.areas.grid_services."
+            "create_room's origin=AUTHORED branch (the staff world-builder canvas "
+            "dig) sets it to None — a canvas-dug room is born unpublished until "
+            "staff reviews it and calls staff_publish_room, which just refreshes "
+            "the stamp on a re-call (idempotent; no separate 'done' flag) — while "
+            "core_management.grid_import._upsert_single_room's new-room branch "
+            "stamps now() explicitly: a grid_import is a restore of previously-live "
+            "world content (the content repo is downstream/bootstrap-only, "
+            "ADR-0238), not a canvas dig awaiting review, so it is born published."
         ),
     )
 

@@ -29,4 +29,4 @@ hazard this ADR closes — the retarget removes the hazard structurally, the gat
 have policed it.
 
 > Status: accepted · Source: #3466 · Extends #1522 (achievement titles); companion to
-> ADR-0251 (the honor ceiling)
+> ADR-0252 (the honor ceiling)

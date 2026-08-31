@@ -1089,19 +1089,32 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Thirty-nine REGISTRY
-  actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
-  `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
+  staff canvas share one substrate instead of two drifting copies. Forty-three
+  REGISTRY actions (`src/actions/definitions/world_builder.py`,
+  `category="world_builder"`, `target_type=SELF`) — `create_area`/`edit_area`/
+  `staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
-  `staff_remove_room`/`staff_remove_area`/`staff_move_room`/`promote_room`/
-  `promote_area` + the six #2451 discovery/portal verbs + the #3269 Phase B
-  room-authoring set (stats/places/ambient/feature/staffing/travel/blueprint/
-  bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the Phase C
-  area metadata) + the #3291 `staff_set_room_desc_variant`/
-  `staff_remove_room_desc_variant` pair — gated solely by
-  `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
-  GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
-  and always authors the new room outright; `staff_remove_room` refuses an
+  `staff_publish_room`/`staff_remove_room`/`staff_remove_area`/`staff_move_room`/
+  `promote_room`/`promote_area` + the six #2451 discovery/portal verbs + the #3269
+  Phase B room-authoring set (stats/places/ambient/feature/staffing/travel/
+  blueprint/bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the
+  Phase C area metadata) + the #3291 `staff_set_room_desc_variant`/
+  `staff_remove_room_desc_variant` pair — gated by `BuildWarrantPrerequisite`
+  (#3477 Task 1, replacing the old `StaffOnlyPrerequisite`: staff bypass
+  unconditionally, a non-staff GM additionally passes with an `AreaBuildGrant`
+  over the resolved area at the `BUILDING` floor — no ownership/tenancy standing
+  otherwise) except `edit_area` (the stricter level-aware variant) and
+  `author_clue` (`MinimumGMLevelPrerequisite(SENIOR)`, #3432). `staff_dig_room`
+  requires an AUTHORED area and always authors the new room outright — and, as of
+  #3477 Task 2, births it *unpublished*: `RoomProfile.published_at` defaults to
+  `now()` (an ordinary/PLAYER room is live immediately) but `create_room` sets it
+  to `NULL` for `origin=AUTHORED`, and an unpublished room does not exist in the
+  live world — not enterable (`ExitState.can_traverse`) and its exits hidden from
+  the room-state payload (`RoomStatePayloadSerializer._exit_hidden_from_looker`)
+  — for anyone but a story-runner (GM/Staff, `is_story_runner`). `staff_publish_room`
+  (kwarg `room_id`) stamps `published_at=now()`; idempotent (a re-publish just
+  refreshes the stamp), no unpublish verb, no separate "done" flag.
+  `staff_remove_room` refuses an
   already-exported room (report-never-delete pipeline territory, not the canvas);
   `staff_unlink_rooms`'s stranding guard is the narrower "would this drop leave an
   *occupied* room with zero exits" rule, not the Room Builder's anchor-room BFS
@@ -1133,7 +1146,27 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   standing check, no currency cost — see magic.md's "Portal travel" section). The
   grid bundle format gains `clues`/`clue_triggers`/`portal_anchors` sidecar sections;
   see the "Investigation & Discovery" system entry below for the clue-side
-  model/action detail.
+  model/action detail. **Area art cascade + ambient-condition authoring (#3477 Task
+  3):** `Area.art` (FK to `arxii.Media`, mirrors `PageBackground.art`'s shape) resolves
+  most-specific-wins down the hierarchy like climate/realm; area and room payloads gain
+  `art_url` (`WorldBuilderAreaSerializer.get_art_url` walks the area chain directly, the
+  same inline-cascade convention as `get_effective_climate` on that serializer;
+  `world.locations.services.resolve_area_art(room_profile)` is the room-level entry
+  point — a room's own `ObjectDisplayData.thumbnail` wins outright, else it falls back to
+  the area cascade). Two new REGISTRY actions, `staff_add_ambient_condition`/
+  `staff_remove_ambient_condition`, wire the pre-existing (BUILT NOT WIRED)
+  `AmbientEmoteCondition` model to the canvas — kwargs `line_id`/`condition_type`/
+  `target_id` plus per-type extras (`minimum_value` for RESONANCE_MIN, `min_fame_tier`/
+  optional `perceiving_society_id` for RENOWN_MIN; LEGEND_DEED needs no ref). The
+  room-detail payload's `ambient_lines` now nest a `conditions` list
+  (`{id, condition_type, label}`; `world.narrative.ambient_content.describe_condition`
+  renders the label). Every ambient line/condition write re-derives the delivery
+  Trigger graph in place via `world.narrative.ambient_triggers.
+  resync_room_ambient_triggers`/`resync_area_ambient_triggers` (#3477 fix round 2) —
+  entry lines deliver only through pre-derived Triggers with frozen line groups
+  (`ensure_ambient_group_trigger`, moved there from `grid_import`, which now
+  delegates), so without the resync a canvas write was invisible until a re-import
+  ADR-0238 forbids on a populated database.
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
@@ -1162,7 +1195,9 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
 - **Key Functions:** `effective_value(room, stat_key=… | resonance=… | damage_type=…)` (single-axis
   polymorphic read), `effective_values_for_rooms()` (bulk), `hazard_is_covered()`,
   `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
-  cascade, #1514/#1522), `character_comfort_summary()`/`comfort_mitigation()` (per-character
+  cascade, #1514/#1522), `resolve_area_art(room_profile)` (#3477 — a room's own
+  `ObjectDisplayData.thumbnail` wins outright, else most-specific-wins up `Area.art`, mirroring
+  `get_effective_climate`), `character_comfort_summary()`/`comfort_mitigation()` (per-character
   readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
   `is_tenant()` (ownership/tenancy lookups), `assign_room_tenant()`/`end_room_tenancy()`/
   `set_primary_home()` (#670 player tenancy seam — owner grants/evicts, tenant departs or
@@ -1370,10 +1405,10 @@ Social structures, organizations, reputation, and legend tracking.
   the #3433 risk badge. Station is stamped but NOT folded into `base_value`, and
   `station_multiplier()` is applied on read by `LegendRequirement`, so retuning never
   requires recomputing history and `CharacterLegendSummary` stays the tale-worth total.
-- **Rite of Honors (#3466, ADR-0251, ADR-0252):** `world.societies.honors.honor_deed` —
+- **Rite of Honors (#3466, ADR-0252, ADR-0253):** `world.societies.honors.honor_deed` —
   spend Golden Hares + write a public journal to raise a witnessed deed's `base_value`, or
   establish a fresh solo deed for an act settlement never credited. Clamped to
-  `anchor_event.base_value - deed.base_value` (**ADR-0251**): peer judgment redistributes
+  `anchor_event.base_value - deed.base_value` (**ADR-0252**): peer judgment redistributes
   recognition inside an envelope the event already proved, never invents peril, so this does
   not reopen what ADR-0249 closed. Establishing refuses when the honoree already has an
   active deed anchored to that event (one deed per act, not one per honorer); a struck
@@ -1387,7 +1422,7 @@ Social structures, organizations, reputation, and legend tracking.
   (`commands.ritual.CmdRitual`, free-text grammar special-cased for this one ritual) and web
   (`DeedViewSet.honor` / `LegendEventViewSet.establish`, both converging on
   `PerformRitualAction`, never calling `honor_deed` directly). **Titles retarget to Persona
-  in the same PR (ADR-0252):** see the Achievements section's `PersonaTitle` entry — a deed
+  in the same PR (ADR-0253):** see the Achievements section's `PersonaTitle` entry — a deed
   earned behind a mask titles the mask and can never surface on the character sheet.
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
 - **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
@@ -2251,7 +2286,10 @@ Character lifecycle management with web-first applications and player anonymity.
   per-row queries); `MyRosterEntrySerializer.get_unread_narrative_count` reads the
   annotation off `obj.__dict__` when present, falling back to a direct count on the
   unannotated `select`-endpoint path. Drives the "Your Characters" band's tidings
-  `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section.
+  `CountChip` on `/` — see [roster.md](roster.md)'s API Endpoints section. The same
+  band (`CharactersBand`) carries an extra grid tile for a staff/GM account
+  (`account.is_gm`/`is_staff`) — `GMSlot` (#3478), the Hall's GM onboarding/edit
+  surface; see the GM section's "GM onboarding lives on the Hall" entry.
 - **The offscreen-act gate (#3412 slice 3, ADR-0246):** `MyRosterEntrySerializer` also
   exposes `lifecycle_state` (plain read-only `CharField` mirror of
   `CharacterSheet.lifecycle_state`, no annotation, no migration), letting the Hall's
@@ -2304,7 +2342,9 @@ Player-GM identity, tables, roster recruitment, and the trust ladder that caps w
 GM at a given level may author (#2000, ADR-0097).
 
 - **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
-  `last_active_at` stub), `GMApplication` (freeform text, staff response, one PENDING
+  `last_active_at` stub, `contact_times`/`ooc_info` freeform `TextField`s (#3478) —
+  writable only through the GM's own `mine` endpoint below), `GMApplication` (freeform
+  text, staff response, one PENDING
   per account), `GMTable` (a GM's working group; ACTIVE/ARCHIVED lifecycle),
   `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
   (single-use recruitment code, public or private-with-email-match, 30-day default
@@ -2393,7 +2433,18 @@ GM at a given level may author (#2000, ADR-0097).
   players, list/review/update for staff — approval auto-creates a `GMProfile`),
   `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
   `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
-  `IsAdminUser`), `GMTableViewSet` (`/api/gm/tables/`; staff sees all, GMs their own,
+  `IsAdminUser`; `GET`/`PATCH /api/gm/profiles/mine/` (#3478) — the requesting account's
+  own `GMProfile` via `GMProfileMineSerializer`, `contact_times`/`ooc_info` writable,
+  `level` read-only, 404 for a non-GM account; `POST /api/gm/profiles/character/` (#3478)
+  mints the account's own GM/Staff character via `mint_gm_character`
+  (`world.roster.services.staff_characters`, role-aware: staff mints
+  `typeclasses.gm_characters.StaffCharacter`, an approved GM mints `GMCharacter`, anyone
+  else refused; one GM/Staff character per account, enforced via an active
+  `RosterTenure` on an existing GM/Staff-typeclassed character), returning
+  `character_id`/`name`, a `StaffMintError` surfacing as 400 — both typeclasses'
+  `get_display_name` append an unconditional `(GM)` tag
+  (`typeclasses/gm_characters.py`'s `_MechanicallyImmuneCharacterMixin`)), `GMTableViewSet`
+  (`/api/gm/tables/`; staff sees all, GMs their own,
   players tables where an active persona holds membership; `archive`/`transfer_ownership`
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
@@ -2409,6 +2460,18 @@ GM at a given level may author (#2000, ADR-0097).
   (count from `gm_application_queue(gm)`) and `open_invites` (this GM's unclaimed,
   unexpired `GMRosterInvite` rows) as the tile source for those same recruitment
   surfaces (#3268).
+- **GM onboarding lives on the Hall (#3478):** the Hall's GM slot
+  (`frontend/src/home/hall/GMSlot.tsx`) is the sole surface for both
+  `mine`/`character` endpoints above — `CreateGMCharacterDialog` mints via
+  `mintGMCharacter`, `EditGMProfileDialog` edits `contact_times`/`ooc_info`; the slot
+  hides its edit affordance rather than rendering the 404 for a staff account with no
+  `GMProfile` row. **This replaced the world-builder page's inline mint form**
+  (`mint-builder-character`, #3283's original staff-only stopgap): that endpoint and
+  its frontend caller (`mintBuilderCharacter`, `frontend/src/world-builder/api.ts`)
+  are deleted; `WorldBuilderPage`'s no-actor banner
+  (`data-testid="world-builder-actor-banner"`) is now a plain "set up your GM Profile
+  from the Hall" message linking to `/`. See `docs/roadmap/tooling.md`'s "GM
+  onboarding moves to the Hall" entry and `gm-system.md`'s Phase 9.
 - **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
@@ -2711,12 +2774,12 @@ GM at a given level may author (#2000, ADR-0097).
   (`world.roster.services.staff_characters`) — JUNIOR+ `GMProfile` (staff bypass) +
   the new `GMLevelCap.max_story_npcs` per-level cap (most-restrictive/refuse when
   unconfigured; enforced by the shared `check_story_npc_cap`), delegating to
-  `mint_staff_character`'s working set (#3283 — Character + sheet + PRIMARY persona
-  + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to the GM's own
-  account, the same tenure the persona picker and telnet `@ic` key on).
-  `description` writes `CharacterSheet.additional_desc` via
-  `set_physical_description`. In-scope bugfix: `mint_staff_character`'s shelf
-  lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
+  `_mint_character_working_set` for the working set (#3283 — Character + sheet +
+  PRIMARY persona + NPC-shelf `RosterEntry` + active `RosterTenure` binding it to
+  the GM's own account, the same tenure the persona picker and telnet `@ic` key
+  on). `description` writes `CharacterSheet.additional_desc` via
+  `set_physical_description`. In-scope bugfix: `_mint_character_working_set`'s
+  shelf lookup re-keyed from `name="NPC"` to `roster_type=RosterType.NPC` (unique;
   `roster/seeds.py`'s seeded shelf is named "NPCs", so the old lookup missed it and
   collided on create). Heavyweight sibling: `finalize_gm_character(draft,
   claim_as_npc=True)` (`world.character_creation.services`) lands a full-CG
@@ -8071,11 +8134,16 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   locationless encounters inside nested transaction savepoints that are always rolled
   back (isolation contract in the module docstring) — nothing it does is ever persisted,
   and existing `EncounterScalingConfig` tuning is never overwritten.
-- **Game Ops** (`/admin/_ops/`, `admin_ops`) — five panels: progression, economy,
+- **Game Ops** (`/admin/_ops/`, `admin_ops`) - six panels: progression, economy,
   story/GM, and reports-queue analytics (`web/admin/tuning/metrics.py` —
-  `progression_series`, `economy_series`, `story_series`, `reports_snapshot`, etc.), plus
-  a refresh-on-demand Technical Health panel (`tech_health.py` — `collect_tech_health`:
-  idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
+  `progression_series`, `economy_series`, `story_series`, `reports_snapshot`, etc.), a
+  refresh-on-demand Technical Health panel (`tech_health.py` - `collect_tech_health`:
+  idmapper RAM, process RSS/CPU, open system errors, deploy SHA), and a required-content
+  sentinel panel (`required_content.py`, #3444) - `_declarations()` is the single place
+  a new content dependency (a code path's hard dependency on a specific authored
+  database row) gets registered, and `collect_required_content()` probes the live
+  database for each one, since no repo artifact can answer the question (ADR-0238). See
+  `docs/adr/0251-content-dependencies-are-a-live-db-registry.md`.
 - **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
   maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
   `core_management.content_fixtures.load_world_content`; linked from the Game Setup

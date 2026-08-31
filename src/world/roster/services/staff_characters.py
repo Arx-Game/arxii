@@ -11,6 +11,13 @@ never publicly listed), and an active RosterTenure binding it to the
 requesting account — which is exactly what ``IsCharacterOwner`` and the
 builder's actor resolution key on.
 
+``mint_gm_character`` (#3478) is role-aware: a staff account mints
+``typeclasses.gm_characters.StaffCharacter``, an approved GM (has a
+``GMProfile``) mints ``typeclasses.gm_characters.GMCharacter``, and anyone
+else is refused. It also enforces one GM/Staff character per account — an
+active ``RosterTenure`` on an existing GM/Staff-typeclassed character blocks
+a second mint.
+
 ``mint_story_npc`` below is the GMProfile-gated follow-on this docstring used
 to describe as deliberately not built (#3426): a JUNIOR+ GM mints a Story NPC
 through the same working set, capped per GM level and tenure-bound to their
@@ -24,6 +31,8 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
+
+from web.api.character_type import TYPECLASS_TO_CHARACTER_TYPE
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -41,9 +50,17 @@ class StaffMintError(Exception):
         self.user_message = message
 
 
-@transaction.atomic
-def mint_staff_character(account: AccountDB, name: str) -> ObjectDB:
-    """Mint an OOC staff character bound to ``account``; returns the character."""
+def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -> ObjectDB:
+    """Create Character + CharacterSheet + PRIMARY Persona + NPC-shelf tenure.
+
+    Shared name-validation and working-set creation for both
+    ``mint_gm_character`` (role-aware typeclass, one per account) and
+    ``mint_story_npc`` (always plain ``Character``, capped instead of
+    one-per-account via ``check_story_npc_cap``) -- kept as a private helper
+    rather than routing the latter through the former so a GM's own OOC
+    character and their Story NPCs stay independent: neither typeclass nor
+    the one-per-account guard should apply to a Story NPC mint.
+    """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
@@ -60,7 +77,7 @@ def mint_staff_character(account: AccountDB, name: str) -> ObjectDB:
         raise StaffMintError(msg)
 
     character, sheet, _persona = create_character_with_sheet(
-        character_key=name, primary_persona_name=name
+        character_key=name, primary_persona_name=name, typeclass=typeclass
     )
     # Keyed on roster_type (unique), not name (#3426 in-scope bugfix): the seeded
     # shelf is named "NPCs" (world/roster/seeds.py), so a name="NPC" lookup never
@@ -79,6 +96,44 @@ def mint_staff_character(account: AccountDB, name: str) -> ObjectDB:
         approved_by=player_data,
     )
     return character
+
+
+@transaction.atomic
+def mint_gm_character(account: AccountDB, name: str) -> ObjectDB:
+    """Mint a role-aware OOC GM/Staff character bound to ``account`` (#3478).
+
+    Staff accounts mint ``StaffCharacter``; accounts with an approved
+    ``GMProfile`` mint ``GMCharacter``; anyone else is refused. Also refuses
+    a second GM/Staff character on an account that already has one bound via
+    an active ``RosterTenure``. Returns the minted character.
+    """
+    from world.gm.models import GMProfile  # noqa: PLC0415
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    if account.is_staff:
+        typeclass = "typeclasses.gm_characters.StaffCharacter"
+    elif GMProfile.objects.filter(account=account).exists():
+        typeclass = "typeclasses.gm_characters.GMCharacter"
+    else:
+        msg = "Only staff or approved GMs can create a GM character."
+        raise StaffMintError(msg)
+
+    gm_typeclasses = tuple(TYPECLASS_TO_CHARACTER_TYPE)
+    # No select_for_update on this check: a double-submit racing between the
+    # exists() read and the mint below could both pass and mint two GM
+    # characters. Accepted per the same norm check_story_npc_cap documents --
+    # the account is bound to one real person, so the worst case is a rare
+    # manual cleanup, not a security or data-integrity issue.
+    already = RosterTenure.objects.filter(
+        player_data__account=account,
+        end_date__isnull=True,
+        roster_entry__character_sheet__character__db_typeclass_path__in=gm_typeclasses,
+    ).exists()
+    if already:
+        msg = "You already have a GM character."
+        raise StaffMintError(msg)
+
+    return _mint_character_working_set(account, name, typeclass)
 
 
 def check_story_npc_cap(gm_account: AccountDB) -> None:
@@ -219,9 +274,12 @@ def mint_story_npc(
     """Mint a Story NPC for a JUNIOR+ GM, tenure-bound to their account (#3426).
 
     Validates trust + the per-level cap via ``check_story_npc_cap``, then
-    delegates the actual mint to ``mint_staff_character``'s working set
-    (Character + sheet + PRIMARY persona + NPC-shelf entry + active
-    RosterTenure) -- its documented follow-on, no parallel creation path.
+    delegates the actual mint to ``_mint_character_working_set`` (Character +
+    sheet + PRIMARY persona + NPC-shelf entry + active RosterTenure) with the
+    plain ``Character`` typeclass -- a Story NPC is not the GM's own OOC
+    presence, so it deliberately bypasses ``mint_gm_character``'s role-aware
+    typeclass selection and one-per-account guard (#3478); ``check_story_npc_cap``
+    is this on-ramp's own authorization instead.
 
     ``description``, when given, lands in ``CharacterSheet.additional_desc``
     via ``set_physical_description`` -- the seam ``get_display_description()``
@@ -237,7 +295,7 @@ def mint_story_npc(
 
     check_story_npc_cap(gm_account)
 
-    character = mint_staff_character(gm_account, name)
+    character = _mint_character_working_set(gm_account, name, "typeclasses.characters.Character")
     if description:
         set_physical_description(character.sheet_data, description)
     if preset is not None:

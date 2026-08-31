@@ -21,6 +21,7 @@ const area: WorldBuilderArea = {
   climate: null,
   dominant_society: null,
   effective_climate: null,
+  art_url: null,
   description: '',
   color: '',
   permit_eligibility: 'open' as const,

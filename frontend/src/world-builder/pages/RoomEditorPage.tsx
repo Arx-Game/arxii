@@ -32,7 +32,7 @@ export function RoomEditorPage() {
 
   const runAction = (key: string, kwargs: Record<string, unknown>) => {
     if (characterId == null) {
-      toast.error('You need a character to build as — mint one from the World Builder page.');
+      toast.error('You need a character to build as — set up your GM Profile from the Hall.');
       return;
     }
     runMutation({ key: key as WorldBuilderActionKey, kwargs });

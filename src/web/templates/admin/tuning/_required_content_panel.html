@@ -1,0 +1,126 @@
+{% load i18n %}
+
+<h2>{% translate "Required-Content Sentinel" %}</h2>
+<p>
+  {% translate "Authored database rows the code hard-depends on, probed against THIS database. Seeds prove nothing here - a clone's seed data is bootstrap/E2E scaffolding only, never a stand-in for the corpus." %}
+</p>
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <span class="stat-value">{{ snapshot.missing_required|length }}</span>
+    <span class="stat-label">{% translate "Missing required rows" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ snapshot.missing_tuning|length }}</span>
+    <span class="stat-label">{% translate "Missing tuning rows" %}</span>
+  </div>
+</div>
+
+<h3>{% translate "Missing - Required" %}</h3>
+{% if snapshot.missing_required %}
+<p>
+  {% translate "Each row below is load-bearing for a code path a player or staff member can hit today." %}
+</p>
+<table class="tuning-table required-content-table required-content-table--missing">
+  <thead>
+    <tr>
+      <th>{% translate "Dependency" %}</th>
+      <th>{% translate "Consumer" %}</th>
+      <th>{% translate "Consequence" %}</th>
+      <th>{% translate "Missing" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in snapshot.missing_required %}
+    <tr class="required-content-row--missing">
+      <td>{{ row.dependency.label }}</td>
+      <td>{{ row.dependency.consumer }}</td>
+      <td>{{ row.dependency.consequence }}</td>
+      <td>
+        {% if row.result.missing %}
+        {{ row.result.missing|join:", " }}
+        {% endif %}
+        {% if row.result.detail %}
+        <br>
+        {{ row.result.detail }}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>{% translate "Nothing missing. Every required content dependency resolved against this database." %}</p>
+{% endif %}
+
+<h3>{% translate "Missing - Tuning" %}</h3>
+{% if snapshot.missing_tuning %}
+<p>
+  {% translate "Each row below is config the game runs without, just with worse numbers." %}
+</p>
+<table class="tuning-table required-content-table required-content-table--missing">
+  <thead>
+    <tr>
+      <th>{% translate "Dependency" %}</th>
+      <th>{% translate "Consumer" %}</th>
+      <th>{% translate "Consequence" %}</th>
+      <th>{% translate "Missing" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in snapshot.missing_tuning %}
+    <tr class="required-content-row--missing">
+      <td>{{ row.dependency.label }}</td>
+      <td>{{ row.dependency.consumer }}</td>
+      <td>{{ row.dependency.consequence }}</td>
+      <td>
+        {% if row.result.missing %}
+        {{ row.result.missing|join:", " }}
+        {% endif %}
+        {% if row.result.detail %}
+        <br>
+        {{ row.result.detail }}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>{% translate "Nothing missing. Every tuning content dependency resolved against this database." %}</p>
+{% endif %}
+
+<details>
+  <summary>
+    {% blocktranslate count count=snapshot.present_required|length|add:snapshot.present_tuning|length %}
+    {{ count }} dependency present
+    {% plural %}
+    {{ count }} dependencies present
+    {% endblocktranslate %}
+  </summary>
+  <table class="tuning-table required-content-table">
+    <thead>
+      <tr>
+        <th>{% translate "Dependency" %}</th>
+        <th>{% translate "Tier" %}</th>
+        <th>{% translate "Consumer" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in snapshot.present_required %}
+      <tr>
+        <td>{{ row.dependency.label }}</td>
+        <td>{% translate "Required" %}</td>
+        <td>{{ row.dependency.consumer }}</td>
+      </tr>
+      {% endfor %}
+      {% for row in snapshot.present_tuning %}
+      <tr>
+        <td>{{ row.dependency.label }}</td>
+        <td>{% translate "Tuning" %}</td>
+        <td>{{ row.dependency.consumer }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>

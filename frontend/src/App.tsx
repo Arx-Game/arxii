@@ -82,9 +82,9 @@ const TriggerGiversPage = lazy(() =>
     default: m.TriggerGiversPage,
   }))
 );
-const WorldBuilderPage = lazy(() =>
-  import('@/world-builder/pages/WorldBuilderPage').then((m) => ({
-    default: m.WorldBuilderPage,
+const AtlasPage = lazy(() =>
+  import('@/world-builder/atlas/AtlasPage').then((m) => ({
+    default: m.AtlasPage,
   }))
 );
 const RoomEditorPage = lazy(() =>
@@ -608,7 +608,7 @@ function App() {
             element={
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <WorldBuilderPage />
+                  <AtlasPage />
                 </Suspense>
               </StaffRoute>
             }

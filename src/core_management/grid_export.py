@@ -95,6 +95,11 @@ def _serialize_rooms(rooms, display_map: dict) -> list[dict]:
                 "default_blueprint": (
                     room.default_blueprint.name if room.default_blueprint_id else None
                 ),
+                # #3477 fix round 2: an unpublished WIP room must round-trip as
+                # unpublished — a restore that silently published every WIP room
+                # would expose unreviewed rooms at exactly the disaster-recovery
+                # moment the durability ADRs exist for.
+                "published_at": (room.published_at.isoformat() if room.published_at else None),
             }
         )
     rooms_data.sort(key=lambda r: r["fixture_key"])

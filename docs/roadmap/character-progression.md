@@ -127,7 +127,7 @@ mint sites were retargeted through it or zeroed.
 `ClassLevelUnlock` — the wall itself. The machinery is built; the numbers are
 staff's. This is the remaining half of the "path step requirements engine" below.
 
-### Rite of Honors (#3466, ADR-0251, ADR-0252) — BUILT
+### Rite of Honors (#3466, ADR-0252, ADR-0253) — BUILT
 
 A character spends Golden Hares and writes a public journal to honor another
 character's legendary deed — raising a witnessed deed's `base_value`, or
@@ -139,14 +139,14 @@ ritual) and the web (`DeedViewSet.honor` / `LegendEventViewSet.establish`, both
 converging on `PerformRitualAction`). It works posthumously by design — nothing
 in `honor_deed` checks life-state.
 
-- **The ceiling rule (ADR-0251).** Honoring is clamped to
+- **The ceiling rule (ADR-0252).** Honoring is clamped to
   `anchor_event.base_value - deed.base_value`: peer judgment redistributes
   recognition inside an envelope a settled event already proved, and never
   invents peril that never happened. This is why the rite does not reopen the
   hole ADR-0249 closed. Establishing refuses when the honoree already has an
   active deed anchored to that event (one deed per act, not one per honorer); a
   struck (`is_active=False`) deed proves nothing and blocks nothing.
-- **The titles retarget (ADR-0252).** `achievements.PersonaTitle` (renamed from
+- **The titles retarget (ADR-0253).** `achievements.PersonaTitle` (renamed from
   `CharacterTitle`) now hangs on `Persona`, not `CharacterSheet` — a deed earned
   behind a mask titles the mask and can never surface on the character sheet to
   out the player. Achievement-sourced titles resolve to the sheet's PRIMARY

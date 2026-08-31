@@ -144,6 +144,21 @@ class WorldBuilderAreaListTests(WorldBuilderApiBase):
         self.assertIn(child.pk, ids)
         self.assertNotIn(self.area.pk, ids)
 
+    def test_area_art_url_cascades_most_specific_wins(self) -> None:
+        """#3477 — an area with no art of its own inherits the nearest ancestor's."""
+        from evennia_extensions.factories import MediaFactory
+
+        parent = AreaFactory(level=AreaLevel.CITY, name="Parent City")
+        child = AreaFactory(level=AreaLevel.WARD, name="Child Ward", parent=parent)
+        media = MediaFactory(player_data=None, slug="city-art-test")
+        parent.art = media
+        parent.save(update_fields=["art"])
+
+        response = self._get(self._url(), self.staff_account, parent=parent.pk)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next(r for r in response.data["results"] if r["id"] == child.pk)
+        self.assertEqual(row["art_url"], media.cloudinary_url)
+
 
 class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
     def _url(self, area=None) -> str:
@@ -265,3 +280,97 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
         self.assertEqual(other_row["clues"], [])
         self.assertEqual(other_row["clue_triggers"], [])
         self.assertEqual(other_row["portal_anchors"], [])
+
+    def test_room_art_url_cascades_room_thumbnail_wins(self) -> None:
+        """#3477 — a room's own thumbnail wins over the area's art; otherwise it cascades."""
+        from evennia_extensions.factories import MediaFactory
+
+        area_media = MediaFactory(player_data=None, slug="ward-art-test")
+        self.area.art = area_media
+        self.area.save(update_fields=["art"])
+        room_media = MediaFactory(player_data=None, slug="room-thumb-test")
+        ObjectDisplayData.objects.create(object=self.private_room, thumbnail=room_media)
+
+        response = self._get(self._url(), self.staff_account)
+        rooms_by_id = {row["id"]: row for row in response.data["rooms"]}
+        # public_room has no thumbnail of its own — inherits the area's art.
+        self.assertEqual(rooms_by_id[self.public_room.pk]["art_url"], area_media.cloudinary_url)
+        # private_room's own thumbnail wins over the area's art.
+        self.assertEqual(rooms_by_id[self.private_room.pk]["art_url"], room_media.cloudinary_url)
+
+    def test_room_rows_art_url_does_not_query_per_room(self) -> None:
+        """#3477 fix round 1 — resolve_area_art must not run a query per room in the loop.
+
+        ``_room_rows`` bulk-fetches ``ObjectDisplayData`` (with its thumbnail) once and
+        passes each room's precomputed ``thumbnail_url`` into ``resolve_area_art``, so the
+        total query count must not grow as more rooms are added to the same area.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from evennia_extensions.factories import MediaFactory
+        from world.areas.builder_views import _room_rows
+
+        area_media = MediaFactory(player_data=None, slug="ward-art-query-test")
+        self.area.art = area_media
+        self.area.save(update_fields=["art"])
+        room_media = MediaFactory(player_data=None, slug="room-thumb-query-test")
+        ObjectDisplayData.objects.create(object=self.private_room, thumbnail=room_media)
+
+        def _profiles():
+            return list(
+                RoomProfile.objects.filter(area=self.area).select_related(
+                    "objectdb", "size", "default_blueprint"
+                )
+            )
+
+        with CaptureQueriesContext(connection) as before:
+            rows = _room_rows(_profiles())
+        baseline_query_count = len(before.captured_queries)
+
+        for i in range(5):
+            _room_in(self.area, name=f"Extra Room {i}")
+
+        with CaptureQueriesContext(connection) as after:
+            _room_rows(_profiles())
+        scaled_query_count = len(after.captured_queries)
+
+        self.assertEqual(
+            baseline_query_count,
+            scaled_query_count,
+            "query count must not scale with room count (art_url N+1 regression)",
+        )
+        rows_by_id = {r["id"]: r for r in rows}
+        self.assertEqual(rows_by_id[self.public_room.pk]["art_url"], area_media.cloudinary_url)
+        self.assertEqual(rows_by_id[self.private_room.pk]["art_url"], room_media.cloudinary_url)
+
+
+class WorldBuilderRoomDetailTests(WorldBuilderApiBase):
+    """The selection-time room-detail endpoint (#3269); ambient-line conditions (#3477)."""
+
+    def _url(self) -> str:
+        return "/api/world-builder/areas/room-detail/"
+
+    def test_ambient_line_conditions_are_serialized(self) -> None:
+        from world.narrative.factories import AmbientEmoteConditionFactory, AmbientEmoteLineFactory
+        from world.species.factories import SpeciesFactory
+
+        species = SpeciesFactory(name="Feline")
+        line = AmbientEmoteLineFactory(room_profile=self.public_room.room_profile)
+        condition = AmbientEmoteConditionFactory(line=line, species=species)
+
+        response = self._get(self._url(), self.staff_account, room_id=self.public_room.pk)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        line_row = next(row for row in response.data["ambient_lines"] if row["id"] == line.pk)
+        self.assertEqual(
+            line_row["conditions"],
+            [{"id": condition.pk, "condition_type": "species", "label": "Species: Feline"}],
+        )
+
+    def test_ambient_line_without_conditions_has_empty_list(self) -> None:
+        from world.narrative.factories import AmbientEmoteLineFactory
+
+        line = AmbientEmoteLineFactory(room_profile=self.public_room.room_profile)
+        response = self._get(self._url(), self.staff_account, room_id=self.public_room.pk)
+        line_row = next(row for row in response.data["ambient_lines"] if row["id"] == line.pk)
+        self.assertEqual(line_row["conditions"], [])

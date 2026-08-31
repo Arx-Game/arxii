@@ -1,7 +1,11 @@
 from django.test import TestCase
 
 from evennia_extensions.constants import ExitKind
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import (
+    GMCharacterFactory,
+    ObjectDBFactory,
+    StaffCharacterFactory,
+)
 from evennia_extensions.models import ExitProfile, RoomProfile
 from flows.factories import SceneDataManagerFactory
 from flows.object_states.character_state import CharacterState
@@ -37,6 +41,9 @@ class ObjectStatePermissionTests(TestCase):
         self.item = ObjectDBFactory(db_key="rock", location=self.room)
         for obj in (self.room, self.dest, self.exit, self.char, self.item):
             self.context.initialize_state_for_object(obj)
+        # #3477 — RoomProfile.published_at defaults to now(), so self.dest is
+        # already published; these tests exercise the lock/bars/window gates
+        # in isolation, unaffected by the separate publish gate covered below.
 
     def test_default_state_allows_moving_items(self):
         item_state = self.context.get_state_by_pk(self.item.pk)
@@ -181,3 +188,41 @@ class ObjectStatePermissionTests(TestCase):
         exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
         actor_state = self.context.get_state_by_pk(self.char.pk)
         assert not exit_state.can_traverse(actor_state)
+
+    def test_unpublished_destination_blocks_plain_character(self):
+        """An unpublished destination room isn't enterable by a plain character (#3477).
+
+        The room doesn't exist in the live world yet — checked independently
+        of (and ahead of) the lock/bars/window gates above.
+        """
+        dest_profile = RoomProfile.objects.filter(objectdb=self.dest).first()
+        dest_profile.published_at = None
+        dest_profile.save(update_fields=["published_at"])
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert not exit_state.can_traverse(actor_state)
+
+    def test_unpublished_destination_allows_gm_character(self):
+        """A GM character (a story-runner) can still step into an unpublished room (#3477)."""
+        dest_profile = RoomProfile.objects.filter(objectdb=self.dest).first()
+        dest_profile.published_at = None
+        dest_profile.save(update_fields=["published_at"])
+
+        gm = GMCharacterFactory()
+        self.context.initialize_state_for_object(gm)
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        gm_state = self.context.get_state_by_pk(gm.pk)
+        assert exit_state.can_traverse(gm_state)
+
+    def test_unpublished_destination_allows_staff_character(self):
+        """A staff character (a story-runner) can still step into an unpublished room (#3477)."""
+        dest_profile = RoomProfile.objects.filter(objectdb=self.dest).first()
+        dest_profile.published_at = None
+        dest_profile.save(update_fields=["published_at"])
+
+        staff = StaffCharacterFactory()
+        self.context.initialize_state_for_object(staff)
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        staff_state = self.context.get_state_by_pk(staff.pk)
+        assert exit_state.can_traverse(staff_state)

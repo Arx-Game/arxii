@@ -101,7 +101,7 @@ is playable immediately, with no Functionary placement in the chain:
 - **Lightweight mint** — `mint_story_npc` (`world/roster/services/staff_characters.py`)
   gates on `GMProfile` at JUNIOR+ (staff bypass) and
   `GMLevelCap.max_story_npcs` (per-GM-level cap, most-restrictive/refuse when
-  no cap row exists), then delegates to `mint_staff_character`'s working set:
+  no cap row exists), then delegates to `_mint_character_working_set` for the working set:
   Character + `CharacterSheet` + PRIMARY `Persona` + a `RosterEntry` on the
   NPC shelf (`RosterType.NPC`) + an active `RosterTenure` binding it to the
   GM's own account. `description`, when given, writes

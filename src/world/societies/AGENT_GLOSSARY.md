@@ -51,7 +51,7 @@ _Avoid_: rumor, telling event, gossip record.
 A character's paid, written testimony to another character's deed — a Golden Hare
 surrendered, a public journal written, and legend added to `LegendEntry.base_value`, always
 clamped to the ceiling the anchoring `LegendEvent.base_value` already proved (see
-ADR-0251). Also the seam that *establishes* a fresh solo deed for an act the automatic
+ADR-0252). Also the seam that *establishes* a fresh solo deed for an act the automatic
 settlement never credited, when the honorer witnessed it. Unrestricted by life-state:
 honoring a dead character's deed is by design, never a bug.
 _Avoid_: **acclaim** — that word is taken: `ItemInstance.acclaim` is fashion esteem, whose

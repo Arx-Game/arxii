@@ -137,15 +137,21 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   disambiguate it from the pre-existing, distinct `progression.AchievementRequirement`.
 
 - **Admin-hosted Game Tuning & Game Ops dashboards + content-repo load (#1220/#1221, complete):**
-  - **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — four HTMX-fragment panels: check-engine
+  - **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) - six HTMX-fragment panels: check-engine
     probability distributions (`web/admin/tuning/checks_analytics.py`), a consequence-pool inspector
-    (`consequence_analytics.py`), condition danger ranking (`condition_analytics.py`), and a Monte
+    (`consequence_analytics.py`), condition danger ranking (`condition_analytics.py`), a Monte
     Carlo party-vs-boss simulation form backed by `world.combat.simulation.run_party_vs_boss_simulation`
-    (drives the real `resolve_round` pipeline inside rolled-back transaction savepoints — nothing
-    persists).
-  - **Game Ops** (`/admin/_ops/`, `admin_ops`) — five panels: progression/economy/story/reports
-    analytics (`web/admin/tuning/metrics.py`) plus a refresh-on-demand Technical Health panel
-    (`tech_health.py`: idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
+    (drives the real `resolve_round` pipeline inside rolled-back transaction savepoints - nothing
+    persists), a technique combat-power league table (#3279,
+    `web/admin/tuning/technique_analytics.py`), and a capability DE-per-point league table (#3390,
+    `web/admin/tuning/capability_power_analytics.py`).
+  - **Game Ops** (`/admin/_ops/`, `admin_ops`) - six panels: progression/economy/story/reports
+    analytics (`web/admin/tuning/metrics.py`), a refresh-on-demand Technical Health panel
+    (`tech_health.py`: idmapper RAM, process RSS/CPU, open system errors, deploy SHA), and a
+    required-content sentinel panel (#3444, `required_content.py`) - one central
+    `_declarations()` table of 48 code-level hard dependencies on specific authored database
+    rows (44 REQUIRED, 4 TUNING), probed live against the database rather than any repo
+    artifact, since seeds are clone-bootstrap/E2E scaffolding only (ADR-0238). See ADR-0251.
   - Superuser-only external content-repo load surface (`web/admin/content_load_views.py`,
     `CONTENT_REPO_PATH` env var) upserting into the DB via `core_management.content_fixtures`;
     linked from the Game Setup hub alongside both new dashboards. Phase 2 (#2266, complete):

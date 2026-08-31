@@ -95,7 +95,7 @@ subject's **fame** (`apply_spread_fame_bump` — fast, larger, and it decays) an
 room traffic, so it amplifies both. Fame tier separately acts as a display
 multiplier on prestige.
 
-#### The Rite of Honors (#3466, ADR-0251, ADR-0252)
+#### The Rite of Honors (#3466, ADR-0252, ADR-0253)
 
 A character spends Golden Hares and writes a public journal to honor another
 character's deed — raising a witnessed deed's `base_value`, or *establishing* a
@@ -105,7 +105,7 @@ the "Rite of Honors" `magic.Ritual` row (`SERVICE` execution kind,
 `hedge_accessible=False` — a Gifted rite by ruling). It works posthumously by
 design: nothing in `honors.py` checks life-state, and nothing should.
 
-**The ceiling rule (ADR-0251).** Honoring may raise a deed's `base_value` only up
+**The ceiling rule (ADR-0252).** Honoring may raise a deed's `base_value` only up
 to the anchoring `LegendEvent.base_value` — `headroom = event.base_value -
 deed.base_value`, and a headroom of zero refuses (`DeedAtCeilingError`). Peer
 judgment *redistributes* recognition inside an envelope the event's own
@@ -138,7 +138,7 @@ Several refinements close gaps that clamp alone doesn't:
   else a deed's value is read, so a paid rite could never raise a number any
   read path will ever surface.
 
-**Titles retarget to Persona (ADR-0252).** `achievements.PersonaTitle`
+**Titles retarget to Persona (ADR-0253).** `achievements.PersonaTitle`
 (`maybe_grant_deed_title`, called from `honor_deed`'s last step) mints a title
 when a deed crosses its station's `LegendLevelCalibration.deed_title_threshold`,
 landing on `deed.persona` — the face that did it, never the character sheet.

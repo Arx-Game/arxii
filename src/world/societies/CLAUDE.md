@@ -68,7 +68,7 @@ journal entry to raise a witnessed deed's `base_value`, or to establish a fresh 
 under an event that never credited it. Runs all eligibility and affordability checks inside
 one `transaction.atomic()` before any write. Every raise is a `HonorRefused` subclass
 carrying a player-safe `user_message`. Sized within the ceiling the anchoring `LegendEvent`
-already proved (**ADR-0251** — never above it), unrestricted by life-state (honoring the
+already proved (**ADR-0252** — never above it), unrestricted by life-state (honoring the
 dead is by design, #3466 Decision 7). See `docs/systems/societies.md`'s Legend System
 section for the ceiling rule in full.
 
@@ -177,7 +177,7 @@ advance you" is enforced, and it is why per-act sites (lockpicking, theft, feedi
 kills) still write their deed rows for crime tags and witnesses while being worth
 nothing.
 
-**The Rite of Honors** (#3466, ADR-0251/ADR-0252) lets a character spend Golden Hares and
+**The Rite of Honors** (#3466, ADR-0252/ADR-0253) lets a character spend Golden Hares and
 write a public journal to raise a witnessed deed's `base_value` toward what its anchoring
 `LegendEvent` itself paid, or to establish a fresh solo deed for an extraordinary act the
 automatic settlement never credited. **Honoring is always clamped to the event's own
@@ -196,7 +196,7 @@ yourself (mirrors `_grant_title`'s reasoning). Unrestricted by life-state: honor
 by design (`honors.py` adds no death check anywhere). See `honors.py` above for the service
 function and `docs/systems/societies.md` for the full write-up.
 
-**Titles hang on `Persona`, not `CharacterSheet`** (ADR-0252) — `achievements.PersonaTitle`
+**Titles hang on `Persona`, not `CharacterSheet`** (ADR-0253) — `achievements.PersonaTitle`
 retargeted #3466 so a deed earned behind a mask titles the mask and can never surface on the
 character sheet. Achievement-sourced titles still resolve to the PRIMARY persona, never the
 active one (a stat crossing a threshold is a fact about the character, not whatever disguise

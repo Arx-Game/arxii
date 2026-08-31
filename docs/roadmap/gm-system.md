@@ -563,6 +563,42 @@ See `docs/systems/npc-lifecycle.md`'s "GM story-NPC on-ramp" section for the ful
 service/action/API rundown and how this relates to (but bypasses) the ambient-NPC
 ladder.
 
+### Phase 9 — GM Self-Service Character Mint & Profile Editing ✅ (#3478)
+A GM or staff account can now stand up their own OOC GM/Staff character and edit
+their own operational info — contact times, OOC availability notes — entirely from
+the Hall, with no admin or world-builder detour.
+
+Delivered:
+- **Model**: `GMProfile.contact_times`/`ooc_info` — two freeform `TextField`s, writable
+  only through the GM's own `mine` endpoint (see below); `level` stays read-only there.
+- **Service**: `mint_gm_character` (`world.roster.services.staff_characters`) — role-aware
+  sibling of #3283's `mint_staff_character`/#3426's `mint_story_npc`: a staff account
+  mints `typeclasses.gm_characters.StaffCharacter`, an approved GM (has a `GMProfile`)
+  mints `typeclasses.gm_characters.GMCharacter`, anyone else is refused. Enforces one
+  GM/Staff character per account (an active `RosterTenure` on an existing GM/Staff-
+  typeclassed character blocks a second mint) — narrower than `mint_story_npc`'s
+  per-level cap, since this is the account's own single OOC presence, not a roster of
+  NPCs. Both typeclasses' `get_display_name` append an unconditional `(GM)` tag
+  (`typeclasses/gm_characters.py`'s `_MechanicallyImmuneCharacterMixin`) — every viewer
+  sees it, no ambiguity about who is a GM.
+- **API**: `GET`/`PATCH /api/gm/profiles/mine/` (`GMProfileViewSet.mine`) — the
+  requesting account's own `GMProfile` via `GMProfileMineSerializer`; 404 for a
+  non-GM/non-staff account (no profile to edit). `POST /api/gm/profiles/character/`
+  (`GMProfileViewSet.character`) mints via `mint_gm_character`, returning
+  `character_id`/`name`; a `StaffMintError` (already has one, name taken, blank name)
+  surfaces as 400 with a player-safe message.
+- **Frontend**: the Hall's GM slot (`frontend/src/home/hall/GMSlot.tsx`) is the sole
+  onboarding surface — `CreateGMCharacterDialog` mints, `EditGMProfileDialog` edits
+  `contact_times`/`ooc_info`; the slot itself hides its edit affordance for an account
+  with no `GMProfile` row (staff-without-profile) rather than rendering the 404.
+  **The world-builder page's mint form was removed** (it grew a name field + submit
+  button pointed at the now-deleted `POST /api/world-builder/areas/mint-builder-
+  character/` — #3283's original stopgap): the builder's no-actor banner
+  (`WorldBuilderPage`, `data-testid="world-builder-actor-banner"`) is now a plain
+  "set up your GM Profile from the Hall" message with a Link to `/`. The Hall's mint
+  flow is the only GM-onboarding path left; `mintBuilderCharacter`
+  (`frontend/src/world-builder/api.ts`) and its dead endpoint are both deleted.
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows
