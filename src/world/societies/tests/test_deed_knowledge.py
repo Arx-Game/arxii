@@ -6,6 +6,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import (
     InteractionFactory,
+    PersonaFactory,
     SceneFactory,
     SceneParticipationFactory,
 )
@@ -17,6 +18,7 @@ from world.societies.factories import (
 from world.societies.knowledge_services import (
     grant_deed_knowledge,
     known_deed_ids,
+    knows_deed,
     scene_witness_personas,
 )
 from world.societies.models import LegendEntry, PersonaDeedKnowledge
@@ -106,6 +108,22 @@ class KnownDeedIdsTests(TestCase):
             deed=deed, personas=[self.stranger], source=DeedKnowledgeSource.WITNESSED
         )
         assert deed.pk not in {row["pk"] for row in known_deed_ids(self.stranger)}
+
+
+class KnowsDeedTests(TestCase):
+    """The read half of ``grant_deed_knowledge`` (#3466)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.persona = PersonaFactory()
+        cls.deed = LegendEntryFactory(persona=PersonaFactory(), base_value=100)
+
+    def test_false_before_grant_true_after(self) -> None:
+        assert knows_deed(persona=self.persona, deed=self.deed) is False
+        grant_deed_knowledge(
+            deed=self.deed, personas=[self.persona], source=DeedKnowledgeSource.WITNESSED
+        )
+        assert knows_deed(persona=self.persona, deed=self.deed) is True
 
 
 class WitnessWriteSiteTests(TestCase):

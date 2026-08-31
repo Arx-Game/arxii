@@ -7,8 +7,13 @@ from django.db.models import Model
 
 def _seed_magic() -> None:
     from world.seeds.game_content.magic import seed_magic_dev  # noqa: PLC0415
+    from world.societies.seeds import ensure_rite_of_honors_ritual  # noqa: PLC0415
 
     seed_magic_dev()
+    # Rite of Honors (#3466): a societies/legend rite, but dispatched via the
+    # same Ritual machinery as Imbuing/Atonement/the Durance — see
+    # seed_canonical_rituals() for the sibling pattern this mirrors.
+    ensure_rite_of_honors_ritual()
 
 
 def _seed_items() -> None:

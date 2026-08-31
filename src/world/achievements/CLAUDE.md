@@ -49,10 +49,20 @@ Links an achievement to a RewardDefinition with optional parameterization.
   "5000"), or an optional explicit **rank** for DISTINCTION (e.g. "3"; blank/invalid parses as
   "advance one step")
 
-### CharacterTitle (SharedMemoryModel)
-The cosmetic/display record of a title a character has earned (FK character_sheet, FK to a TITLE
-`RewardDefinition`, `earned_at`; unique per (sheet, reward)). **Mechanical rewards do NOT live
-here** — they attach to the *achievement* (see Reward application below); a title is display-only.
+### PersonaTitle (SharedMemoryModel)
+The cosmetic/display record of a title a persona has earned (FK `persona`, `earned_at`).
+Retargeted from `CharacterSheet` onto `Persona` (#3466): a title hangs on the face that earned
+it, so a deed earned behind a mask titles the mask and never surfaces on the character sheet.
+Exactly one of two branches is set (`CheckConstraint`, unique per persona within each branch):
+- `reward` — an achievement-earned TITLE `RewardDefinition`. **Mechanical rewards do NOT live
+  here** — they attach to the *achievement* (see Reward application below); a title is
+  display-only. Always granted to the sheet's PRIMARY persona (`_grant_title`).
+- `legend_entry` — a deed (`societies.LegendEntry`) that crossed its station's
+  `LegendLevelCalibration.deed_title_threshold`, minted by
+  `achievements.services.maybe_grant_deed_title(deed)`. Lands on `deed.persona`, whichever
+  face established the deed.
+
+`display_name` returns whichever branch's name applies (`reward.name` or `legend_entry.title`).
 
 ### Discovery
 First-time-earned record. OneToOne to Achievement.
@@ -146,7 +156,8 @@ Records when a character earned an achievement.
 `grant_achievement` applies an achievement's rewards **once per newly-earned sheet** (then fires
 the stories reactivity hook). `services.apply_achievement_rewards(sheet, achievement)` dispatches
 by `reward_type`:
-- **TITLE** → a `CharacterTitle` (idempotent via the unique constraint).
+- **TITLE** → a `PersonaTitle` on the sheet's PRIMARY persona (idempotent via the unique
+  constraint; see `maybe_grant_deed_title` for the sibling deed-earned branch, #3466).
 - **BONUS** → a `CharacterModifier` on `reward.modifier_target` (amount = `reward_value`), sourced
   via the shared `mechanics.ModifierSource.achievement_reward` marker (mirrors `residence_comfort`).
 - **PRESTIGE** → `societies.renown.award_deed_prestige(persona, amount)` on the primary persona.
@@ -164,15 +175,23 @@ Achievement-sourced BONUS modifiers ARE read by `get_modifier_total`: `get_modif
 counts *recognized* non-distinction sources (`achievement_reward`, `residence_comfort`) as flat
 addends — orphaned/bare (UNKNOWN) sources still contribute nothing (#909).
 
-## Displaying earned titles (#1522)
+## Displaying earned titles (#1522, #3466)
 
 Titles are cosmetic and **public** — a character shows them off — so display is ungated.
-`CharacterTitleViewSet` (`GET /api/achievements/character-titles/?character_sheet=<id>`,
-`CharacterTitleSerializer` → the `CharacterTitle` schema: `title`, `reward_key`, `earned_at`)
-lists a character's earned titles, newest first. Faces: the telnet `sheet/titles` section
-(`commands.account.sheet_sections._render_titles_section`, registered in `SHEET_SECTIONS`) and the
-React **Titles** tab (`frontend/src/achievements/TitlesPanel` on `CharacterSheetPage`). The title's
-player-facing name is the linked TITLE `RewardDefinition.name`.
+`PersonaTitleViewSet` (`GET /api/achievements/persona-titles/?persona=<id>`,
+`PersonaTitleSerializer` → the `PersonaTitle` schema: `title`, `reward_key`, `earned_at`)
+lists a persona's earned titles, newest first. `persona` is **required** (`PersonaTitleFilterSet`
+declares it with `required=True`) — this view has no pagination, so an unfiltered `GET` would
+otherwise return every `PersonaTitle` row in the database; a missing/invalid `persona` 400s
+instead (`DjangoFilterBackend.raise_exception` default). Filterable by `persona` **only** —
+deliberately not by `character_sheet`, which would traverse from a sheet to every one of its
+personas (including masks) and reopen the sheet-to-mask link #3466 exists to close. Faces: the
+telnet `sheet/titles` section (`commands.account.sheet_sections._render_titles_section`,
+registered in `SHEET_SECTIONS`, scoped to the viewer's `primary_persona`) and the React
+**Titles** tab (`frontend/src/achievements/TitlesPanel`, retargeted to `?persona=` on
+`CharacterSheetPage`, #3466). Both surfaces read `title.display_name`, which resolves to
+whichever branch is set (`reward.name` or `legend_entry.title`) - never read `title.reward.name`
+directly, it is `None` on the deed branch.
 
 ## StatHandler (handlers.py)
 

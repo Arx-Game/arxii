@@ -14,6 +14,7 @@ from world.achievements.models import (
     CharacterAchievement,
     ConditionStatRule,
     Discovery,
+    PersonaTitle,
     RewardDefinition,
     StatDefinition,
     StatTracker,
@@ -112,3 +113,15 @@ class ConditionStatRuleFactory(factory_django.DjangoModelFactory):
     )
     event_type = ConditionEventType.GAINED
     increment_amount = 1
+
+
+class PersonaTitleFactory(factory_django.DjangoModelFactory):
+    """Defaults to the reward branch (#3466); pass ``legend_entry=`` and ``reward=None``
+    for the deed branch — exactly one of the two must be set."""
+
+    class Meta:
+        model = PersonaTitle
+
+    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    reward = factory.SubFactory(RewardDefinitionFactory)
+    legend_entry = None

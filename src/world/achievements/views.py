@@ -1,6 +1,7 @@
 """API views for the achievements system."""
 
 from django.db.models import Prefetch
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
@@ -10,13 +11,13 @@ from world.achievements.models import (
     Achievement,
     AchievementReward,
     CharacterAchievement,
-    CharacterTitle,
+    PersonaTitle,
 )
 from world.achievements.serializers import (
     AchievementListSerializer,
     AchievementSerializer,
     CharacterAchievementSerializer,
-    CharacterTitleSerializer,
+    PersonaTitleSerializer,
 )
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -90,20 +91,47 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
         )
 
 
-class CharacterTitleViewSet(ReadOnlyModelViewSet):
-    """List a character's earned, displayable titles (#1522).
+class PersonaTitleFilterSet(django_filters.FilterSet):
+    """Filter ``PersonaTitle`` by owning persona only (#3466).
+
+    ``persona`` is declared explicitly (rather than left to the ``Meta.fields``
+    auto-generated filter) so it can be marked ``required``: this view has no pagination
+    (see ``PersonaTitleViewSet``), so an unfiltered ``GET`` would otherwise return every
+    ``PersonaTitle`` row in the database, unbounded (a correctness/load bug, not a privacy
+    one -- the serializer exposes no owner field). ``DjangoFilterBackend.raise_exception``
+    defaults to True, so a missing/invalid ``persona`` becomes an HTTP 400 with a clear
+    per-field message, not a silent full-table scan.
+
+    Deliberately NOT filterable by ``character_sheet``: traversing from a sheet to
+    ALL of its personas would return a masked persona's titles alongside the primary's,
+    reopening exactly the sheet-to-mask link this retarget exists to close. Titles are
+    persona-scoped now, so ``?persona=<id>`` is the honest (and only safe) parameter.
+    """
+
+    persona = django_filters.NumberFilter(
+        required=True, help_text="Persona id (required) -- returns that persona's earned titles."
+    )
+
+    class Meta:
+        model = PersonaTitle
+        fields = ["persona"]
+
+
+class PersonaTitleViewSet(ReadOnlyModelViewSet):
+    """List a persona's earned, displayable titles (#1522, #3466).
 
     Titles are cosmetic and public — a character shows them off — so any authenticated user can
-    read any character's titles. Filter by ``character_sheet`` (== character ObjectDB pk).
+    read any persona's titles. Filter by ``persona`` (== Persona pk, required). Not filterable by
+    character sheet on purpose — see ``PersonaTitleFilterSet``.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
-    serializer_class = CharacterTitleSerializer
+    serializer_class = PersonaTitleSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["character_sheet"]
+    filterset_class = PersonaTitleFilterSet
 
     def get_queryset(self):  # type: ignore[override]
-        """Earned titles with the title's reward prefetched, newest first."""
-        return CharacterTitle.objects.select_related("reward").order_by("-earned_at")
+        """Earned titles with the title's reward/deed prefetched, newest first."""
+        return PersonaTitle.objects.select_related("reward", "legend_entry").order_by("-earned_at")

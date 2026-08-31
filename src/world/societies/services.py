@@ -69,8 +69,14 @@ def create_solo_deed(  # noqa: PLR0913
     concealed: bool = False,
     containment_approach: str | None = None,
     earned_at_level: int = 0,
+    event: LegendEvent | None = None,
 ) -> LegendEntry:
-    """Create a legend deed not tied to a shared event.
+    """Create a solo legend deed, optionally anchored to a shared event's ceiling.
+
+    "Solo" describes the deed's crediting (one persona, not a shared-event mint's
+    multi-participant fan-out) — `event` (#3466) may still link it back to the
+    `LegendEvent` it was established under, distinct from a deed `create_legend_event`
+    mints directly for every participant.
 
     Args:
         persona: The persona earning legend for this deed.
@@ -94,6 +100,9 @@ def create_solo_deed(  # noqa: PLR0913
             level). Defaults to 0, meaning "won outside a perilous stakes
             contract": real legend for fame, murmur and spread, but qualifying
             no advancement at any level. Only settlement passes a non-zero value.
+        event: #3466 — the shared event this solo deed came out of, when there
+            is one - a standout's anchor, and the ceiling any honor is clamped
+            to. None for a deed with no shared origin.
 
     Returns:
         The created LegendEntry.
@@ -108,7 +117,7 @@ def create_solo_deed(  # noqa: PLR0913
         description=description,
         scene=scene,
         story=story,
-        event=None,
+        event=event,
         spread_multiplier=config.default_spread_multiplier,
     )
     if crime_kinds:

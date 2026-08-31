@@ -6,8 +6,8 @@ from world.achievements.models import (
     Achievement,
     AchievementReward,
     CharacterAchievement,
-    CharacterTitle,
     Discovery,
+    PersonaTitle,
     StatTracker,
 )
 from world.roster.models import RosterTenure
@@ -114,20 +114,25 @@ class CharacterAchievementSerializer(serializers.ModelSerializer):
         return obj.is_discoverer()
 
 
-class CharacterTitleSerializer(serializers.ModelSerializer):
-    """Serializer for an earned, displayable character title (#1522).
+class PersonaTitleSerializer(serializers.ModelSerializer):
+    """Serializer for an earned, displayable character title (#1522, #3466).
 
-    Cosmetic display only — the mechanical reward attaches to the achievement, not here. The
-    title's player-facing name comes from the linked TITLE ``RewardDefinition``.
+    Cosmetic display only — the mechanical reward attaches to the achievement, not here.
+    ``title`` reads ``display_name`` so it works for both branches (an authored TITLE
+    ``RewardDefinition`` or a deed's own name); ``reward_key`` is null on the deed branch,
+    since there is no ``RewardDefinition`` to key by.
     """
 
-    title = serializers.CharField(source="reward.name", read_only=True)
-    reward_key = serializers.CharField(source="reward.key", read_only=True)
+    title = serializers.CharField(source="display_name", read_only=True)
+    reward_key = serializers.SerializerMethodField()
 
     class Meta:
-        model = CharacterTitle
+        model = PersonaTitle
         fields = ["id", "title", "reward_key", "earned_at"]
         read_only_fields = fields
+
+    def get_reward_key(self, obj: PersonaTitle) -> str | None:
+        return obj.reward.key if obj.reward_id else None
 
 
 class StatTrackerSerializer(serializers.ModelSerializer):

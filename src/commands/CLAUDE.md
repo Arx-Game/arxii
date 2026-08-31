@@ -195,7 +195,35 @@ actions, backends, and service functions.
 - **`ritual.py`**: `CmdRitual` (alias `perform`) — telnet face of
   `PerformRitualAction` and multi-participant session lifecycle:
   - `ritual <name> [k=v ...]` — single-actor ritual performance (SERVICE rituals execute
-    immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands)
+    immediately; CEREMONY rituals create a `PendingRitualEffect` for finisher commands).
+    Kwargs are integers only (`thread=<id>`/`tradition_id=<id>`/etc) EXCEPT for one
+    special case:
+    - `ritual Rite of Honors honoree=<name> deed=<id> title=<text> body=<text>` (#3466)
+      — amplify a witnessed deed — OR
+      `ritual Rite of Honors honoree=<name> event=<id> deed_title=<text> title=<text> body=<text>`
+      — establish a new one; exactly one of `deed=`/`event=` must be given (both or
+      neither is refused, by name; `deed_title=` without `event=` is refused too).
+      The one single-actor ritual with free-text kwargs (a persona name, a title, a
+      journal body). `resolve_action_args` looks the ritual up by name first, then
+      branches to `_resolve_honors_args` (built on the shared `parse_kv_and_flags`
+      multiword tokenizer, `commands/parsing.py`) when
+      `ritual.service_function_path == HONORS_SERVICE_PATH`
+      (`world.societies.honors.HONORS_SERVICE_PATH`). `honoree` resolves to a `Persona`
+      by exact (case-insensitive) name, globally — never room-scoped, since honoring is
+      unrestricted by presence or life-state (Decision 7: a posthumous honoree may be
+      off-scene or dead). Persona names are NOT globally unique
+      (`unique_persona_name_per_character` is per-character) — more than one match
+      refuses with a disambiguation message rather than silently picking the first
+      (#3466 whole-branch-review I3, this repo's no-implicit-first-item-selection
+      rule). On the amplify form, the resolved `honoree` is additionally checked
+      against the resolved deed's own `persona` — the amplify service call ignores
+      `honoree_persona` entirely (it always honors `deed.persona`), so a mismatch is
+      refused here rather than silently honoring someone other than who was named.
+      `deed` resolves to a `LegendEntry` by pk; `event` resolves to a `LegendEvent` by
+      pk. This resolution lives here, not in `commands.ritual_adapters` (that registry
+      is consulted only on the session draft/join path below) and not inside
+      `honor_deed` itself (shared with the REST dispatch path, which passes
+      already-resolved model instances — `world/societies/honors.py`).
   - `ritual sessions` — list pending sessions
   - `ritual draft <name> invite=<char>[,<char>] [<extra k=v ...>]`
     — draft a session; extra kwargs are adapter-specific (see `ritual_adapters.py`):
@@ -971,8 +999,10 @@ actions, backends, and service functions.
   reputations, scoped to active persona; distinct from `renown`, which holds fame / prestige /
   *society* reputation); `covenant` (`sheet/covenant` — your covenant membership(s), role, rank,
   and which you're *engaged* in, from `CharacterCovenantRole`; read-only); `title`
-  (`sheet/titles`, #1522 — the earned, displayable titles your active character holds, from
-  `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab); `distinction`
+  (`sheet/titles`, #1522 — the earned, displayable titles your PRIMARY persona holds, from
+  `achievements.PersonaTitle` (retargeted from `CharacterSheet` onto `Persona`, #3466, ADR-0253
+  — a title names the face that earned it, so a deed earned behind a mask titles the mask and
+  never surfaces here); cosmetic, mirrors the web Titles tab); `distinction`
   (`sheet/distinction`, #1446 — your distinctions, secret-badged, over the shared
   `_build_distinctions` builder, mirroring the web Distinctions tab); `magic` (`sheet/magic`,
   #1446 — gifts/techniques/motif/aura/**resonance balances** (#2032) over the shared

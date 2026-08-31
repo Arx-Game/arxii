@@ -83,6 +83,8 @@ Authored tuning: `RiskCalibration.legend_award`, `RenownMagnitudeAward`,
 |-------|---------|------------|
 | `LegendEntry` | A deed that earns legend for a persona | `persona`, `title`, `description`, `base_value`, `source_note`, `location_note`, `societies_aware` (M2M) |
 | `LegendSpread` | An instance of spreading/embellishing a deed | `legend_entry`, `spreader_persona`, `value_added`, `description`, `method`, `societies_reached` (M2M) |
+| `LegendLevelCalibration` (#3466) | Per-level dials for honoring and deed-granted titles | `level` (unique), `honor_hares_required`, `honor_value_added`, `deed_title_threshold`. Authored content; unguarded lookups (a missing row raises, surfacing on the admin required-content panel rather than silently mispricing an honor) |
+| `LegendHonor` (#3466) | One paid, written testimony to a deed | `deed`, `honorer` (PROTECT — story-significant), `journal_entry`, `deed_story`, `hares` (M2M to Golden Hares spent), `hares_spent`, `value_added`, `established_deed`; unique per (deed, honorer) |
 
 **Spreading a deed grows fame *and* prestige.** On a successful `spread_a_tale`
 retelling (`_resolve_spread_tale`), besides adding traffic-scaled legend, the deed
@@ -92,6 +94,81 @@ subject's **fame** (`apply_spread_fame_bump` — fast, larger, and it decays) an
 `room_activity_band` multiplier. A Social Hub (#1694) boosts that multiplier via
 room traffic, so it amplifies both. Fame tier separately acts as a display
 multiplier on prestige.
+
+#### The Rite of Honors (#3466, ADR-0252, ADR-0253)
+
+A character spends Golden Hares and writes a public journal to honor another
+character's deed — raising a witnessed deed's `base_value`, or *establishing* a
+fresh solo deed for an extraordinary act the automatic settlement never
+credited. `world.societies.honors.honor_deed` is the single seam, dispatched by
+the "Rite of Honors" `magic.Ritual` row (`SERVICE` execution kind,
+`hedge_accessible=False` — a Gifted rite by ruling). It works posthumously by
+design: nothing in `honors.py` checks life-state, and nothing should.
+
+**The ceiling rule (ADR-0252).** Honoring may raise a deed's `base_value` only up
+to the anchoring `LegendEvent.base_value` — `headroom = event.base_value -
+deed.base_value`, and a headroom of zero refuses (`DeedAtCeilingError`). Peer
+judgment *redistributes* recognition inside an envelope the event's own
+settlement already proved; it can never invent peril that never happened. That
+is why the rite does not reopen the hole ADR-0249 closed: nothing here mints
+danger, it only moves already-proved value between the event and its deeds.
+Several refinements close gaps that clamp alone doesn't:
+- **Establishing refuses when the honoree already has an active deed anchored to
+  that event** (`HonoreeAlreadyAnchoredError`) — otherwise several honorers could
+  each establish a separate full-ceiling deed for the same act, uncapping the
+  aggregate the ceiling exists to bound. Many voices are meant to grow ONE deed.
+  The anchoring `LegendEvent` row is locked (`select_for_update()`) before this
+  check runs, so two concurrent establishes against the same event serialize
+  behind one commit rather than both reading "no anchored deed yet" (the
+  amplify branch gets the equivalent guarantee for free via the deed's own row
+  lock).
+- **Establishing also requires the HONOREE to have witnessed the anchoring
+  event**, not just the honorer — checked against the same
+  `scene_witness_personas` list the honorer is checked against
+  (`HonoreeNotPresentToEstablishError`). Gating only the honorer would let a
+  witness mint a full-ceiling deed for someone who was never at the event,
+  inventing peril they never faced. This is deliberately a presence check, not
+  a widened `HonoreeAlreadyAnchoredError` scoped across a sheet's personas —
+  that would become a mask-identity oracle (telling a prober that some other
+  persona on the same sheet already has a deed there).
+- **A struck deed (`LegendEntry.is_active=False`) proves nothing.** It doesn't
+  count toward the station used when establishing a sibling deed, doesn't block
+  a fresh deed from being established under the same event, and amplifying one
+  is refused outright (`DeedNotActiveError`) — it is worth nothing everywhere
+  else a deed's value is read, so a paid rite could never raise a number any
+  read path will ever surface.
+
+**Titles retarget to Persona (ADR-0253).** `achievements.PersonaTitle`
+(`maybe_grant_deed_title`, called from `honor_deed`'s last step) mints a title
+when a deed crosses its station's `LegendLevelCalibration.deed_title_threshold`,
+landing on `deed.persona` — the face that did it, never the character sheet.
+Titles hang on **Persona** throughout precisely because Legend is persona-scoped
+throughout; a deed earned behind a mask titles the mask and can never surface on
+the character sheet to out the player. Achievement-sourced titles (the
+unrelated `RewardDefinition` TITLE path) resolve to the sheet's **PRIMARY**
+persona, never the active one — an achievement is a fact about who the
+character *is*, not whatever disguise happened to be worn when a stat ticked
+over.
+
+**The honorer is always the PRIMARY persona, never whatever face is active.**
+`honor_deed` resolves `honorer_persona = character_sheet.primary_persona`
+unconditionally — the same argument `_grant_title` makes for achievement
+titles. An honor is a named public act: the journal is authored by
+`character_sheet` (the real character) and the mirrored scene pose
+(`_post_declaration`) always posts under the primary persona regardless of
+what's active, so recording a mask as `LegendHonor.honorer` would be a
+deterministic mask-to-real link sitting right beside that public journal. The
+rite is always performed as yourself.
+
+**Eligibility, in order** (`honor_deed`'s Step 2, all before any write):
+amplifying requires already knowing the deed (`knows_deed`), not having
+already honored it (`unique_honor_per_honorer`), and the deed being active
+(struck deeds refuse amplification outright); establishing requires having
+witnessed the anchoring event's scene (both the honorer AND the honoree,
+above) and not being the honoree's own face. Both refuse honoring your own
+deed. Pricing (`LegendLevelCalibration`, keyed by the honorer's own level) and
+affordability (Golden Hares via `resolve_unredeemed_favor_tokens`) run only
+after eligibility clears.
 
 ### Obligations (#2428)
 
@@ -425,6 +502,8 @@ Read-only endpoints under `/api/societies/`:
 | `/reputations/` | `OrganizationReputationViewSet` | The requester's active persona's org reputations (standing) — `{id, persona, organization, organization_name, tier}`, tier only, self-scoped (#1446) |
 | `/standing-declarations/` | `StandingDeclarationViewSet` | Public favor/disfavor declaration history (#3290) — `{id, organization, organization_name, target_persona, target_persona_name, declared_by_persona, declared_by_persona_name, direction, citation, created_at}`; **public** (unlike `/reputations/`), no `delta_applied` (mirrors the reputation viewset's "tier only, never the raw value" convention); writes go through `declare_standing_action`, never a POST here |
 | `/appeals/` | `OrgAppealViewSet` | Appeals to organizations (#3293) — list/retrieve is members + own appeals; `create` lodges, `signon`/`resolve`/`withdraw` detail actions dispatch through the matching Action |
+| `/deeds/` | `DeedViewSet` (#3466) | Public read of every active `LegendEntry` — any authenticated player, including deeds belonging to a persona they don't play (legend is public, like proclamations); `honor` detail action — `POST /deeds/{id}/honor/` `{journal_title, journal_body}` amplifies this deed. Payload includes `ceiling`/`headroom` (against the anchoring event) and `can_honor` (eligibility preview scoped to the requester's own active persona) |
+| `/events/` | `LegendEventViewSet` (#3466) | Public read of `LegendEvent` rows; `establish` detail action — `POST /events/{id}/establish/` `{honoree_persona, deed_title, journal_title, journal_body}` mints a fresh deed under that event. Both actions dispatch through `PerformRitualAction` against the seeded "Rite of Honors" ritual, never `honor_deed` directly — mirroring `world.magic.views.RitualPerformView`, so telnet and web converge on one action |
 
 All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
 

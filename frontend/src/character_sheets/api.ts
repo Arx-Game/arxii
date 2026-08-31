@@ -159,6 +159,18 @@ export interface CharacterSheetStory {
   origin_slots: CharacterSheetOriginSlot[];
 }
 
+/**
+ * Mirrors `world.character_sheets.types.PersonaEntry`. A privileged viewer (owner/staff) gets
+ * every face of the character; a non-privileged viewer gets exactly one entry — the presented
+ * (active) persona — so `personas[0].id` is always a safe "which persona is this sheet
+ * currently showing" fallback for a foreign, non-privileged view (#3466).
+ */
+export interface CharacterSheetPersona {
+  id: number;
+  name: string;
+  thumbnail: string | null;
+}
+
 export interface CharacterSheetPayload {
   id: number;
   can_edit: boolean;
@@ -172,7 +184,7 @@ export interface CharacterSheetPayload {
   magic: CharacterSheetMagic | null;
   story: CharacterSheetStory;
   goals: unknown[];
-  personas: unknown[];
+  personas: CharacterSheetPersona[];
   theming: Record<string, unknown>;
   profile_picture: unknown;
   current_residence: unknown;

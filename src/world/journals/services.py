@@ -126,9 +126,10 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
     is_public: bool,
     tags: list[str] | None = None,
     posthumous_override: str = PosthumousOverride.INHERIT,
+    award_weekly_xp: bool = True,
 ) -> JournalEntry:
     """
-    Create a journal entry and award weekly XP.
+    Create a journal entry, optionally awarding weekly XP.
 
     Args:
         author: The character writing the entry.
@@ -137,6 +138,10 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
         is_public: Whether the entry is publicly visible.
         tags: Optional list of tag names to attach.
         posthumous_override: Per-entry disposition override (#3287); INHERIT by default.
+        award_weekly_xp: #3466 — when False, skip the weekly-post-count XP award
+            (and its tracker write) entirely. An honoring journal written as
+            part of the Rite of Honors is not the author's own weekly post and
+            must not consume their post-count XP.
 
     Returns:
         The created JournalEntry.
@@ -155,20 +160,21 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
                 [JournalTag(entry=entry, name=tag.lower().strip()) for tag in tags]
             )
 
-        tracker = _get_or_reset_weekly_tracker(author)
-        tracker.posts_this_week += 1
-        tracker.save(update_fields=["posts_this_week"])
+        if award_weekly_xp:
+            tracker = _get_or_reset_weekly_tracker(author)
+            tracker.posts_this_week += 1
+            tracker.save(update_fields=["posts_this_week"])
 
-        # Award XP based on post count this week (0-indexed)
-        post_index = tracker.posts_this_week - 1
-        if post_index < len(JOURNAL_POST_XP):
-            xp_amount = JOURNAL_POST_XP[post_index]
-            account = author.character.db_account
-            award_xp(
-                account=account,
-                amount=xp_amount,
-                description=f"Journal post: {title}",
-            )
+            # Award XP based on post count this week (0-indexed)
+            post_index = tracker.posts_this_week - 1
+            if post_index < len(JOURNAL_POST_XP):
+                xp_amount = JOURNAL_POST_XP[post_index]
+                account = author.character.db_account
+                award_xp(
+                    account=account,
+                    amount=xp_amount,
+                    description=f"Journal post: {title}",
+                )
 
         stat_keys = ["journals.total_written"]
         if is_public:

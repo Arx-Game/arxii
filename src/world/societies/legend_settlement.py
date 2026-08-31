@@ -276,6 +276,7 @@ def settle_legend_for(  # noqa: PLR0913 - one seam, and every input is load-bear
         scene=scene,
         story=story,
         already_paid={p.persona.pk for p in paid},
+        event=event,
     )
     return SettlementReport(
         minted=True,
@@ -323,6 +324,9 @@ def settle_standouts_only(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
         scene=scene,
         story=story,
         already_paid=set(),
+        # #3466: a lost unit has no shared event to anchor to - this path is
+        # the consolation case for a unit with no shared deed by construction.
+        event=None,
     )
     return SettlementReport(
         minted=bool(standouts),
@@ -345,6 +349,7 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     scene: Scene | None,
     story: Story | None,
     already_paid: set[int],
+    event: LegendEvent | None,
 ) -> list[LegendEntry]:
     """Solo deeds for crucial contributions resolved brilliantly.
 
@@ -352,6 +357,12 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     are skipped deliberately: on a *won* unit the shared deed is the reward, and
     stacking a standout on top would double-pay the same act. On a lost unit the
     set is empty, so every standout pays — which is the consolation case.
+
+    ``event``: #3466 — the shared event a standout anchors to, so honoring it
+    later has a ceiling to clamp against. ``settle_legend_for`` passes the
+    event it just created; ``settle_standouts_only`` passes ``None`` on
+    purpose — a lost unit has no shared event by construction, so its
+    standouts have no anchor. Do not "fix" that by inventing one.
     """
     from world.societies.services import create_solo_deed  # noqa: PLC0415
 
@@ -386,6 +397,7 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
             scene=scene,
             story=story,
             earned_at_level=station,
+            event=event,
         )
         if entry is not None:
             minted.append(entry)

@@ -332,6 +332,15 @@ const JournalsPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded deed page (#3466 Task 10) — the Rite of Honors: a legendary
+// deed, its honors, and the form to write one more.
+// ---------------------------------------------------------------------------
+
+const DeedPage = lazy(() =>
+  import('@/legend/components/DeedPage').then((m) => ({ default: m.DeedPage }))
+);
+
+// ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
 
@@ -432,6 +441,16 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <JournalsPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/deeds/:id"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <DeedPage />
                 </ProtectedRoute>
               </Suspense>
             }

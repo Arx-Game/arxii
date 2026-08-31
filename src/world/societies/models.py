@@ -1783,6 +1783,114 @@ class LegendSettlementConfig(SharedMemoryModel):
         )
 
 
+class LegendLevelCalibration(SharedMemoryModel):
+    """Per-level dials for honoring a deed and for deed-granted titles (#3466).
+
+    One row per character level. Sibling of ``RiskCalibration``, which keys by risk
+    tier as this keys by level. Authored content: **nothing in code invents these
+    numbers**, and lookups are deliberately unguarded - a missing row raises so the
+    admin required-content panel surfaces it, rather than a silent default quietly
+    mispricing every honor. Do not add a ``try``/``except`` or a ``.first() or ...``
+    fallback at any call site.
+    """
+
+    level = models.PositiveSmallIntegerField(
+        unique=True,
+        help_text="The character level this row prices. Level 0 is meaningful: a deed "
+        "settled at station 0 was won outside a perilous stakes contract.",
+    )
+    honor_hares_required = models.PositiveSmallIntegerField(
+        help_text="Golden Hares a character of this level surrenders to honor a deed.",
+    )
+    honor_value_added = models.PositiveIntegerField(
+        help_text="Legend a voice at this level adds to a deed, before the event ceiling "
+        "clamps it.",
+    )
+    deed_title_threshold = models.PositiveIntegerField(
+        help_text="base_value a deed at this station must reach before it grants its "
+        "earner a title.",
+    )
+
+    class Meta:
+        ordering = ["level"]
+        verbose_name = "Legend Level Calibration"
+        verbose_name_plural = "Legend Level Calibrations"
+
+    def __str__(self) -> str:
+        return f"Level {self.level} legend calibration"
+
+
+class LegendHonor(SharedMemoryModel):
+    """One person's paid, written testimony to one deed (#3466).
+
+    An honor is the record of the Rite of Honors: Golden Hares surrendered, a public
+    journal written, and legend added to a deed within the ceiling its event proved.
+    Distinct from ``LegendDeedStory``, which is the free account anyone may write and
+    rewrite about a deed - an honor costs something and moves the number.
+
+    Story-significant: never hard-deleted. Staff strike a farcical honor by deactivating
+    its deed (``LegendEntry.is_active``), which zeroes the deed's value without
+    destroying who said what.
+    """
+
+    deed = models.ForeignKey(LegendEntry, on_delete=models.CASCADE, related_name="honors")
+    # PROTECT (unlike sibling persona FKs LegendSpread.spreader_persona / LegendDeedStory.author,
+    # both CASCADE): story-significant per the class docstring, so a persona delete must not
+    # silently erase who spoke an honor.
+    honorer = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.PROTECT,
+        related_name="honors_given",
+        help_text="The face that spoke. The journal is authored by their sheet, so an "
+        "honor is never anonymous.",
+    )
+    journal_entry = models.ForeignKey(
+        "arxii.JournalEntry",
+        on_delete=models.PROTECT,
+        related_name="legend_honors",
+        help_text="The public journal written as part of the rite.",
+    )
+    deed_story = models.ForeignKey(
+        "arxii.LegendDeedStory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legend_honors",
+        help_text="The mirrored account on the deed. Nullable: the author may later "
+        "rewrite or remove it through the ordinary deed-story surface.",
+    )
+    hares = models.ManyToManyField(
+        "arxii.FavorTokenDetails",
+        related_name="honors",
+        blank=True,
+        help_text="The Golden Hares surrendered, kept for provenance.",
+    )
+    hares_spent = models.PositiveSmallIntegerField(
+        help_text="Denormalized count of hares, so a deed page does not query the M2M "
+        "once per honor.",
+    )
+    value_added = models.PositiveIntegerField(
+        help_text="Legend this voice actually contributed, after the event ceiling "
+        "clamped it. May be less than the calibration row's value.",
+    )
+    established_deed = models.BooleanField(
+        default=False,
+        help_text="True when this honor is the one that created the deed.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Legend Honor"
+        verbose_name_plural = "Legend Honors"
+        constraints = [
+            models.UniqueConstraint(fields=["deed", "honorer"], name="unique_honor_per_honorer"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.honorer} honors {self.deed}"
+
+
 class LegendContribution(SharedMemoryModel):
     """What one character actually did during a staked unit (#3463).
 

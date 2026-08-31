@@ -76,6 +76,15 @@ def grant_deed_knowledge(
     return len(created)
 
 
+def knows_deed(*, persona: Persona, deed: LegendEntry) -> bool:
+    """Whether ``persona`` knows of ``deed`` (#3466).
+
+    The read half of ``grant_deed_knowledge``. Honoring an existing deed requires
+    knowledge; establishing a new one requires presence (``scene_witness_personas``).
+    """
+    return PersonaDeedKnowledge.objects.filter(persona=persona, deed=deed).exists()
+
+
 def scene_witness_personas(scene: Scene) -> list[Persona]:
     """Everyone "on the scene list" as personas (generous by design, #902).
 
@@ -140,5 +149,6 @@ __all__ = [
     "DeedKnowledgeSource",
     "grant_deed_knowledge",
     "known_deed_ids",
+    "knows_deed",
     "scene_witness_personas",
 ]

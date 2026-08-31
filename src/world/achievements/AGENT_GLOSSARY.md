@@ -31,3 +31,13 @@ _Avoid_: ability change, capability notification, technique grant (too narrow)
 **Eligible earner**:
 A character sheet currently piloted by a regular player, i.e. holding a current, non-staff RosterTenure. Only eligible earners can earn a CharacterAchievement, claim a first-ever Discovery, receive rewards, or fire the stories reactivity hook. The single predicate is `can_earn_achievements` in `achievements/services.py`, enforced inside `grant_achievement` so every caller inherits it (#3024, ADR-0202).
 _Avoid_: ceremony eligible (the narrower pre-#3024 term), tenured sheet (staff tenures are still ineligible)
+
+**PersonaTitle** (retargeted from `CharacterTitle`, #3466, ADR-0253):
+The earned, displayable record of a title, hung on a **Persona**, never the CharacterSheet — a
+title names a face, and a deed earned behind a mask must title the mask, never surface on the
+character sheet and out the player wearing it. Exactly one of two branches is set: `reward` (an
+achievement-earned TITLE `RewardDefinition`, always granted to the sheet's PRIMARY persona,
+never the active one — see `_grant_title`) or `legend_entry` (a `societies.LegendEntry` that
+crossed its station's `deed_title_threshold`, minted onto `deed.persona` by
+`maybe_grant_deed_title`).
+_Avoid_: **CharacterTitle** — the pre-#3466 name; do not reintroduce a sheet-scoped title record.

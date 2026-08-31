@@ -205,6 +205,37 @@ class CreateJournalEntryTest(TestCase):
 
 @patch("world.journals.services.increment_stat")
 @patch("world.journals.services.award_xp")
+class JournalXPOptOutTests(TestCase):
+    """#3466: an honoring journal (Rite of Honors) is not the author's own weekly post."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.sheet.character.db_account = cls.account
+        cls.sheet.character.save()
+
+    def test_award_weekly_xp_false_writes_no_tracker(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        create_journal_entry(
+            author=self.sheet, title="t", body="b", is_public=True, award_weekly_xp=False
+        )
+        assert not WeeklyJournalXP.objects.filter(character_sheet=self.sheet).exists()
+
+    def test_default_still_awards(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        create_journal_entry(author=self.sheet, title="t", body="b", is_public=True)
+        assert WeeklyJournalXP.objects.filter(character_sheet=self.sheet).exists()
+
+
+@patch("world.journals.services.increment_stat")
+@patch("world.journals.services.award_xp")
 class CreateJournalResponseTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
