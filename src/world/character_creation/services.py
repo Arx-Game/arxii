@@ -2448,7 +2448,7 @@ def finalize_gm_character(
     )
     if claim_as_npc:
         # #3426: bind the finalizing GM's own account by an active tenure, the
-        # same working-set shape mint_story_npc/mint_staff_character grant --
+        # same working-set shape mint_story_npc/mint_gm_character grant --
         # what the persona picker and telnet @ic key on.
         player_data, _ = PlayerData.objects.get_or_create(account=draft.account)
         RosterTenure.objects.create(

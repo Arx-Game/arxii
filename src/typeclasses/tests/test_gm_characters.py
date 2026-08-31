@@ -2,6 +2,11 @@
 
 from django.test import TestCase
 
+from evennia_extensions.factories import (
+    CharacterFactory,
+    GMCharacterFactory,
+    StaffCharacterFactory,
+)
 from typeclasses.characters import Character
 from typeclasses.gm_characters import GMCharacter, StaffCharacter
 
@@ -68,3 +73,18 @@ class IsStoryRunnerTest(TestCase):
 
     def test_staff_character_is_story_runner(self) -> None:
         assert StaffCharacter.is_story_runner is True
+
+
+class DisplayNameGMTagTest(TestCase):
+    """Every GM/Staff character carries an unmistakable (GM) display tag."""
+
+    def setUp(self) -> None:
+        self.gm_char = GMCharacterFactory()
+        self.staff_char = StaffCharacterFactory()
+        self.player = CharacterFactory()
+
+    def test_display_name_carries_gm_tag(self) -> None:
+        self.assertTrue(self.gm_char.get_display_name(looker=self.player).endswith(" (GM)"))
+
+    def test_staff_display_name_carries_gm_tag(self) -> None:
+        self.assertTrue(self.staff_char.get_display_name(looker=self.player).endswith(" (GM)"))

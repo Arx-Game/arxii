@@ -39,6 +39,10 @@ class _MechanicallyImmuneCharacterMixin:
         """Return a fun message when someone tries to target this character."""
         return self.TARGETING_REJECTION
 
+    def get_display_name(self, looker=None, **kwargs) -> str:
+        """Every viewer sees the (GM) tag — ambiguity about who is a GM is never allowed."""
+        return f"{super().get_display_name(looker=looker, **kwargs)} (GM)"
+
 
 class GMCharacter(_MechanicallyImmuneCharacterMixin, Character):
     """A GM's in-game presence. Can occupy rooms and interact with players,
