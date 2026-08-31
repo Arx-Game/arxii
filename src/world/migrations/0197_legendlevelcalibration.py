@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0196_alter_bossphase_vulnerability_intensity_bonus_and_more")
-    ]
+    dependencies = [("arxii", "0196_alter_bossphase_vulnerability_intensity_bonus_and_more")]
 
     operations = [
         migrations.CreateModel(
