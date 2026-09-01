@@ -99,6 +99,22 @@ jobs:
       - run: uv sync
       - run: uv run pre-commit install
       - run: uv run pre-commit run --all-files
+      # tools/tests/ had 60 passing tests and no runner before #3548 - they never ran in CI.
+      - run: uv run pytest tools/tests -q
+
+  sonar-profile-drift:
+    name: SonarCloud rule policy matches sonar-rules.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+      - run: uv sync
+      # Reads public SonarCloud endpoints, so no SONAR_TOKEN is needed here. Fails if a
+      # rule was enabled or disabled in the SonarCloud web UI without updating the file
+      # that records WHY (#3548).
+      - run: uv run python tools/sonar_profile.py --check
 
   # Sharded test execution. Each shard runs a slice of apps in parallel.
   # The `backend` job below aggregates shard results so existing branch
