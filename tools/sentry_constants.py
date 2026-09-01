@@ -35,6 +35,10 @@ class SentryAuthError(RuntimeError):
     """Raised when no Sentry auth token is configured."""
 
 
+class SentryAPIError(RuntimeError):
+    """Raised when the Sentry API rejects a call, carrying its own explanation."""
+
+
 def _token() -> str:
     token = os.environ.get(TOKEN_ENV, "").strip()
     if not token:
@@ -63,8 +67,15 @@ def api_request(
     request.add_header("Authorization", f"Bearer {_token()}")
     if data is not None:
         request.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(request) as resp:  # noqa: S310
-        raw = resp.read()
+    try:
+        with urllib.request.urlopen(request) as resp:  # noqa: S310
+            raw = resp.read()
+    except urllib.error.HTTPError as exc:
+        # Sentry puts the actual reason in the body ("Value ARX2-6 is not a valid
+        # integer id"); a bare HTTPError traceback hides it.
+        detail = exc.read().decode(errors="replace").strip()
+        msg = f"Sentry API {exc.code} on {method} {path}: {detail}"
+        raise SentryAPIError(msg) from None
     return json.loads(raw) if raw else None
 
 
@@ -101,3 +112,20 @@ def fetch_unresolved_issues(limit: int = 100) -> list[dict]:
 def issue_url(issue_id: str) -> str:
     """Permalink to a single Sentry issue."""
     return f"https://sentry.io/organizations/{SENTRY_ORG}/issues/{issue_id}/"
+
+
+def numeric_issue_id(identifier: str) -> str:
+    """Translate a short id (``ARX2-6``) to the numeric id the API needs.
+
+    The bulk issues endpoint accepts *only* numeric ids - it rejects a short id
+    with "Value ARX2-6 is not a valid integer id" - but short ids are what the
+    digest shows and what a human reads off the Sentry UI, so accept both.
+    """
+    identifier = identifier.strip()
+    if identifier.isdigit():
+        return identifier
+    found = api_request(f"/organizations/{SENTRY_ORG}/shortids/{identifier}/")
+    if not found or not found.get("groupId"):
+        msg = f"No Sentry issue found for short id {identifier!r}."
+        raise SentryAPIError(msg)
+    return str(found["groupId"])

@@ -54,9 +54,12 @@ def make_body(issues: list[dict]) -> str:
         )
     lines += [
         "",
-        "**Working one of these:** read it in Sentry, fix it on a branch, and mark it "
-        "resolved with `python tools/sentry_resolve.py <SHORT-ID>` once the fix is merged. "
-        "Close this digest when every row is handled - the next scheduled run reopens a "
+        "**Working one of these:** read it in Sentry, then establish whether a fix is "
+        "already in the *deployed* build before closing anything - "
+        "`docs/operations/sentry-triage.md` has the check. "
+        "`sentry_resolve.py <SHORT-ID>` once the fix is live; "
+        "`--status resolvedInNextRelease` when it is merged but not yet deployed. "
+        "Close this digest when every row is handled - the next scheduled run opens a "
         "fresh one if anything is still unresolved.",
     ]
     return "\n".join(lines)

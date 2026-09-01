@@ -8,7 +8,7 @@ from sentry_digest import DIGEST_MARKER, find_open_digest, make_body, make_title
 
 def _issue(
     issue_id: str = "7690351599",
-    short_id: str = "ARXII-1A",
+    short_id: str = "ARX2-6",
     level: str = "error",
     count: str = "41",
     user_count: int = 3,
@@ -39,7 +39,7 @@ def test_title_singular_for_one():
 def test_body_links_each_issue_by_short_id():
     body = make_body([_issue()])
     assert DIGEST_MARKER in body
-    assert "[ARXII-1A](https://sentry.io/organizations/arx2/issues/7690351599/)" in body
+    assert "[ARX2-6](https://sentry.io/organizations/arx2/issues/7690351599/)" in body
 
 
 def test_body_carries_counts_and_dates():

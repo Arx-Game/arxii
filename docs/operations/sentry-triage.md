@@ -14,9 +14,48 @@ is the read side.
 3. **If Sentry is clean, no issue is created**, and an open digest is closed with a
    comment. A standing "0 issues" card would only teach people to ignore the label.
 4. An agent picks a row, opens it *in Sentry*, fixes it on a branch, and ships a PR.
-5. Once merged, `python tools/sentry_resolve.py ARXII-1A` marks it resolved in Sentry.
+5. Once merged, `python tools/sentry_resolve.py ARX2-6` marks it resolved in Sentry.
    Close the digest when every row is handled; the next run opens a fresh one if
    anything is still unresolved.
+
+## Closing an issue with rigor
+
+Bugs here get fixed without anyone touching Sentry, so unresolved issues accumulate
+that are already dead. Clearing them is right, but "it looks old" is not a reason. The
+test is whether the fix is **in the build production is actually running**, and the
+answer is checkable, because every event is tagged with `release` = the deployed commit
+SHA (`SENTRY_RELEASE`, stamped by `app_deploy` at checkout).
+
+```bash
+# 1. the SHA production was running when the error last fired
+curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+  "https://sentry.io/api/0/issues/<numeric-id>/events/" |
+  python -c "import json,sys;[print(e['dateCreated'],{t['key']:t['value'] for t in e['tags']}.get('release')) for e in json.load(sys.stdin)]"
+
+# 2. the commit that fixed it
+git log -S '<the broken expression>' -- <path/to/file.py>
+
+# 3. is the fix in that build?
+git merge-base --is-ancestor <fix-sha> <deployed-sha> && echo IN || echo NOT-IN
+```
+
+Then pick the status from what you found:
+
+| What you established | Status | Why |
+| --- | --- | --- |
+| Fix is in the deployed build, no events since | `resolved` | Genuinely gone in production |
+| Fix is merged to main but **not** deployed | `resolvedInNextRelease` | Sentry reopens it if it recurs after the next release |
+| No fix identified | leave it open, or fix it | An old date is not a diagnosis |
+
+**The trap this guards:** merging to `main` does not deploy. Releases here are
+tag-triggered (`v1.2.3-release`), so main can be days ahead of production — on
+2026-09-01 the deployed build was nine days behind, and an issue whose fix had already
+merged was still firing in prod. `resolvedInNextRelease` is the honest status for that
+state; plain `resolved` would have claimed something untrue and lost the regression
+signal.
+
+Either status keeps the safety net: if the error happens again, Sentry reopens the issue
+and the next digest lists it. That is what makes closing safe rather than tidy.
 
 ## The digest deliberately withholds the error
 
@@ -66,6 +105,6 @@ project id is the `?project=` value from any Sentry issue-stream URL.
 ```bash
 python tools/sentry_digest.py --dry-run     # print the digest, touch no issue
 python tools/sentry_digest.py               # create or update the rolling digest
-python tools/sentry_resolve.py ARXII-1A     # resolve one (accepts several, or numeric ids)
-python tools/sentry_resolve.py ARXII-1A --status ignored
+python tools/sentry_resolve.py ARX2-6     # resolve one (accepts several, or numeric ids)
+python tools/sentry_resolve.py ARX2-6 --status ignored
 ```
