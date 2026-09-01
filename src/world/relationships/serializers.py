@@ -19,6 +19,8 @@ from world.relationships.models import (
 
 # Choices accepted by the feedback write endpoints.
 WRITEUP_TYPE_CHOICES = ["update", "development", "capstone"]
+_TRACK_NAME_SOURCE = "track.name"
+_AUTHOR_NAME_SOURCE = "author.character.db_key"
 
 
 class RelationshipConditionSerializer(serializers.ModelSerializer):
@@ -53,7 +55,7 @@ class RelationshipTrackSerializer(serializers.ModelSerializer):
 class HybridRequirementSerializer(serializers.ModelSerializer):
     """Serializer for a single track/tier requirement on a hybrid type."""
 
-    track_name = serializers.CharField(source="track.name", read_only=True)
+    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
 
     class Meta:
         model = HybridRequirement
@@ -77,7 +79,7 @@ class HybridRelationshipTypeSerializer(serializers.ModelSerializer):
 class RelationshipTrackProgressSerializer(serializers.ModelSerializer):
     """Serializer for track progress within a relationship."""
 
-    track_name = serializers.CharField(source="track.name", read_only=True)
+    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
     track_sign = serializers.CharField(source="track.sign", read_only=True)
     current_tier_name = serializers.SerializerMethodField()
     temporary_points = serializers.IntegerField(read_only=True)
@@ -106,8 +108,8 @@ class RelationshipTrackProgressSerializer(serializers.ModelSerializer):
 class RelationshipUpdateSerializer(serializers.ModelSerializer):
     """Serializer for relationship updates."""
 
-    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
-    track_name = serializers.CharField(source="track.name", read_only=True)
+    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
+    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
     kudos_count = serializers.SerializerMethodField()
     viewer_has_kudosed = serializers.SerializerMethodField()
 
@@ -160,8 +162,8 @@ class RelationshipUpdateSerializer(serializers.ModelSerializer):
 class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
     """Serializer for relationship development updates."""
 
-    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
-    track_name = serializers.CharField(source="track.name", read_only=True)
+    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
+    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
     kudos_count = serializers.SerializerMethodField()
     viewer_has_kudosed = serializers.SerializerMethodField()
 
@@ -213,8 +215,8 @@ class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
 class RelationshipCapstoneSerializer(serializers.ModelSerializer):
     """Serializer for relationship capstone events."""
 
-    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
-    track_name = serializers.CharField(source="track.name", read_only=True)
+    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
+    track_name = serializers.CharField(source=_TRACK_NAME_SOURCE, read_only=True)
     kudos_count = serializers.SerializerMethodField()
     viewer_has_kudosed = serializers.SerializerMethodField()
 
@@ -259,7 +261,7 @@ class RelationshipCapstoneSerializer(serializers.ModelSerializer):
 class RelationshipChangeSerializer(serializers.ModelSerializer):
     """Serializer for relationship changes (track-to-track point transfers)."""
 
-    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
+    author_name = serializers.CharField(source=_AUTHOR_NAME_SOURCE, read_only=True)
     source_track_name = serializers.CharField(source="source_track.name", read_only=True)
     target_track_name = serializers.CharField(source="target_track.name", read_only=True)
 

@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+ACCOUNT_MODEL = "accounts.AccountDB"
 INTERACTION_MODEL = "arxii.Interaction"
 PLAYER_DATA_MODEL = "arxii.PlayerData"
 SCENE_ROUND_PARTICIPANT_MODEL = "arxii.SceneRoundParticipant"
@@ -106,7 +107,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     )
 
     participants = models.ManyToManyField(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         through="SceneParticipation",
         related_name="participated_scenes",
         help_text="Accounts that have participated in this scene",
@@ -258,7 +259,7 @@ class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="participations",
     )
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="scene_participations",
     )
@@ -848,13 +849,13 @@ class BlockContactFlag(SharedMemoryModel):
     """
 
     blocker_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="The account that did the blocking (the target of the contact attempt).",
     )
     blocked_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="The blocked account that attempted contact (the initiator).",
@@ -907,7 +908,7 @@ class Interaction(SharedMemoryModel):
         "interaction has a persona, even if it's just the character's primary persona.",
     )
     writer_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1177,7 +1178,7 @@ class InteractionReaction(SharedMemoryModel):
         help_text="Denormalized from interaction for composite FK with partitioned table",
     )
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="interaction_reactions",
     )
@@ -1511,7 +1512,7 @@ class SceneRoundDefaultsConfig(SharedMemoryModel):
     )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

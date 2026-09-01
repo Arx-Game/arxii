@@ -339,6 +339,23 @@ def settle_standouts_only(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     )
 
 
+def _clears_standout_bar(participant: SettlementParticipant, min_success_level: int) -> bool:
+    """Whether this one contribution was both perilous enough and brilliant enough.
+
+    The peril half is the same per-person filter as the shared deed: brilliance is
+    only a song when the person performing it was themselves at risk. An
+    untouchable hero's flourish on a battlefield that could not hurt them is not a
+    consolation deed. A participant with no recorded `personal_risk` is not
+    filtered out — an unmeasured risk is not a measured absence of one.
+    """
+    if participant.personal_risk is not None and not risk_meets_legend_floor(
+        participant.personal_risk
+    ):
+        return False
+    level = participant.crucial_success_level
+    return level is not None and level >= min_success_level
+
+
 def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
     *,
     participants: Sequence[SettlementParticipant],
@@ -368,25 +385,16 @@ def _mint_standouts(  # noqa: PLR0913 - mirrors settle_legend_for's inputs
 
     fraction, min_success_level = _standout_dials()
     minted: list[LegendEntry] = []
+    value = round(risk_award * fraction)
+    if value <= 0:
+        return minted
     for participant in participants:
         if participant.persona.pk in already_paid:
             continue
-        # Same per-person peril filter as the shared deed: brilliance is only a
-        # song when the person performing it was themselves at risk. A
-        # untouchable hero's flourish on a battlefield that could not hurt them
-        # is not a consolation deed.
-        if participant.personal_risk is not None and not risk_meets_legend_floor(
-            participant.personal_risk
-        ):
-            continue
-        level = participant.crucial_success_level
-        if level is None or level < min_success_level:
+        if not _clears_standout_bar(participant, min_success_level):
             continue
         station = station_for(participant.level, target_level)
         if station <= 0:
-            continue
-        value = round(risk_award * fraction)
-        if value <= 0:
             continue
         deed_title = participant.standout_title or f"{title}: a deed remembered"
         entry = create_solo_deed(

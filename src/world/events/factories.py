@@ -6,6 +6,8 @@ from world.events.constants import EventStatus, InvitationTargetType
 from world.events.models import Event, EventHost, EventInvitation, EventModification
 from world.game_clock.constants import TimePhase
 
+_PERSONA_FACTORY = "world.scenes.factories.PersonaFactory"
+
 
 class EventFactory(factory_django.DjangoModelFactory):
     class Meta:
@@ -26,7 +28,7 @@ class EventHostFactory(factory_django.DjangoModelFactory):
         model = EventHost
 
     event = factory.SubFactory(EventFactory)
-    persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    persona = factory.SubFactory(_PERSONA_FACTORY)
     is_primary = True
 
 
@@ -36,8 +38,8 @@ class EventInvitationFactory(factory_django.DjangoModelFactory):
 
     event = factory.SubFactory(EventFactory)
     target_type = InvitationTargetType.PERSONA
-    target_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
-    invited_by = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    target_persona = factory.SubFactory(_PERSONA_FACTORY)
+    invited_by = factory.SubFactory(_PERSONA_FACTORY)
 
 
 class EventModificationFactory(factory_django.DjangoModelFactory):

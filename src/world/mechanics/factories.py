@@ -43,6 +43,8 @@ from world.mechanics.models import (
 )
 from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
+_OBJECTDB_FACTORY = "evennia_extensions.factories.ObjectDBFactory"
+
 _CHECK_TYPE_FACTORY_PATH = "world.checks.factories.CheckTypeFactory"
 
 
@@ -488,8 +490,8 @@ class ChallengeInstanceFactory(DjangoModelFactory):
         model = ChallengeInstance
 
     template = factory.SubFactory(ChallengeTemplateFactory)
-    location = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
-    target_object = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
+    location = factory.SubFactory(_OBJECTDB_FACTORY)
+    target_object = factory.SubFactory(_OBJECTDB_FACTORY)
     is_active = True
     is_revealed = True
 
@@ -501,7 +503,7 @@ class SituationInstanceFactory(DjangoModelFactory):
         model = SituationInstance
 
     template = factory.SubFactory(SituationTemplateFactory)
-    location = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
+    location = factory.SubFactory(_OBJECTDB_FACTORY)
 
 
 class ContextConsequencePoolFactory(DjangoModelFactory):

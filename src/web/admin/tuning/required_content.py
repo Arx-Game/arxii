@@ -15,7 +15,7 @@ the consequence a player or staff member experiences when the row is absent.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -1151,33 +1151,48 @@ def _declarations() -> tuple[ContentDependency, ...]:
     )
 
 
+def _name_batch_label(probe: ContentProbe) -> str | None:
+    """The model label whose row names this probe wants batch-fetched, or None.
+
+    `AnyRowProbe`, `FilteredRowProbe` and `CustomProbe` all resolve themselves and
+    never read `known_names`, so they return None here even when they do name a
+    model label.
+    """
+    if not probe.participates_in_name_batch():
+        return None
+    return probe.model_label()
+
+
+def _batch_known_names(dependencies: Sequence[ContentDependency]) -> dict[str, frozenset[str]]:
+    """One `values_list("name", flat=True)` per distinct model label, never one per probe.
+
+    The names are returned in their authored case. A shared model label can carry
+    both case-sensitive and case-insensitive declarations, so casefolding is left
+    to each probe's `resolve()`.
+    """
+    named_labels = {
+        label for dep in dependencies if (label := _name_batch_label(dep.probe)) is not None
+    }
+    return {
+        label: frozenset(apps.get_model("arxii", label).objects.values_list("name", flat=True))
+        for label in named_labels
+    }
+
+
 def collect_required_content() -> RequiredContentSnapshot:
     """Resolve every declared `ContentDependency` into a `RequiredContentSnapshot`.
 
-    Batches every `NamedRowsProbe` sharing a model label onto a single
-    `values_list("name", flat=True)` query - one per distinct label, never one
-    per declaration - and passes the exact-case result to each such probe's
-    `resolve()`, which casefolds on its own when `case_insensitive=True`. The
-    names are not lowercased here: a shared model label can carry both
-    case-sensitive and case-insensitive declarations (e.g. `ConditionTemplate`
-    is all case-insensitive today, but nothing stops a future case-sensitive
-    declaration on the same model), so the exact case must survive to
-    `resolve()` for it to decide. `AnyRowProbe`, `FilteredRowProbe`, and
-    `CustomProbe` all resolve themselves - none of them read `known_names`.
+    `_batch_known_names` does the name batching (one query per distinct model
+    label, never one per declaration) and passes the exact-case result to each
+    such probe's `resolve()`, which casefolds on its own when
+    `case_insensitive=True`. The names are not lowercased here: a shared model
+    label can carry both case-sensitive and case-insensitive declarations (e.g.
+    `ConditionTemplate` is all case-insensitive today, but nothing stops a future
+    case-sensitive declaration on the same model), so the exact case must survive
+    to `resolve()` for it to decide.
     """
     dependencies = build_registry(_declarations())
-
-    named_labels: set[str] = set()
-    for dependency in dependencies:
-        probe = dependency.probe
-        label = probe.model_label()
-        if probe.participates_in_name_batch() and label is not None:
-            named_labels.add(label)
-
-    known_names_by_label: dict[str, frozenset[str]] = {}
-    for label in named_labels:
-        model = apps.get_model("arxii", label)
-        known_names_by_label[label] = frozenset(model.objects.values_list("name", flat=True))
+    known_names_by_label = _batch_known_names(dependencies)
 
     missing_required: list[DependencyRow] = []
     present_required: list[DependencyRow] = []
@@ -1185,17 +1200,13 @@ def collect_required_content() -> RequiredContentSnapshot:
     present_tuning: list[DependencyRow] = []
 
     for dependency in dependencies:
-        probe = dependency.probe
-        known_names: frozenset[str] | None = None
-        probe_label = probe.model_label()
-        if probe.participates_in_name_batch() and probe_label is not None:
-            known_names = known_names_by_label[probe_label]
-        result = probe.resolve(known_names)
-        row = DependencyRow(dependency=dependency, result=result)
+        label = _name_batch_label(dependency.probe)
+        known_names = known_names_by_label[label] if label is not None else None
+        row = DependencyRow(dependency=dependency, result=dependency.probe.resolve(known_names))
         if dependency.tier == DependencyTier.REQUIRED:
-            (present_required if result.present else missing_required).append(row)
+            (present_required if row.result.present else missing_required).append(row)
         else:
-            (present_tuning if result.present else missing_tuning).append(row)
+            (present_tuning if row.result.present else missing_tuning).append(row)
 
     return RequiredContentSnapshot(
         missing_required=missing_required,

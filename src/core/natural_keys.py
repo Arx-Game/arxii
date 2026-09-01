@@ -532,33 +532,32 @@ class NaturalKeyMixin:
         config = self.__class__.NaturalKeyConfig
         key_parts: list[Any] = []
         for field_name in config.fields:
-            value = getattr(self, field_name)
-            field = self.__class__._meta.get_field(field_name)  # noqa: SLF001
-            is_self_ref = isinstance(field, ForeignKey) and field.related_model is self.__class__
-
-            if is_self_ref:
-                # Self-referential FK: nest as single value
-                if value is not None and hasattr(value, "natural_key"):
-                    key_parts.append(list(value.natural_key()))
-                else:
-                    key_parts.append(None)
-            elif hasattr(value, "natural_key"):
-                # Regular FK: flatten into tuple
-                key_parts.extend(value.natural_key())
-            elif value is None:
-                # Null FK: expand to the right number of None values so
-                # get_by_natural_key() can consume the correct argument count
-                if isinstance(field, ForeignKey) and hasattr(
-                    field.related_model, "NaturalKeyConfig"
-                ):
-                    num_args = count_natural_key_args(field.related_model)
-                    key_parts.extend([None] * num_args)
-                else:
-                    key_parts.append(None)
-            else:
-                key_parts.append(value)
-
+            key_parts.extend(self._natural_key_parts(field_name))
         return tuple(key_parts)
+
+    def _natural_key_parts(self, field_name: str) -> list[Any]:
+        """The element(s) one configured field contributes to the natural key.
+
+        Most fields contribute one element. A regular FK flattens into its
+        target's whole key; a null one expands to that many Nones so
+        ``get_by_natural_key()`` still sees the argument count it expects. A
+        self-referential FK is the exception: it nests as a single element (a
+        list, or None) so the arg count stays fixed regardless of tree depth.
+        """
+        value = getattr(self, field_name)
+        field = self.__class__._meta.get_field(field_name)  # noqa: SLF001
+
+        if isinstance(field, ForeignKey) and field.related_model is self.__class__:
+            if value is not None and hasattr(value, "natural_key"):
+                return [list(value.natural_key())]
+            return [None]
+        if hasattr(value, "natural_key"):
+            return list(value.natural_key())
+        if value is None and isinstance(field, ForeignKey):
+            if hasattr(field.related_model, "NaturalKeyConfig"):
+                return [None] * count_natural_key_args(field.related_model)
+            return [None]
+        return [value]
 
     @classmethod
     def natural_key_dependencies(cls) -> list[str]:

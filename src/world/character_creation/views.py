@@ -108,6 +108,8 @@ from world.magic.types.cg_catalog import TechniqueOptions
 from world.species.models import Language, Species, SpeciesStatBonus
 from world.stories.pagination import StandardResultsSetPagination
 
+_NO_APPLICATION_DETAIL = "No application found."
+
 logger = logging.getLogger(__name__)
 
 
@@ -1023,7 +1025,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         try:
@@ -1043,7 +1045,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         comment = request.data.get("comment", "")
@@ -1064,7 +1066,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         try:
@@ -1088,7 +1090,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         serializer = DraftApplicationDetailSerializer(application)
@@ -1106,7 +1108,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         text = request.data.get("text", "")

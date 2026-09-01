@@ -54,6 +54,24 @@ def _regenerate_model_map() -> None:
         logger.exception("MODEL_MAP.md regeneration failed")
 
 
+def _resolved_dependency(
+    loader: MigrationLoader,
+    ignored_migrations: dict[str, set[str]],
+    dep_app: str,
+    dep_name: str,
+) -> str:
+    """Repoint a dependency that names a migration we are about to throw away.
+
+    A phantom Evennia migration we refuse to write cannot be depended on, so the
+    dependency moves to that app's current leaf instead. Anything else — and the
+    case where the excluded app has no migrations at all — keeps the name it had.
+    """
+    if dep_name not in ignored_migrations.get(dep_app, frozenset()):
+        return dep_name
+    leaves = loader.graph.leaf_nodes(dep_app)
+    return leaves[0][1] if leaves else dep_name
+
+
 class Command(BaseCommand):
     """Override makemigrations to default to our custom apps only."""
 
@@ -103,18 +121,10 @@ class Command(BaseCommand):
                 continue
 
             for migration in migrations:
-                new_deps = []
-                for dep_app, dep_name in migration.dependencies:
-                    if dep_app in ignored_migrations and dep_name in ignored_migrations[dep_app]:
-                        leaves = loader.graph.leaf_nodes(dep_app)
-                        if leaves:
-                            resolved_dep_name = leaves[0][1]
-                        else:
-                            resolved_dep_name = dep_name
-                    else:
-                        resolved_dep_name = dep_name
-                    new_deps.append((dep_app, resolved_dep_name))
-                migration.dependencies = new_deps
+                migration.dependencies = [
+                    (dep_app, _resolved_dependency(loader, ignored_migrations, dep_app, dep_name))
+                    for dep_app, dep_name in migration.dependencies
+                ]
             filtered_changes[app_label] = migrations
 
         result = super().write_migration_files(

@@ -556,7 +556,43 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
         _broadcast_to_location(location, payload)
 
 
-def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct branches
+def _is_receiver_scoped(interaction: Interaction) -> bool:
+    """Whether this interaction is limited to its writer and named receivers.
+
+    Whispers, table talk (place-scoped) and receiver-scoped mutters stay between
+    writer and receivers even inside a public scene, mirroring the real-time push
+    rule so the persisted log never shows more than the room heard. A mutter
+    WITHOUT receiver rows is the public fragment (#905) — what the room heard —
+    and is not receiver-scoped, so it falls through to scene-level visibility.
+    """
+    if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
+        return True
+    return (
+        interaction.mode == InteractionMode.MUTTER
+        and InteractionReceiver.objects.filter(interaction=interaction).exists()
+    )
+
+
+def _private_scene_admits(scene: Scene, persona: Persona, *, is_writer: bool) -> bool:
+    """Whether a private scene's log is open to this persona.
+
+    Participation is Account-based (via ``SceneParticipation``), so a persona
+    whose character has no current tenure resolves to no account and is admitted
+    only as the writer.
+    """
+    from world.scenes.models import SceneParticipation  # noqa: PLC0415
+
+    account_id = _get_account_for_persona(persona)
+    if account_id is None:
+        return is_writer
+    is_participant = SceneParticipation.objects.filter(
+        scene=scene,
+        account_id=account_id,
+    ).exists()
+    return is_participant or is_writer
+
+
+def can_view_interaction(
     interaction: Interaction,
     persona: Persona,
     *,
@@ -585,10 +621,11 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
         interaction=interaction,
         persona=persona,
     ).exists()
+    heard_it = is_receiver or is_writer
 
     # Very private: only original receivers and writer, never staff
     if interaction.visibility == InteractionVisibility.VERY_PRIVATE:
-        return is_receiver or is_writer
+        return heard_it
 
     # Staff can see everything except very_private
     if is_staff:
@@ -598,41 +635,17 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
     # event, plus staff (already returned True above). Unlike VERY_PRIVATE this
     # tier still admits staff — checked here, after the staff early-return.
     if interaction.visibility == InteractionVisibility.PERCEIVED_ONLY:
-        return is_receiver or is_writer
+        return heard_it
 
-    # Whisper, receiver-scoped mutter, or place-scoped (table talk): only
-    # writer + receivers, even inside a public or private scene. A mutter
-    # WITHOUT receiver rows is the public fragment (#905) — what the room
-    # heard — and falls through to scene-level visibility.
-    if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
-        return is_receiver or is_writer
-    if (
-        interaction.mode == InteractionMode.MUTTER
-        and InteractionReceiver.objects.filter(interaction=interaction).exists()
-    ):
-        return is_receiver or is_writer
+    if _is_receiver_scoped(interaction):
+        return heard_it
 
     # Private scene: all scene participants
     scene = interaction.scene
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.PRIVATE:
-        # Check if persona's account is a scene participant
-        from world.scenes.models import SceneParticipation  # noqa: PLC0415
+        return _private_scene_admits(scene, persona, is_writer=is_writer)
 
-        account_id = _get_account_for_persona(persona)
-        if account_id is not None:
-            is_participant = SceneParticipation.objects.filter(
-                scene=scene,
-                account_id=account_id,
-            ).exists()
-            if is_participant or is_writer:
-                return True
-        return is_writer
-
-    # Public scene or no scene with room-wide mode = public
-    if scene is not None and scene.privacy_mode == ScenePrivacyMode.PUBLIC:
-        return True
-
-    # Default: public (pose/emit/say/shout/action without a scene)
+    # Public scene, or no scene at all (pose/emit/say/shout/action) = public
     return True
 
 

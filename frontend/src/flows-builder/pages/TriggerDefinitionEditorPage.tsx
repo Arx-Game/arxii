@@ -95,6 +95,25 @@ function fromServer(td: TriggerDefinition): EditorState {
   };
 }
 
+/**
+ * Everything wrong with the current draft, filter problems included.
+ *
+ * Collects all of them rather than stopping at the first, so the editor can
+ * show the whole list at once.
+ */
+function collectErrors(
+  state: EditorState,
+  priority: number,
+  filterOps: readonly string[]
+): string[] {
+  const errors = validateFilter(state.baseFilterCondition, filterOps);
+  if (!state.name.trim()) errors.push('Name is required.');
+  if (!state.eventName) errors.push('Event is required.');
+  if (state.flowDefinition === null) errors.push('Flow is required.');
+  if (Number.isNaN(priority)) errors.push('Priority must be a number.');
+  return errors;
+}
+
 export function TriggerDefinitionEditorPage() {
   const { tdId: tdIdParam } = useParams<{ tdId: string }>();
   const navigate = useNavigate();
@@ -164,11 +183,7 @@ export function TriggerDefinitionEditorPage() {
   const save = () => {
     if (!catalog) return;
     const priority = parseInt(state.priority, 10);
-    const errors = validateFilter(state.baseFilterCondition, catalog.filter_ops);
-    if (!state.name.trim()) errors.push('Name is required.');
-    if (!state.eventName) errors.push('Event is required.');
-    if (state.flowDefinition === null) errors.push('Flow is required.');
-    if (Number.isNaN(priority)) errors.push('Priority must be a number.');
+    const errors = collectErrors(state, priority, catalog.filter_ops);
     setValidationErrors(errors);
     if (errors.length > 0) return;
 

@@ -63,6 +63,14 @@ _SOCIAL_ACTION_TEMPLATES = [
 _ENTRANCE_TEMPLATE_NAME = "Entrance"
 _POOL_PREFIX = "Social"
 
+# The Boon ask and its three flavors share one outcome triple (read-only; only ever
+# iterated when seeding).
+_BOON_CONSEQUENCES: list[tuple[str, str, int]] = [
+    ("Failure", "The ask lands badly", 1),
+    (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
+    ("Success", "They grant the boon", 1),
+]
+
 # (outcome_tier_name, label, weight) per action — the three standard tiers.
 _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
     "Intimidate": [
@@ -80,28 +88,13 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         (_OUTCOME_PARTIAL_SUCCESS, "Target intrigued but unconvinced", 2),
         ("Success", "Target fully persuaded", 1),
     ],
-    "Boon": [
-        ("Failure", "The ask lands badly", 1),
-        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
-        ("Success", "They grant the boon", 1),
-    ],
+    "Boon": _BOON_CONSEQUENCES,
     # #2540 slice 3 — the ask flavors reuse the Boon triple verbatim (flavor-neutral
-    # labels; the check type carries the flavor, not the outcome text).
-    "Con a Boon": [
-        ("Failure", "The ask lands badly", 1),
-        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
-        ("Success", "They grant the boon", 1),
-    ],
-    "Charm a Boon": [
-        ("Failure", "The ask lands badly", 1),
-        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
-        ("Success", "They grant the boon", 1),
-    ],
-    "Menace a Boon": [
-        ("Failure", "The ask lands badly", 1),
-        (_OUTCOME_PARTIAL_SUCCESS, "They hesitate, unmoved", 2),
-        ("Success", "They grant the boon", 1),
-    ],
+    # labels; the check type carries the flavor, not the outcome text), so they share
+    # the one `_BOON_CONSEQUENCES` list rather than restating it.
+    "Con a Boon": _BOON_CONSEQUENCES,
+    "Charm a Boon": _BOON_CONSEQUENCES,
+    "Menace a Boon": _BOON_CONSEQUENCES,
     "Deceive": [
         ("Failure", "Lie detected immediately", 1),
         (_OUTCOME_PARTIAL_SUCCESS, "Partial deception holds", 2),

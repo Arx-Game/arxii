@@ -165,6 +165,63 @@ def start_action_resolution(  # noqa: PLR0913
     return pending
 
 
+def _resume_remaining_gates(
+    pending: PendingActionResolution,
+    context: ResolutionContext,
+    template: ActionTemplate,
+) -> bool:
+    """Run the gates that had not been reached yet; True if one aborted the pipeline.
+
+    Picks up at the gate after the last recorded result, so a resumed pipeline
+    never re-rolls a gate the player already saw. A gate with no outcome counts
+    as failed.
+    """
+    gates = list(template.gates.order_by("step_order"))
+    for gate in gates[len(pending.gate_results) :]:
+        gate_result = _run_gate(context.character, gate, pending.target_difficulty, context)
+        pending.gate_results.append(gate_result)
+        gate_failed = (
+            gate_result.check_result.success_level <= 0
+            if gate_result.check_result.outcome
+            else True
+        )
+        if gate_failed and gate.failure_aborts:
+            pending.current_phase = ResolutionPhase.GATE_RESOLVED
+            return True
+    return False
+
+
+def _resume_confirmed(
+    pending: PendingActionResolution, context: ResolutionContext
+) -> PendingActionResolution:
+    """Continue a pipeline the player just confirmed, from wherever it paused."""
+    from actions.models import ActionTemplate  # noqa: PLC0415
+
+    pending.awaiting_confirmation = False
+    template = ActionTemplate.objects.get(pk=pending.template_id)
+
+    if pending.current_phase == ResolutionPhase.GATE_PENDING and _resume_remaining_gates(
+        pending, context, template
+    ):
+        return pending
+
+    # Gates passed, or there were none left: run the main step.
+    if pending.main_result is None:
+        pending.current_phase = ResolutionPhase.MAIN_PENDING
+        pending.main_result = _run_main_step(
+            context.character,
+            template,
+            pending.target_difficulty,
+            context,
+            pending.extra_modifiers,
+            effort_level=pending.effort_level,
+        )
+        pending.current_phase = ResolutionPhase.MAIN_RESOLVED
+
+    pending.current_phase = ResolutionPhase.COMPLETE
+    return pending
+
+
 def advance_resolution(
     pending: PendingActionResolution,
     context: ResolutionContext,
@@ -180,8 +237,6 @@ def advance_resolution(
       - "abort": set phase to COMPLETE, return without further resolution
       - "reroll": re-run consequence selection on the current step
     """
-    from actions.models import ActionTemplate  # noqa: PLC0415
-
     if player_decision == PlayerDecision.ABORT:
         pending.awaiting_confirmation = False
         pending.awaiting_intervention = False
@@ -189,45 +244,7 @@ def advance_resolution(
         return pending
 
     if player_decision == PlayerDecision.CONFIRM and pending.awaiting_confirmation:
-        pending.awaiting_confirmation = False
-        template = ActionTemplate.objects.get(pk=pending.template_id)
-        character = context.character
-
-        if pending.current_phase == ResolutionPhase.GATE_PENDING:
-            # Resume gate processing from where we left off
-            gates = list(template.gates.order_by("step_order"))
-            processed_count = len(pending.gate_results)
-
-            for gate in gates[processed_count:]:
-                gate_result = _run_gate(character, gate, pending.target_difficulty, context)
-                pending.gate_results.append(gate_result)
-
-                gate_failed = (
-                    gate_result.check_result.success_level <= 0
-                    if gate_result.check_result.outcome
-                    else True
-                )
-
-                if gate_failed and gate.failure_aborts:
-                    pending.current_phase = ResolutionPhase.GATE_RESOLVED
-                    return pending
-
-        # If gates passed (or no more gates), run main step
-        if pending.main_result is None:
-            pending.current_phase = ResolutionPhase.MAIN_PENDING
-            main_result = _run_main_step(
-                character,
-                template,
-                pending.target_difficulty,
-                context,
-                pending.extra_modifiers,
-                effort_level=pending.effort_level,
-            )
-            pending.main_result = main_result
-            pending.current_phase = ResolutionPhase.MAIN_RESOLVED
-
-        pending.current_phase = ResolutionPhase.COMPLETE
-        return pending
+        return _resume_confirmed(pending, context)
 
     if player_decision == PlayerDecision.REROLL:
         pending.awaiting_intervention = False

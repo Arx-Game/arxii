@@ -166,6 +166,58 @@ def _apply_on_use_pool(template: ItemTemplate, user: ObjectDB, context: Resoluti
     return pending.check_result, applied
 
 
+def _run_pre_charge_gates(
+    *,
+    locked: ItemInstance,
+    user: ObjectDB,
+    target: ObjectDB | None,
+    option_id: int | None,
+    blend: bool,
+) -> FormTraitOption | None:
+    """Every refusal that must land BEFORE a charge is spent, and the chosen option.
+
+    Each of these raises rather than burning a use: an unusable or spent item, an
+    unattuned holder, a target who has not consented to being restyled, a missing
+    or mismatched choose-at-use option, an exotic style the actor does not know,
+    and a blend request against a trait with no composite option. Returns the
+    resolved choose-at-use option (None for a fixed-option or non-cosmetic
+    template) for the caller to hand to the appearance effects.
+    """
+    template = locked.template
+    has_appearance_effects = template.appearance_effects.exists()
+    has_disguise_kit_effects = template.disguise_kit_effects.exists()
+    if (
+        template.on_use_pool_id is None
+        and not has_appearance_effects
+        and not has_disguise_kit_effects
+    ):
+        raise ItemNotUsable
+    if template.is_consumable and locked.charges <= 0:
+        raise NoChargesRemaining
+
+    # Attunement gate (#3430): requires_attunement templates are inert for a holder
+    # the instance isn't attuned to — resolve the acting sheet from the user ObjectDB
+    # (character_sheet is None for a sheet-less actor, which never matches a real
+    # attuned_to_character_sheet_id).
+    if template.requires_attunement:
+        acting_sheet = user.character_sheet
+        acting_sheet_pk = acting_sheet.pk if acting_sheet is not None else None
+        if locked.attuned_to_character_sheet_id != acting_sheet_pk:
+            raise ItemNotAttuned
+
+    if not has_appearance_effects:
+        return None
+
+    # Styling someone else (#2632): a refused makeover never burns a dye.
+    if target is not None and target != user:
+        _require_makeover_consent(user, target)
+    chosen_option = _resolve_choose_at_use_option(template, option_id)
+    _require_style_knowledge(user, chosen_option)
+    if blend:
+        _require_blendable(template)
+    return chosen_option
+
+
 @transaction.atomic
 def use_item(  # noqa: PLR0913
     *,
@@ -203,43 +255,13 @@ def use_item(  # noqa: PLR0913
     application teaches the recipient — you learn a look by having it done."""
     locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
     template = locked.template
-    has_appearance_effects = template.appearance_effects.exists()
-    has_disguise_kit_effects = template.disguise_kit_effects.exists()
-    if (
-        template.on_use_pool_id is None
-        and not has_appearance_effects
-        and not has_disguise_kit_effects
-    ):
-        raise ItemNotUsable
-    if template.is_consumable and locked.charges <= 0:
-        raise NoChargesRemaining
-
-    # Attunement gate (#3430): refuse BEFORE any charge is spent. requires_attunement
-    # templates are inert for a holder the instance isn't attuned to — resolve the
-    # acting sheet from the user ObjectDB (character_sheet is None for a sheet-less
-    # actor, which never matches a real attuned_to_character_sheet_id).
-    if template.requires_attunement:
-        acting_sheet = user.character_sheet
-        acting_sheet_pk = acting_sheet.pk if acting_sheet is not None else None
-        if locked.attuned_to_character_sheet_id != acting_sheet_pk:
-            raise ItemNotAttuned
-
-    # Styling someone else (#2632): consent-gate BEFORE any charge is spent,
-    # so a refused makeover never burns a dye.
-    if has_appearance_effects and target is not None and target != user:
-        _require_makeover_consent(user, target)
-
-    # Choose-at-use cosmetics (#2632): resolve the chosen option BEFORE any
-    # charge is spent, so a missing/invalid choice never burns a use. The
-    # exotic-style gate and blendability check run pre-charge for the same
-    # reason.
-    chosen_option = (
-        _resolve_choose_at_use_option(template, option_id) if has_appearance_effects else None
+    chosen_option = _run_pre_charge_gates(
+        locked=locked,
+        user=user,
+        target=target,
+        option_id=option_id,
+        blend=blend,
     )
-    if has_appearance_effects:
-        _require_style_knowledge(user, chosen_option)
-        if blend:
-            _require_blendable(template)
 
     context = ResolutionContext(character=user, target=target)
     check_result, applied = _apply_on_use_pool(template, user, context)

@@ -179,6 +179,50 @@ def can_embezzle_from(organization: Organization, carrier_persona: Persona) -> b
     return True
 
 
+def _resolve_one_transit(
+    *,
+    vault: OrganizationVault,
+    item: ItemInstance,
+    carrier_persona: Persona,
+    keep: bool,
+) -> VaultTransitResolution:
+    """Settle one carried item and return the resolution to stamp on its transit.
+
+    A kept item is embezzled: it stays in the carrier's hands and books NO vault
+    event (the double-gate that authorizes this ran in the caller). Otherwise the
+    item deposits, with two wrinkles the #2540 review found:
+
+    - Already vaulted HERE (a plain ``VaultDepositAction`` beat this call to it):
+      resolve DEPOSITED without a second holding or a duplicate event.
+    - The carrier no longer holds it (sold it, or it sits in a DIFFERENT org's
+      vault): fail the whole act loudly rather than yanking it out of the buyer's
+      hands. The caller's ``@transaction.atomic`` rolls back anything resolved so
+      far. This check runs strictly after the already-vaulted-here one, since a
+      vaulted item's holder is null and would otherwise wrongly trip it.
+    """
+    if keep:
+        return VaultTransitResolution.KEPT
+    if VaultHolding.objects.filter(vault=vault, item_instance=item).exists():
+        return VaultTransitResolution.DEPOSITED
+    if item.holder_character_sheet_id != carrier_persona.character_sheet_id:
+        msg = "PLACEHOLDER: you no longer carry all of the take."
+        raise ValidationError(msg)
+    if item.game_object is not None:
+        item.game_object.delete()
+        item.game_object = None
+    item.holder_character_sheet = None
+    item.save(update_fields=["holder_character_sheet", "game_object"])
+    VaultHolding.objects.create(vault=vault, item_instance=item, deposited_by=carrier_persona)
+    OrgVaultEvent.objects.create(
+        vault=vault,
+        item_instance=item,
+        kind=OrgVaultEventKind.DEPOSIT,
+        actor_persona=carrier_persona,
+        reason="collection deposit",
+    )
+    return VaultTransitResolution.DEPOSITED
+
+
 @transaction.atomic
 def resolve_vault_transit(
     *,
@@ -234,40 +278,9 @@ def resolve_vault_transit(
         locked_transit = VaultTransit.objects.select_for_update().get(pk=transit.pk)
         if locked_transit.resolved_at is not None:
             continue
-        if item.pk in keep_ids:
-            transit.resolution = VaultTransitResolution.KEPT
-        else:
-            already_vaulted_here = VaultHolding.objects.filter(
-                vault=vault, item_instance=item
-            ).exists()
-            if already_vaulted_here:
-                # Finding 3: delivered already (plain deposit beat this call to it) —
-                # resolve without creating a duplicate holding or duplicate event.
-                transit.resolution = VaultTransitResolution.DEPOSITED
-            elif item.holder_character_sheet_id != carrier_persona.character_sheet_id:
-                # Finding 2: the carrier no longer holds this item — sold it, or it's
-                # vaulted in a DIFFERENT org's vault. Fail the whole act loudly; the
-                # @transaction.atomic wrapper rolls back anything resolved so far in
-                # this call.
-                msg = "PLACEHOLDER: you no longer carry all of the take."
-                raise ValidationError(msg)
-            else:
-                if item.game_object is not None:
-                    item.game_object.delete()
-                    item.game_object = None
-                item.holder_character_sheet = None
-                item.save(update_fields=["holder_character_sheet", "game_object"])
-                VaultHolding.objects.create(
-                    vault=vault, item_instance=item, deposited_by=carrier_persona
-                )
-                OrgVaultEvent.objects.create(
-                    vault=vault,
-                    item_instance=item,
-                    kind=OrgVaultEventKind.DEPOSIT,
-                    actor_persona=carrier_persona,
-                    reason="collection deposit",
-                )
-                transit.resolution = VaultTransitResolution.DEPOSITED
+        transit.resolution = _resolve_one_transit(
+            vault=vault, item=item, carrier_persona=carrier_persona, keep=item.pk in keep_ids
+        )
         transit.resolved_at = now
         transit.save(update_fields=["resolution", "resolved_at"])
     return transits

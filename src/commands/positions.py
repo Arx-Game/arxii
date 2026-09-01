@@ -30,6 +30,7 @@ from commands.utils.gm_resolution import resolve_position_by_name
 
 _SWITCH_PLACE = "place"
 _USAGE_PLACE = "Usage: position/place <target>=<position name>"
+_NOT_ANYWHERE = "You aren't anywhere."
 
 
 class CmdPosition(ArxCommand):
@@ -72,7 +73,7 @@ class CmdPosition(ArxCommand):
 
         room = self.caller.location
         if room is None:
-            self.msg("You aren't anywhere.")
+            self.msg(_NOT_ANYWHERE)
             return
         positions = list(Position.objects.filter(room=room).order_by("pk"))
         if not positions:
@@ -106,7 +107,7 @@ class CmdPosition(ArxCommand):
 
         room = self.caller.location
         if room is None:
-            msg = "You aren't anywhere."
+            msg = _NOT_ANYWHERE
             raise CommandError(msg)
         position = resolve_position_by_name(room, name)
 
@@ -127,7 +128,7 @@ class CmdPosition(ArxCommand):
 
         room = self.caller.location
         if room is None:
-            msg = "You aren't anywhere."
+            msg = _NOT_ANYWHERE
             raise CommandError(msg)
 
         # Co-located search only -- cannot name anything outside the caller's
