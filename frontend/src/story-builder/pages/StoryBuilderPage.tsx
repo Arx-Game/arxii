@@ -7,18 +7,18 @@
  * the story palette hides/renames), right is the selected room's detail
  * panel plus its access-grant list.
  *
- * Structurally mirrors `WorldBuilderPage`
- * (`@/world-builder/pages/WorldBuilderPage`) — the GM-owned character-id
- * resolution is identical (see that page's module doc): dispatch still
- * needs a `characterId` even though story-builder actions are gated on GM
- * trust rather than staff, because `Action.run(actor=<puppet>)` always needs
- * an acting ObjectDB.
+ * Structurally mirrors the retired grid-first `WorldBuilderPage` (#3538 —
+ * replaced by the Atlas for staff; this page is now the sole consumer of the
+ * shared `WorldCanvas`/`DigRoomDialog`/`LinkRoomsDialog`/`RoomDetailPanel`
+ * set): dispatch still needs a `characterId` even though story-builder
+ * actions are gated on GM trust rather than staff, because
+ * `Action.run(actor=<puppet>)` always needs an acting ObjectDB.
  *
  * `StoryAreaListPanel`/`CreateStoryAreaDialog`/`TempRoomsPanel`/
  * `RoomAccessPanel` are story-builder-only (not shared with world-builder) —
  * see `StoryAreaListPanel`'s doc comment for why a GM's flat, non-nested
- * story areas don't fit `AreaTreePanel`'s recursive-tree shape or its
- * hardwired staff data source.
+ * story areas didn't fit the (also-retired) `AreaTreePanel`'s
+ * recursive-tree shape or its hardwired staff data source.
  */
 import { useMemo, useState } from 'react';
 
