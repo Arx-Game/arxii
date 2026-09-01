@@ -342,6 +342,47 @@ def _apply_area_plain_fields(area: Any, kwargs: dict[str, Any]) -> str | None:
     return None
 
 
+def _apply_room_profile_flags(
+    profile: Any, kwargs: dict[str, Any], enclosure_choices: Any
+) -> str | None:
+    """Apply staff_edit_room's profile-flag kwargs, saving touched fields; error or None."""
+    update_fields = []
+    if kwargs.get("is_social_hub") is not None:
+        profile.is_social_hub = bool(kwargs["is_social_hub"])
+        update_fields.append("is_social_hub")
+    if kwargs.get("is_outdoor") is not None:
+        profile.is_outdoor = bool(kwargs["is_outdoor"])
+        update_fields.append("is_outdoor")
+    enclosure = kwargs.get("enclosure")
+    if enclosure:
+        valid = {choice for choice, _ in enclosure_choices.choices}
+        if enclosure not in valid:
+            options = ", ".join(sorted(valid))
+            return f"Pick an enclosure: {options}."
+        profile.enclosure = enclosure
+        update_fields.append("enclosure")
+    if update_fields:
+        profile.save(update_fields=update_fields)
+    return None
+
+
+def _resolve_art_media(art_id: Any) -> tuple[Any | None, str | None]:
+    """Resolve an ``art_id`` kwarg to ``(Media | None, error)`` (#3535).
+
+    Truthy id -> the Media row (or an error when it doesn't exist); falsy
+    (0/""/null) -> None, meaning "take the art down". Callers only invoke
+    this when the kwarg is present -- absent means untouched.
+    """
+    from evennia_extensions.models import Media  # noqa: PLC0415
+
+    if not art_id:
+        return None, None
+    media = Media.objects.filter(pk=art_id).first()
+    if media is None:
+        return None, "No such art."
+    return media, None
+
+
 def _apply_area_metadata(area: Any, kwargs: dict[str, Any]) -> tuple[str | None, str]:
     """Apply every Phase C metadata kwarg to ``area``, pre-save (#3269)."""
     error, climate_note = _apply_area_named_fks(area, kwargs)
@@ -350,6 +391,11 @@ def _apply_area_metadata(area: Any, kwargs: dict[str, Any]) -> tuple[str | None,
     plain_error = _apply_area_plain_fields(area, kwargs)
     if plain_error is not None:
         return plain_error, ""
+    if kwargs.get("art_id") is not None:
+        media, art_error = _resolve_art_media(kwargs["art_id"])
+        if art_error is not None:
+            return art_error, ""
+        area.art = media
     return None, climate_note
 
 
@@ -573,7 +619,9 @@ class EditAreaAction(_WorldBuilderAction):
     ``parent_id``, plus the Phase C metadata (#3269): ``realm``/``climate``/
     ``dominant_society`` (names; empty string clears), ``description``,
     ``color``, ``permit_eligibility``, ``grid_x``/``grid_y`` (parent-local
-    ward placement).
+    ward placement), and ``art_id`` (#3535 — a ``Media`` pk hung as the
+    area's ``art``; falsy takes it down, absent leaves it untouched; rooms
+    beneath inherit via the most-specific-wins cascade).
 
     A slug change is refused once a room beneath carries a fixture key —
     keys are permanent from that moment (shares ``ensure_slug_change_allowed``
@@ -724,7 +772,9 @@ class StaffEditRoomAction(_WorldBuilderAction):
     """Edit a world room's display data + profile flags.
 
     Kwargs: ``room_id``, optional ``name``/``description``/``is_public``/
-    ``is_social_hub``/``is_outdoor``/``enclosure``.
+    ``is_social_hub``/``is_outdoor``/``enclosure``, and ``art_id`` (#3535 —
+    a ``Media`` pk hung as the room's ``ObjectDisplayData.thumbnail``; falsy
+    takes the art down, absent leaves it untouched).
     """
 
     key: str = "staff_edit_room"
@@ -758,23 +808,18 @@ class StaffEditRoomAction(_WorldBuilderAction):
                 )
             except RoomEditError as exc:
                 return ActionResult(success=False, message=exc.user_message)
-        update_fields = []
-        if kwargs.get("is_social_hub") is not None:
-            profile.is_social_hub = bool(kwargs["is_social_hub"])
-            update_fields.append("is_social_hub")
-        if kwargs.get("is_outdoor") is not None:
-            profile.is_outdoor = bool(kwargs["is_outdoor"])
-            update_fields.append("is_outdoor")
-        enclosure = kwargs.get("enclosure")
-        if enclosure:
-            valid = {choice for choice, _ in RoomEnclosure.choices}
-            if enclosure not in valid:
-                options = ", ".join(sorted(valid))
-                return ActionResult(success=False, message=f"Pick an enclosure: {options}.")
-            profile.enclosure = enclosure
-            update_fields.append("enclosure")
-        if update_fields:
-            profile.save(update_fields=update_fields)
+        flags_error = _apply_room_profile_flags(profile, kwargs, RoomEnclosure)
+        if flags_error is not None:
+            return ActionResult(success=False, message=flags_error)
+        if kwargs.get("art_id") is not None:
+            from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
+
+            media, art_error = _resolve_art_media(kwargs["art_id"])
+            if art_error is not None:
+                return ActionResult(success=False, message=art_error)
+            ObjectDisplayData.objects.update_or_create(
+                object=profile.objectdb, defaults={"thumbnail": media}
+            )
         return ActionResult(success=True, message=f"{profile.objectdb.db_key} updated.")
 
 

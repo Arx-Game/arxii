@@ -37,6 +37,7 @@ import { PlateHead } from '@/components/folio';
 import { Textarea } from '@/components/ui/textarea';
 
 import { EditAreaDialog } from '../components/EditAreaDialog';
+import { ArtDialog } from './ArtDialog';
 import { useAreaManagerQuery, useWorldBuilderAction } from '../queries';
 import type { WorldBuilderActionKey, WorldBuilderAreaManager } from '../types';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
@@ -90,6 +91,7 @@ function AreaDocumentBody({
   const descDraft = useDraft(areaId, 'area-description', area.description ?? '');
 
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [artOpen, setArtOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const handleSave = () => {
@@ -182,7 +184,20 @@ function AreaDocumentBody({
         </div>
       </div>
 
-      <AreaMarginalia manager={manager} onEditMetadata={() => setMetadataOpen(true)} />
+      <AreaMarginalia
+        manager={manager}
+        onEditMetadata={() => setMetadataOpen(true)}
+        onOpenArt={() => setArtOpen(true)}
+      />
+
+      <ArtDialog
+        open={artOpen}
+        onOpenChange={setArtOpen}
+        subjectName={area.name}
+        currentArtUrl={area.art_url}
+        onHang={(mediaId) => runAction('edit_area', { area_id: areaId, art_id: mediaId })}
+        onTakeDown={() => runAction('edit_area', { area_id: areaId, art_id: 0 })}
+      />
 
       <EditAreaDialog
         area={area}
@@ -229,9 +244,11 @@ function Kv({ term, children }: { term: string; children: React.ReactNode }) {
 function AreaMarginalia({
   manager,
   onEditMetadata,
+  onOpenArt,
 }: {
   manager: WorldBuilderAreaManager;
   onEditMetadata: () => void;
+  onOpenArt: () => void;
 }) {
   const area = manager.area;
   const climate = area.climate
@@ -283,6 +300,14 @@ function AreaMarginalia({
             none hung — rooms beneath inherit whatever hangs above
           </p>
         )}
+        <button
+          type="button"
+          className="mt-1 text-left font-body text-xs italic text-muted-foreground hover:text-primary"
+          onClick={onOpenArt}
+          data-testid="open-area-art-button"
+        >
+          ✎ hang art…
+        </button>
       </div>
 
       <button

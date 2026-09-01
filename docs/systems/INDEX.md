@@ -1153,7 +1153,10 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   same inline-cascade convention as `get_effective_climate` on that serializer;
   `world.locations.services.resolve_area_art(room_profile)` is the room-level entry
   point — a room's own `ObjectDisplayData.thumbnail` wins outright, else it falls back to
-  the area cascade). Two new REGISTRY actions, `staff_add_ambient_condition`/
+  the area cascade). Authoring (#3535): `staff_edit_room`/`edit_area` take an `art_id`
+  (`Media` pk; falsy takes the art down, absent leaves it untouched), reached from both
+  documents' marginalia via the shared `ArtDialog` (library + upload reuse
+  `/api/roster/media/`). Two new REGISTRY actions, `staff_add_ambient_condition`/
   `staff_remove_ambient_condition`, wire the pre-existing (BUILT NOT WIRED)
   `AmbientEmoteCondition` model to the canvas — kwargs `line_id`/`condition_type`/
   `target_id` plus per-type extras (`minimum_value` for RESONANCE_MIN, `min_fame_tier`/
