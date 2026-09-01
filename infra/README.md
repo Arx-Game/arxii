@@ -174,9 +174,9 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   `SENTRY_ENVIRONMENT` (prod: `production`; rehearsal: `rehearsal`) and
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
   checkout) are derived on-box, not operator-supplied. Reading errors *back*
-  out of Sentry is a separate credential (`SENTRY_AUTH_TOKEN`, an org auth
-  token) used only by CI and developer tooling, never by the game process —
-  see `docs/operations/sentry-triage.md`.
+  out of Sentry is a separate credential (`SENTRY_AUTH_TOKEN`, an internal-
+  integration token) used only by CI and developer tooling, never by the game
+  process — see `docs/operations/sentry-triage.md`.
 
 **Pre-stored by the operator — ansible-step-only, never written to the app's
 own EnvironmentFile (#3153; a third category alongside "on-box runtime"

@@ -1,10 +1,13 @@
 """Shared Sentry Web API access for the digest and resolve tools.
 
-Read access needs a Sentry *organization* auth token in ``SENTRY_AUTH_TOKEN``
-(scopes: ``org:read``, ``project:read``, ``event:read``, and ``event:write`` for
-resolving). This is deliberately a different credential from the ``SENTRY_DSN``
-in ``src/server/conf/settings.py`` — the DSN is write-only ingest and cannot read
-anything back.
+Read access needs ``SENTRY_AUTH_TOKEN`` carrying ``org:read``, ``project:read``,
+``event:read`` and ``event:write`` (the last for resolving). Mint it as an
+**internal integration** token (Settings -> Developer Settings, permission
+*Issue & Event: Read & Write*) or a user auth token - *not* an organization auth
+token (``sntrys_``), whose fixed release-management scopes 403 on every issue
+endpoint. This is a different credential from the ``SENTRY_DSN`` in
+``src/server/conf/settings.py``, which is write-only ingest and reads nothing back.
+See ``docs/operations/sentry-triage.md``.
 """
 
 import json
@@ -31,9 +34,9 @@ def _token() -> str:
     token = os.environ.get(TOKEN_ENV, "").strip()
     if not token:
         msg = (
-            f"{TOKEN_ENV} is not set. Create an organization auth token at "
-            f"https://sentry.io/settings/{SENTRY_ORG}/auth-tokens/ with scopes "
-            f"org:read, project:read, event:read, event:write."
+            f"{TOKEN_ENV} is not set. Create an internal-integration or user auth "
+            f"token with scopes org:read, project:read, event:read, event:write "
+            f"(NOT an org auth token - see docs/operations/sentry-triage.md)."
         )
         raise SentryAuthError(msg)
     return token

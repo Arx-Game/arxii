@@ -6,8 +6,10 @@ production exceptions accumulated where no agent could see them. `tools/sentry_d
 plus `.github/workflows/sentry-digest.yml` close that loop on a daily 09:00 UTC schedule,
 rewriting a single rolling GitHub issue labelled `sentry` with the currently-unresolved
 Sentry issues; `tools/sentry_resolve.py` marks them resolved once the fix ships. Read
-access is a Sentry **organization auth token** (`SENTRY_AUTH_TOKEN`), structurally a
-different credential from the DSN, which can only write.
+access is `SENTRY_AUTH_TOKEN`, structurally a different credential from the DSN, which
+can only write - and specifically *not* a Sentry organization auth token, whose fixed
+release-management scopes 403 on every issue endpoint (see
+`docs/operations/sentry-triage.md`).
 
 **This repo is public, and that decides the digest's content.** Each row carries only
 Sentry's own short id, a permalink, the level, event and user counts, and first/last-seen

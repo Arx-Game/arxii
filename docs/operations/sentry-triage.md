@@ -33,10 +33,25 @@ requires Sentry access. That is the trade, taken on purpose.
 
 ## Credentials
 
-`SENTRY_AUTH_TOKEN` is a Sentry **organization auth token** — a different credential from
-the ingest DSN, which cannot read. Mint it at
-`https://sentry.io/settings/arx2/auth-tokens/` with scopes `org:read`, `project:read`,
-`event:read`, and `event:write` (the last is what `sentry_resolve.py` needs).
+`SENTRY_AUTH_TOKEN` needs `org:read`, `project:read`, `event:read` and `event:write`
+(the last is what `sentry_resolve.py` needs). It is a different credential from the
+ingest DSN, which can only write.
+
+**Not an Organization Auth Token.** The tokens under
+`https://sentry.io/settings/arx2/auth-tokens/` (they start `sntrys_`) are
+release-management credentials for sentry-cli — their scopes are fixed, not editable,
+and they 403 on every issue-read endpoint. Verified 2026-09-01: one returned 403 even
+on `GET /organizations/arx2/`. Use one of these instead:
+
+- **Internal Integration (preferred).** Settings -> Developer Settings -> New Internal
+  Integration; set Permissions -> *Issue & Event: Read & Write*, then copy the generated
+  token. It belongs to the org rather than a person, so it survives anyone leaving, and
+  its permissions genuinely are selectable.
+- **User Auth Token.** Settings -> Account -> API -> Auth Tokens
+  (`https://sentry.io/settings/account/api/auth-tokens/`), ticking the four scopes above.
+  Quicker, but it is tied to one person's account.
+
+Once minted, store it in both places:
 
 - **CI:** `gh secret set SENTRY_AUTH_TOKEN --repo Arx-Game/arxii`. The workflow step is
   guarded by `if: env.SENTRY_AUTH_TOKEN != ''`, so before the secret exists the job skips
