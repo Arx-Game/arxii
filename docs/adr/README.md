@@ -88,7 +88,7 @@ treat those names as hints to confirm, not gospel.
 - [0195 — All first-party apps collapse into one Django app, `arxii`](0195-single-app-collapse-arxii.md) (#2906; narrows ADR-0013; relates to ADR-0021)
 - [0196 - Content credit is a row mixin; contributors are content](0196-content-credit-is-a-row-mixin-and-contributors-are-content.md) (#2980; related ADR-0010, ADR-0146)
 - [0197 - Traps ride situations, and a GM manages them rather than authoring them](0197-traps-ride-situations-and-are-managed-not-authored.md) (#3002; applies ADR-0110; relates to #1895, #2865)
-- [0200 - Schema-construction paths are held equivalent by a nightly diff, names excluded](0200-schema-paths-are-diff-gated.md) (#2982; related ADR-0083, ADR-0195, ADR-0018)
+- [0200 - Schema-construction paths are held equivalent by a nightly diff, names excluded](0200-schema-paths-are-diff-gated.md) (#2982, extended by #3544; related ADR-0083, ADR-0195, ADR-0018)
 - [0201 - Credited rows are frozen against loads; sample content only seeds an empty universe](0201-credited-rows-are-frozen-against-loads.md) (#3017; extends ADR-0196; related ADR-0168, ADR-0171, ADR-0191, ADR-0142)
 - [0206 - Acquisition provenance is a first-class record, not a snapshot](0206-acquisition-provenance-is-first-class-not-a-snapshot.md) (#3055 slice 1b; related #3060)
 - [0207 - The beta-reset wipe is guarded by a hardcoded constant AND a one-way latch](0207-beta-reset-guarded-by-hardcoded-constant-and-one-way-latch.md) (#3055 PR 2; related ADR-0206)
