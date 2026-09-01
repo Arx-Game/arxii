@@ -125,7 +125,7 @@ class ChallengeAction(Action):
     target_kind: TargetKind = TargetKind.CHARACTER
     target_filters: TargetFilters = field(default=_CHALLENGE_TARGET_FILTERS)
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -575,7 +575,7 @@ class ProposeLethalDuelAction(Action):
     target_type: TargetType = TargetType.AREA
     costs_turn: bool = False
 
-    def execute(  # noqa: PLR0911, PLR0913 - distinct guard failures + GM-verb kwarg shape
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

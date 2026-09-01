@@ -115,9 +115,12 @@ def _resolve_condition_thumbnail(
 
     for inst in visible:
         # Stage thumbnail overrides template thumbnail
-        if inst.current_stage_id is not None and inst.current_stage is not None:
-            if inst.current_stage.thumbnail_id is not None:
-                return inst.current_stage.thumbnail.cloudinary_url
+        if (
+            inst.current_stage_id is not None
+            and inst.current_stage is not None
+            and inst.current_stage.thumbnail_id is not None
+        ):
+            return inst.current_stage.thumbnail.cloudinary_url
         if inst.condition.thumbnail_id is not None:
             return inst.condition.thumbnail.cloudinary_url
 

@@ -1531,7 +1531,7 @@ def _maybe_move_to_destination(character: ObjectDB, destination_room: ObjectDB |
     character.save(update_fields=["db_location"])
 
 
-def attempt_wake(  # noqa: PLR0911 - one return per resolved wake-attempt outcome
+def attempt_wake(
     character_sheet: CharacterSheet | None,
     *,
     in_combat_tick: bool = False,

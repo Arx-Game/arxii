@@ -123,9 +123,10 @@ def _check_target_prerequisites(
     caster_od = initiator_persona.character_sheet.character
     msg = "Target does not meet this technique's targeting requirement."
 
-    if technique.target_type == ActionTargetType.SELF:
-        if not _target_meets_prerequisites(technique, caster_od, initiator_persona):
-            raise InvalidCastTarget(msg)
+    if technique.target_type == ActionTargetType.SELF and not _target_meets_prerequisites(
+        technique, caster_od, initiator_persona
+    ):
+        raise InvalidCastTarget(msg)
 
     for persona in target_personas:
         if not _target_meets_prerequisites(technique, caster_od, persona):

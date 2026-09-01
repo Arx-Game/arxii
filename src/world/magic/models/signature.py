@@ -134,16 +134,20 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
         except Motif.DoesNotExist:
             return False
 
-        if self.required_resonance_id is not None:
-            if not motif.resonances.filter(resonance_id=self.required_resonance_id).exists():
-                return False
+        if (
+            self.required_resonance_id is not None
+            and not motif.resonances.filter(resonance_id=self.required_resonance_id).exists()
+        ):
+            return False
 
-        if self.required_facet_id is not None:
-            if not MotifResonanceAssociation.objects.filter(
+        if (
+            self.required_facet_id is not None
+            and not MotifResonanceAssociation.objects.filter(
                 motif_resonance__motif=motif,
                 facet_id=self.required_facet_id,
-            ).exists():
-                return False
+            ).exists()
+        ):
+            return False
 
         return True
 

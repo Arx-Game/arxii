@@ -1060,16 +1060,15 @@ class SocietyReputation(SharedMemoryModel):
         """
         super().clean()
 
-        if self.persona_id:
-            if not self.persona.is_established_or_primary:
-                raise ValidationError(
-                    {
-                        "persona": (
-                            "Only primary identities or established personas can have "
-                            "society reputations."
-                        )
-                    }
-                )
+        if self.persona_id and not self.persona.is_established_or_primary:
+            raise ValidationError(
+                {
+                    "persona": (
+                        "Only primary identities or established personas can have "
+                        "society reputations."
+                    )
+                }
+            )
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
@@ -1138,16 +1137,15 @@ class OrganizationReputation(SharedMemoryModel):
         """
         super().clean()
 
-        if self.persona_id:
-            if not self.persona.is_established_or_primary:
-                raise ValidationError(
-                    {
-                        "persona": (
-                            "Only primary identities or established personas can have "
-                            "organization reputations."
-                        )
-                    }
-                )
+        if self.persona_id and not self.persona.is_established_or_primary:
+            raise ValidationError(
+                {
+                    "persona": (
+                        "Only primary identities or established personas can have "
+                        "organization reputations."
+                    )
+                }
+            )
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""

@@ -847,22 +847,23 @@ class CharacterCovenantRole(SharedMemoryModel):
                     ),
                 }
             )
-        if self.covenant_role.command_tier == CommandTier.SUPREME:
-            if self._another_engaged_supreme_exists():
-                raise ValidationError(
-                    {
-                        "engaged": (
-                            "Another engaged Supreme Commander already exists for this covenant."
-                        ),
-                    }
-                )
-        if self.covenant_role.is_champion_role:
-            if self._another_engaged_champion_exists():
-                raise ValidationError(
-                    {
-                        "engaged": ("Another engaged Champion already exists for this covenant."),
-                    }
-                )
+        if (
+            self.covenant_role.command_tier == CommandTier.SUPREME
+            and self._another_engaged_supreme_exists()
+        ):
+            raise ValidationError(
+                {
+                    "engaged": (
+                        "Another engaged Supreme Commander already exists for this covenant."
+                    ),
+                }
+            )
+        if self.covenant_role.is_champion_role and self._another_engaged_champion_exists():
+            raise ValidationError(
+                {
+                    "engaged": ("Another engaged Champion already exists for this covenant."),
+                }
+            )
 
     def _another_same_type_engaged_exists(self) -> bool:
         """True if another active engaged membership of the same covenant type AND

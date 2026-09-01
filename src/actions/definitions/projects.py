@@ -40,7 +40,7 @@ class DonateToProjectAction(Action):
     category: str = "projects"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0911 — distinct guard returns, each a specific failure message
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -111,7 +111,7 @@ class CheckContributeAction(Action):
     category: str = "projects"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0911 — distinct guard returns, each a specific failure message
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

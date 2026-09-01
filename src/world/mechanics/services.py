@@ -1860,13 +1860,17 @@ def _source_meets_effect_requirements(
     source: CapabilitySource,
 ) -> bool:
     """Check if a source meets the effect property requirements of app and approach."""
-    if app.required_effect_property_id:
-        if app.required_effect_property_id not in source.effect_property_ids:
-            return False
+    if (
+        app.required_effect_property_id
+        and app.required_effect_property_id not in source.effect_property_ids
+    ):
+        return False
 
-    if approach.required_effect_property_id:
-        if approach.required_effect_property_id not in source.effect_property_ids:
-            return False
+    if (
+        approach.required_effect_property_id
+        and approach.required_effect_property_id not in source.effect_property_ids
+    ):
+        return False
 
     return True
 

@@ -286,7 +286,7 @@ def _check_class_level_unlock_gate(character: ObjectDB) -> bool:
     return requirements_met
 
 
-def _evaluate_majora_gates(  # noqa: PLR0911
+def _evaluate_majora_gates(
     character: ObjectDB, runtime_intensity: int, sheet: CharacterSheet
 ) -> tuple[AudereMajoraThreshold | None, int]:
     """Run all Audere Majora eligibility gates, returning the threshold + stage.

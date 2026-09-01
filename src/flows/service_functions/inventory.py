@@ -203,7 +203,7 @@ def _placed_as_active_decoration(item_instance: ItemInstance) -> bool:
     return RoomDecoration.objects.filter(source_item_instance=item_instance).exists()
 
 
-def _take_denial(  # noqa: PLR0911
+def _take_denial(
     taker_sheet: CharacterSheet | None, item_instance: ItemInstance
 ) -> type[InventoryError] | None:
     """Why plain take refuses this item (#1909), or None when take is allowed.
@@ -620,7 +620,7 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
     )
 
 
-def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:  # noqa: PLR0911
+def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
     """Target-side-only availability (#1909): NPC-owned always; players by consent.
 
     An actively-placed decoration (#2991) is never stealable: routing it through

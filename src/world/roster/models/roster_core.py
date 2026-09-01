@@ -104,14 +104,12 @@ class RosterEntry(SharedMemoryModel):
     def clean(self) -> None:
         """Validate that profile picture belongs to this character's tenure."""
         super().clean()
-        if self.profile_picture:
-            if self.profile_picture.tenure.roster_entry != self:
-                raise ValidationError(
-                    {
-                        "profile_picture": "Profile picture must belong to this "
-                        "character's tenure.",
-                    },
-                )
+        if self.profile_picture and self.profile_picture.tenure.roster_entry != self:
+            raise ValidationError(
+                {
+                    "profile_picture": "Profile picture must belong to this character's tenure.",
+                },
+            )
 
     # Movement tracking
     joined_roster = models.DateTimeField(auto_now_add=True)

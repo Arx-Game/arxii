@@ -402,9 +402,8 @@ class StartDefenseInstallationAction(Action):
                 if condition is None:
                     return None, _MSG_CONDITION_NOT_FOUND.format(name=condition_id)
 
-        if condition is not None:
-            if not condition.category.is_negative:
-                return None, _MSG_CONDITION_NOT_NEGATIVE
+        if condition is not None and not condition.category.is_negative:
+            return None, _MSG_CONDITION_NOT_NEGATIVE
 
         return condition, None
 

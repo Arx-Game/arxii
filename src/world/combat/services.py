@@ -3936,7 +3936,7 @@ def _get_eligible_entries(
 _TargetT = TypeVar("_TargetT")
 
 
-def _select_targets_core(  # noqa: PLR0911
+def _select_targets_core(
     entry: ThreatPoolEntry,
     candidates: list[_TargetT],
     health_of: Callable[[list[_TargetT]], list[int]],
@@ -6622,9 +6622,10 @@ def _action_matches_slot(
         if slot.resonance_requirement_id not in resonance_ids:
             return False
     # #2022: check required_archetype (a blend-axis label, #2529) if set.
-    if slot.required_archetype:
-        if not _participant_has_archetype(action.participant, slot.required_archetype):
-            return False
+    if slot.required_archetype and not _participant_has_archetype(
+        action.participant, slot.required_archetype
+    ):
+        return False
     return True
 
 

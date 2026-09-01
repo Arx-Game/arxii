@@ -116,7 +116,7 @@ def _already_have(kind: str, prefetched: _Prefetched) -> bool:
     return False
 
 
-def _resolve_eligibility(  # noqa: PLR0911
+def _resolve_eligibility(
     sheet: CharacterSheet,
     milestone: MagicProgressionMilestone,
     current_stage: int,

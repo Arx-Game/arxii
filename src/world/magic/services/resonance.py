@@ -531,7 +531,7 @@ _ALWAYS_IN_ACTION_KINDS = frozenset(
 )
 
 
-def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: PLR0911
+def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     """Return True iff ``thread``'s anchor is involved in the action (Spec A §5.2).
 
     Relationship anchors are always considered in-action (player asserts
@@ -565,7 +565,7 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: 
     return False
 
 
-def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat by design
+def _anchor_ambiently_active(
     thread: Thread,
     ctx: PullActionContext,
     *,
@@ -1243,9 +1243,11 @@ def _validate_pull_threads_for_commit(
                 raise CovenantRoleNotEngagedError
             msg = "Thread anchor is not involved in this action."
             raise InvalidImbueAmount(msg)
-        if t.target_kind == TargetKind.FACET:
-            if not character_sheet.character.equipped_items.item_facets_for(t.target_facet):
-                raise NoMatchingWornFacetItemsError
+        if (
+            t.target_kind == TargetKind.FACET
+            and not character_sheet.character.equipped_items.item_facets_for(t.target_facet)
+        ):
+            raise NoMatchingWornFacetItemsError
 
 
 @transaction.atomic

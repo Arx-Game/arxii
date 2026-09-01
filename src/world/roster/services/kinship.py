@@ -685,7 +685,7 @@ def _incarnation_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | No
     return None
 
 
-def derive_relationship(  # noqa: C901, PLR0911 — one branch/return per precedence label
+def derive_relationship(  # noqa: C901
     a: Kinsperson, b: Kinsperson, viewer: object
 ) -> str | None:
     """Label the visible relationship from ``a`` to ``b`` (or None).
