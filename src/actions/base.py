@@ -282,7 +282,58 @@ class Action:
             return ""
         return result.reason or ""
 
-    def run(  # noqa: C901
+    def _apply_enhancements(
+        self,
+        context: ActionContext,
+        actor: ObjectDB | None,
+        enhancements: list[ActionEnhancement] | None,
+    ) -> None:
+        """Apply the player's chosen enhancements, then the involuntary ones.
+
+        Involuntary enhancements are character-scoped, so there are none to
+        apply when there is no actor (an account-authorized event action).
+        """
+        from actions.enhancements import get_involuntary_enhancements  # noqa: PLC0415
+
+        for enh in enhancements or []:
+            enh.apply(context)
+        if actor is None:
+            return
+        for enh in get_involuntary_enhancements(self.key, actor):
+            enh.apply(context)
+
+    def _emit_intent(self, context: ActionContext, actor: ObjectDB | None) -> ActionResult | None:
+        """Emit ACTION_INTENT and return a refusal result if a flow cancelled it.
+
+        Intent fires BEFORE the prerequisite gate (#3418): it means "the actor
+        wants to do this" and fires even when they can't, so a cancelling flow
+        refuses the attempt before anything is charged. Account-authorized calls
+        (actor is None) have no scene context and emit nothing.
+
+        A flow may also redirect the action by rewriting ``intent.target``; the
+        redirect is written back into kwargs so prerequisites and execute() see
+        it (the movement-redirect pattern, ADR-0242). ``context.target`` is
+        deliberately left as-dispatched.
+        """
+        if actor is None:
+            return None
+        from flows.constants import EventName  # noqa: PLC0415
+        from flows.emit import emit_event  # noqa: PLC0415
+        from flows.events.payloads import ActionIntentPayload  # noqa: PLC0415
+
+        original_target = context.kwargs.get("target")
+        intent = ActionIntentPayload(actor=actor, action_key=self.key, target=original_target)
+        stack = emit_event(EventName.ACTION_INTENT, intent, location=actor.location)
+        if stack.was_cancelled():
+            return ActionResult(
+                success=False,
+                message=intent.cancel_message or "Something prevents you.",
+            )
+        if intent.target is not original_target:
+            context.kwargs["target"] = intent.target
+        return None
+
+    def run(
         self,
         actor: ObjectDB | None,
         enhancements: list[ActionEnhancement] | None = None,
@@ -293,10 +344,12 @@ class Action:
         This is the primary entry point. Both commands (telnet) and the
         web action dispatcher call this method.
 
-        High C901 complexity is expected here and not a sign to split the
-        method: it is a linear lifecycle of gates (enhancements, intent
-        event, prerequisites, costs, execute, result event) that reads
-        clearest as one straight-line sequence.
+        This reads as one straight-line lifecycle on purpose — enhancements,
+        intent event, prerequisites, costs, execute, result event, in that
+        order — and the sequence should stay visible here. The two steps that
+        have their own internal branching (`_apply_enhancements`,
+        `_emit_intent`) are named rather than inlined; the rest are gates that
+        belong in the line.
 
         ``actor`` is the character performing the action and may be ``None``
         for **account-authorized** actions that need no character context —
@@ -316,7 +369,6 @@ class Action:
         Returns:
             Structured result of the action.
         """
-        from actions.enhancements import get_involuntary_enhancements  # noqa: PLC0415
         from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
 
         # Build context
@@ -331,43 +383,11 @@ class Action:
             scene_data=sdm,
         )
 
-        # Apply voluntary enhancements (chosen by player)
-        for enh in enhancements or []:
-            enh.apply(context)
+        self._apply_enhancements(context, actor, enhancements)
 
-        # Query and apply involuntary enhancements (character-scoped — none to
-        # apply when there is no actor, e.g. an account-authorized event action).
-        if actor is not None:
-            for enh in get_involuntary_enhancements(self.key, actor):
-                enh.apply(context)
-
-        # Emit the intent event BEFORE the prerequisite gate (#3418): intent
-        # means "the actor wants to do this" and fires even when they can't.
-        # A cancelling flow refuses the attempt before anything is charged.
-        # Account-authorized calls (actor is None) have no scene context and
-        # emit nothing.
-        if actor is not None:
-            from flows.constants import EventName  # noqa: PLC0415
-            from flows.emit import emit_event  # noqa: PLC0415
-            from flows.events.payloads import ActionIntentPayload  # noqa: PLC0415
-
-            original_target = context.kwargs.get("target")
-            intent = ActionIntentPayload(
-                actor=actor,
-                action_key=self.key,
-                target=original_target,
-            )
-            stack = emit_event(EventName.ACTION_INTENT, intent, location=actor.location)
-            if stack.was_cancelled():
-                return ActionResult(
-                    success=False,
-                    message=intent.cancel_message or "Something prevents you.",
-                )
-            if intent.target is not original_target:
-                # Redirect written back so prerequisites and execute() see it
-                # (the movement-redirect pattern, ADR-0242). context.target is
-                # deliberately left as-dispatched.
-                context.kwargs["target"] = intent.target
+        cancelled = self._emit_intent(context, actor)
+        if cancelled is not None:
+            return cancelled
 
         # Enforce prerequisites against the final (post-enhancement) kwargs.
         # run() is the single telnet+web chokepoint; prerequisites read kwargs

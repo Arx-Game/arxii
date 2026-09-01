@@ -553,6 +553,61 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
         fields = ["id", "scene", "persona", "persona_name", "content", "action", "timestamp"]
         read_only_fields = ["timestamp"]
 
+    def _validate_persona_is_the_requester(self, persona: Persona) -> None:
+        """The revision must be signed with a face the requesting account actually wears."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return
+        roster_entry = persona.character_sheet.roster_entry_or_none
+        if roster_entry is None:
+            raise serializers.ValidationError(
+                {"persona": "Persona's character has no roster entry."}
+            )
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        owns_character = RosterTenure.objects.filter(
+            roster_entry=roster_entry,
+            player_data__account=request.user,
+            end_date__isnull=True,
+        ).exists()
+        if not owns_character:
+            raise serializers.ValidationError(
+                {"persona": "You can only submit revisions as your own persona."}
+            )
+
+    def _validate_persona_was_there(self, scene: Scene, persona: Persona) -> None:
+        """The signing persona's account must be a participant of the scene being summarized.
+
+        A persona with no roster entry, or whose character has no active tenure,
+        has no account to check against and is left to the ownership check above.
+        """
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        # Audit fix (was getattr(...character, "roster_entry", None)): the reverse
+        # OneToOne lives on the SHEET — the old receiver was the ObjectDB character,
+        # so this always resolved None and the participant check silently never ran.
+        roster_entry = persona.character_sheet.roster_entry_or_none
+        if not roster_entry:
+            return
+        active_tenure = (
+            RosterTenure.objects.filter(
+                roster_entry=roster_entry,
+                end_date__isnull=True,
+            )
+            .select_related("player_data")
+            .first()
+        )
+        if not active_tenure:
+            return
+        is_participant = SceneParticipation.objects.filter(
+            scene=scene,
+            account=active_tenure.player_data.account,
+        ).exists()
+        if not is_participant:
+            raise serializers.ValidationError(
+                {"persona": "Persona must belong to a participant of this scene."}
+            )
+
     def validate(self, attrs: dict) -> dict:
         scene = attrs.get("scene")
         persona = attrs.get("persona")
@@ -561,55 +616,10 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"scene": "Summary revisions can only be submitted for ephemeral scenes."}
             )
-
         if persona:
-            request = self.context.get("request")
-            if request and request.user.is_authenticated:
-                # Check the requesting user owns the character behind this persona
-                roster_entry = persona.character_sheet.roster_entry_or_none
-                if roster_entry is None:
-                    raise serializers.ValidationError(
-                        {"persona": "Persona's character has no roster entry."}
-                    )
-                from world.roster.models import RosterTenure  # noqa: PLC0415
-
-                owns_character = RosterTenure.objects.filter(
-                    roster_entry=roster_entry,
-                    player_data__account=request.user,
-                    end_date__isnull=True,
-                ).exists()
-                if not owns_character:
-                    raise serializers.ValidationError(
-                        {"persona": "You can only submit revisions as your own persona."}
-                    )
-
+            self._validate_persona_is_the_requester(persona)
         if scene and persona:
-            # Check that persona's character's account is a scene participant
-            from world.roster.models import RosterTenure  # noqa: PLC0415
-
-            # Audit fix (was getattr(...character, "roster_entry", None)): the reverse
-            # OneToOne lives on the SHEET — the old receiver was the ObjectDB character,
-            # so this always resolved None and the participant check silently never ran.
-            roster_entry = persona.character_sheet.roster_entry_or_none
-            if roster_entry:
-                active_tenure = (
-                    RosterTenure.objects.filter(
-                        roster_entry=roster_entry,
-                        end_date__isnull=True,
-                    )
-                    .select_related("player_data")
-                    .first()
-                )
-                if active_tenure:
-                    is_participant = SceneParticipation.objects.filter(
-                        scene=scene,
-                        account=active_tenure.player_data.account,
-                    ).exists()
-                    if not is_participant:
-                        raise serializers.ValidationError(
-                            {"persona": "Persona must belong to a participant of this scene."}
-                        )
-
+            self._validate_persona_was_there(scene, persona)
         return attrs
 
 
