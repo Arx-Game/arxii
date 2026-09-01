@@ -3885,9 +3885,11 @@ def _treatment_gate_parent_match(
     if treatment.target_kind == TreatmentTargetKind.PRIMARY:
         if target_effect.condition_id != treatment.target_condition_id:
             raise TreatmentParentMismatch
-    elif treatment.target_kind == TreatmentTargetKind.AFTERMATH:
-        if target_effect.condition.parent_condition_id != treatment.target_condition_id:
-            raise TreatmentParentMismatch
+    elif (
+        treatment.target_kind == TreatmentTargetKind.AFTERMATH
+        and target_effect.condition.parent_condition_id != treatment.target_condition_id
+    ):
+        raise TreatmentParentMismatch
     # PENDING_ALTERATION: no parent-match check per spec §5.2 step 2.
 
 

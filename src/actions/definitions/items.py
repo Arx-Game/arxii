@@ -365,7 +365,7 @@ class ActivatePermitAction(Action):
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

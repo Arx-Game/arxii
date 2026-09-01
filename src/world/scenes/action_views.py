@@ -340,7 +340,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             " no row is created, no error occurred (#2540 slice 3)."
         ),
     )
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -568,7 +568,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
 
     @extend_schema(request=ConsentResponseSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
-    def respond(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
+    def respond(self, request: Request, pk: int | None = None) -> Response:
         """Respond to a pending action request (accept/deny).
 
         When ``target_persona_id`` is present in the payload the caller is
@@ -689,7 +689,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         responses={201: SceneActionRequestSerializer},
     )
     @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
-    def cast(self, request: Request) -> Response:  # noqa: PLR0911
+    def cast(self, request: Request) -> Response:
         """Submit a standalone technique cast.
 
         Routes per the consent/combat/immediate matrix:

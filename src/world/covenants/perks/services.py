@@ -238,9 +238,10 @@ def perk_scope_matches(
     """
     if perk.battle_action_kind and perk.battle_action_kind != (ctx.battle_action_kind or ""):
         return False
-    if perk.mission_template_id is not None:
-        if ctx.mission is None or ctx.mission.template_id != perk.mission_template_id:
-            return False
+    if perk.mission_template_id is not None and (
+        ctx.mission is None or ctx.mission.template_id != perk.mission_template_id
+    ):
+        return False
     if perk.mission_category_id is not None:
         if ctx.mission is None:
             return False

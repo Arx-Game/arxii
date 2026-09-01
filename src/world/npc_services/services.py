@@ -366,7 +366,7 @@ def _asset_has_collectable_income(*, persona: Persona) -> bool:
     ).exists()
 
 
-def _mission_gates_pass(  # noqa: PLR0911
+def _mission_gates_pass(
     *,
     offer: NPCServiceOffer,
     persona: Persona,

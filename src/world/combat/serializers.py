@@ -1514,11 +1514,14 @@ class AddOpponentSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"non_field_errors": exc.user_message}) from exc
 
         position_id = attrs.get("position_id")
-        if position_id is not None and encounter is not None:
-            if not Position.objects.filter(pk=position_id, room=encounter.room).exists():
-                raise serializers.ValidationError(
-                    {"position_id": "That position is not in this encounter's room."}
-                )
+        if (
+            position_id is not None
+            and encounter is not None
+            and not Position.objects.filter(pk=position_id, room=encounter.room).exists()
+        ):
+            raise serializers.ValidationError(
+                {"position_id": "That position is not in this encounter's room."}
+            )
         return attrs
 
 

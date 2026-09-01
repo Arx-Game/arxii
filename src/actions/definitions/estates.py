@@ -35,7 +35,7 @@ class WillReadingAction(Action):
     category: str = "estates"
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(  # noqa: PLR0911 - one refusal message per gate, deliberately flat
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

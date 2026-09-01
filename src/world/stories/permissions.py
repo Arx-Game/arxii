@@ -169,9 +169,8 @@ class IsParticipationOwnerOrStoryOwnerOrStaff(permissions.BasePermission):
             return True
 
         # Character owner can view their own participation
-        if request.method in permissions.SAFE_METHODS:
-            if obj.character.db_account == request.user:
-                return True
+        if request.method in permissions.SAFE_METHODS and obj.character.db_account == request.user:
+            return True
 
         # Story owners can manage participations in their stories
         return obj.story.owners.filter(id=request.user.id).exists()
@@ -1048,9 +1047,11 @@ class CanDetachStoryFromTable(permissions.BasePermission):
                 return True
 
         # CHARACTER-scope story owner: character_sheet -> character -> db_account.
-        if story.character_sheet_id is not None:
-            if story.character_sheet.character.db_account_id == request.user.pk:
-                return True
+        if (
+            story.character_sheet_id is not None
+            and story.character_sheet.character.db_account_id == request.user.pk
+        ):
+            return True
 
         return False
 
@@ -1309,9 +1310,12 @@ def _story_log_user_has_access(
 ) -> bool:
     """Return True if ``user`` is a player-tier viewer of this story."""
     # CHARACTER scope: the character's ObjectDB account is this user.
-    if story.scope == StoryScope.CHARACTER and story.character_sheet_id is not None:
-        if story.character_sheet.character.db_account == user:
-            return True
+    if (
+        story.scope == StoryScope.CHARACTER
+        and story.character_sheet_id is not None
+        and story.character_sheet.character.db_account == user
+    ):
+        return True
 
     # GROUP scope: user is an active member of the GMTable with progress.
     if story.scope == StoryScope.GROUP and progress is not None:

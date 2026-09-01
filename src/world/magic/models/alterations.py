@@ -171,10 +171,11 @@ class MagicalAlterationTemplate(NaturalKeyMixin, SharedMemoryModel):
             if self.resonance is not None or self.stage_threshold is not None:
                 msg = "MAGE_SCAR templates must not specify resonance/stage_threshold."
                 raise ValidationError(msg)
-        elif self.kind == AlterationKind.CORRUPTION_TWIST:
-            if self.resonance is None or self.stage_threshold is None:
-                msg = "CORRUPTION_TWIST templates require resonance AND stage_threshold."
-                raise ValidationError(msg)
+        elif self.kind == AlterationKind.CORRUPTION_TWIST and (
+            self.resonance is None or self.stage_threshold is None
+        ):
+            msg = "CORRUPTION_TWIST templates require resonance AND stage_threshold."
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         return f"{self.condition_template.name} (Tier {self.tier})"

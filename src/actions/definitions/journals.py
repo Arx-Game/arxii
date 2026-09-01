@@ -150,7 +150,7 @@ class EditJournalEntryAction(_BaseJournalAction):
     icon: str = "edit-3"
     category: str = "journals"
 
-    def execute(  # noqa: PLR0911 - one return per validation/failure branch, deliberately flat
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

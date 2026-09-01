@@ -163,7 +163,7 @@ def _bound_covenant_role_cap_by_court_grant(
     return min(base_cap, granted if granted is not None else 0)
 
 
-def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911, C901
+def compute_anchor_cap(thread: Thread) -> int:  # noqa: C901
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:

@@ -323,7 +323,7 @@ def _route_unbuilt_propagation(
     rumor_stub.propagate_rumor(line)  # always raises in 5b.1
 
 
-def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind, sink) pair
+def _route_line(  # noqa: PLR0913
     deed: MissionDeedRecord,
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],

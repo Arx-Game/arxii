@@ -1789,10 +1789,11 @@ class SustainedAction(SharedMemoryModel):
             if self.ritual_id is None or self.technique_id is not None:
                 msg = "A RITUAL SustainedAction must set ritual and leave technique null."
                 raise ValidationError(msg)
-        elif self.sustained_kind == SustainedKind.TECHNIQUE:
-            if self.technique_id is None or self.ritual_id is not None:
-                msg = "A TECHNIQUE SustainedAction must set technique and leave ritual null."
-                raise ValidationError(msg)
+        elif self.sustained_kind == SustainedKind.TECHNIQUE and (
+            self.technique_id is None or self.ritual_id is not None
+        ):
+            msg = "A TECHNIQUE SustainedAction must set technique and leave ritual null."
+            raise ValidationError(msg)
 
     @property
     def subject_name(self) -> str:

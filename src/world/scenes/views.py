@@ -828,7 +828,7 @@ class PersonaViewSet(
         request=SpreadInputSerializer, responses=SpreadResultSerializer, tags=["personas"]
     )
     @action(detail=True, methods=[HTTPMethod.POST])
-    def spread(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
+    def spread(self, request: Request, pk: int | None = None) -> Response:
         """#745 — Spread a tale: resolve an area 'Spread a Tale' action for this persona."""
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
 

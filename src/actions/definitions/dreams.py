@@ -168,7 +168,7 @@ class DreamwalkAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(  # noqa: C901, PLR0911
+    def execute(  # noqa: C901
         self,
         actor: Any,
         context: ActionContext | None = None,

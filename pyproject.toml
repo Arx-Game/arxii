@@ -92,7 +92,6 @@ ignore = [
     "N818",   # error-suffix-on-exception-name - not always necessary
 
     # Code organization - not always beneficial
-    "SIM102", # collapsible-if - sometimes separate ifs are clearer
     "SIM103", # needless-bool - sometimes explicit is better
     "SIM108", # if-else-block-instead-of-if-exp - readability over conciseness
     "SIM117", # multiple-with-statements - sometimes clearer separate
@@ -106,6 +105,12 @@ ignore = [
 
     # Package structure
     "INP001", # implicit-namespace-package - legitimate for some modules
+
+    # Max-returns fights guard clauses, and guard clauses are how we keep code flat.
+    # 65 sites carried a `# noqa: PLR0911` whose comments all said the same thing
+    # ("readable early-exit cascade", "distinct guard failures read clearest as early
+    # returns"). Ruled 2026-09-01: flat beats few-returns, so the rule goes. See #3548.
+    "PLR0911", # too-many-return-statements - early returns are the preferred flattening
 
     # Code quality - edge cases
     "TRY004",  # type-check-without-type-error - specific exception handling
@@ -424,6 +429,11 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
 "src/evennia_extensions/mixins.py" = [
     "SLF001",  # private member access - mixin accessing internals is expected
 ]
+
+[tool.ruff.lint.pylint]
+# Flat is better than nested. The codebase already passes at 3 (ruff's default is 5), so
+# this ratchets the current state in rather than asking for cleanup work. #3548.
+max-nested-blocks = 3
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"

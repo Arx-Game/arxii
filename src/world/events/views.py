@@ -288,11 +288,14 @@ class EventViewSet(_EventActorMixin, ModelViewSet):
 
         # If scheduled_real_time changed, validate location gap
         new_real_time = data.get("scheduled_real_time")
-        if new_real_time and new_real_time != event.scheduled_real_time:
-            if not validate_location_gap(
+        if (
+            new_real_time
+            and new_real_time != event.scheduled_real_time
+            and not validate_location_gap(
                 event.location_id, new_real_time, exclude_event_id=event.id
-            ):
-                raise DRFValidationError(EventError.LOCATION_GAP)
+            )
+        ):
+            raise DRFValidationError(EventError.LOCATION_GAP)
 
         serializer.save()
 

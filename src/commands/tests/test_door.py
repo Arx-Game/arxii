@@ -39,9 +39,8 @@ class CmdLockTests(TestCase):
         def _msg(*a, **kw):
             if a:
                 messages.append(a[0])
-            if kw:
-                if kwargs_out is not None:
-                    kwargs_out.append(kw)
+            if kw and kwargs_out is not None:
+                kwargs_out.append(kw)
 
         cmd.msg = _msg
         cmd.func()

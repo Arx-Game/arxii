@@ -143,7 +143,7 @@ class ResolveNPCOfferAction(Action):
     category: str = "social"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

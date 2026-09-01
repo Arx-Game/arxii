@@ -483,7 +483,7 @@ class AmbientEmoteCondition(SharedMemoryModel):
     class Meta:
         ordering = ["line", "id"]
 
-    def clean(self) -> None:  # noqa: C901 — one branch per condition_type, grows with the enum
+    def clean(self) -> None:
         errors: dict[str, str] = {}
         if self.condition_type == ConditionType.SPECIES:
             if not self.species_id:
@@ -496,9 +496,8 @@ class AmbientEmoteCondition(SharedMemoryModel):
         elif self.condition_type == ConditionType.DISTINCTION:
             if not self.distinction_id:
                 errors["distinction"] = "Required when condition_type is DISTINCTION."
-        elif self.condition_type == ConditionType.RENOWN_MIN:
-            if not self.min_fame_tier:
-                errors["min_fame_tier"] = "Required when condition_type is RENOWN_MIN."
+        elif self.condition_type == ConditionType.RENOWN_MIN and not self.min_fame_tier:
+            errors["min_fame_tier"] = "Required when condition_type is RENOWN_MIN."
         if errors:
             raise ValidationError(errors)
 

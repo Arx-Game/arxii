@@ -929,16 +929,19 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         )
         height_inches = attrs.get("height_inches")
 
-        if height_inches is not None and height_band is not None:
-            if not (height_band.min_inches <= height_inches <= height_band.max_inches):
-                raise serializers.ValidationError(
-                    {
-                        "height_inches": (
-                            f"Must be between {height_band.min_inches} and "
-                            f"{height_band.max_inches} for {height_band.display_name}."
-                        )
-                    }
-                )
+        if (
+            height_inches is not None
+            and height_band is not None
+            and not (height_band.min_inches <= height_inches <= height_band.max_inches)
+        ):
+            raise serializers.ValidationError(
+                {
+                    "height_inches": (
+                        f"Must be between {height_band.min_inches} and "
+                        f"{height_band.max_inches} for {height_band.display_name}."
+                    )
+                }
+            )
 
         # Birthday pair must name a real Gregorian date (#2756).
         month = attrs.get("birthday_month", self.instance.birthday_month if self.instance else None)

@@ -309,7 +309,7 @@ class ChallengeChampionDuelAction(Action):
     target_type: TargetType = TargetType.AREA
     costs_turn: bool = False
 
-    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -438,7 +438,7 @@ class JoinPlaceEncounterAction(Action):
     category: str = "battle"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -549,7 +549,7 @@ class CreateBattleAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911, C901 - distinct guard failures read clearest as early returns
+    def execute(  # noqa: C901
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -708,7 +708,7 @@ class SpawnBattleUnitsAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -787,7 +787,7 @@ class EnlistBattleParticipantAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

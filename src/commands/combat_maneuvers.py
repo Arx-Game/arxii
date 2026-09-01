@@ -126,7 +126,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         return ActionRef(backend=ActionBackend.REGISTRY, registry_key=_SUBVERBS[self._subverb])
 
-    def resolve_action_args(self) -> dict[str, Any]:  # noqa: PLR0911
+    def resolve_action_args(self) -> dict[str, Any]:
         """Resolve name arguments (ally / opponent / combo) into dispatch kwargs."""
         if self._subverb == "cover":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}

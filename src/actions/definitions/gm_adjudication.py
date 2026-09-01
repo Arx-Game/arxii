@@ -255,7 +255,7 @@ class GMAwardAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911 - one dispatch branch per award_type, deliberately flat
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -458,7 +458,7 @@ class GMAwardAction(Action):
             message=f"Raised {trait.name} to {new_dots} for {target.key}.",
         )
 
-    def _award_technique(  # noqa: PLR0911 - one refusal message per gate, deliberately flat
+    def _award_technique(
         self,
         target: ObjectDB,
         kwargs: dict[str, Any],

@@ -138,11 +138,11 @@ def resolve_appeal(
         raise AppealNotOpenError
     if verdict not in _RESOLVED_VERDICTS:
         raise InvalidAppealVerdictError
-    if not is_staff:
-        if resolver_persona is None or not can_resolve_org_appeals(
-            resolver_persona, appeal.organization
-        ):
-            raise NotAuthorizedToResolveAppealError
+    if not is_staff and (
+        resolver_persona is None
+        or not can_resolve_org_appeals(resolver_persona, appeal.organization)
+    ):
+        raise NotAuthorizedToResolveAppealError
 
     appeal.state = verdict
     appeal.resolution_text = resolution_text
