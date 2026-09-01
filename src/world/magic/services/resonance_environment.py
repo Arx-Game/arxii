@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from django.db import models, transaction
 
@@ -150,6 +150,101 @@ def _dominant_place_affinity(room: DefaultObject, resonances: list[Resonance]) -
     candidates = [(aff.name, aff) for total, aff in affinity_sums.values() if total == best_sum]
     candidates.sort(key=lambda pair: pair[0])
     return candidates[0][1]
+
+
+class ResonanceReading(NamedTuple):
+    """One resolved cascade resonance at a place (#3534 — the builder panel's row)."""
+
+    name: str
+    affinity: str | None
+    magnitude: int
+
+
+def room_resonance_readings(room: DefaultObject) -> list[ResonanceReading]:
+    """Every cascade resonance holding at a room with its resolved magnitude (#3534).
+
+    The builder Resonance panel's read: ``_get_room_resonances`` for the
+    candidate set, ``effective_value`` per row for the resolved magnitude
+    (override-beats-modifiers, most-specific-wins — the same resolution every
+    mechanical consumer uses). Zero-magnitude rows are dropped; sorted
+    strongest-first, name ascending on ties.
+    """
+    readings = []
+    for resonance in _get_room_resonances(room):
+        magnitude = effective_value(room, resonance=resonance)
+        if magnitude == 0:
+            continue
+        readings.append(
+            ResonanceReading(
+                name=resonance.name,
+                affinity=resonance.affinity.name if resonance.affinity_id else None,
+                magnitude=magnitude,
+            )
+        )
+    readings.sort(key=lambda r: (-r.magnitude, r.name))
+    return readings
+
+
+def area_resonance_readings(area: object) -> list[ResonanceReading]:
+    """Every cascade resonance an area's chain contributes, with magnitudes (#3534).
+
+    The area-document panel's read. Resolution mirrors the room path's
+    area arm: a chain override wins (most-specific — lowest area level);
+    otherwise modifier ``current_value`` sums across the chain. A room
+    beneath may still override locally — this is what the AREA hands down,
+    not any single room's final value.
+    """
+    from world.locations.models import (  # noqa: PLC0415
+        LocationValueModifier,
+        LocationValueOverride,
+    )
+
+    chain_ids = list(
+        AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
+    )
+    if area.pk not in chain_ids:
+        chain_ids.append(area.pk)
+
+    overrides = list(
+        LocationValueOverride.objects.filter(
+            key_type=KeyType.RESONANCE, area_id__in=chain_ids
+        ).select_related("resonance__affinity", "area")
+    )
+    modifiers = list(
+        LocationValueModifier.objects.filter(
+            key_type=KeyType.RESONANCE, area_id__in=chain_ids
+        ).select_related("resonance__affinity")
+    )
+
+    override_by_resonance: dict[int, object] = {}
+    for override in overrides:
+        held = override_by_resonance.get(override.resonance_id)
+        if held is None or override.area.level < held.area.level:
+            override_by_resonance[override.resonance_id] = override
+
+    sums: dict[int, int] = {}
+    rows: dict[int, object] = {}
+    for modifier in modifiers:
+        rows[modifier.resonance_id] = modifier.resonance
+        sums[modifier.resonance_id] = sums.get(modifier.resonance_id, 0) + modifier.current_value()
+    for override in overrides:
+        rows[override.resonance_id] = override.resonance
+
+    readings = []
+    for resonance_id, resonance in rows.items():
+        override = override_by_resonance.get(resonance_id)
+        magnitude = override.value if override is not None else sums.get(resonance_id, 0)
+        if magnitude == 0:
+            continue
+        readings.append(
+            ResonanceReading(
+                name=resonance.name,
+                affinity=resonance.affinity.name if resonance.affinity_id else None,
+                magnitude=magnitude,
+            )
+        )
+    readings.sort(key=lambda r: (-r.magnitude, r.name))
+    return readings
 
 
 def get_room_dominant_affinity(room: DefaultObject) -> Affinity | None:

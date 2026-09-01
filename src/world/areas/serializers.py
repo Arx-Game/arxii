@@ -252,9 +252,46 @@ class WorldBuilderIdNameSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
-class WorldBuilderCatalogsSerializer(serializers.Serializer):
-    """Panel pick-lists (#3269)."""
+class WorldBuilderChoiceSerializer(serializers.Serializer):
+    """One TextChoices member as a pick-list row (#3534 — fame tiers)."""
 
+    value = serializers.CharField()
+    label = serializers.CharField()
+
+
+class WorldBuilderResonanceReadingSerializer(serializers.Serializer):
+    """One resolved cascade resonance at a room or area (#3534 — the Resonance panel)."""
+
+    name = serializers.CharField()
+    affinity = serializers.CharField(allow_null=True)
+    magnitude = serializers.IntegerField()
+
+
+class WorldBuilderGrantSerializer(serializers.Serializer):
+    """One of the caller's own AreaBuildGrants, with its budget usage (#3534)."""
+
+    area_id = serializers.IntegerField()
+    area_name = serializers.CharField()
+    area_level = serializers.IntegerField()
+    max_level = serializers.IntegerField()
+    room_budget = serializers.IntegerField(allow_null=True)
+    rooms_used = serializers.IntegerField()
+
+
+class WorldBuilderGrantsSerializer(serializers.Serializer):
+    """The caller's warrant shape: staff (implicit world-wide) or their grants (#3534)."""
+
+    is_staff = serializers.BooleanField()
+    grants = WorldBuilderGrantSerializer(many=True)
+
+
+class WorldBuilderCatalogsSerializer(serializers.Serializer):
+    """Panel pick-lists (#3269; condition-editor refs #3534)."""
+
+    species = WorldBuilderIdNameSerializer(many=True)
+    resonances = WorldBuilderIdNameSerializer(many=True)
+    distinctions = WorldBuilderIdNameSerializer(many=True)
+    fame_tiers = WorldBuilderChoiceSerializer(many=True)
     realms = serializers.ListField(child=serializers.CharField())
     climates = serializers.ListField(child=serializers.CharField())
     societies = serializers.ListField(child=serializers.CharField())
@@ -357,6 +394,8 @@ class WorldBuilderRoomDetailSerializer(serializers.Serializer):
     comfort = WorldBuilderComfortSerializer()
     ambient_lines = WorldBuilderAmbientLineSerializer(many=True)
     ambient_emits = WorldBuilderAmbientEmitSerializer(many=True)
+    resonances = WorldBuilderResonanceReadingSerializer(many=True)
+    dominant_affinity = serializers.CharField(allow_null=True)
 
 
 class WorldBuilderAreaManagerSerializer(serializers.Serializer):
@@ -366,4 +405,5 @@ class WorldBuilderAreaManagerSerializer(serializers.Serializer):
     catalogs = WorldBuilderCatalogsSerializer()
     breadcrumb = WorldBuilderBreadcrumbSerializer(many=True)
     rooms = WorldBuilderRoomSerializer(many=True)
+    resonances = WorldBuilderResonanceReadingSerializer(many=True)
     exits = WorldBuilderExitSerializer(many=True)

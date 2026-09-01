@@ -103,6 +103,10 @@ function makeManager(
   return {
     area,
     catalogs: {
+      species: [],
+      resonances: [],
+      distinctions: [],
+      fame_tiers: [],
       realms: [],
       climates: [],
       societies: [],
@@ -116,6 +120,7 @@ function makeManager(
     },
     breadcrumb: [{ id: area.id, name: area.name, level_display: area.level_display }],
     rooms,
+    resonances: [],
     exits: [],
   };
 }

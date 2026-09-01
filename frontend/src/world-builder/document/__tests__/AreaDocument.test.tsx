@@ -49,6 +49,10 @@ function makeManager(area: WorldBuilderArea): WorldBuilderAreaManager {
   return {
     area,
     catalogs: {
+      species: [],
+      resonances: [],
+      distinctions: [],
+      fame_tiers: [],
       realms: [],
       climates: [],
       societies: [],
@@ -62,6 +66,7 @@ function makeManager(area: WorldBuilderArea): WorldBuilderAreaManager {
     },
     breadcrumb: [],
     rooms: [],
+    resonances: [],
     exits: [],
   };
 }

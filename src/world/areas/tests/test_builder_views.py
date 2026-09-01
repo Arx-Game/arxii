@@ -374,3 +374,93 @@ class WorldBuilderRoomDetailTests(WorldBuilderApiBase):
         response = self._get(self._url(), self.staff_account, room_id=self.public_room.pk)
         line_row = next(row for row in response.data["ambient_lines"] if row["id"] == line.pk)
         self.assertEqual(line_row["conditions"], [])
+
+
+class WorldBuilderGrantScopedReadTests(WorldBuilderApiBase):
+    """#3534 — reads open to AreaBuildGrant holders, scoped to their subtrees;
+    the grants endpoint carries the warrant shape the atlas renders honestly.
+    Direct-grant shapes only (SQLite-safe); closure descent is CI's PG parity.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.gm.factories import AreaBuildGrantFactory, GMProfileFactory
+
+        self.gm_account = AccountFactory(username="granted_gm", is_staff=False)
+        GMProfileFactory(account=self.gm_account)
+        self.grant = AreaBuildGrantFactory(
+            account=self.gm_account,
+            area=self.area,
+            max_level=AreaLevel.BUILDING,
+            room_budget=8,
+        )
+
+    def test_grantless_player_still_rejected(self) -> None:
+        response = self._get("/api/world-builder/areas/", self.player_account)
+        assert response.status_code == 403
+
+    def test_grant_holder_reads_only_their_subtree_areas(self) -> None:
+        response = self._get("/api/world-builder/areas/", self.gm_account)
+        assert response.status_code == 200
+        names = {row["name"] for row in response.data["results"]}
+        assert "Golden Ward" in names
+        assert "Ashen Row" not in names
+
+    def test_grant_holder_room_search_scoped(self) -> None:
+        response = self._get("/api/world-builder/areas/room-search/", self.gm_account, search="a")
+        assert response.status_code == 200
+        names = {hit["name"] for hit in response.data}
+        assert "Market Square" in names
+        assert "Ashen Gate" not in names
+
+    def test_grant_holder_room_detail_outside_subtree_reads_absent(self) -> None:
+        response = self._get(
+            "/api/world-builder/areas/room-detail/",
+            self.gm_account,
+            room_id=self.foreign_room.pk,
+        )
+        assert response.status_code == 404
+        inside = self._get(
+            "/api/world-builder/areas/room-detail/",
+            self.gm_account,
+            room_id=self.public_room.pk,
+        )
+        assert inside.status_code == 200
+
+    def test_grants_endpoint_reports_shape_and_usage(self) -> None:
+        response = self._get("/api/world-builder/areas/grants/", self.gm_account)
+        assert response.status_code == 200
+        assert response.data["is_staff"] is False
+        [row] = response.data["grants"]
+        assert row["area_id"] == self.area.pk
+        assert row["max_level"] == int(AreaLevel.BUILDING)
+        assert row["room_budget"] == 8
+        assert row["rooms_used"] == 2  # Market Square + Backroom, not Ashen Gate
+
+    def test_grants_endpoint_staff_shape(self) -> None:
+        response = self._get("/api/world-builder/areas/grants/", self.staff_account)
+        assert response.status_code == 200
+        assert response.data["is_staff"] is True
+        assert response.data["grants"] == []
+
+    def test_room_detail_carries_resonance_panel_fields(self) -> None:
+        response = self._get(
+            "/api/world-builder/areas/room-detail/",
+            self.staff_account,
+            room_id=self.public_room.pk,
+        )
+        assert response.status_code == 200
+        assert "resonances" in response.data
+        assert "dominant_affinity" in response.data
+
+    def test_manager_carries_area_resonances_and_condition_catalogs(self) -> None:
+        response = self._get(
+            f"/api/world-builder/areas/{self.area.pk}/manager/", self.staff_account
+        )
+        assert response.status_code == 200
+        assert "resonances" in response.data
+        catalogs = response.data["catalogs"]
+        assert "species" in catalogs
+        assert "resonances" in catalogs
+        assert "distinctions" in catalogs
+        assert len(catalogs["fame_tiers"]) > 0
