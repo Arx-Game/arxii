@@ -94,6 +94,10 @@ export interface LatticeProps {
   runAction: (key: string, kwargs: Record<string, unknown>) => void;
   /** Areas mode only — the level new child areas realize at (`create_area`'s `level`). */
   childAreaLevel?: number;
+  /** The caller's grant ceiling (#3534) — null/undefined = unlimited (staff).
+   * In 'areas' mode, empty ground stops offering child-area plans when the
+   * child level would exceed it; the server refuses anyway, this is honesty. */
+  maxBuildLevel?: number | null;
   /**
    * A search-hit landing on this grid (#3477 Task 6, spec §1) — the matching
    * tile gets a brief highlight ring. The caller (`AtlasPage`) owns clearing
@@ -151,6 +155,7 @@ export function Lattice({
   onRealize,
   runAction,
   childAreaLevel,
+  maxBuildLevel = null,
   highlightTileId = null,
 }: LatticeProps) {
   const account = useAccount();
@@ -269,11 +274,21 @@ export function Lattice({
   };
 
   // ---- carve cycle: plan -> clear, empty -> void, void -> restore ----
+  // #3534 — a granted GM whose ceiling sits below this altitude's child level
+  // gets no planning affordance here at all (spec §3: "add-buttons past your
+  // ceiling absent"); the warrant check refuses server-side regardless.
+  const overCeiling =
+    mode === 'areas' &&
+    maxBuildLevel != null &&
+    childAreaLevel != null &&
+    childAreaLevel > maxBuildLevel;
+
   const handleCellLeftClick = (key: CellKey, state: 'planned' | 'void' | 'empty') => {
     if (pruning) {
       updateSketch((prev) => carveCell(prev, key));
       return;
     }
+    if (overCeiling) return;
     if (state === 'empty') {
       updateSketch((prev) => planCell(prev, key));
     } else if (state === 'planned') {
@@ -647,7 +662,7 @@ export function Lattice({
                       </span>
                     </>
                   )}
-                  {state === 'empty' && <span aria-hidden>⊕</span>}
+                  {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
                 </button>
               );
             })}

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import {
   dispatchWorldBuilder,
   fetchAreaManager,
+  fetchMyGrants,
   fetchWorldBuilderArea,
   fetchWorldBuilderAreas,
   fetchRoomDetail,
@@ -58,6 +59,15 @@ export function useRoomDetailQuery(roomId: number | null) {
 }
 
 /** Debounce-friendly cross-area room search (#3269); disabled under 2 chars. */
+/** The caller's warrant shape (#3534) — drives atlas rooting, ceiling gating, budgets. */
+export function useMyGrantsQuery() {
+  return useQuery({
+    queryKey: ['world-builder', 'my-grants'],
+    queryFn: fetchMyGrants,
+    staleTime: 60_000,
+  });
+}
+
 export function useRoomSearchQuery(term: string) {
   return useQuery({
     queryKey: [...worldBuilderKeys.all, 'room-search', term] as const,

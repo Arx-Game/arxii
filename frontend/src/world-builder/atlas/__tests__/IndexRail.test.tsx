@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -235,5 +235,32 @@ describe('IndexRail', () => {
       { kind: 'area', id: 1, name: 'Central Ward', visitedAt: '2026-01-01T00:00:00Z' },
       'Central Ward'
     );
+  });
+
+  it('a grant renders its budget as used/total and jumps to the grant area (#3534)', async () => {
+    const onSelect = vi.fn();
+    renderWithProviders(
+      <IndexRail
+        current={null}
+        onSelect={onSelect}
+        pinned={[]}
+        recents={[]}
+        grants={[
+          {
+            area_id: 5,
+            area_name: 'Central Ward',
+            area_level: 30,
+            max_level: 10,
+            room_budget: 8,
+            rooms_used: 3,
+          },
+        ]}
+      />
+    );
+
+    const block = screen.getByTestId('index-warrant');
+    expect(block).toHaveTextContent('3 of 8 rooms');
+    await userEvent.click(within(block).getByText('Central Ward'));
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'area', id: 5 }, 'Central Ward');
   });
 });

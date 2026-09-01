@@ -174,6 +174,14 @@ describe('Lattice — plot-then-realize', () => {
     });
   });
 
+  it('over-ceiling areas mode offers no planning at all (#3534)', async () => {
+    renderLattice({ mode: 'areas', tiles: [], childAreaLevel: 20, maxBuildLevel: 10 });
+    const cell = screen.getByTestId('lattice-cell-0-0');
+    expect(cell).not.toHaveTextContent('⊕');
+    await userEvent.click(cell);
+    expect(cell).toHaveAttribute('data-cell-state', 'empty');
+  });
+
   it('areas mode realize dispatches create_area with a slugified name and the given level', async () => {
     const { runAction } = renderLattice({
       mode: 'areas',

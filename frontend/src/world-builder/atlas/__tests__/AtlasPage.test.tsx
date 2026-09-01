@@ -8,6 +8,7 @@ import { AtlasPage } from '../AtlasPage';
 
 vi.mock('../../queries', () => ({
   useWorldBuilderAreasQuery: vi.fn(),
+  useMyGrantsQuery: vi.fn(),
   useAreaManagerQuery: vi.fn(),
   useRoomDetailQuery: vi.fn(),
   useRoomSearchQuery: vi.fn(),
@@ -63,8 +64,13 @@ vi.mock('../IndexRail', () => ({
   ),
 }));
 
-const { useWorldBuilderAreasQuery, useAreaManagerQuery, useRoomDetailQuery, useRoomSearchQuery } =
-  await import('../../queries');
+const {
+  useWorldBuilderAreasQuery,
+  useAreaManagerQuery,
+  useRoomDetailQuery,
+  useRoomSearchQuery,
+  useMyGrantsQuery,
+} = await import('../../queries');
 
 function makeArea(overrides: Partial<WorldBuilderArea> = {}): WorldBuilderArea {
   return {
@@ -138,6 +144,7 @@ function mockQueries(
   });
   vi.mocked(useRoomSearchQuery).mockReturnValue({ data: hits, isLoading: false } as never);
   vi.mocked(useRoomDetailQuery).mockReturnValue({ data: undefined, isLoading: false } as never);
+  vi.mocked(useMyGrantsQuery).mockReturnValue({ data: { is_staff: true, grants: [] } } as never);
 }
 
 describe('AtlasPage', () => {
@@ -156,6 +163,29 @@ describe('AtlasPage', () => {
     renderWithProviders(<AtlasPage />);
 
     expect(screen.getByTestId('mock-area-page')).toHaveAttribute('data-area-id', '5');
+  });
+
+  it('a granted GM roots at their warrant, not the world (#3534)', async () => {
+    mockQueries({ 5: makeManager(centralWard) });
+    vi.mocked(useMyGrantsQuery).mockReturnValue({
+      data: {
+        is_staff: false,
+        grants: [
+          {
+            area_id: 5,
+            area_name: 'Central Ward',
+            area_level: 30,
+            max_level: 10,
+            room_budget: 8,
+            rooms_used: 3,
+          },
+        ],
+      },
+    } as never);
+
+    renderWithProviders(<AtlasPage />);
+
+    expect(await screen.findByTestId('mock-area-page')).toHaveAttribute('data-area-id', '5');
   });
 
   it('defaults to the first root area when nothing is stored', async () => {

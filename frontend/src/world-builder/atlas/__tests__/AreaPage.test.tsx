@@ -11,6 +11,7 @@ vi.mock('../../queries', () => ({
   useAreaManagerQuery: vi.fn(),
   useWorldBuilderAreasQuery: vi.fn(),
   useWorldBuilderAction: vi.fn(() => ({ mutate: vi.fn() })),
+  useMyGrantsQuery: vi.fn(() => ({ data: { is_staff: true, grants: [] } })),
 }));
 
 vi.mock('../../useWorldBuilderActor', () => ({
