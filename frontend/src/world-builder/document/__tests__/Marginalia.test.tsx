@@ -58,6 +58,7 @@ const EXIT: WorldBuilderExitDetail = {
 function renderMarginalia(overrides: Partial<Parameters<typeof Marginalia>[0]> = {}) {
   const onOpenExit = vi.fn();
   const onAddExit = vi.fn();
+  const onOpenArt = vi.fn();
   renderWithProviders(
     <Marginalia
       room={makeRoom()}
@@ -67,10 +68,11 @@ function renderMarginalia(overrides: Partial<Parameters<typeof Marginalia>[0]> =
       clueTriggersCount={0}
       onOpenExit={onOpenExit}
       onAddExit={onAddExit}
+      onOpenArt={onOpenArt}
       {...overrides}
     />
   );
-  return { onOpenExit, onAddExit };
+  return { onOpenExit, onAddExit, onOpenArt };
 }
 
 describe('Marginalia', () => {
@@ -171,5 +173,22 @@ describe('Marginalia', () => {
     expect(panel).toHaveTextContent('Hope');
     expect(panel).toHaveTextContent('4');
     expect(panel).not.toHaveTextContent('unresonant ground');
+  });
+
+  it('the Art panel shows resolved art and its door fires onOpenArt (#3535)', async () => {
+    const { onOpenArt } = renderMarginalia({
+      room: makeRoom({ art_url: 'https://img.example/ward.png' }),
+    });
+    expect(screen.getByTestId('marginalia-art')).toHaveAttribute(
+      'src',
+      'https://img.example/ward.png'
+    );
+    await userEvent.click(screen.getByTestId('open-art-button'));
+    expect(onOpenArt).toHaveBeenCalled();
+  });
+
+  it('bare walls read honestly when nothing resolves (#3535)', () => {
+    renderMarginalia({ room: makeRoom({ art_url: null }) });
+    expect(screen.getByText('bare walls')).toBeInTheDocument();
   });
 });
