@@ -2469,9 +2469,11 @@ GM at a given level may author (#2000, ADR-0097).
   (`mint-builder-character`, #3283's original staff-only stopgap): that endpoint and
   its frontend caller (`mintBuilderCharacter`, `frontend/src/world-builder/api.ts`)
   are deleted; `WorldBuilderPage`'s no-actor banner
-  (`data-testid="world-builder-actor-banner"`) is now a plain "set up your GM Profile
-  from the Hall" message linking to `/`. See `docs/roadmap/tooling.md`'s "GM
-  onboarding moves to the Hall" entry and `gm-system.md`'s Phase 9.
+  (`data-testid="world-builder-actor-banner"`) became a plain "set up your GM Profile
+  from the Hall" message linking to `/` — until #3538 retired `WorldBuilderPage`
+  entirely (the Atlas, #3477/#3533, replaced the grid-first canvas). See
+  `docs/roadmap/tooling.md`'s "GM onboarding moves to the Hall" entry and
+  `gm-system.md`'s Phase 9.
 - **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
