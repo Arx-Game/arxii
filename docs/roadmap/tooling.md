@@ -24,9 +24,13 @@ drafted area prose via `edit_area`, area marginalia, the reused #3269
 `EditAreaDialog` as the metadata door, delete via `staff_remove_area` (its
 first button). Room/area art resolves most-specific-wins up the ancestor chain
 (`resolve_area_art`, Task 3) and ambient lines carry authorable conditions.
+Art *authoring* landed in #3535: `art_id` on `staff_edit_room` (the room's
+`ObjectDisplayData.thumbnail`) and `edit_area` (`Area.art`) — falsy takes it
+down, absent leaves it untouched — with the `ArtDialog` door on both
+documents' marginalia (library + upload reuse the roster media machinery).
 Not built (later phases per the spec): marginalia category *editors* beyond
-exits (categories-are-doors ruling), the visitor lens, player permits, the
-Resonance panel's real data, warrant-budget display.
+exits and art (categories-are-doors ruling), the visitor lens, player
+permits, the Resonance panel's real data, warrant-budget display.
 
 ## Built (2026-08-31, #3477 Task 2 — publish lifecycle)
 

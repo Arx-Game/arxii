@@ -34,6 +34,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 
 import { AddDialog, type AddDialogRealizePayload } from '../atlas/AddDialog';
+import { ArtDialog } from './ArtDialog';
 import {
   useAreaManagerQuery,
   useRoomDetailQuery,
@@ -127,6 +128,7 @@ function RoomDocumentBody({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exitDialogExit, setExitDialogExit] = useState<WorldBuilderExitDetail | null>(null);
   const [addExitOpen, setAddExitOpen] = useState(false);
+  const [artOpen, setArtOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [exitSearchTerm, setExitSearchTerm] = useState('');
   const { data: exitSearchHits } = useRoomSearchQuery(exitSearchTerm);
@@ -354,6 +356,7 @@ function RoomDocumentBody({
           clueTriggersCount={room.clue_triggers.length}
           onOpenExit={setExitDialogExit}
           onAddExit={() => setAddExitOpen(true)}
+          onOpenArt={() => setArtOpen(true)}
         />
       </div>
 
@@ -373,6 +376,15 @@ function RoomDocumentBody({
         onConfirm={handleExitConfirm}
         roomOptions={exitRoomOptions}
         onDestinationInput={setExitSearchTerm}
+      />
+
+      <ArtDialog
+        open={artOpen}
+        onOpenChange={setArtOpen}
+        subjectName={room.name}
+        currentArtUrl={room.art_url}
+        onHang={(mediaId) => runAction('staff_edit_room', { room_id: roomId, art_id: mediaId })}
+        onTakeDown={() => runAction('staff_edit_room', { room_id: roomId, art_id: 0 })}
       />
 
       <PreviewDialog

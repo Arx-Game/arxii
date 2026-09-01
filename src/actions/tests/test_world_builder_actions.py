@@ -2104,3 +2104,74 @@ class AmbientResyncTests(TestCase):
         assert not result.success
         assert "fame tier" in result.message
         assert not AmbientEmoteCondition.objects.filter(line=line).exists()
+
+
+class BuilderArtAuthoringTests(TestCase):
+    """#3535 — hanging art from the builder: art_id on staff_edit_room (the room's
+    ObjectDisplayData.thumbnail) and edit_area (Area.art). Falsy takes it down,
+    absent leaves it untouched, a bogus id refuses."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("ArtStaff")
+        self.area = AreaFactory(
+            name="Art Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="art-ward"
+        )
+        self.profile = RoomProfileFactory(area=self.area, grid_x=0, grid_y=0)
+
+    def _media(self):
+        from evennia_extensions.factories import MediaFactory
+
+        return MediaFactory()
+
+    def test_room_art_hangs_and_comes_down(self) -> None:
+        from actions.definitions.world_builder import StaffEditRoomAction
+        from evennia_extensions.models import ObjectDisplayData
+
+        media = self._media()
+        result = StaffEditRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, art_id=media.pk
+        )
+        assert result.success, result.message
+        display = ObjectDisplayData.objects.get(object_id=self.profile.objectdb_id)
+        assert display.thumbnail_id == media.pk
+
+        cleared = StaffEditRoomAction().run(self.staff, room_id=self.profile.objectdb_id, art_id=0)
+        assert cleared.success, cleared.message
+        display.refresh_from_db()
+        assert display.thumbnail_id is None
+
+    def test_room_edit_without_art_id_leaves_art_untouched(self) -> None:
+        from actions.definitions.world_builder import StaffEditRoomAction
+        from evennia_extensions.models import ObjectDisplayData
+
+        media = self._media()
+        StaffEditRoomAction().run(self.staff, room_id=self.profile.objectdb_id, art_id=media.pk)
+        result = StaffEditRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="Renamed"
+        )
+        assert result.success, result.message
+        display = ObjectDisplayData.objects.get(object_id=self.profile.objectdb_id)
+        assert display.thumbnail_id == media.pk
+
+    def test_bogus_room_art_id_refuses(self) -> None:
+        from actions.definitions.world_builder import StaffEditRoomAction
+
+        result = StaffEditRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, art_id=999999999
+        )
+        assert not result.success
+        assert result.message == "No such art."
+
+    def test_area_art_hangs_and_comes_down(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+
+        media = self._media()
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, art_id=media.pk)
+        assert result.success, result.message
+        self.area.refresh_from_db()
+        assert self.area.art_id == media.pk
+
+        cleared = EditAreaAction().run(self.staff, area_id=self.area.pk, art_id=0)
+        assert cleared.success, cleared.message
+        self.area.refresh_from_db()
+        assert self.area.art_id is None

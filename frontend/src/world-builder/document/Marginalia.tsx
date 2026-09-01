@@ -2,7 +2,8 @@
  * Marginalia (#3477 Task 6) — the manuscript's always-visible side panels,
  * fed entirely from `fetchRoomDetail`'s payload: Exits (the one panel with
  * a real editor — chips open `ExitEditorDialog`, ⊕ opens the exit-mode
- * `AddDialog`), Ownership, People, Ambience, Places & Things, Law & Danger,
+ * `AddDialog`; Art gained the second door in #3535 — `ArtDialog` via
+ * `onOpenArt`), Ownership, People, Ambience, Places & Things, Law & Danger,
  * Secrets & Story, and Resonance.
  *
  * Every panel but Exits is read-only display here (matching the brief's
@@ -30,6 +31,8 @@ export interface MarginaliaProps {
   clueTriggersCount: number;
   onOpenExit: (exit: WorldBuilderExitDetail) => void;
   onAddExit: () => void;
+  /** Opens the ArtDialog (#3535) — the second real door after Exits. */
+  onOpenArt: () => void;
 }
 
 function Panel({
@@ -74,6 +77,7 @@ export function Marginalia({
   clueTriggersCount,
   onOpenExit,
   onAddExit,
+  onOpenArt,
 }: MarginaliaProps) {
   const resonanceStat = room.stats.find((stat) => stat.key.startsWith('resonance'));
   const dangerStats = room.stats.filter((stat) => stat.key === 'crime' || stat.key === 'order');
@@ -151,6 +155,27 @@ export function Marginalia({
       <Panel label="Secrets & Story" count={cluesCount + clueTriggersCount}>
         <Kv term="Clues">{cluesCount}</Kv>
         <Kv term="Clue triggers">{clueTriggersCount}</Kv>
+      </Panel>
+
+      <Panel label="Art">
+        {room.art_url ? (
+          <img
+            src={room.art_url}
+            alt={`Art for ${room.name}`}
+            className="max-h-24 w-full border object-cover"
+            data-testid="marginalia-art"
+          />
+        ) : (
+          <p className="font-body text-sm text-muted-foreground">bare walls</p>
+        )}
+        <button
+          type="button"
+          className="mt-1 text-left font-body text-xs italic text-muted-foreground hover:text-primary"
+          onClick={onOpenArt}
+          data-testid="open-art-button"
+        >
+          ✎ hang art…
+        </button>
       </Panel>
 
       <Panel label="Resonance">
