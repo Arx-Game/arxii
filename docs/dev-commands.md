@@ -110,12 +110,29 @@ there is no `SonarSource/*` scanner action in `.github/`). A few
 Automatic-Analysis-specific behaviors that differ from a configured scanner:
 
 - **`sonar.issue.ignore.*` in `sonar-project.properties` is a no-op** under
-  Automatic Analysis (proven by a PR where scoping a rule off `**/models.py`
-  had zero effect). To suppress a rule/issue: deactivate it in the SonarCloud
-  UI's Quality Profile, scope it in Analysis Scope, mark it Won't-Fix, or use
-  inline `# NOSONAR` (which Automatic Analysis does honor). `sonar.exclusions`
-  (not `sonar.issue.ignore.*`) is the one properties-file setting that
-  reliably works — it's how this repo excludes test files from analysis.
+  Automatic Analysis (proven twice: once by a PR where scoping a rule off
+  `**/models.py` had zero effect, and again in #3548, where three such entries
+  had sat in the file for months while every rule they named kept firing on
+  exactly the files they named). `sonar.exclusions` (not `sonar.issue.ignore.*`)
+  is the one properties-file setting that reliably works — it's how this repo
+  excludes test files from analysis. **Do not re-add a `multicriteria` block.**
+- **Turning a rule off goes through `sonar-rules.yaml`, not the SonarCloud UI.**
+  Since #3548 the repo owns custom Quality Profiles (`Arx II Python`, `Arx II
+  TypeScript`, …), declared in `sonar-rules.yaml` at the repo root and pushed by
+  `tools/sonar_profile.py --apply`. CI runs `--check` and **fails on drift**, so a
+  rule toggled by hand in the web UI will break the build until the file that
+  records *why* is updated to match. Two tiers:
+  - **rule-level** — the rule is wrong for this codebase everywhere. Add it to
+    `disabled:` with a rationale, run `--apply`. Takes effect at the next
+    main-branch analysis (a merge), which is also when existing findings clear.
+  - **instance-level** — the rule is right in general, wrong in one place. Leave
+    it active and mark those findings:
+    `uv run python tools/sonarcloud_triage.py --rule <key> --path "<glob>"`
+    (add `--dry-run` first). Record it under `false_positives:` in the YAML.
+    Unlike a profile change, this takes effect **immediately**.
+
+  Inline `# NOSONAR` is also honored by Automatic Analysis, but prefer the two
+  tiers above — they keep the reasoning in git where it gets reviewed.
 - **The Quality Gate here fails specifically on "Reliability Rating on New
   Code ≥ A"** — Reliability = Bug-rule findings (e.g. float-equality checks
   flagged as S1244), not code smells (cognitive complexity, S134) or `TODO`
