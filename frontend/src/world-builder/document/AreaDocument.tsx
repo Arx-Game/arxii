@@ -239,7 +239,8 @@ function Kv({ term, children }: { term: string; children: React.ReactNode }) {
 /**
  * Area-flavored marginalia — read-only reads of what the manager payload
  * already carries (the same phase-1 boundary as the room `Marginalia`),
- * plus the one door: "✎ edit the record" into `EditAreaDialog`.
+ * plus the doors: "✎ edit the record" into `EditAreaDialog` and art (#3535).
+ * Resonance renders the chain's real cascade readings (#3534), read-only.
  */
 function AreaMarginalia({
   manager,
@@ -274,6 +275,22 @@ function AreaMarginalia({
         </PlateHead>
         <Kv term="Dominant">{area.dominant_society ?? 'none holds sway'}</Kv>
         <Kv term="Permits">{area.permit_eligibility || 'unset'}</Kv>
+      </div>
+
+      <div className="border-b pb-2 pt-2">
+        <PlateHead as="h4" className="mb-1">
+          Resonance
+        </PlateHead>
+        {manager.resonances.length === 0 ? (
+          <p className="font-body text-sm text-muted-foreground">unresonant ground</p>
+        ) : (
+          manager.resonances.map((reading) => (
+            <Kv key={reading.name} term={reading.name}>
+              {reading.magnitude}
+              {reading.affinity ? ` (${reading.affinity})` : ''}
+            </Kv>
+          ))
+        )}
       </div>
 
       <div className="border-b pb-2 pt-2">

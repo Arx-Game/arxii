@@ -74,6 +74,9 @@ export type WorldBuilderComfort = components['schemas']['WorldBuilderComfort'];
 export type WorldBuilderAmbientLine = components['schemas']['WorldBuilderAmbientLine'];
 export type WorldBuilderAmbientCondition = components['schemas']['WorldBuilderAmbientCondition'];
 export type WorldBuilderRoomDescVariant = components['schemas']['WorldBuilderRoomDescVariant'];
+export type WorldBuilderResonanceReading = components['schemas']['WorldBuilderResonanceReading'];
+export type WorldBuilderGrant = components['schemas']['WorldBuilderGrant'];
+export type WorldBuilderGrants = components['schemas']['WorldBuilderGrants'];
 
 /** One cross-area room-search hit (#3269) — mirrors WorldBuilderRoomHitSerializer. */
 export interface WorldBuilderRoomHit {

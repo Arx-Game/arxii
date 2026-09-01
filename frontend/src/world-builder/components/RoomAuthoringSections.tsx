@@ -39,7 +39,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function StatsSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'catalogs'>) {
+export function StatsSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'catalogs'>) {
   const [statKey, setStatKey] = useState('');
   const [value, setValue] = useState('');
   const touched = room.stats.filter(
@@ -128,7 +128,7 @@ function StatsSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'cat
   );
 }
 
-function PlacesSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'catalogs'>) {
+export function PlacesSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'catalogs'>) {
   const [name, setName] = useState('');
   return (
     <Section title={`Places (${room.places.length})`}>
@@ -166,7 +166,151 @@ function PlacesSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'ca
   );
 }
 
-function AtmosphereSection({ room, runAction }: Omit<RoomAuthoringSectionsProps, 'catalogs'>) {
+/** Mirrors `world.narrative.constants.ConditionType` — the ambience door's add-condition menu. */
+const AMBIENT_CONDITION_TYPES: { value: string; label: string }[] = [
+  { value: 'species', label: 'Species' },
+  { value: 'resonance_min', label: 'Resonance threshold' },
+  { value: 'distinction', label: 'Distinction' },
+  { value: 'renown_min', label: 'Fame tier' },
+  { value: 'legend_deed', label: 'Has legend deeds' },
+];
+
+function LineConditions({
+  line,
+  catalogs,
+  runAction,
+}: {
+  line: { id: number; conditions: { id: number; condition_type: string; label: string }[] };
+  catalogs: WorldBuilderAreaManager['catalogs'];
+  runAction: RoomAuthoringSectionsProps['runAction'];
+}) {
+  return (
+    <div className="ml-2 flex flex-col gap-1" data-testid={`line-conditions-${line.id}`}>
+      <div className="flex flex-wrap gap-1">
+        {line.conditions.map((condition) => (
+          <Badge key={condition.id} variant="outline" className="gap-1 text-[0.65rem]">
+            {condition.label}
+            <button
+              type="button"
+              aria-label={`remove condition: ${condition.label}`}
+              onClick={() =>
+                runAction('staff_remove_ambient_condition', {
+                  condition_id: condition.id,
+                  line_id: line.id,
+                })
+              }
+            >
+              ✕
+            </button>
+          </Badge>
+        ))}
+      </div>
+      <AddConditionRow lineId={line.id} catalogs={catalogs} runAction={runAction} />
+    </div>
+  );
+}
+
+function AddConditionRow({
+  lineId,
+  catalogs,
+  runAction,
+}: {
+  lineId: number;
+  catalogs: WorldBuilderAreaManager['catalogs'];
+  runAction: RoomAuthoringSectionsProps['runAction'];
+}) {
+  const [conditionType, setConditionType] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [minimumValue, setMinimumValue] = useState('1');
+  const [fameTier, setFameTier] = useState('');
+
+  const refOptions =
+    conditionType === 'species'
+      ? catalogs.species
+      : conditionType === 'resonance_min'
+        ? catalogs.resonances
+        : conditionType === 'distinction'
+          ? catalogs.distinctions
+          : [];
+  const needsRef = refOptions.length > 0 || conditionType === 'renown_min';
+  const canAdd =
+    conditionType !== '' &&
+    (conditionType === 'legend_deed' ||
+      (conditionType === 'renown_min' ? fameTier !== '' : targetId !== ''));
+
+  const submit = () => {
+    const kwargs: Record<string, unknown> = { line_id: lineId, condition_type: conditionType };
+    if (targetId) kwargs.target_id = Number(targetId);
+    if (conditionType === 'resonance_min') kwargs.minimum_value = Number(minimumValue);
+    if (conditionType === 'renown_min') kwargs.min_fame_tier = fameTier;
+    runAction('staff_add_ambient_condition', kwargs);
+    setConditionType('');
+    setTargetId('');
+    setFameTier('');
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Select value={conditionType} onValueChange={setConditionType}>
+        <SelectTrigger className="h-7 w-40 text-xs" data-testid={`condition-type-${lineId}`}>
+          <SelectValue placeholder="⊕ gate this line…" />
+        </SelectTrigger>
+        <SelectContent>
+          {AMBIENT_CONDITION_TYPES.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {needsRef && conditionType !== 'renown_min' && (
+        <Select value={targetId} onValueChange={setTargetId}>
+          <SelectTrigger className="h-7 w-40 text-xs" data-testid={`condition-ref-${lineId}`}>
+            <SelectValue placeholder="which…" />
+          </SelectTrigger>
+          <SelectContent>
+            {refOptions.map((option) => (
+              <SelectItem key={option.id} value={String(option.id)}>
+                {option.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {conditionType === 'resonance_min' && (
+        <Input
+          className="h-7 w-16 text-xs"
+          type="number"
+          min={1}
+          value={minimumValue}
+          onChange={(event) => setMinimumValue(event.target.value)}
+          aria-label="minimum resonance"
+        />
+      )}
+      {conditionType === 'renown_min' && (
+        <Select value={fameTier} onValueChange={setFameTier}>
+          <SelectTrigger className="h-7 w-40 text-xs" data-testid={`condition-tier-${lineId}`}>
+            <SelectValue placeholder="at least…" />
+          </SelectTrigger>
+          <SelectContent>
+            {catalogs.fame_tiers.map((tier) => (
+              <SelectItem key={tier.value} value={tier.value}>
+                {tier.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {conditionType !== '' && (
+        <Button size="sm" className="h-7" disabled={!canAdd} onClick={submit}>
+          Add
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function AtmosphereSection({ room, catalogs, runAction }: RoomAuthoringSectionsProps) {
   const { data: detail } = useRoomDetailQuery(room.id);
   const [lineText, setLineText] = useState('');
   const [emitText, setEmitText] = useState('');
@@ -177,15 +321,18 @@ function AtmosphereSection({ room, runAction }: Omit<RoomAuthoringSectionsProps,
       title={`Atmosphere (${room.ambient_counts.lines} entry / ${room.ambient_counts.emits} linger)`}
     >
       {(detail?.ambient_lines ?? []).map((line) => (
-        <div key={line.id} className="flex items-start gap-1 text-xs">
-          <span className="flex-1">{line.arriver_body || line.bystander_body}</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => runAction('staff_remove_ambient_line', { line_id: line.id })}
-          >
-            Remove
-          </Button>
+        <div key={line.id} className="flex flex-col gap-1">
+          <div className="flex items-start gap-1 text-xs">
+            <span className="flex-1">{line.arriver_body || line.bystander_body}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => runAction('staff_remove_ambient_line', { line_id: line.id })}
+            >
+              Remove
+            </Button>
+          </div>
+          <LineConditions line={line} catalogs={catalogs} runAction={runAction} />
         </div>
       ))}
       <div className="flex gap-1">
@@ -276,7 +423,7 @@ function AtmosphereSection({ room, runAction }: Omit<RoomAuthoringSectionsProps,
   );
 }
 
-function FeatureSection({ room, catalogs, runAction }: RoomAuthoringSectionsProps) {
+export function FeatureSection({ room, catalogs, runAction }: RoomAuthoringSectionsProps) {
   const [kind, setKind] = useState('');
   return (
     <Section title="Feature">
@@ -320,7 +467,7 @@ function FeatureSection({ room, catalogs, runAction }: RoomAuthoringSectionsProp
   );
 }
 
-function StaffingSection({ room, catalogs, runAction }: RoomAuthoringSectionsProps) {
+export function StaffingSection({ room, catalogs, runAction }: RoomAuthoringSectionsProps) {
   const [role, setRole] = useState('');
   return (
     <Section title={`Staffing (${room.functionaries.length})`}>
@@ -518,7 +665,7 @@ export function RoomAuthoringSections(props: RoomAuthoringSectionsProps) {
     <div className="flex flex-col gap-2" data-testid="room-authoring-sections">
       <StatsSection room={props.room} runAction={props.runAction} />
       <PlacesSection room={props.room} runAction={props.runAction} />
-      <AtmosphereSection room={props.room} runAction={props.runAction} />
+      <AtmosphereSection {...props} />
       <FeatureSection {...props} />
       <StaffingSection {...props} />
       <StageTravelSection {...props} />

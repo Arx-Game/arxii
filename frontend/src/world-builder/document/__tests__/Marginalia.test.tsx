@@ -59,6 +59,7 @@ function renderMarginalia(overrides: Partial<Parameters<typeof Marginalia>[0]> =
   const onOpenExit = vi.fn();
   const onAddExit = vi.fn();
   const onOpenArt = vi.fn();
+  const onOpenDoor = vi.fn();
   renderWithProviders(
     <Marginalia
       room={makeRoom()}
@@ -69,10 +70,13 @@ function renderMarginalia(overrides: Partial<Parameters<typeof Marginalia>[0]> =
       onOpenExit={onOpenExit}
       onAddExit={onAddExit}
       onOpenArt={onOpenArt}
+      onOpenDoor={onOpenDoor}
+      resonances={[]}
+      dominantAffinity={null}
       {...overrides}
     />
   );
-  return { onOpenExit, onAddExit, onOpenArt };
+  return { onOpenExit, onAddExit, onOpenArt, onOpenDoor };
 }
 
 describe('Marginalia', () => {
@@ -154,27 +158,6 @@ describe('Marginalia', () => {
     expect(screen.getByTestId('marginalia-panel-resonance')).toHaveTextContent('unresonant ground');
   });
 
-  it('shows a resonance stat when the payload carries one', () => {
-    renderMarginalia({
-      room: makeRoom({
-        stats: [
-          {
-            key: 'resonance_hope',
-            label: 'Hope',
-            default: 0,
-            effective: 4,
-            authored: null,
-            pinned: null,
-          },
-        ],
-      }),
-    });
-    const panel = screen.getByTestId('marginalia-panel-resonance');
-    expect(panel).toHaveTextContent('Hope');
-    expect(panel).toHaveTextContent('4');
-    expect(panel).not.toHaveTextContent('unresonant ground');
-  });
-
   it('the Art panel shows resolved art and its door fires onOpenArt (#3535)', async () => {
     const { onOpenArt } = renderMarginalia({
       room: makeRoom({ art_url: 'https://img.example/ward.png' }),
@@ -190,5 +173,30 @@ describe('Marginalia', () => {
   it('bare walls read honestly when nothing resolves (#3535)', () => {
     renderMarginalia({ room: makeRoom({ art_url: null }) });
     expect(screen.getByText('bare walls')).toBeInTheDocument();
+  });
+
+  it('category headers are doors — clicking one opens its editor (#3534)', async () => {
+    const { onOpenDoor } = renderMarginalia();
+    await userEvent.click(screen.getByTestId('marginalia-door-ambience'));
+    expect(onOpenDoor).toHaveBeenCalledWith('ambience');
+    await userEvent.click(screen.getByTestId('marginalia-door-secrets-story'));
+    expect(onOpenDoor).toHaveBeenCalledWith('secrets');
+  });
+
+  it('Ownership stays a label — no door onto nothing (#3534)', () => {
+    renderMarginalia();
+    expect(screen.queryByTestId('marginalia-door-ownership')).not.toBeInTheDocument();
+  });
+
+  it('the Resonance panel renders real cascade readings (#3534)', () => {
+    renderMarginalia({
+      resonances: [{ name: 'Hope', affinity: 'Radiant', magnitude: 4 }],
+      dominantAffinity: 'Radiant',
+    });
+    const panel = screen.getByTestId('marginalia-panel-resonance');
+    expect(panel).toHaveTextContent('Hope');
+    expect(panel).toHaveTextContent('4');
+    expect(panel).toHaveTextContent('Dominant');
+    expect(panel).not.toHaveTextContent('unresonant ground');
   });
 });
