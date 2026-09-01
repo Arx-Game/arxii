@@ -174,6 +174,92 @@ disabled:
     name: Optional property declarations should not use both '?' and 'undefined'
     why: Redundant-syntax opinion; TypeScript treats the two forms identically here.
 
+  # ------------------------------------- tail triage (#3548): ruff/ESLint already owns it
+  - rule: python:S1854
+    name: Unused assignments should be removed
+    why: ruff `F841` already enforces this, locally and blocking.
+  - rule: python:S2208
+    name: Wildcard imports should not be used
+    why: ruff `F403`/`F405` already enforce this; CLAUDE.md also bars them outright.
+  - rule: python:S3626
+    name: Jump statements should not be redundant
+    why: >
+      ruff `RET505`-`RET508` cover this and the codebase is already clean under them -
+      they are what enforces our guard-clause style.
+  - rule: typescript:S3626
+    name: Jump statements should not be redundant
+    why: Same as python:S3626, on the frontend.
+  - rule: python:S1186
+    name: Functions and methods should not be empty
+    why: >
+      ruff owns empty-body detection, and CLAUDE.md treats stubs and placeholders as
+      intentional - an empty body is frequently a deliberate seam here.
+  - rule: python:S108
+    name: Nested blocks of code should not be left empty
+    why: Same reasoning as python:S1186.
+
+  # ------------------------------------------ tail triage (#3548): consistency with rules
+  # we already rejected for the same reason
+  - rule: typescript:S107
+    name: Functions should not have too many parameters
+    why: >
+      The TypeScript twin of python:S107, which is disabled above because ruff `PLR0913`
+      owns it. Leaving one on and the other off would be incoherent.
+  - rule: javascript:S7773
+    name: Number static methods should be preferred over global equivalents
+    why: The JavaScript twin of typescript:S7773 - `parseInt` IS `Number.parseInt`.
+
+  # ------------------------------------------------- tail triage (#3548): cosmetic, no defect
+  - rule: typescript:S6754
+    name: useState return should be destructured and named symmetrically
+    why: Naming preference. No defect, and the asymmetric names it flags are readable.
+  - rule: typescript:S7763
+    name: Re-exports should use "export...from" syntax
+    why: Syntax preference with no behavioural difference.
+  - rule: typescript:S6564
+    name: Redundant type aliases should not be used
+    why: Cosmetic. A named alias is often the clearer form even when structurally redundant.
+  - rule: typescript:S6571
+    name: Type constituents of unions should not be redundant
+    why: Cosmetic; TypeScript already collapses these.
+  - rule: typescript:S7744
+    name: Unnecessary fallback objects should not be used when spreading
+    why: Cosmetic; the explicit fallback often documents intent.
+  - rule: typescript:S7778
+    name: Multiple consecutive calls should be merged
+    why: Cosmetic.
+  - rule: typescript:S7721
+    name: Functions should be moved to the highest possible scope
+    why: >
+      Debatable - a closure defined where it is used is frequently clearer than one
+      hoisted away from its only caller.
+  - rule: typescript:S7780
+    name: String literals with escaped backslashes should use String.raw
+    why: Cosmetic.
+  - rule: typescript:S7758
+    name: Unicode-aware string methods should be used
+    why: >
+      No defect in this codebase - the flagged sites operate on ASCII identifiers and
+      keys, not user text.
+  - rule: typescript:S3735
+    name: '"void" should not be used'
+    why: >
+      Cosmetic. `void` on a deliberately-ignored promise is the idiom that documents the
+      intent, which is the opposite of what this rule assumes.
+  - rule: typescript:S2301
+    name: Methods should not contain selector parameters
+    why: >
+      A design opinion, not a defect. A boolean parameter is sometimes the honest shape;
+      ruff's equivalent (`FBT`) is likewise ignored on the Python side.
+  - rule: python:S7496
+    name: Creation of collections with literals or comprehensions
+    why: Cosmetic style preference.
+  - rule: python:S6796
+    name: Generic functions should use the PEP 695 type parameter syntax
+    why: >
+      Modernization churn. ruff's `UP007` (the same family, non-PEP604 unions) is already
+      ignored for backwards compatibility.
+
 # Rules deliberately KEPT despite being noisy, so nobody "cleans them up" later.
 # These are not configuration — they are a record of decisions, read by humans.
 keep:
