@@ -76,17 +76,19 @@ def _is_query_params_access(node: ast.expr) -> bool:
     Returns:
         True when the node accesses query_params or GET.
     """
-    if isinstance(node, ast.Call):
-        if (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == _GET_METHOD
-            and isinstance(node.func.value, ast.Attribute)
-            and node.func.value.attr in ("query_params", "GET")
-        ):
-            return True
-    if isinstance(node, ast.Subscript):
-        if isinstance(node.value, ast.Attribute) and node.value.attr in ("query_params", "GET"):
-            return True
+    if isinstance(node, ast.Call) and (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == _GET_METHOD
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr in ("query_params", "GET")
+    ):
+        return True
+    if (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr in ("query_params", "GET")
+    ):
+        return True
     return False
 
 
