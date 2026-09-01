@@ -10,8 +10,10 @@ endpoint. This is a different credential from the ``SENTRY_DSN`` in
 See ``docs/operations/sentry-triage.md``.
 """
 
+from datetime import UTC, datetime
 import json
 import os
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +23,9 @@ SENTRY_ORG = "arx2"
 # issues endpoint accepts numeric ids, so no slug lookup is needed.
 SENTRY_PROJECT_ID = "4511905661386752"
 SENTRY_BASE = "https://sentry.io/api/0"
+# Comfortably predates the project; the API rejects an empty statsPeriod, so an
+# absolute range is the only way to ask for "all unresolved, ever".
+EPOCH_START = "2020-01-01T00:00:00"
 GH_REPO = "Arx-Game/arxii"
 
 TOKEN_ENV = "SENTRY_AUTH_TOKEN"  # noqa: S105 - env var name, not a credential
@@ -64,19 +69,33 @@ def api_request(
 
 
 def fetch_unresolved_issues(limit: int = 100) -> list[dict]:
-    """Return currently unresolved Sentry issues for the project, newest activity first."""
-    return (
+    """Return every unresolved Sentry issue for the project, newest activity first.
+
+    Queried over an absolute date range rather than ``statsPeriod``, deliberately.
+    ``statsPeriod`` filters on last-seen and caps at 90d, so any window silently
+    drops issues that stopped firing but were never resolved - the digest would
+    report "1 unresolved" while five older ones sat open (observed 2026-09-01 with
+    the 14d default). An unresolved issue is unresolved however stale it is.
+    """
+    issues = (
         api_request(
             f"/organizations/{SENTRY_ORG}/issues/",
             params={
                 "query": "is:unresolved",
                 "project": SENTRY_PROJECT_ID,
-                "statsPeriod": "14d",
+                "start": EPOCH_START,
+                "end": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%S"),
                 "limit": limit,
             },
         )
         or []
     )
+    if len(issues) >= limit:
+        print(
+            f"WARNING: hit the {limit}-issue page limit - the digest may be incomplete.",
+            file=sys.stderr,
+        )
+    return issues
 
 
 def issue_url(issue_id: str) -> str:
