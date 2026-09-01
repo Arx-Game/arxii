@@ -39,13 +39,13 @@ function StageBadge({
   isCurrent,
   isReview,
   isBehind,
-}: {
+}: Readonly<{
   index: number;
   isComplete: boolean;
   isCurrent: boolean;
   isReview: boolean;
   isBehind: boolean;
-}) {
+}>) {
   if (isComplete && !isReview) {
     return <CheckCircle2 className="h-5 w-5 text-green-500" />;
   }
@@ -76,14 +76,14 @@ function StageStep({
   stageCompletion,
   errors,
   onStageSelect,
-}: {
+}: Readonly<{
   stage: Stage;
   index: number;
   currentStage: Stage;
   stageCompletion: Record<Stage, boolean>;
   errors: string[];
   onStageSelect: (stage: Stage) => void;
-}) {
+}>) {
   const isComplete = stageCompletion[stage];
   const isCurrent = stage === currentStage;
   const isReview = stage === Stage.REVIEW;

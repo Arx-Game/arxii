@@ -98,7 +98,7 @@ function collectColorTokens(text: string, tokens: Token[]): void {
 function resolveColorHex(m: RegExpExecArray): string | undefined {
   if (m[2] !== undefined) {
     // Indexed: |[123]
-    return xtermToHex(parseInt(m[2], 10));
+    return xtermToHex(Number.parseInt(m[2], 10));
   }
   if (m[3] === undefined) return undefined;
   // Named: |r — 'n' is the reset code, not a color
@@ -209,6 +209,35 @@ interface Range {
  * markers stay in the text. Bold additionally swallows any italic markers
  * inside the pair — `**a *b* c**` is bold throughout, not bold-around-italic.
  */
+function findSpanClose(
+  tokens: Token[],
+  text: string,
+  openIdx: number,
+  kind: 'boldMarker' | 'strikeMarker'
+): number {
+  const closeIdx = findClosingMarker(tokens, openIdx, kind, text);
+  if (closeIdx === -1) return -1;
+  // An empty pair is not a span — leave the markers in the text as literals.
+  if (tokens[openIdx].end === tokens[closeIdx].start) return -1;
+  return closeIdx;
+}
+
+/**
+ * Swallow the italic markers inside a bold span.
+ *
+ * `**a *b* c**` is bold throughout, not bold-around-italic.
+ */
+function consumeItalicMarkersWithin(
+  tokens: Token[],
+  openIdx: number,
+  closeIdx: number,
+  consumed: Set<number>
+): void {
+  for (let j = openIdx + 1; j < closeIdx; j++) {
+    if (tokens[j].kind === 'italicMarker') consumed.add(j);
+  }
+}
+
 function matchPairedMarkers(
   tokens: Token[],
   text: string,
@@ -219,9 +248,8 @@ function matchPairedMarkers(
 ): void {
   for (let i = 0; i < tokens.length; i++) {
     if (consumed.has(i) || tokens[i].kind !== kind) continue;
-    const closeIdx = findClosingMarker(tokens, i, kind, text);
+    const closeIdx = findSpanClose(tokens, text, i, kind);
     if (closeIdx === -1) continue;
-    if (text.slice(tokens[i].end, tokens[closeIdx].start).length === 0) continue;
 
     ranges.push({
       type,
@@ -232,11 +260,7 @@ function matchPairedMarkers(
     });
     consumed.add(i);
     consumed.add(closeIdx);
-    if (type === 'bold') {
-      for (let j = i + 1; j < closeIdx; j++) {
-        if (tokens[j].kind === 'italicMarker') consumed.add(j);
-      }
-    }
+    if (type === 'bold') consumeItalicMarkersWithin(tokens, i, closeIdx, consumed);
   }
 }
 
@@ -247,26 +271,42 @@ function matchPairedMarkers(
  * ones too — a stray `**` is not two italics) and anything sitting inside a
  * range already claimed by bold or strikethrough.
  */
-function findItalicPositions(text: string, ranges: Range[]): number[] {
-  const boldMarkerPositions = new Set<number>();
+function boldMarkerPositions(ranges: Range[]): Set<number> {
+  const positions = new Set<number>();
   for (const r of ranges) {
     if (r.type !== 'bold') continue;
-    for (let p = r.fullStart; p < r.fullStart + 2; p++) boldMarkerPositions.add(p);
-    for (let p = r.fullEnd - 2; p < r.fullEnd; p++) boldMarkerPositions.add(p);
+    for (let p = r.fullStart; p < r.fullStart + 2; p++) positions.add(p);
+    for (let p = r.fullEnd - 2; p < r.fullEnd; p++) positions.add(p);
   }
-  const isInsideRange = (pos: number): boolean =>
-    ranges.some((r) => pos > r.fullStart && pos < r.fullEnd);
+  return positions;
+}
 
+/** Whether a position sits strictly inside a range something else already claimed. */
+function isInsideAnyRange(pos: number, ranges: Range[]): boolean {
+  return ranges.some((r) => pos > r.fullStart && pos < r.fullEnd);
+}
+
+function findItalicPositions(text: string, ranges: Range[]): number[] {
+  const markerPositions = boldMarkerPositions(ranges);
   const positions: number[] = [];
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] !== '*' || boldMarkerPositions.has(i)) continue;
-    if (i + 1 < text.length && text[i + 1] === '*') {
-      i++; // part of an unconsumed ** — skip both characters
+
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '*') {
+      i += 1;
       continue;
     }
-    if (i > 0 && text[i - 1] === '*') continue;
-    if (isInsideRange(i)) continue;
-    positions.push(i);
+    // A `**` is one marker, not two italics — skip both characters, whether or
+    // not the pair went on to resolve into a bold range.
+    if (text[i + 1] === '*') {
+      i += 2;
+      continue;
+    }
+    // `text[i - 1]` is undefined at i === 0, which is correctly not '*'.
+    if (text[i - 1] !== '*' && !markerPositions.has(i) && !isInsideAnyRange(i, ranges)) {
+      positions.push(i);
+    }
+    i += 1;
   }
   return positions;
 }

@@ -24,12 +24,12 @@ function Pager({
   numPages,
   current,
   onPage,
-}: {
+}: Readonly<{
   page: number;
   numPages: number;
   current: number;
   onPage: (updater: (p: number) => number) => void;
-}) {
+}>) {
   if (numPages <= 1) return null;
   return (
     <div className="mt-6 flex items-center justify-center gap-2">
