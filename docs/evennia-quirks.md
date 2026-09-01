@@ -246,6 +246,26 @@ error, just an object that's simply never there in any schema-from-models DB. Th
 now also diffs the two resulting schemas directly (`tools/compare_schemas.py`), so a divergence
 fails there even if the wiring hook is somehow satisfied.
 
+### `RenameModel` leaves the sequence named after the OLD model
+
+`ALTER TABLE ... RENAME TO` renames the table and nothing else, so the sequence backing its `id`
+column keeps its original name forever. After migration 0174 renamed `CommonGemBucket` to
+`MaterialBucket`, production and every migrate-built database hold table `arxii_materialbucket`
+whose identity sequence is still `arxii_commongembucket_id_seq`; a `build_schema.py`-built
+database, which creates the table fresh under its current name, gets `arxii_materialbucket_id_seq`
+for the identical column.
+
+**This is cosmetic and must be left alone.** Django resolves sequences through
+`pg_get_serial_sequence` / the identity column's `pg_depend` link, never by name, and nothing in
+this repo reads a sequence name. Do not "fix" it with `ALTER SEQUENCE ... RENAME` in a migration:
+that is real DDL against production to correct a name no code reads, and it would have to be
+repeated for every future rename.
+
+What it did break was the nightly schema diff, which keyed sequence rows on the sequence's own
+name and so reported four false divergences (#3544, red for six consecutive nights).
+`tools/compare_schemas.py` now keys sequence rows on the owning `(table, column)` via `pg_depend`,
+so a rename produces no diff while an int-vs-bigint PK-width divergence still does. See ADR-0200.
+
 ### Fuzzy/partial object search is broken on PostgreSQL
 
 Evennia's `ObjectDB.objects.get_objs_with_key_or_alias(exact=False)` (the path `caller.search(name)` takes when there's no exact match) builds a `\b`-anchored regex (`r"\bBo.*"` for "Bo") and queries `db_key__iregex`. **On PostgreSQL, `\b` is a literal backspace character (POSIX BRE/ERE), not a word boundary** — word boundaries are a PCRE/Python-`re` extension. So the regex never matches a real key like "Bob" on Postgres. On the SQLite tier, Evennia registers a Python `re`-based `REGEXP` function where `\b` IS a word boundary, so partial matching works there and the divergence is invisible until CI's Postgres shard runs.

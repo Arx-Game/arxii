@@ -162,6 +162,17 @@ repos:
         entry: uv run python tools/check_standalone_sql_wiring.py
         language: system
         pass_filenames: false
+      # tools/tests/ is pytest, not Django, so `arx test`'s app labels never
+      # reach it and nothing else in CI ran it - the unit tests guarding
+      # compare_schemas.py, check_standalone_sql_wiring.py and the sonarcloud
+      # helpers were inert (found while fixing #3544, whose own regression pins
+      # live there). Whole suite is ~0.5s, so it runs on every commit.
+      - id: tools-tests
+        name: Unit tests for tools/ helper scripts
+        entry: uv run pytest tools/tests -q
+        language: system
+        pass_filenames: false
+        files: ^tools/
       - id: ty
         name: ty
         entry: uv run ty check --no-progress

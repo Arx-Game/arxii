@@ -77,12 +77,35 @@ SECTION_QUERIES: dict[str, str] = {
         WHERE schemaname = 'public'
         ORDER BY 1
     """,
-    # An int-vs-bigint PK divergence surfaces here.
+    # An int-vs-bigint PK divergence surfaces here - which is about the sequence's
+    # TYPE, so the row is keyed on the column the sequence backs, not on the
+    # sequence's own name. Postgres does not rename a sequence when its owning
+    # table is renamed: after a RenameModel the migrate-built database keeps
+    # arxii_commongembucket_id_seq while build_schema.py creates
+    # arxii_materialbucket_id_seq for the identical column. Keying on the owner
+    # (table, column) makes that a non-event, exactly as normalize_index_line()
+    # does for index names - see the module docstring on why names are excluded.
+    # deptype 'i' covers identity columns (Django 4.1+ AutoFields) and 'a' the
+    # older serial form; refobjsubid > 0 restricts the join to column
+    # dependencies, so each sequence yields exactly one row. A sequence with no
+    # owning column (a standalone CREATE SEQUENCE) falls back to its own name
+    # with an empty column field, so it is still compared rather than dropped.
     "SEQUENCE": """
-        SELECT 'SEQUENCE|' || c.relname || '|' || format_type(s.seqtypid, NULL)
+        SELECT 'SEQUENCE|' || COALESCE(owner.relname, seq.relname) || '|'
+               || COALESCE(a.attname, '') || '|'
+               || format_type(s.seqtypid, NULL)
         FROM pg_sequence s
-        JOIN pg_class c ON c.oid = s.seqrelid
-        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_class seq ON seq.oid = s.seqrelid
+        JOIN pg_namespace n ON n.oid = seq.relnamespace
+        LEFT JOIN pg_depend d
+               ON d.classid = 'pg_class'::regclass
+              AND d.objid = s.seqrelid
+              AND d.refclassid = 'pg_class'::regclass
+              AND d.refobjsubid > 0
+              AND d.deptype IN ('a', 'i')
+        LEFT JOIN pg_class owner ON owner.oid = d.refobjid
+        LEFT JOIN pg_attribute a
+               ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
         WHERE n.nspname = 'public'
         ORDER BY 1
     """,
@@ -133,12 +156,14 @@ ALLOWED_DIFFERENCES: frozenset[str] = frozenset(
         "COLUMN|django_flatpage_sites|id|integer|false||d",
         "COLUMN|socialaccount_socialapp_sites|id|bigint|false||d",
         "COLUMN|socialaccount_socialapp_sites|id|integer|false||d",
-        "SEQUENCE|auth_group_permissions_id_seq|bigint",
-        "SEQUENCE|auth_group_permissions_id_seq|integer",
-        "SEQUENCE|django_flatpage_sites_id_seq|bigint",
-        "SEQUENCE|django_flatpage_sites_id_seq|integer",
-        "SEQUENCE|socialaccount_socialapp_sites_id_seq|bigint",
-        "SEQUENCE|socialaccount_socialapp_sites_id_seq|integer",
+        # Keyed on the owning (table, column) to match SECTION_QUERIES["SEQUENCE"];
+        # these are the sequences behind the three id columns listed above.
+        "SEQUENCE|auth_group_permissions|id|bigint",
+        "SEQUENCE|auth_group_permissions|id|integer",
+        "SEQUENCE|django_flatpage_sites|id|bigint",
+        "SEQUENCE|django_flatpage_sites|id|integer",
+        "SEQUENCE|socialaccount_socialapp_sites|id|bigint",
+        "SEQUENCE|socialaccount_socialapp_sites|id|integer",
     }
 )
 
@@ -155,9 +180,12 @@ def _is_django_migrations_object(line: str) -> bool:
     """True if the snapshot line's object name is or starts with django_migrations_.
 
     The '_' boundary keeps this from wrongly excluding a hypothetical unrelated
-    table like django_migrationsfoo. 'Starts with' (not just equals) is still
-    needed to catch django_migrations_id_seq, whose SEQUENCE row is named after
-    the table's own auto-incrementing id column.
+    table like django_migrationsfoo. 'Starts with' (not just equals) pairs with
+    SECTION_QUERIES["SEQUENCE"]'s ownerless fallback: the sequence row normally
+    keys on the owning table ('django_migrations'), which the equality arm
+    catches, but if that ownership link is ever absent the row falls back to the
+    sequence's own name ('django_migrations_id_seq') and only the prefix arm
+    catches it. Cheap insurance against this filter re-reddening the nightly.
     """
     object_name = line.split("|", 2)[1]
     return object_name == "django_migrations" or object_name.startswith("django_migrations_")

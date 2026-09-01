@@ -146,6 +146,57 @@ def test_snapshot_partition_query_excludes_null_bound_index_children(monkeypatch
     assert lines == ["PARTITION|parent|child|FOR VALUES FROM (MINVALUE) TO (MAXVALUE)"]
 
 
+def test_sequence_query_keys_on_the_owning_column_not_the_sequence_name():
+    # Regression pin for #3544, which reddened the nightly migration replay for
+    # six consecutive nights. Postgres does not rename a sequence when its owning
+    # table is renamed, so after migration 0174's and 0203's RenameModel steps the
+    # migrate-built database held arxii_commongembucket_id_seq where
+    # build_schema.py had created arxii_materialbucket_id_seq - identical columns,
+    # four diff lines, and a gate that is red for a reason nobody needs to act on.
+    #
+    # Asserted against the query's source text because snapshot() is faked here
+    # (no database), the same approach the PARTITION test above takes. Reverting
+    # the projection to the sequence's own relname fails this.
+    query = compare_schemas.SECTION_QUERIES["SEQUENCE"]
+    assert "pg_depend" in query, "sequence rows must resolve their owner via pg_depend"
+    assert "owner.relname" in query, "sequence rows must key on the OWNING table's name"
+    # Both dependency kinds must be admitted: 'i' for identity columns (Django
+    # 4.1+ AutoFields) and 'a' for the older serial form.
+    assert "'a', 'i'" in query or "'i', 'a'" in query
+    # Column dependencies only - without this the namespace/table-level pg_depend
+    # rows would multiply each sequence into several snapshot lines.
+    assert "refobjsubid > 0" in query
+
+
+def test_a_renamed_table_produces_no_sequence_diff():
+    # The end-to-end shape of #3544 over the snapshot format itself: the same
+    # column reached by two paths (renamed vs created fresh) must produce one
+    # identical line, regardless of what the underlying sequence is named.
+    migrate_built = ["SEQUENCE|arxii_materialbucket|id|bigint"]
+    schema_built = ["SEQUENCE|arxii_materialbucket|id|bigint"]
+    assert diff_snapshots(migrate_built, schema_built, "migrate", "models") == ""
+
+
+def test_an_int_vs_bigint_sequence_still_diffs_under_the_owner_anchored_key():
+    # The divergence the SEQUENCE section exists to catch must survive the
+    # re-keying - owner-anchoring removes the NAME noise, not the TYPE signal.
+    left = ["SEQUENCE|arxii_personatitle|id|bigint"]
+    right = ["SEQUENCE|arxii_personatitle|id|integer"]
+    assert diff_snapshots(left, right, "migrate", "models") != ""
+
+
+def test_allowlisted_sequence_entries_are_owner_anchored():
+    # A name-keyed entry ('SEQUENCE|auth_group_permissions_id_seq|bigint') would
+    # silently never match after the re-keying, so the vendored through-table
+    # divergence it exists to tolerate would resurface as a red nightly. Owner-
+    # anchored rows carry four fields; name-keyed ones carried three.
+    sequence_entries = [e for e in ALLOWED_DIFFERENCES if e.startswith("SEQUENCE|")]
+    assert sequence_entries, "the vendored PK-width entries must still be present"
+    for entry in sequence_entries:
+        assert len(entry.split("|")) == 4, f"{entry} is not owner-anchored"
+        assert not entry.split("|")[1].endswith("_seq"), f"{entry} keys on a sequence name"
+
+
 def test_identical_snapshots_produce_no_diff():
     lines = ["TABLE|arxii_interaction|p", "COLUMN|arxii_interaction|id|bigint|false||"]
     assert diff_snapshots(lines, list(lines), "a", "b") == ""
@@ -188,7 +239,12 @@ def test_filter_allowed_drops_django_migrations_rows_by_object_name():
     lines = [
         "TABLE|django_migrations|r",
         "COLUMN|django_migrations|id|bigint|false||d",
-        "SEQUENCE|django_migrations_id_seq|bigint",
+        # Owner-anchored form: the sequence row keys on its owning table, so the
+        # equality arm catches it.
+        "SEQUENCE|django_migrations|id|bigint",
+        # Ownerless-fallback form: if the ownership link were ever absent the row
+        # keys on the sequence's own name, and only the prefix arm catches it.
+        "SEQUENCE|django_migrations_id_seq||bigint",
         "TABLE|django_migration|r",  # singular - not the real table; must survive
         "TABLE|django_migrationsfoo|r",  # no '_' boundary; must survive
         "TABLE|keepme|r",
