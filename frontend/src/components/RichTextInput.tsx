@@ -167,76 +167,79 @@ export function RichTextInput({
     });
   }, [onChange]);
 
+  /**
+   * Drive the open autocomplete popup. Returns true when the key was consumed,
+   * so the caller knows not to treat it as text or as a formatting shortcut.
+   */
+  const handleAutocompleteKey = React.useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!autocompleteState?.visible || filteredItems.length === 0) return false;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setAutocompleteState((prev) =>
+          prev
+            ? { ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredItems.length - 1) }
+            : null
+        );
+        return true;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setAutocompleteState((prev) =>
+          prev ? { ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) } : null
+        );
+        return true;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        // I6: the filtered list can shrink as the user types, leaving
+        // selectedIndex pointing past the end — clamp before indexing.
+        const selected =
+          filteredItems[Math.min(autocompleteState.selectedIndex, filteredItems.length - 1)];
+        if (selected) {
+          handleAutocompleteSelect(selected.name);
+        }
+        return true;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setAutocompleteState(null);
+        return true;
+      }
+      return false;
+    },
+    [autocompleteState, filteredItems, handleAutocompleteSelect]
+  );
+
+  /** Ctrl/Cmd formatting shortcuts. Returns true when the key was consumed. */
+  const handleFormattingKey = React.useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!e.ctrlKey && !e.metaKey) return false;
+
+      const wrap = (open: string, close: string) => {
+        e.preventDefault();
+        handleWrap(open, close);
+        return true;
+      };
+      if (e.key === 'b') return wrap('**', '**');
+      if (e.key === 'i') return wrap('*', '*');
+      if (e.shiftKey && (e.key === 'S' || e.key === 's')) return wrap('~~', '~~');
+      if (e.key === 'k') {
+        e.preventDefault();
+        handleLinkInsert();
+        return true;
+      }
+      return false;
+    },
+    [handleWrap, handleLinkInsert]
+  );
+
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Handle autocomplete navigation first
-      if (autocompleteState?.visible && filteredItems.length > 0) {
-        // I6: Clamp selectedIndex to valid range before using it.
-        // The filtered list can shrink as the user types, leaving the
-        // index pointing past the end.
-        const clampedIndex = Math.min(autocompleteState.selectedIndex, filteredItems.length - 1);
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setAutocompleteState((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  selectedIndex: Math.min(prev.selectedIndex + 1, filteredItems.length - 1),
-                }
-              : null
-          );
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setAutocompleteState((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  selectedIndex: Math.max(prev.selectedIndex - 1, 0),
-                }
-              : null
-          );
-          return;
-        }
-        if (e.key === 'Enter' || e.key === 'Tab') {
-          e.preventDefault();
-          const selected = filteredItems[clampedIndex];
-          if (selected) {
-            handleAutocompleteSelect(selected.name);
-          }
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          setAutocompleteState(null);
-          return;
-        }
-      }
-
-      // Keyboard shortcuts for formatting
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'b') {
-          e.preventDefault();
-          handleWrap('**', '**');
-          return;
-        }
-        if (e.key === 'i') {
-          e.preventDefault();
-          handleWrap('*', '*');
-          return;
-        }
-        if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
-          e.preventDefault();
-          handleWrap('~~', '~~');
-          return;
-        }
-        if (e.key === 'k') {
-          e.preventDefault();
-          handleLinkInsert();
-          return;
-        }
-      }
+      // The popup gets first refusal on every key, then formatting shortcuts.
+      if (handleAutocompleteKey(e)) return;
+      if (handleFormattingKey(e)) return;
 
       // Enter to submit, Shift+Enter for newline
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -245,18 +248,9 @@ export function RichTextInput({
         return;
       }
 
-      // Pass through to parent handler
       onKeyDown?.(e);
     },
-    [
-      autocompleteState,
-      filteredItems,
-      handleAutocompleteSelect,
-      handleWrap,
-      handleLinkInsert,
-      onSubmit,
-      onKeyDown,
-    ]
+    [handleAutocompleteKey, handleFormattingKey, onSubmit, onKeyDown]
   );
 
   const handleChange = React.useCallback(
