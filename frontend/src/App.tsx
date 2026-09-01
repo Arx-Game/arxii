@@ -87,11 +87,6 @@ const AtlasPage = lazy(() =>
     default: m.AtlasPage,
   }))
 );
-const RoomEditorPage = lazy(() =>
-  import('@/world-builder/pages/RoomEditorPage').then((m) => ({
-    default: m.RoomEditorPage,
-  }))
-);
 const FlowsBuilderPage = lazy(() =>
   import('@/flows-builder/pages/FlowsBuilderPage').then((m) => ({
     default: m.FlowsBuilderPage,
@@ -609,16 +604,6 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <AtlasPage />
-                </Suspense>
-              </StaffRoute>
-            }
-          />
-          <Route
-            path="/staff/world-builder/rooms/:roomId"
-            element={
-              <StaffRoute>
-                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <RoomEditorPage />
                 </Suspense>
               </StaffRoute>
             }
