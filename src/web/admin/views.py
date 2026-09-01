@@ -17,6 +17,8 @@ from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute
 logger = logging.getLogger(__name__)
 
 _ERR_UNKNOWN_MODEL = "Unknown model"
+_IMPORT_UPLOAD_TEMPLATE = "admin/import_upload.html"
+_IMPORT_DATA_TITLE = "Import Data"
 
 
 def _resolve_domain(app_label, model_name):
@@ -250,8 +252,8 @@ def import_upload(request):
         if not uploaded_file:
             return render(
                 request,
-                "admin/import_upload.html",
-                {"title": "Import Data", "error": "No file selected."},
+                _IMPORT_UPLOAD_TEMPLATE,
+                {"title": _IMPORT_DATA_TITLE, "error": "No file selected."},
             )
         try:
             content = uploaded_file.read().decode("utf-8")
@@ -260,8 +262,8 @@ def import_upload(request):
             logger.exception("Fixture upload parse failed")
             return render(
                 request,
-                "admin/import_upload.html",
-                {"title": "Import Data", "error": f"Failed to parse file: {exc}"},
+                _IMPORT_UPLOAD_TEMPLATE,
+                {"title": _IMPORT_DATA_TITLE, "error": f"Failed to parse file: {exc}"},
             )
         # Store fixture content in session for the execute step
         request.session["import_fixture_data"] = content
@@ -270,7 +272,7 @@ def import_upload(request):
             "admin/import_preview.html",
             {"title": "Import Preview", "analysis": analysis},
         )
-    return render(request, "admin/import_upload.html", {"title": "Import Data"})
+    return render(request, _IMPORT_UPLOAD_TEMPLATE, {"title": _IMPORT_DATA_TITLE})
 
 
 @require_POST
@@ -281,9 +283,9 @@ def import_execute(request):
     if not fixture_data:
         return render(
             request,
-            "admin/import_upload.html",
+            _IMPORT_UPLOAD_TEMPLATE,
             {
-                "title": "Import Data",
+                "title": _IMPORT_DATA_TITLE,
                 "error": "No fixture data found. Please upload a file first.",
             },
         )

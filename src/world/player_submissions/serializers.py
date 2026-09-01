@@ -28,6 +28,8 @@ _NO_ACTIVE_TENURE = "This persona's character has no active tenure."
 _NOT_OWNED = "You are not currently playing this persona."
 _REPORTED_NO_ROSTER_ENTRY = "Reported persona's character has no roster entry."
 _REPORTED_NO_TENURE = "Reported persona has no active player."
+_REPORTER_ACCOUNT_USERNAME = "reporter_account.username"
+_REPORTER_PERSONA_NAME = "reporter_persona.name"
 _CANNOT_REPORT_SELF = "You cannot report yourself."
 
 
@@ -90,11 +92,11 @@ class PlayerFeedbackDetailSerializer(serializers.ModelSerializer):
     """Read serializer for staff review."""
 
     reporter_account_username = serializers.CharField(
-        source="reporter_account.username",
+        source=_REPORTER_ACCOUNT_USERNAME,
         read_only=True,
     )
     reporter_persona_name = serializers.CharField(
-        source="reporter_persona.name",
+        source=_REPORTER_PERSONA_NAME,
         read_only=True,
     )
 
@@ -128,11 +130,11 @@ class BugReportCreateSerializer(serializers.ModelSerializer):
 
 class BugReportDetailSerializer(serializers.ModelSerializer):
     reporter_account_username = serializers.CharField(
-        source="reporter_account.username",
+        source=_REPORTER_ACCOUNT_USERNAME,
         read_only=True,
     )
     reporter_persona_name = serializers.CharField(
-        source="reporter_persona.name",
+        source=_REPORTER_PERSONA_NAME,
         read_only=True,
     )
     issue_draft = serializers.SerializerMethodField()
@@ -262,11 +264,11 @@ class PlayerReportDetailSerializer(serializers.ModelSerializer):
     """Staff-only detail serializer with full identity context."""
 
     reporter_account_username = serializers.CharField(
-        source="reporter_account.username",
+        source=_REPORTER_ACCOUNT_USERNAME,
         read_only=True,
     )
     reporter_persona_name = serializers.CharField(
-        source="reporter_persona.name",
+        source=_REPORTER_PERSONA_NAME,
         read_only=True,
     )
     reported_account_username = serializers.CharField(

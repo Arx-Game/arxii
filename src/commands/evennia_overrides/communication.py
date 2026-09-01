@@ -23,6 +23,8 @@ from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
 from world.scenes.place_models import Place
 
+_CMD_ALL_LOCK = "cmd:all()"
+
 # Per-say language tag (#2993): a leading "(tongue) rest of the line" switches
 # just this one utterance's language without touching the sticky default.
 _LANGUAGE_TAG_RE = re.compile(r"^\(([^)]{1,50})\)\s+(.*)$")
@@ -99,7 +101,7 @@ class CmdSay(ArxCommand):
     """Speak aloud to the room."""
 
     key = "say"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = SayAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -139,7 +141,7 @@ class CmdWhisper(ArxCommand):
     """Whisper something to a target."""
 
     key = "whisper"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = WhisperAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -178,7 +180,7 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
     ]
 
     key = "page"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     help_category = "Account"
 
     def _resolve_target(self, charname: str) -> Any | None:
@@ -292,7 +294,7 @@ class CmdTabletalk(ArxCommand):
 
     key = "tt"
     aliases: ClassVar[list[str]] = ["tabletalk"]
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PoseAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -328,7 +330,7 @@ class CmdPose(ArxCommand):
 
     key = "pose"
     aliases: ClassVar[list[str]] = ["emote"]
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PoseAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -352,7 +354,7 @@ class CmdMutter(ArxCommand):
     """
 
     key = "mutter"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = MutterAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -391,7 +393,7 @@ class CmdPemit(ArxCommand):
     """
 
     key = "pemit"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PemitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -423,7 +425,7 @@ class CmdEmit(ArxCommand):
     """
 
     key = "emit"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = EmitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:

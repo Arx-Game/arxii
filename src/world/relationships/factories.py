@@ -20,6 +20,8 @@ from world.relationships.models import (
     RelationshipUpdate,
 )
 
+_CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+
 
 class RelationshipConditionFactory(DjangoModelFactory):
     """Factory for creating RelationshipCondition instances."""
@@ -105,8 +107,8 @@ class CharacterRelationshipFactory(DjangoModelFactory):
     class Meta:
         model = CharacterRelationship
 
-    source = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    target = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    source = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    target = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
 
 
 class RelationshipTrackProgressFactory(DjangoModelFactory):
@@ -128,7 +130,7 @@ class RelationshipUpdateFactory(DjangoModelFactory):
         model = RelationshipUpdate
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     title = factory.Faker("sentence", nb_words=4)
     writeup = factory.Faker("paragraph")
     track = factory.SubFactory(RelationshipTrackFactory)
@@ -142,7 +144,7 @@ class RelationshipDevelopmentFactory(DjangoModelFactory):
         model = RelationshipDevelopment
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     title = factory.Faker("sentence", nb_words=4)
     writeup = factory.Faker("paragraph")
     track = factory.SubFactory(RelationshipTrackFactory)
@@ -157,7 +159,7 @@ class RelationshipCapstoneFactory(DjangoModelFactory):
         model = RelationshipCapstone
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     title = factory.Faker("sentence", nb_words=4)
     writeup = factory.Faker("paragraph")
     track = factory.SubFactory(RelationshipTrackFactory)
@@ -171,7 +173,7 @@ class RelationshipChangeFactory(DjangoModelFactory):
         model = RelationshipChange
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
-    author = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    author = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     title = factory.Faker("sentence", nb_words=4)
     writeup = factory.Faker("paragraph")
     source_track = factory.SubFactory(RelationshipTrackFactory)
