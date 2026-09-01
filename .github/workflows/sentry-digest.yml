@@ -1,0 +1,33 @@
+name: Sentry → GitHub digest
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the digest without touching any issue"
+        default: false
+        type: boolean
+  schedule:
+    - cron: "0 9 * * *"  # Daily 09:00 UTC
+
+jobs:
+  digest:
+    name: Digest unresolved Sentry issues
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    # Job-level so the step's own `if` can read it — a step cannot see env it
+    # declares itself.
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: "3.13"
+      - name: Digest
+        # Skip rather than fail when the secret is absent, so a fork (or this
+        # repo before the token lands) doesn't go red every morning.
+        if: env.SENTRY_AUTH_TOKEN != ''
+        run: python tools/sentry_digest.py ${{ inputs.dry_run && '--dry-run' || '' }}
