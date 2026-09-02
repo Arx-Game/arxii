@@ -77,7 +77,7 @@ def _actor_persona(actor: ObjectDB) -> Persona | None:
         return None
 
 
-def _resolve_target_value(value: Any) -> Persona | None:  # noqa: PLR0911
+def _resolve_target_value(value: Any) -> Persona | None:
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
     from world.scenes.models import Persona  # noqa: PLC0415
@@ -327,7 +327,7 @@ class OrgLeaveAction(Action):
         )
 
 
-def _run_membership_management(  # noqa: PLR0911, PLR0913
+def _run_membership_management(  # noqa: PLR0913
     actor: ObjectDB,
     verb: str,
     preposition: str,

@@ -407,7 +407,7 @@ def _room_description(profile: Any) -> str:
     return row.permanent_description if row is not None else ""
 
 
-def _relational_dig_target(  # noqa: PLR0911 — a validation ladder; each refusal is one message
+def _relational_dig_target(
     kwargs: dict[str, Any], area: Any
 ) -> tuple[Any | None, Any | None, str | None]:
     """Resolve the ``from_room_id``/``direction`` relational-dig kwargs (#3269).
@@ -2226,7 +2226,7 @@ class StaffBatchDigAction(_WorldBuilderAction):
     warrant_adds_rooms: ClassVar[bool] = True
     warrant_rooms_count_param: ClassVar[str | None] = "count"
 
-    def execute(  # noqa: PLR0911 — a validation ladder; each refusal is one message
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

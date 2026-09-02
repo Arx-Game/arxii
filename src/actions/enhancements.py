@@ -28,7 +28,10 @@ def get_involuntary_enhancements(
     results = []
     for enh in enhancements:
         source = enh.source
-        if source and hasattr(source, "should_apply_enhancement"):
-            if source.should_apply_enhancement(actor, enh):
-                results.append(enh)
+        if (
+            source
+            and hasattr(source, "should_apply_enhancement")
+            and source.should_apply_enhancement(actor, enh)
+        ):
+            results.append(enh)
     return results

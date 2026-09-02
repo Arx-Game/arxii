@@ -34,7 +34,7 @@ class MintAccusationAction(Action):
     action_category: ActionCategory = ActionCategory.SOCIAL
     target_type: TargetType = TargetType.SINGLE
 
-    def execute(  # noqa: PLR0911 — each return is a distinct guard/route (consent, crime, mint)
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

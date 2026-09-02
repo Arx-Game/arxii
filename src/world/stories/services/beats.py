@@ -841,9 +841,7 @@ def _members_for_beat(
                     continue
 
 
-def _evaluate_predicate(  # noqa: PLR0911 — match dispatch, each case a distinct predicate type
-    beat: Beat, progress: StoryProgress
-) -> BeatOutcome:
+def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
     """Dispatch on beat.predicate_type and return the current outcome.
 
     Returns UNSATISFIED when the predicate is not yet met or the type is

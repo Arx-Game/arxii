@@ -114,7 +114,7 @@ class GMAwardDistinctionAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -567,7 +567,7 @@ class ReviewSheetUpdateRequestAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

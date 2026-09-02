@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _parents_for(thread: Thread) -> Iterable:  # noqa: PLR0911
+def _parents_for(thread: Thread) -> Iterable:
     """Return the parent entities whose variants should be searched.
 
     Moved verbatim from ``world.covenants.discovery._parents_for``.
@@ -325,7 +325,7 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
-def _anchor_label_for(thread: Thread) -> str:  # noqa: PLR0911
+def _anchor_label_for(thread: Thread) -> str:
     """Return a human-readable label for the thread's anchor entity.
 
     Used by ``_compose_crossing_message`` and ``CmdThreads._list_offers`` so

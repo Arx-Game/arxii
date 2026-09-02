@@ -130,17 +130,20 @@ class Trigger(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        if self.source_stage and self.source_condition:
-            # ConditionStage and ConditionInstance both FK to ConditionTemplate
-            # via the `condition` field.
-            if self.source_stage.condition_id != self.source_condition.condition_id:
-                raise ValidationError(
-                    {
-                        "source_stage": (
-                            "source_stage must belong to source_condition's ConditionTemplate"
-                        ),
-                    }
-                )
+        # ConditionStage and ConditionInstance both FK to ConditionTemplate
+        # via the `condition` field.
+        if (
+            self.source_stage
+            and self.source_condition
+            and self.source_stage.condition_id != self.source_condition.condition_id
+        ):
+            raise ValidationError(
+                {
+                    "source_stage": (
+                        "source_stage must belong to source_condition's ConditionTemplate"
+                    ),
+                }
+            )
         if self.additional_filter_condition:
             validate_filter_schema(
                 self.additional_filter_condition,

@@ -517,7 +517,7 @@ def _settle_building_arrears(sheet: CharacterSheet, purse: Any) -> None:
         building.save(update_fields=["upkeep_arrears"])
 
 
-def _deliver_bequest(  # noqa: PLR0911 - one return per bequest kind, deliberately flat
+def _deliver_bequest(
     sheet: CharacterSheet,
     bequest: Bequest,
     heir_persona: Any,

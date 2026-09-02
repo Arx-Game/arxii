@@ -122,7 +122,7 @@ class RunBeatAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def _resolve_run_context(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+    def _resolve_run_context(
         self, actor: ObjectDB, kwargs: dict[str, Any]
     ) -> tuple[Beat, Scene, AccountDB | None] | ActionResult:
         """Resolve + validate the beat/scene/account triple, or a failure result."""

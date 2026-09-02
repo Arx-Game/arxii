@@ -270,7 +270,7 @@ class ServiceCraftAction(_MarketAction):
     name: str = "Commission Crafting"
     icon: str = "anvil"
 
-    def execute(  # noqa: PLR0911 — one return per refusal reason
+    def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
         from django.core.exceptions import ValidationError  # noqa: PLC0415

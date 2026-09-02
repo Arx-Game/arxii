@@ -87,9 +87,10 @@ def _check_applicability(
     # matches the thread's anchor technique. When the context has no technique
     # (technique=None), a TECHNIQUE-kind thread is always inapplicable because
     # the action isn't using any technique that the thread is anchored to.
-    if thread.target_kind == TargetKind.TECHNIQUE:
-        if context.technique is None or thread.target_technique_id != context.technique.pk:
-            return False, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value
+    if thread.target_kind == TargetKind.TECHNIQUE and (
+        context.technique is None or thread.target_technique_id != context.technique.pk
+    ):
+        return False, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value
 
     # Rule: Court-leader-no-stake (#1831). A COVENANT_ROLE thread's pull only
     # gets a Court-leader-regard empowerment bonus when some candidate effect's
@@ -97,9 +98,12 @@ def _check_applicability(
     # (see court_regard_modulation). When no candidate effect would ever be
     # empowered against this target, flag the thread inapplicable so the
     # player doesn't spend resonance expecting a boost that won't happen.
-    if thread.target_kind == TargetKind.COVENANT_ROLE and context.target_persona_id is not None:
-        if not _court_pull_would_have_effect(thread, context.target_persona_id):
-            return False, InapplicabilityReason.COURT_LEADER_NO_STAKE.value
+    if (
+        thread.target_kind == TargetKind.COVENANT_ROLE
+        and context.target_persona_id is not None
+        and not _court_pull_would_have_effect(thread, context.target_persona_id)
+    ):
+        return False, InapplicabilityReason.COURT_LEADER_NO_STAKE.value
 
     # Rule: relationship-no-stake (#1849). A RELATIONSHIP_TRACK thread's pull only
     # gets a relationship-bond empowerment bonus when the live target IS the
@@ -110,9 +114,8 @@ def _check_applicability(
     if (
         thread.target_kind == TargetKind.RELATIONSHIP_TRACK
         and context.target_persona_id is not None
-    ):
-        if not _relationship_pull_would_have_effect(thread, context.target_persona_id):
-            return False, InapplicabilityReason.RELATIONSHIP_NO_STAKE.value
+    ) and not _relationship_pull_would_have_effect(thread, context.target_persona_id):
+        return False, InapplicabilityReason.RELATIONSHIP_NO_STAKE.value
 
     return True, None
 

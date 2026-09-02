@@ -527,7 +527,7 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
             return f"{char_name} #{tenure.player_number}"
         return f"{self.name} ({char_name} #{tenure.player_number})"
 
-    def display_to_staff(self) -> str:  # noqa: PLR0911
+    def display_to_staff(self) -> str:
         """Full staff context — persona, character, player number, account.
 
         - First tenure: 'Bob (Thomas, played by Fred)'

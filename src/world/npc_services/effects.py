@@ -524,9 +524,7 @@ OFFER_EFFECT_HANDLERS[OfferKind.COLLECTION.value] = run_collection
 OFFER_EFFECT_HANDLERS[OfferKind.IMPROVEMENT.value] = run_improvement
 
 
-def run_train_offer(  # noqa: PLR0911 - one distinct business-rule return per gate
-    offer: NPCServiceOffer, persona: Persona
-) -> EffectResult:
+def run_train_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     """TRAIN effect handler (#2440): Academy trainer teaches a technique.
 
     One offer row per teachable technique (``TrainOfferDetails.technique`` —

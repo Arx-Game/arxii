@@ -49,7 +49,7 @@ def _active_round_for_room(room: ObjectDB) -> SceneRound | None:
     return active_round_for_room(room)
 
 
-def _resolve_guard_and_ally(  # noqa: PLR0911
+def _resolve_guard_and_ally(
     actor: ObjectDB, ally_name: str | None, *, no_ally_message: str
 ) -> tuple[SceneRoundParticipant, SceneRoundParticipant] | ActionResult:
     """Resolve the caller's active participant + a named ally's active participant.
@@ -244,7 +244,7 @@ class SetRoundModeAction(Action):
     target_type: TargetType = TargetType.AREA
     costs_turn: bool = False
 
-    def execute(  # noqa: PLR0911, PLR0913
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

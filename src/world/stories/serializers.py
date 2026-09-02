@@ -1846,11 +1846,10 @@ class ContributeBeatInputSerializer(serializers.Serializer):
                 {"non_field_errors": "Only AGGREGATE_THRESHOLD beats accept contributions."}
             )
 
-        if not request.user.is_staff:
-            if character_sheet.character.db_account_id != request.user.pk:
-                raise serializers.ValidationError(
-                    {"character_sheet": "You may only contribute for your own character."}
-                )
+        if not request.user.is_staff and character_sheet.character.db_account_id != request.user.pk:
+            raise serializers.ValidationError(
+                {"character_sheet": "You may only contribute for your own character."}
+            )
 
         return attrs
 

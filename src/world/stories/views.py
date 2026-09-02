@@ -3197,10 +3197,9 @@ class TableBulletinPostViewSet(viewsets.ModelViewSet):
         """Standard get_object with read permission check."""
         obj = super().get_object()
         # For retrieve, ensure the user can actually read this post.
-        if self.action == "retrieve":
-            if not _user_can_read_bulletin_post(self.request.user, obj):
-                msg = "You do not have permission to view this bulletin post."
-                raise PermissionDenied(msg)
+        if self.action == "retrieve" and not _user_can_read_bulletin_post(self.request.user, obj):
+            msg = "You do not have permission to view this bulletin post."
+            raise PermissionDenied(msg)
         return obj
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:

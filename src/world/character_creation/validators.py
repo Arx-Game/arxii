@@ -320,7 +320,7 @@ def get_identity_errors(draft: CharacterDraft) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: PLR0911
+def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     """Compute validation errors for the Magic stage (Gift/technique picks, #2426).
 
     Gift-stage validation, in order (return-first style):

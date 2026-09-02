@@ -68,7 +68,7 @@ class SpreadTaleAction(Action):
             return None, "That form cannot be used to spread a tale."
         return Specialization.objects.get(pk=specialization_id), ""
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

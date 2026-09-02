@@ -878,7 +878,7 @@ class OnUseTargetPrerequisite(Prerequisite):
     external target of that kind is required, reachable, and visible.
     """
 
-    def is_met(  # noqa: PLR0911
+    def is_met(
         self,
         actor: ObjectDB,
         target: ObjectDB | None = None,
@@ -1057,9 +1057,7 @@ class CompanionPresentPrerequisite(Prerequisite):
     additionally needs (a companion pose is a room-level pose).
     """
 
-    def is_met(  # noqa: PLR0911 - readable early-exit cascade, mirrors can_view_interaction
-        self, actor, target=None, context=None
-    ) -> tuple[bool, str]:
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
         from world.companions.models import Companion  # noqa: PLC0415
 
         kwargs = (context or {}).get("kwargs", {})
@@ -1099,9 +1097,7 @@ class GhostWindowPrerequisite(Prerequisite):
     - an ACCEPTED seance offer whose ceremony is OPEN, at the ceremony's location (#2393).
     """
 
-    def is_met(  # noqa: PLR0911
-        self, actor, target=None, context=None
-    ) -> tuple[bool, str]:
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
         from world.ceremonies.services import open_funeral_for  # noqa: PLC0415

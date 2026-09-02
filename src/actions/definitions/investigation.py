@@ -212,9 +212,7 @@ class StartInvestigationAction(Action):
             .exists()
         )
 
-    def _resolve_clue(  # noqa: PLR0911 — each return is a distinct player-facing guard
-        self, sheet: Any, kwargs: dict[str, Any]
-    ) -> Any:
+    def _resolve_clue(self, sheet: Any, kwargs: dict[str, Any]) -> Any:
         """Resolve the investigation's clue from a held clue or held evidence.
 
         Returns the Clue, or a failure ActionResult (checked via isinstance by the

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from world.magic.models import Technique
 
 
-def maybe_create_weakness_selection(  # noqa: PLR0911
+def maybe_create_weakness_selection(
     caster_sheet: CharacterSheet,
     technique: Technique,
     resolution_participant: CombatParticipant,

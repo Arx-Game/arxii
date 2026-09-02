@@ -71,7 +71,7 @@ def find_servant(room: ObjectDB) -> NPCAssignment | None:
     )
 
 
-def can_servant_fetch(*, actor: ObjectDB, item_instance: ItemInstance) -> bool:  # noqa: PLR0911
+def can_servant_fetch(*, actor: ObjectDB, item_instance: ItemInstance) -> bool:
     """Eligibility check: may a servant fetch this item for this actor?
 
     Returns True only when ALL of:

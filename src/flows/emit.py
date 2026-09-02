@@ -93,12 +93,12 @@ def _trigger_should_fire(trigger: Any, payload: Any, event_name: str) -> bool:
     base = trigger.trigger_definition.base_filter_condition
     additional = trigger.additional_filter_condition
     try:
-        if base is not None:
-            if not evaluate_filter(base, payload, self_ref=trigger.obj):
-                return False
-        if additional is not None:
-            if not evaluate_filter(additional, payload, self_ref=trigger.obj):
-                return False
+        if base is not None and not evaluate_filter(base, payload, self_ref=trigger.obj):
+            return False
+        if additional is not None and not evaluate_filter(
+            additional, payload, self_ref=trigger.obj
+        ):
+            return False
     except FilterPathError:
         logger.warning(
             "FilterPathError on trigger %s during dispatch of %s",
