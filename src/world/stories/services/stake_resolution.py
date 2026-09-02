@@ -394,8 +394,8 @@ def _machine_column_for_stake(
     The specific branch within that polarity is selected separately by
     _branch_for_column's lifecycle-state match (#1760); this function only
     picks WIN vs LOSS. ``stake`` is unused now that the old is-dead override
-    moved into _branch_for_column, but kept in the signature — callers pass
-    it uniformly with the withdrawal/GM-pick branch lookups.
+    moved into _branch_for_column, but kept in the signature - callers pass
+    it uniformly with the withdrawal branch lookups.
     """
     if outcome == BeatOutcome.SUCCESS:
         return StakeResolutionColumn.WIN

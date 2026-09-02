@@ -454,8 +454,8 @@ class MachineGradingTests(EvenniaTestCase):
         """Machine grading is tier-filtered: a branch pool with no consequence
         at the completion's tier applies nothing, but the StakeOutcome is
         still recorded (the resolution happened; its pool had no row for
-        this tier). Deliberate asymmetry with the GM-pick/withdrawal paths,
-        which apply deterministically (no tier)."""
+        this tier). Deliberate asymmetry with the withdrawal path, which
+        applies deterministically (no tier)."""
         _sheet, beat, progress = _character_story_beat()
         other_tier = CheckOutcomeFactory(name="Stake Unmatched Tier", success_level=-5)
         consequence = ConsequenceFactory(outcome_tier=other_tier)

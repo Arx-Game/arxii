@@ -382,9 +382,11 @@ class StakeRewardLineSerializerTests(APITestCase):
 class CompletedBeatEditRefusalTests(APITestCase):
     """#1770 PR3 review finding 1a: contract editing ends when the beat completes.
 
-    The open-activation lock alone leaves a hole — the completion tail closes
-    the activation while stakes still pend for a GM pick, which would reopen
-    reward-line (and resolution) editing on a contract that already ran.
+    The open-activation lock alone leaves a hole: every stake resolves
+    synchronously inside the same atomic completion tail that closes the
+    activation (there is no pending-decision window), but without the
+    completed-beat check reward-line (and resolution) editing could reopen
+    right after that tail runs, on a contract that already ran.
     """
 
     @classmethod

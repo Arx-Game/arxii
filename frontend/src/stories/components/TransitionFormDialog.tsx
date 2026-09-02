@@ -79,9 +79,10 @@ interface RoutingRow {
    */
   optionKey?: string;
   /** Stake-level routing rows (#1770 PR2): set when the requirement routes on
-   * a StakeOutcome column instead of the beat outcome. Authored via the
-   * stakes editor / API; this dialog preserves them through the bulk-save
-   * round-trip but only adds beat-level rows. */
+   * a StakeOutcome column instead of the beat outcome. This dialog's
+   * AddRoutingRow can author these directly ("Stake column" option) as well
+   * as preserve rows authored via the stakes editor / API through the
+   * bulk-save round-trip. */
   stakeId?: number;
   stakeColumn?: string;
 }

@@ -957,21 +957,23 @@ issues:
   narrows the `StakeOutcomeMethod` choices to `MACHINE` alone
 - `factories.py` — `seed_default_risk_calibrations` + FactoryBoy factories
 
-Cross-app (#3561): `world/scenes/rail_services.py` (`stakes`/`activation`
-sections of the GM story rail payload) + `world/scenes/views.py`
-(`SceneViewSet.stakes_summary`); `world/assets/views.py::NPCAssetViewSet` +
-`world/assets/filters.py::NPCAssetFilter` (the ASSET subject picker's search,
-scoped to a non-staff GM's own assets plus assets promoted within a story
-they lead).
-Cross-app (PR2): `world/combat/beat_wiring.py` (withdrawal wire),
-`world/items/services/usage.py::forfeit_item_instance`,
-`world/vitals/services.py::_mark_dead` (lifecycle propagation),
-`world/npc_services/services.py::adjust_npc_affection` (reused, unchanged).
-Cross-app (PR3): `world/currency/services.py::deliver_mission_money` (MONEY
-sink, `reason_label="stake reward"`), `world/magic/constants.py::GainSource.STAKE_REWARD` +
-`world/magic/models/grant.py::res_grant_stake_reward_shape` (RESONANCE sink
-provenance).
-Cross-app (PR4): `world/combat/beat_wiring.py::activate_stakes_for_scene` +
-`staked_unsatisfied_beats_for_scene`, `world/missions` risk-acknowledgement
-gate + `activate_stakes_for_instance`, `actions/definitions/gm_stories.py`
-(`declare_stakes`).
+### Cross-app
+
+- **#3561** - `world/scenes/rail_services.py` (`stakes`/`activation` sections
+  of the GM story rail payload) + `world/scenes/views.py`
+  (`SceneViewSet.stakes_summary`); `world/assets/views.py::NPCAssetViewSet` +
+  `world/assets/filters.py::NPCAssetFilter` (the ASSET subject picker's
+  search, scoped to a non-staff GM's own assets plus assets promoted within a
+  story they lead).
+- **PR2** - `world/combat/beat_wiring.py` (withdrawal wire),
+  `world/items/services/usage.py::forfeit_item_instance`,
+  `world/vitals/services.py::_mark_dead` (lifecycle propagation),
+  `world/npc_services/services.py::adjust_npc_affection` (reused, unchanged).
+- **PR3** - `world/currency/services.py::deliver_mission_money` (MONEY sink,
+  `reason_label="stake reward"`), `world/magic/constants.py::GainSource.STAKE_REWARD`
+  + `world/magic/models/grant.py::res_grant_stake_reward_shape` (RESONANCE
+  sink provenance).
+- **PR4** - `world/combat/beat_wiring.py::activate_stakes_for_scene` +
+  `staked_unsatisfied_beats_for_scene`, `world/missions` risk-acknowledgement
+  gate + `activate_stakes_for_instance`, `actions/definitions/gm_stories.py`
+  (`declare_stakes`).

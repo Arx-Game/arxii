@@ -302,11 +302,14 @@ def reward_band_problems_for_beat(beat: Beat) -> list[str]:
 
     Used by ``validate_stakes_readiness`` (via ``_calibration_band_problems``,
     which passes its own prefetch) AND re-run at pay time by
-    ``stake_resolution._apply_stake_rewards`` — the readiness verdict frozen
-    on the activation can go stale if reward lines change after the beat
-    completes (the GM-pick window), so the payout re-verifies the band
-    against live data. Missing calibration / no stakes / risk NONE return []
-    here (those are readiness problems, not band problems).
+    ``stake_resolution._apply_stake_rewards`` - the readiness verdict frozen
+    on the activation can go stale if reward lines changed earlier in the
+    activation's life; every stake now resolves synchronously inside the
+    same atomic completion tail that closes the activation, so there is no
+    post-completion pending-decision window, and this re-check exists for
+    staleness from before that tail ran. Missing calibration / no stakes /
+    risk NONE return [] here (those are readiness problems, not band
+    problems).
     """
     if beat.risk == RenownRisk.NONE:
         return []

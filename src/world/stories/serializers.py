@@ -3348,9 +3348,10 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
         """Reject the write if any involved resolution's beat is locked or completed.
 
         #1770 PR3 review: re-pointing to/from a resolution whose beat is locked
-        is rejected either way. Once the completion tail closes the activation
-        (with stakes possibly pending a GM pick), the open-activation lock no
-        longer bites — without the completed-beat check reward lines could be
+        is rejected either way. Once the completion tail closes the activation,
+        the open-activation lock no longer bites - every stake already resolved
+        synchronously inside that same atomic tail (there is no pending-decision
+        window) - without the completed-beat check reward lines could be
         re-authored after the contract ran and pay out on the stale activation's
         readiness verdict.
         """
@@ -3465,11 +3466,14 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
     def _enforce_lock_state(self, stake: Any, old_stake: Any, is_repoint: bool) -> None:
         """Lock check (#1770 PR1 review) + completed-beat check (#1770 PR3 review).
 
-        Re-pointing to/from a stake whose beat is locked is rejected either way —
-        check both sides when re-pointing. The open-activation lock alone leaves a
-        hole — the completion tail closes the activation while stakes can still
-        pend for a GM pick, which would reopen editing on a contract that already
-        ran. Contract editing ends when the beat completes (pillar 8's spirit).
+        Re-pointing to/from a stake whose beat is locked is rejected either way,
+        so check both sides when re-pointing. The open-activation lock alone
+        leaves a hole - every stake resolves synchronously inside the same
+        atomic completion tail that closes the activation (there is no
+        pending-decision window), but without this check reward lines could
+        still be re-authored right after that tail runs, reopening editing on
+        a contract that already ran. Contract editing ends when the beat
+        completes (pillar 8's spirit).
         """
         from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
