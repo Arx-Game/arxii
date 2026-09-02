@@ -29,7 +29,7 @@ def delete_null_tier_mapping_rows(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0206_alter_beat_deadline")]
+    dependencies = [("arxii", "0207_alter_beat_outcome_alter_beatcompletion_outcome_and_more")]
 
     operations = [
         migrations.AddField(
