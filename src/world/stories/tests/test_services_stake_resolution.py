@@ -57,7 +57,10 @@ from world.stories.services.beats import (
     record_gm_marked_outcome,
     record_outcome_tier_completion,
 )
-from world.stories.services.stake_resolution import resolve_stake_by_gm_pick
+from world.stories.services.stake_resolution import (
+    resolve_stake_by_gm_pick,
+    resolve_stakes_for_withdrawal,
+)
 from world.stories.services.stakes import activate_stakes_contract, get_open_activation
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
@@ -161,19 +164,6 @@ class MachineGradingTests(EvenniaTestCase):
         self.assertEqual(outcomes[0].pk, prior.pk)
         self.assertEqual(outcomes[0].column, StakeResolutionColumn.WIN)
 
-    def test_pending_gm_review_defers_stakes(self):
-        """force_outcome=PENDING_GM_REVIEW (no withdrawal): stakes wait for the GM."""
-        _sheet, beat, progress = _character_story_beat()
-        stake = StakeFactory(beat=beat)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
-
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
-
-        self.assertFalse(StakeOutcome.objects.filter(stake=stake).exists())
-
     def test_npc_fate_dead_subject_grades_loss_even_on_beat_success(self):
         """Pillar 11 (#1760: generalized to the LifecycleState ladder — the
         old implicit is-dead override is gone; reproducing it now requires an
@@ -240,26 +230,49 @@ class MachineGradingTests(EvenniaTestCase):
         outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.resolution_id, captured_branch.pk)
 
-    def test_withdrawal_fires_authored_branch_and_pends_the_rest(self):
-        _sheet, beat, progress = _character_story_beat()
+    def test_withdrawal_fires_authored_branch_and_records_the_rest(self):
+        """resolve_stakes_for_withdrawal: authored WITHDRAWAL fires; unauthored records
+        an empty outcome; the activation closes; the beat is untouched."""
+        sheet, beat, progress = _character_story_beat()
         authored = StakeFactory(beat=beat)
-        branch = StakeResolutionFactory(stake=authored, column=StakeResolutionColumn.WITHDRAWAL)
-        unauthored = StakeFactory(beat=beat)
-
-        record_outcome_tier_completion(
-            progress=progress,
-            beat=beat,
-            force_outcome=BeatOutcome.PENDING_GM_REVIEW,
-            withdrawal=True,
+        StakeResolutionFactory(stake=authored, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=authored, column=StakeResolutionColumn.LOSS)
+        pool = ConsequencePoolFactory()
+        consequence = ConsequenceFactory(outcome_tier=self.fail_tier)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=LegendSourceTypeFactory(),
+            legend_description_template="Withdrew.",
         )
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        branch = StakeResolutionFactory(
+            stake=authored, column=StakeResolutionColumn.WITHDRAWAL, consequence_pool=pool
+        )
+        bare = StakeFactory(beat=beat)
+        StakeResolutionFactory(stake=bare, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=bare, column=StakeResolutionColumn.LOSS)
+        activation = activate_stakes_contract(beat, [sheet])
 
+        outcomes = resolve_stakes_for_withdrawal(beat, progress, [sheet.primary_persona])
+
+        assert {o.stake_id for o in outcomes} == {authored.pk, bare.pk}
+        fired = StakeOutcome.objects.get(stake=authored)
+        assert fired.resolution_id == branch.pk
+        assert fired.column == StakeResolutionColumn.WITHDRAWAL
+        empty = StakeOutcome.objects.get(stake=bare)
+        assert empty.resolution is None
+        assert empty.column == StakeResolutionColumn.WITHDRAWAL
+        assert empty.activation_id == activation.pk
+        assert get_open_activation(beat) is None
         beat.refresh_from_db()
-        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
-        outcome = StakeOutcome.objects.get(stake=authored)
-        self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
-        self.assertEqual(outcome.method, StakeOutcomeMethod.MACHINE)
-        self.assertEqual(outcome.resolution_id, branch.pk)
-        self.assertFalse(StakeOutcome.objects.filter(stake=unauthored).exists())
+        assert beat.outcome == BeatOutcome.UNSATISFIED
+
+    def test_withdrawal_without_activation_is_noop(self):
+        sheet, beat, progress = _character_story_beat()
+        StakeFactory(beat=beat)
+        assert resolve_stakes_for_withdrawal(beat, progress, [sheet.primary_persona]) == []
 
     def test_withdrawal_requires_pending_gm_review(self):
         _sheet, beat, progress = _character_story_beat()

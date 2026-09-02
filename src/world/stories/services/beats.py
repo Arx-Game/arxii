@@ -221,20 +221,26 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     Shared atomic-transaction tail for record_gm_marked_outcome and
     record_outcome_tier_completion: flips beat.outcome in-place, creates the
     BeatCompletion row, fires the matching consequence pool (tier-aware when
-    outcome_tier is set), resolves the beat's stakes (#1770 PR2 — per-stake
-    machine grading, or WITHDRAWAL branches when ``withdrawal`` is set), closes
-    the open stake activation, and opens a SessionRequest if the episode is now
-    ready-to-run. Notifies post-commit (outside the atomic block) so a
-    notify failure can't roll back the completion.
+    outcome_tier is set), resolves the beat's stakes (#1770 PR2 - per-stake
+    machine grading), closes the open stake activation, and opens a
+    SessionRequest if the episode is now ready-to-run. Notifies post-commit
+    (outside the atomic block) so a notify failure can't roll back the
+    completion.
 
-    ``resolved_by`` (#2123) — only ever passed by record_gm_marked_outcome
+    ``resolved_by`` (#2123) - only ever passed by record_gm_marked_outcome
     (never by the machine-graded record_outcome_tier_completion, which is
     OUTCOME_TIER-only and excluded from GM Story Reward by construction).
     Credits GM Story Reward XP after commit when the outcome is SUCCESS or
     FAILURE (EXPIRED is system-caused, not GM effort, and never reaches this
-    path via record_gm_marked_outcome anyway — _GM_MARKED_VALID_OUTCOMES
+    path via record_gm_marked_outcome anyway - _GM_MARKED_VALID_OUTCOMES
     excludes it).
+
+    ``withdrawal`` no longer reaches resolve_stakes_for_completion (#3559 task
+    2 - withdrawal resolves through the separate resolve_stakes_for_withdrawal
+    instead); kept on this signature only because Task 3 of #3559 deletes it
+    alongside PENDING_GM_REVIEW/force_outcome.
     """
+    del withdrawal
     from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
     from world.stories.services.stake_resolution import (  # noqa: PLC0415
         resolve_stakes_for_completion,
@@ -262,7 +268,6 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
-            withdrawal=withdrawal,
         )
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
