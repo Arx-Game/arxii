@@ -256,6 +256,43 @@ class ExpireBeatTests(EvenniaTestCase):
         assert BeatCompletion.objects.filter(beat=beat).count() == 1
 
 
+class NotifyDeferralTests(EvenniaTestCase):
+    """complete_beat_expired defers notify to transaction.on_commit (review finding).
+
+    complete_beat_expired and expire_beat are both @transaction.atomic, so the
+    _create_completion_and_fire_pool tail runs inside a savepoint, not a top-level
+    commit. defer_notify=True schedules the notify via transaction.on_commit so it
+    fires only when the outer transaction actually commits, and so a notify failure
+    can't roll back the completion. EvenniaTestCase subclasses django.test.TestCase,
+    so captureOnCommitCallbacks is available directly.
+    """
+
+    def test_notify_runs_only_after_the_outer_transaction_commits(self) -> None:
+        _sheet, beat, progress = _character_beat()
+        with mock.patch("world.stories.services.beats._notify_beat_completion") as notify:
+            with self.captureOnCommitCallbacks(execute=True):
+                completion = complete_beat_expired(beat)
+                assert notify.call_count == 0
+            assert notify.call_count == 1
+        notify.assert_called_once_with(completion, progress)
+
+    def test_notify_failure_does_not_roll_back_the_completion(self) -> None:
+        _sheet, beat, _progress = _character_beat()
+        with (
+            mock.patch(
+                "world.stories.services.beats._notify_beat_completion",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertRaises(RuntimeError),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            complete_beat_expired(beat)
+
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.EXPIRED
+        assert BeatCompletion.objects.filter(beat=beat).exists()
+
+
 class ExpirySitesTests(EvenniaTestCase):
     def test_cron_fires_pool(self) -> None:
         template = ConditionTemplateFactory()

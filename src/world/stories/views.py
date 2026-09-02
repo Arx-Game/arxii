@@ -2612,9 +2612,13 @@ class GMQueueView(APIView):
 class ExpireOverdueBeatsView(APIView):
     """POST /api/stories/expire-overdue-beats/
 
-    Staff-only trigger that flips all UNSATISFIED beats with past deadlines
-    to EXPIRED. Designed for manual triggering and cron hooks.
-    Returns {"expired_count": N}.
+    Staff-only trigger that completes every UNSATISFIED beat with a past
+    deadline as EXPIRED through the shared completion tail (#3558): fires the
+    beat's expired consequence pool (no legend), grades its open stakes LOSS,
+    closes its stake contract, and notifies - one savepoint per beat, so one
+    beat's failure never stops the sweep. Designed for manual triggering and
+    cron hooks. Returns {"expired_count": N}, the count of beats whose
+    outcome changed.
     """
 
     permission_classes = [permissions.IsAdminUser]

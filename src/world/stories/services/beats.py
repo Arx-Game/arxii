@@ -35,6 +35,7 @@ Public API:
 
 from __future__ import annotations
 
+import functools
 import logging
 from typing import TYPE_CHECKING, cast
 
@@ -225,6 +226,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     withdrawal: bool = False,
     resolved_by: GMProfile | None = None,
     skip_effect_types: frozenset[str] = frozenset(),
+    defer_notify: bool = False,
 ) -> BeatCompletion:
     """Persist the outcome, create the BeatCompletion, and fire its consequence pool.
 
@@ -234,8 +236,26 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     outcome_tier is set), resolves the beat's stakes (#1770 PR2 — per-stake
     machine grading, or WITHDRAWAL branches when ``withdrawal`` is set), closes
     the open stake activation, and opens a SessionRequest if the episode is now
-    ready-to-run. Notifies post-commit (outside the atomic block) so a
-    notify failure can't roll back the completion.
+    ready-to-run. Notifies after the ``with transaction.atomic():`` block above
+    exits so a notify failure can't roll back the completion.
+
+    ``defer_notify`` — False (default) calls ``_notify_beat_completion``
+    directly, exactly as before this flag existed. record_gm_marked_outcome and
+    record_outcome_tier_completion are NOT themselves atomic, so their calls
+    land after the real commit already; a global switch to
+    ``transaction.on_commit`` would silently drop the notification in every
+    existing narrative test, because Django's ``TestCase`` wraps each test in a
+    transaction it rolls back rather than commits, and on_commit callbacks
+    never run without an explicit commit or
+    ``captureOnCommitCallbacks(execute=True)``. Pass ``defer_notify=True`` only
+    from a caller that itself wraps this whole tail in a further
+    ``@transaction.atomic`` (currently just complete_beat_expired via
+    expire_beat/expire_overdue_beats, #3558): there, the block below is merely
+    a savepoint, so a direct call would run inside the still-open outer
+    transaction — a notify failure would roll back the whole completion, and
+    the real-time push could reach a client before the commit. Deferring via
+    ``transaction.on_commit`` schedules the notify for when the OUTER
+    transaction actually commits.
 
     ``resolved_by`` (#2123) — only ever passed by record_gm_marked_outcome
     (never by the machine-graded record_outcome_tier_completion, which is
@@ -284,7 +304,10 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
         # and requires a GM session. Idempotent — safe to call unconditionally.
         maybe_create_session_request(progress)
 
-    _notify_beat_completion(completion, progress)
+    if defer_notify:
+        transaction.on_commit(functools.partial(_notify_beat_completion, completion, progress))
+    else:
+        _notify_beat_completion(completion, progress)
 
     if resolved_by is not None and outcome in _GM_MARKED_VALID_OUTCOMES:
         from world.gm.models import GMRewardConfig  # noqa: PLC0415
@@ -693,7 +716,11 @@ def complete_beat_expired(beat: Beat) -> BeatCompletion | None:
 
     Fires the authored expired pool (every row, LEGEND_AWARD skipped: expiry
     earns no legend), grades open stakes LOSS, closes the contract, writes the
-    ledger row and notifies. A story with no active progress cannot be
+    ledger row and notifies once this function's own ``@transaction.atomic``
+    actually commits (``defer_notify=True`` — this is the only caller of
+    ``_create_completion_and_fire_pool`` that wraps the tail in its own
+    transaction, so a direct notify would run inside a savepoint instead of
+    after the real commit). A story with no active progress cannot be
     completed for anyone: the outcome still flips so routing sees it, and
     ``None`` is returned. No deadline check here; ``expire_beat`` guards the
     deadline and the scene clock (#3567) calls this directly when it fills.
@@ -730,6 +757,7 @@ def complete_beat_expired(beat: Beat) -> BeatCompletion | None:
         explicit_participants=_expiry_participants(progress, scope),
         outcome_tier=None,
         skip_effect_types=frozenset({EffectType.LEGEND_AWARD}),
+        defer_notify=True,
     )
 
 
