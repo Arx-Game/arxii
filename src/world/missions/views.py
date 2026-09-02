@@ -6,11 +6,15 @@ D3 adds the giver library. D4 adds the visibility flip + copy +
 staff-power actions. D5 adds the predicate-tree API.
 
 Every viewset in this module uses the project conventions:
-- ``IsAuthenticated + IsAdminUser`` permission stack (401 vs 403 split).
-  ``IsAdminUser`` is DRF's built-in check on ``request.user.is_staff``;
-  reusing it instead of a per-app reimplementation (e.g. the older
-  ``IsStaffPermission`` in character_creation) keeps the staff-permission
-  surface uniform across world/ apps.
+- Authoring viewsets (template + its node/option/route/candidate/reward
+  children, plus category/predicate-leaf browse) use
+  ``IsAuthenticated + IsStaffOrScenarioOwner`` (401 vs 403 split): staff get
+  full access, a GM with their own StoryScenario (#3565) is scoped to it via
+  ``ScenarioScopedQuerysetMixin``/``ScenarioOwnedChildMixin`` (see
+  ``world.missions.permissions``). ``MissionGiverViewSet`` and
+  ``MissionInstanceViewSet`` stay ``IsAuthenticated + IsAdminUser``
+  (staff-only ops surfaces, not authoring) — ``IsAdminUser`` is DRF's
+  built-in check on ``request.user.is_staff``.
 - A ``FilterSet`` (never raw request.query_params).
 - Explicit ``.order_by(...)`` for stable pagination.
 - ``ModelViewSet`` when full CRUD applies; ``ReadOnlyModelViewSet`` for
