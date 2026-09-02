@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useContributeToBeat } from '../queries';
 import type { Beat } from '../types';
+import { beatLabel } from '../beatLabel';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -76,12 +77,7 @@ export function ContributeBeatDialog({
   const isResolved = outcome === 'success' || outcome === 'failure' || outcome === 'expired';
 
   // Visible title for the dialog header
-  const beatLabel =
-    beat.player_hint && beat.player_hint.trim().length > 0
-      ? beat.player_hint
-      : beat.visibility === 'secret'
-        ? '(Hidden Beat)'
-        : 'Beat';
+  const visibleTitle = beatLabel(beat);
 
   // Client-side points validation
   const parsedPoints = parseInt(points, 10);
@@ -167,7 +163,7 @@ export function ContributeBeatDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Contribute to &ldquo;{beatLabel}&rdquo;</DialogTitle>
+            <DialogTitle>Contribute to &ldquo;{visibleTitle}&rdquo;</DialogTitle>
             <DialogDescription>
               {currentTotal} of {required} points reached
               {remaining > 0 ? ` (${remaining} still needed` : ') threshold met'}

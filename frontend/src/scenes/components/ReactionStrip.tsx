@@ -26,6 +26,13 @@ interface ReactionStripProps {
   interactionId: number;
 }
 
+/** A reaction chip is yours, available to press, or shown but out of reach. */
+function reactionChipClass(isMine: boolean, canReact: boolean): string {
+  if (isMine) return 'border-amber-500 bg-amber-500/10 font-medium';
+  if (canReact) return 'border-muted-foreground/30 hover:border-amber-500/60';
+  return 'border-muted-foreground/20 opacity-60';
+}
+
 export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStripProps) {
   const queryClient = useQueryClient();
   // Resolve the viewer's acting persona (mirrors PersonaContextMenu).
@@ -73,13 +80,10 @@ export function ReactionStrip({ windows, sceneId, interactionId }: ReactionStrip
                   title={reactorNames || choice.label}
                   disabled={!canReact || mutation.isPending}
                   onClick={() => mutation.mutate({ windowId: window.id, choice: choice.slug })}
-                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                    isMine
-                      ? 'border-amber-500 bg-amber-500/10 font-medium'
-                      : canReact
-                        ? 'border-muted-foreground/30 hover:border-amber-500/60'
-                        : 'border-muted-foreground/20 opacity-60'
-                  }`}
+                  className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${reactionChipClass(
+                    isMine,
+                    canReact
+                  )}`}
                 >
                   {choice.label}
                   {count > 0 ? ` ${count}` : ''}

@@ -18,6 +18,14 @@ interface SessionRequestStatusCardProps {
   activeEntry: MyActiveStoryEntry;
 }
 
+/** What the player is told about a pending session, by its request status. */
+function sessionStatusLabel(status: string | undefined): string {
+  if (status === 'open') return 'Session pending: your GM has been notified';
+  if (status === 'scheduled') return 'Session scheduled: your GM is finalising the event';
+  if (status === 'resolved') return 'Session resolved';
+  return 'Episode ready: GM scheduling required';
+}
+
 export function SessionRequestStatusCard({ activeEntry }: SessionRequestStatusCardProps) {
   const { open_session_request_id, scheduled_event_id, scheduled_real_time } = activeEntry;
 
@@ -57,14 +65,7 @@ export function SessionRequestStatusCard({ activeEntry }: SessionRequestStatusCa
   }
 
   // Open session request path — GM has been notified.
-  const statusLabel =
-    sessionRequest?.status === 'open'
-      ? 'Session pending: your GM has been notified'
-      : sessionRequest?.status === 'scheduled'
-        ? 'Session scheduled: your GM is finalising the event'
-        : sessionRequest?.status === 'resolved'
-          ? 'Session resolved'
-          : 'Episode ready: GM scheduling required';
+  const statusLabel = sessionStatusLabel(sessionRequest?.status);
 
   return (
     <div className="rounded-lg border bg-card p-4">

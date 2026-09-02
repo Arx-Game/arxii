@@ -169,6 +169,16 @@ const REF_ID_KEY: Record<string, 'ref_covenant_id' | 'ref_covenant_role_id'> = {
 // Component
 // ---------------------------------------------------------------------------
 
+/** Whichever of the two mutations failed, in the player's words. */
+function mutationErrorText(
+  accept: { isError: boolean; error: unknown },
+  decline: { isError: boolean; error: unknown }
+): string | null {
+  if (accept.isError) return extractErrorMessage(accept.error, 'Operation failed');
+  if (decline.isError) return extractErrorMessage(decline.error, 'Operation failed');
+  return null;
+}
+
 export function RitualSessionResponseDialog({
   session,
   participantId,
@@ -298,11 +308,7 @@ export function RitualSessionResponseDialog({
 
   const isPending = acceptMutation.isPending || declineMutation.isPending;
 
-  const errorMessage = acceptMutation.isError
-    ? extractErrorMessage(acceptMutation.error, 'Operation failed')
-    : declineMutation.isError
-      ? extractErrorMessage(declineMutation.error, 'Operation failed')
-      : null;
+  const errorMessage = mutationErrorText(acceptMutation, declineMutation);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
