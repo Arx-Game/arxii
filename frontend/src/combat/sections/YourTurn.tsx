@@ -27,6 +27,7 @@ import type {
 } from '@/actions/types';
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
+import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
 import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
@@ -1106,6 +1107,18 @@ export function YourTurn({
     });
   }
 
+  // Pending-attacks strip prefills (#3572) — Guard the wind-up's target, or
+  // steer the focused declaration at the opponent still winding it up.
+  const guardControlRef = useRef<HTMLDivElement | null>(null);
+  function handlePrefillGuard(targetParticipantId: number) {
+    setGuardAllyId(String(targetParticipantId));
+    guardControlRef.current?.scrollIntoView({ block: 'nearest' });
+  }
+  function handlePrefillStrike(opponentId: number) {
+    setSubmitError(null);
+    setFocusedContext((prev) => ({ ...prev, targetKind: 'opponent', targetId: opponentId }));
+  }
+
   function handleGuard() {
     setManeuverError(null);
     const allyParticipantId =
@@ -1277,6 +1290,13 @@ export function YourTurn({
 
   return (
     <div className="space-y-4" data-testid="your-turn-section">
+      <PendingAttacks
+        attacks={encounter?.pending_attacks ?? []}
+        viewerParticipantId={myParticipantId}
+        onGuard={readOnly ? undefined : handlePrefillGuard}
+        onStrike={readOnly ? undefined : handlePrefillStrike}
+      />
+
       {/* Submitted / ready badge */}
       {(submitted || serverReady) && (
         <div
@@ -1828,7 +1848,7 @@ export function YourTurn({
 
           {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
           {declaredManeuver !== 'interpose' && (
-            <div className="space-y-1.5" data-testid="guard-control">
+            <div className="space-y-1.5" data-testid="guard-control" ref={guardControlRef}>
               <Select
                 value={guardAllyId}
                 onValueChange={setGuardAllyId}
