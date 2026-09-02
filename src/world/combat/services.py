@@ -10656,13 +10656,15 @@ def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_
         return None
 
 
-def active_combat_engagement_for(character: ObjectDB) -> CharacterEngagement | None:  # noqa: OBJECTDB_PARAM
+def active_combat_engagement_for(  # noqa: OBJECTDB_PARAM
+    character: ObjectDB,
+) -> CharacterEngagement | None:
     """The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.
 
     The reverse OneToOne accessor caches on the identity-mapped instance (no query on
     a warm path); a pk-less engagement is a row deleted through a queryset; a non-COMBAT
     engagement (challenge/mission stakes) is not combat. Extracted from
-    ``EncounterDetailSerializer._combat_engagement`` (#3573) so reactive-cost seams can
+    ``ParticipantSerializer._combat_engagement`` (#3573) so reactive-cost seams can
     read ``engagement.source.is_lethal``.
     """
     from world.mechanics.constants import EngagementType  # noqa: PLC0415
