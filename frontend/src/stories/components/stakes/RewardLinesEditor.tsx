@@ -68,7 +68,8 @@ function RewardLineRow({ line, resolutionId, beatId, disabled }: RewardLineRowPr
       },
       {
         onSuccess: () => toast.success('Reward line saved'),
-        onError: () => toast.error('Failed to save reward line'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to save reward line'),
       }
     );
   }
@@ -79,7 +80,8 @@ function RewardLineRow({ line, resolutionId, beatId, disabled }: RewardLineRowPr
       { id: line.id, resolutionId, beatId },
       {
         onSuccess: () => toast.success('Reward line removed'),
-        onError: () => toast.error('Failed to remove reward line'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to remove reward line'),
       }
     );
   }
@@ -154,7 +156,8 @@ export function RewardLinesEditor({ resolutionId, beatId, disabled }: RewardLine
       { beatId, resolution: resolutionId, sink: 'money', amount: 1 },
       {
         onSuccess: () => toast.success('Reward line added'),
-        onError: () => toast.error('Failed to add reward line'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to add reward line'),
       }
     );
   }

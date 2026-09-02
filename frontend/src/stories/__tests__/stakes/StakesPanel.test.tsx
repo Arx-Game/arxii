@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { StakesPanel } from '../../components/stakes/StakesPanel';
 import { makeBeat, makeStake, makeTemplate } from './fixtures';
+import { toast } from 'sonner';
 
 vi.mock('../../queries', () => ({
   useStakes: vi.fn(),
@@ -185,5 +186,26 @@ describe('StakesPanel', () => {
       },
       expect.anything()
     );
+  });
+
+  it('surfaces the mutation error message on a rejected add-stake', async () => {
+    const user = userEvent.setup();
+    const createMutate = vi.fn((_vars, opts) => {
+      opts.onError(new Error('column LOSS already has branch "surrendered"'));
+    });
+    vi.mocked(queries.useCreateStake).mockReturnValue({
+      mutate: createMutate,
+      isPending: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    mockTemplates([makeTemplate({ id: 1, name: 'In band', min_risk: 'low', max_risk: 'high' })]);
+
+    renderWithProviders(<StakesPanel beat={makeBeat({ id: 200, risk: 'moderate' })} />);
+    await user.click(screen.getByTestId('stakes-add-btn'));
+    await user.selectOptions(screen.getByTestId('stakes-add-template-select'), '1');
+    await user.type(screen.getByTestId('stakes-add-template-summary'), 'The town turns on them');
+    await user.click(screen.getByTestId('stakes-add-template-confirm'));
+
+    expect(toast.error).toHaveBeenCalledWith('column LOSS already has branch "surrendered"');
   });
 });

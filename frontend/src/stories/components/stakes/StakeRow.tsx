@@ -64,7 +64,8 @@ export function StakeRow({ stake, beat, disabled }: StakeRowProps) {
       },
       {
         onSuccess: () => toast.success('Stake saved'),
-        onError: () => toast.error('Failed to save stake'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to save stake'),
       }
     );
   }
@@ -75,7 +76,8 @@ export function StakeRow({ stake, beat, disabled }: StakeRowProps) {
       { id: stake.id, beatId: beat.id },
       {
         onSuccess: () => toast.success('Stake deleted'),
-        onError: () => toast.error('Failed to delete stake'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to delete stake'),
       }
     );
   }

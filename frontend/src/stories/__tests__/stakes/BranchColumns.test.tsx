@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { BranchColumns } from '../../components/stakes/BranchColumns';
 import { makeBeat, makeResolution, makeStake } from './fixtures';
+import { toast } from 'sonner';
 
 vi.mock('../../queries', () => ({
   useStakeResolutions: vi.fn(),
@@ -195,5 +196,36 @@ describe('BranchColumns', () => {
     await user.click(screen.getByTestId('add-named-branch-loss'));
     expect(screen.getByTestId('named-branch-key-input-loss')).toBeInTheDocument();
     expect(screen.queryByTestId('named-branch-key-select-loss')).not.toBeInTheDocument();
+  });
+
+  it('disables Add and warns when the chosen named-branch key already exists on that column', async () => {
+    const user = userEvent.setup();
+    mockResolutions([makeResolution({ id: 1, column: 'loss', outcome_key: 'surrendered' })]);
+    makeMutationMocks();
+    const beat = makeBeat({ scenario: null });
+
+    renderWithProviders(<BranchColumns stake={makeStake()} beat={beat} />);
+
+    await user.click(screen.getByTestId('add-named-branch-loss'));
+    await user.type(screen.getByTestId('named-branch-key-input-loss'), 'surrendered');
+
+    expect(screen.getByTestId('named-branch-key-duplicate-loss')).toHaveTextContent(
+      'That key is already authored on this column'
+    );
+    expect(screen.getByTestId('confirm-named-branch-loss')).toBeDisabled();
+  });
+
+  it('surfaces the mutation error message on a rejected branch save', async () => {
+    const user = userEvent.setup();
+    mockResolutions([makeResolution({ id: 1, column: 'loss' })]);
+    const { update } = makeMutationMocks();
+    update.mockImplementation((_vars, opts) => {
+      opts.onError(new Error('column LOSS already has branch "surrendered"'));
+    });
+
+    renderWithProviders(<BranchColumns stake={makeStake()} beat={makeBeat()} />);
+    await user.click(screen.getByTestId('branch-save-1'));
+
+    expect(toast.error).toHaveBeenCalledWith('column LOSS already has branch "surrendered"');
   });
 });

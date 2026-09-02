@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { StakeRow } from '../../components/stakes/StakeRow';
 import { makeBeat, makeStake, makeTemplate } from './fixtures';
+import { toast } from 'sonner';
 
 vi.mock('../../queries', () => ({
   useUpdateStake: vi.fn(),
@@ -124,6 +125,21 @@ describe('StakeRow', () => {
     await user.click(screen.getByTestId(`stake-delete-${stake.id}`));
 
     expect(del).toHaveBeenCalledWith({ id: stake.id, beatId: beat.id }, expect.anything());
+  });
+
+  it('surfaces the mutation error message on a rejected Save', async () => {
+    const user = userEvent.setup();
+    mockTemplates([]);
+    const { update } = makeMutationMocks();
+    update.mockImplementation((_vars, opts) => {
+      opts.onError(new Error('column LOSS already has branch "surrendered"'));
+    });
+    const stake = makeStake();
+
+    renderWithProviders(<StakeRow stake={stake} beat={makeBeat()} />);
+    await user.click(screen.getByTestId(`stake-save-${stake.id}`));
+
+    expect(toast.error).toHaveBeenCalledWith('column LOSS already has branch "surrendered"');
   });
 
   it('disables Save/Delete when disabled (locked)', () => {

@@ -119,7 +119,8 @@ function BranchCard({ resolution, stake, beatId, disabled }: BranchCardProps) {
       },
       {
         onSuccess: () => toast.success('Branch saved'),
-        onError: () => toast.error('Failed to save branch'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to save branch'),
       }
     );
   }
@@ -130,7 +131,8 @@ function BranchCard({ resolution, stake, beatId, disabled }: BranchCardProps) {
       { id: resolution.id, stakeId: stake.id, beatId },
       {
         onSuccess: () => toast.success('Branch deleted'),
-        onError: () => toast.error('Failed to delete branch'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to delete branch'),
       }
     );
   }
@@ -334,14 +336,18 @@ function BranchColumn({ column, resolutions, stake, beat, disabled }: BranchColu
       { beatId: beat.id, stake: stake.id, column, outcome_key: '' },
       {
         onSuccess: () => toast.success('Branch added'),
-        onError: () => toast.error('Failed to add branch'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to add branch'),
       }
     );
   }
 
+  const trimmedNamedKey = namedKey.trim();
+  const isDuplicateNamedKey = resolutions.some((r) => r.outcome_key === trimmedNamedKey);
+
   function confirmNamedBranch() {
-    const key = namedKey.trim();
-    if (!key) return;
+    const key = trimmedNamedKey;
+    if (!key || isDuplicateNamedKey) return;
     createMutation.mutate(
       { beatId: beat.id, stake: stake.id, column, outcome_key: key },
       {
@@ -350,7 +356,8 @@ function BranchColumn({ column, resolutions, stake, beat, disabled }: BranchColu
           setAddingNamed(false);
           setNamedKey('');
         },
-        onError: () => toast.error('Failed to add branch'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to add branch'),
       }
     );
   }
@@ -419,11 +426,19 @@ function BranchColumn({ column, resolutions, stake, beat, disabled }: BranchColu
               type="button"
               size="sm"
               onClick={confirmNamedBranch}
-              disabled={!namedKey.trim() || createMutation.isPending}
+              disabled={!trimmedNamedKey || isDuplicateNamedKey || createMutation.isPending}
               data-testid={`confirm-named-branch-${column}`}
             >
               Add
             </Button>
+            {isDuplicateNamedKey && (
+              <p
+                className="text-xs text-destructive"
+                data-testid={`named-branch-key-duplicate-${column}`}
+              >
+                That key is already authored on this column
+              </p>
+            )}
             <Button
               type="button"
               size="sm"

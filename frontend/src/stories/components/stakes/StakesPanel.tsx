@@ -53,7 +53,8 @@ function AddFromTemplateForm({ beatId, templates, onDone }: AddFromTemplateFormP
           toast.success('Stake added');
           onDone();
         },
-        onError: () => toast.error('Failed to add stake'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to add stake'),
       }
     );
   }
@@ -129,7 +130,8 @@ function AddCustomForm({ beatId, onDone }: AddCustomFormProps) {
           toast.success('Custom stake added');
           onDone();
         },
-        onError: () => toast.error('Failed to add stake'),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to add stake'),
       }
     );
   }
