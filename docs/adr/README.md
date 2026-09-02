@@ -261,6 +261,7 @@ treat those names as hints to confirm, not gospel.
 - [0252 - Honors size a deed within the ceiling its event already proved](0252-honors-size-a-deed-within-the-ceiling-its-event-proved.md) (#3466; extends ADR-0249)
 - [0253 - Titles belong to the Persona, not the CharacterSheet](0253-titles-belong-to-the-persona-not-the-charactersheet.md) (#3466; extends #1522, companion to ADR-0252)
 - [0254 - The Sentry digest issue is a pointer, never a reproduction](0254-sentry-digest-is-a-pointer-not-a-reproduction.md) (extends #2236 Phase 5)
+- [0255 - Beat expiry is a completion, not a field flip](0255-beat-expiry-is-a-completion.md) (#3558)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

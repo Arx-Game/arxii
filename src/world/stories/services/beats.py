@@ -20,7 +20,7 @@ Public API:
         CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
         consequences matching that tier.
 
-    expire_overdue_beats(now) — completes every UNSATISFIED beat with a past
+    expire_overdue_beats(now) - completes every UNSATISFIED beat with a past
         deadline via expire_beat (#3558), one savepoint per beat. Returns the
         count of beats whose outcome changed. Idempotent; safe for a cron hook.
 
@@ -651,7 +651,7 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
 def _expire_each(beats: list[Beat], *, now: datetime) -> int:
     """Expire every beat in ``beats`` in its own savepoint; count outcomes that changed.
 
-    Log-and-continue (ADR-0009 style): one beat's failure never aborts the
+    Log-and-continue (ADR-0255): one beat's failure never aborts the
     sweep or the request that triggered a lazy expiry.
     """
     count = 0

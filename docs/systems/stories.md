@@ -258,13 +258,26 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `internal_description` | TextField | Author/staff view |
 | `player_hint` | TextField | Shown while active (HINTED or VISIBLE) |
 | `player_resolution_text` | TextField | Shown in story log after completion |
-| `deadline` | DateTimeField (nullable) | Expiry triggers EXPIRED outcome via `expire_overdue_beats` |
+| `deadline` | DateTimeField (nullable) | When it passes, the beat resolves EXPIRED as a real completion (#3558) - see "Expiry" below |
 | `agm_eligible` | BooleanField | True = AGM may claim this beat |
 | `order` | PositiveIntegerField | |
 | `kind` | BeatKind | SITUATION / ENCOUNTER / TASK (default) / REQUIREMENT — what the beat *is*; resolution still flows through `predicate_type` |
 | `advances` | BooleanField | Default True; False = Tangent (recorded for history, never gates a transition) |
 | `risk` | CharField (RenownRisk choices) | Default NONE. The stakes-wager declaration (ADR-0067) — how life-threatening/consequential this beat is, backing a full stakes contract (`Stake`/`StakeResolution`/`StakeContractActivation`, #1770). Drives Legend award magnitude on SUCCESS via `RISK_LEGEND_AWARDS`, scaled by the beat's effective risk. Authoring trust-gated in `BeatSerializer` — only staff may author `risk != NONE`. See [stakes.md](stakes.md) for the full contract model, chain rule, and effective-risk formula |
 | `target_level` | PositiveSmallIntegerField (nullable) | The character level this beat's stakes are declared against (e.g. "EXTREME at level 4"). Required (via readiness validation, not `clean()`) when `risk != NONE`. Compared against the actual party's average level at activation to compute effective risk — see [stakes.md](stakes.md) |
+
+**Expiry (#3558):** a past-deadline beat resolves through `expire_beat` /
+`complete_beat_expired` (`world.stories.services.beats`), the same completion tail
+every other beat resolution uses - it is not a bare field flip. Three sites call it,
+each per-beat inside its own savepoint (`_expire_each`) so one beat's failure never
+aborts the sweep: the cron sweep `expire_overdue_beats`, and the two lazy sites that
+fire when a progress record checks its transitions (`_expire_overdue_beats_for_episode`
+in `transitions.py`, `_expire_overdue_beats_for_episodes` in `views.py`). Expiry fires
+the beat's `expired_consequences` pool with every effect type except `LEGEND_AWARD`
+skipped (expiry earns no legend, ADR-0066), grades any open stakes LOSS, and closes the
+open `StakeContractActivation` - see [stakes.md](stakes.md). For a GROUP-scope story the
+credited participants are the GM table's current members (`GMTableMembership` rows with
+`left_at__isnull=True`), not whoever satisfied the predicate. See ADR-0255.
 
 **Per-predicate config fields (exactly one set should be non-null per predicate type):**
 
@@ -537,7 +550,9 @@ All services in `src/world/stories/services/`.
 | `evaluate_auto_beats` | `(progress: AnyStoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats; flips UNSATISFIED beats whose predicate is now met; writes BeatCompletion rows; calls `maybe_create_session_request` on exit |
 | `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="", participants=None, extra_participants=None, resolved_by=None) -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome. `resolved_by` (#2123) — the marking GM's `GMProfile` (Lead GM or an approved Assistant GM); when set and the outcome is SUCCESS/FAILURE, credits GM Story Reward XP via `world.stories.services.gm_rewards.credit_gm_story_reward` after commit. `None` (the default, and always the case from the machine-graded `record_outcome_tier_completion`) skips the award |
 | `record_aggregate_contribution` | `(*, beat, character_sheet, points, source_note="") -> AggregateBeatContribution` | Records contribution, re-evaluates beat atomically, flips to SUCCESS if threshold crossed |
-| `expire_overdue_beats` | `(now=None) -> int` | Idempotent bulk sweep; flips UNSATISFIED past-deadline beats to EXPIRED; returns count |
+| `expire_overdue_beats` | `(now=None) -> int` | Cron sweep; completes every UNSATISFIED past-deadline beat via `expire_beat` (#3558), one savepoint per beat (`_expire_each`); returns the count of beats whose outcome changed. Idempotent |
+| `complete_beat_expired` | `(beat: Beat) -> BeatCompletion \| None` | Resolves a beat EXPIRED as a real completion (#3558): fires `expired_consequences` with `LEGEND_AWARD` skipped, grades open stakes LOSS, closes the contract, writes the ledger row. `None` when the story has no active progress to credit (outcome still flips) |
+| `expire_beat` | `(beat: Beat, *, now=None) -> BeatCompletion \| None` | Locks the beat row, no-ops if not UNSATISFIED or the deadline hasn't passed, else delegates to `complete_beat_expired`. Idempotent; the per-beat entry point every expiry site calls |
 
 ### transitions.py
 
