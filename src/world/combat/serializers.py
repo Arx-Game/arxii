@@ -428,10 +428,17 @@ class ParticipantSerializer(serializers.ModelSerializer):
         identity-mapped ObjectDB instance, so the three escalation fields
         share at most one query per character and the warm API path pays
         zero (no prefetch machinery; the idmapper is the cache layer).
+
+        A participant whose ``character_sheet`` descriptor raises (bare or
+        partially-constructed row) resolves to None here, before delegating.
         """
         from world.combat.services import active_combat_engagement_for  # noqa: PLC0415
 
-        return active_combat_engagement_for(obj.character_sheet.character)
+        try:
+            character = obj.character_sheet.character
+        except AttributeError:
+            return None
+        return active_combat_engagement_for(character)
 
     def get_escalation_level(self, obj: CombatParticipant) -> int | None:
         """Escalation pressure on this combatant — public dramatic state."""
