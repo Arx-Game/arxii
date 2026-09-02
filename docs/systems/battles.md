@@ -610,10 +610,10 @@ reusing the stakes-contract engine (`world.stories.services.stakes`,
 
 A designer-authored map from `BattleOutcome` to a `traits.CheckOutcome` tier
 (`outcome` unique, `check_outcome` a required FK, `on_delete=PROTECT`). Unlike
-combat's `EncounterOutcomeMapping`, there's no separate risk-level axis —
+combat's `EncounterOutcomeMapping`, there's no separate risk-level axis -
 `BattleOutcome`'s four values already encode decisive-vs-marginal severity.
 Starts empty; a missing row is required content, not an alternate resolution
-path (#3559) — `resolve_battle_beats` logs an error and leaves the beat open,
+path (#3559) - `resolve_battle_beats` logs an error and leaves the beat open,
 surfaced on the admin sentinel (#3444). Admin-registered
 (`world/battles/admin.py`).
 
@@ -622,7 +622,7 @@ surfaced on the admin sentinel (#3444). Admin-registered
 Looks up the `BattleOutcomeMapping` row for `battle.outcome`. Raises
 `ValueError` if called before the battle has a graded outcome, or
 `BattleOutcomeMapping.DoesNotExist` if no row is authored for the outcome
-(#3559 — the caller, `resolve_battle_beats`, catches this and logs).
+(#3559 - the caller, `resolve_battle_beats`, catches this and logs).
 
 ### `activate_stakes_for_battle(battle) -> None`
 
@@ -649,7 +649,7 @@ the single call-site choke point for battle conclusion.
 `beat_for_scene_conclusion` (`world.stories.services.beats`, #3559) picks at
 most **one** beat the battle may grade: `battle.story_beat` when it's set and
 still an `UNSATISFIED` `OUTCOME_TIER` beat, else the battle scene's
-`running_beat` when that is itself the objective (`kind=ENCOUNTER`) — the
+`running_beat` when that is itself the objective (`kind=ENCOUNTER`) - the
 legacy every-`EpisodeScene`-linked-beat scan is gone. Classifies
 `battle.outcome` and resolves that one beat; per-front independent grading is
 still **#1760**'s job. No `withdrawal` path: `BattleOutcome` has no
@@ -706,7 +706,7 @@ Multi-write operations use `@transaction.atomic`.
 | `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
 | `open_siege_engine_encounter` | `(*, battle_place, participant, opponent_kwargs, tier=OpponentTier.ELITE) -> CombatEncounter` | Binds `battle_place` to a discrete siege-engine skirmish — same bridge and `create_lethal_duel` call as `open_champion_duel`, no Champion-role requirement (#1713). Raises `PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
-| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves the one story beat this battle grades, if any, via `resolve_battle_beats` (#1785, #3559). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
+| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves the one story beat this battle grades, if any, via `resolve_battle_beats` (#1785, #3559). Does NOT call `complete_story` - a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
 | `create_battle_vehicle` | `(*, battle, side, place_name, vehicle_kind=VehicleKind.SHIP, is_structural=True) -> BattleVehicle` | Creates a vessel/mount: a paired `BattleUnit` + `BattlePlace`, plus a hull `Fortification` if `is_structural` (#1714). The unit's own `place` stays `None`; other units/participants embed by pointing their own `place` FK at `vehicle.place`. |
 | `places_overlap` | `(place_a, place_b) -> bool` | Whether two `BattlePlace` footprints intersect on the battle map: distance between `(x, y)` centers < sum of `footprint_radius` values (#1714, ADR-0085). |

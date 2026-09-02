@@ -1004,9 +1004,9 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     story beat this battle grades, if any.
 
     Resolves at most one beat via resolve_battle_beats (#1785, #3559,
-    beat_for_scene_conclusion) — the battle's own explicitly routed
+    beat_for_scene_conclusion) - the battle's own explicitly routed
     ``story_beat``, or the battle scene's running beat when it is itself the
-    objective (kind ENCOUNTER) — classifying battle.outcome through
+    objective (kind ENCOUNTER) - classifying battle.outcome through
     BattleOutcomeMapping and completing the beat through the same
     record_outcome_tier_completion seam combat/missions already use. Idempotent:
     if the battle is already concluded, returns it unchanged (resolve_battle_beats

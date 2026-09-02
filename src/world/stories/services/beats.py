@@ -20,7 +20,7 @@ Public API:
         CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
         consequences matching that tier.
 
-    beat_for_scene_conclusion(scene, explicit_beat) — the one beat a concluded
+    beat_for_scene_conclusion(scene, explicit_beat) - the one beat a concluded
         fight or battle may grade (#3559): an explicit routed beat wins,
         otherwise the scene's running beat when the GM declared the fight
         itself as the objective (kind ENCOUNTER), else None.

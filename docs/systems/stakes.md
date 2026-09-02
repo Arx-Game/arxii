@@ -409,16 +409,16 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
 
 **Withdrawal (combat FLED/ABANDONED):** the combat auto-wire
 (`world.combat.beat_wiring.encounter_completed_beat_handler`) calls
-`resolve_stakes_for_withdrawal(beat, progress, participants)` directly (#3559)
-— a separate function from the completion path, not a flag through
+`resolve_stakes_for_withdrawal(beat, progress, participants)` directly (#3559),
+a separate function from the completion path, not a flag through
 `record_outcome_tier_completion`. The withdrawal path is **structural**:
 FLED/ABANDONED take it regardless of any authored `EncounterOutcomeMapping`
-row for the pair — a mapped tier is never even looked up (withdrawal routes to
+row for the pair - a mapped tier is never even looked up (withdrawal routes to
 withdrawal branches by spec semantics, not data convention). Every open stake
 gets a `StakeOutcome` immediately: one **with** an authored `WITHDRAWAL`
 resolution fires it (method `MACHINE`); one without still records an
 audit-honest `StakeOutcome` with `resolution=None` rather than waiting for a
-GM's pick. The beat's own outcome is untouched — it stays `UNSATISFIED`, since
+GM's pick. The beat's own outcome is untouched - it stays `UNSATISFIED`, since
 walking away is neither success nor failure of the objective (#3559 removed
 the `PENDING_GM_REVIEW` state this paragraph used to describe).
 

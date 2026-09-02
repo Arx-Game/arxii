@@ -6420,11 +6420,11 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter` (`story_beat` FK → `stories.Beat`,
-  nullable, #1760, #3559 — `beat_for_scene_conclusion` picks at most ONE beat
+  nullable, #1760, #3559 - `beat_for_scene_conclusion` picks at most ONE beat
   an encounter may grade: this explicit `story_beat` when it's still
   UNSATISFIED `OUTCOME_TIER`, else the scene's `running_beat` when that is
   itself the objective (`kind=ENCOUNTER`); the old find-every-linked-beat
-  scan is gone — an unrouted encounter with no running beat grades nothing),
+  scan is gone - an unrouted encounter with no running beat grades nothing),
   `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
   JOUST (#1843, see "Mounted combat" below); plus the

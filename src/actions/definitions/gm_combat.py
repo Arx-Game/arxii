@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     )
     from world.combat.scaling import OpponentStatBlock
     from world.scenes.models import Scene
-    from world.stories.models import Beat
 
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -107,26 +106,6 @@ def _actor_may_start_encounter(actor: ObjectDB, scene: Scene) -> bool:
     if account is None:
         return False
     return can_create_encounter_for_scene(account, scene)
-
-
-def _actor_may_route_beat(actor: ObjectDB, beat: Beat) -> bool:
-    """True when *actor* may route a new encounter onto *beat* (#3559).
-
-    Mirrors ``CanAssignMissionToBeat``: the beat's story's Lead GM, or staff.
-    """
-    from world.gm.models import GMProfile  # noqa: PLC0415
-
-    account = resolve_account_or_none(actor)
-    if account is None:
-        return False
-    if account.is_staff:
-        return True
-    try:
-        gm_profile = account.gm_profile
-    except GMProfile.DoesNotExist:
-        return False
-    story = beat.episode.chapter.story
-    return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
 
 
 def _resolve_participant_in_encounter(
@@ -980,6 +959,7 @@ class CreateEncounterAction(Action):
         from world.combat.services import finalize_new_encounter  # noqa: PLC0415
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
         from world.stories.models import Beat  # noqa: PLC0415
+        from world.stories.permissions import account_may_route_beat  # noqa: PLC0415
 
         scene = get_active_scene(actor.location)
         if scene is None:
@@ -1002,7 +982,7 @@ class CreateEncounterAction(Action):
                 beat = None
             if beat is None:
                 return ActionResult(success=False, message=_NO_SUCH_BEAT)
-            if not _actor_may_route_beat(actor, beat):
+            if not account_may_route_beat(resolve_account_or_none(actor), beat):
                 return ActionResult(success=False, message=_NO_BEAT_PERMISSION)
 
         encounter = CombatEncounter.objects.create(

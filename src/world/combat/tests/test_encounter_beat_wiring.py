@@ -69,7 +69,7 @@ class EncounterOutcomeMappingModelTests(TestCase):
                 )
 
     def test_check_outcome_is_required(self) -> None:
-        """check_outcome is required content now (#3559) — no more null 'pend' row."""
+        """check_outcome is required content now (#3559) - no more null 'pend' row."""
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 EncounterOutcomeMapping.objects.create(
@@ -105,7 +105,7 @@ class ClassifyBattleOutcomeTests(TestCase):
         self.assertEqual(classify_battle_outcome(encounter), tier)
 
     def test_unmapped_pair_raises(self) -> None:
-        """A pair with no mapping row raises — missing content, not a runtime branch."""
+        """A pair with no mapping row raises - missing content, not a runtime branch."""
         encounter = CombatEncounterFactory(outcome=EncounterOutcome.FLED, risk_level=RiskLevel.LOW)
         with self.assertRaises(EncounterOutcomeMapping.DoesNotExist):
             classify_battle_outcome(encounter)
@@ -164,7 +164,7 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
             outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
         )
         install_encounter_beat_trigger(encounter)
-        # No story_beat, no scene.running_beat — must not raise.
+        # No story_beat, no scene.running_beat - must not raise.
         complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
 
     def test_unlinked_encounter_grades_nothing(self) -> None:
@@ -326,7 +326,7 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
 
     def test_fled_withdraws_even_when_a_mapping_row_is_authored(self) -> None:
         """Withdrawal is structural (#1770 PR2, #3559): a designer-authored
-        EncounterOutcomeMapping tier for FLED is never consulted — the beat
+        EncounterOutcomeMapping tier for FLED is never consulted - the beat
         still stays open and the withdrawal branch fires regardless.
         """
         mapped_tier = CheckOutcome.objects.create(name="Fled Mapped Tier", success_level=5)

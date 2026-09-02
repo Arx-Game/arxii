@@ -60,26 +60,6 @@ def _actor_may_gm_battle(actor: ObjectDB, battle: Battle) -> bool:
     return battle.scene.is_gm(account)
 
 
-def _actor_may_route_beat(actor: ObjectDB, beat: Beat) -> bool:
-    """True when *actor* may route a new battle onto *beat* (#3559).
-
-    Mirrors ``CanAssignMissionToBeat``: the beat's story's Lead GM, or staff.
-    """
-    from world.gm.models import GMProfile  # noqa: PLC0415
-
-    account = resolve_account_or_none(actor)
-    if account is None:
-        return False
-    if account.is_staff:
-        return True
-    try:
-        gm_profile = account.gm_profile
-    except GMProfile.DoesNotExist:
-        return False
-    story = beat.episode.chapter.story
-    return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
-
-
 def _resolve_routed_beat(
     actor: ObjectDB, kwargs: dict[str, Any]
 ) -> tuple[Beat | None, ActionResult | None]:
@@ -90,6 +70,7 @@ def _resolve_routed_beat(
     error_result)`` when it was given but doesn't resolve or isn't permitted.
     """
     from world.stories.models import Beat  # noqa: PLC0415
+    from world.stories.permissions import account_may_route_beat  # noqa: PLC0415
 
     beat_id = kwargs.get("beat_id")
     if beat_id is None:
@@ -100,7 +81,7 @@ def _resolve_routed_beat(
         beat = None
     if beat is None:
         return None, ActionResult(success=False, message=_NO_SUCH_BEAT)
-    if not _actor_may_route_beat(actor, beat):
+    if not account_may_route_beat(resolve_account_or_none(actor), beat):
         return None, ActionResult(success=False, message=_NO_BEAT_PERMISSION)
     return beat, None
 

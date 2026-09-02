@@ -1,7 +1,7 @@
 """Deliberate discard of null-tier outcome mapping rows (#3559, ADR-0237).
 
 A EncounterOutcomeMapping/BattleOutcomeMapping row with a null check_outcome
-only ever meant "resolve to PENDING_GM_REVIEW" — that state is gone (#3559
+only ever meant "resolve to PENDING_GM_REVIEW" - that state is gone (#3559
 task 3), so a null row now encodes nothing. It carries no authored tier to
 restructure onto, so this is a deliberate discard, not a restructure: the row
 is deleted outright rather than backfilled with a fabricated CheckOutcome.
@@ -18,7 +18,7 @@ import django.db.models.deletion
 def delete_null_tier_mapping_rows(apps, schema_editor):
     """Delete every outcome-mapping row whose check_outcome is null.
 
-    These rows only ever encoded "pend for GM review" (#3559) — a state that
+    These rows only ever encoded "pend for GM review" (#3559) - a state that
     no longer exists. Deliberate discard: there is no authored tier to carry
     forward, so nothing is restructured, only removed.
     """

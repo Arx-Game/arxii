@@ -59,7 +59,7 @@ class BattleOutcomeMappingModelTests(TestCase):
                 )
 
     def test_check_outcome_is_required(self) -> None:
-        """check_outcome is required content now (#3559) — no more null 'pend' row."""
+        """check_outcome is required content now (#3559) - no more null 'pend' row."""
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 BattleOutcomeMapping.objects.create(
@@ -91,7 +91,7 @@ class ClassifyBattleConclusionOutcomeTests(TestCase):
         self.assertEqual(classify_battle_conclusion_outcome(battle), tier)
 
     def test_unmapped_outcome_raises(self) -> None:
-        """An outcome with no mapping row raises — missing content, not a runtime branch."""
+        """An outcome with no mapping row raises - missing content, not a runtime branch."""
         from world.battles.beat_wiring import classify_battle_conclusion_outcome
 
         battle = BattleFactory(outcome=BattleOutcome.DEFENDER_MARGINAL)
@@ -342,7 +342,7 @@ class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
 
     def test_no_linked_beat_noops(self) -> None:
         battle = BattleFactory()
-        # No story_beat, no running beat — must not raise.
+        # No story_beat, no running beat - must not raise.
         conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_MARGINAL)
         battle.refresh_from_db()
         self.assertTrue(battle.is_concluded)
