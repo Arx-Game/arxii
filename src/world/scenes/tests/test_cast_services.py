@@ -516,6 +516,57 @@ class TestRespondToActionRequestStandaloneCast(CastScenarioMixin):
         )
         self.assertFalse(outcome_poses.exists())
 
+    def test_accept_standalone_cast_does_not_stamp_soulfray_consent(self) -> None:
+        """The consent-accept path's confirm_soulfray_risk=True only bypasses the
+        re-halt on a cast the caster already got past - it is not the caster's
+        Soulfray consent, which the pending request does not persist (#3573).
+
+        Focused unit test on the derivation: drives the real consent-accept
+        resolution but patches ``apply_technique_conditions`` at the point
+        ``_resolve_and_pose_cast`` calls it, to read the ``soulfray_consented``
+        it was actually handed without depending on a real check roll clearing
+        the condition row's ``minimum_success_level`` gate.
+        """
+        req = self._make_pending_standalone_request()
+
+        with patch("world.scenes.cast_services.apply_technique_conditions") as mock_apply:
+            mock_apply.return_value = []
+            respond_to_action_request(
+                action_request=req,
+                decision=ConsentDecision.ACCEPT,
+            )
+
+        mock_apply.assert_called_once()
+        self.assertFalse(mock_apply.call_args.kwargs["soulfray_consented"])
+
+
+class TestImmediateCastSoulfrayConsentDerivation(CastScenarioMixin):
+    """The immediate (self-cast) path derives soulfray_consented from the caller's
+    real confirm_soulfray_risk flag, unlike the consent-accept path (#3573).
+
+    Focused unit test on the derivation (see the class docstring above for why):
+    patches ``apply_technique_conditions`` to read the ``soulfray_consented`` it
+    was actually handed, rather than depending on a real check roll clearing a
+    condition row's ``minimum_success_level`` gate.
+    """
+
+    def test_immediate_cast_stamps_consent_from_confirm_soulfray_risk(self) -> None:
+        technique = make_benign_castable_technique()
+        grant_technique(self.caster, technique)
+
+        with patch("world.scenes.cast_services.apply_technique_conditions") as mock_apply:
+            mock_apply.return_value = []
+            request_technique_cast(
+                scene=self.scene,
+                initiator_persona=self.caster,
+                target_persona=None,
+                technique=technique,
+                confirm_soulfray_risk=True,
+            )
+
+        mock_apply.assert_called_once()
+        self.assertTrue(mock_apply.call_args.kwargs["soulfray_consented"])
+
 
 class TestImmediateCastThreadRaisesPower(ResonanceCacheIsolationMixin, TestCase):
     """A passive tier-0 INTENSITY_BUMP thread anchored to the cast technique

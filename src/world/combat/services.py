@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from world.magic.services.cast_observation import CastAudience
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
+    from world.mechanics.engagement import CharacterEngagement
     from world.mechanics.models import ObjectProperty
     from world.scenes.models import Interaction, Persona
     from world.stories.models import Story
@@ -180,6 +181,9 @@ from world.conditions.constants import Allegiance
 from world.fatigue.constants import EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
+from world.magic.models.soulfray import SoulfrayConfig
+from world.magic.services.anima import deduct_anima
+from world.magic.services.soulfray import accumulate_soulfray
 from world.mechanics.types import ChallengeResolutionResult
 from world.scenes.constants import RoundStatus
 from world.vitals.constants import (
@@ -894,6 +898,7 @@ class CombatTechniqueResolver:
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
             position_params=position_params or None,
+            soulfray_consented=self.action.confirm_soulfray_risk,
         )
         # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
         # through the SAME shared seam, over the same resolved targets. No-op when the
@@ -910,6 +915,7 @@ class CombatTechniqueResolver:
                 eff_intensity=eff_intensity,
                 targets_by_kind=targets_by_kind,
                 source_character=caster_od,
+                soulfray_consented=self.action.confirm_soulfray_risk,
             )
         )
         # Technique treatment (#2668): perform bounded-mend treatments on resolved
@@ -2058,12 +2064,14 @@ def _validate_redirect_declaration(
             raise ValueError(msg)
 
 
-def declare_interpose(
+def declare_interpose(  # noqa: PLR0913 - interpose declaration requires all redirect/consent fields
     participant: CombatParticipant,
     ally: CombatParticipant | None = None,
     technique: Technique | None = None,
     redirect_opponent_target: CombatOpponent | None = None,
     redirect_object_target: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+    *,
+    confirm_soulfray_risk: bool = False,
 ) -> CombatRoundAction:
     """Declare an interposing maneuver — passives-only, auto-ready.
 
@@ -2089,6 +2097,10 @@ def declare_interpose(
     kwargs are accepted regardless of the declared technique's flavor (harmless
     no-ops for non-REDIRECT declarations); resolution
     (``_try_technique_interpose``) only reads them on the REDIRECT branch.
+
+    ``confirm_soulfray_risk`` (#3573) records the guardian's consent to keep the
+    reaction firing past zero anima at the cost of Soulfray; read by
+    ``_try_technique_interpose``.
     """
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
     from world.magic.services.targeting import protective_flavor  # noqa: PLC0415
@@ -2150,6 +2162,7 @@ def declare_interpose(
             "is_ready": True,
             "redirect_opponent_target": redirect_opponent_target,
             "redirect_object_target": redirect_object_target,
+            "confirm_soulfray_risk": confirm_soulfray_risk,
         },
     )
     return action
@@ -9892,6 +9905,61 @@ def _dispatch_interpose_action(
         )
 
 
+def _guardian_can_fire_technique_interpose(
+    anima: CharacterAnima | None, cost: int, *, consented: bool
+) -> bool:
+    """True when a cost>0 technique-guardian reaction may fire.
+
+    No pool at all means there's nothing to consent with. Otherwise: affordable
+    fires unconditionally; unaffordable fires only when consented (#3573), which
+    runs the guardian's anima into deficit (:func:`_settle_technique_interpose_cost`
+    handles the actual debit).
+    """
+    if anima is None:
+        return False
+    return anima.current >= cost or consented
+
+
+def _settle_technique_interpose_cost(  # noqa: PLR0913 - debit + accrue needs all of it
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    anima: CharacterAnima,
+    cost: int,
+    consented: bool,
+    check_result: CheckResult | None,
+) -> None:
+    """Debit a firing technique guardian's anima and, if consented, accrue Soulfray.
+
+    Split out of :func:`_try_technique_interpose` (#3573) purely to keep that
+    function's branch count under the complexity budget - the debit-then-accrue
+    sequencing is otherwise a single linear step in that function's flow.
+    """
+    encounter = action.participant.encounter
+    deficit = deduct_anima(interposer, cost, lethal=encounter.is_lethal)
+    if not consented:
+        return
+    accumulate_soulfray(
+        character=interposer,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=check_result,
+        lethal=encounter.is_lethal,
+    )
+    if deficit > 0:
+        ally_name = (
+            str(action.focused_ally_target.character_sheet.character)
+            if action.focused_ally_target_id
+            else str(protected)
+        )
+        _broadcast_commitment_line(
+            encounter,
+            f"{interposer} tears at their own soul to hold the line over {ally_name}!",
+        )
+
+
 def _try_technique_interpose(
     action: CombatRoundAction,
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -9907,14 +9975,16 @@ def _try_technique_interpose(
     a plain mundane interpose. Diverges from :func:`dispatch_interpose` in three
     ways:
 
-    1. **Affordability first.** Cost is the matched protective
+    1. **Affordability first, unless consented.** Cost is the matched protective
        ``ConditionTemplate.reactive_anima_cost`` (resolved via
        :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
        the same traversal :func:`~world.magic.services.targeting.protective_flavor`
        walks at declaration time, first protective-flavored template wins). Can't
        pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
        charged, and damage proceeds unchanged to ``_try_companion_defend`` as
-       today.
+       today. **Unless** ``action.confirm_soulfray_risk`` (#3573) is set: a
+       consented guardian fires regardless of affordability, running the pool
+       into deficit and accruing Soulfray (point 3 below).
     2. **The roll is the guardian's own cast check**
        (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
        against the same authored difficulty as the mundane Interpose challenge
@@ -9923,11 +9993,17 @@ def _try_technique_interpose(
        spellcasting, not martial reflex, so it never touches
        :func:`dispatch_capability_reaction`.
     3. **Cost is anima, not fatigue.** On fire (any non-fizzle resolution) the
-       guardian's anima is debited directly (mirrors
-       :func:`~world.magic.services.effect_handlers._try_spend_reactive`'s debit
-       pattern, minus the ``ConditionInstance`` machinery — the guardian is
-       casting live, not carrying a passive buff). No
-       ``INTERPOSE_BASE_FATIGUE_COST`` is charged on this path.
+       guardian's anima is debited via :func:`~world.magic.services.anima.deduct_anima`
+       (mirrors :func:`~world.magic.services.effect_handlers._try_spend_reactive`'s
+       debit pattern, minus the ``ConditionInstance`` machinery - the guardian is
+       casting live, not carrying a passive buff). No ``INTERPOSE_BASE_FATIGUE_COST``
+       is charged on this path. A consented guardian (``confirm_soulfray_risk``,
+       #3573) may run the pool into deficit - ``deduct_anima``'s ``lethal`` kwarg
+       is threaded from ``action.participant.encounter.is_lethal`` so a non-lethal
+       encounter never draws life force - and every consented fire (deficit or
+       not) accrues Soulfray via
+       :func:`~world.magic.services.soulfray.accumulate_soulfray`. A deficit fire
+       also broadcasts a commitment line to the encounter.
 
     Grading reuses :func:`_grade_interpose_damage` — the SAME clean/partial/fail
     banding (including SHIELD divisor widening) the mundane path uses via
@@ -9972,13 +10048,18 @@ def _try_technique_interpose(
 
     # Affordability first (mirrors _try_spend_reactive's cost<=0 free-fire rule,
     # world/magic/services/effect_handlers.py): a free-cost protective technique
-    # never needs a CharacterAnima row to fire.
+    # never needs a CharacterAnima row to fire. A consented guardian
+    # (confirm_soulfray_risk, #3573) bypasses the affordability gate and fires
+    # into deficit instead.
     cost = condition_template.reactive_anima_cost
+    consented = bool(action.confirm_soulfray_risk)
     anima = None
     if cost > 0:
         anima = CharacterAnima.objects.filter(character_id=interposer.pk).first()
-        if anima is None or anima.current < cost:
-            return  # Fizzle: unaffordable — no roll, no cost, damage proceeds.
+        if not _guardian_can_fire_technique_interpose(anima, cost, consented=consented):
+            # Fizzle: no pool at all, or unaffordable and unconsented - no roll,
+            # no cost, damage proceeds.
+            return
 
     severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
     if severity_template is None:
@@ -10017,10 +10098,21 @@ def _try_technique_interpose(
         situation_ctx=situation_ctx,
     )
 
-    # Debit on fire (any non-fizzle resolution) — anima, not fatigue.
+    # Debit on fire (any non-fizzle resolution) - anima, not fatigue. A consented
+    # guardian may run into deficit and accrues Soulfray on every fire (#3573).
     if cost > 0:
-        anima.current -= cost
-        anima.save(update_fields=["current"])
+        # The earlier affordability gate already returned if cost > 0 and anima
+        # was None, so anima is guaranteed set here.
+        assert anima is not None  # noqa: S101  # type narrowing for ty
+        _settle_technique_interpose_cost(
+            action,
+            interposer,
+            protected,
+            anima=anima,
+            cost=cost,
+            consented=consented,
+            check_result=check_result,
+        )
 
     amount_before = pre_payload.amount
     is_clean_block = _grade_interpose_damage(
@@ -10648,6 +10740,29 @@ def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_
         return None
 
 
+def active_combat_engagement_for(  # noqa: OBJECTDB_PARAM
+    character: ObjectDB,
+) -> CharacterEngagement | None:
+    """The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.
+
+    The reverse OneToOne accessor caches on the identity-mapped instance (no query on
+    a warm path); a pk-less engagement is a row deleted through a queryset; a non-COMBAT
+    engagement (challenge/mission stakes) is not combat. Extracted from
+    ``ParticipantSerializer._combat_engagement`` (#3573) so reactive-cost seams can
+    read ``engagement.source.is_lethal``.
+    """
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    try:
+        engagement = character.engagement
+    except (AttributeError, CharacterEngagement.DoesNotExist):
+        return None
+    if engagement.pk is None or engagement.engagement_type != EngagementType.COMBAT:
+        return None
+    return engagement
+
+
 def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[AvailableCombo]:
     """Emit COMBAT_ROUND_STARTING, drain upkeep, detect combos.
 
@@ -10667,20 +10782,57 @@ def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[Available
     return detect_available_combos(enc, round_number)
 
 
-def _debit_ally_paid_upkeep(inst: ConditionInstance, cost: int) -> None:
+def _debit_ally_paid_upkeep(
+    inst: ConditionInstance, cost: int, *, encounter: CombatEncounter
+) -> None:
     """Debit a condition's upkeep from its ally ``source_character`` payer.
 
     The payer is the condition's ``source_character`` — distinct from the
-    bearer. If the payer cannot pay in full, the condition lapses (its
-    ``ConditionInstance`` row is deleted and any ``Trigger`` rows on it
-    cascade). Otherwise the payer's anima pool is debited immediately.
+    bearer. If the payer cannot pay in full and hasn't consented, the
+    condition lapses (its ``ConditionInstance`` row is deleted and any
+    ``Trigger`` rows on it cascade). A consented payer instead runs into
+    deficit and accrues Soulfray (#3573) via ``_pay_upkeep``.
     """
-    payer_anima = _get_anima(inst.source_character)
-    if payer_anima is None or payer_anima.current < cost:
+    payer = inst.source_character
+    payer_anima = _get_anima(payer)
+    if payer_anima is None:
         inst.delete()  # lapse — Trigger rows cascade via source_condition FK
-    else:
-        payer_anima.current -= cost
-        payer_anima.save(update_fields=["current"])
+        return
+    if payer_anima.current < cost and not inst.soulfray_consented:
+        inst.delete()  # lapse - Trigger rows cascade via source_condition FK
+        return
+    _pay_upkeep(payer, payer_anima, cost, inst, encounter)
+
+
+def _pay_upkeep(
+    payer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    anima: CharacterAnima,
+    cost: int,
+    inst: ConditionInstance,
+    encounter: CombatEncounter,
+) -> None:
+    """Debit one round of upkeep; a consented payer runs into deficit and accrues (#3573).
+
+    Shared by the ally-paid and self-paid upkeep branches of
+    ``drain_reactive_upkeep`` so the debit-then-accrue sequencing lives in one
+    place. Unconsented callers must not reach here already-unaffordable - the
+    caller lapses the condition instead.
+    """
+    deficit = deduct_anima(payer, cost, lethal=encounter.is_lethal)
+    if not inst.soulfray_consented:
+        return
+    accumulate_soulfray(
+        character=payer,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=None,
+        lethal=encounter.is_lethal,
+    )
+    if deficit > 0:
+        _broadcast_commitment_line(
+            encounter, f"{payer} bleeds soul to keep the ward on {inst.target}."
+        )
 
 
 def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
@@ -10706,7 +10858,10 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     Anima is written at most once per participant (after the inner loop) so that
     a round with N self-sustained conditions produces a single UPDATE rather
     than N; ally-sourced conditions debit their payer's pool immediately since
-    that payer is not necessarily among the participants being iterated.
+    that payer is not necessarily among the participants being iterated. A
+    consented instance that runs unaffordable (#3573) is the rare exception: it
+    flushes the accumulated ``remaining`` immediately, then pays through
+    ``_pay_upkeep`` into deficit rather than lapsing.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
@@ -10728,10 +10883,20 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
         for inst in instances:
             cost = inst.condition.upkeep_anima_per_round
             if inst.source_character_id and inst.source_character_id != char.id:
-                _debit_ally_paid_upkeep(inst, cost)
+                _debit_ally_paid_upkeep(inst, cost, encounter=encounter)
                 continue
             if remaining >= cost:
                 remaining -= cost
+            elif inst.soulfray_consented:
+                anima.current = remaining
+                anima.save(update_fields=["current"])
+                _pay_upkeep(char, anima, cost, inst, encounter)
+                # deduct_anima (inside _pay_upkeep) re-fetches CharacterAnima by
+                # pk under select_for_update; SharedMemoryModel identity-maps by
+                # pk so that call returns this same instance and its glut-first
+                # spend already landed on anima.current - carry that forward
+                # instead of clobbering it back to 0 (#3573 review fix).
+                remaining = anima.current
             else:
                 inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         if remaining != anima.current:

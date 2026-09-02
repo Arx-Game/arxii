@@ -242,6 +242,7 @@ class InterposeAction(Action):
         technique_id: int | None = None,
         redirect_opponent_target_id: int | None = None,
         redirect_object_target_id: int | None = None,
+        confirm_soulfray_risk: bool = False,
         **kwargs: Any,
     ) -> ActionResult:
         from world.combat.services import declare_interpose  # noqa: PLC0415
@@ -268,6 +269,7 @@ class InterposeAction(Action):
                 technique=technique,
                 redirect_opponent_target=redirect_opponent,
                 redirect_object_target=redirect_object,
+                confirm_soulfray_risk=confirm_soulfray_risk,
             )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))

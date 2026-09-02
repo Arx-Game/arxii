@@ -443,6 +443,7 @@ class _ApplyConditionParams:
     source_technique: "Technique | None" = None
     source_description: str = ""
     source_vow: "CovenantRole | None" = None
+    soulfray_consented: bool = False
 
 
 @dataclass
@@ -739,6 +740,7 @@ def _create_instance_from_context(
         source_technique=params.source_technique,
         source_description=params.source_description,
         source_vow=params.source_vow,
+        soulfray_consented=params.soulfray_consented,
     )
 
     return ApplyConditionResult(
@@ -982,6 +984,7 @@ def _bulk_apply_one(  # noqa: PLR0913
     source_technique: "Technique | None",
     source_description: str,
     source_vow: "CovenantRole | None",
+    soulfray_consented: bool,
 ) -> ApplyConditionResult:
     """Apply one BulkConditionApplication within a bulk_apply_conditions batch.
 
@@ -1031,6 +1034,7 @@ def _bulk_apply_one(  # noqa: PLR0913
         source_technique=source_technique,
         source_description=source_description,
         source_vow=source_vow,
+        soulfray_consented=soulfray_consented,
     )
     result = _apply_single(app.target, app.template, params, ctx)
 
@@ -1163,6 +1167,7 @@ def bulk_apply_conditions(
     source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
     source_technique: "Technique | None" = None,
     source_description: str = "",
+    soulfray_consented: bool = False,
 ) -> list[ApplyConditionResult]:
     """Apply multiple conditions in a single transaction with batched queries.
 
@@ -1191,7 +1196,13 @@ def bulk_apply_conditions(
 
     return [
         _bulk_apply_one(
-            app, ctx, source_character, source_technique, source_description, source_vow
+            app,
+            ctx,
+            source_character,
+            source_technique,
+            source_description,
+            source_vow,
+            soulfray_consented,
         )
         for app in applications
     ]

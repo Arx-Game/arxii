@@ -290,6 +290,12 @@ class PlayerAction:
     # that actually protect a ward.
     protective_flavor: str | None = None
 
+    # Flat reactive anima fee of the protective condition (#3573); None when not
+    # protective. Resolved alongside protective_flavor from the same
+    # protective_condition_and_flavor traversal (world.magic.services.targeting) so
+    # the frontend Guard panel can show the fee before the guardian commits to it.
+    reactive_anima_cost: int | None = None
+
     # Which cast-position input (if any) the technique's effects consume:
     # "pair" (origin+destination), "single" (destination only), or "none" (default).
     # Carried so the frontend knows whether to prompt for battlefield position(s)

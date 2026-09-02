@@ -31,6 +31,7 @@ import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
 import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
+import { useCharacterAnima } from '@/magic/queries';
 import {
   Select,
   SelectContent,
@@ -225,6 +226,10 @@ interface RoundScopedState {
   guardAllyId: string;
   guardTechniqueId: string;
   guardDestination: string;
+  /** Guardian's consent (#3573) to keep a technique-guardian's ward alive
+   *  past zero anima by drawing on Soulfray. Reset to false whenever
+   *  guardTechniqueId switches to mundane (no protective technique). */
+  guardSoulfrayAccepted: boolean;
   // #3381 additions — rally/succor ally pickers, use-item declaration,
   // charge/joust mini-panel. Each control's own error is tracked separately
   // from `maneuverError` since these render outside the Maneuvers cluster
@@ -264,6 +269,7 @@ function initialRoundState(): RoundScopedState {
     guardAllyId: GUARD_ANYONE_VALUE,
     guardTechniqueId: GUARD_NO_TECHNIQUE_VALUE,
     guardDestination: GUARD_DESTINATION_AWAY,
+    guardSoulfrayAccepted: false,
     rallyAllyId: '',
     succorAllyId: '',
     useItemInstanceId: '',
@@ -299,6 +305,13 @@ type DispatchJob = () => Promise<DispatchResult>;
  * Shape-aware per the selected action's `position_target_shape` — a
  * "none"/undefined-shape technique never gets `position_params`, even if
  * stale castPosition state is present (#2206 review finding).
+ *
+ * `isWardBearing` (#3573) - true when the selected technique carries a
+ * protective ward (`reactive_anima_cost != null`). `confirm_soulfray_risk` is
+ * sent when `soulfrayAccepted` is true AND either a Soulfray warning is active
+ * OR the cast is ward-bearing - the lighter ward-cast toggle (rendered when no
+ * warning is present) reuses the same `soulfrayAccepted` state as the
+ * SoulfrayAcceptGate.
  */
 function buildFocusedJob(
   focusedContext: ActionContext,
@@ -310,7 +323,8 @@ function buildFocusedJob(
   furyTierId: number | null,
   furyAnchorId: number | null,
   castPosition: CastPosition,
-  positionTargetShape: PositionTargetShape
+  positionTargetShape: PositionTargetShape,
+  isWardBearing: boolean
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -334,7 +348,9 @@ function buildFocusedJob(
   if (furyTierId !== null) furyKwargs.fury_commitment_id = furyTierId;
   if (furyAnchorId !== null) furyKwargs.fury_anchor_id = furyAnchorId;
   const soulfrayKwarg =
-    soulfrayWarning !== null && soulfrayAccepted ? { confirm_soulfray_risk: true } : {};
+    soulfrayAccepted && (soulfrayWarning !== null || isWardBearing)
+      ? { confirm_soulfray_risk: true }
+      : {};
 
   // Strain (#3446): the push-yourself anima overcommit on an ordinary declared
   // cast — the non-clash sibling of the per-clash strain slider below.
@@ -639,6 +655,7 @@ export function YourTurn({
     guardAllyId,
     guardTechniqueId,
     guardDestination,
+    guardSoulfrayAccepted,
     rallyAllyId,
     succorAllyId,
     useItemInstanceId,
@@ -688,6 +705,7 @@ export function YourTurn({
   const setGuardAllyId = useMemo(() => makeFieldSetter('guardAllyId'), []);
   const setGuardTechniqueId = useMemo(() => makeFieldSetter('guardTechniqueId'), []);
   const setGuardDestination = useMemo(() => makeFieldSetter('guardDestination'), []);
+  const setGuardSoulfrayAccepted = useMemo(() => makeFieldSetter('guardSoulfrayAccepted'), []);
   const setRallyAllyId = useMemo(() => makeFieldSetter('rallyAllyId'), []);
   const setSuccorAllyId = useMemo(() => makeFieldSetter('succorAllyId'), []);
   const setUseItemInstanceId = useMemo(() => makeFieldSetter('useItemInstanceId'), []);
@@ -908,6 +926,12 @@ export function YourTurn({
 
   // Soulfray + fury descriptor for the currently selected focused cast (#1543).
   const soulfrayWarning = focusedCastDescriptor?.soulfray_warning ?? null;
+  // Whether the selected focused technique carries a protective ward (#3573) -
+  // consent must ALWAYS be offered for a ward-bearing cast, not just when an
+  // active Soulfray warning is already in effect. When a warning IS present,
+  // the SoulfrayAcceptGate below is the only control; its acceptance already
+  // covers the ward (see the soulfrayKwarg logic in buildFocusedJob).
+  const isWardBearingCast = focusedCastDescriptor?.reactive_anima_cost != null;
   const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
   const furyAnchors = focusedCastDescriptor?.eligible_fury_anchors ?? [];
   const furyOverCap =
@@ -945,6 +969,12 @@ export function YourTurn({
     (a) => String(a.ref.technique_id) === guardTechniqueId
   );
   const isRedirectGuardTechnique = selectedGuardTechnique?.protective_flavor === 'redirect';
+
+  // Current anima, shown next to the Guard Soulfray toggle's fee readout
+  // (#3573) and the ward-cast toggle below, so the guardian/caster can see
+  // what they're spending before consenting.
+  const { data: characterAnima } = useCharacterAnima(characterId);
+  const animaCurrent = characterAnima?.current ?? null;
 
   // Usable held items for the Use Item control (#3381) — filters the same
   // inventory query the wardrobe/inventory panel uses, no new endpoint.
@@ -1014,7 +1044,8 @@ export function YourTurn({
       furyTierId,
       furyAnchorId,
       castPosition,
-      focusedTechniquePositionShape
+      focusedTechniquePositionShape,
+      isWardBearingCast
     );
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
@@ -1137,7 +1168,13 @@ export function YourTurn({
         parseInt(guardDestination.slice(GUARD_DESTINATION_OBJECT_PREFIX.length), 10) || null;
     }
     declareGuard(
-      { allyParticipantId, techniqueId, redirectOpponentTargetId, redirectObjectTargetId },
+      {
+        allyParticipantId,
+        techniqueId,
+        redirectOpponentTargetId,
+        redirectObjectTargetId,
+        confirmSoulfrayRisk: techniqueId != null && guardSoulfrayAccepted,
+      },
       {
         onSuccess: (result) => {
           // The generic dispatch endpoint always resolves 200 — a business-rule
@@ -1353,6 +1390,24 @@ export function YourTurn({
             onAcceptChange={setSoulfrayAccepted}
             disabled={isLocked}
           />
+        )}
+        {soulfrayWarning === null && isWardBearingCast && (
+          <label
+            className="mt-1.5 flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs"
+            data-testid="cast-ward-soulfray-gate"
+          >
+            <input
+              type="checkbox"
+              data-testid="cast-ward-soulfray-toggle"
+              checked={soulfrayAccepted}
+              onChange={(e) => setSoulfrayAccepted(e.target.checked)}
+              disabled={isLocked}
+            />
+            <span>
+              Hold this ward into Soulfray (fee {focusedCastDescriptor?.reactive_anima_cost} anima
+              per fire)
+            </span>
+          </label>
         )}
         {furyTiers.length > 0 && (
           <FuryDeclaration
@@ -1880,7 +1935,12 @@ export function YourTurn({
               {protectiveTechniques.length > 0 && (
                 <Select
                   value={guardTechniqueId}
-                  onValueChange={setGuardTechniqueId}
+                  onValueChange={(value) => {
+                    setGuardTechniqueId(value);
+                    // Switching back to mundane clears any prior Soulfray
+                    // consent - there's no protective ward left to hold (#3573).
+                    if (value === GUARD_NO_TECHNIQUE_VALUE) setGuardSoulfrayAccepted(false);
+                  }}
                   disabled={isLocked || !isDeclaringPhase || guardPending}
                 >
                   <SelectTrigger data-testid="guard-technique-select" className="h-8 text-xs">
@@ -1903,6 +1963,27 @@ export function YourTurn({
                     ))}
                   </SelectContent>
                 </Select>
+              )}
+
+              {selectedGuardTechnique != null && (
+                <label
+                  className="flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs"
+                  data-testid="guard-soulfray-gate"
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="guard-soulfray-toggle"
+                    checked={guardSoulfrayAccepted}
+                    onChange={(e) => setGuardSoulfrayAccepted(e.target.checked)}
+                    disabled={isLocked || !isDeclaringPhase || guardPending}
+                  />
+                  <span>
+                    Hold the line into Soulfray
+                    {animaCurrent != null && selectedGuardTechnique.reactive_anima_cost != null
+                      ? ` (anima ${animaCurrent} / fee ${selectedGuardTechnique.reactive_anima_cost})`
+                      : ''}
+                  </span>
+                </label>
               )}
 
               {isRedirectGuardTechnique && (
