@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatRoutingRule, formatRoutingRules } from '../routingRules';
 import type { TransitionRoutingRule } from '../types';
 
-const beatRule = {
+const beatRule: TransitionRoutingRule = {
   id: 1,
   beat: 4,
   beat_title: 'Hostage exchange',
@@ -11,9 +11,9 @@ const beatRule = {
   stake: null,
   stake_summary: '',
   required_stake_column: '',
-} as unknown as TransitionRoutingRule;
+};
 
-const stakeRule = {
+const stakeRule: TransitionRoutingRule = {
   id: 2,
   beat: 4,
   beat_title: 'Hostage exchange',
@@ -22,7 +22,7 @@ const stakeRule = {
   stake: 9,
   stake_summary: 'The hostage',
   required_stake_column: 'loss',
-} as unknown as TransitionRoutingRule;
+};
 
 describe('formatRoutingRule', () => {
   it('renders a beat rule as title = OUTCOME', () => {
