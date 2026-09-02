@@ -31,11 +31,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
 import { useAccount } from '@/store/hooks';
-import { useCreatureTemplates } from '@/combat/queries';
 import {
   useSituationTemplateCatalog,
   useChallengeTemplateCatalog,
 } from '@/gm-adjudication/queries';
+import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
 import {
   useCreateBeat,
   useUpdateBeat,
@@ -458,14 +458,6 @@ function PredicateConfigFields({ predicateType, config, onChange, errors }: Conf
 // diffs incoming rows against the beat's existing children by id.
 // ---------------------------------------------------------------------------
 
-/** Draft shape for one opponent-line row while the form is open. */
-interface OpponentLineDraft {
-  id?: number;
-  creature_template: string;
-  count: string;
-  position_name: string;
-}
-
 function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[] {
   return (beat?.opponent_lines ?? []).map((line) => ({
     id: line.id,
@@ -485,100 +477,6 @@ function opponentLineDraftsToPayload(drafts: OpponentLineDraft[]): BeatOpponentL
       position_name: d.position_name.trim(),
       order: 0,
     }));
-}
-
-interface OpponentLinesEditorProps {
-  lines: OpponentLineDraft[];
-  onChange: (lines: OpponentLineDraft[]) => void;
-  rowErrors: Record<string, string[]>[] | undefined;
-}
-
-function OpponentLinesEditor({ lines, onChange, rowErrors }: OpponentLinesEditorProps) {
-  const [search, setSearch] = useState('');
-  const { data: creatureTemplates = [] } = useCreatureTemplates(search);
-
-  function updateRow(index: number, partial: Partial<OpponentLineDraft>) {
-    onChange(lines.map((line, i) => (i === index ? { ...line, ...partial } : line)));
-  }
-
-  function addRow() {
-    onChange([...lines, { creature_template: '', count: '1', position_name: '' }]);
-  }
-
-  function removeRow(index: number) {
-    onChange(lines.filter((_, i) => i !== index));
-  }
-
-  return (
-    <div className="space-y-2" data-testid="beat-opponent-lines">
-      <div className="flex items-center justify-between">
-        <Label>Encounter prep — opponent lines</Label>
-        <Button type="button" size="sm" variant="outline" onClick={addRow}>
-          Add opponent
-        </Button>
-      </div>
-      <Input
-        placeholder="Search the bestiary…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      {lines.length === 0 && (
-        <p className="text-xs text-muted-foreground">No opponents authored yet.</p>
-      )}
-      {lines.map((line, index) => {
-        const errors = rowErrors?.[index];
-        return (
-          <div
-            key={line.id ?? `new-${index}`}
-            className="grid grid-cols-[1fr_auto_1fr_auto] items-start gap-2 rounded-md border p-2"
-            data-testid={`beat-opponent-line-row-${index}`}
-          >
-            <div className="space-y-1">
-              <select
-                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-                value={line.creature_template}
-                onChange={(e) => updateRow(index, { creature_template: e.target.value })}
-                data-testid={`beat-opponent-line-creature-${index}`}
-              >
-                <option value="">Select a creature…</option>
-                {creatureTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.tier})
-                  </option>
-                ))}
-              </select>
-              {errors?.creature_template && (
-                <p className="text-xs text-destructive">{errors.creature_template.join(' ')}</p>
-              )}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              className="w-16"
-              value={line.count}
-              onChange={(e) => updateRow(index, { count: e.target.value })}
-              data-testid={`beat-opponent-line-count-${index}`}
-            />
-            <Input
-              placeholder="Position (optional)"
-              value={line.position_name}
-              onChange={(e) => updateRow(index, { position_name: e.target.value })}
-              data-testid={`beat-opponent-line-position-${index}`}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => removeRow(index)}
-              data-testid={`beat-opponent-line-remove-${index}`}
-            >
-              Remove
-            </Button>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /** Draft shape for one staged-template row while the form is open. */

@@ -12,13 +12,14 @@
  * `needs_rewrite` switch on each editor).
  */
 
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useMissionNodes, useMissionOptions, useMissionRoutes } from '../queries';
+import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionTemplate } from '../types';
 
 interface FlavorRewriteCardProps {
@@ -26,6 +27,9 @@ interface FlavorRewriteCardProps {
 }
 
 export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
+  const location = useLocation();
+  const base = studioBaseFromPath(location.pathname);
+  const paths = studioPaths(base, template.id, template.story_id);
   const nodes = useMissionNodes({ template: template.id, needs_rewrite: true });
   const options = useMissionOptions({ template: template.id, needs_rewrite: true });
   const routes = useMissionRoutes({ template: template.id, needs_rewrite: true });
@@ -49,7 +53,7 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
             {nodeRows.map((n) => (
               <Link
                 key={n.id}
-                to={`/staff/missions/${template.id}/nodes/${n.id}`}
+                to={paths.node(n.id)}
                 className="block rounded border px-2 py-1 text-sm hover:bg-muted"
               >
                 {n.key}
@@ -62,7 +66,7 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
             {optionRows.map((o) => (
               <Link
                 key={o.id}
-                to={`/staff/missions/${template.id}/nodes/${o.node}/options/${o.id}`}
+                to={paths.option(o.node, o.id)}
                 className="block rounded border px-2 py-1 text-sm hover:bg-muted"
               >
                 Node {o.node} · option #{o.order} ({o.option_kind})

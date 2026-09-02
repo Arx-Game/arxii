@@ -1,8 +1,11 @@
 /**
  * NodePage — edit one MissionNode, list its authored options.
  *
- * Routes: /staff/missions/:id/nodes/:nodeId. PATCH on save via D2's
- * MissionNodeViewSet. Options listed with click-through to OptionPage.
+ * Mounted twice: /staff/missions/:id/nodes/:nodeId (StaffRoute) and
+ * /stories/scenarios/:id/nodes/:nodeId (GMRoute, #3565) - studioPaths
+ * derives which mount is live from the current URL. PATCH on save via
+ * D2's MissionNodeViewSet. Options listed with click-through to
+ * OptionPage.
  *
  * Scope (E3): node settings + flavor text + option list. Cross-tool
  * picker for attached_challenges and challenge-contributed-option
@@ -10,7 +13,7 @@
  * visibility_rule will hook into OptionPage in E4.
  */
 
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
@@ -38,6 +41,7 @@ import {
   useMissionTemplate,
   usePatchMissionNode,
 } from '../queries';
+import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionNode } from '../types';
 import { useQuery } from '@tanstack/react-query';
 
@@ -51,6 +55,9 @@ export function NodePage() {
   const { data: node, isLoading, isError } = useNode(numericNodeId);
   const { data: optionsPage } = useMissionOptions({ node: numericNodeId });
   const navigate = useNavigate();
+  const location = useLocation();
+  const base = studioBaseFromPath(location.pathname);
+  const paths = studioPaths(base, templateId ?? 0, template?.story_id);
 
   if (Number.isNaN(numericNodeId)) {
     return <div className="p-6 text-destructive">Bad node id.</div>;
@@ -64,8 +71,8 @@ export function NodePage() {
           role="alert"
         >
           <p className="font-medium">Couldn't load this node.</p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
-            ← Back to Mission Studio
+          <Button variant="outline" className="mt-3" onClick={() => navigate(paths.browser)}>
+            ← Back to {paths.browserLabel}
           </Button>
         </div>
       </div>
@@ -76,10 +83,10 @@ export function NodePage() {
     <div className="container mx-auto space-y-4 px-4 py-6">
       <StudioBreadcrumb
         crumbs={[
-          { label: 'Missions', to: '/staff/missions' },
+          { label: paths.browserLabel, to: paths.browser },
           {
             label: template?.name ?? (templateId ? `#${templateId}` : '…'),
-            to: `/staff/missions?id=${templateId ?? ''}`,
+            to: paths.canvas,
           },
           { label: node ? `Node "${node.key}"` : '…' },
         ]}
@@ -96,8 +103,8 @@ export function NodePage() {
                 key={opt.id}
                 to={
                   templateId !== undefined && Number.isFinite(templateId)
-                    ? `/staff/missions/${templateId}/nodes/${numericNodeId}/options/${opt.id}`
-                    : '/staff/missions'
+                    ? paths.option(numericNodeId, opt.id)
+                    : paths.browser
                 }
                 className="flex items-center justify-between rounded border px-2 py-1 text-sm hover:bg-muted"
               >

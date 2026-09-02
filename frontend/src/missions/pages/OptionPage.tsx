@@ -1,17 +1,23 @@
 /**
  * OptionPage — edit one MissionOption, list its routes.
  *
- * Routes: /staff/missions/:id/nodes/:nodeId/options/:optionId. PATCH
- * on save via D2's MissionOptionViewSet. Routes listed by tier with a
- * tag for is_random_set (= "random pool"); per-route candidate / reward
- * editing is a future enhancement (D2's nested CRUD endpoints exist;
- * the UI for them lands in a follow-up Studio iteration).
+ * Mounted twice: /staff/missions/:id/nodes/:nodeId/options/:optionId
+ * (StaffRoute) and /stories/scenarios/:id/nodes/:nodeId/options/:optionId
+ * (GMRoute, #3565) - studioPaths derives which mount is live from the
+ * current URL. PATCH on save via D2's MissionOptionViewSet. Routes
+ * listed by tier with a tag for is_random_set (= "random pool");
+ * per-route candidate / reward editing is a future enhancement (D2's
+ * nested CRUD endpoints exist; the UI for them lands in a follow-up
+ * Studio iteration).
+ *
+ * ENCOUNTER options (#3565) author a risk level + opponent lines:
+ * check-only fields (base risk) hide the same way they hide for BRANCH.
  *
  * The visibility_rule predicate tree is rendered raw here (JSON);
  * PredicateBuilder integration lands in E4.
  */
 
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +35,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { OpponentLineDraft, OpponentLinesEditor } from '@/stories/components/OpponentLinesEditor';
 
 import {
   coercePredicate,
@@ -41,11 +48,36 @@ import { StudioBreadcrumb } from '../components/StudioBreadcrumb';
 import { getMissionOption, patchMissionOption } from '../api';
 import { useServerDraft } from '../hooks/useServerDraft';
 import { missionKeys, usePredicateLeaves, useMissionRoutes, useMissionTemplate } from '../queries';
+import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionOption } from '../types';
 import { useMutation } from '@tanstack/react-query';
 
-const KINDS = ['branch', 'check'] as const;
+const KINDS = ['branch', 'check', 'encounter'] as const;
 const SOURCES = ['authored', 'challenge'] as const;
+const RISK_LEVELS = ['low', 'moderate', 'high', 'extreme', 'lethal'] as const;
+
+function opponentLineDraftsFromOption(lines: MissionOption['opponent_lines']): OpponentLineDraft[] {
+  return (lines ?? []).map((line) => ({
+    id: line.id,
+    creature_template: String(line.creature_template),
+    count: String(line.count ?? 1),
+    position_name: line.position_name ?? '',
+  }));
+}
+
+function opponentLineDraftsToPayload(
+  drafts: OpponentLineDraft[]
+): NonNullable<MissionOption['opponent_lines']> {
+  return drafts
+    .filter((d) => d.creature_template !== '')
+    .map((d) => ({
+      ...(d.id !== undefined ? { id: d.id } : {}),
+      creature_template: Number(d.creature_template),
+      count: d.count !== '' ? Number(d.count) : 1,
+      position_name: d.position_name.trim(),
+      order: 0,
+    }));
+}
 
 export function OptionPage() {
   const {
@@ -64,6 +96,9 @@ export function OptionPage() {
   const { data: option, isLoading, isError } = useOption(numericOptionId);
   const { data: routesPage } = useMissionRoutes({ option: numericOptionId });
   const navigate = useNavigate();
+  const location = useLocation();
+  const base = studioBaseFromPath(location.pathname);
+  const paths = studioPaths(base, templateId ?? 0, template?.story_id);
 
   if (Number.isNaN(numericOptionId)) {
     return <div className="p-6 text-destructive">Bad option id.</div>;
@@ -77,8 +112,8 @@ export function OptionPage() {
           role="alert"
         >
           <p className="font-medium">Couldn't load this option.</p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
-            ← Back to Mission Studio
+          <Button variant="outline" className="mt-3" onClick={() => navigate(paths.browser)}>
+            ← Back to {paths.browserLabel}
           </Button>
         </div>
       </div>
@@ -89,17 +124,17 @@ export function OptionPage() {
     <div className="container mx-auto space-y-4 px-4 py-6">
       <StudioBreadcrumb
         crumbs={[
-          { label: 'Missions', to: '/staff/missions' },
+          { label: paths.browserLabel, to: paths.browser },
           {
             label: template?.name ?? (templateId ? `#${templateId}` : '…'),
-            to: `/staff/missions?id=${templateId ?? ''}`,
+            to: paths.canvas,
           },
           {
             label: 'Node',
             to:
               templateId !== undefined && Number.isFinite(templateId)
-                ? `/staff/missions/${templateId}/nodes/${numericNodeId}`
-                : '/staff/missions',
+                ? paths.node(numericNodeId)
+                : paths.browser,
           },
           { label: option ? `Option #${option.order}` : '…' },
         ]}
@@ -161,6 +196,8 @@ function OptionEditor({ option }: { option: MissionOption }) {
     authored_ic_framing_needs_rewrite: o.authored_ic_framing_needs_rewrite ?? false,
     authored_base_risk: o.authored_base_risk ?? 0,
     visibility_rule: (o.visibility_rule ?? {}) as PredicateNode,
+    encounter_risk_level: o.encounter_risk_level ?? '',
+    opponent_lines: opponentLineDraftsFromOption(o.opponent_lines),
   }));
 
   // Validate the predicate tree before save — blocks empty leaves, missing
@@ -176,6 +213,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
         // Coerce string-typed leaf params to int / bool / float per the
         // D5 catalog so the backend resolver gets the type it expects.
         visibility_rule: coercePredicate(draft.visibility_rule, leaves.data ?? []),
+        opponent_lines: opponentLineDraftsToPayload(draft.opponent_lines),
       }),
     onSuccess: () => {
       qc.invalidateQueries({
@@ -184,6 +222,9 @@ function OptionEditor({ option }: { option: MissionOption }) {
       qc.invalidateQueries({ queryKey: missionKeys.options() });
     },
   });
+
+  const isEncounter = draft.option_kind === 'encounter';
+  const isCheck = draft.option_kind === 'check';
 
   return (
     <Card>
@@ -241,20 +282,50 @@ function OptionEditor({ option }: { option: MissionOption }) {
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label htmlFor="opt-risk">Base risk</Label>
-          <Input
-            id="opt-risk"
-            type="number"
-            value={draft.authored_base_risk}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                authored_base_risk: Number(e.target.value || 0),
-              })
-            }
-          />
-        </div>
+        {/* Base risk is a CHECK-only field - it hides for BRANCH and ENCOUNTER
+            the same way (an encounter's risk comes from encounter_risk_level). */}
+        {isCheck ? (
+          <div>
+            <Label htmlFor="opt-risk">Base risk</Label>
+            <Input
+              id="opt-risk"
+              type="number"
+              value={draft.authored_base_risk}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  authored_base_risk: Number(e.target.value || 0),
+                })
+              }
+            />
+          </div>
+        ) : null}
+        {isEncounter ? (
+          <div>
+            <Label htmlFor="opt-encounter-risk">Encounter risk level</Label>
+            <Select
+              value={draft.encounter_risk_level ?? ''}
+              onValueChange={(v) =>
+                setDraft({
+                  ...draft,
+                  encounter_risk_level: v as '' | (typeof RISK_LEVELS)[number],
+                })
+              }
+            >
+              <SelectTrigger id="opt-encounter-risk">
+                <SelectValue placeholder="Select a risk level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Unset</SelectItem>
+                {RISK_LEVELS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         <div className="md:col-span-2">
           <Label htmlFor="opt-framing">IC framing</Label>
           <Textarea
@@ -272,6 +343,15 @@ function OptionEditor({ option }: { option: MissionOption }) {
           />
           <Label htmlFor="opt-needs-rewrite">Framing needs rewrite</Label>
         </div>
+        {isEncounter ? (
+          <div className="border-t pt-3 md:col-span-2">
+            <OpponentLinesEditor
+              lines={draft.opponent_lines}
+              onChange={(lines) => setDraft({ ...draft, opponent_lines: lines })}
+              rowErrors={undefined}
+            />
+          </div>
+        ) : null}
         <div className="border-t pt-3 md:col-span-2">
           <PredicateBuilder
             label="Visibility rule"
