@@ -511,15 +511,15 @@ versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
 `ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
 and ADR-0130).
 
-**Beat-authoring parity (#3562) [BUILT & WIRED]** — the stories app's beat form needs
+**Beat-authoring parity (#3562) [BUILT & WIRED]** - the stories app's beat form needs
 every authored `ConsequencePool`, not just the two curated technique-cast/combat-offense
 catalogs above. `GET /api/magic/consequence-pool-catalog/?scope=beat`
 (`ConsequencePoolCatalogFilter.filter_scope`, `ConsequencePoolScope` TextChoices in
 `world.magic.constants`) widens the listing to every `ConsequencePool` in the game,
-ordered by name; `?scope=technique` (also the default with no `scope` param) is a no-op —
+ordered by name; `?scope=technique` (also the default with no `scope` param) is a no-op -
 the viewset's narrow-catalog `get_queryset` already applies. `GET
-/api/magic/consequence-pool-catalog/{id}/` (`retrieve`) is always unfiltered — any pool,
-catalog member or not — and routes through `ConsequencePoolDetailSerializer` instead of the
+/api/magic/consequence-pool-catalog/{id}/` (`retrieve`) is always unfiltered - any pool,
+catalog member or not - and routes through `ConsequencePoolDetailSerializer` instead of the
 list row: `entries` is built from `resolve_pool_consequences` (parent inheritance plus the
 pool's own entries minus exclusions), each with `outcome_tier`, `effect_types`, and
 `character_loss`, so `ConsequencePoolPicker` (`frontend/src/stories/components/

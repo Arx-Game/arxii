@@ -587,7 +587,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
   - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
   - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
-  - `GET /api/magic/consequence-pool-catalog/` — the #1995 flavor catalog
+  - `GET /api/magic/consequence-pool-catalog/` - the #1995 flavor catalog
     (`?action_category=` narrows to combat/technique catalogs; no param is the flat
     union). `?scope=beat` (#3562) widens it to every authored `ConsequencePool`, ordered
     by name, for the stories app's beat-authoring stakes picker; `retrieve` is always
@@ -2435,7 +2435,7 @@ GM at a given level may author (#2000, ADR-0097).
   mark/episode resolve/story completion/feedback submission that triggered it.
 - **Trust-ladder consumers:** `cap_for_profile(profile) -> GMLevelCap | None`
   (`world.gm.services`, #3562) is the single `GMLevelCap.objects.get(level=profile.level)`
-  lookup — `None` when the level is unseeded, never raises. `stories.BeatSerializer`'s risk
+  lookup - `None` when the level is unseeded, never raises. `stories.BeatSerializer`'s risk
   gate (`gm_max_risk`, `world.gm.services`) and `stories.StakeSerializer`'s custom-stakes/
   global-scope gates (`_gm_allows_custom_stakes`/`_gm_allows_global_scope`,
   `world.stories.serializers`) all delegate to it instead of re-deriving the query (staff
@@ -2449,7 +2449,7 @@ GM at a given level may author (#2000, ADR-0097).
   `IsAdminUser`; `GET`/`PATCH /api/gm/profiles/mine/` (#3478) — the requesting account's
   own `GMProfile` via `GMProfileMineSerializer`, `contact_times`/`ooc_info` writable,
   `level` read-only, 404 for a non-GM account. **`max_beat_risk`/`allow_custom_stakes`
-  (#3562)** are read-only `SerializerMethodField`s built from `cap_for_profile` — staff
+  (#3562)** are read-only `SerializerMethodField`s built from `cap_for_profile` - staff
   get `RenownRisk.EXTREME`/`True` regardless of any cap row, a non-staff GM gets its own
   `GMLevelCap.max_beat_risk`/`allow_custom_stakes` (`RenownRisk.NONE`/`False` when the
   level is unseeded); a PATCH body naming either field is silently ignored
