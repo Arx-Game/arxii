@@ -4141,6 +4141,13 @@ state is node position + snapshots + already-applied consequences, never a scrat
   behind `GMRoute` (`account.is_gm || account.is_staff`), alongside the staff-only
   `/staff/missions/...` mount; `studioPaths` (`frontend/src/missions/studioPaths.ts`) is the
   shared link builder both mounts' pages use so the components stay identical between them.
+  `scenario_scope_q`'s OPEN branch also requires `risk_tier__gte=1` (#3562) — `risk_tier=0` is
+  an unset sentinel, never a living tier, and without the floor it slipped into scope under any
+  positive ceiling (`0 <= max_risk_tier_for(user)` for any GM with a profile).
+  `BeatSerializer.validate` (`world.stories.serializers`) reuses `scenario_scope_q` too: a
+  non-staff GM's `required_mission` write is rejected (`{"required_mission": "..."}`, 400)
+  unless the template is in that same scope — see `docs/systems/stakes.md`'s API table for the
+  sibling GM readiness endpoint this task also added.
 - **ENCOUNTER option: objective-first (#3565, ADR-0258):** picking (or a group vote landing
   on) an ENCOUNTER option creates a `CombatEncounter` in the scene via the same service
   `RunBeatAction._run_encounter_beat` uses, spawns the option's authored
