@@ -13,7 +13,7 @@ Every viewset in this module uses the project conventions:
   ``ScenarioScopedQuerysetMixin``/``ScenarioOwnedChildMixin`` (see
   ``world.missions.permissions``). ``MissionGiverViewSet`` and
   ``MissionInstanceViewSet`` stay ``IsAuthenticated + IsAdminUser``
-  (staff-only ops surfaces, not authoring) — ``IsAdminUser`` is DRF's
+  (staff-only ops surfaces, not authoring) - ``IsAdminUser`` is DRF's
   built-in check on ``request.user.is_staff``.
 - A ``FilterSet`` (never raw request.query_params).
 - Explicit ``.order_by(...)`` for stable pagination.
@@ -131,26 +131,43 @@ class ScenarioScopedQuerysetMixin:
 
 
 class ScenarioOwnedChildMixin:
-    """``perform_create`` ownership gate for scenario-graph child viewsets (#3565).
+    """``perform_create``/``perform_update`` ownership gate for scenario-graph
+    child viewsets (#3565).
 
     DRF never calls ``has_object_permission`` on create (the row doesn't
     exist yet) -- ``IsStaffOrScenarioOwner.has_permission`` only checks
-    ``scenario_owner_can_create``. This mixin is where the create-time
-    ownership check actually happens: resolve the parent MissionTemplate
-    from the validated payload (via ``parent_template``, implemented per
-    viewset) and reject unless staff or ``user_leads_template``.
+    ``scenario_owner_can_create``. On update, ``has_object_permission`` only
+    checks the OLD parent (the object as it exists pre-write) -- a PATCH that
+    re-points the parent FK (e.g. ``{"template": <other pk>}`` on a node, or
+    the equivalent one level down for option/route/candidate/reward) would
+    otherwise let a non-staff owner move authored content into a template
+    they do not lead. This mixin is where BOTH the create-time and the
+    write-time (target) ownership check actually happen: resolve the parent
+    MissionTemplate the row will belong to AFTER the write from the
+    validated payload -- falling back to the pre-existing instance's current
+    parent when the FK isn't in this particular payload (an update that
+    doesn't touch the parent FK) -- via ``parent_template`` (implemented per
+    viewset, one shared entry point for both paths) and reject unless staff
+    or ``user_leads_template``.
     """
 
-    def parent_template(self, validated_data: dict) -> MissionTemplate:
+    def parent_template(self, validated_data: dict, instance: Any = None) -> MissionTemplate:
         raise NotImplementedError
 
-    def perform_create(self, serializer: BaseSerializer) -> None:
+    def _check_parent_ownership(self, serializer: BaseSerializer, instance: object) -> None:
         user = self.request.user
         if not user.is_staff:
-            template = self.parent_template(serializer.validated_data)
+            template = self.parent_template(serializer.validated_data, instance)
             if not user_leads_template(user, template):
                 msg = "Only the Lead GM of this scenario's story or staff may add to it."
                 raise PermissionDenied(msg)
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        self._check_parent_ownership(serializer, None)
+        serializer.save()
+
+    def perform_update(self, serializer: BaseSerializer) -> None:
+        self._check_parent_ownership(serializer, serializer.instance)
         serializer.save()
 
 
@@ -265,7 +282,7 @@ class MissionTemplateViewSet(ScenarioScopedQuerysetMixin, viewsets.ModelViewSet)
 # D2 editor CRUD viewsets — one per nested model, each a full ModelViewSet
 # (list/retrieve/create/update/partial-update/destroy). Filtered by parent
 # FK (template/node/option/route) via the per-model FilterSets. Staff, or a
-# GM writing within their own StoryScenario's scope (#3565) — see
+# GM writing within their own StoryScenario's scope (#3565) - see
 # ScenarioScopedQuerysetMixin / ScenarioOwnedChildMixin / IsStaffOrScenarioOwner.
 # ---------------------------------------------------------------------------
 
@@ -287,8 +304,11 @@ class MissionNodeViewSet(
     def template_of(self, obj: MissionNode) -> MissionTemplate:
         return obj.template
 
-    def parent_template(self, validated_data: dict) -> MissionTemplate:
-        return validated_data["template"]
+    def parent_template(self, validated_data: dict, instance: Any = None) -> MissionTemplate:
+        template = validated_data.get("template")
+        if template is not None:
+            return template
+        return instance.template
 
     @action(detail=True, methods=("POST",))
     def copy(self, request: Request, pk: str | None = None) -> Response:
@@ -350,8 +370,11 @@ class MissionOptionViewSet(
     def template_of(self, obj: MissionOption) -> MissionTemplate:
         return obj.node.template
 
-    def parent_template(self, validated_data: dict) -> MissionTemplate:
-        return validated_data["node"].template
+    def parent_template(self, validated_data: dict, instance: Any = None) -> MissionTemplate:
+        node = validated_data.get("node")
+        if node is not None:
+            return node.template
+        return instance.node.template
 
 
 class MissionOptionRouteViewSet(
@@ -371,8 +394,11 @@ class MissionOptionRouteViewSet(
     def template_of(self, obj: MissionOptionRoute) -> MissionTemplate:
         return obj.option.node.template
 
-    def parent_template(self, validated_data: dict) -> MissionTemplate:
-        return validated_data["option"].node.template
+    def parent_template(self, validated_data: dict, instance: Any = None) -> MissionTemplate:
+        option = validated_data.get("option")
+        if option is not None:
+            return option.node.template
+        return instance.option.node.template
 
 
 class MissionOptionRouteCandidateViewSet(
@@ -392,8 +418,11 @@ class MissionOptionRouteCandidateViewSet(
     def template_of(self, obj: MissionOptionRouteCandidate) -> MissionTemplate:
         return obj.route.option.node.template
 
-    def parent_template(self, validated_data: dict) -> MissionTemplate:
-        return validated_data["route"].option.node.template
+    def parent_template(self, validated_data: dict, instance: Any = None) -> MissionTemplate:
+        route = validated_data.get("route")
+        if route is not None:
+            return route.option.node.template
+        return instance.route.option.node.template
 
 
 class MissionOptionRouteRewardViewSet(ScenarioOwnedChildMixin, viewsets.ModelViewSet):
@@ -427,12 +456,21 @@ class MissionOptionRouteRewardViewSet(ScenarioOwnedChildMixin, viewsets.ModelVie
             return obj.route.option.node.template
         return obj.candidate.route.option.node.template
 
-    def parent_template(self, validated_data: dict) -> MissionTemplate:
+    def parent_template(self, validated_data: dict, instance: Any = None) -> MissionTemplate:
         route = validated_data.get("route")
         if route is not None:
             return route.option.node.template
-        candidate = validated_data["candidate"]
-        return candidate.route.option.node.template
+        candidate = validated_data.get("candidate")
+        if candidate is not None:
+            return candidate.route.option.node.template
+        # Neither FK in this payload (a PATCH not touching the parent) --
+        # fall back to the pre-existing instance's current parent.
+        if instance is not None:
+            if instance.route_id is not None:
+                return instance.route.option.node.template
+            return instance.candidate.route.option.node.template
+        msg = "One of route or candidate is required."
+        raise KeyError(msg)
 
 
 class MissionInstanceViewSet(

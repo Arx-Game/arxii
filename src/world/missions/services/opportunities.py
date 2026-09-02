@@ -160,7 +160,7 @@ def _nearby_giver_rows(
             )
             for posting in postings_for_giver(giver, character)
         ]
-    # Trigger giver — flavor only, never the pool. A GM's StoryScenario
+    # Trigger giver - flavor only, never the pool. A GM's StoryScenario
     # template is excluded outright (#3565) -- reached only through its
     # beat, never a discovery flavor line, even if attached to a giver.
     has_eligible = any(

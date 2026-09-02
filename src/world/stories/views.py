@@ -1686,14 +1686,14 @@ class BeatViewSet(viewsets.ModelViewSet):
         permission_classes=[CanAssignMissionToBeat],
     )
     def scenario(self, request: Request, pk: int | None = None) -> Response:
-        """POST /api/beats/{id}/scenario/ — GM authors a scenario graph as this beat's body.
+        """POST /api/beats/{id}/scenario/ - GM authors a scenario graph as this beat's body.
 
-        #3565. Reuses ``CanAssignMissionToBeat`` (Lead GM or staff — the same gate
+        #3565. Reuses ``CanAssignMissionToBeat`` (Lead GM or staff - the same gate
         ``assign_mission`` above uses) since authoring a beat's mission body
         is the same GM-tier gesture as assigning one. POST body:
         ``{"name", "summary", "risk_tier"}``. 201 + the new
         MissionTemplateSerializer payload on first call; 200 with the same
-        payload on a repeat call (idempotent — ``create_scenario_for_beat``
+        payload on a repeat call (idempotent - ``create_scenario_for_beat``
         returns the existing template rather than erroring or duplicating).
         400 ``{"required_mission": [...]}`` when the beat already uses a
         catalog (non-scenario) template; 400 ``{"name": [...]}`` on a name

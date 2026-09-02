@@ -55,7 +55,7 @@ def postings_for_giver(giver: MissionGiver, character: ObjectDB) -> list[BoardPo
     pure preview. Capped at :data:`MAX_BOARD_POSTINGS`.
 
     A GM's StoryScenario template is excluded outright regardless of its
-    visibility flag (#3565) — it is reached only through its beat, never a
+    visibility flag (#3565) - it is reached only through its beat, never a
     board's front door, even when a GM accidentally (or deliberately)
     attaches it to a giver.
 

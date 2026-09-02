@@ -71,7 +71,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
 
     ``story_id`` (#3565) is read-only: null for a catalog template, the
     owning Story's pk when this template is a GM's StoryScenario. Non-staff
-    writers are additionally bounded in ``validate()`` — a JUNIOR/GM-level
+    writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
     author can never author above their GM level's risk ceiling, flip
     ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
     weight into the front door (``base_weight``): a scenario is reached only
