@@ -90,9 +90,11 @@ The following view bodies retain narrow `try/except` blocks for race-condition e
 be pre-validated by serializers without duplicating service-level atomic state checks. These are
 the **only** permitted `try/except` blocks in views; all other validation belongs in serializers.
 
-**`EpisodeViewSet.resolve`** — catches `NoEligibleTransitionError` and `AmbiguousTransitionError`
-from `resolve_episode()`. These cannot be pre-validated without duplicating
-`get_eligible_transitions()`.
+**`EpisodeViewSet.resolve`** — catches `StoryError` (in practice `NoEligibleTransitionError`)
+from `resolve_episode()`. Routing is now fully automatic (#3565): a several-eligible-edges case
+fires the lowest `(order, pk)` transition rather than raising, so `AmbiguousTransitionError` is
+retired along with `TransitionMode.GM_CHOICE`. The remaining case cannot be pre-validated
+without duplicating `get_eligible_transitions()`.
 
 **`StoryGMOfferViewSet.accept`** — catches `StoryGMOfferError("The receiving GM has no active
 table…")`. Between serializer validation and service execution, the GM may have lost their active

@@ -264,6 +264,7 @@ treat those names as hints to confirm, not gospel.
 - [0254 - The Sentry digest issue is a pointer, never a reproduction](0254-sentry-digest-is-a-pointer-not-a-reproduction.md) (extends #2236 Phase 5)
 - [0256 - Beat expiry is a completion, not a field flip](0256-beat-expiry-is-a-completion.md) (#3558)
 - [0257 - Beats never wait for a ruling](0257-beats-never-wait-for-a-ruling.md) (#3559)
+- [0258 - Story beats reuse the mission scenario graph](0258-story-beats-reuse-the-mission-scenario-graph.md) (#3565; applies ADR-0030; extends ADR-0010, ADR-0085; supersedes the 2026-05-18 missions-design tenet 1 framing; reverses the 2026-04-20 stories-design GM_CHOICE mode)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -128,6 +128,27 @@ contributes typed **Effects** (handlers in `actions/effects/`) that modify how t
 resolves. _Avoid_: buff, modifier (Effect is the action-layer term; Modifier is the
 mechanics-layer term).
 
+## Stories & missions: the scenario graph (#3565)
+
+**Scenario / Scenario Graph**:
+`world.missions`' authored option -> check -> tier -> consequence -> next node graph
+(`MissionTemplate`/`MissionNode`/`MissionOption`/`MissionOptionRoute`) is a shared
+primitive, not owned by either app (ADR-0258). **Scenario** is the GM-facing name used on
+the stories side (a story beat's "Design scenario" action, the scene's Scenario Card/rail);
+**scenario graph** is the code and glossary term for the primitive itself, used whether the
+wrapper is a story beat (`StoryScenario`, see the stories glossary) or a mission (below).
+_Avoid_: GM choice (the runtime transition-picking mode this work retires - see Beat
+Outcome Key in the stories glossary and `docs/adr/0258-story-beats-reuse-the-mission-
+scenario-graph.md`), option engine (there is exactly one, shared by both wrappers).
+
+**Mission** (as a wrapper):
+A scenario graph in its **quest** wrapper - the giver economy (`MissionTemplate`'s
+cooldown, draw weight, era replacement, visibility) plus contract bookkeeping
+(`MissionInstance`'s report style, ransom target). See the missions glossary's Mission
+entry and the stories glossary's StoryScenario entry for the sibling story-beat wrapper.
+_Avoid_: scenario (a mission with a giver is not what "scenario" names - reserve that word
+for the graph wrapped in a story beat).
+
 ## Identity
 
 **Persona**:
