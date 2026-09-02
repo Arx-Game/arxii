@@ -8,9 +8,9 @@ from rest_framework.exceptions import ErrorDetail
 from world.character_sheets.models import CharacterSheet
 from world.events.models import Event
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMLevelCap, GMProfile, GMTable
+from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
-from world.gm.services import gm_max_risk
+from world.gm.services import cap_for_profile, gm_max_risk
 from world.items.models import ItemInstance
 from world.missions.models import MissionOption, MissionTemplate
 from world.scenes.models import Persona
@@ -981,10 +981,10 @@ def _gm_allows_custom_stakes(user) -> bool:
     No GMProfile or no cap row → False.
     """
     try:
-        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
-    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
         return False
-    return cap.allow_custom_stakes
+    return bool(cap and cap.allow_custom_stakes)
 
 
 def _gm_allows_global_scope(user) -> bool:
@@ -994,10 +994,10 @@ def _gm_allows_global_scope(user) -> bool:
     ``_gm_allows_custom_stakes``).
     """
     try:
-        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
-    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
         return False
-    return cap.allow_global_scope_authoring
+    return bool(cap and cap.allow_global_scope_authoring)
 
 
 class BeatOpponentLineSerializer(serializers.ModelSerializer):
@@ -1273,7 +1273,70 @@ class BeatSerializer(serializers.ModelSerializer):
                         )
                     }
                 )
+
+        if not is_staff:
+            self._check_required_mission_cap(user, merged, existing)
+
+        self._check_stakes_lock(attrs)
         return attrs
+
+    @staticmethod
+    def _check_required_mission_cap(
+        user: Any, merged: dict[str, Any], existing: dict[str, Any]
+    ) -> None:
+        """Non-staff ``required_mission`` is capped to the caller's ``scenario_scope_q`` (#3562).
+
+        Without this, a non-staff GM could assign any catalog mission --
+        including one restricted well above their GM level -- as a beat's
+        required_mission, sidestepping the same scope the missions Studio API
+        already enforces on that GM's authoring surface (#3565). Only checked
+        when the value is set and actually changing -- an untouched
+        required_mission on an existing beat (e.g. authored by staff) is left
+        alone, matching the risk gate's snapshot-merge posture above.
+        """
+        from world.missions.models import MissionTemplate  # noqa: PLC0415
+        from world.missions.permissions import scenario_scope_q  # noqa: PLC0415
+
+        template = merged.get("required_mission")
+        if template is None or template == existing.get("required_mission"):
+            return
+        in_scope = (
+            MissionTemplate.objects.filter(scenario_scope_q(user)).filter(pk=template.pk).exists()
+        )
+        if not in_scope:
+            raise serializers.ValidationError(
+                {"required_mission": "Your GM level does not permit assigning this mission."}
+            )
+
+    def _check_stakes_lock(self, attrs: dict[str, Any]) -> None:
+        """Reject a write that touches a priced field while a contract is locked (#3562).
+
+        Mirrors ``_check_stake_beat_lock``'s posture (no staff bypass -- a
+        locked contract is locked for everyone until resolved) but is
+        beat-shaped rather than stake-shaped: it looks at *this* beat's own
+        open activation and the fields on the incoming ``attrs``, reusing
+        ``_STAKES_LOCKED_MESSAGE`` rather than calling that stake-shaped
+        helper. Only fires on an actual value change -- a PATCH that repeats
+        the stored value, or touches an unrelated field, passes through.
+        """
+        if self.instance is None:
+            return
+        from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+        if get_open_activation(self.instance) is None:
+            return
+        locked_fields = (
+            "risk",
+            "target_level",
+            "success_consequences",
+            "failure_consequences",
+            "expired_consequences",
+        )
+        for field_name in locked_fields:
+            if field_name not in attrs:
+                continue
+            if attrs[field_name] != getattr(self.instance, field_name):
+                raise serializers.ValidationError({field_name: _STAKES_LOCKED_MESSAGE})
 
     def _check_beat_ownership(self, user: Any, is_staff: bool, merged: dict[str, Any]) -> None:
         """Reject the write unless staff or the requesting user owns the episode's story.
@@ -3611,6 +3674,27 @@ class StakeSummarySerializer(serializers.ModelSerializer):
         model = Stake
         fields = ["id", "player_summary", "severity", "severity_label"]
         read_only_fields = fields
+
+
+class BeatReadinessSerializer(serializers.Serializer):
+    """GM readiness dashboard payload for a beat (#3562).
+
+    Read-only wire shape; build the payload via
+    ``world.stories.services.stakes.beat_readiness_payload``. Unlike
+    ``StakesSummarySerializer`` below, ``problems`` is GM planning detail
+    (readiness reasons) rather than a player-safe summary, so the readiness
+    endpoint gates on ``CanAssignMissionToBeat`` (Lead GM or staff), not the
+    broader stakes-summary audience.
+    """
+
+    is_staked = serializers.BooleanField(read_only=True)
+    is_ready = serializers.BooleanField(read_only=True)
+    problems = serializers.ListField(child=serializers.CharField(), read_only=True)
+    advisories = serializers.ListField(child=serializers.CharField(), read_only=True)
+    declared_risk = serializers.CharField(read_only=True)
+    effective_risk = serializers.CharField(read_only=True)
+    locked = serializers.BooleanField(read_only=True)
+    locked_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
 class StakesSummarySerializer(serializers.Serializer):

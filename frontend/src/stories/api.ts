@@ -25,6 +25,7 @@ import type {
   Beat,
   BeatCompletion,
   BeatCreateBody,
+  BeatReadiness,
   BeatUpdateBody,
   CanonReview,
   CanonReviewChangesBody,
@@ -34,6 +35,8 @@ import type {
   ChapterList,
   ClearanceDecisionBody,
   ClearanceResolveBody,
+  ConsequencePoolCatalog,
+  ConsequencePoolDetail,
   ContributeBeatBody,
   CreateEventBody,
   CustodyClearance,
@@ -65,6 +68,7 @@ import type {
   ResolveEpisodeBody,
   SessionRequest,
   StaffWorkloadResponse,
+  StakeContractActivation,
   Story,
   StoryCreateBody,
   StoryGMOffer,
@@ -412,6 +416,56 @@ export async function createBeatScenario(
   });
   if (!res.ok) await throwApiError(res, `Failed to create scenario for beat ${beatId}`);
   return res.json() as Promise<MissionTemplate>;
+}
+
+/**
+ * GET /api/beats/{id}/readiness/ (#3562) - the GM readiness dashboard for
+ * this beat (Lead GM or staff only). Drives `BeatFormDialog`'s readiness
+ * strip in edit mode.
+ */
+export async function getBeatReadiness(id: number): Promise<BeatReadiness> {
+  const res = await apiFetch(`/api/beats/${id}/readiness/`);
+  if (!res.ok) await throwApiError(res, `Failed to load readiness for beat ${id}`);
+  return res.json() as Promise<BeatReadiness>;
+}
+
+/**
+ * GET /api/stake-activations/?beat=&resolved_at_isnull=true (#3562) - the
+ * beat's open stakes-contract activations, if any. A non-empty result means
+ * the beat's stakes contract (risk / target_level / consequence pools) is
+ * locked: `PATCH /api/beats/{id}/` rejects changes to those fields while an
+ * activation is open. Returns the flattened `results` list, not the raw
+ * paginated envelope - callers only ever want "is there an open one."
+ */
+export async function listOpenBeatActivations(beatId: number): Promise<StakeContractActivation[]> {
+  const res = await apiFetch(`/api/stake-activations/?beat=${beatId}&resolved_at_isnull=true`);
+  if (!res.ok) await throwApiError(res, `Failed to load open activations for beat ${beatId}`);
+  const data = (await res.json()) as PaginatedResponse<StakeContractActivation>;
+  return data.results;
+}
+
+/**
+ * GET /api/magic/consequence-pool-catalog/?scope=beat (#3562) - every
+ * ConsequencePool a beat's success/failure/expired outcome may fire,
+ * widened from the technique-scoped catalog `character-creation/api.ts`'s
+ * `getConsequencePoolCatalog` reads (which only sees children of the two
+ * technique base pools). Feeds `ConsequencePoolPicker`'s `<select>`.
+ */
+export async function listBeatConsequencePools(): Promise<ConsequencePoolCatalog[]> {
+  const res = await apiFetch('/api/magic/consequence-pool-catalog/?scope=beat');
+  if (!res.ok) await throwApiError(res, 'Failed to load consequence pools');
+  return res.json() as Promise<ConsequencePoolCatalog[]>;
+}
+
+/**
+ * GET /api/magic/consequence-pool-catalog/{id}/ (#3562) - a single pool's
+ * resolved entries (parent inheritance plus the pool's own entries), the
+ * preview `ConsequencePoolPicker` renders under its `<select>`.
+ */
+export async function getConsequencePoolDetail(id: number): Promise<ConsequencePoolDetail> {
+  const res = await apiFetch(`/api/magic/consequence-pool-catalog/${id}/`);
+  if (!res.ok) await throwApiError(res, `Failed to load consequence pool ${id}`);
+  return res.json() as Promise<ConsequencePoolDetail>;
 }
 
 // ---------------------------------------------------------------------------

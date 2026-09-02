@@ -74,6 +74,10 @@ def scenario_scope_q(user: _User, prefix: str = "") -> Q:
         **{
             f"{prefix}visibility": MissionVisibility.OPEN,
             f"{prefix}risk_tier__lte": max_risk_tier_for(user),
+            # 0 is the unset sentinel, never a living tier (real tiers are
+            # 1-5) -- without this, a positive ceiling admits it too, since
+            # 0 <= anything (#3562).
+            f"{prefix}risk_tier__gte": 1,
         }
     )
 

@@ -1214,6 +1214,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/beats/{id}/readiness/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{id}/readiness/ - GM readiness dashboard for this beat (#3562).
+     *
+     *     Unlike ``stakes-summary`` (player-safe, pillar 9), this surfaces the
+     *     raw ``problems`` list - GM planning detail, like
+     *     ``internal_description`` - so it is gated to the Lead GM or staff via
+     *     ``CanAssignMissionToBeat`` rather than the broader stakes-summary
+     *     audience.
+     */
+    get: operations['beats_readiness_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/beats/{id}/scenario/': {
     parameters: {
       query?: never;
@@ -11936,6 +11961,14 @@ export interface paths {
      *     resolve_cast_action_template enforces the same split at submit/finalize
      *     time. The technique builder's category-agnostic picker keeps the flat
      *     union by passing no param.
+     *
+     *     **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+     *     every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+     *     isn't limited to the technique-cast catalog. ``retrieve`` is always
+     *     unfiltered (any pool, not just a catalog member) and returns
+     *     ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+     *     inheritance + own entries minus exclusions) the beat form's pool picker
+     *     needs to preview a pool before selecting it.
      */
     get: operations['magic_consequence_pool_catalog_list'];
     put?: never;
@@ -11964,6 +11997,14 @@ export interface paths {
      *     resolve_cast_action_template enforces the same split at submit/finalize
      *     time. The technique builder's category-agnostic picker keeps the flat
      *     union by passing no param.
+     *
+     *     **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+     *     every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+     *     isn't limited to the technique-cast catalog. ``retrieve`` is always
+     *     unfiltered (any pool, not just a catalog member) and returns
+     *     ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+     *     inheritance + own entries minus exclusions) the beat form's pool picker
+     *     needs to preview a pool before selecting it.
      */
     get: operations['magic_consequence_pool_catalog_retrieve'];
     put?: never;
@@ -24532,6 +24573,27 @@ export interface components {
      * @enum {string}
      */
     BeatOutcomeEnum: 'success' | 'failure';
+    /**
+     * @description GM readiness dashboard payload for a beat (#3562).
+     *
+     *     Read-only wire shape; build the payload via
+     *     ``world.stories.services.stakes.beat_readiness_payload``. Unlike
+     *     ``StakesSummarySerializer`` below, ``problems`` is GM planning detail
+     *     (readiness reasons) rather than a player-safe summary, so the readiness
+     *     endpoint gates on ``CanAssignMissionToBeat`` (Lead GM or staff), not the
+     *     broader stakes-summary audience.
+     */
+    BeatReadiness: {
+      readonly is_staked: boolean;
+      readonly is_ready: boolean;
+      readonly problems: string[];
+      readonly advisories: string[];
+      readonly declared_risk: string;
+      readonly effective_risk: string;
+      readonly locked: boolean;
+      /** Format: date-time */
+      readonly locked_at: string | null;
+    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     BeatRequest: {
       episode: number;
@@ -26782,6 +26844,42 @@ export interface components {
       name: string;
       /** @description GM authoring context for this pool. */
       description?: string;
+    };
+    /**
+     * @description Detail view of any ``ConsequencePool``'s resolved consequences (#3562), the
+     *     beat-authoring picker's pool preview. ``entries`` is built from
+     *     ``resolve_pool_consequences`` (parent inheritance plus the pool's own entries,
+     *     minus anything excluded), not straight from ``ConsequencePoolEntry`` rows, so
+     *     it matches what actually fires when the pool is applied.
+     */
+    ConsequencePoolDetail: {
+      readonly id: number;
+      /** @description Human-readable pool name (e.g., 'Wild Magic Surge'). */
+      name: string;
+      /** @description GM authoring context for this pool. */
+      description?: string;
+      readonly entries: components['schemas']['ConsequencePoolEntry'][];
+    };
+    /**
+     * @description One resolved Consequence row in a ConsequencePoolDetailSerializer's ``entries``
+     *     list (#3562); schema typing only. See ``get_entries`` below for the builder.
+     */
+    ConsequencePoolEntry: {
+      consequence_id: number;
+      name: string;
+      outcome_tier: components['schemas']['ConsequencePoolEntryOutcomeTier'] | null;
+      effect_types: string[];
+      character_loss: boolean;
+    };
+    /**
+     * @description The outcome-tier triple embedded in a ConsequencePoolDetailSerializer entry
+     *     (#3562); schema typing only. ConsequencePoolDetailSerializer builds the dict
+     *     directly rather than instantiating this serializer.
+     */
+    ConsequencePoolEntryOutcomeTier: {
+      id: number;
+      name: string;
+      success_level: number;
     };
     /** @description Read-only serializer for the staff-authored content theme catalog. */
     ContentTheme: {
@@ -29416,7 +29514,14 @@ export interface components {
        */
       readonly approved_at: string;
     };
-    /** @description The requesting GM's own profile: operational fields are writable (#3478). */
+    /**
+     * @description The requesting GM's own profile: operational fields are writable (#3478).
+     *
+     *     ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+     *     GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+     *     options from the same ceiling the API enforces, instead of a client-side
+     *     guess. Staff get the top of each scale regardless of any cap row.
+     */
     GMProfileMine: {
       readonly id: number;
       readonly level: components['schemas']['NewLevelEnum'];
@@ -29425,6 +29530,10 @@ export interface components {
       contact_times?: string;
       /** @description OOC information for players: style, expectations, boundaries. */
       ooc_info?: string;
+      /** @description RenownRisk ceiling: "extreme" for staff, else the caller's GMLevelCap. */
+      readonly max_beat_risk: string;
+      /** @description Whether this GM may author custom (template=null) stakes: True for staff. */
+      readonly allow_custom_stakes: boolean;
     };
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
@@ -37444,7 +37553,14 @@ export interface components {
       staff_response?: string;
       status?: components['schemas']['StatusBa9Enum'];
     };
-    /** @description The requesting GM's own profile: operational fields are writable (#3478). */
+    /**
+     * @description The requesting GM's own profile: operational fields are writable (#3478).
+     *
+     *     ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+     *     GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+     *     options from the same ceiling the API enforces, instead of a client-side
+     *     guess. Staff get the top of each scale regardless of any cap row.
+     */
     PatchedGMProfileMineRequest: {
       /** @description When players can reach this GM (freeform, shown on their GM card). */
       contact_times?: string;
@@ -47156,6 +47272,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_readiness_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BeatReadiness'];
         };
       };
     };
@@ -61454,6 +61592,11 @@ export interface operations {
     parameters: {
       query?: {
         action_category?: string;
+        /**
+         * @description * `technique` - Technique
+         *     * `beat` - Beat
+         */
+        scope?: 'beat' | 'technique';
       };
       header?: never;
       path?: never;
@@ -61488,7 +61631,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ConsequencePoolCatalog'];
+          'application/json': components['schemas']['ConsequencePoolDetail'];
         };
       };
     };

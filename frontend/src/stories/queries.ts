@@ -105,6 +105,13 @@ export const storiesKeys = {
   // Beats
   beatList: listKey<ListBeatsParams>('beats'),
   beat: (id: number) => [...storiesKeys.all, 'beat', id] as const,
+  // #3562 readiness dashboard + open stakes-contract-activation lock
+  beatReadiness: (id: number) => [...storiesKeys.all, 'beat', id, 'readiness'] as const,
+  beatActivations: (beatId: number) => [...storiesKeys.all, 'beat', beatId, 'activations'] as const,
+
+  // #3562 beat-scoped consequence pool catalog + detail
+  consequencePools: () => [...storiesKeys.all, 'consequence-pools', 'beat'] as const,
+  consequencePoolDetail: (id: number) => [...storiesKeys.all, 'consequence-pool', id] as const,
 
   // Progress
   groupProgress: listKey<ListGroupProgressParams>('group-progress'),
@@ -429,7 +436,32 @@ export function useUpdateBeat() {
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: storiesKeys.beat(id) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
+      // A risk/target_level/consequence-pool edit can flip readiness
+      // (e.g. clearing a "missing target_level" problem).
+      qc.invalidateQueries({ queryKey: storiesKeys.beatReadiness(id) }).catch(() => {});
     },
+  });
+}
+
+/** #3562 - the beat's GM readiness dashboard, edit mode only. */
+export function useBeatReadiness(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.beatReadiness(id),
+    queryFn: () => api.getBeatReadiness(id),
+    enabled: enabled && id > 0,
+  });
+}
+
+/**
+ * #3562 - the beat's open stakes-contract activation, if any (the lock).
+ * Returns the raw list (0 or 1 entries in practice - a beat has at most one
+ * open activation); callers read `data?.[0]` for the lock state.
+ */
+export function useOpenBeatActivation(beatId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.beatActivations(beatId),
+    queryFn: () => api.listOpenBeatActivations(beatId),
+    enabled: enabled && beatId > 0,
   });
 }
 
@@ -588,6 +620,23 @@ export function useCreateBeatScenario() {
       qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
     },
+  });
+}
+
+/** #3562 - the beat-scoped consequence pool catalog for `ConsequencePoolPicker`'s `<select>`. */
+export function useBeatConsequencePools() {
+  return useQuery({
+    queryKey: storiesKeys.consequencePools(),
+    queryFn: () => api.listBeatConsequencePools(),
+  });
+}
+
+/** #3562 - a single pool's resolved entries for `ConsequencePoolPicker`'s preview. */
+export function useConsequencePoolDetail(id: number) {
+  return useQuery({
+    queryKey: storiesKeys.consequencePoolDetail(id),
+    queryFn: () => api.getConsequencePoolDetail(id),
+    enabled: id > 0,
   });
 }
 

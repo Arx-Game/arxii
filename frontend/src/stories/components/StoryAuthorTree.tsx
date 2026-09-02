@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ChevronDown, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -179,6 +180,11 @@ function BeatRowAuthor({ beat }: BeatRowAuthorProps) {
           {beat.internal_description?.slice(0, 60) ?? '(no description)'}
         </span>
         <span className="ml-1 text-muted-foreground">({beat.predicate_type})</span>
+        {beat.risk && beat.risk !== 'none' && (
+          <Badge variant="outline" className="ml-2" data-testid="beat-risk-badge">
+            {beat.risk.charAt(0).toUpperCase() + beat.risk.slice(1)}
+          </Badge>
+        )}
       </span>
       <div className="flex items-center gap-1">
         {canMark && <MarkBeatDialog beat={beat} />}

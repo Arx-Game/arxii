@@ -587,6 +587,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
   - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
   - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
+  - `GET /api/magic/consequence-pool-catalog/` - the #1995 flavor catalog
+    (`?action_category=` narrows to combat/technique catalogs; no param is the flat
+    union). `?scope=beat` (#3562) widens it to every authored `ConsequencePool`, ordered
+    by name, for the stories app's beat-authoring stakes picker; `retrieve` is always
+    unfiltered and returns `ConsequencePoolDetailSerializer`'s resolved `entries` (see
+    `docs/systems/magic.md`'s "Beat-authoring parity" note)
 - **API endpoints (dramatic moment tagging — #1139):**
   - `GET /api/magic/dramatic-moment-types/` — unpaginated catalog for the tag-picker
   - `POST /api/magic/dramatic-moment-tags/` — create tag; `IsSceneGMOrOwnerOrStaff` gated
@@ -2427,18 +2433,30 @@ GM at a given level may author (#2000, ADR-0097).
   `GameWeek`; awards via `progression.award_xp(reason=ProgressionReason.GM_STORY_REWARD)`.
   Never raises — a bug here logs and returns `None` rather than aborting the beat
   mark/episode resolve/story completion/feedback submission that triggered it.
-- **Trust-ladder consumers:** `stories.BeatSerializer`'s risk gate and
-  `stories.StakeSerializer`'s custom-stakes gate read the acting GM's `GMLevelCap` via
-  `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
-  `combat.StakesLevelRequirement.minimum_gm_level` gates on `gm_account.gm_profile.level`
-  (no profile → STARTING)
+- **Trust-ladder consumers:** `cap_for_profile(profile) -> GMLevelCap | None`
+  (`world.gm.services`, #3562) is the single `GMLevelCap.objects.get(level=profile.level)`
+  lookup - `None` when the level is unseeded, never raises. `stories.BeatSerializer`'s risk
+  gate (`gm_max_risk`, `world.gm.services`) and `stories.StakeSerializer`'s custom-stakes/
+  global-scope gates (`_gm_allows_custom_stakes`/`_gm_allows_global_scope`,
+  `world.stories.serializers`) all delegate to it instead of re-deriving the query (staff
+  bypass unchanged, handled by each caller); `combat.StakesLevelRequirement.minimum_gm_level`
+  gates on `gm_account.gm_profile.level` directly (no profile → STARTING). `GMProfileMineSerializer`
+  (below) also reads it to surface the caller's own cap on the wire.
 - **API Endpoints:** `GMApplicationViewSet` (`/api/gm/applications/`; create for
   players, list/review/update for staff — approval auto-creates a `GMProfile`),
   `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
   `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
   `IsAdminUser`; `GET`/`PATCH /api/gm/profiles/mine/` (#3478) — the requesting account's
   own `GMProfile` via `GMProfileMineSerializer`, `contact_times`/`ooc_info` writable,
-  `level` read-only, 404 for a non-GM account; `POST /api/gm/profiles/character/` (#3478)
+  `level` read-only, 404 for a non-GM account. **`max_beat_risk`/`allow_custom_stakes`
+  (#3562)** are read-only `SerializerMethodField`s built from `cap_for_profile` - staff
+  get `RenownRisk.EXTREME`/`True` regardless of any cap row, a non-staff GM gets its own
+  `GMLevelCap.max_beat_risk`/`allow_custom_stakes` (`RenownRisk.NONE`/`False` when the
+  level is unseeded); a PATCH body naming either field is silently ignored
+  (`SerializerMethodField` is never writable). The beat-authoring frontend
+  (`useGMProfileMine`, `frontend/src/gm/queries.ts`) reads this payload to build its
+  risk-select options and stakes-picker gating from the same ceiling the API enforces,
+  instead of a client-side guess; `POST /api/gm/profiles/character/` (#3478)
   mints the account's own GM/Staff character via `mint_gm_character`
   (`world.roster.services.staff_characters`, role-aware: staff mints
   `typeclasses.gm_characters.StaffCharacter`, an approved GM mints `GMCharacter`, anyone
@@ -4141,6 +4159,13 @@ state is node position + snapshots + already-applied consequences, never a scrat
   behind `GMRoute` (`account.is_gm || account.is_staff`), alongside the staff-only
   `/staff/missions/...` mount; `studioPaths` (`frontend/src/missions/studioPaths.ts`) is the
   shared link builder both mounts' pages use so the components stay identical between them.
+  `scenario_scope_q`'s OPEN branch also requires `risk_tier__gte=1` (#3562) - `risk_tier=0` is
+  an unset sentinel, never a living tier, and without the floor it slipped into scope under any
+  positive ceiling (`0 <= max_risk_tier_for(user)` for any GM with a profile).
+  `BeatSerializer.validate` (`world.stories.serializers`) reuses `scenario_scope_q` too: a
+  non-staff GM's `required_mission` write is rejected (`{"required_mission": "..."}`, 400)
+  unless the template is in that same scope - see `docs/systems/stakes.md`'s API table for the
+  sibling GM readiness endpoint this task also added.
 - **ENCOUNTER option: objective-first (#3565, ADR-0258):** picking (or a group vote landing
   on) an ENCOUNTER option creates a `CombatEncounter` in the scene via the same service
   `RunBeatAction._run_encounter_beat` uses, spawns the option's authored

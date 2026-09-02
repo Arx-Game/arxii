@@ -13,6 +13,11 @@ import { fetchClockState, fetchGMProfileMine, mintGMCharacter, updateGMProfileMi
 import type { GMProfileMine } from './types';
 import { useAccount } from '@/store/hooks';
 
+// Re-exported so existing imports of the Hall's query module keep working
+// (`useGMProfileMineQuery` below stays its own hook, own cache entry - see
+// `@/gm/queries` for why).
+export { useGMProfileMine, gmKeys } from '@/gm/queries';
+
 export const hallKeys = {
   clock: ['hall', 'clock'] as const,
   gmProfileMine: ['hall', 'gm-profile-mine'] as const,

@@ -37,7 +37,8 @@ from world.missions.factories import (
     MissionOptionRouteRewardFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionNode
+from world.missions.models import MissionNode, MissionTemplate
+from world.missions.permissions import scenario_scope_q
 from world.missions.services.boards import postings_for_giver
 from world.missions.services.opportunities import _nearby_giver_rows
 from world.stories.factories import StoryFactory, StoryScenarioFactory
@@ -595,3 +596,47 @@ class NodeCopyActionPermissionTests(TestCase):
         )
         after = MissionNode.objects.filter(template=self.owner_template).count()
         self.assertEqual(before, after)
+
+
+class ScenarioScopeQRiskTierZeroTests(TestCase):
+    """risk_tier=0 is never a living OPEN-scope tier (#3562).
+
+    Every real tier is 1-5 (``risk_tier_to_renown_risk`` only maps that
+    range); 0 is the unset/sentinel value. Before this fix, the OPEN branch's
+    ``risk_tier__lte=max_risk_tier_for(user)`` alone let 0 through for any GM
+    with a profile (0 <= any positive ceiling), silently admitting sentinel
+    rows into scope.
+    """
+
+    def test_open_risk_tier_zero_excluded_from_gm_scope(self) -> None:
+        seed_default_gm_level_caps()
+        account = AccountFactory(username="scope-zero-tier", is_staff=False)
+        GMProfileFactory(account=account, level=GMLevel.JUNIOR)
+        template = MissionTemplateFactory(
+            name="zero-tier-open",
+            visibility=MissionVisibility.OPEN,
+            risk_tier=0,
+        )
+        in_scope = (
+            MissionTemplate.objects.filter(scenario_scope_q(account))
+            .filter(pk=template.pk)
+            .exists()
+        )
+        self.assertFalse(in_scope)
+
+    def test_open_risk_tier_one_still_in_scope(self) -> None:
+        """Sanity check: the gte=1 addition doesn't also exclude real tiers."""
+        seed_default_gm_level_caps()
+        account = AccountFactory(username="scope-one-tier", is_staff=False)
+        GMProfileFactory(account=account, level=GMLevel.JUNIOR)
+        template = MissionTemplateFactory(
+            name="one-tier-open",
+            visibility=MissionVisibility.OPEN,
+            risk_tier=1,
+        )
+        in_scope = (
+            MissionTemplate.objects.filter(scenario_scope_q(account))
+            .filter(pk=template.pk)
+            .exists()
+        )
+        self.assertTrue(in_scope)
