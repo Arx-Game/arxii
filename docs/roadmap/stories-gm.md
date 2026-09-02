@@ -442,7 +442,6 @@ web-only pattern.
 All MVP-blocking items from Phase 5's "What's Needed for MVP" section have landed. Remaining items are either blocked on other systems or represent quality-of-life improvements:
 
 - **Covenant / organization chat channels** — broader feature beyond stories scope; will land alongside the organizations system
-- **MISSION_COMPLETE predicate UI** — no longer blocked by the Missions system: Missions shipped, and the `Beat.required_mission` seam is live (#1757, `world.missions.services.beat.on_mission_complete_for_beat`, called from `services/resolution.py`'s terminal handler) — a launched instance completes its linked beat on termination today. What remains is GM-facing authoring UI to set `required_mission` without a shell/admin round-trip.
 - **DAG advanced editing** — multi-select, copy/paste, layout templates, drag-position persistence; Phase 5 delivered drag-to-add; richer graph editing is Phase 6+
 - **Cross-table GM availability marketplace** — the *player→GM* discovery direction shipped as #2119 (`GroupStoryRequest`, a covenant's broadcast ask any GM can browse/claim). A GM-directed (browse *players*/covenants wanting a GM, headhunting a specific one) direction remains a possible follow-up with no evidence of demand yet.
 - **Notification settings UI beyond story mute** — per-category toggles for atmosphere / visions / happenstance / system; Phase 6+
@@ -487,3 +486,35 @@ The staff-facing side landed too: `pending_canon_reviews` was already computed
 by `StaffWorkloadView` but never rendered — `PendingCanonReviewsPanel` on
 `StaffWorkloadPage` now lists the pending queue and wires
 `CanonReviewViewSet`'s `clear`/`changes` actions.
+
+### Beat form parity: required-mission authoring from the form - DONE (#3562)
+
+The `Beat.required_mission` seam was live end to end (#1757,
+`world.missions.services.beat.on_mission_complete_for_beat`, called from
+`services/resolution.py`'s terminal handler) but GM-facing authoring UI to
+set it existed only via a shell/admin round-trip. `BeatFormDialog` now shows
+a `required_mission` picker (`EntitySearchField` over
+`listMissionTemplates`/`getMissionTemplate`) for SITUATION/TASK beats, kind-
+gated so switching a beat's kind away clears the picker's state rather than
+silently carrying a stale FK. `BeatSerializer.validate` caps a non-staff
+GM's `required_mission` write to their own `scenario_scope_q` (the same
+scope the Missions Studio API enforces, #3565) - a GM cannot assign a
+mission through a beat that they couldn't have authored directly.
+
+The same pass closed every other gap between `BeatSerializer` and
+`BeatFormDialog`: the form now authors all nine predicate types (adding
+`faction_standing_at_least`), `target_level`, and the three consequence
+pools (`success_consequences`/`failure_consequences`/`expired_consequences`)
+via a new `ConsequencePoolPicker` with a resolved-entries preview
+(`GET /api/magic/consequence-pool-catalog/?scope=beat`, `GET
+/api/magic/consequence-pool-catalog/{id}/`); risk is offered up to the
+caller's own `GMLevelCap.max_beat_risk`
+(`GMProfileMineSerializer.max_beat_risk`, staff get the top of the ladder)
+rather than being staff-only; a `GET /api/beats/{id}/readiness/` strip
+surfaces `is_ready`/`problems`/`advisories`/`effective_risk`; and an open
+stakes-contract activation renders a lock banner and disables the fields
+`BeatSerializer.validate` locks server-side (`risk`, `target_level`, the
+three consequence pools). `StoryFormDialog` gained the matching `privacy`
+select (public/private/invite_only). See `docs/systems/stories.md`'s
+authoring section and `docs/systems/stakes.md`'s readiness section for the
+full detail.

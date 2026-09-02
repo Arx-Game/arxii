@@ -6,6 +6,20 @@ Structured narrative campaign management: task-gated episode progression, multi-
 
 **Authoring backbone + authoring API/UI shipped.** The non-linear maturity sketchpad (per-node `maturity`, `StoryScope.UNASSIGNED`, `Episode.resting_conclusion`/`is_ending`, `Beat.kind`/`advances`/`risk`, the WAITING_FOR_GM/RESTING frontier, the per-story `StoryNote` ledger) and the authoring/run-control API + minimal UI are in: `Story.summary` ("The Story So Far"), the GM↔player visibility contract, `POST /api/episodes/{id}/promote/`, `POST /api/stories/{id}/assign-to-scope/`, query-bounded `gm-queue`/`staff-workload`, and the `StoryAuthorPage` run-control surface (promote/assign dialogs, GM Notes panel, inline progress-state banner, nimble +Beat/+Branch). See the Visibility Contract and API sections below.
 
+**`BeatFormDialog` reached parity with `BeatSerializer` (#3562).** Every
+field `BeatSerializer` accepts is now on the form: all nine predicate types
+(`faction_standing_at_least` included), `target_level`, the three
+consequence pools via `ConsequencePoolPicker` (with a resolved-entries
+preview), `required_mission` (SITUATION/TASK, kind-gated), and `risk` up to
+the caller's own `GMLevelCap.max_beat_risk` rather than staff-only. Edit
+mode adds a `GET /api/beats/{id}/readiness/` strip
+(`is_ready`/`problems`/`advisories`/`effective_risk`) and a lock banner when
+an open stakes-contract activation locks `risk`/`target_level`/the three
+consequence pools against further edits. `StoryFormDialog` gained the
+matching `privacy` select. See the `Beat` model table and "StoryScenario"
+below, and [stakes.md](stakes.md)'s "Readiness (GM-facing, #3562)" section,
+for the field-by-field detail.
+
 **Source:** `src/world/stories/`
 **API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`, `/api/story-notes/`
 
@@ -274,7 +288,7 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `order` | PositiveIntegerField | |
 | `kind` | BeatKind | SITUATION / ENCOUNTER / TASK (default) / REQUIREMENT — what the beat *is*; resolution still flows through `predicate_type` |
 | `advances` | BooleanField | Default True; False = Tangent (recorded for history, never gates a transition) |
-| `risk` | CharField (RenownRisk choices) | Default NONE. The stakes-wager declaration (ADR-0067) — how life-threatening/consequential this beat is, backing a full stakes contract (`Stake`/`StakeResolution`/`StakeContractActivation`, #1770). Drives Legend award magnitude on SUCCESS via `RISK_LEGEND_AWARDS`, scaled by the beat's effective risk. Authoring trust-gated in `BeatSerializer` — only staff may author `risk != NONE`. See [stakes.md](stakes.md) for the full contract model, chain rule, and effective-risk formula |
+| `risk` | CharField (RenownRisk choices) | Default NONE. The stakes-wager declaration (ADR-0067) — how life-threatening/consequential this beat is, backing a full stakes contract (`Stake`/`StakeResolution`/`StakeContractActivation`, #1770). Drives Legend award magnitude on SUCCESS via `RISK_LEGEND_AWARDS`, scaled by the beat's effective risk. Authoring trust-gated in `BeatSerializer` — staff may author any value; a non-staff GM is capped to their own `GMLevelCap.max_beat_risk` (`world.gm.services.gm_max_risk`), not staff-only (#3562). While an open `StakeContractActivation` exists on the beat, `risk` is locked against any change (staff included — see [stakes.md](stakes.md)'s beat-side lock). See [stakes.md](stakes.md) for the full contract model, chain rule, and effective-risk formula |
 | `target_level` | PositiveSmallIntegerField (nullable) | The character level this beat's stakes are declared against (e.g. "EXTREME at level 4"). Required (via readiness validation, not `clean()`) when `risk != NONE`. Compared against the actual party's average level at activation to compute effective risk — see [stakes.md](stakes.md) |
 
 **Expiry (#3558):** a past-deadline beat resolves through `expire_beat` /
@@ -464,6 +478,17 @@ beat's pointer to its scenario's template, catalog or story-owned alike -
 unchanged by this work. `BeatSerializer.scenario` surfaces the linked
 template's id and name (or null) so the story author page can show "Design
 scenario" vs "Open canvas".
+
+`required_mission` is authored directly on `BeatFormDialog` (SITUATION/TASK
+beats only, #3562) via an `EntitySearchField` over
+`listMissionTemplates`/`getMissionTemplate` - the catalog-mission
+alternative to the `/scenario/` bespoke-graph action above. `BeatSerializer.
+validate` caps a non-staff GM's write to `scenario_scope_q(user)`
+(`world.missions.permissions`, the same scope the Missions Studio API
+enforces, #3565) whenever the value is set and changing; an untouched
+existing value (e.g. authored by staff) is left alone. Switching a beat's
+`kind` away from SITUATION/TASK in the form clears the picker's state so the
+payload never silently carries a stale FK the form no longer shows.
 
 ---
 

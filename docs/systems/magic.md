@@ -511,6 +511,21 @@ versa) raises `InvalidConsequencePoolChoice`. The catalog listing endpoint
 `ActionTemplate.consequence_pool` (see "Combat" doc's note on `wire_melee_attack_action_template`
 and ADR-0130).
 
+**Beat-authoring parity (#3562) [BUILT & WIRED]** — the stories app's beat form needs
+every authored `ConsequencePool`, not just the two curated technique-cast/combat-offense
+catalogs above. `GET /api/magic/consequence-pool-catalog/?scope=beat`
+(`ConsequencePoolCatalogFilter.filter_scope`, `ConsequencePoolScope` TextChoices in
+`world.magic.constants`) widens the listing to every `ConsequencePool` in the game,
+ordered by name; `?scope=technique` (also the default with no `scope` param) is a no-op —
+the viewset's narrow-catalog `get_queryset` already applies. `GET
+/api/magic/consequence-pool-catalog/{id}/` (`retrieve`) is always unfiltered — any pool,
+catalog member or not — and routes through `ConsequencePoolDetailSerializer` instead of the
+list row: `entries` is built from `resolve_pool_consequences` (parent inheritance plus the
+pool's own entries minus exclusions), each with `outcome_tier`, `effect_types`, and
+`character_loss`, so `ConsequencePoolPicker` (`frontend/src/stories/components/
+ConsequencePoolPicker.tsx`) can preview what actually fires before a GM selects a pool for
+a beat's success/failure/expired consequences.
+
 ### Covenant-Role Blend Power Term (#2529, ADR-0149) [BUILT & WIRED]
 
 `_derive_power` (cast power resolution) sums a list of independent power-term providers
