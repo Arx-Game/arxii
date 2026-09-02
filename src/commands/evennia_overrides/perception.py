@@ -13,11 +13,12 @@ from actions.definitions.perception import (
 from actions.types import ActionResult
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.argsplit import split_on_keyword
 
-# Drilled-form regexes — try in order, fall through to plain look on no match.
-_POSSESSIVE_RE = re.compile(r"^(.+?)'s\s+(.+)$", flags=re.IGNORECASE)
-_ON_RE = re.compile(r"^(.+?)\s+on\s+(.+)$", flags=re.IGNORECASE)
-_IN_RE = re.compile(r"^(.+?)\s+in\s+(.+)$", flags=re.IGNORECASE)
+# Drilled forms — try in order, fall through to plain look on no match. The
+# possessive keeps a regex (the separator is punctuation, not a word); the
+# connector forms split on the keyword instead, which does not backtrack.
+_POSSESSIVE_RE = re.compile(r"^([^']{1,200})'s\s+(.+)$", flags=re.IGNORECASE)
 
 
 class CmdLook(ArxCommand):
@@ -58,15 +59,13 @@ class CmdLook(ArxCommand):
             result = self._try_dispatch_at_owner(owner_name, item_name)
             if result is not None:
                 return result
-        if match := _ON_RE.match(args):
-            item_name = match.group(1).strip()
-            owner_name = match.group(2).strip()
+        if split := split_on_keyword(args, "on"):
+            item_name, owner_name = split
             result = self._try_dispatch_at_owner(owner_name, item_name)
             if result is not None:
                 return result
-        if match := _IN_RE.match(args):
-            item_name = match.group(1).strip()
-            container_name = match.group(2).strip()
+        if split := split_on_keyword(args, "in"):
+            item_name, container_name = split
             result = self._try_dispatch_at_container(container_name, item_name)
             if result is not None:
                 return result

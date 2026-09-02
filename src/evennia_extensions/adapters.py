@@ -72,7 +72,7 @@ class ArxAccountAdapter(DefaultAccountAdapter):
             return "", ""
         try:
             data = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
+        except ValueError:
             return "", ""
         if not isinstance(data, dict):
             return "", ""

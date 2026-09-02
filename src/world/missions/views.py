@@ -425,7 +425,9 @@ def _puppet_character(request: Request) -> "ObjectDB":
 
     try:
         puppet = request.user.puppet
-    except (AttributeError, Exception):  # noqa: BLE001
+    except AttributeError:
+        # An AnonymousUser has no `puppet` at all. Anything else raised here is a
+        # real fault and should not be silently turned into "no character assumed".
         puppet = None
     if puppet is None:
         msg = "No puppeted character — assume a character before using the journal."

@@ -2414,7 +2414,6 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
         session's id so the frontend can navigate to its detail page.
         """
         from world.magic.exceptions import (  # noqa: PLC0415
-            ParticipantCountError,
             RitualSessionError,
         )
 
@@ -2424,7 +2423,7 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
 
         try:
             self.perform_create(serializer)
-        except (RitualSessionError, ParticipantCountError) as exc:
+        except RitualSessionError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         except CovenantError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
