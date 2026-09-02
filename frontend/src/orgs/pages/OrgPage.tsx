@@ -302,8 +302,8 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
             <p className="text-sm text-muted-foreground">Nothing stirring.</p>
           ) : (
             <ul className="space-y-1 text-sm">
-              {feed.map((item, index) => (
-                <li key={index}>
+              {feed.map((item) => (
+                <li key={`${item.kind}-${item.subject}-${item.headline}`}>
                   <Badge variant={item.kind === 'scandal' ? 'destructive' : 'secondary'}>
                     {item.kind}
                   </Badge>{' '}

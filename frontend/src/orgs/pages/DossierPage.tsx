@@ -94,8 +94,11 @@ function DossierInner({ orgId }: { orgId: number }) {
             <p className="text-muted-foreground">No pacts stand. They face the dark alone.</p>
           ) : (
             <ul className="space-y-1">
-              {data.pacts.map((pact, index) => (
-                <li key={index} className="flex items-baseline justify-between">
+              {data.pacts.map((pact) => (
+                <li
+                  key={`${pact.kind}-${pact.counterpart}`}
+                  className="flex items-baseline justify-between"
+                >
                   <span>
                     <Badge variant="secondary" className="mr-2">
                       {pact.kind}
@@ -127,8 +130,11 @@ function DossierInner({ orgId }: { orgId: number }) {
             <p className="text-muted-foreground">No troubles known. Spies might know better.</p>
           ) : (
             <ul className="space-y-1">
-              {data.open_crises.map((crisis, index) => (
-                <li key={index} className="flex items-baseline justify-between">
+              {data.open_crises.map((crisis) => (
+                <li
+                  key={`${crisis.severity}-${crisis.type_name ?? ''}`}
+                  className="flex items-baseline justify-between"
+                >
                   <span>
                     <Badge variant="destructive" className="mr-2">
                       {crisis.severity}
@@ -155,8 +161,8 @@ function DossierInner({ orgId }: { orgId: number }) {
           </CardHeader>
           <CardContent className="text-sm">
             <ul className="space-y-1">
-              {data.consorts.map((row, index) => (
-                <li key={index} className="flex items-baseline justify-between">
+              {data.consorts.map((row) => (
+                <li key={row.holder} className="flex items-baseline justify-between">
                   <span>{row.holder}</span>
                   <span className="text-muted-foreground">
                     {row.consorts}
@@ -178,8 +184,11 @@ function DossierInner({ orgId }: { orgId: number }) {
             <p className="text-muted-foreground">Their fortunes hold steady.</p>
           ) : (
             <ul className="space-y-1">
-              {data.recent_shifts.map((shift, index) => (
-                <li key={index} className="flex items-baseline justify-between">
+              {data.recent_shifts.map((shift) => (
+                <li
+                  key={`${shift.cause}-${shift.subject ?? ''}`}
+                  className="flex items-baseline justify-between"
+                >
                   <span>
                     {shift.cause}
                     {shift.subject && (

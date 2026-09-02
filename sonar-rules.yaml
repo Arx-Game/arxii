@@ -294,6 +294,36 @@ keep:
 # This is the tier `sonar.issue.ignore.multicriteria` was reaching for and could not
 # deliver under Automatic Analysis. Record each standing suppression here.
 false_positives:
+  - rule: typescript:S6479
+    path: "frontend/src/*"
+    why: >
+      "JSX list components should not use array indexes as key" is a real rule with a
+      real failure mode - React matches elements by key, so an index key makes state
+      stick to a POSITION rather than to an item, and a reorder moves someone's typed
+      text into the wrong row. It stays ACTIVE in the profile for exactly that reason.
+
+      Every one of its 72 sites was read (#3548). Thirteen were genuine and are fixed:
+      seven took a real composite key (pact.kind + counterpart, entry.stage, item.label,
+      ...) and six in FormattedContent are documented in place. The remaining sites are
+      ones where the index is the CORRECT key, and inventing a content-derived one would
+      be actively worse:
+
+      - 21 are editable form rows. The row is addressed by position, and a key derived
+        from its content would change as the user types, remounting the input and
+        dropping focus mid-keystroke.
+      - 15 already use a composite `${data}-${index}` key where the index only
+        disambiguates rows that legitimately repeat.
+      - 7 are fixed-length loading placeholders with nothing to identify.
+      - The rest render lists whose API payloads carry no id and whose rows repeat by
+        design (effect rows, ledger entries). Four of these files already carried
+        written comments saying so before this pass - "carries no client-only ids, so
+        an index key is the only option", "Effect rows may repeat kinds ... so we key
+        by index", "Rows are addressed by position (not by `key`, which the user is
+        actively editing)".
+
+      Marked per-instance rather than disabled rule-wide so a genuinely new violation
+      still gets flagged.
+
   - rule: python:S3516
     path: "*/serializers.py"
     why: >
