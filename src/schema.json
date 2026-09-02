@@ -66824,7 +66824,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -75296,7 +75296,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -75405,7 +75405,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
