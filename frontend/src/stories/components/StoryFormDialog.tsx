@@ -2,8 +2,9 @@
  * StoryFormDialog — create or edit a Story.
  *
  * Fields: title, description (internal GM), summary ("The Story So Far",
- * player-facing), scope (CHARACTER / GROUP / GLOBAL). On edit, the current
- * maturity is shown read-only (promotion is a separate control).
+ * player-facing), scope (CHARACTER / GROUP / GLOBAL), privacy (public /
+ * private / invite_only). On edit, the current maturity is shown read-only
+ * (promotion is a separate control).
  * Validation errors from DRF are surfaced inline next to their fields.
  */
 
@@ -22,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useCreateStory, useUpdateStory } from '../queries';
-import type { Story, StoryScope } from '../types';
+import type { Story, StoryPrivacy, StoryScope } from '../types';
 import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
@@ -34,9 +35,20 @@ interface DRFFieldErrors {
   description?: string[];
   summary?: string[];
   scope?: string[];
+  privacy?: string[];
   non_field_errors?: string[];
   detail?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Privacy options - mirrors the backend's StoryPrivacy enum default (public).
+// ---------------------------------------------------------------------------
+
+const PRIVACY_OPTIONS: ReadonlyArray<{ value: StoryPrivacy; label: string }> = [
+  { value: 'public', label: 'Public' },
+  { value: 'private', label: 'Private' },
+  { value: 'invite_only', label: 'Invite only' },
+];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -61,6 +73,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
   const [description, setDescription] = useState(story?.description ?? '');
   const [summary, setSummary] = useState(story?.summary ?? '');
   const [scope, setScope] = useState<StoryScope>(story?.scope ?? 'character');
+  const [privacy, setPrivacy] = useState<StoryPrivacy>(story?.privacy ?? 'public');
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
   const createMutation = useCreateStory();
@@ -73,6 +86,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
     setDescription(story?.description ?? '');
     setSummary(story?.summary ?? '');
     setScope(story?.scope ?? 'character');
+    setPrivacy(story?.privacy ?? 'public');
     setFieldErrors({});
   }
 
@@ -109,6 +123,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
       description: description.trim(),
       summary: summary.trim(),
       scope,
+      privacy,
     };
 
     if (isEdit && story) {
@@ -244,6 +259,26 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
               </RadioGroup>
               {fieldErrors.scope && (
                 <p className="text-xs text-destructive">{fieldErrors.scope.join(' ')}</p>
+              )}
+            </div>
+
+            {/* Privacy */}
+            <div className="space-y-1.5">
+              <Label htmlFor="story-privacy">Privacy</Label>
+              <select
+                id="story-privacy"
+                value={privacy}
+                onChange={(e) => setPrivacy(e.target.value as StoryPrivacy)}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                {PRIVACY_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.privacy && (
+                <p className="text-xs text-destructive">{fieldErrors.privacy.join(' ')}</p>
               )}
             </div>
           </div>
