@@ -466,6 +466,13 @@ interface DistinctionCardProps {
   onHover: (distinction: Distinction | null) => void;
 }
 
+/** How a distinction card reads at a glance: chosen, unavailable, or offered. */
+function cardStateClass(isSelected?: boolean, isLocked?: boolean): string {
+  if (isSelected) return 'bg-primary/10 ring-2 ring-primary';
+  if (isLocked) return 'cursor-not-allowed opacity-50';
+  return 'hover:ring-1 hover:ring-primary/50';
+}
+
 function DistinctionCard({
   distinction,
   isSelected,
@@ -477,13 +484,7 @@ function DistinctionCard({
 
   return (
     <Card
-      className={`cursor-pointer transition-all ${
-        isSelected
-          ? 'bg-primary/10 ring-2 ring-primary'
-          : isLocked
-            ? 'cursor-not-allowed opacity-50'
-            : 'hover:ring-1 hover:ring-primary/50'
-      }`}
+      className={`cursor-pointer transition-all ${cardStateClass(isSelected, isLocked)}`}
       onClick={() => {
         if (isLocked) return;
         onToggle();

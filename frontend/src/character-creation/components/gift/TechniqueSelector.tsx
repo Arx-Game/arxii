@@ -38,6 +38,21 @@ interface TechniqueSelectorProps {
   giftId: number;
 }
 
+/**
+ * Toggling a technique: deselect it if it is already chosen, refuse to add when
+ * the budget is spent, otherwise add it.
+ */
+function nextSelection(
+  selectedIds: number[],
+  techniqueId: number,
+  isSelected: boolean,
+  atBudget: boolean
+): number[] {
+  if (isSelected) return selectedIds.filter((id) => id !== techniqueId);
+  if (atBudget) return selectedIds;
+  return [...selectedIds, techniqueId];
+}
+
 export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
   const updateDraft = useUpdateDraft();
   const { data: options, isLoading } = useCGTechniqueOptions(draft.id, giftId);
@@ -82,11 +97,7 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
 
   const toggle = (techniqueId: number) => {
     const isSelected = selectedIds.includes(techniqueId);
-    const next = isSelected
-      ? selectedIds.filter((id) => id !== techniqueId)
-      : atBudget
-        ? selectedIds
-        : [...selectedIds, techniqueId];
+    const next = nextSelection(selectedIds, techniqueId, isSelected, atBudget);
     if (next === selectedIds) return;
     updateDraft.mutate({
       draftId: draft.id,

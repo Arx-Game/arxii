@@ -19,6 +19,13 @@ interface VoteButtonProps {
   targetId: number;
 }
 
+/** What the vote button explains about itself on hover. */
+function voteTooltip(isVoted: boolean, votesRemaining: number): string {
+  if (isVoted) return 'Remove vote';
+  if (votesRemaining > 0) return `Vote (${votesRemaining} remaining)`;
+  return 'No votes remaining';
+}
+
 export function VoteButton({ targetType, targetId }: VoteButtonProps) {
   const { data: votes = [] } = useMyVotesQuery();
   const { data: budget } = useVoteBudgetQuery();
@@ -45,11 +52,7 @@ export function VoteButton({ targetType, targetId }: VoteButtonProps) {
     }
   }
 
-  const tooltipText = isVoted
-    ? 'Remove vote'
-    : votesRemaining > 0
-      ? `Vote (${votesRemaining} remaining)`
-      : 'No votes remaining';
+  const tooltipText = voteTooltip(isVoted, votesRemaining);
 
   return (
     <Button
