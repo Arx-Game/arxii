@@ -76,7 +76,13 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
 //     parent state already holds a techniqueId, or where the mockImplementation
 //     hard-codes one).
 type CardProps = {
-  actionContext: { slot: string; strainCommitment: number; techniqueId?: number };
+  actionContext: {
+    slot: string;
+    strainCommitment: number;
+    techniqueId?: number;
+    targetKind?: string;
+    targetId?: number;
+  };
   onContextChange: (ctx: {
     slot: string;
     strainCommitment: number;
@@ -91,6 +97,11 @@ function defaultCardImpl({ actionContext, onContextChange, readOnly }: CardProps
   return (
     <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
       ActionCard [{slot}]
+      {slot === 'focused' && (
+        <span data-testid="card-target">
+          {actionContext.targetKind ?? ''}:{actionContext.targetId ?? ''}
+        </span>
+      )}
       <button
         type="button"
         data-testid={`card-change-btn-${slot}`}
@@ -282,6 +293,7 @@ function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetai
     current_round_actions: [],
     clashes: [],
     engagement_locks: [],
+    pending_attacks: [],
     created_at: '2026-06-11T00:00:00Z',
     ...overrides,
   } as unknown as EncounterDetail;
@@ -1199,6 +1211,55 @@ describe('YourTurn — #1001a focused target', () => {
     expect(calls[0][0].kwargs).not.toHaveProperty('focused_ally_target_id');
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #3572 — threat strip prefills
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — pending attacks strip prefills (#3572)', () => {
+  function pendingAttackFixture(): NonNullable<EncounterDetail['pending_attacks']>[number] {
+    return {
+      id: 1,
+      opponent_id: 10,
+      opponent_name: 'Ogre',
+      target_participant_id: 5,
+      target_name: 'Kira',
+      declared_round: 1,
+      resolves_round: 3,
+      rounds_until_landing: 1,
+      downgrades: 0,
+      called_out: false,
+      damage_scale: 1,
+      cancelled: false,
+    };
+  }
+
+  it('prefills the Guard ally from a wind-up row', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      participants: [makeParticipant(5, 'Kira')],
+      pending_attacks: [pendingAttackFixture()],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('pending-attack-guard-1'));
+    expect(screen.getByTestId('guard-ally-select')).toHaveTextContent('Kira');
+  });
+
+  it('prefills the focused target from a wind-up row', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      participants: [makeParticipant(5, 'Kira')],
+      pending_attacks: [pendingAttackFixture()],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('pending-attack-strike-1'));
+    expect(screen.getByTestId('card-target')).toHaveTextContent('opponent:10');
   });
 });
 

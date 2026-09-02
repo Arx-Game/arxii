@@ -113,6 +113,8 @@ from world.combat.constants import (
     WINDUP_FIZZLE_DOWNGRADES,
     WINDUP_GENERIC_TELEGRAPH,
     WINDUP_MIN_DAMAGE_SCALE,
+    WINDUP_NO_TARGET_LABEL,
+    WINDUP_TARGET_CLAUSE,
     ActionCategory,
     BreakContributionKind,
     ClashFlavor,
@@ -4817,11 +4819,18 @@ def _broadcast_commitment_line(encounter: CombatEncounter, narration: str) -> No
 
 
 def _broadcast_windup_telegraph(pending: PendingOpponentAttack, *, caller_name: str | None) -> None:
-    """Announce a newly-declared wind-up (#2637 design 2, 6)."""
+    """Announce a newly-declared wind-up, always naming its target (#2637 design 2, 6; #3572)."""
+    target_name = (
+        str(pending.target.character_sheet.character)
+        if pending.target is not None
+        else WINDUP_NO_TARGET_LABEL
+    )
     template = pending.threat_entry.windup_telegraph or WINDUP_GENERIC_TELEGRAPH
-    narration = template.format(opponent=pending.opponent.name)
+    if "{target}" not in template:
+        template = template + WINDUP_TARGET_CLAUSE
+    narration = template.format(opponent=pending.opponent.name, target=target_name)
     if caller_name:
-        narration = f"{narration} — {caller_name} calls it!"
+        narration = f"{narration} - {caller_name} calls it!"
     _broadcast_commitment_line(pending.encounter, narration)
 
 
@@ -4932,7 +4941,7 @@ def _create_pending_opponent_attack(
     return pending
 
 
-def _windup_damage_scale(downgrades: int) -> float:
+def windup_damage_scale(downgrades: int) -> float:
     """The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3)."""
     return max(WINDUP_MIN_DAMAGE_SCALE, 1.0 - WINDUP_DOWNGRADE_STEP * downgrades)
 
@@ -4955,7 +4964,7 @@ def _mature_one_pending_attack(
         return
 
     entry = pending.threat_entry
-    scale = _windup_damage_scale(pending.downgrades)
+    scale = windup_damage_scale(pending.downgrades)
 
     if pending.target_id is not None:
         target = pending.target

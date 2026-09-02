@@ -48011,6 +48011,11 @@ components:
           items:
             $ref: '#/components/schemas/EngagementLock'
           readOnly: true
+        pending_attacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAttack'
+          readOnly: true
         resolution_order:
           type: array
           items:
@@ -48093,6 +48098,7 @@ components:
       - opponents
       - outcome
       - participants
+      - pending_attacks
       - position_adjacency
       - position_edges
       - position_nodes
@@ -67204,6 +67210,56 @@ components:
         * `open` - Open
         * `resolved` - Resolved
         * `staff_cleared` - Staff Cleared
+    PendingAttack:
+      type: object
+      description: |-
+        Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+
+        Never instantiated for serialization (same idiom as EngagementLockSerializer):
+        exists so drf-spectacular emits a concrete component. Threat-entry internals
+        (damage, defense check, cooldown) are deliberately absent; the row carries only
+        what the telegraph already announced plus the downgrade state.
+      properties:
+        id:
+          type: integer
+        opponent_id:
+          type: integer
+        opponent_name:
+          type: string
+        target_participant_id:
+          type: integer
+          nullable: true
+        target_name:
+          type: string
+          nullable: true
+        declared_round:
+          type: integer
+        resolves_round:
+          type: integer
+        rounds_until_landing:
+          type: integer
+        downgrades:
+          type: integer
+        called_out:
+          type: boolean
+        damage_scale:
+          type: number
+          format: double
+        cancelled:
+          type: boolean
+      required:
+      - called_out
+      - cancelled
+      - damage_scale
+      - declared_round
+      - downgrades
+      - id
+      - opponent_id
+      - opponent_name
+      - resolves_round
+      - rounds_until_landing
+      - target_name
+      - target_participant_id
     PendingAudereMajoraOffer:
       type: object
       description: |-

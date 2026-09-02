@@ -37,6 +37,11 @@ export type EncounterDetail = components['schemas']['EncounterDetail'];
 // the encounter.
 export type EngagementLock = components['schemas']['EngagementLock'];
 
+// pending_attacks is schema-typed via @extend_schema_field (#3572) - a real
+// component, not {[key: string]: unknown}[]. Telegraphed NPC wind-ups not yet
+// landed, soonest-landing first.
+export type PendingAttack = components['schemas']['PendingAttack'];
+
 // current_round_actions is typed as {[key: string]: unknown}[] in the schema —
 // the backend serializes these with varying shapes depending on action type.
 // For Phase 7 we surface them as opaque blobs; a typed shape is a follow-up.

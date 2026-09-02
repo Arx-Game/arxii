@@ -461,6 +461,43 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             condition__name="Berserk",
         ).first()
 
+    @staticmethod
+    def _pending_windups(encounter: Any) -> list[Any]:
+        """Pending wind-ups on *encounter*, soonest-landing first (#3572)."""
+        from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+
+        return list(
+            PendingOpponentAttack.objects.filter(encounter=encounter)
+            .select_related("opponent", "target__character_sheet__character")
+            .order_by("resolves_round", "id")
+        )
+
+    @staticmethod
+    def _render_windup_lines(participant: Any, pending: list[Any]) -> list[str]:
+        if not pending:
+            return []
+        from world.combat.constants import WINDUP_NO_TARGET_LABEL  # noqa: PLC0415
+
+        round_number = participant.encounter.round_number
+        lines = ["|wWind-ups|n:"]
+        for row in pending:
+            target = (
+                str(row.target.character_sheet.character)
+                if row.target_id
+                else WINDUP_NO_TARGET_LABEL
+            )
+            left = max(row.resolves_round - round_number, 0)
+            landing = "lands this round" if left == 0 else f"lands in {left}"
+            notes = []
+            if row.called_out:
+                notes.append("called out")
+            if row.downgrades:
+                plural = "" if row.downgrades == 1 else "s"
+                notes.append(f"{row.downgrades} stagger{plural}")
+            suffix = f" ({', '.join(notes)})" if notes else ""
+            lines.append(f"  {row.opponent.name} -> {target}, {landing}{suffix}")
+        return lines
+
     def _show_status_hub(self) -> None:
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
@@ -498,4 +535,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
                 ready = "ready" if action.is_ready else "not ready"
                 maneuver = action.maneuver or "action"
                 lines.append(f"Declared: {maneuver} ({ready}).")
+            lines.extend(
+                self._render_windup_lines(participant, self._pending_windups(participant.encounter))
+            )
         self.msg("\n".join(lines))

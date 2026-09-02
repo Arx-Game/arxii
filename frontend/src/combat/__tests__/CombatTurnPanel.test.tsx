@@ -142,6 +142,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     current_round_actions: [],
     clashes: [],
     engagement_locks: [],
+    pending_attacks: [],
     created_at: '2026-05-24T00:00:00Z',
     outcome: '',
     completed_at: null,
@@ -285,6 +286,36 @@ describe('CombatTurnPanel — render smoke', () => {
     expect(screen.getByText(/Observer/i)).toBeInTheDocument();
     expect(screen.queryByTestId('your-turn-stub')).not.toBeInTheDocument();
     expect(screen.getByText(/observing this encounter/i)).toBeInTheDocument();
+  });
+
+  it('shows the threat strip to observers without buttons (#3572)', () => {
+    mockEncounter({
+      is_participant: false,
+      pending_attacks: [
+        {
+          id: 1,
+          opponent_id: 10,
+          opponent_name: 'Ogre',
+          target_participant_id: 5,
+          target_name: 'Kira',
+          declared_round: 1,
+          resolves_round: 3,
+          rounds_until_landing: 1,
+          downgrades: 0,
+          called_out: false,
+          damage_scale: 1,
+          cancelled: false,
+        },
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('pending-attack-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('pending-attack-guard-1')).toBeNull();
+    expect(screen.queryByTestId('pending-attack-strike-1')).toBeNull();
   });
 
   it('passes encounterId and roundNumber to YourTurn stub', () => {
