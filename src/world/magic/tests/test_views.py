@@ -587,3 +587,48 @@ class ConsequencePoolCatalogDetailViewSetTests(APITestCase):
         self.assertEqual(own["consequence_id"], own_consequence.pk)
         self.assertEqual(own["effect_types"], ["apply_condition", "grant_distinction"])
         self.assertTrue(own["character_loss"])
+
+    def _build_pool_with_entries(self, name: str, entry_count: int):
+        """A parent + child pool pair with ``entry_count`` consequences split
+        across both (each with one effect), for the query-count test below."""
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        tier = CheckOutcomeFactory(name=f"{name} Tier")
+        parent = ConsequencePoolFactory(name=f"{name} Parent")
+        child = ConsequencePoolFactory(name=f"{name} Child", parent=parent)
+        for i in range(entry_count):
+            consequence = ConsequenceFactory(outcome_tier=tier, label=f"{name} Row {i}")
+            pool = parent if i % 2 == 0 else child
+            ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+            ConsequenceEffectFactory(consequence=consequence, execution_order=0)
+        return child
+
+    def test_retrieve_query_count_does_not_grow_with_entries(self):
+        """#3562 review: get_entries used to read consequence.outcome_tier
+        and consequence.effects.all() per entry in a loop (one query each),
+        so the query count grew with pool size (14 queries measured for 2
+        entries, 26 for 20). It now bulk-loads both maps once, so the query
+        count must be identical for a 1-entry pool and a 6-entry pool."""
+        small_pool = self._build_pool_with_entries("Small", 1)
+        large_pool = self._build_pool_with_entries("Large", 6)
+
+        # force_authenticate's first request creates a session row; warm the
+        # session so that bookkeeping isn't conflated with the counts below.
+        self.client.get(f"/api/magic/consequence-pool-catalog/{small_pool.pk}/")
+
+        # Measured directly (see task-2-report.md "Fix round 1"): fetching
+        # the pool + resolve_pool_consequences' 3 queries (own entries,
+        # parent fetch, parent entries) + the 2 bulk-load queries + 1 session
+        # read = 6, constant regardless of entry count.
+        expected_query_count = 6
+
+        with self.assertNumQueries(expected_query_count):
+            small_resp = self.client.get(f"/api/magic/consequence-pool-catalog/{small_pool.pk}/")
+        self.assertEqual(small_resp.status_code, 200)
+
+        with self.assertNumQueries(expected_query_count):
+            large_resp = self.client.get(f"/api/magic/consequence-pool-catalog/{large_pool.pk}/")
+        self.assertEqual(large_resp.status_code, 200)
+        self.assertEqual(len(large_resp.data["entries"]), 6)

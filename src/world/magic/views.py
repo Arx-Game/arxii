@@ -273,20 +273,11 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
             # Beat authoring (#3562) can point at any pool, not just a curated
             # catalog member, so retrieve stays unfiltered by the narrow-list
             # rule below (and by ?scope=, since it's a no-op unless applied).
-            return (
-                ConsequencePool.objects.all()
-                .order_by("name")
-                .prefetch_related(
-                    Prefetch(
-                        "entries__consequence__effects",
-                        to_attr="cached_pool_detail_effects",
-                    ),
-                    Prefetch(
-                        "entries__consequence__outcome_tier",
-                        to_attr="cached_pool_detail_outcome_tier",
-                    ),
-                )
-            )
+            # No prefetch here: ConsequencePoolDetailSerializer.get_entries
+            # (#3562 review) bulk-loads outcome tiers and effects itself,
+            # since resolve_pool_consequences() runs its own select_related
+            # queries that would bypass anything prefetched on this queryset.
+            return ConsequencePool.objects.all().order_by("name")
 
         # checks.CheckType is content-repo-owned (#2698) — get_melee_offense_pool()
         # is None when the 'Melee Attack' CheckType isn't authored; drop it

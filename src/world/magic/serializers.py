@@ -7,6 +7,7 @@ and character-specific magic data.
 Affinities and Resonances are proper domain models in the magic app.
 """
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
@@ -199,11 +200,31 @@ class ConsequencePoolDetailSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(ConsequencePoolEntrySerializer(many=True))
     def get_entries(self, pool: ConsequencePool) -> list[dict]:
+        """Two bulk queries replace one per-entry lookup each (#3562 review):
+        ``resolve_pool_consequences`` returns bare ``Consequence`` rows that
+        carry no prefetched ``outcome_tier``/``effects``, so reading
+        ``consequence.outcome_tier`` or ``consequence.effects.all()`` per
+        entry in a loop is O(entries) queries. Load both maps once instead."""
         from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+        from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+        from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+        consequences = resolve_pool_consequences(pool)
+        consequence_ids = [c.id for c in consequences]
+        tier_ids = {c.outcome_tier_id for c in consequences if c.outcome_tier_id is not None}
+
+        tiers_by_id = {tier.id: tier for tier in CheckOutcome.objects.filter(id__in=tier_ids)}
+
+        effect_types_by_consequence: dict[int, list[str]] = defaultdict(list)
+        effects = ConsequenceEffect.objects.filter(consequence_id__in=consequence_ids).order_by(
+            "execution_order"
+        )
+        for effect in effects:
+            effect_types_by_consequence[effect.consequence_id].append(effect.effect_type)
 
         entries = []
-        for consequence in resolve_pool_consequences(pool):
-            tier = consequence.outcome_tier
+        for consequence in consequences:
+            tier = tiers_by_id.get(consequence.outcome_tier_id)
             entries.append(
                 {
                     "consequence_id": consequence.id,
@@ -213,7 +234,7 @@ class ConsequencePoolDetailSerializer(serializers.ModelSerializer):
                         if tier is None
                         else {"id": tier.id, "name": tier.name, "success_level": tier.success_level}
                     ),
-                    "effect_types": [effect.effect_type for effect in consequence.effects.all()],
+                    "effect_types": effect_types_by_consequence.get(consequence.id, []),
                     "character_loss": consequence.character_loss,
                 }
             )

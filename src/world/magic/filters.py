@@ -74,7 +74,9 @@ class ConsequencePoolCatalogFilter(django_filters.FilterSet):
     ) -> QuerySet[ConsequencePool]:
         """``beat`` widens to every authored pool (#3562); ``technique`` is a
         no-op, since the viewset's ``get_queryset`` already narrowed to the two
-        base pools' children for the list action."""
+        base pools' children for the list action. ``scope=beat`` replaces the
+        queryset outright, so it ignores any ``action_category`` also passed
+        on the same request."""
         if value == ConsequencePoolScope.BEAT:
             return ConsequencePool.objects.all().order_by("name")
         return queryset
