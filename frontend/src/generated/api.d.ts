@@ -24295,7 +24295,7 @@ export interface components {
       agm_eligible?: boolean;
       /**
        * Format: date-time
-       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
@@ -24453,7 +24453,7 @@ export interface components {
       agm_eligible?: boolean;
       /**
        * Format: date-time
-       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
@@ -36826,7 +36826,7 @@ export interface components {
       agm_eligible?: boolean;
       /**
        * Format: date-time
-       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
