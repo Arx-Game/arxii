@@ -648,3 +648,61 @@ export interface ClearanceResolveBody {
   grant: boolean;
   response_note?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Stakes (#1770 pillars 1/2/3/5/7/8; ASSET subject + npc_regard_delta +
+// transitions_subject_asset widened #3561) - the stakes-contract editor's
+// read/write shapes. StakeContractActivation is aliased above (#3562).
+// ---------------------------------------------------------------------------
+
+export type Stake = components['schemas']['Stake'];
+export type StakeRequestBody = components['schemas']['StakeRequest'];
+export type StakeUpdateBody = Partial<StakeRequestBody>;
+export type PaginatedStakeList = components['schemas']['PaginatedStakeList'];
+
+export type StakeResolution = components['schemas']['StakeResolution'];
+export type StakeResolutionRequestBody = components['schemas']['StakeResolutionRequest'];
+export type StakeResolutionUpdateBody = Partial<StakeResolutionRequestBody>;
+export type PaginatedStakeResolutionList = components['schemas']['PaginatedStakeResolutionList'];
+
+export type StakeRewardLine = components['schemas']['StakeRewardLine'];
+export type StakeRewardLineRequestBody = components['schemas']['StakeRewardLineRequest'];
+export type StakeRewardLineUpdateBody = Partial<StakeRewardLineRequestBody>;
+export type PaginatedStakeRewardLineList = components['schemas']['PaginatedStakeRewardLineList'];
+
+export type StakeTemplate = components['schemas']['StakeTemplate'];
+export type PaginatedStakeTemplateList = components['schemas']['PaginatedStakeTemplateList'];
+
+export type PaginatedStakeContractActivationList =
+  components['schemas']['PaginatedStakeContractActivationList'];
+
+/** Per-stake resolution audit row - always MACHINE-resolved since #3561 retired the GM pick. */
+export type StakeOutcome = components['schemas']['StakeOutcome'];
+
+/** Player-facing beat-level stakes summary (`GET /api/beats/{id}/stakes-summary/`). */
+export type StakesSummary = components['schemas']['StakesSummary'];
+export type StakeSummary = components['schemas']['StakeSummary'];
+
+// Enum aliases
+export type StakeResolutionColumn = NonNullable<components['schemas']['ColumnEnum']>;
+export type StakeRewardSink = NonNullable<components['schemas']['StakeRewardLineSinkEnum']>;
+export type StakeSeverity = NonNullable<components['schemas']['SeverityEnum']>;
+export type StakeOutcomeMethod = NonNullable<components['schemas']['MethodEnum']>;
+export type StakeEscalatesToRisk =
+  | components['schemas']['EscalatesToRiskEnum']
+  | components['schemas']['BlankEnum'];
+export type StakeSetsSubjectLifecycle =
+  | components['schemas']['SetsSubjectLifecycleEnum']
+  | components['schemas']['BlankEnum'];
+export type StakeMachineMatchLifecycleState =
+  | components['schemas']['MachineMatchLifecycleStateEnum']
+  | components['schemas']['BlankEnum'];
+
+/**
+ * `StakeResolution.transitions_subject_asset` (ASSET stakes only). Not a
+ * generated enum - the model field is a plain blank-default CharField (no
+ * `choices=`), so spectacular types it as a bare `string`; hand-aliased here
+ * from `world.assets.constants.AssetStatus`'s recoverable/terminal values
+ * (ACTIVE is not a valid transition target, only the three degraded states).
+ */
+export type AssetTransition = 'compromised' | 'lost' | 'dismissed';

@@ -220,14 +220,14 @@ class StakeRewardSink(models.TextChoices):
 class StakeOutcomeMethod(models.TextChoices):
     """How a StakeOutcome was decided (#1770 PR2).
 
-    MACHINE: graded automatically by the completion tail (beat outcome column,
-    with data-where-it-exists overrides such as NPC vitals DEAD -> LOSS).
-    GM_PICK: a GM chose among the stake's authored columns (constrained pick —
-    never free composition).
+    MACHINE is the only method: every outcome is graded automatically by the
+    completion tail (beat outcome column, with data-where-it-exists overrides
+    such as NPC vitals DEAD -> LOSS). #3561 retired the GM constrained pick;
+    StakeOutcome.resolved_by / gm_notes remain as audit fields from before
+    that removal (see their help_text).
     """
 
     MACHINE = "machine", "Machine"
-    GM_PICK = "gm_pick", "GM pick"
 
 
 # Risk ladder for effective-risk shifts (index order matters).

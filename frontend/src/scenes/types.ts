@@ -213,12 +213,46 @@ export interface GMStoryRailParticipant {
   name: string;
 }
 
-/** GET /api/scenes/{id}/gm-rail/ response (#3434). */
+/** #3561 GM story rail - the fired branch for one stake, once the contract resolves it. */
+export interface GMStoryRailStakeOutcome {
+  column: string;
+  outcome_key: string;
+  resolution_summary: string;
+}
+
+/**
+ * #3561 GM story rail - one stake on the running beat's contract, story-standing
+ * viewers only. `severity` is the raw 1-5 integer (`StakeSeverity`); map it to a
+ * label client-side, mirroring `stories/components/stakes/constants.ts`'s
+ * `SEVERITY_OPTIONS` (Setback/Costly/Grave/Dire/Removal).
+ */
+export interface GMStoryRailStake {
+  id: number;
+  player_summary: string;
+  severity: number;
+  subject_kind: string;
+  outcome: GMStoryRailStakeOutcome | null;
+}
+
+/**
+ * #3561 GM story rail - the running beat's lock state: the open activation, or
+ * the most recent resolved one when none is open. Null only when the beat has
+ * never been activated.
+ */
+export interface GMStoryRailActivation {
+  locked_at: string;
+  effective_risk: string;
+  is_ready: boolean;
+}
+
+/** GET /api/scenes/{id}/gm-rail/ response (#3434; stakes/activation #3561). */
 export interface GMStoryRailPayload {
   beat: GMStoryRailBeat | null;
   protected_subjects: GMStoryRailProtectedSubject[];
   clue_placements: GMStoryRailCluePlacement[];
   participants: GMStoryRailParticipant[];
+  stakes: GMStoryRailStake[];
+  activation: GMStoryRailActivation | null;
 }
 
 /**
@@ -417,4 +451,29 @@ export interface HighlightReelEntry {
 export interface HighlightReel {
   featured: HighlightReelFeatured | null;
   index: HighlightReelEntry[];
+}
+
+/** #3561 player opt-in - one stake's player-visible summary (mirrors GMStoryRailStake, minus subject_kind/outcome). */
+export interface SceneStakeSummary {
+  id: number;
+  player_summary: string;
+  severity: number;
+  severity_label: string;
+}
+
+/**
+ * GET /api/scenes/{id}/stakes-summary/ response (#3561): what the scene's
+ * running beat wagers, for the party's opt-in prompt. A player never
+ * receives the running beat id from any scene payload, so this resolves it
+ * server-side; `declared_risk`/`effective_risk` are null when the scene runs
+ * no beat (the backend builds that shape by hand, not through
+ * StakesSummarySerializer, whose fields forbid null - see
+ * world.scenes.views.SceneViewSet.stakes_summary). Branch contents
+ * (StakeResolution rows) are never included.
+ */
+export interface SceneStakesSummary {
+  declared_risk: string | null;
+  effective_risk: string | null;
+  is_ready: boolean;
+  stakes: SceneStakeSummary[];
 }

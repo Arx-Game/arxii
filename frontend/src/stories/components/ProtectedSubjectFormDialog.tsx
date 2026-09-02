@@ -113,7 +113,12 @@ export function ProtectedSubjectFormDialog({ storyId, onSuccess }: Props) {
           <DialogTitle>Protect a subject</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <SubjectRefFields value={ref} onChange={setRef} disabled={createMutation.isPending} />
+          <SubjectRefFields
+            value={ref}
+            onChange={setRef}
+            disabled={createMutation.isPending}
+            excludeKinds={['asset']}
+          />
 
           <div className="space-y-1">
             <Label htmlFor="protected-subject-notes">

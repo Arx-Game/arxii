@@ -2,8 +2,10 @@
 
 Covers machine grading through the completion tail (record_outcome_tier_completion
 and record_gm_marked_outcome), the NPC-vitals LOSS override, withdrawal handling,
-the GM constrained pick (service + endpoint), the pillar-12 no-fiat serializer
-guard, the world-state writers, and stake-level transition routing.
+the pillar-12 no-fiat serializer guard, the world-state writers, and stake-level
+transition routing. #3561 retired the GM constrained pick (resolve_stake_by_gm_pick
++ POST /api/stakes/{id}/resolve/); outcomes are always machine-graded now.
+ResolveStakeEndpointGoneTests covers the endpoint's removal.
 """
 
 from django.urls import reverse
@@ -14,6 +16,8 @@ from rest_framework.test import APITestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
+from world.assets.constants import AssetStatus
+from world.assets.factories import NPCAssetFactory
 from world.boundaries.factories import TreasuredSubjectFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
@@ -40,7 +44,6 @@ from world.stories.factories import (
     ChapterFactory,
     CustodyClearanceFactory,
     EpisodeFactory,
-    GroupStoryProgressFactory,
     StakeFactory,
     StakeOutcomeFactory,
     StakeResolutionFactory,
@@ -56,10 +59,7 @@ from world.stories.services.beats import (
     record_gm_marked_outcome,
     record_outcome_tier_completion,
 )
-from world.stories.services.stake_resolution import (
-    resolve_stake_by_gm_pick,
-    resolve_stakes_for_withdrawal,
-)
+from world.stories.services.stake_resolution import resolve_stakes_for_withdrawal
 from world.stories.services.stakes import activate_stakes_contract, get_open_activation
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
@@ -145,7 +145,7 @@ class MachineGradingTests(EvenniaTestCase):
         self.assertIsNone(outcome.resolution)
 
     def test_idempotent_skips_already_resolved_stake(self):
-        """A stake with an earlier StakeOutcome (e.g. a GM pick) is untouched."""
+        """A stake with an earlier StakeOutcome is untouched."""
         _sheet, beat, progress = _character_story_beat()
         stake = StakeFactory(beat=beat)
         StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
@@ -153,7 +153,7 @@ class MachineGradingTests(EvenniaTestCase):
         prior = StakeOutcomeFactory(
             stake=stake,
             column=StakeResolutionColumn.WIN,
-            method=StakeOutcomeMethod.GM_PICK,
+            method=StakeOutcomeMethod.MACHINE,
         )
 
         record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
@@ -228,6 +228,137 @@ class MachineGradingTests(EvenniaTestCase):
 
         outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.resolution_id, captured_branch.pk)
+
+    def test_outcome_key_selects_named_branch_over_plain_default(self) -> None:
+        """#3561: a LOSS column with a plain ("") branch and a named
+        "surrendered" branch fires the named one when the completion carries
+        that outcome_key."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        surrendered_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+            outcome_key="surrendered",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, surrendered_branch.pk)
+
+    def test_blank_outcome_key_fires_plain_branch(self) -> None:
+        """A blank outcome_key (the ordinary/no-scenario-graph path) still
+        fires the plain default branch, not any named one."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        plain_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key=""
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, plain_branch.pk)
+
+    def test_unknown_outcome_key_falls_back_to_plain_branch(self) -> None:
+        """An outcome_key that names no authored branch on the column falls
+        back to the plain default rather than leaving resolution=None."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        plain_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key=""
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+            outcome_key="no-such-branch",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, plain_branch.pk)
+
+    def test_lifecycle_match_wins_over_outcome_key(self) -> None:
+        """#1760 still wins over #3561's key selection: a matching
+        machine_match_lifecycle_state branch fires even when outcome_key
+        names a different authored branch."""
+        subject = CharacterSheetFactory()
+        subject.lifecycle_state = LifecycleState.CAPTURED
+        subject.save(update_fields=["lifecycle_state"])
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=subject
+        )
+        captured_branch = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            machine_match_lifecycle_state=LifecycleState.CAPTURED,
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.SUCCESS,
+            outcome_key="surrendered",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, captured_branch.pk)
+
+    def test_named_branch_on_other_column_never_fires_across_columns(self) -> None:
+        """#3561 review: a named "surrendered" branch authored on WIN never
+        fires for a LOSS completion carrying outcome_key="surrendered" - the
+        column filter in _branch_for_column applies before the outcome_key
+        match, so the LOSS plain branch fires instead."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.WIN, outcome_key="surrendered"
+        )
+        loss_plain = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key=""
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+            outcome_key="surrendered",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.column, StakeResolutionColumn.LOSS)
+        self.assertEqual(outcome.resolution_id, loss_plain.pk)
 
     def test_withdrawal_fires_authored_branch_and_records_the_rest(self):
         """resolve_stakes_for_withdrawal: authored WITHDRAWAL fires; unauthored records
@@ -323,8 +454,8 @@ class MachineGradingTests(EvenniaTestCase):
         """Machine grading is tier-filtered: a branch pool with no consequence
         at the completion's tier applies nothing, but the StakeOutcome is
         still recorded (the resolution happened; its pool had no row for
-        this tier). Deliberate asymmetry with the GM-pick/withdrawal paths,
-        which apply deterministically (no tier)."""
+        this tier). Deliberate asymmetry with the withdrawal path, which
+        applies deterministically (no tier)."""
         _sheet, beat, progress = _character_story_beat()
         other_tier = CheckOutcomeFactory(name="Stake Unmatched Tier", success_level=-5)
         consequence = ConsequenceFactory(outcome_tier=other_tier)
@@ -385,222 +516,26 @@ class MachineGradingTests(EvenniaTestCase):
         self.assertIsNone(get_open_activation(beat))
 
 
-class GMPickTests(EvenniaTestCase):
-    """resolve_stake_by_gm_pick + the final-mark auto-resolution."""
+class ResolveStakeEndpointGoneTests(APITestCase):
+    """#3561: POST /api/stakes/{id}/resolve/ (the GM constrained pick) is retired.
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.gm_profile = GMProfileFactory()
-
-    def _pending_staked_beat(self):
-        """A staked beat with an activated (locked) contract and an unresolved
-        stake, awaiting a GM's constrained pick (#3559 - resolve_stake_by_gm_pick
-        needs only an open activation, never a completed beat)."""
-        sheet, beat, progress = _character_story_beat()
-        stake = StakeFactory(beat=beat)
-        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
-        loss = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
-        activate_stakes_contract(beat, [sheet])
-        return sheet, beat, progress, stake, win, loss
-
-    def test_pick_fires_branch_and_records_gm(self):
-        _sheet, _beat, _progress, stake, win, _loss = self._pending_staked_beat()
-
-        outcome = resolve_stake_by_gm_pick(
-            stake,
-            column=StakeResolutionColumn.WIN,
-            gm_profile=self.gm_profile,
-            gm_notes="They earned it.",
-        )
-
-        self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
-        self.assertEqual(outcome.method, StakeOutcomeMethod.GM_PICK)
-        self.assertEqual(outcome.resolution_id, win.pk)
-        self.assertEqual(outcome.resolved_by_id, self.gm_profile.pk)
-        self.assertEqual(outcome.gm_notes, "They earned it.")
-
-    def test_pick_rejects_unauthored_column(self):
-        _sheet, _beat, _progress, stake, _win, loss = self._pending_staked_beat()
-        loss.delete()
-        with self.assertRaises(ValueError):
-            resolve_stake_by_gm_pick(
-                stake, column=StakeResolutionColumn.LOSS, gm_profile=self.gm_profile
-            )
-
-    def test_second_pick_rejected(self):
-        _sheet, _beat, _progress, stake, _win, _loss = self._pending_staked_beat()
-        resolve_stake_by_gm_pick(
-            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
-        with self.assertRaises(ValueError):
-            resolve_stake_by_gm_pick(
-                stake, column=StakeResolutionColumn.LOSS, gm_profile=self.gm_profile
-            )
-
-    def test_final_mark_auto_resolves_remaining_but_not_picked(self):
-        """After a GM pick, the GM's final mark resolves only the other stakes."""
-        sheet = CharacterSheetFactory()
-        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
-        chapter = ChapterFactory(story=story)
-        episode = EpisodeFactory(chapter=chapter)
-        beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.GM_MARKED)
-        progress = StoryProgressFactory(story=story, character_sheet=sheet)
-
-        picked = StakeFactory(beat=beat)
-        picked_win = StakeResolutionFactory(stake=picked, column=StakeResolutionColumn.WIN)
-        StakeResolutionFactory(stake=picked, column=StakeResolutionColumn.LOSS)
-        other = StakeFactory(beat=beat)
-        StakeResolutionFactory(stake=other, column=StakeResolutionColumn.WIN)
-        other_loss = StakeResolutionFactory(stake=other, column=StakeResolutionColumn.LOSS)
-
-        pick = resolve_stake_by_gm_pick(
-            picked, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
-
-        record_gm_marked_outcome(progress=progress, beat=beat, outcome=BeatOutcome.FAILURE)
-
-        picked_outcomes = list(StakeOutcome.objects.filter(stake=picked))
-        self.assertEqual(len(picked_outcomes), 1)
-        self.assertEqual(picked_outcomes[0].pk, pick.pk)
-        self.assertEqual(picked_outcomes[0].column, StakeResolutionColumn.WIN)
-        self.assertEqual(picked_outcomes[0].resolution_id, picked_win.pk)
-
-        other_outcome = StakeOutcome.objects.get(stake=other)
-        self.assertEqual(other_outcome.column, StakeResolutionColumn.LOSS)
-        self.assertEqual(other_outcome.method, StakeOutcomeMethod.MACHINE)
-        self.assertEqual(other_outcome.resolution_id, other_loss.pk)
-
-    def test_gm_pick_selects_the_specific_outcome_key_branch(self) -> None:
-        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
-        stake = StakeFactory(beat=beat)
-        destroyed = StakeResolutionFactory(
-            stake=stake,
-            column=StakeResolutionColumn.LOSS,
-            outcome_key="destroyed",
-        )
-        StakeResolutionFactory(
-            stake=stake,
-            column=StakeResolutionColumn.LOSS,
-            outcome_key="captured",
-        )
-        # resolve_stake_by_gm_pick is a service-level call with no beat-
-        # completion precondition (that gate lives in ResolveStakeInputSerializer,
-        # covered separately in Step 4's serializer test) — calling it directly
-        # against an UNSATISFIED beat is deliberate here.
-        gm = GMProfileFactory()
-        outcome = resolve_stake_by_gm_pick(
-            stake,
-            column=StakeResolutionColumn.LOSS,
-            outcome_key="destroyed",
-            gm_profile=gm,
-        )
-        self.assertEqual(outcome.resolution_id, destroyed.pk)
-
-    def test_gm_pick_rejects_unauthored_outcome_key_under_authored_column(self) -> None:
-        """A column with ONE authored outcome_key doesn't authorize picking another."""
-        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
-        stake = StakeFactory(beat=beat)
-        StakeResolutionFactory(
-            stake=stake,
-            column=StakeResolutionColumn.LOSS,
-            outcome_key="destroyed",
-        )
-        gm = GMProfileFactory()
-        with self.assertRaises(ValueError):
-            resolve_stake_by_gm_pick(
-                stake,
-                column=StakeResolutionColumn.LOSS,
-                outcome_key="captured",
-                gm_profile=gm,
-            )
-
-
-class ResolveStakeEndpointTests(APITestCase):
-    """POST /api/stakes/{id}/resolve/ — the constrained-pick endpoint."""
+    Outcomes are always machine-graded now; there is no pick endpoint to hit.
+    """
 
     @classmethod
     def setUpTestData(cls):
         cls.staff = AccountFactory(is_staff=True)
-        cls.player = AccountFactory(is_staff=False)
-        cls.sheet, cls.beat, cls.progress = _character_story_beat()
-        # Complete the beat with no stakes present yet (#3559 - a completion
-        # now grades every stake open at that moment), then author the stake
-        # afterward so it still awaits the GM's pick on a completed beat.
-        win_tier = CheckOutcomeFactory(success_level=3)
-        record_outcome_tier_completion(progress=cls.progress, beat=cls.beat, outcome_tier=win_tier)
-        cls.stake = StakeFactory(beat=cls.beat)
-        cls.win = StakeResolutionFactory(stake=cls.stake, column=StakeResolutionColumn.WIN)
+        cls.stake = StakeFactory()
 
-    def _url(self, stake):
-        return reverse("stake-resolve", kwargs={"pk": stake.pk})
-
-    def test_staff_pick_of_authored_column_succeeds(self):
+    def test_resolve_endpoint_is_gone(self):
         self.client.force_authenticate(user=self.staff)
+        detail_url = reverse("stake-detail", kwargs={"pk": self.stake.pk})
         resp = self.client.post(
-            self._url(self.stake),
-            {"column": StakeResolutionColumn.WIN, "gm_notes": "Well fought."},
-            format="json",
+            f"{detail_url}resolve/", {"column": StakeResolutionColumn.WIN}, format="json"
         )
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(resp.data["column"], StakeResolutionColumn.WIN)
-        self.assertEqual(resp.data["method"], StakeOutcomeMethod.GM_PICK)
-        self.assertEqual(resp.data["gm_notes"], "Well fought.")
-
-    def test_unauthored_column_rejected(self):
-        self.client.force_authenticate(user=self.staff)
-        resp = self.client.post(
-            self._url(self.stake),
-            {"column": StakeResolutionColumn.LOSS},
-            format="json",
+        self.assertIn(
+            resp.status_code, (status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED)
         )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("constrained", str(resp.data))
-
-    def test_unauthored_outcome_key_rejected_under_authored_column(self):
-        """A LOSS column authored only as "destroyed" rejects a "captured" pick."""
-        StakeResolutionFactory(
-            stake=self.stake,
-            column=StakeResolutionColumn.LOSS,
-            outcome_key="destroyed",
-        )
-        self.client.force_authenticate(user=self.staff)
-        resp = self.client.post(
-            self._url(self.stake),
-            {"column": StakeResolutionColumn.LOSS, "outcome_key": "captured"},
-            format="json",
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("constrained", str(resp.data))
-
-    def test_second_pick_rejected(self):
-        self.client.force_authenticate(user=self.staff)
-        first = self.client.post(
-            self._url(self.stake), {"column": StakeResolutionColumn.WIN}, format="json"
-        )
-        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
-        second = self.client.post(
-            self._url(self.stake), {"column": StakeResolutionColumn.WIN}, format="json"
-        )
-        self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("already", str(second.data))
-
-    def test_uncompleted_beat_rejected(self):
-        _sheet2, beat2, _progress2 = _character_story_beat()
-        stake2 = StakeFactory(beat=beat2)
-        StakeResolutionFactory(stake=stake2, column=StakeResolutionColumn.WIN)
-        self.client.force_authenticate(user=self.staff)
-        resp = self.client.post(
-            self._url(stake2), {"column": StakeResolutionColumn.WIN}, format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("not completed", str(resp.data))
-
-    def test_player_forbidden(self):
-        self.client.force_authenticate(user=self.player)
-        resp = self.client.post(
-            self._url(self.stake), {"column": StakeResolutionColumn.WIN}, format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class NoFiatSerializerTests(APITestCase):
@@ -683,6 +618,71 @@ class NoFiatSerializerTests(APITestCase):
             subject_sheet=npc_sheet,
         )
         resp = self._post_resolution(stake, machine_match_lifecycle_state=LifecycleState.DEAD)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_transitions_subject_asset_rejected_on_item_stake(self):
+        """transitions_subject_asset is ASSET-only (#3561 Task 3), symmetric with
+        sets_subject_lifecycle's existing pillar-12 guard.
+        """
+        item = ItemInstanceFactory(template=ItemTemplateFactory())
+        stake = StakeFactory(beat=self.beat, subject_kind=StakeSubjectKind.ITEM, subject_item=item)
+        resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transitions_subject_asset", str(resp.data))
+
+    def test_transitions_subject_asset_allowed_on_asset_stake(self):
+        asset = NPCAssetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.ASSET,
+            subject_asset=asset,
+        )
+        resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_transitions_subject_asset_rejected_on_unknown_value(self):
+        """A garbage value isn't caught by the kind guard alone (#3561 Task 3
+        review) - the field has no DB-level choices, so this must be enforced
+        in stake_resolution_payload_problems or it 201s and later blows up
+        IllegalAssetTransitionError when the branch fires.
+        """
+        asset = NPCAssetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.ASSET,
+            subject_asset=asset,
+        )
+        resp = self._post_resolution(stake, transitions_subject_asset="not_a_real_status")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transitions_subject_asset", str(resp.data))
+
+    def test_transitions_subject_asset_rejected_on_asset_stake_with_no_subject_asset(self):
+        """An ASSET stake with subject_asset unset still 400s on a non-blank
+        value (the kind guard's existing branch, re-asserted after the value
+        guard was added alongside it).
+        """
+        stake = StakeFactory(beat=self.beat, subject_kind=StakeSubjectKind.ASSET)
+        resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transitions_subject_asset", str(resp.data))
+
+    def test_npc_regard_delta_rejected_on_faction_stake(self):
+        """npc_regard_delta is NPC_FATE-only; today only StakeResolution.clean()
+        catches this - it must also be rejected through the API (#3561 Task 3).
+        """
+        stake = StakeFactory(beat=self.beat, subject_kind=StakeSubjectKind.FACTION)
+        resp = self._post_resolution(stake, npc_regard_delta=-2)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("npc_regard_delta", str(resp.data))
+
+    def test_npc_regard_delta_allowed_on_npc_fate(self):
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            subject_sheet=npc_sheet,
+        )
+        resp = self._post_resolution(stake, npc_regard_delta=-2)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
 
@@ -1062,110 +1062,6 @@ class StakeRoutingTests(EvenniaTestCase):
         )
         with self.assertRaises(ValidationError):
             req_empty.clean()
-
-
-def _group_story_pending_staked_beat():
-    """A GROUP-scope story with a completed OUTCOME_TIER beat and a stake
-    authored (and still unresolved) only after that completion (#3559 - a
-    completion grades every stake open at that moment, so the stake this
-    helper returns must not have existed yet when the beat completed)."""
-    story = StoryFactory(scope=StoryScope.GROUP)
-    chapter = ChapterFactory(story=story)
-    episode = EpisodeFactory(chapter=chapter)
-    gm_table = GMTableFactory()
-    progress = GroupStoryProgressFactory(story=story, gm_table=gm_table, current_episode=episode)
-    beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
-    win_tier = CheckOutcomeFactory(success_level=3)
-    record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=win_tier)
-
-    stake = StakeFactory(beat=beat)
-    consequence = ConsequenceFactory()  # no tier: fires deterministically on pick
-    ConsequenceEffectFactory(
-        consequence=consequence,
-        effect_type=EffectType.LEGEND_AWARD,
-        legend_base_value=10,
-        legend_source_type=LegendSourceTypeFactory(),
-        legend_description_template="Group stake won.",
-    )
-    pool = ConsequencePoolFactory()
-    ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
-    StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, consequence_pool=pool)
-    return stake
-
-
-class GroupScopeGMPickTests(EvenniaTestCase):
-    """GROUP-scope constrained picks thread explicit participants (#1770 PR2 review)."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.gm_profile = GMProfileFactory()
-
-    def test_group_pick_with_legend_pool_succeeds_with_participants(self):
-        stake = _group_story_pending_staked_beat()
-        persona = CharacterSheetFactory().primary_persona
-
-        outcome = resolve_stake_by_gm_pick(
-            stake,
-            column=StakeResolutionColumn.WIN,
-            gm_profile=self.gm_profile,
-            participants=[persona],
-        )
-
-        self.assertEqual(outcome.method, StakeOutcomeMethod.GM_PICK)
-        self.assertTrue(LegendEvent.objects.exists())
-
-    def test_group_pick_affection_delta_reaches_participants(self):
-        """The same participant list feeds the subject_standing_delta writer."""
-        stake = _group_story_pending_staked_beat()
-        npc_sheet = CharacterSheetFactory()
-        stake.subject_kind = StakeSubjectKind.NPC_FATE
-        stake.subject_sheet = npc_sheet
-        stake.save(update_fields=["subject_kind", "subject_sheet"])
-        loss = StakeResolutionFactory(
-            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-2
-        )
-        self.assertIsNotNone(loss)
-        persona = CharacterSheetFactory().primary_persona
-
-        resolve_stake_by_gm_pick(
-            stake,
-            column=StakeResolutionColumn.LOSS,
-            gm_profile=self.gm_profile,
-            participants=[persona],
-        )
-
-        standing = NPCStanding.objects.get(persona=persona, npc_persona=npc_sheet.primary_persona)
-        self.assertEqual(standing.affection, -2)
-
-
-class GroupScopePickEndpointTests(APITestCase):
-    """Endpoint-level GROUP-scope pick: participants accepted; guard surfaces as 400."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = AccountFactory(is_staff=True)
-        cls.stake = _group_story_pending_staked_beat()
-
-    def _url(self):
-        return reverse("stake-resolve", kwargs={"pk": self.stake.pk})
-
-    def test_missing_participants_returns_400_not_500(self):
-        self.client.force_authenticate(user=self.staff)
-        resp = self.client.post(self._url(), {"column": StakeResolutionColumn.WIN}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("participants", str(resp.data).lower())
-        self.assertFalse(StakeOutcome.objects.filter(stake=self.stake).exists())
-
-    def test_pick_with_participants_succeeds(self):
-        persona = CharacterSheetFactory().primary_persona
-        self.client.force_authenticate(user=self.staff)
-        resp = self.client.post(
-            self._url(),
-            {"column": StakeResolutionColumn.WIN, "participants": [persona.pk]},
-            format="json",
-        )
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(LegendEvent.objects.exists())
 
 
 class BulkSaveStakeRoutingTests(APITestCase):

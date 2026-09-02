@@ -79,16 +79,26 @@ The `StakeContractActivation` row locking a beat's stakes contract at scene star
 _Avoid_: lock (use Activation for the row; "lock" for the behavior it enforces), snapshot.
 
 **Stake Outcome**:
-The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) — which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail, or a GM's Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). Exactly one StakeOutcome per stake (unique constraint) — transition routing reads it. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
-_Avoid_: stake result, stake completion.
-
-**Constrained Pick**:
-The GM's resolution move on a pending stake (`resolve_stake_by_gm_pick`, `POST /api/stakes/{id}/resolve/`): choosing one of the stake's *authored* resolution columns — never composing a consequence freehand at resolution time. The picked branch fires exactly like the machine path (pool + writers); the StakeOutcome records `GM_PICK`, the GM, and notes. One pick per stake.
-_Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bounded by authorship).
+The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) - which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail is the only method since #3561 retired the GM Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). Exactly one StakeOutcome per stake (unique constraint) - transition routing reads it. `resolved_by` / `gm_notes` are historical audit fields from before #3561 - a pre-#3561 row resolved by a GM's pick still shows who and their notes, but every row since is machine-graded with both blank. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
+_Avoid_: stake result, stake completion, GM pick / Constrained Pick (retired #3561 - stakes are always machine-graded now).
 
 **Outcome Key**:
-The `StakeResolution.outcome_key` slug (#1760) — an open, designer-authored vocabulary naming *which* branch a resolution is, within one Stake's one `StakeResolutionColumn`. Lets a stake author multiple named branches sharing a polarity (e.g. two distinct LOSS branches, `"destroyed"` and `"captured"`); blank is the column's single plain/default branch and is what every pre-#1760 `StakeResolution` row carries (backward compatible). `column` + `Outcome Key` together — not `column` alone — identify one authored branch (unique `(stake, column, outcome_key)`); a GM's Constrained Pick names both.
+The `StakeResolution.outcome_key` slug (#1760) - an open, designer-authored vocabulary naming *which* branch a resolution is, within one Stake's one `StakeResolutionColumn`. Lets a stake author multiple named branches sharing a polarity (e.g. two distinct LOSS branches, `"destroyed"` and `"captured"`); blank is the column's single plain/default branch and is what every pre-#1760 `StakeResolution` row carries (backward compatible). `column` + `Outcome Key` together - not `column` alone - identify one authored branch (unique `(stake, column, outcome_key)`); machine grading resolves both from the completing beat's outcome and the completion's own `outcome_key` (#3561).
 _Avoid_: sub-branch, variant (reserve "branch" for the `StakeResolution` row itself; Outcome Key is the naming dimension that distinguishes branches sharing a column).
+
+**Named Branch**:
+A `StakeResolution` row whose `Outcome Key` is non-blank - the second (or
+third...) authored branch sharing a `Stake`'s column, distinguished from the
+column's plain/default branch by its key. Reached by key match, never by a
+runtime GM decision (#3561, ADR-0259): `_branch_for_column` selects a named
+branch when the completing beat's own `outcome_key` equals it, falling back
+to the plain branch (or the column's first authored branch) when it doesn't.
+Readiness (`_named_branch_problems`, #3561) flags two authoring gaps: a
+column with a named branch but no plain default, and a named key no option
+of the beat's scenario declares.
+_Avoid_: sub-branch, variant (see Outcome Key's note - "branch"/"named
+branch" name the `StakeResolution` row; Outcome Key names the field that
+distinguishes it).
 
 **Beat Outcome Key**:
 `Beat.outcome_key`/`BeatCompletion.outcome_key` (#3565) - the `MissionOption.key` of the

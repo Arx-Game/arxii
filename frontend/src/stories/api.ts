@@ -15,8 +15,10 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { EntitySearchResult } from '@/components/EntitySearchField';
 import { throwApiError } from '@/lib/errors';
 import type { MissionTemplate } from '@/missions/types';
+import type { components } from '@/generated/api';
 import type {
   AggregateBeatContribution,
   ApproveClaimBody,
@@ -68,7 +70,21 @@ import type {
   ResolveEpisodeBody,
   SessionRequest,
   StaffWorkloadResponse,
+  Stake,
   StakeContractActivation,
+  StakeRequestBody,
+  StakeResolution,
+  StakeResolutionRequestBody,
+  StakeResolutionUpdateBody,
+  StakeRewardLine,
+  StakeRewardLineRequestBody,
+  StakeRewardLineUpdateBody,
+  StakeUpdateBody,
+  StakesSummary,
+  PaginatedStakeList,
+  PaginatedStakeResolutionList,
+  PaginatedStakeRewardLineList,
+  PaginatedStakeTemplateList,
   Story,
   StoryCreateBody,
   StoryGMOffer,
@@ -1503,4 +1519,212 @@ export async function revokeClearance(id: number): Promise<CustodyClearance> {
     throw err;
   }
   return res.json() as Promise<CustodyClearance>;
+}
+
+// ---------------------------------------------------------------------------
+// Stakes - the stakes-contract editor (#1770 pillars 1/2/3/5/7/8; ASSET
+// subject + npc_regard_delta + transitions_subject_asset widened #3561).
+// Access delegation and locking mirror BeatViewSet's ownership chain and the
+// #3562 open-activation lock; see the ViewSet docstrings in
+// world/stories/views.py for the full gate list.
+// ---------------------------------------------------------------------------
+
+export interface ListStakesParams {
+  beat?: number;
+  subject_kind?: string;
+  severity?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stakes/ */
+export async function listStakes(params?: ListStakesParams): Promise<PaginatedStakeList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stakes/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stakes');
+  return res.json() as Promise<PaginatedStakeList>;
+}
+
+/** POST /api/stakes/ */
+export async function createStake(body: StakeRequestBody): Promise<Stake> {
+  const res = await apiFetch('/api/stakes/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to create stake');
+  return res.json() as Promise<Stake>;
+}
+
+/** PATCH /api/stakes/{id}/ */
+export async function updateStake(id: number, body: StakeUpdateBody): Promise<Stake> {
+  const res = await apiFetch(`/api/stakes/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to update stake ${id}`);
+  return res.json() as Promise<Stake>;
+}
+
+/** DELETE /api/stakes/{id}/ */
+export async function deleteStake(id: number): Promise<void> {
+  const res = await apiFetch(`/api/stakes/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to delete stake ${id}`);
+}
+
+export interface ListStakeResolutionsParams {
+  stake?: number;
+  column?: string;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stake-resolutions/ */
+export async function listStakeResolutions(
+  params?: ListStakeResolutionsParams
+): Promise<PaginatedStakeResolutionList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stake-resolutions/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stake resolutions');
+  return res.json() as Promise<PaginatedStakeResolutionList>;
+}
+
+/** POST /api/stake-resolutions/ */
+export async function createStakeResolution(
+  body: StakeResolutionRequestBody
+): Promise<StakeResolution> {
+  const res = await apiFetch('/api/stake-resolutions/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to create stake resolution');
+  return res.json() as Promise<StakeResolution>;
+}
+
+/** PATCH /api/stake-resolutions/{id}/ */
+export async function updateStakeResolution(
+  id: number,
+  body: StakeResolutionUpdateBody
+): Promise<StakeResolution> {
+  const res = await apiFetch(`/api/stake-resolutions/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to update stake resolution ${id}`);
+  return res.json() as Promise<StakeResolution>;
+}
+
+/** DELETE /api/stake-resolutions/{id}/ */
+export async function deleteStakeResolution(id: number): Promise<void> {
+  const res = await apiFetch(`/api/stake-resolutions/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to delete stake resolution ${id}`);
+}
+
+export interface ListStakeRewardLinesParams {
+  resolution?: number;
+  sink?: string;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stake-reward-lines/ */
+export async function listStakeRewardLines(
+  params?: ListStakeRewardLinesParams
+): Promise<PaginatedStakeRewardLineList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stake-reward-lines/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stake reward lines');
+  return res.json() as Promise<PaginatedStakeRewardLineList>;
+}
+
+/** POST /api/stake-reward-lines/ */
+export async function createStakeRewardLine(
+  body: StakeRewardLineRequestBody
+): Promise<StakeRewardLine> {
+  const res = await apiFetch('/api/stake-reward-lines/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to create stake reward line');
+  return res.json() as Promise<StakeRewardLine>;
+}
+
+/** PATCH /api/stake-reward-lines/{id}/ */
+export async function updateStakeRewardLine(
+  id: number,
+  body: StakeRewardLineUpdateBody
+): Promise<StakeRewardLine> {
+  const res = await apiFetch(`/api/stake-reward-lines/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to update stake reward line ${id}`);
+  return res.json() as Promise<StakeRewardLine>;
+}
+
+/** DELETE /api/stake-reward-lines/{id}/ */
+export async function deleteStakeRewardLine(id: number): Promise<void> {
+  const res = await apiFetch(`/api/stake-reward-lines/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to delete stake reward line ${id}`);
+}
+
+export interface ListStakeTemplatesParams {
+  subject_kind?: string;
+  is_active?: boolean;
+  severity?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stake-templates/ - the GM-facing stake catalog (read-only here; staff-authored). */
+export async function listStakeTemplates(
+  params?: ListStakeTemplatesParams
+): Promise<PaginatedStakeTemplateList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stake-templates/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stake templates');
+  return res.json() as Promise<PaginatedStakeTemplateList>;
+}
+
+/** GET /api/beats/{id}/stakes-summary/ - what this beat wagers (#1770 pillar 9). */
+export async function getStakesSummary(beatId: number): Promise<StakesSummary> {
+  const res = await apiFetch(`/api/beats/${beatId}/stakes-summary/`);
+  if (!res.ok) await throwApiError(res, `Failed to load stakes summary for beat ${beatId}`);
+  return res.json() as Promise<StakesSummary>;
+}
+
+/**
+ * GET /api/assets/?name= (#3561) - name search over NPCAsset for the stakes
+ * editor's ASSET subject picker. Staff and any GMProfile holder (any level)
+ * see every asset by name; other authenticated users still only see the
+ * assets they personally promoted (world.assets.views.NPCAssetViewSet's
+ * pre-existing "my assets" scope, widened for GM/staff callers) - see that
+ * ViewSet's docstring.
+ */
+export async function searchNpcAssets(query: string): Promise<EntitySearchResult[]> {
+  const res = await apiFetch(`/api/assets/?name=${encodeURIComponent(query)}`);
+  if (!res.ok) await throwApiError(res, 'Failed to search NPC assets');
+  const data = (await res.json()) as PaginatedResponse<components['schemas']['NPCAsset']>;
+  return data.results.map((row) => ({
+    id: row.id,
+    name: row.asset_persona_name,
+    hint: row.status_display,
+  }));
 }

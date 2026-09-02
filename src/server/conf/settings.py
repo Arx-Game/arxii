@@ -19,6 +19,7 @@ https://github.com/joke2k/django-environ
 """
 
 import contextlib
+from email.utils import formataddr, parseaddr
 
 import environ
 from evennia.settings_default import *
@@ -156,8 +157,17 @@ if RESEND_API_KEY and not DEBUG:
 else:
     # Use console backend for testing when no email service configured
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
-SITE_URL = env("SITE_URL", default="https://arxmush.org")
+# Gmail and most other clients show a From address that has no display name as
+# just its mailbox ("noreply"), so a bare address from the environment gets the
+# game's name here. An operator who already supplies "Name <addr>" keeps it.
+_from_email = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
+DEFAULT_FROM_EMAIL = (
+    _from_email if parseaddr(_from_email)[0] else formataddr(("Arx II", _from_email))
+)
+# Prod renders SITE_URL (and FRONTEND_URL) into the EnvironmentFile from the
+# deployed web FQDN (infra/ansible/roles/secrets_vault), so this default only
+# reaches a dev box whose .env leaves it unset. It used to be the Arx I domain.
+SITE_URL = env("SITE_URL", default="https://play.arx2.com")
 
 # systemd writes this file when a shutdown/reboot is scheduled and removes it on
 # cancel; world.downtime derives the automatic-reboot announcement from it (#3194).
@@ -289,6 +299,11 @@ NEW_ACCOUNT_REGISTRATION_ENABLED = False
 ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "evennia_extensions.social_adapters.ArxSocialAccountAdapter"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+# Without a prefix allauth falls back to "[<Site.name>] ", and the only row in
+# Django's sites table is the framework default "example.com". The stock body
+# templates read that same row; their overrides live in
+# src/web/templates/account/email/. Same prefix the roster mail already uses.
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Arx II] "
 ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email login
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 LOGIN_REDIRECT_URL = "/"

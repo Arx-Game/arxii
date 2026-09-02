@@ -143,7 +143,12 @@ export function RequestClearanceDialog() {
           <DialogTitle>Request custody clearance</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <SubjectRefFields value={ref} onChange={setRef} disabled={requestMutation.isPending} />
+          <SubjectRefFields
+            value={ref}
+            onChange={setRef}
+            disabled={requestMutation.isPending}
+            excludeKinds={['asset']}
+          />
 
           <div className="space-y-1">
             <Label htmlFor="clearance-scope">What do you need to do</Label>

@@ -38,6 +38,7 @@ Replaces the old NPC-only `StoryNPCDependency`. Generalizes to the full
 | `subject_item` | `ItemInstance` FK, `SET_NULL` — ITEM |
 | `subject_society` | `Society` FK, `SET_NULL` — FACTION (society-level) |
 | `subject_organization` | `Organization` FK, `SET_NULL` — FACTION (organization-level) |
+| `subject_asset` | `NPCAsset` FK, `SET_NULL` - ASSET (a PC's promoted functionary; shared with Stake via `SubjectMixin`, #3561) |
 | `subject_label` | Freeform `CharField` — CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback |
 | `beat` | Optional `Beat` FK, `SET_NULL` — beat-scoped window (protection applies only while the beat is UNSATISFIED); `None` = story-level (whole arc, gated on `story.status == ACTIVE`) |
 | `is_active` | Soft on/off switch |
@@ -45,7 +46,7 @@ Replaces the old NPC-only `StoryNPCDependency`. Generalizes to the full
 | `created_at` | Timestamp; also the tiebreak field when several stories protect the same identity (oldest wins — see [Custody verdict](#custody-verdict-check_subject_custody)) |
 
 Exactly one of `subject_sheet`/`subject_item`/`subject_society`/`subject_organization`/
-`subject_label` must be set (model `clean()` + `StoryProtectedSubjectSerializer.validate`
+`subject_asset`/`subject_label` must be set (model `clean()` + `StoryProtectedSubjectSerializer.validate`
 both enforce it — DRF never calls `clean()` on save).
 
 ### `CustodyClearance`
@@ -184,7 +185,7 @@ gap the Task 6 review found):
   request is inherently cross-story).
 - **identity path** — `subject_kind` + exactly one of
   `subject_sheet`/`subject_item`/`subject_society`/`subject_organization`/
-  `subject_label`, mirroring `StoryProtectedSubjectSerializer`'s exactly-one-subject
+  `subject_asset`/`subject_label`, mirroring `StoryProtectedSubjectSerializer`'s exactly-one-subject
   rule. Resolves to *every* active protection sharing that identity (a subject can be
   independently protected by more than one story) and fans out one `CustodyClearance`
   per match in a single atomic call, skipping (not re-raising on) any row where the

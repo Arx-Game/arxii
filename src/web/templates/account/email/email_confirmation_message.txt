@@ -1,0 +1,12 @@
+{% extends "account/email/base_message.txt" %}
+{% load account %}
+
+{% block content %}{% autoescape off %}{% user_display user as user_display %}This address was used to register the account "{{ user_display }}" on Arx II.
+
+{% if code %}Your verification code is:
+
+{{ code }}{% else %}To confirm the address, open this link:
+
+{{ activate_url }}{% endif %}
+
+If you did not register, you can ignore this message.{% endautoescape %}{% endblock content %}

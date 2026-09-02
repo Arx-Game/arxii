@@ -10,6 +10,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.missions.factories import (
+    MissionNodeFactory,
+    MissionOptionFactory,
+    MissionTemplateFactory,
+)
 from world.societies.constants import RenownRisk
 from world.societies.factories import LegendSourceTypeFactory
 from world.societies.models import LegendEvent
@@ -276,6 +281,101 @@ class ValidateStakesReadinessTests(TestCase):
         )
         self.assertFalse(fight_beat.stakes.filter(severity=StakeSeverity.REMOVAL).exists())
         self.assertTrue(validate_stakes_readiness(beat).is_ready)
+
+
+class NamedBranchReadinessTests(TestCase):
+    """Readiness problems for named branches (#3561): a LOSS/WIN column with a
+    named branch (non-blank outcome_key) needs a default (blank outcome_key)
+    branch for the machine-grading fallback, and, when the beat requires a
+    mission, every named outcome_key must match an option key the beat's
+    scenario actually declares.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+
+    def _staked_beat(self, risk=RenownRisk.HIGH, target_level=4, required_mission=None):
+        return BeatFactory(
+            risk=risk,
+            target_level=target_level,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            required_mission=required_mission,
+        )
+
+    def test_named_branch_without_default_blocks(self):
+        beat = self._staked_beat()
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="captured"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertIn(
+            f"loss on stake #{stake.pk} has a named branch but no default branch",
+            report.problems,
+        )
+        self.assertFalse(report.is_ready)
+
+    def test_named_branch_with_default_carries_no_problem(self):
+        beat = self._staked_beat()
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="captured"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(
+            any("has a named branch but no default branch" in p for p in report.problems)
+        )
+
+    def test_named_key_not_declared_by_scenario_blocks(self):
+        template = MissionTemplateFactory()
+        node = MissionNodeFactory(template=template)
+        MissionOptionFactory(node=node, key="surrendered")
+        beat = self._staked_beat(required_mission=template)
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="no-such-branch"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertIn(
+            f"stake #{stake.pk} names branch 'no-such-branch' that no option of "
+            "the beat's scenario declares",
+            report.problems,
+        )
+
+    def test_named_key_declared_by_scenario_carries_no_problem(self):
+        template = MissionTemplateFactory()
+        node = MissionNodeFactory(template=template)
+        MissionOptionFactory(node=node, key="surrendered")
+        beat = self._staked_beat(required_mission=template)
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(
+            any("that no option of the beat's scenario declares" in p for p in report.problems)
+        )
+
+    def test_no_scenario_named_key_carries_no_declared_key_problem(self):
+        beat = self._staked_beat(required_mission=None)
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="whatever"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(
+            any("that no option of the beat's scenario declares" in p for p in report.problems)
+        )
 
 
 class ActivationTests(EvenniaTestCase):

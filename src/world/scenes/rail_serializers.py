@@ -33,6 +33,34 @@ class GMStoryRailBeatSerializer(serializers.Serializer):
     staged_templates = BeatStagedTemplateSerializer(many=True, allow_null=True)
 
 
+class GMStoryRailStakeOutcomeSerializer(serializers.Serializer):
+    """The fired branch for one stake, if the contract has resolved it."""
+
+    column = serializers.CharField()
+    outcome_key = serializers.CharField()
+    resolution_summary = serializers.CharField()
+
+
+class GMStoryRailStakeSerializer(serializers.Serializer):
+    """One stake on the running beat's contract, story-standing viewers only."""
+
+    id = serializers.IntegerField()
+    player_summary = serializers.CharField()
+    severity = serializers.IntegerField()
+    subject_kind = serializers.CharField()
+    outcome = GMStoryRailStakeOutcomeSerializer(allow_null=True)
+
+
+class GMStoryRailActivationSerializer(serializers.Serializer):
+    """The running beat's lock state: the open activation, or the most recent
+    resolved one when none is open.
+    """
+
+    locked_at = serializers.DateTimeField()
+    effective_risk = serializers.CharField()
+    is_ready = serializers.BooleanField()
+
+
 class GMStoryRailParticipantSerializer(serializers.Serializer):
     """One character currently present in the scene's room (location-derived)."""
 
@@ -56,3 +84,5 @@ class GMStoryRailSerializer(serializers.Serializer):
     protected_subjects = StoryProtectedSubjectSerializer(many=True)
     clue_placements = GMStoryRailClueSerializer(many=True)
     participants = GMStoryRailParticipantSerializer(many=True)
+    stakes = GMStoryRailStakeSerializer(many=True)
+    activation = GMStoryRailActivationSerializer(allow_null=True)

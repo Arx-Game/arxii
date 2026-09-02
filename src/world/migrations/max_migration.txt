@@ -1,1 +1,1 @@
-0210_remove_transition_mode
+0212_alter_stakeresolution_machine_match_lifecycle_state
