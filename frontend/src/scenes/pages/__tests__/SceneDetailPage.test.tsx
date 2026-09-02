@@ -324,6 +324,14 @@ vi.mock('../../components/SceneInteractionPanel', () => ({
   ),
 }));
 
+// #3565 - ScenarioCard is self-fetching (useSceneScenarioQuery); this smoke
+// test's generic useQuery mock invokes any enabled queryFn for real, which
+// would fire a live `fetch()` against a relative URL and reject. Stub it out
+// like the other self-fetching page components below.
+vi.mock('../../components/ScenarioCard', () => ({
+  ScenarioCard: () => <div data-testid="scenario-card">ScenarioCard</div>,
+}));
+
 vi.mock('../../components/ActionPanel', () => ({
   ActionPanel: () => <div data-testid="action-panel">ActionPanel</div>,
 }));

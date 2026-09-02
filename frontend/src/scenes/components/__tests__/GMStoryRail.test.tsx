@@ -6,12 +6,13 @@
  * - @/store/hooks (useAppSelector) - the active-character name
  * - @/combat/queries (useDispatchPlayerAction) - the gm_list_conditions dispatch
  * - @/vitals/vitalsQueries (useCharacterVitalsQuery) - per-participant vitals
- * - ../../queries (useGMStoryRailQuery) - the rail payload itself
+ * - ../../queries (useGMStoryRailQuery, useSceneScenarioQuery) - the rail
+ *   payload and the #3565 scenario payload
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { GMStoryRailPayload, SceneDetail } from '../../types';
+import type { GMStoryRailPayload, SceneDetail, SceneScenarioPayload } from '../../types';
 
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({
@@ -53,8 +54,11 @@ vi.mock('@/vitals/vitalsQueries', () => ({
 }));
 
 const useGMStoryRailQuery = vi.fn();
+const useSceneScenarioQuery = vi.fn();
 vi.mock('../../queries', () => ({
   useGMStoryRailQuery: (sceneId: string, enabled: boolean) => useGMStoryRailQuery(sceneId, enabled),
+  useSceneScenarioQuery: (sceneId: string, enabled: boolean) =>
+    useSceneScenarioQuery(sceneId, enabled),
 }));
 
 import { GMStoryRail } from '../GMStoryRail';
@@ -104,11 +108,40 @@ function buildPayload(overrides: Partial<GMStoryRailPayload> = {}): GMStoryRailP
   };
 }
 
+function buildScenarioPayload(overrides: Partial<SceneScenarioPayload> = {}): SceneScenarioPayload {
+  return {
+    instance_id: 55,
+    is_paused: false,
+    viewer_is_participant: false,
+    group_beat: null,
+    gm: {
+      node_key: 'ambush',
+      flavor_text: '',
+      conflict_mode: 'group_vote',
+      phase: 'vote',
+      is_paused: false,
+      ballots: [
+        {
+          character_id: 100,
+          character_name: 'Aerande',
+          picked_option_id: 1,
+          voted_option_id: null,
+        },
+      ],
+      last_deed: { option_key: 'fight', outcome_name: 'success' },
+      beat_outcome: 'satisfied',
+      beat_outcome_key: 'satisfied',
+    },
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   useCharacterVitalsQuery.mockReturnValue({
     data: { health: 40, max_health: 50, health_percentage: 0.8, status: 'alive' },
   });
+  useSceneScenarioQuery.mockReturnValue({ data: undefined });
 });
 
 describe('GMStoryRail', () => {
@@ -203,5 +236,28 @@ describe('GMStoryRail', () => {
     render(<GMStoryRail scene={buildScene()} />);
     expect(screen.getByTestId('gm-story-rail-protected-subjects')).toHaveTextContent('npc_fate');
     expect(screen.getByTestId('gm-story-rail-clue-placements')).toHaveTextContent('Torn Letter');
+  });
+
+  it('renders the Scenario section with ballots and the last deed when gm is present', () => {
+    useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
+    useSceneScenarioQuery.mockReturnValue({ data: buildScenarioPayload() });
+    render(<GMStoryRail scene={buildScene()} />);
+    const section = screen.getByTestId('gm-story-rail-scenario');
+    expect(section).toHaveTextContent('ambush');
+    expect(section).toHaveTextContent('vote');
+    expect(screen.getByTestId('gm-story-rail-scenario-ballots')).toHaveTextContent(
+      'Aerande: picked, no vote'
+    );
+    expect(screen.getByTestId('gm-story-rail-scenario-last-deed')).toHaveTextContent(
+      'fight: success'
+    );
+    expect(screen.getByTestId('gm-story-rail-scenario-outcome')).toHaveTextContent('satisfied');
+  });
+
+  it('renders no Scenario section when the scenario query has no gm view', () => {
+    useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
+    useSceneScenarioQuery.mockReturnValue({ data: buildScenarioPayload({ gm: null }) });
+    render(<GMStoryRail scene={buildScene()} />);
+    expect(screen.queryByTestId('gm-story-rail-scenario')).not.toBeInTheDocument();
   });
 });

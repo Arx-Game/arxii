@@ -1,3 +1,5 @@
+import type { components } from '@/generated/api';
+
 export interface RosterEntryRef {
   id: number;
   name: string;
@@ -218,6 +220,20 @@ export interface GMStoryRailPayload {
   clue_placements: GMStoryRailCluePlacement[];
   participants: GMStoryRailParticipant[];
 }
+
+/**
+ * GET /api/scenes/{id}/scenario/ response (#3565): the mission scenario a
+ * scene is running its beats on. `group_beat` (participants only) mirrors the
+ * journal group-beat endpoint's shape; `gm` (staff or viewers with standing on
+ * the running story) carries the referee-only view of the same beat.
+ */
+export type SceneScenarioPayload = components['schemas']['SceneScenario'];
+
+/** The GM-only scenario view: current node, every ballot, the last deed (#3565). */
+export type SceneScenarioGM = components['schemas']['SceneScenarioGM'];
+
+/** The GM scenario view's most recent deed - `{option_key, outcome_name}` (#3565). */
+export type SceneScenarioLastDeed = components['schemas']['SceneScenarioLastDeed'];
 
 export interface InteractionPersona {
   id: number;
