@@ -131,6 +131,11 @@ const KIND_OPTIONS: { value: BeatKind; label: string }[] = [
   { value: 'requirement', label: 'Requirement' },
 ];
 
+/** SITUATION/TASK beats may carry a required_mission; other kinds never do. */
+function kindHasRequiredMission(kind: BeatKind): boolean {
+  return kind === 'situation' || kind === 'task';
+}
+
 const RISK_OPTIONS: { value: BeatRisk; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'low', label: 'Low' },
@@ -1007,6 +1012,14 @@ export function BeatFormDialog({
     setConfig((prev) => ({ ...prev, ...partial }));
   }
 
+  function handleKindChange(newKind: BeatKind) {
+    setKind(newKind);
+    // required_mission only rides SITUATION/TASK beats (#3562) - clear it
+    // when switching away so the picker's displayed state matches what
+    // buildPayload() actually sends (never a silently-persisted stale FK).
+    if (!kindHasRequiredMission(newKind)) setRequiredMission(null);
+  }
+
   function resetForm() {
     setPredicateType(beat?.predicate_type ?? 'outcome_tier');
     setConfig(beat ? configFromBeat(beat) : blankConfig());
@@ -1066,7 +1079,7 @@ export function BeatFormDialog({
       success_consequences: successConsequences,
       failure_consequences: failureConsequences,
       expired_consequences: expiredConsequences,
-      required_mission: requiredMission,
+      required_mission: kindHasRequiredMission(kind) ? requiredMission : null,
       order: order !== '' ? Number(order) : undefined,
       deadline: deadline ? new Date(deadline).toISOString() : undefined,
       agm_eligible: agmEligible,
@@ -1253,7 +1266,7 @@ export function BeatFormDialog({
               <select
                 id="beat-kind"
                 value={kind}
-                onChange={(e) => setKind(e.target.value as BeatKind)}
+                onChange={(e) => handleKindChange(e.target.value as BeatKind)}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
               >
                 {KIND_OPTIONS.map(({ value, label }) => (
@@ -1285,7 +1298,7 @@ export function BeatFormDialog({
 
             {/* Required mission (#3562) - the catalog-mission alternative to
                 the bespoke scenario graph below, for SITUATION/TASK beats. */}
-            {(kind === 'situation' || kind === 'task') && (
+            {kindHasRequiredMission(kind) && (
               <EntitySearchField
                 label="Required mission"
                 value={requiredMission}

@@ -1151,4 +1151,54 @@ describe('BeatFormDialog', () => {
 
     expect(await screen.findByText('The Long Watch')).toBeInTheDocument();
   });
+
+  it('clears required_mission from the payload and the picker when kind switches away from situation/task (fix round 1)', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    const updateMock = makeMutationMock('useUpdateBeat');
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 7 });
+    });
+
+    vi.mocked(missionsApi.listMissionTemplates).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 9, name: 'The Long Watch', story_id: null, risk_tier: 2 }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const beat = makeSituationBeat();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    // Pick a required mission while the beat is still SITUATION.
+    const missionInput = screen.getByLabelText(/required mission/i);
+    await user.type(missionInput, 'Watch');
+    await user.click(await screen.findByText('The Long Watch'));
+    expect((missionInput as HTMLInputElement).value).toBe('The Long Watch');
+
+    // Switch kind away from situation/task - the picker disappears (state cleared)
+    // - then submit: the payload must not silently carry the stale FK.
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    expect(screen.queryByLabelText(/required mission/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save beat/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 7,
+          data: expect.objectContaining({ required_mission: null }),
+        }),
+        expect.any(Object)
+      );
+    });
+
+    // Switching back to a kind that shows the picker again must not resurrect
+    // the cleared pick - the picker reflects the (now null) state, not a stale echo.
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'task');
+    const missionInputAgain = screen.getByLabelText(/required mission/i) as HTMLInputElement;
+    expect(missionInputAgain.value).toBe('');
+  });
 });
