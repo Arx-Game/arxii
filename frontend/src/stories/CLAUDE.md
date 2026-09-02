@@ -79,7 +79,6 @@ introspect `APIView`-based dashboard endpoints.
 | `ProgressionRequirementsEditor.tsx` | Add/remove progression requirements on the author editor   |
 | `RejectClaimDialog.tsx`             | Lead GM dialog to reject an AGM claim                      |
 | `RequestClaimDialog.tsx`            | AGM dialog to request a new claim                          |
-| `ResolveEpisodeDialog.tsx`          | GM dialog to resolve an episode (transition selection)     |
 | `ScheduleEventDialog.tsx`           | GM dialog to create an event from a session request        |
 | `ScopeBadge.tsx`                    | Colored badge for story scope (character / group / global) |
 | `SessionRequestStatusCard.tsx`      | Status card for the session request flow                   |

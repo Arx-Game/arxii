@@ -1,13 +1,16 @@
 /**
  * EpisodeReadyCard — single row for an episode-ready-to-run entry in GMQueuePage.
  *
- * Wave 6: adds the "Resolve" action dialog inline on the card.
+ * #3565: GM-choice transitions are retired — every transition now fires
+ * automatically off its routing predicate (beat outcome / scenario option
+ * key), so there is nothing left for a GM to pick from an eligible set. The
+ * "Resolve" dialog is gone; the frontier "author the next node" (adding a
+ * beat/transition in the author tree) is the only remaining GM action.
  */
 
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScopeBadge } from './ScopeBadge';
-import { ResolveEpisodeDialog } from './ResolveEpisodeDialog';
 import type { GMQueueEpisodeEntry } from '../types';
 
 interface EpisodeReadyCardProps {
@@ -15,13 +18,9 @@ interface EpisodeReadyCardProps {
 }
 
 function transitionSummary(transitions: GMQueueEpisodeEntry['eligible_transitions']): string {
-  if (transitions.length === 0) return 'No eligible transitions';
-  const autoCount = transitions.filter((t) => t.mode === 'auto').length;
-  const gmCount = transitions.length - autoCount;
-  const parts: string[] = [];
-  if (autoCount > 0) parts.push(`${autoCount} auto`);
-  if (gmCount > 0) parts.push(`${gmCount} gm_choice`);
-  return `${transitions.length} transition${transitions.length !== 1 ? 's' : ''} (${parts.join(', ')})`;
+  const n = transitions.length;
+  if (n === 0) return 'No eligible transitions';
+  return `${n} transition${n !== 1 ? 's' : ''}`;
 }
 
 export function EpisodeReadyCard({ entry }: EpisodeReadyCardProps) {
@@ -43,7 +42,6 @@ export function EpisodeReadyCard({ entry }: EpisodeReadyCardProps) {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <ResolveEpisodeDialog entry={entry} />
           <Link
             to={`/stories/${entry.story_id}`}
             className="text-sm font-medium text-primary underline-offset-4 hover:underline"

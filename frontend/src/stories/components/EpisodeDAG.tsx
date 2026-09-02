@@ -135,7 +135,6 @@ function computeLayout(
     const src = String(t.source_episode);
     const tgt = t.target_episode != null ? String(t.target_episode) : FRONTIER_NODE_ID;
     const isFrontier = t.target_episode == null;
-    const isGMChoice = t.mode === 'gm_choice';
 
     const connType = (t.connection_type as string | undefined) ?? '';
     const summary = t.connection_summary ?? '';
@@ -149,7 +148,7 @@ function computeLayout(
       label: label || undefined,
       animated: false,
       style: {
-        strokeDasharray: isGMChoice || isFrontier ? '6 3' : undefined,
+        strokeDasharray: isFrontier ? '6 3' : undefined,
         stroke: isFrontier ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
         strokeWidth: 1.5,
       },

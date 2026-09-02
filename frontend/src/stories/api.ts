@@ -16,6 +16,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
+import type { MissionTemplate } from '@/missions/types';
 import type {
   AggregateBeatContribution,
   ApproveClaimBody,
@@ -386,6 +387,31 @@ export async function updateBeat(id: number, data: BeatUpdateBody): Promise<Beat
 export async function deleteBeat(id: number): Promise<void> {
   const res = await apiFetch(`/api/beats/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete beat ${id}`);
+}
+
+export interface CreateBeatScenarioBody {
+  name: string;
+  summary: string;
+  risk_tier: number;
+}
+
+/**
+ * POST /api/beats/{id}/scenario/
+ * Returns 201 MissionTemplate on create, 200 when the beat already has one.
+ * 400 on `required_mission` (the beat uses a catalog mission, not a
+ * bespoke scenario) or `name` (taken).
+ */
+export async function createBeatScenario(
+  beatId: number,
+  body: CreateBeatScenarioBody
+): Promise<MissionTemplate> {
+  const res = await apiFetch(`/api/beats/${beatId}/scenario/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to create scenario for beat ${beatId}`);
+  return res.json() as Promise<MissionTemplate>;
 }
 
 // ---------------------------------------------------------------------------
@@ -767,6 +793,11 @@ export interface OutcomeInputBody {
   beat: number;
   /** Beat-level rows only; blank/omitted on stake-level rows (#1770 PR2). */
   required_outcome?: string;
+  /**
+   * Beat-level rows only (#3565): the scenario option key this row routes
+   * on, e.g. "negotiate". Blank/omitted = any option.
+   */
+  required_outcome_key?: string;
   /** Stake-level routing (#1770 PR2): route on the stake's StakeOutcome column. */
   stake?: number;
   required_stake_column?: string;
@@ -775,7 +806,6 @@ export interface OutcomeInputBody {
 export interface SaveTransitionWithOutcomesBody {
   source_episode: number;
   target_episode: number | null;
-  mode: string;
   connection_type: string;
   connection_summary: string;
   order: number;

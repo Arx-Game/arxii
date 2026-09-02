@@ -25,6 +25,7 @@ import { BeatFormDialog } from '../components/BeatFormDialog';
 vi.mock('../queries', () => ({
   useCreateBeat: vi.fn(),
   useUpdateBeat: vi.fn(),
+  useCreateBeatScenario: vi.fn(),
   useStoryList: vi.fn(),
   useChapterList: vi.fn(),
   useEpisodeList: vi.fn(),
@@ -85,7 +86,7 @@ import { toast } from 'sonner';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeMutationMock(hookName: 'useCreateBeat' | 'useUpdateBeat') {
+function makeMutationMock(hookName: 'useCreateBeat' | 'useUpdateBeat' | 'useCreateBeatScenario') {
   const mutateMock = vi.fn();
   vi.mocked(queries[hookName]).mockReturnValue({
     mutate: mutateMock,
@@ -112,6 +113,7 @@ function makeMutationMock(hookName: 'useCreateBeat' | 'useUpdateBeat') {
 function setupMocks() {
   const createMock = makeMutationMock('useCreateBeat');
   makeMutationMock('useUpdateBeat');
+  makeMutationMock('useCreateBeatScenario');
 
   vi.mocked(queries.useStoryList).mockReturnValue({
     data: { count: 0, results: [], next: null, previous: null },
@@ -160,14 +162,15 @@ describe('BeatFormDialog', () => {
     expect(screen.getByRole('heading', { name: 'Create Beat' })).toBeInTheDocument();
   });
 
-  it('gm_marked is selected by default and shows no extra config', () => {
+  it('outcome_tier is selected by default and shows no extra config (#3565)', () => {
     setupMocks();
     renderWithProviders(<BeatFormDialog {...defaultProps} />);
 
-    // gm_marked radio should be selected
+    // outcome_tier radio should be selected — GM-choice retired, most beats
+    // now resolve off a scenario/fight/check outcome rather than a manual mark.
     const predicateGroup = screen.getByTestId('predicate-type-group');
-    const gmMarkedRadio = within(predicateGroup).getByRole('radio', { name: /gm marked/i });
-    expect(gmMarkedRadio).toBeChecked();
+    const outcomeTierRadio = within(predicateGroup).getByRole('radio', { name: /outcome tier/i });
+    expect(outcomeTierRadio).toBeChecked();
 
     // No level/points fields visible
     expect(screen.queryByLabelText(/required level/i)).not.toBeInTheDocument();
@@ -247,6 +250,11 @@ describe('BeatFormDialog', () => {
     });
 
     renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    // Default predicate is outcome_tier (#3565); explicitly pick gm_marked
+    // for this test.
+    const predicateGroup = screen.getByTestId('predicate-type-group');
+    await user.click(within(predicateGroup).getByRole('radio', { name: /gm marked/i }));
 
     const descInput = screen.getByLabelText(/internal description/i);
     await user.type(descInput, 'A GM-marked beat description');
@@ -392,6 +400,7 @@ describe('BeatFormDialog', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
       can_mark: false,
+      scenario: null,
       opponent_lines: [],
       staged_templates: [],
     };
@@ -555,6 +564,7 @@ describe('BeatFormDialog', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
       can_mark: false,
+      scenario: null,
       opponent_lines: [],
       staged_templates: [],
     };
@@ -679,5 +689,118 @@ describe('BeatFormDialog', () => {
         expect.any(Object)
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // #3565 — Scenario section (SITUATION/TASK beats, edit mode only)
+  // -------------------------------------------------------------------------
+
+  function makeSituationBeat(
+    overrides: Partial<{
+      scenario: { template_id: number; name: string; option_keys: string[] } | null;
+    }> = {}
+  ) {
+    return {
+      id: 7,
+      episode: 42,
+      predicate_type: 'outcome_tier' as const,
+      kind: 'situation' as const,
+      advances: true,
+      risk: 'none' as const,
+      outcome: 'unsatisfied' as const,
+      visibility: 'hinted' as const,
+      internal_description: 'The ambush at the crossroads',
+      player_hint: '',
+      player_resolution_text: undefined,
+      order: 1,
+      agm_eligible: false,
+      deadline: null,
+      required_level: null,
+      required_achievement: null,
+      required_condition_template: null,
+      required_codex_entry: null,
+      referenced_story: null,
+      referenced_milestone_type: undefined,
+      referenced_chapter: null,
+      referenced_episode: null,
+      required_points: null,
+      episode_title: 'Test Episode',
+      chapter_title: 'Chapter 1',
+      story_id: 1,
+      story_title: 'Test Story',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      can_mark: false,
+      scenario: null,
+      opponent_lines: [],
+      staged_templates: [],
+      ...overrides,
+    };
+  }
+
+  it('create mode tells the author to save first (no Design scenario button)', () => {
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+    expect(screen.getByText(/save the beat, then design its scenario/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /design scenario/i })).not.toBeInTheDocument();
+  });
+
+  it('edit mode with scenario: null renders Design scenario and calls the mutation on submit', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    const scenarioMutate = makeMutationMock('useCreateBeatScenario');
+    scenarioMutate.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 55, name: 'The Ambush' });
+    });
+
+    const beat = makeSituationBeat();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    const designBtn = screen.getByTestId('design-scenario-btn');
+    expect(designBtn).toBeInTheDocument();
+    await user.click(designBtn);
+
+    await user.type(screen.getByLabelText(/^name$/i), 'The Ambush');
+    await user.type(screen.getByLabelText(/^summary$/i), 'Bandits strike at dusk.');
+
+    await user.click(screen.getByTestId('confirm-design-scenario'));
+
+    await waitFor(() => {
+      expect(scenarioMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          beatId: 7,
+          name: 'The Ambush',
+          summary: 'Bandits strike at dusk.',
+          risk_tier: 1,
+        }),
+        expect.any(Object)
+      );
+    });
+
+    // On success, the section shows the new scenario's name + Open canvas link.
+    await waitFor(() => {
+      expect(screen.getByText('The Ambush')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /open canvas/i })).toHaveAttribute(
+      'href',
+      '/stories/scenarios/55/canvas'
+    );
+  });
+
+  it('edit mode with a scenario already set renders Open canvas with the right href', () => {
+    setupMocks();
+    const beat = makeSituationBeat({
+      scenario: { template_id: 88, name: 'The Boss Fight', option_keys: ['negotiate', 'fight'] },
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    expect(screen.getByText('The Boss Fight')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open canvas/i })).toHaveAttribute(
+      'href',
+      '/stories/scenarios/88/canvas'
+    );
+    expect(screen.queryByTestId('design-scenario-btn')).not.toBeInTheDocument();
   });
 });

@@ -45,12 +45,25 @@ export type Episode = EpisodeDetail;
 export type BeatOpponentLine = components['schemas']['BeatOpponentLine'];
 export type BeatStagedTemplate = components['schemas']['BeatStagedTemplate'];
 
+// #3565: the beat's scenario graph, GM-view only. spectacular cannot
+// introspect this SerializerMethodField's shape (it types as a bare
+// Record<string, unknown>), so we hand-type it here from the actual
+// BeatSerializer.get_scenario() payload.
+export interface BeatScenarioSummary {
+  template_id: number;
+  name: string;
+  option_keys: string[];
+}
+
 // Beat — single shape with all Phase 2 predicate config fields plus the
 // Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
 // story_id, story_title), the Wave 12 server-computed can_mark, and the
 // #3425 session-prep child row lists. All of these are in the generated
-// schema now, so no hand-written extension is needed.
-export type Beat = components['schemas']['Beat'];
+// schema now, so no hand-written extension is needed except `scenario`
+// (see BeatScenarioSummary above).
+export type Beat = Omit<components['schemas']['Beat'], 'scenario'> & {
+  readonly scenario: BeatScenarioSummary | null;
+};
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
@@ -181,7 +194,7 @@ export interface GMQueueEpisodeEntry {
   episode_title: string;
   progress_type: StoryScope;
   progress_id: number;
-  eligible_transitions: Array<{ transition_id: number; mode: TransitionMode }>;
+  eligible_transitions: Array<{ transition_id: number }>;
   open_session_request_id: number | null;
 }
 
@@ -350,7 +363,6 @@ export type EpisodeProgressionRequirement = components['schemas']['EpisodeProgre
 export type TransitionRequiredOutcome = components['schemas']['TransitionRequiredOutcome'];
 
 // Enum aliases for Wave 9
-export type TransitionMode = NonNullable<Transition['mode']>;
 export type StoryConnectionType = NonNullable<components['schemas']['ConnectionTypeEnum']>;
 export type ReferencedMilestoneType = NonNullable<
   components['schemas']['ReferencedMilestoneTypeEnum']

@@ -121,7 +121,7 @@ const mockGMQueueResponse = {
       episode_title: 'The Final Push',
       progress_type: 'group' as const,
       progress_id: 3,
-      eligible_transitions: [{ transition_id: 7, mode: 'auto' as const }],
+      eligible_transitions: [{ transition_id: 7 }],
       open_session_request_id: 12,
     },
   ],
