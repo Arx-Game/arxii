@@ -27,6 +27,7 @@ from world.combat.models import CombatOpponentAction, PendingOpponentAttack
 from world.combat.services import (
     _apply_windup_interception_rider,
     _batch_fetch_cooldown_data,
+    _create_pending_opponent_attack,
     _get_eligible_entries,
     resolve_round,
     select_npc_actions,
@@ -156,6 +157,26 @@ class WindupDeclarationTests(TestCase):
         sent_text, _outkwargs = kwargs["text"]
         self.assertIn(f"turns on {self.sheet.character} with a roar!", sent_text)
         self.assertNotIn("It is aimed at", sent_text)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_room_targeting_windup_names_no_one_in_particular(
+        self,
+        mock_broadcast,  # noqa: ARG002
+    ) -> None:
+        """A room-targeting wind-up (v1: multi/ALL selection, or an
+        opponent-targeting summon) leaves ``PendingOpponentAttack.target``
+        null (services.py:4688-4690) instead of a single participant FK; the
+        telegraph must still land with an explicit label rather than a
+        silently blank target (#3572)."""
+        listener = CharacterFactory(location=self.encounter.room)
+
+        with mock.patch.object(listener, "msg") as mock_msg:
+            _create_pending_opponent_attack(self.opponent, self.entry, self.encounter, None)
+
+        _args, kwargs = mock_msg.call_args
+        sent_text, _outkwargs = kwargs["text"]
+        self.assertIn("no one in particular", sent_text)
+        self.assertEqual(sent_text.count("It is aimed at"), 1)
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
     def test_zero_windup_rounds_is_unchanged_same_round_behavior(self, mock_broadcast) -> None:  # noqa: ARG002
