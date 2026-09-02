@@ -27980,6 +27980,7 @@ export interface components {
       readonly is_gm: boolean;
       readonly clashes: components['schemas']['ClashState'][];
       readonly engagement_locks: components['schemas']['EngagementLock'][];
+      readonly pending_attacks: components['schemas']['PendingAttack'][];
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
@@ -38567,6 +38568,29 @@ export interface components {
      * @enum {string}
      */
     PendingAlterationStatusEnum: 'open' | 'resolved' | 'staff_cleared';
+    /**
+     * @description Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+     *
+     *     Never instantiated for serialization (same idiom as EngagementLockSerializer):
+     *     exists so drf-spectacular emits a concrete component. Threat-entry internals
+     *     (damage, defense check, cooldown) are deliberately absent; the row carries only
+     *     what the telegraph already announced plus the downgrade state.
+     */
+    PendingAttack: {
+      id: number;
+      opponent_id: number;
+      opponent_name: string;
+      target_participant_id: number | null;
+      target_name: string | null;
+      declared_round: number;
+      resolves_round: number;
+      rounds_until_landing: number;
+      downgrades: number;
+      called_out: boolean;
+      /** Format: double */
+      damage_scale: number;
+      cancelled: boolean;
+    };
     /**
      * @description Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
      *

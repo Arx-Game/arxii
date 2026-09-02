@@ -901,6 +901,29 @@ class EngagementLockSerializer(serializers.Serializer):
     started_round = serializers.IntegerField()
 
 
+class PendingAttackSerializer(serializers.Serializer):
+    """Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+
+    Never instantiated for serialization (same idiom as EngagementLockSerializer):
+    exists so drf-spectacular emits a concrete component. Threat-entry internals
+    (damage, defense check, cooldown) are deliberately absent; the row carries only
+    what the telegraph already announced plus the downgrade state.
+    """
+
+    id = serializers.IntegerField()
+    opponent_id = serializers.IntegerField()
+    opponent_name = serializers.CharField()
+    target_participant_id = serializers.IntegerField(allow_null=True)
+    target_name = serializers.CharField(allow_null=True)
+    declared_round = serializers.IntegerField()
+    resolves_round = serializers.IntegerField()
+    rounds_until_landing = serializers.IntegerField()
+    downgrades = serializers.IntegerField()
+    called_out = serializers.BooleanField()
+    damage_scale = serializers.FloatField()
+    cancelled = serializers.BooleanField()
+
+
 class EncounterDetailSerializer(serializers.ModelSerializer):
     """Full encounter state with covenant-filtered action visibility."""
 
@@ -920,6 +943,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
     engagement_locks = serializers.SerializerMethodField()
+    pending_attacks = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
     position_nodes = serializers.SerializerMethodField()
@@ -977,6 +1001,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_gm",
             "clashes",
             "engagement_locks",
+            "pending_attacks",
             "resolution_order",
             "escalation_curve",
             "escalation_curve_name",
@@ -1218,6 +1243,41 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "started_round": lock.started_round,
             }
             for lock in locks
+        ]
+
+    @extend_schema_field(PendingAttackSerializer(many=True))
+    def get_pending_attacks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Pending wind-ups on this encounter, soonest-landing first (#3572).
+
+        Rows are deleted on maturation, so presence means pending. One query.
+        """
+        from world.combat.constants import WINDUP_FIZZLE_DOWNGRADES  # noqa: PLC0415
+        from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+        from world.combat.services import windup_damage_scale  # noqa: PLC0415
+
+        rows = (
+            PendingOpponentAttack.objects.filter(encounter=obj)
+            .select_related("opponent", "target__character_sheet__character")
+            .order_by("resolves_round", "id")
+        )
+        return [
+            {
+                "id": row.pk,
+                "opponent_id": row.opponent_id,
+                "opponent_name": row.opponent.name,
+                "target_participant_id": row.target_id,
+                "target_name": (
+                    str(row.target.character_sheet.character) if row.target_id else None
+                ),
+                "declared_round": row.declared_round,
+                "resolves_round": row.resolves_round,
+                "rounds_until_landing": max(row.resolves_round - obj.round_number, 0),
+                "downgrades": row.downgrades,
+                "called_out": row.called_out,
+                "damage_scale": windup_damage_scale(row.downgrades),
+                "cancelled": row.downgrades >= WINDUP_FIZZLE_DOWNGRADES,
+            }
+            for row in rows
         ]
 
     @extend_schema_field(PositionAdjacencyItemSerializer(many=True))

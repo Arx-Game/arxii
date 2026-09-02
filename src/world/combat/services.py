@@ -4941,7 +4941,7 @@ def _create_pending_opponent_attack(
     return pending
 
 
-def _windup_damage_scale(downgrades: int) -> float:
+def windup_damage_scale(downgrades: int) -> float:
     """The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3)."""
     return max(WINDUP_MIN_DAMAGE_SCALE, 1.0 - WINDUP_DOWNGRADE_STEP * downgrades)
 
@@ -4964,7 +4964,7 @@ def _mature_one_pending_attack(
         return
 
     entry = pending.threat_entry
-    scale = _windup_damage_scale(pending.downgrades)
+    scale = windup_damage_scale(pending.downgrades)
 
     if pending.target_id is not None:
         target = pending.target
