@@ -186,12 +186,17 @@ export function VoyagePanel({ characterId }: VoyagePanelProps) {
         </div>
 
         <div className="mt-2">
-          <label className="text-[10px] font-semibold text-muted-foreground">Travel Method</label>
+          <span
+            id="voyage-method-label"
+            className="text-[10px] font-semibold text-muted-foreground"
+          >
+            Travel Method
+          </span>
           <Select
             value={String(selectedMethod?.id ?? '')}
             onValueChange={(val) => setSelectedMethodId(Number(val))}
           >
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger className="h-7 text-xs" aria-labelledby="voyage-method-label">
               <SelectValue placeholder="Select method…" />
             </SelectTrigger>
             <SelectContent>
@@ -205,12 +210,19 @@ export function VoyagePanel({ characterId }: VoyagePanelProps) {
         </div>
 
         <div className="mt-3">
-          <label className="text-[10px] font-semibold text-muted-foreground">Destination</label>
-          <HubBrowser
-            travelMode={travelMode}
-            onSelectHub={setSelectedHub}
-            selectedHubId={selectedHub?.id}
-          />
+          <span
+            id="voyage-destination-label"
+            className="text-[10px] font-semibold text-muted-foreground"
+          >
+            Destination
+          </span>
+          <div role="group" aria-labelledby="voyage-destination-label">
+            <HubBrowser
+              travelMode={travelMode}
+              onSelectHub={setSelectedHub}
+              selectedHubId={selectedHub?.id}
+            />
+          </div>
         </div>
 
         {selectedHub && selectedMethod && (

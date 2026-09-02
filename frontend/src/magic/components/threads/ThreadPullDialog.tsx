@@ -200,10 +200,18 @@ export function ThreadPullDialog({
         <div className="space-y-4 py-2">
           {/* Resonance selector */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span
+              id="pull-resonance-label"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
               Resonance
-            </label>
-            <div className="flex flex-wrap gap-2" data-testid="resonance-selector">
+            </span>
+            <div
+              className="flex flex-wrap gap-2"
+              data-testid="resonance-selector"
+              role="group"
+              aria-labelledby="pull-resonance-label"
+            >
               {selectableResonances.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No eligible resonances with balance.
@@ -234,10 +242,13 @@ export function ThreadPullDialog({
 
           {/* Tier selector */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span
+              id="pull-tier-label"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
               Tier
-            </label>
-            <div className="flex gap-2" role="group" aria-label="Tier selector">
+            </span>
+            <div className="flex gap-2" role="group" aria-labelledby="pull-tier-label">
               {([1, 2, 3] as const).map((t) => (
                 <button
                   key={t}
@@ -261,10 +272,18 @@ export function ThreadPullDialog({
           {/* Thread checkboxes */}
           {selectedResonanceId !== null && (
             <div className="space-y-1">
-              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span
+                id="pull-threads-label"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
                 Threads
-              </label>
-              <div className="space-y-1.5" data-testid="thread-checklist">
+              </span>
+              <div
+                className="space-y-1.5"
+                data-testid="thread-checklist"
+                role="group"
+                aria-labelledby="pull-threads-label"
+              >
                 {threadsForResonance.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     No eligible threads for this resonance.
