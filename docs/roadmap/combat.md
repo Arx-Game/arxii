@@ -60,7 +60,11 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   resolution (guardian's own cast check via `resolve_cast_check_type`, anima debited instead
   of fatigue, ally damage zeroed) is journey-proven (`TechniqueGuardianBarrierResolutionTest`,
   SQLite tier). See ADR-0118 for why the technique-guardian roll happens outside
-  `use_technique`.
+  `use_technique`. **Consented Soulfray path (#3573, ADR-0255):** a guardian who
+  set `confirm_soulfray_risk` at declaration (or a ward stamped `soulfray_consented`
+  at cast time) can keep firing past zero anima - the fire debits into deficit and
+  accrues Soulfray through the same `accumulate_soulfray` `use_technique` uses,
+  instead of fizzling; unconsented behavior is unchanged.
 - **Redirects — away / chosen-enemy / volatile-object detonation (#2210, ADR-0124),
   SQLite tier.** A guardian's REDIRECT-flavor technique (Mirror Ward-style reflection —
   previously rejected at declaration, now the third resolved flavor alongside BARRIER

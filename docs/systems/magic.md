@@ -757,6 +757,27 @@ explicitly, bypassing the derivation on the web path only - every other caller (
 separate "accept soulfray"/"decline soulfray" offer prompt that would otherwise gate a cast made
 while the caster has an active Soulfray stage.
 
+**Reactive protections and Soulfray (#3573).** Consent is captured before a reaction ever
+fires, never at fire time, since a reaction fires inside someone else's resolution:
+`declare_interpose`'s `confirm_soulfray_risk` for a declared technique-guardian interpose
+(`CombatRoundAction.confirm_soulfray_risk`), or `ConditionInstance.soulfray_consented`
+stamped at cast time (via `bulk_apply_conditions` -> `_ApplyConditionParams` ->
+`_create_instance_from_context`, from both `apply_technique_conditions` and
+`apply_signature_bonus_conditions`) for a standing ward. Three seams read that consent and
+branch on it - unconsented is unchanged (fizzle or lapse); consented debits through
+`deduct_anima(lethal=encounter.is_lethal)` (glut-first, deficit-capable) and accrues
+through `world.magic.services.soulfray.accumulate_soulfray`, the SAME function
+`use_technique`'s step 7 calls, so a guardian or ward-holder running dry accrues Soulfray
+the way a caster does: `_try_technique_interpose` (declared interpose fire),
+`_try_spend_reactive` (a Barrier/other reactive-condition fire, `effect_handlers.py`), and
+`drain_reactive_upkeep` (per-round upkeep drain, via `_debit_ally_paid_upkeep`/
+`_pay_upkeep`). Lethality for the clamp comes from `active_combat_engagement_for`
+(`None` when the bearer has no live COMBAT engagement - treated as lethal, since a
+ward held outside combat has no encounter to read `is_lethal` from). A consented deficit
+fire narrates distinctly (`_broadcast_commitment_line`): "tears at their own soul to hold
+the line over {ally}" for an interpose, "bleeds soul to keep the ward on {bearer}" for
+upkeep. See ADR-0255 (amends ADR-0118).
+
 **Consent routing** (in `world/scenes/cast_services.py:request_technique_cast`):
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
 - Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).

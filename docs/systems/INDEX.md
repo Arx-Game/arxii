@@ -6697,7 +6697,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
-    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060. **Consented upkeep
+    (#3573):** unaffordable upkeep on an instance with `ConditionInstance.soulfray_consented`
+    debits into deficit (via `_debit_ally_paid_upkeep`/`_pay_upkeep`) instead of lapsing the
+    condition, and accrues Soulfray; a deficit fire narrates "bleeds soul to keep the ward on
+    {bearer}". Both here and in interpose, lethality is `encounter.is_lethal` (already a
+    live combat encounter by construction). Same consent branch structure applies to a
+    Barrier/other reactive-condition fire (`_try_spend_reactive`, `world/magic/services/
+    effect_handlers.py`) - since that seam can fire on a ward held outside a combat
+    encounter, it instead reads `active_combat_engagement_for(payer)` (extracted from
+    `ParticipantSerializer._combat_engagement`, #3573) for the character's live COMBAT
+    `CharacterEngagement`, falling back to lethal when None. See ADR-0255 (amends
+    ADR-0118).
   - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
     True when the target has an active `ConditionInstance` whose
     `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
@@ -6762,6 +6773,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
     the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
     `CONDITION_APPLIED`.
+  - `ConditionInstance.soulfray_consented` (bool, default False, #3573) - the caster
+    consented at cast time to keep this condition's reactive cost/upkeep firing past zero
+    anima at the price of Soulfray; stamped by `_create_instance_from_context` from both
+    `apply_technique_conditions` and `apply_signature_bonus_conditions`, never changes
+    after creation. Read by `_try_spend_reactive` and `drain_reactive_upkeep`.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
@@ -6778,7 +6794,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `redirect_opponent_target`/`redirect_object_target` (mutually exclusive, both
     `None` = "away") declare a REDIRECT-flavor technique's saved-damage destination
     at declaration time (ADR-0032/0122), validated by `_validate_redirect_declaration`
-    — see combat `AGENT_GLOSSARY.md`'s Redirect entry.
+    — see combat `AGENT_GLOSSARY.md`'s Redirect entry. **Soulfray consent (#3573):**
+    a keyword-only `confirm_soulfray_risk` (bool, default False) is captured at
+    declaration time, since a reaction fires inside someone else's resolution and
+    can't stop to prompt - stored on `CombatRoundAction.confirm_soulfray_risk` and
+    read by `_try_technique_interpose`. Telnet: a trailing `soulfray` keyword on
+    `combat interpose ...` (`commands/combat_maneuvers.py`) sets it. See ADR-0255
+    (amends ADR-0118).
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
     an armed interpose challenge naming *participant* (or "any ally") and dispatches it
     via `_dispatch_interpose_action`
@@ -6803,15 +6825,21 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     inventing an action outside `get_available_actions`'s output (ADR-0032).
   - `_try_technique_interpose(action, interposer, protected, pre_payload, *, extra_modifiers=0)`
     (#2207) — resolves a technique-guardian's declared protective reaction. Affordability
-    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`;
-    unaffordable → fizzle, no roll/no cost); rolls the guardian's own cast check
+    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`,
+    gated by `_guardian_can_fire_technique_interpose`: affordable fires unconditionally;
+    unaffordable fires only when `action.confirm_soulfray_risk` was set at declaration
+    (#3573) - no pool at all still fizzles regardless); rolls the guardian's own cast check
     (`resolve_cast_check_type`, None-guarded — an unprovisioned caster fizzles the same way)
     against the mundane Interpose challenge's severity; debits anima (not fatigue) on any
-    non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
-    (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
-    guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
-    `CombatRoundAction.cast_destination`, preferred once that field lands. See ADR-0118
-    for why this rolls outside `use_technique`. **`redirect`-flavored resolution
+    non-fizzle fire via `_settle_technique_interpose_cost` (#3573) - `deduct_anima(lethal=
+    encounter.is_lethal)` runs the guardian into deficit when consented, and a consented
+    fire also accrues Soulfray through `world.magic.services.soulfray.accumulate_soulfray`
+    (deficit>0 narrates "tears at their own soul to hold the line over {ally}"); grades via
+    the SAME `_grade_interpose_damage` the mundane path uses (SHIELD divisor included). A
+    clean `blink`-flavored block relocates the ward to the guardian's own current position
+    (`force_move_to_position`) — a stand-in for #2206's `CombatRoundAction.cast_destination`,
+    preferred once that field lands. See ADR-0118 (amended by ADR-0255, #3573) for why this
+    rolls outside `use_technique`. **`redirect`-flavored resolution
     (#2210):** `saved = amount_before - pre_payload.amount` after grading (zero
     redirects nothing); `_resolve_technique_redirect` dispatches the saved amount to
     the declared destination (`_redirect_away` / `_redirect_to_opponent` /

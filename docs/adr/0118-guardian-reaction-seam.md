@@ -1,6 +1,6 @@
 # ADR-0118: Declared guardian reactions roll the caster's cast check outside `use_technique`
 
-**Status:** Accepted (2026-07-11) · **Issue:** #2207
+**Status:** Accepted (2026-07-11), amended by ADR-0255 (2026-09-02) · **Issue:** #2207
 
 A technique-guardian's protective reaction (`declare_interpose(technique=...)` →
 `world.combat.services._try_technique_interpose`) rolls the guardian's own cast check
