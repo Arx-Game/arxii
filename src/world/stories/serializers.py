@@ -499,9 +499,9 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 
     def get_routing_ambiguous(self, obj: Episode) -> bool:
         """Whether any pair of this episode's outbound transitions is ambiguous (#3565)."""
-        from world.stories.services.transitions import validate_routing_readiness  # noqa: PLC0415
+        from world.stories.services.routing import routing_report  # noqa: PLC0415
 
-        return validate_routing_readiness(obj).is_ambiguous
+        return routing_report(obj).is_ambiguous
 
     def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""

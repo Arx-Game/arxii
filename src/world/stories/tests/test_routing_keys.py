@@ -13,10 +13,8 @@ from world.stories.factories import (
     TransitionRequiredOutcomeFactory,
 )
 from world.stories.services.episodes import resolve_episode
-from world.stories.services.transitions import (
-    get_eligible_transitions,
-    validate_routing_readiness,
-)
+from world.stories.services.routing import routing_report
+from world.stories.services.transitions import get_eligible_transitions
 
 
 class _Base(TestCase):
@@ -78,7 +76,7 @@ class AmbiguityReportTests(_Base):
     def test_two_unconstrained_edges_are_ambiguous(self) -> None:
         a = TransitionFactory(source_episode=self.episode, target_episode=self.next_a, order=1)
         b = TransitionFactory(source_episode=self.episode, target_episode=self.next_b, order=2)
-        report = validate_routing_readiness(self.episode)
+        report = routing_report(self.episode)
         self.assertEqual(report.ambiguous_pairs, ((a.pk, b.pk),))
 
     def test_contradicting_requirements_are_not_ambiguous(self) -> None:
@@ -90,7 +88,7 @@ class AmbiguityReportTests(_Base):
         TransitionRequiredOutcomeFactory(
             transition=b, beat=self.beat, required_outcome=BeatOutcome.FAILURE
         )
-        self.assertEqual(validate_routing_readiness(self.episode).ambiguous_pairs, ())
+        self.assertEqual(routing_report(self.episode).ambiguous_pairs, ())
 
     def test_same_beat_different_keys_are_not_ambiguous(self) -> None:
         a = TransitionFactory(source_episode=self.episode, target_episode=self.next_a, order=1)
@@ -107,4 +105,4 @@ class AmbiguityReportTests(_Base):
             required_outcome=BeatOutcome.SUCCESS,
             required_outcome_key="fight",
         )
-        self.assertEqual(validate_routing_readiness(self.episode).ambiguous_pairs, ())
+        self.assertEqual(routing_report(self.episode).ambiguous_pairs, ())
