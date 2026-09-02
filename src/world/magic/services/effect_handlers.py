@@ -147,7 +147,8 @@ def absorb_pool(*, payload: Any) -> None:
 
     Mechanics:
     - Finds the bearer's oldest active force-field ConditionInstance.
-    - Pays reactive_anima_cost (fizzles silently if unaffordable).
+    - Pays reactive_anima_cost (fizzles silently if unaffordable, unless the
+      instance is consented (#3573), see ``_try_spend_reactive``).
     - Reduces payload.amount by min(buffer, amount); decrements absorb_remaining.
     - Deletes the instance when absorb_remaining reaches 0 (buffer spent).
     """
@@ -179,9 +180,10 @@ def reflect_damage(*, payload: Any) -> None:
 
     Finds the bearer's oldest active Mirror Ward ConditionInstance, pays
     reactive_anima_cost via ``_try_spend_reactive`` (fizzles silently if
-    unaffordable), zeros ``payload.amount``, then applies the recorded amount to
-    the attacker using ``bypass_pre_apply=True`` so the bounce never re-emits
-    DAMAGE_PRE_APPLY — terminating any reflect↔reflect loop.
+    unaffordable, unless the instance is consented (#3573), see
+    ``_try_spend_reactive``), zeros ``payload.amount``, then applies the
+    recorded amount to the attacker using ``bypass_pre_apply=True`` so the
+    bounce never re-emits DAMAGE_PRE_APPLY - terminating any reflect↔reflect loop.
 
     Attacker resolution from ``payload.source.ref``:
     - ``CombatOpponent``  → ``apply_damage_to_opponent``  (primary E2E path)
@@ -674,7 +676,8 @@ def blink_dodge(*, payload: Any) -> None:
       (flavor; if no alternate position exists the move is skipped).
     - Sets ``payload.amount = 0`` (full avoidance).
 
-    Fizzles silently when the bearer cannot afford the cost — attack lands unchanged.
+    Fizzles silently when the bearer cannot afford the cost - attack lands unchanged,
+    unless the instance is consented (#3573), see ``_try_spend_reactive``.
     Mutation-only: setting ``payload.amount = 0`` is what stops lower-priority
     interceptors (they guard on ``payload.amount <= 0``) and zeroes the damage; there
     is no CANCEL_EVENT step (an unconditional cancel would fire on the fizzle path too).

@@ -18,7 +18,7 @@ from django.test import TestCase
 
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ParticipantStatus
+from world.combat.constants import ParticipantStatus, RiskLevel
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.services import drain_reactive_upkeep
 from world.conditions.constants import FORCE_FIELD_CONDITION_NAME
@@ -190,7 +190,11 @@ class AllyWardReactiveCostTests(TestCase):
         ally_anima = CharacterAnimaFactory(character=ally.sheet_data, current=10, maximum=10)
 
         ally_sheet = CharacterSheetFactory(character=ally)
-        encounter = CombatEncounterFactory()
+        # LETHAL so deduct_anima does not clamp the debit to the caster's
+        # available anima - the whole point of this test is that the caster
+        # runs into deficit rather than lapsing (mirrors _build_guardian_and_ally
+        # in test_guardian_reactions.py, #3573).
+        encounter = CombatEncounterFactory(risk_level=RiskLevel.LETHAL)
         CombatParticipantFactory(
             encounter=encounter,
             character_sheet=ally_sheet,
@@ -218,6 +222,9 @@ class AllyWardReactiveCostTests(TestCase):
         caster_anima = CharacterAnima.objects.get(character=caster.sheet_data)
         self.assertEqual(caster_anima.current, 0)
         accrue.assert_called_once()
+        # Caster started at 0 anima; the ward's upkeep cost is 1/round (lethal
+        # encounter, so deduct_anima does not clamp) -> deficit is exactly 1.
+        self.assertEqual(accrue.call_args.kwargs["deficit"], template.upkeep_anima_per_round)
 
         # Ally never paid for a ward they didn't cast -> untouched.
         ally_anima.refresh_from_db()

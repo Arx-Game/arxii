@@ -10799,7 +10799,7 @@ def _debit_ally_paid_upkeep(
         inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         return
     if payer_anima.current < cost and not inst.soulfray_consented:
-        inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+        inst.delete()  # lapse - Trigger rows cascade via source_condition FK
         return
     _pay_upkeep(payer, payer_anima, cost, inst, encounter)
 
@@ -10815,7 +10815,7 @@ def _pay_upkeep(
 
     Shared by the ally-paid and self-paid upkeep branches of
     ``drain_reactive_upkeep`` so the debit-then-accrue sequencing lives in one
-    place. Unconsented callers must not reach here already-unaffordable — the
+    place. Unconsented callers must not reach here already-unaffordable - the
     caller lapses the condition instead.
     """
     deficit = deduct_anima(payer, cost, lethal=encounter.is_lethal)
