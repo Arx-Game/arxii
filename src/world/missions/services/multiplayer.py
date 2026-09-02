@@ -474,7 +474,7 @@ def _resolve_joint(
         anchor_deed.save(update_fields=["route_candidate"])
         emit_candidate_rewards(instance, candidate, anchor_deed)
     if next_node is None:
-        _finish_terminal(instance, route=route)
+        _finish_terminal(instance, route=route, option=anchor_option)
         # Phase 5b.0: JOINT terminal emits the route's reward lines ONCE.
         emit_terminal_rewards(instance, route, anchor_deed)
     else:

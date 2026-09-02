@@ -507,6 +507,7 @@ def _finish_terminal(
     instance: MissionInstance,
     *,
     route: MissionOptionRoute | None = None,
+    option: MissionOption | None = None,
 ) -> None:
     """Mark the run complete (terminal route reached).
 
@@ -514,9 +515,13 @@ def _finish_terminal(
     no-op when ``instance.source_beat_id is None`` (a free run); when set, it
     completes the linked ``Beat`` via ``on_mission_complete_for_beat``.
     ``route`` is the terminal :class:`MissionOptionRoute` (or ``None`` for a
-    BRANCH terminal with no route object). JOINT terminals call
-    ``_finish_terminal`` exactly once (Phase 4 invariant), so the seam fires
-    exactly once per instance termination.
+    BRANCH terminal with no route object). ``option`` is the
+    :class:`MissionOption` whose pick ended the run - its ``key`` becomes the
+    beat completion's ``outcome_key`` (#3560) - threaded through so it's
+    obvious at every call site which option resolved the terminal (Task 5
+    later extracts the post-roll part of ``resolve_option`` around this call).
+    JOINT terminals call ``_finish_terminal`` exactly once (Phase 4
+    invariant), so the seam fires exactly once per instance termination.
     """
     # #1753 — a mission with an NPC to report to pauses at RESOLVED until the player
     # reports the outcome (which delivers money + style-modulated fame/prestige). A run
@@ -535,7 +540,7 @@ def _finish_terminal(
         instance.current_node = None
         instance.save()
     _teardown_spawned_room(instance)
-    on_mission_complete_for_beat(instance, route=route)
+    on_mission_complete_for_beat(instance, route=route, option=option)
     # Crisis seam (#2238): a run minted from a DomainCrisis resolves it on
     # terminal completion. Cheap no-op for every run without a source crisis.
     from world.societies.houses.crisis_services import (  # noqa: PLC0415
@@ -649,7 +654,7 @@ def resolve_option(  # noqa: PLR0913
     is_terminal = False
     if advance:
         if next_node is None:
-            _finish_terminal(instance, route=route)
+            _finish_terminal(instance, route=route, option=option)
             is_terminal = True
         else:
             instance.current_node = next_node
@@ -712,7 +717,7 @@ def _resolve_branch(
                 next_node = None
 
         if next_node is None:
-            _finish_terminal(instance, route=route)
+            _finish_terminal(instance, route=route, option=option)
             is_terminal = True
             terminal_route = route  # may be None when branch is terminal via
             # an option with neither branch_target nor a null-tier route.

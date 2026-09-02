@@ -20,6 +20,12 @@ Public API:
         CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
         consequences matching that tier.
 
+    record_scenario_outcome(*, progress, beat, outcome, outcome_tier, outcome_key,
+        participants) - completion for an OUTCOME_TIER beat whose run played out
+        on a mission scenario graph (#3560, #3565): the graph already decided
+        SUCCESS/FAILURE and which MissionOption ended the run, so this records
+        both rather than re-deriving them from a tier.
+
     beat_for_scene_conclusion(scene, explicit_beat) - the one beat a concluded
         fight or battle may grade (#3559): an explicit routed beat wins,
         otherwise the scene's running beat when the GM declared the fight
@@ -127,6 +133,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
     participants: list[Persona] | None = None,
     extra_participants: list[Persona] | None = None,
     resolved_by: GMProfile | None = None,
+    outcome_key: str = "",
 ) -> BeatCompletion:
     """Record a GM's manual outcome on a GM_MARKED beat.
 
@@ -148,6 +155,10 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         the outcome resolves SUCCESS/FAILURE. ``None`` skips the award (no
         GM identity resolved by the caller, or a machine-graded completion
         via ``record_outcome_tier_completion``, which never passes this).
+
+    ``outcome_key`` - the MissionOption.key that ended a mission-scenario run,
+        when this GM_MARKED beat completed via the mission→beat seam (#3560).
+        Blank for an actual GM manual call.
 
     Defensive assertions (programmer errors — the API serializer validates these
     for user-facing calls; assertions guard direct service callers):
@@ -179,6 +190,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         gm_notes=gm_notes,
         progress=progress,
         scope=scope,
+        outcome_key=outcome_key,
     )
     return _create_completion_and_fire_pool(
         beat=beat,
@@ -188,6 +200,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else extra_participants,
         resolved_by=resolved_by,
+        outcome_key=outcome_key,
     )
 
 
@@ -200,15 +213,22 @@ def _scope_completion_kwargs(  # noqa: PLR0913
     progress: AnyStoryProgress,
     scope: str,
     outcome_tier: CheckOutcome | None = None,
+    outcome_key: str = "",
 ) -> dict:
     """Build BeatCompletion.objects.create() kwargs for the given story scope.
 
-    Shared by record_gm_marked_outcome and record_outcome_tier_completion — both
-    write the same scope-aware FK shape (character_sheet+roster_entry for CHARACTER,
-    gm_table for GROUP, neither for GLOBAL); only the machine-driven path also
-    carries outcome_tier.
+    Shared by record_gm_marked_outcome, record_outcome_tier_completion and
+    record_scenario_outcome - all write the same scope-aware FK shape
+    (character_sheet+roster_entry for CHARACTER, gm_table for GROUP, neither
+    for GLOBAL); the machine-driven paths also carry outcome_tier/outcome_key.
     """
-    kwargs: dict = {"beat": beat, "outcome": outcome, "era": era, "gm_notes": gm_notes}
+    kwargs: dict = {
+        "beat": beat,
+        "outcome": outcome,
+        "era": era,
+        "gm_notes": gm_notes,
+        "outcome_key": outcome_key,
+    }
     if outcome_tier is not None:
         kwargs["outcome_tier"] = outcome_tier
     if scope == StoryScope.CHARACTER:
@@ -234,6 +254,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None,
     outcome_tier: CheckOutcome | None = None,
+    outcome_key: str = "",
     resolved_by: GMProfile | None = None,
     skip_effect_types: frozenset[str] = frozenset(),
     defer_notify: bool = False,
@@ -286,7 +307,8 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
 
     with transaction.atomic():
         beat.outcome = outcome
-        beat.save(update_fields=["outcome", "updated_at"])
+        beat.outcome_key = outcome_key
+        beat.save(update_fields=["outcome", "outcome_key", "updated_at"])
 
         completion = BeatCompletion.objects.create(**completion_kwargs)
 
@@ -398,6 +420,57 @@ def record_outcome_tier_completion(
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else None,
         outcome_tier=outcome_tier,
+    )
+
+
+def record_scenario_outcome(  # noqa: PLR0913
+    *,
+    progress: AnyStoryProgress,
+    beat: Beat,
+    outcome: BeatOutcome,
+    outcome_tier: CheckOutcome | None,
+    outcome_key: str,
+    participants: list[Persona] | None = None,
+) -> BeatCompletion:
+    """Record a scenario run's ending on an OUTCOME_TIER beat (#3565, closes #3560).
+
+    The scenario graph already decided the outcome: the terminal route's
+    authored ``beat_outcome``, or the tier's sign when it left that blank, or
+    SUCCESS for a tier-less terminal (see missions.services.beat). ``outcome_tier``
+    is the graded tier when the terminal was a CHECK or ENCOUNTER route, so the
+    tier-aware pool fires; a BRANCH terminal passes None and fires the coarse
+    pool. ``outcome_key`` is the MissionOption.key that ended the run, which
+    TransitionRequiredOutcome.required_outcome_key routes on.
+    """
+    if beat.predicate_type != BeatPredicateType.OUTCOME_TIER:
+        msg = (
+            f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
+            "a scenario run can only resolve an OUTCOME_TIER beat here."
+        )
+        raise ValueError(msg)
+    if outcome not in _GM_MARKED_VALID_OUTCOMES:
+        msg = f"Outcome {outcome!r} is not a scenario ending; must be SUCCESS or FAILURE."
+        raise ValueError(msg)
+    scope = progress.story.scope
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=outcome,
+        era=Era.objects.get_active(),
+        gm_notes="",
+        progress=progress,
+        scope=scope,
+        outcome_tier=outcome_tier,
+        outcome_key=outcome_key,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=outcome,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=participants if scope == StoryScope.GROUP else None,
+        outcome_tier=outcome_tier,
+        outcome_key=outcome_key,
     )
 
 
