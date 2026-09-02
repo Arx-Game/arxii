@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from web.admin.tuning import required_content as rc
 from world.conditions.factories import ConditionTemplateFactory
+from world.game_clock.factories import GameClockFactory
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -234,6 +235,21 @@ class TestRealDeclarations(TestCase):
         for dep in rc._declarations():
             with self.subTest(key=dep.key):
                 self.assertNotEqual(dep.label, dep.probe.model_label())
+
+    def test_game_clock_singleton_is_a_required_dependency(self) -> None:
+        """An unset clock 503s `GET /api/clock/` and blanks every IC-date reader.
+
+        Seen on play.arx2.com 2026-09-02: the Hall's Time plate fell back to
+        "frozen" and nothing on the ops dashboard said why.
+        """
+        dep = next(d for d in rc._declarations() if d.key == "game-clock")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        self.assertIsInstance(dep.probe, rc.AnyRowProbe)
+        self.assertEqual(dep.probe.model_label(), "GameClock")
+        # Break the invariant and watch the probe say so, then seed and watch it clear.
+        self.assertFalse(dep.probe.resolve(None).present)
+        GameClockFactory()
+        self.assertTrue(dep.probe.resolve(None).present)
 
     def test_collector_runs_against_the_real_table(self) -> None:
         snapshot = rc.collect_required_content()
