@@ -19,7 +19,7 @@ from actions.definitions.battles import (
     SpawnBattleUnitsAction,
     StageBattleMapAction,
 )
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.battles.constants import BattleSideRole
 from world.battles.factories import (
     BattleMapBlueprintFactory,
@@ -29,8 +29,10 @@ from world.battles.factories import (
 from world.battles.models import Battle, BattleParticipant, BattlePlace, BattleUnit
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
-from world.gm.factories import GMProfileFactory
+from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.stories.constants import BeatPredicateType
+from world.stories.factories import BeatFactory, ChapterFactory, EpisodeFactory, StoryFactory
 
 
 def _room(db_key: str = "BattleStagingRoom") -> object:
@@ -140,6 +142,48 @@ class CreateBattleActionTests(BattleStagingActionsTestBase):
         result = CreateBattleAction().run(self.gm_actor, name="Malformed Region", region_id="")
         self.assertFalse(result.success)
         self.assertFalse(Battle.objects.filter(name="Malformed Region").exists())
+
+    def test_lead_gm_may_route_beat_id(self) -> None:
+        """The story's own Lead GM may route the new battle onto their beat (#3559)."""
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+        table = GMTableFactory(gm=GMProfileFactory(account=self.gm_account))
+        story.primary_table = table
+        story.save()
+
+        result = CreateBattleAction().run(self.gm_actor, name="Routed Battle", beat_id=beat.pk)
+
+        self.assertTrue(result.success, result.message)
+        battle = Battle.objects.get(pk=result.data["battle_id"])
+        self.assertEqual(battle.story_beat_id, beat.pk)
+
+    def test_non_lead_gm_denied_beat_id_and_creates_nothing(self) -> None:
+        """A JUNIOR GM who isn't this beat's story's Lead GM cannot route onto it."""
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+        other_account = AccountFactory(username="battletestleadgm")
+        table = GMTableFactory(gm=GMProfileFactory(account=other_account))
+        story.primary_table = table
+        story.save()
+
+        result = CreateBattleAction().run(self.gm_actor, name="Unrouted Battle", beat_id=beat.pk)
+
+        self.assertFalse(result.success)
+        self.assertFalse(Battle.objects.filter(name="Unrouted Battle").exists())
+
+    def test_malformed_beat_id_rejected(self) -> None:
+        result = CreateBattleAction().run(self.gm_actor, name="Malformed Beat", beat_id="")
+        self.assertFalse(result.success)
+        self.assertFalse(Battle.objects.filter(name="Malformed Beat").exists())
+
+    def test_nonexistent_beat_id_rejected(self) -> None:
+        result = CreateBattleAction().run(self.gm_actor, name="No Such Beat", beat_id=999999)
+        self.assertFalse(result.success)
+        self.assertFalse(Battle.objects.filter(name="No Such Beat").exists())
 
 
 class StageBattleMapActionTests(BattleStagingActionsTestBase):

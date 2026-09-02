@@ -1,15 +1,18 @@
-"""Combat encounter → story beat auto-wiring (#1746).
+"""Combat encounter -> story beat auto-wiring (#1746).
 
 Wires the ENCOUNTER_COMPLETED reactive event to record_outcome_tier_completion:
-when a CombatEncounter completes, classify_battle_outcome maps its
-(EncounterOutcome, RiskLevel) to a designer-tunable CheckOutcome, and the
-ENCOUNTER_COMPLETED subscriber resolves any linked OUTCOME_TIER beat via
-record_outcome_tier_completion.
+when a CombatEncounter completes, beat_for_scene_conclusion (#3559) picks the
+single beat it may grade - the encounter's own explicitly routed story_beat,
+or the scene's running beat when it is itself the objective (kind ENCOUNTER) -
+classify_battle_outcome maps the encounter's (EncounterOutcome, RiskLevel) to a
+designer-tunable CheckOutcome, and record_outcome_tier_completion resolves it.
 
-FLED/ABANDONED encounters (or any unmapped outcome×risk pair) resolve the beat
-to PENDING_GM_REVIEW via force_outcome — a machine-detected non-success/failure
-terminal outcome that needs a GM's adjudication rather than an immediate
-pre-authored consequence.
+FLED/ABANDONED encounters never grade the beat: the party walked away from the
+wager, so the beat stays UNSATISFIED and resolve_stakes_for_withdrawal fires
+each open stake's authored WITHDRAWAL branch instead. An outcome x risk pair
+with no authored EncounterOutcomeMapping row is missing content, not a pause -
+it is logged as an error (surfaced on the admin sentinel, #3444) and the beat
+is left open.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
 
 logger = logging.getLogger(__name__)
 
@@ -63,25 +66,22 @@ def activate_stakes_for_scene(
         activate_stakes_contract(beat, participant_sheets)
 
 
-def classify_battle_outcome(encounter: CombatEncounter) -> CheckOutcome | None:
+def classify_battle_outcome(encounter: CombatEncounter) -> CheckOutcome:
     """Map a completed encounter's (outcome, risk_level) to a CheckOutcome tier.
-
-    Returns the designer-authored CheckOutcome for the encounter's outcome×risk,
-    or None when no mapping row exists or the row's check_outcome is null
-    (FLED/ABANDONED, or a pair the designers left unmapped). None signals the
-    caller to resolve the beat to PENDING_GM_REVIEW rather than firing a
-    consequence pool.
 
     Args:
         encounter: A completed CombatEncounter. Its ``outcome`` and
             ``risk_level`` drive the mapping lookup.
 
     Returns:
-        The mapped CheckOutcome, or None.
+        The designer-authored CheckOutcome for the encounter's outcome x risk.
 
     Raises:
-        ValueError: if the encounter has no outcome set (programmer error — the
+        ValueError: if the encounter has no outcome set (programmer error - the
             ENCOUNTER_COMPLETED event only fires post-completion).
+        EncounterOutcomeMapping.DoesNotExist: no row is authored for this
+            outcome x risk pair. Missing content, not a data flag the caller
+            branches on - see encounter_completed_beat_handler.
     """
     if not encounter.outcome:
         msg = (
@@ -93,108 +93,95 @@ def classify_battle_outcome(encounter: CombatEncounter) -> CheckOutcome | None:
     # module imports ENCOUNTER_BEAT_TRIGGER_NAME from here (see Task 4).
     from world.combat.models import EncounterOutcomeMapping  # noqa: PLC0415
 
-    mapping = EncounterOutcomeMapping.objects.filter(
+    mapping = EncounterOutcomeMapping.objects.get(
         outcome=encounter.outcome,
         risk_level=encounter.risk_level,
-    ).first()
-    return mapping.check_outcome if mapping is not None else None
+    )
+    return mapping.check_outcome
+
+
+def _participant_personas(encounter: CombatEncounter) -> list[Persona]:
+    """Primary personas of this encounter's ACTIVE participants (#3559).
+
+    Sheet -> primary_persona is the same mapping activate_stakes_for_scene's
+    own callers already derive for stake activation.
+    """
+    from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+
+    sheets = [
+        p.character_sheet for p in encounter.participants.filter(status=ParticipantStatus.ACTIVE)
+    ]
+    return [sheet.primary_persona for sheet in sheets]
 
 
 def encounter_completed_beat_handler(*, payload: object) -> None:
     """Flow-callable subscriber for ENCOUNTER_COMPLETED (#1746, routed #1760).
 
-    When ``encounter.story_beat`` is set, resolves ONLY that beat with this
-    encounter's own graded outcome. Otherwise falls back to resolving every
-    linked OUTCOME_TIER beat on the encounter's scene's episode(s) (legacy
-    find-all behavior, unchanged for existing single-beat-per-scene content).
-    Classifies the outcome via classify_battle_outcome and completes via
-    record_outcome_tier_completion. No-ops cleanly when the encounter has no
-    scene, no linked beat, or no active progress.
+    Resolves at most ONE beat per completed encounter (#3559,
+    beat_for_scene_conclusion): the encounter's own explicitly routed
+    ``story_beat``, or the scene's running beat when that beat is itself the
+    objective (kind ENCOUNTER). Anything else - no linked beat, or one that
+    isn't gradable - leaves the story untouched.
 
-    FLED/ABANDONED take the withdrawal path STRUCTURALLY (#1770 PR2): the beat
-    resolves to PENDING_GM_REVIEW with ``withdrawal=True`` — withdrawal-authored
-    stakes fire their WITHDRAWAL branch, unauthored stakes pend — regardless of
-    any EncounterOutcomeMapping row a designer may have authored for the pair.
-    Withdrawal-routes-to-withdrawal-branches is spec semantics, not a data
-    convention; a mapped tier for FLED/ABANDONED is ignored. Any other unmapped
-    outcome×risk also resolves PENDING_GM_REVIEW (without the withdrawal flag).
+    FLED/ABANDONED encounters never grade the beat: the party walked away
+    from the wager, so resolve_stakes_for_withdrawal fires each open stake's
+    authored WITHDRAWAL branch and the beat stays UNSATISFIED. Any other
+    outcome classifies via classify_battle_outcome and completes through
+    record_outcome_tier_completion; a missing EncounterOutcomeMapping row is
+    content, not a pause - it is logged as an error (surfaced on the admin
+    sentinel, #3444) and the beat is left open.
 
     Dispatched by a system-installed Trigger (seeded via
     install_encounter_beat_trigger) bound to the seeded
     ``encounter_completed_beat_wiring`` TriggerDefinition.
     """
-    import logging  # noqa: PLC0415
-
     from world.combat.constants import EncounterOutcome  # noqa: PLC0415
-    from world.stories.constants import BeatOutcome, BeatPredicateType  # noqa: PLC0415
-    from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
-    from world.stories.services.beats import record_outcome_tier_completion  # noqa: PLC0415
+    from world.combat.models import EncounterOutcomeMapping  # noqa: PLC0415
+    from world.stories.services.beats import (  # noqa: PLC0415
+        beat_for_scene_conclusion,
+        record_outcome_tier_completion,
+    )
     from world.stories.services.progress import (  # noqa: PLC0415
         get_active_progress_for_story,
     )
-
-    logger = logging.getLogger(__name__)
+    from world.stories.services.stake_resolution import (  # noqa: PLC0415
+        resolve_stakes_for_withdrawal,
+    )
 
     scene = payload.scene
     if scene is None:
         return
 
     encounter = payload.encounter
-    if encounter.story_beat_id is not None:
-        # #1760: an explicitly-routed encounter resolves ONLY its own beat,
-        # regardless of how many other beats share the scene.
-        beats = (
-            [encounter.story_beat]
-            if encounter.story_beat.predicate_type == BeatPredicateType.OUTCOME_TIER
-            and encounter.story_beat.outcome == BeatOutcome.UNSATISFIED
-            else []
-        )
-    else:
-        # Legacy: find every UNSATISFIED OUTCOME_TIER beat on episodes linked
-        # to this scene. Preserved for existing single-beat-per-scene content.
-        episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
-        beats = list(
-            Beat.objects.filter(
-                episode_id__in=episode_ids,
-                predicate_type=BeatPredicateType.OUTCOME_TIER,
-                outcome=BeatOutcome.UNSATISFIED,
-            )
-        )
-    if not beats:
+    beat = beat_for_scene_conclusion(scene, encounter.story_beat)
+    if beat is None:
         return
 
-    # FLED/ABANDONED = the party walked away from the wager (#1770 PR2). The
-    # withdrawal path is structural: it is taken REGARDLESS of any authored
-    # EncounterOutcomeMapping for the pair (a mapped tier is ignored) — the
-    # beat pends for GM adjudication while withdrawal-authored stakes fire
-    # their WITHDRAWAL branch immediately and unauthored stakes pend.
-    is_withdrawal = encounter.outcome in (
-        EncounterOutcome.FLED,
-        EncounterOutcome.ABANDONED,
-    )
-    outcome_tier = None if is_withdrawal else classify_battle_outcome(encounter)
+    progress = get_active_progress_for_story(beat.episode.chapter.story)
+    if progress is None:
+        logger.debug(
+            "ENCOUNTER_COMPLETED: beat %s - no active progress for story; skipping.",
+            beat.pk,
+        )
+        return
 
-    for beat in beats:
-        progress = get_active_progress_for_story(beat.episode.chapter.story)
-        if progress is None:
-            logger.debug(
-                "ENCOUNTER_COMPLETED: beat %s — no active progress for story; skipping.",
-                beat.pk,
-            )
-            continue
-        if outcome_tier is None:
-            record_outcome_tier_completion(
-                progress=progress,
-                beat=beat,
-                force_outcome=BeatOutcome.PENDING_GM_REVIEW,
-                withdrawal=is_withdrawal,
-            )
-        else:
-            record_outcome_tier_completion(
-                progress=progress,
-                beat=beat,
-                outcome_tier=outcome_tier,
-            )
+    if encounter.outcome in (EncounterOutcome.FLED, EncounterOutcome.ABANDONED):
+        resolve_stakes_for_withdrawal(beat, progress, _participant_personas(encounter))
+        return
+
+    try:
+        tier = classify_battle_outcome(encounter)
+    except EncounterOutcomeMapping.DoesNotExist:
+        logger.exception(
+            "No EncounterOutcomeMapping for outcome=%s risk=%s; beat %s left open "
+            "(required content, see the admin sentinel).",
+            encounter.outcome,
+            encounter.risk_level,
+            beat.pk,
+        )
+        return
+
+    record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=tier)
 
 
 def install_encounter_beat_trigger(encounter: CombatEncounter) -> None:

@@ -662,6 +662,7 @@
   - campaign_story -> stories.Story [FK] (nullable)
   - region -> areas.Area [FK] (nullable)
   - weather_override -> weather.WeatherType [FK] (nullable)
+  - story_beat -> stories.Beat [FK] (nullable)
 **Pointed to by:**
   - sides <- battles.BattleSide
   - places <- battles.BattlePlace
@@ -689,7 +690,7 @@
 
 ### BattleOutcomeMapping
 **Foreign Keys:**
-  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
 
 ### BattleParticipant
 **Foreign Keys:**
@@ -850,7 +851,7 @@
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' - Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' - Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' - Check whether any side has reached its victory threshold.`
-- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' - Set the battle's outcome, end the backing scene, and resolve any linked`
+- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' - Set the battle's outcome, end the backing scene, and resolve the one`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10, risk_level: 'str' = RiskLevel.LOW) -> 'Battle' - Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' - Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
 - `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None, max_integrity: 'int | None' = None) -> 'Fortification' - Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
@@ -864,7 +865,7 @@
 - `open_place_encounter(*, battle_place: 'BattlePlace') -> 'CombatEncounter' - Bind *battle_place* to a new general party-scale combat encounter (#2008).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' - Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' - Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
-- `resolve_battle_beats(battle: 'Battle') -> 'None' - Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
+- `resolve_battle_beats(battle: 'Battle') -> 'None' - Resolve the one beat linked to a concluded battle (#3559).`
 - `run_battle_conclusion_hooks(battle: 'Battle') -> 'None' - Invoke every registered conclusion hook with ``battle``.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' - Set a battle side's tactical posture (#1711).`
 
@@ -2349,7 +2350,7 @@
 
 ### EncounterOutcomeMapping
 **Foreign Keys:**
-  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
 
 ### EncounterRiskAcknowledgement
 **Foreign Keys:**
@@ -3363,6 +3364,7 @@
 - `collect_and_distribute(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' - One active collection of a personal asset's accumulated income (#2294).`
 - `collect_org_income(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `count_unredeemed_favor_tokens(*, sheet: 'CharacterSheet', org: 'Organization') -> 'int' - How many of ``org``'s unredeemed Golden Hares ``sheet`` holds (#3466).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' - Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' - Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
 - `distribute_material_allowance(*, organization: 'Organization', landed_by_category: 'list[tuple[MaterialCategory, int]]') -> 'MaterialAllowanceResult' - Auto-split a share of newly landed materials among active piloted members (#2540 slice 2).`
@@ -4073,6 +4075,7 @@
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
 - `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' - The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `has_build_warrant(account: 'AccountDB | None', *, area: 'Area', level: 'int') -> 'bool' - Whether ``account`` may build-author at ``level`` within ``area``'s subtree.`
+- `has_room_budget_capacity(account: 'AccountDB | None', *, area: 'Area', rooms_needed: 'int' = 1) -> 'bool' - Whether digging ``rooms_needed`` more room(s) under ``area`` fits some`
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' - ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' - Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' - Soft-leave a membership. No-op if already left.`
@@ -4916,7 +4919,7 @@
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' - Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' - Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' - Return ALL LocationOwnership rows (active and ended) for a`
-- `resolve_area_art(room_profile: 'RoomProfile | None') -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
+- `resolve_area_art(room_profile: 'RoomProfile | None', *, thumbnail_url: 'object' = <object object>) -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
 - `room_discomfort(room: 'DefaultObject') -> 'int' - Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' - The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' - Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
@@ -9244,7 +9247,7 @@
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a solo legend deed, optionally anchored to a shared event's ceiling.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' - Sum the legend this character earned that was credited to covenants where they held ``role``.`
@@ -9366,6 +9369,7 @@
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)
   - expired_consequences -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
+  - resolving_battles <- battles.Battle
   - resolving_encounters <- combat.CombatEncounter
   - running_scenes <- scenes.Scene
   - decisive_markers <- scenes.DecisiveCheckMarker

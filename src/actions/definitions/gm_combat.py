@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     )
     from world.combat.scaling import OpponentStatBlock
     from world.scenes.models import Scene
+    from world.stories.models import Beat
 
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
@@ -50,6 +51,8 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
 _NO_ACTIVE_ENCOUNTER = "There is no active encounter here."
 _NO_GM_PERMISSION = "Only the scene's GM or staff can do that."
 _NO_ACTIVE_SCENE = "There is no active scene here to start an encounter in."
+_NO_SUCH_BEAT = "No such beat."
+_NO_BEAT_PERMISSION = "Only that beat's story Lead GM or staff may route an encounter onto it."
 
 
 def _encounter_in_room(
@@ -104,6 +107,26 @@ def _actor_may_start_encounter(actor: ObjectDB, scene: Scene) -> bool:
     if account is None:
         return False
     return can_create_encounter_for_scene(account, scene)
+
+
+def _actor_may_route_beat(actor: ObjectDB, beat: Beat) -> bool:
+    """True when *actor* may route a new encounter onto *beat* (#3559).
+
+    Mirrors ``CanAssignMissionToBeat``: the beat's story's Lead GM, or staff.
+    """
+    from world.gm.models import GMProfile  # noqa: PLC0415
+
+    account = resolve_account_or_none(actor)
+    if account is None:
+        return False
+    if account.is_staff:
+        return True
+    try:
+        gm_profile = account.gm_profile
+    except GMProfile.DoesNotExist:
+        return False
+    story = beat.episode.chapter.story
+    return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
 
 
 def _resolve_participant_in_encounter(
@@ -956,6 +979,7 @@ class CreateEncounterAction(Action):
         from world.combat.models import CombatEncounter  # noqa: PLC0415
         from world.combat.services import finalize_new_encounter  # noqa: PLC0415
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+        from world.stories.models import Beat  # noqa: PLC0415
 
         scene = get_active_scene(actor.location)
         if scene is None:
@@ -969,7 +993,21 @@ class CreateEncounterAction(Action):
                 return ActionResult(success=False, message="Invalid pace mode.")
             resolved_pace_mode = pace_mode
 
-        encounter = CombatEncounter.objects.create(scene=scene, pace_mode=resolved_pace_mode)
+        beat = None
+        beat_id = kwargs.get("beat_id")
+        if beat_id is not None:
+            try:
+                beat = Beat.objects.filter(pk=beat_id).first()
+            except (TypeError, ValueError):
+                beat = None
+            if beat is None:
+                return ActionResult(success=False, message=_NO_SUCH_BEAT)
+            if not _actor_may_route_beat(actor, beat):
+                return ActionResult(success=False, message=_NO_BEAT_PERMISSION)
+
+        encounter = CombatEncounter.objects.create(
+            scene=scene, pace_mode=resolved_pace_mode, story_beat=beat
+        )
         finalize_new_encounter(encounter)
         return ActionResult(
             success=True,

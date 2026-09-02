@@ -19,12 +19,15 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.battles.models import Battle
+    from world.stories.models import Beat
 
 
 _NO_ACTIVE_BATTLE = "There is no active battle here."
 _NO_GM_PERMISSION = "Only the battle's GM or staff can do that."
 _NO_CHARACTER_SHEET = "You have no character sheet."
 _NOT_IN_BATTLE = "You are not an active participant in a battle."
+_NO_SUCH_BEAT = "No such beat."
+_NO_BEAT_PERMISSION = "Only that beat's story Lead GM or staff may route a battle onto it."
 
 
 def _active_battle_in_room(actor: ObjectDB) -> Battle | None:
@@ -55,6 +58,51 @@ def _actor_may_gm_battle(actor: ObjectDB, battle: Battle) -> bool:
     if account.is_staff:
         return True
     return battle.scene.is_gm(account)
+
+
+def _actor_may_route_beat(actor: ObjectDB, beat: Beat) -> bool:
+    """True when *actor* may route a new battle onto *beat* (#3559).
+
+    Mirrors ``CanAssignMissionToBeat``: the beat's story's Lead GM, or staff.
+    """
+    from world.gm.models import GMProfile  # noqa: PLC0415
+
+    account = resolve_account_or_none(actor)
+    if account is None:
+        return False
+    if account.is_staff:
+        return True
+    try:
+        gm_profile = account.gm_profile
+    except GMProfile.DoesNotExist:
+        return False
+    story = beat.episode.chapter.story
+    return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
+
+
+def _resolve_routed_beat(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[Beat | None, ActionResult | None]:
+    """Resolve an optional ``beat_id`` kwarg into a permitted, routable Beat (#3559).
+
+    Returns ``(beat, None)`` when no ``beat_id`` was given (routing is optional)
+    or it resolved and the actor may route onto it; returns ``(None,
+    error_result)`` when it was given but doesn't resolve or isn't permitted.
+    """
+    from world.stories.models import Beat  # noqa: PLC0415
+
+    beat_id = kwargs.get("beat_id")
+    if beat_id is None:
+        return None, None
+    try:
+        beat = Beat.objects.filter(pk=beat_id).first()
+    except (TypeError, ValueError):
+        beat = None
+    if beat is None:
+        return None, ActionResult(success=False, message=_NO_SUCH_BEAT)
+    if not _actor_may_route_beat(actor, beat):
+        return None, ActionResult(success=False, message=_NO_BEAT_PERMISSION)
+    return beat, None
 
 
 def _active_battle_for_gm(
@@ -602,6 +650,10 @@ class CreateBattleAction(Action):
             except (Area.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message="No such region.")
 
+        beat, beat_error = _resolve_routed_beat(actor, kwargs)
+        if beat_error is not None:
+            return beat_error
+
         try:
             with transaction.atomic():
                 battle = stage_battle(
@@ -612,6 +664,9 @@ class CreateBattleAction(Action):
                     region=region,
                     location=actor.location,
                 )
+                if beat is not None:
+                    battle.story_beat = beat
+                    battle.save(update_fields=["story_beat"])
 
                 account = resolve_account_or_none(actor)
                 if account is not None:

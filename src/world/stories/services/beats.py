@@ -20,6 +20,11 @@ Public API:
         CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
         consequences matching that tier.
 
+    beat_for_scene_conclusion(scene, explicit_beat) — the one beat a concluded
+        fight or battle may grade (#3559): an explicit routed beat wins,
+        otherwise the scene's running beat when the GM declared the fight
+        itself as the objective (kind ENCOUNTER), else None.
+
     expire_overdue_beats(now) — flips UNSATISFIED beats with past deadlines to
         EXPIRED outcome. Idempotent; safe for a cron hook.
 """
@@ -33,7 +38,13 @@ from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
-from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
+from world.stories.constants import (
+    BeatKind,
+    BeatOutcome,
+    BeatPredicateType,
+    StoryMilestoneType,
+    StoryScope,
+)
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import AnyStoryProgress, StoryStatus
 
@@ -45,7 +56,7 @@ if TYPE_CHECKING:
 
     from actions.models.consequence_pools import ConsequencePool
     from world.gm.models import GMProfile
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene as SceneModel
     from world.stories.models import Episode, Story
     from world.traits.models import CheckOutcome
 
@@ -354,6 +365,29 @@ def record_outcome_tier_completion(
         explicit_participants=participants if scope == StoryScope.GROUP else None,
         outcome_tier=outcome_tier,
     )
+
+
+def beat_for_scene_conclusion(scene: SceneModel | None, explicit_beat: Beat | None) -> Beat | None:
+    """The one beat a concluded fight or battle may grade (#3559, objective-first).
+
+    An explicitly linked beat wins; otherwise the scene's running beat, and only
+    when the GM declared the fight itself as the objective (kind ENCOUNTER).
+    Anything else grades nothing: a brawl during a heist never closes the heist.
+    """
+
+    def _gradable(beat: Beat | None) -> bool:
+        return (
+            beat is not None
+            and beat.predicate_type == BeatPredicateType.OUTCOME_TIER
+            and beat.outcome == BeatOutcome.UNSATISFIED
+        )
+
+    if _gradable(explicit_beat):
+        return explicit_beat
+    running = scene.running_beat if scene is not None else None
+    if _gradable(running) and running.kind == BeatKind.ENCOUNTER:
+        return running
+    return None
 
 
 def record_aggregate_contribution(

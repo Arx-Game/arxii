@@ -1,1 +1,1 @@
-0205_alter_beat_outcome_alter_beatcompletion_outcome_and_more
+0206_battle_story_beat_and_more

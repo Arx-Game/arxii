@@ -1000,11 +1000,13 @@ def check_victory(*, battle: Battle) -> BattleOutcome | None:
 
 @transaction.atomic
 def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
-    """Set the battle's outcome, end the backing scene, and resolve any linked
-    story beat's stakes contract.
+    """Set the battle's outcome, end the backing scene, and resolve the one
+    story beat this battle grades, if any.
 
-    Resolves every UNSATISFIED OUTCOME_TIER beat linked to the battle's scene
-    via resolve_battle_beats (#1785) — classifying battle.outcome through
+    Resolves at most one beat via resolve_battle_beats (#1785, #3559,
+    beat_for_scene_conclusion) — the battle's own explicitly routed
+    ``story_beat``, or the battle scene's running beat when it is itself the
+    objective (kind ENCOUNTER) — classifying battle.outcome through
     BattleOutcomeMapping and completing the beat through the same
     record_outcome_tier_completion seam combat/missions already use. Idempotent:
     if the battle is already concluded, returns it unchanged (resolve_battle_beats
