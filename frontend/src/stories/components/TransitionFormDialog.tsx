@@ -222,11 +222,7 @@ export function TransitionFormDialog({
   const isEdit = transition !== undefined;
 
   const [targetEpisode, setTargetEpisode] = useState<string>(
-    transition?.target_episode != null
-      ? String(transition.target_episode)
-      : defaultTargetEpisodeId != null
-        ? String(defaultTargetEpisodeId)
-        : ''
+    String(transition?.target_episode ?? defaultTargetEpisodeId ?? '')
   );
   const [mode, setMode] = useState<string>(transition?.mode ?? 'auto');
   const [connectionType, setConnectionType] = useState<string>(transition?.connection_type ?? '');
@@ -272,13 +268,7 @@ export function TransitionFormDialog({
   const isPending = saveMutation.isPending;
 
   function resetForm() {
-    setTargetEpisode(
-      transition?.target_episode != null
-        ? String(transition.target_episode)
-        : defaultTargetEpisodeId != null
-          ? String(defaultTargetEpisodeId)
-          : ''
-    );
+    setTargetEpisode(String(transition?.target_episode ?? defaultTargetEpisodeId ?? ''));
     setMode(transition?.mode ?? 'auto');
     setConnectionType(transition?.connection_type ?? '');
     setConnectionSummary(transition?.connection_summary ?? '');

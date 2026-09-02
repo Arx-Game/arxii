@@ -26,6 +26,12 @@ interface ObjectsListProps {
  * door, kept separate from plain examine so taking a posting doesn't require
  * parsing free text out of the description.
  */
+/** The examine pane: the text once it arrives, otherwise why it has not. */
+function examineBody(text: string | undefined, isPending: boolean) {
+  if (text !== undefined) return <FormattedContent content={text} />;
+  return isPending ? 'Looking…' : 'Cannot examine right now.';
+}
+
 export function ObjectsList({ objects, characterId }: ObjectsListProps) {
   const [expandedDbref, setExpandedDbref] = useState<string | null>(null);
   const [examineText, setExamineText] = useState<Record<string, string>>({});
@@ -112,15 +118,7 @@ export function ObjectsList({ objects, characterId }: ObjectsListProps) {
                   className="ml-5 whitespace-pre-wrap text-xs text-muted-foreground"
                   data-testid={`examine-text-${obj.dbref}`}
                 >
-                  {examineText[obj.dbref] === undefined ? (
-                    isPending ? (
-                      'Looking…'
-                    ) : (
-                      'Cannot examine right now.'
-                    )
-                  ) : (
-                    <FormattedContent content={examineText[obj.dbref]} />
-                  )}
+                  {examineBody(examineText[obj.dbref], isPending)}
                 </div>
               ) : null}
             </li>

@@ -49,6 +49,16 @@ export interface AreaDocumentProps {
   onDeleted: (parentAreaId: number | null) => void;
 }
 
+/** An area's own climate, the one it inherits, or nothing set yet. */
+function climateLabel(area: {
+  climate?: string | null;
+  effective_climate?: string | null;
+}): string {
+  if (area.climate) return area.climate;
+  if (area.effective_climate) return `${area.effective_climate} (inherited)`;
+  return 'unset';
+}
+
 export function AreaDocument({ areaId, onDeleted }: AreaDocumentProps) {
   const { data: manager } = useAreaManagerQuery(areaId);
 
@@ -251,11 +261,7 @@ function AreaMarginalia({
   onOpenArt: () => void;
 }) {
   const area = manager.area;
-  const climate = area.climate
-    ? area.climate
-    : area.effective_climate
-      ? `${area.effective_climate} (inherited)`
-      : 'unset';
+  const climate = climateLabel(area);
   const roomsCount = manager.rooms.length;
 
   return (

@@ -65,6 +65,24 @@ function roomToTile(room: WorldBuilderRoom, kindLabel: string): LatticeTile {
   };
 }
 
+/**
+ * The subtitle under an area's name: its room count once the leaf manager has
+ * loaded, its child-area count for a branch, or just the level while loading.
+ */
+function areaKindMeta(
+  area: { level_display: string; children_count: number },
+  isLeaf: boolean,
+  hasLeafManager: boolean,
+  roomCount: number
+): string {
+  if (!isLeaf) {
+    const children = area.children_count > 0 ? ` · ${area.children_count} areas` : '';
+    return `${area.level_display}${children}`;
+  }
+  if (!hasLeafManager) return area.level_display;
+  return `${area.level_display} · ${roomCount} room${roomCount === 1 ? '' : 's'}`;
+}
+
 export function AreaPage({
   areaId,
   onDescend,
@@ -171,11 +189,7 @@ function ChildAreaRow({ area, onSelect }: ChildAreaRowProps) {
   const leafRooms = leafManager?.rooms ?? [];
   const unpublishedCount = isLeaf ? leafRooms.filter((room) => !room.published_at).length : null;
 
-  const kindMeta = isLeaf
-    ? leafManager
-      ? `${area.level_display} · ${leafRooms.length} room${leafRooms.length === 1 ? '' : 's'}`
-      : area.level_display
-    : `${area.level_display}${area.children_count > 0 ? ` · ${area.children_count} areas` : ''}`;
+  const kindMeta = areaKindMeta(area, isLeaf, leafManager != null, leafRooms.length);
 
   const renderUnpublishedCount = () => {
     if (unpublishedCount == null) {

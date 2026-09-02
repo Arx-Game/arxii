@@ -143,6 +143,13 @@ function pendingLinkKey(x: number, y: number, floor: number): string {
   return `${x},${y}@${floor}`;
 }
 
+/** What clicking a lattice square will do, as a hover hint. */
+function squareHint(state: string): string {
+  if (state === 'planned') return 'planned square — click to add';
+  if (state === 'void') return 'carved out — right-click to restore';
+  return 'empty ground — click to plan';
+}
+
 export function Lattice({
   mode,
   nodeId,
@@ -615,13 +622,7 @@ export function Lattice({
                   data-cell-key={key}
                   data-testid={`lattice-cell-${x}-${y}`}
                   data-cell-state={state}
-                  aria-label={
-                    state === 'planned'
-                      ? 'planned square — click to add'
-                      : state === 'void'
-                        ? 'carved out — right-click to restore'
-                        : 'empty ground — click to plan'
-                  }
+                  aria-label={squareHint(state)}
                   className={cn(
                     'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
                     state === 'empty' && 'border-dotted text-muted-foreground',

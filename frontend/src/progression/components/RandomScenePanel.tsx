@@ -13,6 +13,13 @@ import {
   useRerollTargetMutation,
 } from '../randomSceneQueries';
 
+/** What the claim button shows: a tick once claimed, progress mid-flight, or the verb. */
+function claimButtonFace(claimed: boolean, isClaiming: boolean) {
+  if (claimed) return <Check className="h-3.5 w-3.5 text-green-500" />;
+  if (isClaiming) return 'Claiming...';
+  return 'Claim';
+}
+
 export function RandomScenePanel() {
   const { data: targets, isLoading, error } = useRandomSceneTargetsQuery();
   const claimMutation = useClaimTargetMutation();
@@ -120,13 +127,7 @@ export function RandomScenePanel() {
                   onClick={() => handleClaim(target.id)}
                   title={target.claimed ? 'Already claimed' : 'Claim this target'}
                 >
-                  {target.claimed ? (
-                    <Check className="h-3.5 w-3.5 text-green-500" />
-                  ) : isClaimingThis ? (
-                    'Claiming...'
-                  ) : (
-                    'Claim'
-                  )}
+                  {claimButtonFace(target.claimed, isClaimingThis)}
                 </Button>
               </div>
             </div>
