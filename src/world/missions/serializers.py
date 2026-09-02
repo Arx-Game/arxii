@@ -499,7 +499,15 @@ class _ClearOutcomeRewriteOnEditMixin:
 
 
 class MissionOptionRouteSerializer(_ClearOutcomeRewriteOnEditMixin, serializers.ModelSerializer):
-    """Editor CRUD for MissionOptionRoute rows (one per outcome tier per option)."""
+    """Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+
+    ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+    story beat records when the run ends here. Without it in this field
+    list the Studio API could author a terminal route but never actually set
+    the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+    an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+    silently fall back to the tier-less-terminal default of SUCCESS.
+    """
 
     class Meta:
         model = MissionOptionRoute
@@ -512,6 +520,7 @@ class MissionOptionRouteSerializer(_ClearOutcomeRewriteOnEditMixin, serializers.
             "consequence",
             "outcome_text",
             "outcome_text_needs_rewrite",
+            "beat_outcome",
         ]
         read_only_fields = ["id"]
 

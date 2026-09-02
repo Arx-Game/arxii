@@ -182,7 +182,12 @@ _ERR_NO_PARTY = "Nobody in this scene can take part in the scenario."
 def start_scenario_for_scene(beat: Beat, scene: Scene) -> MissionInstance:
     """Start (or rejoin) the beat's scenario for everyone in the scene (#3565).
 
-    The scene's active participant personas are the party. If an ACTIVE run
+    The scene's active PLAYER participant personas are the party -- a scene
+    GM's own PC (``SceneParticipation.is_gm=True``) is excluded even when
+    present, so the GM administering the scene never accidentally becomes a
+    ``MissionParticipant`` (and thus a group-vote voter) in the party's own
+    run; this matches ``world.scenes.scenario_services``'s "Lead GM (not a
+    participant)" contract on the scene-scenario read side. If an ACTIVE run
     already exists for this beat (started here earlier, or by
     gm_assign_mission), it is the run: newcomers are added as non-holder
     participants and it is returned. A second run is never created for one
@@ -201,7 +206,9 @@ def start_scenario_for_scene(beat: Beat, scene: Scene) -> MissionInstance:
     sheets = list(
         {
             persona.character_sheet_id: persona.character_sheet
-            for persona in scene.persona_handler.active_participant_personas()
+            for persona in scene.persona_handler.active_participant_personas(
+                exclude_gm_accounts=True
+            )
         }.values()
     )
     if not sheets:
