@@ -112,6 +112,29 @@ class CmdCombatRoutingTests(TestCase):
         cmd.caller.msg.assert_called_once()
         self.assertIn("Combat actions", cmd.caller.msg.call_args.args[0])
 
+    def test_bare_combat_lists_pending_windups(self) -> None:
+        cmd = _make_cmd("")
+        participant = MagicMock()
+        participant.encounter.round_number = 2
+        pending = MagicMock()
+        pending.target_id = 1
+        pending.opponent.name = "Ogre"
+        pending.target.character_sheet.character = "Kira"
+        pending.resolves_round = 3
+        pending.called_out = True
+        pending.downgrades = 1
+        with (
+            patch.object(cmd, "_combat_participant_or_none", return_value=participant),
+            patch.object(cmd, "_render_resource_state", return_value=[]),
+            patch("world.combat.models.CombatRoundAction.objects") as actions,
+            patch.object(cmd, "_pending_windups", return_value=[pending]),
+        ):
+            actions.select_related.return_value.filter.return_value.first.return_value = None
+            cmd.func()
+        text = cmd.caller.msg.call_args.args[0]
+        self.assertIn("Wind-ups", text)
+        self.assertIn("Ogre -> Kira, lands in 1 (called out, 1 stagger)", text)
+
 
 class CmdCombatArgResolutionTests(TestCase):
     def test_cover_resolves_ally_kwarg(self) -> None:
