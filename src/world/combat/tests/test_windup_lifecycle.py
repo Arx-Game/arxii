@@ -112,6 +112,52 @@ class WindupDeclarationTests(TestCase):
         self.assertIn("begins something enormous", sent_text)
 
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_generic_telegraph_names_the_target(self, mock_broadcast) -> None:  # noqa: ARG002
+        self.entry.windup_telegraph = ""
+        self.entry.save(update_fields=["windup_telegraph"])
+        listener = CharacterFactory(location=self.encounter.room)
+
+        with mock.patch.object(listener, "msg") as mock_msg:
+            select_npc_actions(self.encounter)
+
+        _args, kwargs = mock_msg.call_args
+        sent_text, _outkwargs = kwargs["text"]
+        self.assertIn("bearing down on", sent_text)
+        self.assertIn(str(self.sheet.character), sent_text)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_authored_telegraph_without_placeholder_gets_target_clause(
+        self,
+        mock_broadcast,  # noqa: ARG002
+    ) -> None:
+        listener = CharacterFactory(location=self.encounter.room)
+
+        with mock.patch.object(listener, "msg") as mock_msg:
+            select_npc_actions(self.encounter)
+
+        _args, kwargs = mock_msg.call_args
+        sent_text, _outkwargs = kwargs["text"]
+        self.assertIn("winds up something huge!", sent_text)
+        self.assertIn(f"It is aimed at {self.sheet.character}.", sent_text)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_authored_telegraph_with_placeholder_places_target_itself(
+        self,
+        mock_broadcast,  # noqa: ARG002
+    ) -> None:
+        self.entry.windup_telegraph = "{opponent} turns on {target} with a roar!"
+        self.entry.save(update_fields=["windup_telegraph"])
+        listener = CharacterFactory(location=self.encounter.room)
+
+        with mock.patch.object(listener, "msg") as mock_msg:
+            select_npc_actions(self.encounter)
+
+        _args, kwargs = mock_msg.call_args
+        sent_text, _outkwargs = kwargs["text"]
+        self.assertIn(f"turns on {self.sheet.character} with a roar!", sent_text)
+        self.assertNotIn("It is aimed at", sent_text)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
     def test_zero_windup_rounds_is_unchanged_same_round_behavior(self, mock_broadcast) -> None:  # noqa: ARG002
         self.entry.windup_rounds = 0
         self.entry.save(update_fields=["windup_rounds"])
