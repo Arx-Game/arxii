@@ -471,6 +471,50 @@ class ScenarioChildReparentingTests(TestCase):
         self.owner_reward.refresh_from_db()
         self.assertEqual(self.owner_reward.route_id, self.owner_route_2.pk)
 
+    # -- reward.candidate (the other XOR parent) --
+
+    def _candidate_reward(self):
+        owner_candidate = MissionOptionRouteCandidateFactory(
+            route=self.owner_route, target_node=self.owner_entry_2, weight=1
+        )
+        return owner_candidate, MissionOptionRouteRewardFactory(
+            route=None,
+            candidate=owner_candidate,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+        )
+
+    def test_reward_cannot_reparent_to_unowned_candidate(self) -> None:
+        owner_candidate, reward = self._candidate_reward()
+        other_candidate = MissionOptionRouteCandidateFactory(
+            route=self.other_route, target_node=self.other_route.option.node, weight=1
+        )
+        self.client.force_authenticate(self.owner_account)
+        resp = self.client.patch(
+            f"/api/missions/route-rewards/{reward.pk}/",
+            {"candidate": other_candidate.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, resp.data)
+        reward.refresh_from_db()
+        self.assertEqual(reward.candidate_id, owner_candidate.pk)
+
+    def test_reward_can_reparent_to_own_candidate(self) -> None:
+        _owner_candidate, reward = self._candidate_reward()
+        sibling = MissionOptionRouteCandidateFactory(
+            route=self.owner_route_2, target_node=self.owner_entry_2, weight=1
+        )
+        self.client.force_authenticate(self.owner_account)
+        resp = self.client.patch(
+            f"/api/missions/route-rewards/{reward.pk}/",
+            {"candidate": sibling.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        reward.refresh_from_db()
+        self.assertEqual(reward.candidate_id, sibling.pk)
+
 
 class NodeCopyActionPermissionTests(TestCase):
     """POST /api/missions/nodes/{id}/copy/ and .../copy-subtree/ -- object-level
