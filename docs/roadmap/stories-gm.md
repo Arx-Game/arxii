@@ -144,7 +144,7 @@ All Phase 2 model/service/API infrastructure is implemented. 510 stories tests p
 
 **Wave 5 — Deadline expiry lifecycle:**
 - `Beat.deadline` — DateTimeField (nullable)
-- `expire_overdue_beats(now?)` — idempotent bulk sweep; flips UNSATISFIED beats past deadline to EXPIRED
+- `expire_overdue_beats(now?)` - idempotent bulk sweep; completes each overdue beat EXPIRED through the shared completion tail (pool, stakes LOSS, contract close, notify), one savepoint per beat
 - Lazy invocation in `get_eligible_transitions`: sweeps current episode's overdue beats before evaluating eligibility so routing reflects current deadline state even without a cron
 
 **Wave 6 — Assistant GM claim flow:**

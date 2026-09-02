@@ -40065,8 +40065,8 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
         success_consequences:
           type: integer
           nullable: true
@@ -40357,8 +40357,8 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
         success_consequences:
           type: integer
           nullable: true
@@ -64317,8 +64317,8 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
         success_consequences:
           type: integer
           nullable: true

@@ -73,19 +73,15 @@ def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
 
 
 def _expire_overdue_beats_for_episode(episode: Episode) -> None:
-    """Lazily expire overdue beats scoped to a single episode.
+    """Lazily expire overdue beats scoped to a single episode (#3558: a real completion).
 
     Called at the top of get_eligible_transitions so that eligibility checks
     reflect current deadline state even if no global cron has fired.
-
-    Uses .save() (not .update()) to update SharedMemoryModel's identity-map
-    cache in place — bulk .update() bypasses the ORM layer and leaves stale
-    Python objects in memory, which would break the subsequent FK walks in
-    progression_requirements and routing predicates.
     """
     from django.utils import timezone  # noqa: PLC0415
 
     from world.stories.constants import BeatOutcome  # noqa: PLC0415
+    from world.stories.services.beats import _expire_each  # noqa: PLC0415
 
     now = timezone.now()
     overdue = episode.beats.filter(
@@ -93,9 +89,7 @@ def _expire_overdue_beats_for_episode(episode: Episode) -> None:
         deadline__isnull=False,
         deadline__lt=now,
     )
-    for beat in overdue:
-        beat.outcome = BeatOutcome.EXPIRED
-        beat.save(update_fields=["outcome", "updated_at"])
+    _expire_each(list(overdue), now=now)
 
 
 def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
