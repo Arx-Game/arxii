@@ -518,7 +518,7 @@ class TestRespondToActionRequestStandaloneCast(CastScenarioMixin):
 
     def test_accept_standalone_cast_does_not_stamp_soulfray_consent(self) -> None:
         """The consent-accept path's confirm_soulfray_risk=True only bypasses the
-        re-halt on a cast the caster already got past — it is not the caster's
+        re-halt on a cast the caster already got past - it is not the caster's
         Soulfray consent, which the pending request does not persist (#3573).
 
         Focused unit test on the derivation: drives the real consent-accept

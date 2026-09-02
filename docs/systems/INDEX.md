@@ -6794,7 +6794,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `redirect_opponent_target`/`redirect_object_target` (mutually exclusive, both
     `None` = "away") declare a REDIRECT-flavor technique's saved-damage destination
     at declaration time (ADR-0032/0122), validated by `_validate_redirect_declaration`
-    — see combat `AGENT_GLOSSARY.md`'s Redirect entry. **Soulfray consent (#3573):**
+    - see combat `AGENT_GLOSSARY.md`'s Redirect entry. **Soulfray consent (#3573):**
     a keyword-only `confirm_soulfray_risk` (bool, default False) is captured at
     declaration time, since a reaction fires inside someone else's resolution and
     can't stop to prompt - stored on `CombatRoundAction.confirm_soulfray_risk` and
@@ -6837,7 +6837,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (deficit>0 narrates "tears at their own soul to hold the line over {ally}"); grades via
     the SAME `_grade_interpose_damage` the mundane path uses (SHIELD divisor included). A
     clean `blink`-flavored block relocates the ward to the guardian's own current position
-    (`force_move_to_position`) — a stand-in for #2206's `CombatRoundAction.cast_destination`,
+    (`force_move_to_position`) - a stand-in for #2206's `CombatRoundAction.cast_destination`,
     preferred once that field lands. See ADR-0118 (amended by ADR-0255, #3573) for why this
     rolls outside `use_technique`. **`redirect`-flavored resolution
     (#2210):** `saved = amount_before - pre_payload.amount` after grading (zero

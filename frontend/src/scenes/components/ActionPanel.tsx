@@ -786,6 +786,7 @@ export function ActionPanel({ sceneId }: Props) {
                             data-testid="cast-ward-soulfray-toggle"
                             checked={castWardSoulfrayAccepted}
                             onChange={(e) => setCastWardSoulfrayAccepted(e.target.checked)}
+                            disabled={performCast.isPending}
                           />
                           <span>
                             Hold this ward into Soulfray (fee{' '}

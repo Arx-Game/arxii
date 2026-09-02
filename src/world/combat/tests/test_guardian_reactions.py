@@ -310,7 +310,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         """Build a technique-guardian + protected ally sharing a LETHAL encounter.
 
         Shared by the affordability/consent matrix below (#3573) as well as the
-        original clean-success journey test — returns the pieces each caller
+        original clean-success journey test - returns the pieces each caller
         needs to assert on: ``(ally_participant, ally_vitals, anima,
         expected_cost, encounter)``. Encounter defaults to
         ``RiskLevel.LETHAL`` (``is_lethal`` reads that field, models.py:233) so

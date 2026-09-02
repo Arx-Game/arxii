@@ -10891,7 +10891,12 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
                 anima.current = remaining
                 anima.save(update_fields=["current"])
                 _pay_upkeep(char, anima, cost, inst, encounter)
-                remaining = 0
+                # deduct_anima (inside _pay_upkeep) re-fetches CharacterAnima by
+                # pk under select_for_update; SharedMemoryModel identity-maps by
+                # pk so that call returns this same instance and its glut-first
+                # spend already landed on anima.current - carry that forward
+                # instead of clobbering it back to 0 (#3573 review fix).
+                remaining = anima.current
             else:
                 inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         if remaining != anima.current:

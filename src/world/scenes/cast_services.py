@@ -431,7 +431,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
             ``[target_persona]`` (the pre-existing single-target path).
         soulfray_consented: The caster's Soulfray consent (#3573) to stamp on any
             condition minted by this cast. When ``None`` (the default, used by the
-            immediate path), derived from ``confirm_soulfray_risk`` — that flag
+            immediate path), derived from ``confirm_soulfray_risk`` - that flag
             means "the caster confirmed this cast" on the immediate path, so it
             doubles as consent there. The consent-accept path passes ``False``
             explicitly: its ``confirm_soulfray_risk=True`` only bypasses the

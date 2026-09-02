@@ -423,7 +423,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
         Delegates to ``world.combat.services.active_combat_engagement_for``
         (#3573), which reads the reverse OneToOne accessor
-        (``character.engagement``) rather than a fresh ``.filter()`` — the
+        (``character.engagement``) rather than a fresh ``.filter()`` - the
         descriptor caches the result (even the no-row case) on the
         identity-mapped ObjectDB instance, so the three escalation fields
         share at most one query per character and the warm API path pays

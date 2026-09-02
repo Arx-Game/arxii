@@ -62,3 +62,27 @@ class ReactiveUpkeepTests(TestCase):
         enc, _char, inst = self._setup(anima_current=1, upkeep=3)
         drain_reactive_upkeep(enc)
         self.assertFalse(type(inst).objects.filter(pk=inst.pk).exists())
+
+    def test_consented_upkeep_with_glut_does_not_zero_real_anima(self) -> None:
+        """Regression (#3573 review): deduct_anima spends glut before current, so a
+        consented payer with glut on hand pays upkeep out of glut without touching
+        ``current`` at all. The old ``remaining = 0`` post-loop write then clobbered
+        ``anima.current`` back to 0 even though it was never actually spent - this
+        asserts the real ``current``/``glut`` split survives instead.
+        """
+        enc = CombatEncounterFactory(risk_level=RiskLevel.LETHAL)
+        part = CombatParticipantFactory(encounter=enc)
+        char = part.character_sheet.character
+        CharacterAnimaFactory(character=char.sheet_data, current=1, glut=15, maximum=20)
+        tmpl = ConditionTemplateFactory(upkeep_anima_per_round=10)
+        inst = ConditionInstanceFactory(condition=tmpl, target=char, soulfray_consented=True)
+        with (
+            patch("world.combat.services.accumulate_soulfray") as accrue,
+            patch("world.combat.services._broadcast_commitment_line"),
+        ):
+            drain_reactive_upkeep(enc)
+        self.assertTrue(type(inst).objects.filter(pk=inst.pk).exists())
+        char.anima.refresh_from_db()
+        self.assertEqual(char.anima.current, 1)
+        self.assertEqual(char.anima.glut, 5)
+        self.assertEqual(accrue.call_args.kwargs["deficit"], 0)
