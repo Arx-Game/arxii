@@ -12,6 +12,8 @@ every technique-applied condition). When the ally is hit, the ward absorbs the
 damage but the reactive anima cost is billed to the CASTER, never the ally.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
@@ -122,6 +124,100 @@ class AllyWardReactiveCostTests(TestCase):
             ConditionInstance.objects.filter(pk=instance.pk).exists(),
             "ward should lapse when the CASTER can't afford upkeep, not the ally",
         )
+
+        # Ally never paid for a ward they didn't cast -> untouched.
+        ally_anima.refresh_from_db()
+        self.assertEqual(
+            ally_anima.current,
+            10,
+            "the ally bearing the ward should NOT be debited for a caster-sourced condition",
+        )
+
+    def test_consented_ward_fires_past_zero_and_accrues_for_the_caster(self) -> None:
+        ensure_force_field_content()
+        template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
+        caster_anima = CharacterAnimaFactory(character=caster.sheet_data, current=0, maximum=10)
+        ConditionInstanceFactory(
+            condition=template,
+            target=ally,
+            source_character=caster,
+            absorb_remaining=20,
+            soulfray_consented=True,
+        )
+        payload = DamagePreApplyPayload(
+            target=ally,
+            amount=30,
+            damage_type=None,
+            source=DamageSource(type="environment", ref=None),
+        )
+        with patch("world.magic.services.effect_handlers.accumulate_soulfray") as accrue:
+            absorb_pool(payload=payload)
+        self.assertEqual(payload.amount, 10)
+        caster_anima.refresh_from_db()
+        self.assertEqual(caster_anima.current, 0)
+        accrue.assert_called_once()
+        self.assertEqual(accrue.call_args.kwargs["deficit"], template.reactive_anima_cost)
+        self.assertEqual(accrue.call_args.kwargs["character"], caster)
+
+    def test_unconsented_ward_at_zero_still_fizzles(self) -> None:
+        ensure_force_field_content()
+        template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
+        CharacterAnimaFactory(character=caster.sheet_data, current=0, maximum=10)
+        ConditionInstanceFactory(
+            condition=template, target=ally, source_character=caster, absorb_remaining=20
+        )
+        payload = DamagePreApplyPayload(
+            target=ally,
+            amount=30,
+            damage_type=None,
+            source=DamageSource(type="environment", ref=None),
+        )
+        absorb_pool(payload=payload)
+        self.assertEqual(payload.amount, 30)
+
+    def test_consented_ally_upkeep_holds_the_caster_through_deficit(self) -> None:
+        """drain_reactive_upkeep: consented caster runs into deficit, ward survives."""
+        ensure_force_field_content()
+        template = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
+
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
+        CharacterAnimaFactory(character=caster.sheet_data, current=0, maximum=10)
+        ally_anima = CharacterAnimaFactory(character=ally.sheet_data, current=10, maximum=10)
+
+        ally_sheet = CharacterSheetFactory(character=ally)
+        encounter = CombatEncounterFactory()
+        CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=ally_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        instance = ConditionInstanceFactory(
+            condition=template,
+            target=ally,
+            source_character=caster,
+            soulfray_consented=True,
+        )
+
+        with (
+            patch("world.combat.services.accumulate_soulfray") as accrue,
+            patch("world.combat.services._broadcast_commitment_line"),
+        ):
+            drain_reactive_upkeep(encounter)
+
+        # Consented caster runs into deficit instead of the ward lapsing.
+        self.assertTrue(
+            ConditionInstance.objects.filter(pk=instance.pk).exists(),
+            "consented caster should hold the ward through deficit, not lapse it",
+        )
+        caster_anima = CharacterAnima.objects.get(character=caster.sheet_data)
+        self.assertEqual(caster_anima.current, 0)
+        accrue.assert_called_once()
 
         # Ally never paid for a ward they didn't cast -> untouched.
         ally_anima.refresh_from_db()

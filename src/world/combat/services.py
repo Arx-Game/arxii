@@ -10782,20 +10782,57 @@ def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[Available
     return detect_available_combos(enc, round_number)
 
 
-def _debit_ally_paid_upkeep(inst: ConditionInstance, cost: int) -> None:
+def _debit_ally_paid_upkeep(
+    inst: ConditionInstance, cost: int, *, encounter: CombatEncounter
+) -> None:
     """Debit a condition's upkeep from its ally ``source_character`` payer.
 
     The payer is the condition's ``source_character`` — distinct from the
-    bearer. If the payer cannot pay in full, the condition lapses (its
-    ``ConditionInstance`` row is deleted and any ``Trigger`` rows on it
-    cascade). Otherwise the payer's anima pool is debited immediately.
+    bearer. If the payer cannot pay in full and hasn't consented, the
+    condition lapses (its ``ConditionInstance`` row is deleted and any
+    ``Trigger`` rows on it cascade). A consented payer instead runs into
+    deficit and accrues Soulfray (#3573) via ``_pay_upkeep``.
     """
-    payer_anima = _get_anima(inst.source_character)
-    if payer_anima is None or payer_anima.current < cost:
+    payer = inst.source_character
+    payer_anima = _get_anima(payer)
+    if payer_anima is None:
         inst.delete()  # lapse — Trigger rows cascade via source_condition FK
-    else:
-        payer_anima.current -= cost
-        payer_anima.save(update_fields=["current"])
+        return
+    if payer_anima.current < cost and not inst.soulfray_consented:
+        inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+        return
+    _pay_upkeep(payer, payer_anima, cost, inst, encounter)
+
+
+def _pay_upkeep(
+    payer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    anima: CharacterAnima,
+    cost: int,
+    inst: ConditionInstance,
+    encounter: CombatEncounter,
+) -> None:
+    """Debit one round of upkeep; a consented payer runs into deficit and accrues (#3573).
+
+    Shared by the ally-paid and self-paid upkeep branches of
+    ``drain_reactive_upkeep`` so the debit-then-accrue sequencing lives in one
+    place. Unconsented callers must not reach here already-unaffordable — the
+    caller lapses the condition instead.
+    """
+    deficit = deduct_anima(payer, cost, lethal=encounter.is_lethal)
+    if not inst.soulfray_consented:
+        return
+    accumulate_soulfray(
+        character=payer,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=None,
+        lethal=encounter.is_lethal,
+    )
+    if deficit > 0:
+        _broadcast_commitment_line(
+            encounter, f"{payer} bleeds soul to keep the ward on {inst.target}."
+        )
 
 
 def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
@@ -10821,7 +10858,10 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     Anima is written at most once per participant (after the inner loop) so that
     a round with N self-sustained conditions produces a single UPDATE rather
     than N; ally-sourced conditions debit their payer's pool immediately since
-    that payer is not necessarily among the participants being iterated.
+    that payer is not necessarily among the participants being iterated. A
+    consented instance that runs unaffordable (#3573) is the rare exception: it
+    flushes the accumulated ``remaining`` immediately, then pays through
+    ``_pay_upkeep`` into deficit rather than lapsing.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
@@ -10843,10 +10883,15 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
         for inst in instances:
             cost = inst.condition.upkeep_anima_per_round
             if inst.source_character_id and inst.source_character_id != char.id:
-                _debit_ally_paid_upkeep(inst, cost)
+                _debit_ally_paid_upkeep(inst, cost, encounter=encounter)
                 continue
             if remaining >= cost:
                 remaining -= cost
+            elif inst.soulfray_consented:
+                anima.current = remaining
+                anima.save(update_fields=["current"])
+                _pay_upkeep(char, anima, cost, inst, encounter)
+                remaining = 0
             else:
                 inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         if remaining != anima.current:

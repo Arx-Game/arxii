@@ -19,6 +19,7 @@ from world.conditions.constants import (
 )
 from world.conditions.models import ConditionInstance
 from world.magic.models.anima import CharacterAnima
+from world.magic.services.soulfray import accumulate_soulfray
 
 
 def move_position(*, payload: Any) -> None:
@@ -97,7 +98,11 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
 
     Payer rule (#2208): ``source_character`` pays when set — an ally ward
     strains its caster, never its bearer. Self-cast wards are unchanged
-    (source == bearer). Unaffordable → False (silent fizzle), as before.
+    (source == bearer). Unaffordable and unconsented -> False (silent fizzle),
+    as before. A consented instance (#3573, ``soulfray_consented``) pays into
+    deficit through ``deduct_anima`` and accrues Soulfray on every fire;
+    lethality comes from the payer's live combat engagement, defaulting to
+    lethal out of combat.
 
     Returns True immediately when cost is 0 (free-to-fire condition).
     Does NOT use select_for_update — single-threaded game tick is the expected
@@ -108,10 +113,27 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
         return True
     payer = instance.source_character or instance.target
     anima = CharacterAnima.objects.filter(character_id=payer.pk).first()
-    if anima is None or anima.current < cost:
+    if anima is None:
         return False
-    anima.current -= cost
-    anima.save(update_fields=["current"])
+    if anima.current < cost and not instance.soulfray_consented:
+        return False
+
+    from world.combat.services import active_combat_engagement_for  # noqa: PLC0415
+    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+
+    engagement = active_combat_engagement_for(payer)
+    lethal = engagement.source.is_lethal if engagement is not None else True
+    deficit = deduct_anima(payer, cost, lethal=lethal)
+    if instance.soulfray_consented:
+        accumulate_soulfray(
+            character=payer,
+            anima=anima,
+            deficit=deficit,
+            soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+            check_result=None,
+            lethal=lethal,
+        )
     return True
 
 
