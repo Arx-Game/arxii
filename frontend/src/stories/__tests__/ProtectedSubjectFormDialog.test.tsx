@@ -2,7 +2,7 @@
  * ProtectedSubjectFormDialog tests (#2001 Task 8).
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -77,6 +77,17 @@ describe('ProtectedSubjectFormDialog', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Protect a subject')).toBeInTheDocument();
+  });
+
+  it('does not offer the asset kind (StoryProtectedSubject has no subject_asset column)', async () => {
+    const user = userEvent.setup();
+    makeMutationMock();
+    renderWithProviders(<ProtectedSubjectFormDialog storyId={1} />);
+
+    await user.click(screen.getByTestId('add-protected-subject-btn'));
+
+    const kindSelect = screen.getAllByTestId('mock-select')[0];
+    expect(within(kindSelect).queryByRole('option', { name: /asset/i })).not.toBeInTheDocument();
   });
 
   it('defaults to the custom kind with a freeform label field', async () => {

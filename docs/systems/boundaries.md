@@ -186,9 +186,9 @@ before its per-stake loop (batched: one query for the beat's withdrawn
 2. `elif stake.pk in withdrawn_stake_ids:` — **new** (#1771): a player who withdrew
    their treasured-subject sign-off mid-story never has that stake grade WIN/LOSS at
    a later ordinary completion, even though sibling stakes on the same beat grade
-   normally. Routes to `StakeResolutionColumn.WITHDRAWAL`; pends for a GM's
-   constrained pick if no authored WITHDRAWAL branch exists (same semantics as the
-   whole-encounter path).
+   normally. Routes to `StakeResolutionColumn.WITHDRAWAL`; records the empty outcome
+   (Decision 2, #3561) if no authored WITHDRAWAL branch exists, same as the
+   whole-encounter path.
 3. `else:` — ordinary WIN/LOSS machine grading, **unchanged**.
 
 If a player has both an active sign-off and an unrelated withdrawn sign-off for the

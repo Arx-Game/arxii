@@ -2673,11 +2673,12 @@ class StakeResolution(SharedMemoryModel):
         help_text=(
             "On automatic (machine) grading, if the stake's subject_sheet's "
             "actual lifecycle_state equals this value, THIS branch is "
-            "selected over the column's plain default (#1760 — generalizes "
+            "selected over the column's plain default (#1760, generalizing "
             "the old is-dead-only override to the full LifecycleState "
-            "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only "
-            "— blank means no machine-match, resolve via the plain column "
-            "default or a GM's Constrained Pick."
+            "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; "
+            "blank means no machine-match, so the branch keyed to the "
+            "completion's outcome_key resolves, else the plain column default "
+            "(#3561: never a GM pick)."
         ),
     )
     transitions_subject_asset = models.CharField(
@@ -2720,6 +2721,7 @@ class StakeResolution(SharedMemoryModel):
             sets_subject_lifecycle=self.sets_subject_lifecycle,
             machine_match_lifecycle_state=self.machine_match_lifecycle_state,
             npc_regard_delta=self.npc_regard_delta,
+            transitions_subject_asset=self.transitions_subject_asset,
         ):
             raise ValidationError({problem.field: problem.message})
 
@@ -2829,9 +2831,10 @@ class StakeOutcome(SharedMemoryModel):
     Mirrors EpisodeResolution (a GM narrative-decision audit) and
     BeatCompletion (an append-only ledger): **exactly one row per resolved
     stake** (unique constraint) — a stake's resolution fires once from the
-    locked contract, whether by machine grading or a GM's constrained pick.
-    ``resolution`` is null when no branch was authored for the chosen column
-    (audit honesty: an unready contract that ran anyway). Transition routing
+    locked contract, always machine-graded (#3561 retired the GM constrained
+    pick; every ``method`` is now MACHINE). ``resolution`` is null when no
+    branch was authored for the chosen column (audit honesty: an unready
+    contract that ran anyway). Transition routing
     (TransitionRequiredOutcome.required_stake_column) reads this row.
     """
 
@@ -2857,16 +2860,32 @@ class StakeOutcome(SharedMemoryModel):
         help_text="The authored branch that fired; null = no branch authored for the column.",
     )
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
-    method = models.CharField(max_length=12, choices=StakeOutcomeMethod.choices)
+    method = models.CharField(
+        max_length=12,
+        choices=StakeOutcomeMethod.choices,
+        help_text="Always MACHINE (#3561 retired the GM constrained pick).",
+    )
     resolved_by = models.ForeignKey(
         GM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="stake_outcomes",
-        help_text="The GM who picked the column (GM_PICK only; null for MACHINE).",
+        help_text=(
+            "Historical audit field from before #3561 retired the GM constrained "
+            "pick: the GM who picked the column, on rows resolved that way. "
+            "Always null on rows resolved since."
+        ),
     )
-    gm_notes = models.TextField(blank=True, default="")
+    gm_notes = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Historical audit field from before #3561 retired the GM constrained "
+            "pick: the deciding GM's notes, on rows resolved that way. Always blank "
+            "on rows resolved since."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

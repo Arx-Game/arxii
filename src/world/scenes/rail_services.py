@@ -93,6 +93,74 @@ def _serialize_beat_summary(beat: Any) -> dict[str, Any]:
     }
 
 
+def _serialize_stakes(beat: Any) -> list[dict[str, Any]]:
+    """The beat's stakes contract, per-stake, with its fired outcome if any (#3561).
+
+    ``StakeOutcome`` carries a unique constraint on ``stake`` - at most one row
+    per stake - so ``prefetched_outcomes[0]`` is the fired outcome
+    deterministically; a stake with no ``StakeOutcome`` yet (unresolved) gets
+    ``outcome: None``. ``resolution`` is nullable on ``StakeOutcome`` (no branch
+    was authored for the fired column), so ``outcome_key``/``resolution_summary``
+    fall back to blank in that case, never a crash.
+    """
+    from django.db.models import Prefetch  # noqa: PLC0415
+
+    from world.stories.models import StakeOutcome  # noqa: PLC0415
+
+    stakes = list(
+        beat.stakes.prefetch_related(
+            Prefetch(
+                "outcomes",
+                queryset=StakeOutcome.objects.select_related("resolution"),
+                to_attr="prefetched_outcomes",
+            )
+        )
+    )
+    payload: list[dict[str, Any]] = []
+    for stake in stakes:
+        outcome = stake.prefetched_outcomes[0] if stake.prefetched_outcomes else None
+        outcome_payload: dict[str, Any] | None = None
+        if outcome is not None:
+            resolution = outcome.resolution
+            outcome_payload = {
+                "column": outcome.column,
+                "outcome_key": resolution.outcome_key if resolution is not None else "",
+                "resolution_summary": (
+                    resolution.narrative_summary if resolution is not None else ""
+                ),
+            }
+        payload.append(
+            {
+                "id": stake.pk,
+                "player_summary": stake.player_summary,
+                "severity": stake.severity,
+                "subject_kind": stake.subject_kind,
+                "outcome": outcome_payload,
+            }
+        )
+    return payload
+
+
+def _serialize_activation(beat: Any) -> dict[str, Any] | None:
+    """The beat's locked contract state, if it has ever been activated (#3561).
+
+    Prefers the open (unresolved) activation; when none is open, falls back to
+    the most recent one so a resolved contract still shows its lock instead of
+    silently disappearing from the rail. ``None`` only when the beat has never
+    been activated.
+    """
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    activation = get_open_activation(beat) or beat.stake_activations.order_by("-locked_at").first()
+    if activation is None:
+        return None
+    return {
+        "locked_at": activation.locked_at,
+        "effective_risk": activation.effective_risk,
+        "is_ready": activation.is_ready,
+    }
+
+
 def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]:
     """Compose the GM story rail payload for ``user`` viewing ``scene``.
 
@@ -110,6 +178,8 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
     beat = scene.running_beat
     beat_payload: dict[str, Any] | None = None
     protected_subjects: Any = []
+    stakes: Any = []
+    activation: Any = None
 
     if beat is not None:
         beat_payload = _serialize_beat_summary(beat)
@@ -125,6 +195,8 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
             protected_subjects = StoryProtectedSubjectSerializer(
                 story.protected_subjects.filter(is_active=True), many=True
             ).data
+            stakes = _serialize_stakes(beat)
+            activation = _serialize_activation(beat)
 
     clue_placements: list[dict[str, Any]] = []
     if user.is_staff and scene.location_id is not None:
@@ -152,6 +224,8 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
     return {
         "beat": beat_payload,
         "protected_subjects": protected_subjects,
+        "stakes": stakes,
+        "activation": activation,
         "clue_placements": clue_placements,
         "participants": participants,
     }

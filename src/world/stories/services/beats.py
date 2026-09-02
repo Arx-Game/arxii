@@ -330,6 +330,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
+            outcome_key=completion.outcome_key,
         )
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415

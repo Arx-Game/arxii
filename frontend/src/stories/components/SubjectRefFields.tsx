@@ -15,6 +15,14 @@
  * - FACTION → society-or-organization toggle + name search, reusing
  *   `searchSocieties`/`searchOrganizations` from `@/events/queries` (the
  *   same pickers `EventInvitations` uses) via `EntitySearchField`.
+ * - ASSET (subject_asset, #3561) → name search over NPCAsset via
+ *   `searchNpcAssets` from `stories/api.ts`, same `EntitySearchField` as
+ *   FACTION. Only `Stake`/`StakeRequest` carry `subject_asset` today -
+ *   `StoryProtectedSubject`/`CustodyClearance` (this component's other two
+ *   consumers) don't, so `ProtectedSubjectFormDialog` and
+ *   `RequestClearanceDialog` pass `excludeKinds={['asset']}` to hide the
+ *   ASSET option from their kind selectors - their models have no
+ *   `subject_asset` column to submit a pick into.
  * - PERSONAL_JEOPARDY / NPC_FATE (subject_sheet) and ITEM (subject_item) —
  *   no name-search endpoint exists for CharacterSheet or ItemInstance by name
  *   (only retrieve-by-id ViewSets), so these are plain numeric id inputs,
@@ -34,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { searchOrganizations, searchSocieties } from '@/events/queries';
+import { searchNpcAssets } from '../api';
 import type { SubjectKindEnum } from '../types';
 
 import { SUBJECT_KIND_LABELS } from '@/shared/subjectKinds';
@@ -46,6 +55,7 @@ export interface SubjectRefValue {
   subject_item: number | null;
   subject_society: number | null;
   subject_organization: number | null;
+  subject_asset: number | null;
   subject_label: string;
 }
 
@@ -56,6 +66,7 @@ export function emptySubjectRef(kind: SubjectKindEnum = 'custom'): SubjectRefVal
     subject_item: null,
     subject_society: null,
     subject_organization: null,
+    subject_asset: null,
     subject_label: '',
   };
 }
@@ -64,6 +75,8 @@ interface Props {
   value: SubjectRefValue;
   onChange: (value: SubjectRefValue) => void;
   disabled?: boolean;
+  /** Kinds to hide from the selector, e.g. ['asset'] where the consumer's model has no subject_asset column. */
+  excludeKinds?: SubjectKindEnum[];
 }
 
 type FactionTarget = 'society' | 'organization';
@@ -75,7 +88,7 @@ function numOrNull(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function SubjectRefFields({ value, onChange, disabled }: Props) {
+export function SubjectRefFields({ value, onChange, disabled, excludeKinds }: Props) {
   const [factionTarget, setFactionTarget] = useState<FactionTarget>(
     value.subject_organization != null ? 'organization' : 'society'
   );
@@ -83,6 +96,10 @@ export function SubjectRefFields({ value, onChange, disabled }: Props) {
   function handleKindChange(kind: SubjectKindEnum) {
     onChange(emptySubjectRef(kind));
   }
+
+  const kindOptions = (Object.keys(SUBJECT_KIND_LABELS) as SubjectKindEnum[]).filter(
+    (kind) => !excludeKinds?.includes(kind)
+  );
 
   return (
     <div className="space-y-3">
@@ -97,7 +114,7 @@ export function SubjectRefFields({ value, onChange, disabled }: Props) {
             <SelectValue placeholder="Kind" />
           </SelectTrigger>
           <SelectContent>
-            {(Object.keys(SUBJECT_KIND_LABELS) as SubjectKindEnum[]).map((kind) => (
+            {kindOptions.map((kind) => (
               <SelectItem key={kind} value={kind}>
                 {SUBJECT_KIND_LABELS[kind]}
               </SelectItem>
@@ -182,6 +199,17 @@ export function SubjectRefFields({ value, onChange, disabled }: Props) {
             />
           )}
         </div>
+      )}
+
+      {value.subject_kind === 'asset' && (
+        <EntitySearchField
+          label="Asset"
+          placeholder="Search NPC assets…"
+          value={value.subject_asset}
+          onChange={(id) => onChange({ ...value, subject_asset: id })}
+          search={searchNpcAssets}
+          disabled={disabled}
+        />
       )}
 
       {(value.subject_kind === 'location' ||

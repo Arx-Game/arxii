@@ -8,6 +8,7 @@ import type {
   ReactionEmojiEntry,
   SceneRoundModeValue,
   SceneScenarioPayload,
+  SceneStakesSummary,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -161,6 +162,29 @@ export function useSceneScenarioQuery(sceneId: string, enabled: boolean) {
     queryFn: () => fetchSceneScenario(sceneId),
     enabled,
     refetchInterval: 5_000,
+  });
+}
+
+/**
+ * Fetch what the scene's running beat wagers (#3561) - the party's opt-in
+ * read. A player never receives the running beat id from any scene payload
+ * (see `SceneDetail.running_beat`'s doc comment above), so this hits the
+ * scene-scoped endpoint, which resolves the beat server-side, rather than
+ * the beat-scoped `GET /api/beats/{id}/stakes-summary/`. Returns null on
+ * 401/403/404, mirroring `fetchGMStoryRail`'s convention.
+ */
+export async function fetchSceneStakesSummary(sceneId: string): Promise<SceneStakesSummary | null> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/stakes-summary/`);
+  if (res.status === 401 || res.status === 403 || res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to load the scene stakes summary');
+  return res.json();
+}
+
+export function useSceneStakesSummaryQuery(sceneId: string, enabled: boolean) {
+  return useQuery<SceneStakesSummary | null>({
+    queryKey: ['scene-stakes-summary', sceneId],
+    queryFn: () => fetchSceneStakesSummary(sceneId),
+    enabled,
   });
 }
 

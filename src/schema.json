@@ -853,9 +853,22 @@ paths:
   /api/assets/:
     get:
       operationId: assets_list
-      description: Read endpoints for the player's own promoted assets + introduce
-        action.
+      description: |-
+        Read endpoints for the player's own promoted assets + introduce action.
+
+        Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+        search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+        per-player private content (name, role_context, status, created_at), so
+        that widening is scoped narrowly: a non-staff GM only sees assets
+        promoted by a character who participates in a story that GM LEADS, never
+        every asset in the game (#3561 review fix - the first cut let any
+        GMProfile holder, unrelated to the asset's owner, list every player's
+        private assets, which was a privacy leak).
       parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
       - name: page
         required: false
         in: query
@@ -876,8 +889,17 @@ paths:
   /api/assets/{id}/:
     get:
       operationId: assets_retrieve
-      description: Read endpoints for the player's own promoted assets + introduce
-        action.
+      description: |-
+        Read endpoints for the player's own promoted assets + introduce action.
+
+        Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+        search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+        per-player private content (name, role_context, status, created_at), so
+        that widening is scoped narrowly: a non-staff GM only sees assets
+        promoted by a character who participates in a story that GM LEADS, never
+        every asset in the game (#3561 review fix - the first cut let any
+        GMProfile holder, unrelated to the asset's owner, list every player's
+        private assets, which was a privacy leak).
       parameters:
       - in: path
         name: id
@@ -31571,6 +31593,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/scenes/{id}/stakes-summary/:
+    get:
+      operationId: scenes_stakes_summary_retrieve
+      description: |-
+        GET /api/scenes/{id}/stakes-summary/ (#3561) - what the scene's running beat
+        wagers, for the party's opt-in prompt.
+
+        Composed read only -- no writes, no models, no migration. Scene-level gate via
+        ``get_permissions``: ``IsAuthenticated`` + ``ReadOnlyOrSceneParticipant`` -- the
+        same participant/staff floor ``scenario``/``gm-rail`` use (``Scene.is_viewable_by``).
+
+        Exists because a player never receives the running beat id from any scene
+        payload (``SceneListSerializer``/``SceneDetailSerializer`` deliberately omit
+        ``running_beat`` -- see the #3562 leak rule this preserves): the beat-scoped
+        ``GET /api/beats/{id}/stakes-summary/`` (``BeatViewSet.stakes_summary``) is
+        unreachable to a player who was never handed a beat id, so this resolves
+        ``scene.running_beat`` server-side and delegates to the identical
+        ``stakes_summary_for_beat`` builder -- one payload shape, two entry points.
+        Leaks only ``player_summary``/``severity`` per stake, plus declared/effective
+        risk and readiness (#1770 pillar 9); branch contents (``StakeResolution`` rows)
+        are never included.
+
+        When the scene runs no beat, returns the same shape with ``declared_risk``/
+        ``effective_risk`` null and an empty ``stakes`` list, built by hand rather than
+        through ``StakesSummarySerializer`` (whose ``declared_risk``/``effective_risk``
+        ``CharField``s forbid null) -- there is no beat to build a
+        ``StakesSummarySerializer``-shaped instance from.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakesSummary'
+          description: ''
   /api/scenes/{id}/truncate-precapture/:
     post:
       operationId: scenes_truncate_precapture_create
@@ -34704,48 +34771,6 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/stakes/{id}/resolve/:
-    post:
-      operationId: stakes_resolve_create
-      description: |-
-        POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
-
-        Lead GM, staff, or an AGM with an approved claim on the stake's beat
-        picks one of the stake's AUTHORED resolution columns; the branch fires
-        exactly like the machine path (pool + writers) and the StakeOutcome
-        audit row records method=GM_PICK with the GM and notes. Optional
-        ``participants`` / ``extra_participants`` carry the personas the
-        branch's pool and affection writer credit (MarkBeat semantics).
-        Returns 201 with the StakeOutcome.
-
-        The LEGEND_AWARD participant guards fire inside the service's pool
-        walk — pre-validating them in the serializer would duplicate
-        resolve_pool_consequences; they are surfaced as 400 here (same
-        exception-block carve-out as EpisodeViewSet.resolve).
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this stake.
-        required: true
-      tags:
-      - stakes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StakeRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Stake'
-          description: ''
   /api/stories/:
     get:
       operationId: stories_list
@@ -51057,11 +51082,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GMStoryRailParticipant'
+        stakes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMStoryRailStake'
+        activation:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailActivation'
+          nullable: true
       required:
+      - activation
       - beat
       - clue_placements
       - participants
       - protected_subjects
+      - stakes
+    GMStoryRailActivation:
+      type: object
+      description: |-
+        The running beat's lock state: the open activation, or the most recent
+        resolved one when none is open.
+      properties:
+        locked_at:
+          type: string
+          format: date-time
+        effective_risk:
+          type: string
+        is_ready:
+          type: boolean
+      required:
+      - effective_risk
+      - is_ready
+      - locked_at
     GMStoryRailBeat:
       type: object
       description: The running beat's authored state, gated per-field by story standing.
@@ -51135,6 +51187,43 @@ components:
       required:
       - character_sheet_id
       - name
+    GMStoryRailStake:
+      type: object
+      description: One stake on the running beat's contract, story-standing viewers
+        only.
+      properties:
+        id:
+          type: integer
+        player_summary:
+          type: string
+        severity:
+          type: integer
+        subject_kind:
+          type: string
+        outcome:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailStakeOutcome'
+          nullable: true
+      required:
+      - id
+      - outcome
+      - player_summary
+      - severity
+      - subject_kind
+    GMStoryRailStakeOutcome:
+      type: object
+      description: The fired branch for one stake, if the contract has resolved it.
+      properties:
+        column:
+          type: string
+        outcome_key:
+          type: string
+        resolution_summary:
+          type: string
+      required:
+      - column
+      - outcome_key
+      - resolution_summary
     GMSummonOffer:
       type: object
       description: |-
@@ -55322,11 +55411,8 @@ components:
     MethodEnum:
       enum:
       - machine
-      - gm_pick
       type: string
-      description: |-
-        * `machine` - Machine
-        * `gm_pick` - GM pick
+      description: '* `machine` - Machine'
     MetricEnum:
       enum:
       - allure
@@ -66645,6 +66731,10 @@ components:
           nullable: true
           description: For FACTION subjects (organization-level). Nulls if the org
             is deleted.
+        subject_asset:
+          type: integer
+          nullable: true
+          description: For ASSET subjects. Nulls if the asset is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -66713,6 +66803,12 @@ components:
             or OrganizationReputation (whichever of subject_society/subject_organization
             is set) — previously a dead FK (subject_society/subject_organization were
             never read); this is the fix.'
+        npc_regard_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind
+            is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row.
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -66728,7 +66824,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -66739,6 +66835,13 @@ components:
           oneOf:
           - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        transitions_subject_asset:
+          type: string
+          description: On fire, transition the stake's subject_asset to this AssetStatus
+            (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct
+            asset transition (use the consequence_pool for check-gated transitions
+            instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes.
+          maxLength: 20
     PatchedStakeRewardLineRequest:
       type: object
       description: |-
@@ -74892,6 +74995,10 @@ components:
           nullable: true
           description: For FACTION subjects (organization-level). Nulls if the org
             is deleted.
+        subject_asset:
+          type: integer
+          nullable: true
+          description: For ASSET subjects. Nulls if the asset is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -75012,14 +75119,23 @@ components:
           allOf:
           - $ref: '#/components/schemas/MethodEnum'
           readOnly: true
+          description: |-
+            Always MACHINE (#3561 retired the GM constrained pick).
+
+            * `machine` - Machine
         resolved_by:
           type: integer
           readOnly: true
           nullable: true
-          description: The GM who picked the column (GM_PICK only; null for MACHINE).
+          description: 'Historical audit field from before #3561 retired the GM constrained
+            pick: the GM who picked the column, on rows resolved that way. Always
+            null on rows resolved since.'
         gm_notes:
           type: string
           readOnly: true
+          description: 'Historical audit field from before #3561 retired the GM constrained
+            pick: the deciding GM''s notes, on rows resolved that way. Always blank
+            on rows resolved since.'
         created_at:
           type: string
           format: date-time
@@ -75081,6 +75197,10 @@ components:
           nullable: true
           description: For FACTION subjects (organization-level). Nulls if the org
             is deleted.
+        subject_asset:
+          type: integer
+          nullable: true
+          description: For ASSET subjects. Nulls if the asset is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -75155,6 +75275,12 @@ components:
             or OrganizationReputation (whichever of subject_society/subject_organization
             is set) — previously a dead FK (subject_society/subject_organization were
             never read); this is the fix.'
+        npc_regard_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind
+            is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row.
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -75170,7 +75296,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -75181,6 +75307,13 @@ components:
           oneOf:
           - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        transitions_subject_asset:
+          type: string
+          description: On fire, transition the stake's subject_asset to this AssetStatus
+            (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct
+            asset transition (use the consequence_pool for check-gated transitions
+            instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes.
+          maxLength: 20
         reward_lines:
           type: array
           items:
@@ -75251,6 +75384,12 @@ components:
             or OrganizationReputation (whichever of subject_society/subject_organization
             is set) — previously a dead FK (subject_society/subject_organization were
             never read); this is the fix.'
+        npc_regard_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind
+            is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row.
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -75266,7 +75405,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -75277,6 +75416,13 @@ components:
           oneOf:
           - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        transitions_subject_asset:
+          type: string
+          description: On fire, transition the stake's subject_asset to this AssetStatus
+            (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct
+            asset transition (use the consequence_pool for check-gated transitions
+            instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes.
+          maxLength: 20
       required:
       - column
       - stake

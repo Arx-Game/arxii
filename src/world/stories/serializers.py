@@ -3036,86 +3036,6 @@ class ResolveForeclosureInputSerializer(serializers.Serializer):
         return story.global_progress if hasattr(story, "global_progress") else None
 
 
-class ResolveStakeInputSerializer(serializers.Serializer):
-    """Input for POST /api/stakes/{id}/resolve/ — the GM constrained pick.
-
-    Context required:
-        stake (Stake): the stake being resolved.
-
-    Validates:
-        - The stake has no StakeOutcome yet (a pick is final; idempotent API).
-        - The chosen column is among the stake's AUTHORED resolutions — the
-          pick is constrained, never free composition.
-        - The stake's beat has completed (outcome != UNSATISFIED).
-
-    ``participants`` / ``extra_participants`` — same semantics as
-    MarkBeatInputSerializer: GROUP-scope LEGEND_AWARD branch pools need an
-    explicit participant list; CHARACTER scope may credit extras alongside
-    the progress's primary persona.
-    """
-
-    column = serializers.ChoiceField(choices=StakeResolutionColumn.choices)
-    outcome_key = serializers.CharField(required=False, allow_blank=True, default="")
-    gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
-    participants = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Persona.objects.all(),
-        required=False,
-        default=list,
-        help_text=(
-            "GROUP scope: explicit Persona PKs credited by the branch's pool "
-            "(required for LEGEND_AWARD pools) and affection writer."
-        ),
-    )
-    extra_participants = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Persona.objects.all(),
-        required=False,
-        default=list,
-        help_text=(
-            "CHARACTER scope only: additional personas to credit alongside the "
-            "progress's primary persona."
-        ),
-    )
-
-    def validate(self, attrs: Any) -> Any:
-        stake = self.context["stake"]
-
-        # Query the table directly — the view's prefetched `stake.outcomes`
-        # cache on the idmapper-shared instance can be stale within a request
-        # cycle, and this check must be point-in-time correct.
-        if StakeOutcome.objects.filter(stake=stake).exists():
-            raise serializers.ValidationError(
-                {"non_field_errors": "This stake has already been resolved."}
-            )
-
-        authored = set(stake.resolutions.values_list("column", "outcome_key"))
-        pick = (attrs["column"], attrs.get("outcome_key", ""))
-        if pick not in authored:
-            branches = sorted(authored) or "none authored"
-            raise serializers.ValidationError(
-                {
-                    "column": (
-                        "A GM pick is constrained to the stake's authored "
-                        f"(column, outcome_key) branches ({branches}) — never free "
-                        "composition. Author the branch first."
-                    )
-                }
-            )
-
-        if stake.beat.outcome == BeatOutcome.UNSATISFIED:
-            raise serializers.ValidationError(
-                {
-                    "non_field_errors": (
-                        "The stake's beat has not completed; stakes resolve at or "
-                        "after beat completion."
-                    )
-                }
-            )
-
-        return attrs
-
-
 class StakeSerializer(serializers.ModelSerializer):
     """Full serializer for Stake (#1770 pillar 1).
 
@@ -3144,6 +3064,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_item",
             "subject_society",
             "subject_organization",
+            "subject_asset",
             "subject_label",
             "player_summary",
             "outcomes",
@@ -3247,6 +3168,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_item",
             "subject_society",
             "subject_organization",
+            "subject_asset",
             "subject_label",
             "player_summary",
         )
@@ -3426,9 +3348,10 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
         """Reject the write if any involved resolution's beat is locked or completed.
 
         #1770 PR3 review: re-pointing to/from a resolution whose beat is locked
-        is rejected either way. Once the completion tail closes the activation
-        (with stakes possibly pending a GM pick), the open-activation lock no
-        longer bites — without the completed-beat check reward lines could be
+        is rejected either way. Once the completion tail closes the activation,
+        the open-activation lock no longer bites - every stake already resolved
+        synchronously inside that same atomic tail (there is no pending-decision
+        window) - without the completed-beat check reward lines could be
         re-authored after the contract ran and pay out on the stale activation's
         readiness verdict.
         """
@@ -3489,8 +3412,10 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "narrative_summary",
             "forfeits_subject_item",
             "subject_standing_delta",
+            "npc_regard_delta",
             "sets_subject_lifecycle",
             "machine_match_lifecycle_state",
+            "transitions_subject_asset",
             "reward_lines",
         ]
         read_only_fields = ["id"]
@@ -3541,11 +3466,14 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
     def _enforce_lock_state(self, stake: Any, old_stake: Any, is_repoint: bool) -> None:
         """Lock check (#1770 PR1 review) + completed-beat check (#1770 PR3 review).
 
-        Re-pointing to/from a stake whose beat is locked is rejected either way —
-        check both sides when re-pointing. The open-activation lock alone leaves a
-        hole — the completion tail closes the activation while stakes can still
-        pend for a GM pick, which would reopen editing on a contract that already
-        ran. Contract editing ends when the beat completes (pillar 8's spirit).
+        Re-pointing to/from a stake whose beat is locked is rejected either way,
+        so check both sides when re-pointing. The open-activation lock alone
+        leaves a hole - every stake resolves synchronously inside the same
+        atomic completion tail that closes the activation (there is no
+        pending-decision window), but without this check reward lines could
+        still be re-authored right after that tail runs, reopening editing on
+        a contract that already ran. Contract editing ends when the beat
+        completes (pillar 8's spirit).
         """
         from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
@@ -3585,6 +3513,8 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             subject_standing_delta=merged("subject_standing_delta", default=0),
             sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
             machine_match_lifecycle_state=merged("machine_match_lifecycle_state", default=""),
+            npc_regard_delta=merged("npc_regard_delta", default=0),
+            transitions_subject_asset=merged("transitions_subject_asset", default=""),
         )
         if problems:
             raise serializers.ValidationError({p.field: p.message for p in problems})

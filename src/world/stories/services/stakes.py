@@ -177,6 +177,47 @@ def _stake_column_problems(stakes: list[Stake]) -> list[str]:
     return problems
 
 
+def _named_branch_problems(beat: Beat, stakes: list[Stake]) -> list[str]:
+    """Every column with a named branch (non-blank outcome_key) needs a default
+    (blank outcome_key) branch for the machine-grading fallback (#3561); when
+    the beat requires a mission, a named outcome_key must also match an option
+    key its scenario actually declares.
+
+    Scenario keys are fetched once (not per stake) via a single query keyed
+    off ``beat.required_mission_id`` - a beat with no required mission skips
+    the declared-key check entirely (there is no scenario to check against).
+    """
+    problems: list[str] = []
+    scenario_keys: set[str] | None = None
+    if beat.required_mission_id is not None:
+        from world.missions.models import MissionOption  # noqa: PLC0415
+
+        scenario_keys = set(
+            MissionOption.objects.filter(node__template_id=beat.required_mission_id).values_list(
+                "key", flat=True
+            )
+        )
+
+    for stake in stakes:
+        outcome_keys_by_column: dict[str, set[str]] = {}
+        for resolution in stake.prefetched_resolutions:
+            outcome_keys_by_column.setdefault(resolution.column, set()).add(resolution.outcome_key)
+        for column, outcome_keys in outcome_keys_by_column.items():
+            named_keys = outcome_keys - {""}
+            if named_keys and "" not in outcome_keys:
+                problems.append(
+                    f"{column} on stake #{stake.pk} has a named branch but no default branch"
+                )
+            if scenario_keys is not None:
+                problems.extend(
+                    f"stake #{stake.pk} names branch '{key}' that no option of "
+                    "the beat's scenario declares"
+                    for key in sorted(named_keys)
+                    if key not in scenario_keys
+                )
+    return problems
+
+
 def _calibration_band_problems(
     beat: Beat, calibration: RiskCalibration, stakes: list[Stake]
 ) -> list[str]:
@@ -261,11 +302,14 @@ def reward_band_problems_for_beat(beat: Beat) -> list[str]:
 
     Used by ``validate_stakes_readiness`` (via ``_calibration_band_problems``,
     which passes its own prefetch) AND re-run at pay time by
-    ``stake_resolution._apply_stake_rewards`` — the readiness verdict frozen
-    on the activation can go stale if reward lines change after the beat
-    completes (the GM-pick window), so the payout re-verifies the band
-    against live data. Missing calibration / no stakes / risk NONE return []
-    here (those are readiness problems, not band problems).
+    ``stake_resolution._apply_stake_rewards`` - the readiness verdict frozen
+    on the activation can go stale if reward lines changed earlier in the
+    activation's life; every stake now resolves synchronously inside the
+    same atomic completion tail that closes the activation, so there is no
+    post-completion pending-decision window, and this re-check exists for
+    staleness from before that tail ran. Missing calibration / no stakes /
+    risk NONE return [] here (those are readiness problems, not band
+    problems).
     """
     if beat.risk == RenownRisk.NONE:
         return []
@@ -345,6 +389,7 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     if not stakes:
         problems.append("no stakes declared")
     problems.extend(_stake_column_problems(stakes))
+    problems.extend(_named_branch_problems(beat, stakes))
 
     if calibration is not None and stakes:
         problems.extend(_calibration_band_problems(beat, calibration, stakes))

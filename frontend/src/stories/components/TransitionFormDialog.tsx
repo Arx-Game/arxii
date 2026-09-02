@@ -35,14 +35,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Combobox } from '@/components/ui/combobox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   useSaveTransitionWithOutcomes,
   useTransitionRequiredOutcomes,
   useEpisodeList,
   useBeatList,
+  useStakes,
 } from '../queries';
 import type { Transition } from '../types';
 import { formSubmitLabel } from '../formSubmitLabel';
+import { COLUMN_OPTIONS } from './stakes/constants';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -76,9 +79,10 @@ interface RoutingRow {
    */
   optionKey?: string;
   /** Stake-level routing rows (#1770 PR2): set when the requirement routes on
-   * a StakeOutcome column instead of the beat outcome. Authored via the
-   * stakes editor / API; this dialog preserves them through the bulk-save
-   * round-trip but only adds beat-level rows. */
+   * a StakeOutcome column instead of the beat outcome. This dialog's
+   * AddRoutingRow can author these directly ("Stake column" option) as well
+   * as preserve rows authored via the stakes editor / API through the
+   * bulk-save round-trip. */
   stakeId?: number;
   stakeColumn?: string;
 }
@@ -119,6 +123,12 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
   const [beatId, setBeatId] = useState('');
   const [outcome, setOutcome] = useState('success');
   const [optionKey, setOptionKey] = useState('');
+  // #3561: a row may route on the beat's own outcome, or on a StakeOutcome
+  // column fired by the beat's stakes contract. The two are mutually
+  // exclusive per row.
+  const [routeOn, setRouteOn] = useState<'outcome' | 'stake'>('outcome');
+  const [stakeId, setStakeId] = useState('');
+  const [stakeColumn, setStakeColumn] = useState<string>(COLUMN_OPTIONS[0].value);
   const [adding, setAdding] = useState(false);
 
   const { data: beatsData } = useBeatList({ episode: episodeId, page_size: 100 });
@@ -137,6 +147,25 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
     { value: '', label: 'Any option' },
     ...scenarioOptionKeys.map((key) => ({ value: key, label: key })),
   ];
+
+  // #3561: the selected beat's stakes, for the stake-column routing mode.
+  const numericBeatId = beatId ? Number(beatId) : 0;
+  const { data: stakesData } = useStakes(numericBeatId, routeOn === 'stake' && numericBeatId > 0);
+  const stakes = stakesData?.results ?? [];
+  const stakeOptions = stakes.map((s) => ({
+    value: String(s.id),
+    label: `#${s.id} ${s.player_summary.slice(0, 50)}`,
+  }));
+
+  function resetAndClose() {
+    setBeatId('');
+    setOutcome('success');
+    setOptionKey('');
+    setRouteOn('outcome');
+    setStakeId('');
+    setStakeColumn(COLUMN_OPTIONS[0].value);
+    setAdding(false);
+  }
 
   if (!adding) {
     return (
@@ -168,6 +197,7 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
           onValueChange={(v) => {
             setBeatId(v);
             setOptionKey('');
+            setStakeId('');
           }}
           placeholder="Select beat…"
           searchPlaceholder="Search beats…"
@@ -175,25 +205,76 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Required Outcome</Label>
-        <Combobox
-          items={OUTCOME_OPTIONS}
-          value={outcome}
-          onValueChange={setOutcome}
-          placeholder="Select outcome…"
-        />
+        <Label className="text-xs">Route On</Label>
+        <RadioGroup
+          value={routeOn}
+          onValueChange={(v) => {
+            setRouteOn(v as 'outcome' | 'stake');
+            setStakeId('');
+          }}
+          className="flex gap-4"
+          data-testid="routing-row-route-on"
+        >
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="outcome" id="routing-row-route-on-outcome" />
+            <span>Beat outcome</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="stake" id="routing-row-route-on-stake" />
+            <span>Stake column</span>
+          </label>
+        </RadioGroup>
       </div>
-      {selectedBeat?.scenario != null && (
-        <div className="space-y-1">
-          <Label className="text-xs">Option</Label>
-          <Combobox
-            items={optionKeyOptions}
-            value={optionKey}
-            onValueChange={setOptionKey}
-            placeholder="Any option"
-            data-testid="routing-row-option-key"
-          />
-        </div>
+      {routeOn === 'outcome' ? (
+        <>
+          <div className="space-y-1">
+            <Label className="text-xs">Required Outcome</Label>
+            <Combobox
+              items={OUTCOME_OPTIONS}
+              value={outcome}
+              onValueChange={setOutcome}
+              placeholder="Select outcome…"
+            />
+          </div>
+          {selectedBeat?.scenario != null && (
+            <div className="space-y-1">
+              <Label className="text-xs">Option</Label>
+              <Combobox
+                items={optionKeyOptions}
+                value={optionKey}
+                onValueChange={setOptionKey}
+                placeholder="Any option"
+                data-testid="routing-row-option-key"
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <Label className="text-xs">Stake</Label>
+            <Combobox
+              items={stakeOptions}
+              value={stakeId}
+              onValueChange={setStakeId}
+              placeholder={beatId ? 'Select stake…' : 'Select a beat first'}
+              searchPlaceholder="Search stakes…"
+              emptyMessage="No stakes found."
+              disabled={!beatId}
+              data-testid="routing-row-stake"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Column</Label>
+            <Combobox
+              items={COLUMN_OPTIONS}
+              value={stakeColumn}
+              onValueChange={setStakeColumn}
+              placeholder="Select column…"
+              data-testid="routing-row-stake-column"
+            />
+          </div>
+        </>
       )}
       <div className="flex gap-2">
         <Button
@@ -203,18 +284,26 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
             if (!beatId) return;
             const beatLabel =
               beatOptions.find((o) => o.value === beatId)?.label ?? `Beat #${beatId}`;
-            onAdd({
-              beatId: Number(beatId),
-              outcome,
-              beatLabel,
-              optionKey: optionKey || undefined,
-            });
-            setBeatId('');
-            setOutcome('success');
-            setOptionKey('');
-            setAdding(false);
+            if (routeOn === 'stake') {
+              if (!stakeId) return;
+              onAdd({
+                beatId: Number(beatId),
+                outcome: '',
+                beatLabel,
+                stakeId: Number(stakeId),
+                stakeColumn,
+              });
+            } else {
+              onAdd({
+                beatId: Number(beatId),
+                outcome,
+                beatLabel,
+                optionKey: optionKey || undefined,
+              });
+            }
+            resetAndClose();
           }}
-          disabled={!beatId}
+          disabled={!beatId || (routeOn === 'stake' && !stakeId)}
           data-testid="confirm-routing-row"
         >
           Add
