@@ -1,8 +1,8 @@
 """Episode resolution service for the stories system.
 
 Public API:
-    resolve_episode(*, progress, chosen_transition=None, gm_notes="", resolved_by=None)
-        — evaluates eligibility, selects or validates the transition, creates an
+    resolve_episode(*, progress, gm_notes="", resolved_by=None)
+        — evaluates eligibility, selects the transition, creates an
           EpisodeResolution row, and advances progress.
 """
 
@@ -11,68 +11,35 @@ from typing import Any
 from django.db import transaction
 
 from world.gm.models import GMProfile
-from world.stories.constants import StoryMaturity, StoryScope, TransitionMode
-from world.stories.exceptions import AmbiguousTransitionError, NoEligibleTransitionError
+from world.stories.constants import StoryMaturity, StoryScope
+from world.stories.exceptions import NoEligibleTransitionError
 from world.stories.models import EpisodeResolution, Era, Transition
 from world.stories.services.progress import advance_progress_to_episode
 from world.stories.services.transitions import get_eligible_transitions
 from world.stories.types import AnyStoryProgress
 
 
-def _select_transition(
-    progress: AnyStoryProgress, chosen_transition: Transition | None
-) -> Transition:
-    """The transition this resolution fires, per steps 1-4 of ``resolve_episode``.
+def _select_transition(progress: AnyStoryProgress) -> Transition:
+    """The transition that fires now: the lowest (order, pk) eligible edge.
 
-    ``get_eligible_transitions`` raises ``ProgressionRequirementNotMetError``
-    when a progression gate is unmet — that propagates untouched (the player is
-    *blocked*, status stays ACTIVE). Reaching past it means the exception did
-    NOT fire, so an empty list is one of the two cases below.
+    Zero eligible edges: a genuine frontier (no outbound transitions) resolves
+    through resolve_frontier; otherwise NoEligibleTransitionError. Several
+    eligible edges resolve by authored order (#3565): routing is decided when
+    the episode is written, never by a GM after the players act.
     """
     eligible = get_eligible_transitions(progress)
-
     if not eligible:
-        # An empty eligible list is NOT necessarily a frontier:
-        # get_eligible_transitions also returns [] when outbound transitions
-        # exist but no routing predicate is satisfied yet (a transient block,
-        # player mid-episode — NOT an authoring frontier). Only treat the
-        # genuine "no onward edges authored at all" case as a frontier and
-        # route through resolve_frontier (RESTING / WAITING_FOR_GM). In the
-        # routing-block case, status stays ACTIVE. Either way, re-raise so the
-        # NoEligibleTransitionError contract (view try/except, callers) is
-        # intact.
-        from world.stories.services.frontier import resolve_frontier  # noqa: PLC0415
-
         if not progress.current_episode.outbound_transitions.exists():
+            from world.stories.services.frontier import resolve_frontier  # noqa: PLC0415
+
             resolve_frontier(progress)
-        msg = f"No eligible transitions from episode {progress.current_episode_id!r}."
-        raise NoEligibleTransitionError(msg)
-
-    if chosen_transition is not None:
-        if chosen_transition not in eligible:
-            msg = f"Transition {chosen_transition.pk!r} is not in the eligible set."
-            raise NoEligibleTransitionError(msg)
-        return chosen_transition
-
-    if len(eligible) > 1:
-        msg = f"{len(eligible)} eligible transitions — caller must pass chosen_transition."
-        raise AmbiguousTransitionError(msg)
-
-    # Exactly one eligible.
-    only = eligible[0]
-    if only.mode == TransitionMode.GM_CHOICE:
-        msg = (
-            f"The single eligible transition {only.pk!r} has mode GM_CHOICE; "
-            "caller must pass chosen_transition explicitly."
-        )
-        raise AmbiguousTransitionError(msg)
-    return only
+        raise NoEligibleTransitionError
+    return eligible[0]  # get_eligible_transitions orders by (order, pk)
 
 
 def resolve_episode(
     *,
     progress: AnyStoryProgress,
-    chosen_transition: Transition | None = None,
     gm_notes: str = "",
     resolved_by: GMProfile | None = None,
 ) -> EpisodeResolution:
@@ -90,14 +57,9 @@ def resolve_episode(
            exist but none are routable yet (a transient routing block — the
            next step is authored, just not unlocked), status stays ACTIVE
            and only the exception is raised.
-        3. If chosen_transition is provided:
-               - Must be in the eligible set, else raise NoEligibleTransitionError.
-               - Use that transition.
-        4. Otherwise (no chosen_transition):
-               - If exactly one transition is eligible AND mode == AUTO → fire it.
-               - If exactly one eligible AND mode == GM_CHOICE → raise AmbiguousTransitionError.
-               - If multiple eligible → raise AmbiguousTransitionError.
-        5. Atomically:
+        3. Otherwise the lowest (order, pk) eligible transition fires (#3565):
+           routing is decided by the author, never by a GM after the fact.
+        4. Atomically:
                a. Create EpisodeResolution, populating the scope-appropriate FK:
                   - CHARACTER → character_sheet
                   - GROUP     → gm_table
@@ -107,9 +69,9 @@ def resolve_episode(
            resolve_frontier (not runnable yet); a PLOT target restores
            ACTIVE if a stale frontier status was set; a None target is
            left untouched (documented follow-up).
-        6. Return the EpisodeResolution instance.
+        5. Return the EpisodeResolution instance.
     """
-    selected = _select_transition(progress, chosen_transition)
+    selected = _select_transition(progress)
 
     era = Era.objects.get_active()
     episode = progress.current_episode

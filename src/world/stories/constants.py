@@ -124,11 +124,6 @@ class BeatVisibility(models.TextChoices):
     VISIBLE = "visible", "Visible"
 
 
-class TransitionMode(models.TextChoices):
-    AUTO = "auto", "Auto"
-    GM_CHOICE = "gm_choice", "GM Choice"
-
-
 class StoryGMOfferStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     ACCEPTED = "accepted", "Accepted"

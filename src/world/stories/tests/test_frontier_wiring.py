@@ -17,7 +17,6 @@ from world.stories.constants import (
     ProgressStatus,
     StoryMaturity,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.exceptions import NoEligibleTransitionError
 from world.stories.factories import (
@@ -103,7 +102,6 @@ class FrontierWiringTests(TestCase):
         success_transition = TransitionFactory(
             source_episode=ep,
             target_episode=target_success,
-            mode=TransitionMode.AUTO,
             order=0,
         )
         TransitionRequiredOutcomeFactory(
@@ -114,7 +112,6 @@ class FrontierWiringTests(TestCase):
         failure_transition = TransitionFactory(
             source_episode=ep,
             target_episode=target_failure,
-            mode=TransitionMode.AUTO,
             order=1,
         )
         TransitionRequiredOutcomeFactory(
@@ -146,7 +143,6 @@ class FrontierWiringTests(TestCase):
         TransitionFactory(
             source_episode=source,
             target_episode=target,
-            mode=TransitionMode.AUTO,
         )
         progress = StoryProgressFactory(story=story, current_episode=source)
 

@@ -74,7 +74,7 @@ _SURRENDER_USAGE = "Usage: story surrender <story-id>"
 _COMPLETE_USAGE = "Usage: story complete <story-id>"
 _HIDDEN_BEAT_TITLE = "(Hidden Beat)"
 _DEFAULT_BEAT_TITLE = "Beat"
-_RESOLVE_USAGE = "Usage: story resolve <episode-id> [transition-id] [notes]"
+_RESOLVE_USAGE = "Usage: story resolve <episode-id> [notes]"
 _PROMOTE_USAGE = "Usage: story promote <episode-id> <pitch|outline|plot>"
 _MARK_USAGE = "Usage: story mark <beat-id> <success|failure> [notes]"
 
@@ -322,11 +322,10 @@ class CmdStory(ArxNamespaceCommand):
         self._run_action(CompleteStoryAction, story_id=str(story.pk))
 
     def _handle_resolve(self, rest: str) -> None:
-        """Parse ``resolve <episode-id> [transition-id] [notes]`` and dispatch ResolveEpisodeAction.
+        """Parse ``resolve <episode-id> [notes]`` and dispatch ResolveEpisodeAction.
 
-        ``Transition`` has no name/title field, so it can only be supplied by
-        numeric pk; any non-numeric second token is treated as the start of GM
-        notes.
+        Routing is automatic (#3565): the transition fires by authored
+        order, so every remaining token is GM notes.
         """
         from actions.definitions.gm_stories import ResolveEpisodeAction  # noqa: PLC0415
 
@@ -337,13 +336,8 @@ class CmdStory(ArxNamespaceCommand):
 
         episode = resolve_episode_or_error(tokens[0])
         kwargs: dict[str, object] = {"episode_id": str(episode.pk)}
-        remaining = tokens[1:]
 
-        if remaining and remaining[0].isdigit():
-            kwargs["chosen_transition_id"] = remaining[0]
-            remaining = remaining[1:]
-
-        gm_notes = " ".join(remaining).strip()
+        gm_notes = " ".join(tokens[1:]).strip()
         if gm_notes:
             kwargs["gm_notes"] = gm_notes
 

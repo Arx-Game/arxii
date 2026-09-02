@@ -18,7 +18,6 @@ from world.stories.constants import (
     BeatPredicateType,
     StoryMaturity,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     AssistantGMClaimFactory,
@@ -146,7 +145,6 @@ class ResolveEpisodeActionTests(GMStoryActionTestBase):
         self.transition = TransitionFactory(
             source_episode=self.ep1,
             target_episode=self.ep2,
-            mode=TransitionMode.AUTO,
         )
 
     def test_lead_gm_can_resolve_auto_transition(self) -> None:
@@ -171,26 +169,24 @@ class ResolveEpisodeActionTests(GMStoryActionTestBase):
         self.assertFalse(result.success)
         self.assertFalse(EpisodeResolution.objects.filter(episode=self.ep1).exists())
 
-    def test_gm_choice_requires_transition_id(self) -> None:
+    def test_multiple_eligible_transitions_lowest_order_fires(self) -> None:
+        """Several eligible transitions: the lowest-order one fires automatically (#3565).
+
+        Routing is decided by the author, never by a GM after the fact — there
+        is no transition id to pass.
+        """
         from actions.definitions.gm_stories import ResolveEpisodeAction
 
-        gm_choice_transition = TransitionFactory(
-            source_episode=self.ep1,
-            target_episode=self.ep2,
-            mode=TransitionMode.GM_CHOICE,
-        )
+        other_target = EpisodeFactory(chapter=self.chapter, order=3)
+        # self.transition (order=0, -> ep2) already exists from setUp; add a
+        # higher-order transition to a different target.
+        TransitionFactory(source_episode=self.ep1, target_episode=other_target, order=1)
         # Reset progress to the source episode for this scenario.
         self.progress.current_episode = self.ep1
         self.progress.save(update_fields=["current_episode", "last_advanced_at"])
 
         result = ResolveEpisodeAction().run(self.lead_gm_actor, episode_id=self.ep1.pk)
-        self.assertFalse(result.success)
 
-        result = ResolveEpisodeAction().run(
-            self.lead_gm_actor,
-            episode_id=self.ep1.pk,
-            chosen_transition_id=gm_choice_transition.pk,
-        )
         self.assertTrue(result.success, result.message)
         self.progress.refresh_from_db()
         self.assertEqual(self.progress.current_episode_id, self.ep2.pk)
@@ -215,7 +211,7 @@ class ResolveEpisodeActionTests(GMStoryActionTestBase):
         chapter = ChapterFactory(story=group_story)
         ep1 = EpisodeFactory(chapter=chapter, order=1)
         ep2 = EpisodeFactory(chapter=chapter, order=2)
-        TransitionFactory(source_episode=ep1, target_episode=ep2, mode=TransitionMode.AUTO)
+        TransitionFactory(source_episode=ep1, target_episode=ep2)
         other_table = GMTableFactory(gm=GMProfileFactory())
         progress1 = GroupStoryProgressFactory(
             story=group_story,

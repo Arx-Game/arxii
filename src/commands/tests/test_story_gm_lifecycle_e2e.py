@@ -22,7 +22,6 @@ from world.stories.constants import (
     BeatPredicateType,
     StoryMaturity,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -104,7 +103,6 @@ class StoryGMLifecycleE2ETest(TestCase):
         self.transition = TransitionFactory(
             source_episode=self.ep1,
             target_episode=self.ep2,
-            mode=TransitionMode.AUTO,
         )
 
         # GM-marked beat on the first episode.

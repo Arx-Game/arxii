@@ -28,7 +28,6 @@ from world.stories.constants import (
     EraStatus,
     StoryGMOfferStatus,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -169,7 +168,6 @@ class Phase5EndToEndTests(EvenniaTestCase):
         transition = TransitionFactory(
             source_episode=char_ep1,
             target_episode=char_ep2,
-            mode=TransitionMode.AUTO,
             connection_summary="You press forward.",
         )
         TransitionRequiredOutcomeFactory(

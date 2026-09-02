@@ -1,16 +1,19 @@
 """Tests for world.stories.services.scheduling — maybe_create_session_request.
 
-Wave 7, Task 7.2.
+Wave 7, Task 7.2. Updated for #3565: routing is automatic, so a session is
+needed when the episode has a beat someone has to run at a table (SITUATION
+or ENCOUNTER kind) or a fact only a GM can mark (GM_MARKED), never because a
+transition needs a GM to pick a path.
 """
 
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import (
+    BeatKind,
     BeatOutcome,
     BeatPredicateType,
     SessionRequestStatus,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -49,7 +52,7 @@ class MaybeCreateSessionRequestDirectTests(EvenniaTestCase):
         EpisodeProgressionRequirementFactory(
             episode=episode, beat=gm_beat, required_outcome=BeatOutcome.SUCCESS
         )
-        TransitionFactory(source_episode=episode, target_episode=target, mode=TransitionMode.AUTO)
+        TransitionFactory(source_episode=episode, target_episode=target)
 
         sheet = CharacterSheetFactory()
         progress = StoryProgressFactory(story=story, character_sheet=sheet, current_episode=episode)
@@ -88,14 +91,20 @@ class MaybeCreateSessionRequestDirectTests(EvenniaTestCase):
         self.assertIsNone(result)
 
     def test_no_session_request_when_no_gm_involvement_needed(self):
-        """Returns None when all transitions are AUTO and no GM_MARKED beats are UNSATISFIED."""
+        """Returns None when the episode has no unsatisfied SITUATION/ENCOUNTER/GM_MARKED beat."""
         story = StoryFactory()
         chapter = ChapterFactory(story=story, order=1)
         episode = EpisodeFactory(chapter=chapter, order=1)
         target = EpisodeFactory(chapter=chapter, order=2)
 
-        # No progression requirements, AUTO transition, no GM_MARKED beats.
-        TransitionFactory(source_episode=episode, target_episode=target, mode=TransitionMode.AUTO)
+        # No progression requirements, an eligible transition, no beat that needs a table.
+        TransitionFactory(source_episode=episode, target_episode=target)
+        BeatFactory(
+            episode=episode,
+            kind=BeatKind.TASK,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
 
         sheet = CharacterSheetFactory()
         progress = StoryProgressFactory(story=story, character_sheet=sheet, current_episode=episode)
@@ -104,16 +113,23 @@ class MaybeCreateSessionRequestDirectTests(EvenniaTestCase):
         self.assertIsNone(result)
         self.assertEqual(SessionRequest.objects.filter(episode=episode).count(), 0)
 
-    def test_session_request_created_when_gm_choice_transition(self):
-        """Creates OPEN SessionRequest when an eligible transition is GM_CHOICE."""
+    def test_session_request_created_when_situation_beat_unsatisfied(self):
+        """Creates OPEN SessionRequest when the episode has an UNSATISFIED SITUATION beat (#3565).
+
+        Routing is automatic; a session is needed because someone has to run
+        the beat at a table, not because a GM must pick a path.
+        """
         story = StoryFactory()
         chapter = ChapterFactory(story=story, order=1)
         episode = EpisodeFactory(chapter=chapter, order=1)
         target = EpisodeFactory(chapter=chapter, order=2)
 
-        # GM_CHOICE transition — eligible immediately (no progression gates).
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
+        # An eligible transition, plus a SITUATION beat someone has to run.
+        TransitionFactory(source_episode=episode, target_episode=target)
+        BeatFactory(
+            episode=episode,
+            kind=BeatKind.SITUATION,
+            outcome=BeatOutcome.UNSATISFIED,
         )
 
         sheet = CharacterSheetFactory()
@@ -142,7 +158,7 @@ class MaybeCreateSessionRequestDirectTests(EvenniaTestCase):
         EpisodeProgressionRequirementFactory(
             episode=episode, beat=gate_beat, required_outcome=BeatOutcome.SUCCESS
         )
-        TransitionFactory(source_episode=episode, target_episode=target, mode=TransitionMode.AUTO)
+        TransitionFactory(source_episode=episode, target_episode=target)
 
         # A second GM_MARKED beat that is still UNSATISFIED — needs a GM session.
         BeatFactory(
@@ -166,9 +182,8 @@ class MaybeCreateSessionRequestDirectTests(EvenniaTestCase):
         episode = EpisodeFactory(chapter=chapter, order=1)
         target = EpisodeFactory(chapter=chapter, order=2)
 
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
-        )
+        TransitionFactory(source_episode=episode, target_episode=target)
+        BeatFactory(episode=episode, kind=BeatKind.SITUATION, outcome=BeatOutcome.UNSATISFIED)
 
         sheet = CharacterSheetFactory()
         progress = StoryProgressFactory(story=story, character_sheet=sheet, current_episode=episode)
@@ -186,9 +201,8 @@ class MaybeCreateSessionRequestDirectTests(EvenniaTestCase):
         episode = EpisodeFactory(chapter=chapter, order=1)
         target = EpisodeFactory(chapter=chapter, order=2)
 
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
-        )
+        TransitionFactory(source_episode=episode, target_episode=target)
+        BeatFactory(episode=episode, kind=BeatKind.SITUATION, outcome=BeatOutcome.UNSATISFIED)
 
         sheet = CharacterSheetFactory()
         progress = StoryProgressFactory(story=story, character_sheet=sheet, current_episode=episode)
@@ -222,9 +236,13 @@ class SessionRequestAutoCreatedFromBeatsTests(EvenniaTestCase):
         EpisodeProgressionRequirementFactory(
             episode=episode, beat=gm_beat, required_outcome=BeatOutcome.SUCCESS
         )
-        # GM_CHOICE transition — once the gate is met, a GM must choose the path.
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
+        TransitionFactory(source_episode=episode, target_episode=target)
+        # A second GM_MARKED beat still UNSATISFIED after the gate clears — a
+        # session is needed to mark it (#3565: routing itself needs no GM).
+        BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            outcome=BeatOutcome.UNSATISFIED,
         )
 
         sheet = CharacterSheetFactory()
@@ -242,7 +260,7 @@ class SessionRequestAutoCreatedFromBeatsTests(EvenniaTestCase):
 
     def test_session_request_created_after_aggregate_threshold_crossed(self):
         """record_aggregate_contribution triggers SessionRequest creation when threshold
-        is crossed and the episode has a GM_CHOICE transition."""
+        is crossed and the episode has an ENCOUNTER beat someone has to run."""
         story = StoryFactory()
         chapter = ChapterFactory(story=story, order=1)
         episode = EpisodeFactory(chapter=chapter, order=1)
@@ -258,9 +276,12 @@ class SessionRequestAutoCreatedFromBeatsTests(EvenniaTestCase):
         EpisodeProgressionRequirementFactory(
             episode=episode, beat=agg_beat, required_outcome=BeatOutcome.SUCCESS
         )
-        # GM_CHOICE transition: once threshold met, GM must pick the path.
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
+        TransitionFactory(source_episode=episode, target_episode=target)
+        # An ENCOUNTER beat someone has to run once the threshold clears.
+        BeatFactory(
+            episode=episode,
+            kind=BeatKind.ENCOUNTER,
+            outcome=BeatOutcome.UNSATISFIED,
         )
 
         sheet = CharacterSheetFactory()
@@ -294,9 +315,8 @@ class SessionRequestAutoCreatedFromBeatsTests(EvenniaTestCase):
         EpisodeProgressionRequirementFactory(
             episode=episode, beat=agg_beat, required_outcome=BeatOutcome.SUCCESS
         )
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
-        )
+        TransitionFactory(source_episode=episode, target_episode=target)
+        BeatFactory(episode=episode, kind=BeatKind.ENCOUNTER, outcome=BeatOutcome.UNSATISFIED)
 
         sheet = CharacterSheetFactory()
         StoryProgressFactory(story=story, character_sheet=sheet, current_episode=episode)
@@ -323,9 +343,8 @@ class SessionRequestAutoCreatedFromBeatsTests(EvenniaTestCase):
         EpisodeProgressionRequirementFactory(
             episode=episode, beat=gm_beat, required_outcome=BeatOutcome.SUCCESS
         )
-        TransitionFactory(
-            source_episode=episode, target_episode=target, mode=TransitionMode.GM_CHOICE
-        )
+        TransitionFactory(source_episode=episode, target_episode=target)
+        BeatFactory(episode=episode, kind=BeatKind.SITUATION, outcome=BeatOutcome.UNSATISFIED)
 
         sheet = CharacterSheetFactory()
         progress = StoryProgressFactory(story=story, character_sheet=sheet, current_episode=episode)

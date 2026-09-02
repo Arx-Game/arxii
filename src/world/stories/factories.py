@@ -26,7 +26,6 @@ from world.stories.constants import (
     StakeSubjectKind,
     StoryGMOfferStatus,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.models import (
     AggregateBeatContribution,
@@ -231,7 +230,6 @@ class TransitionFactory(factory_django.DjangoModelFactory):
     target_episode = factory.LazyAttribute(
         lambda obj: EpisodeFactory(chapter=obj.source_episode.chapter)
     )
-    mode = TransitionMode.AUTO
     order = 0
 
 

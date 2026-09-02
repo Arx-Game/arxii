@@ -16,7 +16,6 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
-from world.stories.constants import TransitionMode
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
@@ -53,7 +52,6 @@ class TransitionViewSetTest(APITestCase):
         cls.transition = TransitionFactory(
             source_episode=cls.ep1,
             target_episode=cls.ep2,
-            mode=TransitionMode.AUTO,
         )
 
         # A separate story (unrelated) with its own episode/transition for isolation tests.
@@ -109,7 +107,6 @@ class TransitionViewSetTest(APITestCase):
         data = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep3.pk,
-            "mode": TransitionMode.GM_CHOICE,
             "connection_type": "",
             "connection_summary": "Only if the hero fails.",
             "order": 1,
@@ -126,7 +123,6 @@ class TransitionViewSetTest(APITestCase):
         data = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep3.pk,
-            "mode": TransitionMode.AUTO,
         }
         response = self.client.post(url, json.dumps(data), content_type="application/json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -181,7 +177,6 @@ class TransitionViewSetTest(APITestCase):
         data = {
             "source_episode": ep4.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "connection_type": "",
             "connection_summary": "",
             "order": 0,

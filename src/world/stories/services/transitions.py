@@ -4,13 +4,16 @@ Public API:
     get_eligible_transitions(progress) — returns the transitions from the
         current episode whose progression requirements AND routing predicates
         are all satisfied.
+    validate_routing_readiness(episode) — reports outbound transition pairs
+        whose requirement sets never contradict (#3565): an authoring-time
+        warning, since the lowest (order, pk) fires silently at runtime.
 """
 
 from django.db.models import Prefetch
 
 from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.models import Episode, Transition, TransitionRequiredOutcome
-from world.stories.types import AnyStoryProgress
+from world.stories.types import AnyStoryProgress, RoutingReadinessReport
 
 
 def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
@@ -120,4 +123,63 @@ def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
 
         outcome = StakeOutcome.objects.filter(stake_id=req.stake_id).first()
         return outcome is not None and outcome.column == req.required_stake_column
-    return req.beat.outcome == req.required_outcome
+    if req.beat.outcome != req.required_outcome:
+        return False
+    return not req.required_outcome_key or req.beat.outcome_key == req.required_outcome_key
+
+
+def validate_routing_readiness(episode: Episode) -> RoutingReadinessReport:
+    """Report every pair of outbound transitions whose requirement sets never contradict.
+
+    Two transitions are ambiguous when no beat or stake they both constrain is
+    constrained to different values (an unconstrained pair is ambiguous). The
+    lowest (order, pk) would fire, which is a silent authoring mistake, so the
+    author tree surfaces it.
+    """
+    readiness_prefetch = Prefetch(
+        "required_outcomes",
+        queryset=TransitionRequiredOutcome.objects.all(),
+        to_attr="cached_routing_reqs_for_readiness",
+    )
+    transitions = list(
+        episode.outbound_transitions.prefetch_related(readiness_prefetch).order_by("order", "pk")
+    )
+    pairs: list[tuple[int, int]] = [
+        (first.pk, second.pk)
+        for i, first in enumerate(transitions)
+        for second in transitions[i + 1 :]
+        if not _contradict(
+            first.cached_routing_reqs_for_readiness, second.cached_routing_reqs_for_readiness
+        )
+    ]
+    return RoutingReadinessReport(ambiguous_pairs=tuple(pairs))
+
+
+def _contradict(
+    rows_a: list[TransitionRequiredOutcome], rows_b: list[TransitionRequiredOutcome]
+) -> bool:
+    """True when some shared subject (beat or stake) is required to differ."""
+    by_beat_a = {
+        r.beat_id: (r.required_outcome, r.required_outcome_key)
+        for r in rows_a
+        if r.stake_id is None
+    }
+    by_beat_b = {
+        r.beat_id: (r.required_outcome, r.required_outcome_key)
+        for r in rows_b
+        if r.stake_id is None
+    }
+    for beat_id, (outcome_a, key_a) in by_beat_a.items():
+        if beat_id not in by_beat_b:
+            continue
+        outcome_b, key_b = by_beat_b[beat_id]
+        if outcome_a != outcome_b:
+            return True
+        if key_a and key_b and key_a != key_b:
+            return True
+    by_stake_a = {r.stake_id: r.required_stake_column for r in rows_a if r.stake_id is not None}
+    by_stake_b = {r.stake_id: r.required_stake_column for r in rows_b if r.stake_id is not None}
+    return any(
+        stake_id in by_stake_b and by_stake_b[stake_id] != column
+        for stake_id, column in by_stake_a.items()
+    )

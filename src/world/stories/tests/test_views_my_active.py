@@ -28,7 +28,6 @@ from world.stories.constants import (
     ProgressStatus,
     StoryEpisodeStatus,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -175,9 +174,7 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
     def test_episode_ready_to_schedule_status(self):
         """Open SessionRequest → status 'ready_to_schedule'."""
         next_ep = EpisodeFactory(chapter=self.chapter, order=3)
-        TransitionFactory(
-            source_episode=self.episode, target_episode=next_ep, mode=TransitionMode.AUTO
-        )
+        TransitionFactory(source_episode=self.episode, target_episode=next_ep)
         progress = StoryProgressFactory(
             story=self.story, character_sheet=self.sheet, current_episode=self.episode
         )
@@ -196,9 +193,7 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
     def test_episode_ready_to_resolve_status(self):
         """Eligible transition and no SessionRequest → status 'ready_to_resolve'."""
         next_ep = EpisodeFactory(chapter=self.chapter, order=4)
-        TransitionFactory(
-            source_episode=self.episode, target_episode=next_ep, mode=TransitionMode.AUTO
-        )
+        TransitionFactory(source_episode=self.episode, target_episode=next_ep)
         progress = StoryProgressFactory(
             story=self.story, character_sheet=self.sheet, current_episode=self.episode
         )

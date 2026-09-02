@@ -34,7 +34,6 @@ from world.stories.constants import (
     StakeResolutionColumn,
     StakeSubjectKind,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -1192,7 +1191,6 @@ class BulkSaveStakeRoutingTests(APITestCase):
             "existing_id": existing_id,
             "source_episode": self.ep1.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "outcomes": [
                 {"beat": self.beat.pk, "required_outcome": BeatOutcome.SUCCESS},
                 {

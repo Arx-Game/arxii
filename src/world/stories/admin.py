@@ -197,7 +197,7 @@ class TransitionInline(admin.TabularInline):
     model = Transition
     fk_name = "source_episode"
     extra = 0
-    fields = ["order", "target_episode", "mode", "connection_type", "connection_summary"]
+    fields = ["order", "target_episode", "connection_type", "connection_summary"]
 
 
 class BeatInline(admin.TabularInline):
@@ -270,8 +270,8 @@ class TransitionRequiredOutcomeInline(admin.TabularInline):
 
 @admin.register(Transition)
 class TransitionAdmin(admin.ModelAdmin):
-    list_display = ("source_episode", "target_episode", "mode", "connection_type", "order")
-    list_filter = ("mode", "connection_type")
+    list_display = ("source_episode", "target_episode", "connection_type", "order")
+    list_filter = ("connection_type",)
     search_fields = ("source_episode__title", "target_episode__title", "connection_summary")
     ordering = ("source_episode", "order")
     inlines = [TransitionRequiredOutcomeInline]

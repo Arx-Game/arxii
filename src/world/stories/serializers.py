@@ -30,7 +30,6 @@ from world.stories.constants import (
     StoryGMOfferStatus,
     StoryMaturity,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.exceptions import MaturityPromotionError
 from world.stories.models import (
@@ -475,6 +474,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     """Full serializer for episode details"""
 
     chapter = serializers.StringRelatedField(read_only=True)
+    routing_ambiguous = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -493,7 +493,14 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "completed_at",
             "created_at",
             "updated_at",
+            "routing_ambiguous",
         ]
+
+    def get_routing_ambiguous(self, obj: Episode) -> bool:
+        """Whether any pair of this episode's outbound transitions is ambiguous (#3565)."""
+        from world.stories.services.transitions import validate_routing_readiness  # noqa: PLC0415
+
+        return validate_routing_readiness(obj).is_ambiguous
 
     def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
@@ -1357,7 +1364,6 @@ class TransitionSerializer(serializers.ModelSerializer):
             "source_episode_title",
             "target_episode",
             "target_episode_title",
-            "mode",
             "connection_type",
             "connection_summary",
             "order",
@@ -1413,6 +1419,7 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
             "transition",
             "beat",
             "required_outcome",
+            "required_outcome_key",
             "stake",
             "required_stake_column",
         ]
@@ -1422,24 +1429,38 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
         """Mirror the model clean(): exactly one predicate shape per row."""
         existing: dict[str, Any] = {}
         if self.instance is not None:
-            for field_name in ("beat", "stake", "required_outcome", "required_stake_column"):
+            for field_name in (
+                "beat",
+                "stake",
+                "required_outcome",
+                "required_outcome_key",
+                "required_stake_column",
+            ):
                 existing[field_name] = getattr(self.instance, field_name)
         merged = {**existing, **attrs}
 
         stake = merged.get("stake")
         required_outcome = merged.get("required_outcome") or ""
+        required_outcome_key = merged.get("required_outcome_key") or ""
         required_stake_column = merged.get("required_stake_column") or ""
         beat = merged.get("beat")
 
         if stake is not None:
-            self._validate_stake_row(stake, required_stake_column, required_outcome, beat)
+            self._validate_stake_row(
+                stake, required_stake_column, required_outcome, required_outcome_key, beat
+            )
         else:
             self._validate_outcome_row(required_outcome, required_stake_column)
 
         return attrs
 
     def _validate_stake_row(
-        self, stake: Any, required_stake_column: str, required_outcome: str, beat: Any
+        self,
+        stake: Any,
+        required_stake_column: str,
+        required_outcome: str,
+        required_outcome_key: str,
+        beat: Any,
     ) -> None:
         """Validate a stake-level predicate row (stake set, outcome blank)."""
         if not required_stake_column:
@@ -1449,6 +1470,9 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
         if required_outcome:
             msg = "Must be blank when stake is set (stake rows route on the stake column)."
             raise serializers.ValidationError({"required_outcome": msg})
+        if required_outcome_key:
+            msg = "Only beat-level routing rows may require an option key."
+            raise serializers.ValidationError({"required_outcome_key": msg})
         if beat is not None and stake.beat_id != beat.pk:
             raise serializers.ValidationError(
                 {"stake": "The stake must belong to this requirement's beat."}
@@ -1485,6 +1509,9 @@ class OutcomeInputSerializer(serializers.Serializer):
     required_outcome = serializers.ChoiceField(
         choices=BeatOutcome.choices, required=False, allow_blank=True, default=""
     )
+    required_outcome_key = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=100
+    )
     stake = serializers.PrimaryKeyRelatedField(
         queryset=Stake.objects.all(), required=False, allow_null=True, default=None
     )
@@ -1504,6 +1531,7 @@ class OutcomeInputSerializer(serializers.Serializer):
         """Exactly one predicate shape, mirroring TransitionRequiredOutcome.clean()."""
         stake = attrs.get("stake")
         required_outcome = attrs.get("required_outcome") or ""
+        required_outcome_key = attrs.get("required_outcome_key") or ""
         required_stake_column = attrs.get("required_stake_column") or ""
         beat = attrs["beat"]
 
@@ -1515,6 +1543,9 @@ class OutcomeInputSerializer(serializers.Serializer):
             if required_outcome:
                 msg = "Must be blank when stake is set (stake rows route on the stake column)."
                 raise serializers.ValidationError({"required_outcome": msg})
+            if required_outcome_key:
+                msg = "Only beat-level routing rows may require an option key."
+                raise serializers.ValidationError({"required_outcome_key": msg})
             if stake.beat_id != beat.pk:
                 raise serializers.ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
@@ -1554,7 +1585,6 @@ class SaveTransitionWithOutcomesInputSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
-    mode = serializers.ChoiceField(choices=TransitionMode.choices)
     connection_type = serializers.ChoiceField(
         choices=ConnectionType.choices,
         required=False,
@@ -1686,29 +1716,17 @@ class ResolveEpisodeInputSerializer(serializers.Serializer):
         episode (Episode): the episode being resolved.
 
     Validates:
-        - chosen_transition belongs to this episode (if provided).
         - An active progress record exists for the episode's story.
 
-    Stores resolved ``progress`` and ``chosen_transition`` in validated_data.
+    Routing is automatic (#3565): the transition fires by authored order, so
+    this only ever resolves ``progress`` into validated_data.
     """
 
     progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    chosen_transition = serializers.PrimaryKeyRelatedField(
-        queryset=Transition.objects.all(),
-        required=False,
-        allow_null=True,
-        default=None,
-    )
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
         episode: Episode = self.context["episode"]
-
-        transition: Transition | None = attrs.get("chosen_transition")
-        if transition is not None and transition.source_episode_id != episode.pk:
-            raise serializers.ValidationError(
-                {"chosen_transition": "Transition does not belong to this episode."}
-            )
 
         progress = _resolve_progress(episode, attrs.get("progress_id"))
         if progress is None:

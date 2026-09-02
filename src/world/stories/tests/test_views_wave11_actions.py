@@ -32,7 +32,6 @@ from world.stories.constants import (
     BeatPredicateType,
     SessionRequestStatus,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     AssistantGMClaimFactory,
@@ -86,11 +85,10 @@ class EpisodeResolveActionTest(APITestCase):
             outcome=BeatOutcome.SUCCESS,
         )
 
-        # Transition from ep1 -> ep2 (AUTO mode, no required outcomes for simplicity).
+        # Transition from ep1 -> ep2 (no required outcomes for simplicity).
         cls.transition = TransitionFactory(
             source_episode=cls.ep1,
             target_episode=cls.ep2,
-            mode=TransitionMode.AUTO,
         )
 
         # A character sheet for progress.
@@ -153,28 +151,6 @@ class EpisodeResolveActionTest(APITestCase):
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_explicit_transition_out_of_eligible_set_returns_400(self):
-        """Passing a transition not in the eligible set returns 400."""
-        # Create a different episode and a transition from a different source.
-        ep3 = EpisodeFactory(chapter=self.chapter, order=3)
-        ep4 = EpisodeFactory(chapter=self.chapter, order=4)
-        wrong_transition = TransitionFactory(source_episode=ep3, target_episode=ep4)
-
-        # Reset progress to ep1.
-        self.progress.current_episode = self.ep1
-        self.progress.save()
-
-        self.client.force_authenticate(user=self.lead_gm_account)
-        url = reverse("episode-resolve", kwargs={"pk": self.ep1.pk})
-        response = self.client.post(
-            url,
-            json.dumps({"progress_id": self.progress.pk, "chosen_transition": wrong_transition.pk}),
-            content_type="application/json",
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        # DRF validation error shape: {"chosen_transition": [...]}
-        assert "chosen_transition" in response.data
 
     def test_no_transitions_returns_400(self):
         """If the progress has no eligible transitions (frontier), returns 400.

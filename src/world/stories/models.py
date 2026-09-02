@@ -32,7 +32,6 @@ from world.stories.constants import (
     StoryMaturity,
     StoryMilestoneType,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.types import (
     ConnectionType,
@@ -760,7 +759,12 @@ class Era(SharedMemoryModel):
 
 
 class Transition(SharedMemoryModel):
-    """A guarded edge from one Episode to another."""
+    """A guarded edge from one Episode to another.
+
+    Every transition is automatic: it fires when its routing requirements
+    are met. When several are eligible the lowest (order, pk) fires (#3565);
+    authoring warns about that case through validate_routing_readiness.
+    """
 
     source_episode = models.ForeignKey(
         EPISODE_MODEL,
@@ -774,15 +778,6 @@ class Transition(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="inbound_transitions",
         help_text="May be null when next episode is unauthored (frontier pause).",
-    )
-    mode = models.CharField(
-        max_length=20,
-        choices=TransitionMode.choices,
-        default=TransitionMode.AUTO,
-        help_text=(
-            "AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead "
-            "GM to pick from the eligible set."
-        ),
     )
     connection_type = models.CharField(
         max_length=20,

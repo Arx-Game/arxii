@@ -184,7 +184,6 @@ class EligibleTransitionEntry(TypedDict):
     """A single eligible Transition surfaced in the GM queue."""
 
     transition_id: int
-    mode: str
 
 
 class EpisodeReadyEntry(TypedDict):
@@ -374,6 +373,17 @@ class StakesReadinessReport:
     # Consumer: the GM readiness endpoint #3562 adds. This branch (#3559)
     # deliberately adds only the data - no endpoint surfaces it yet.
     advisories: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RoutingReadinessReport:
+    """Pairs of outbound transitions that could be eligible at the same time (#3565)."""
+
+    ambiguous_pairs: tuple[tuple[int, int], ...]
+
+    @property
+    def is_ambiguous(self) -> bool:
+        return bool(self.ambiguous_pairs)
 
 
 @dataclass(frozen=True)

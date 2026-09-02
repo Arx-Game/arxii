@@ -66,8 +66,8 @@ class GMVerbActivityStampingTests(TestCase):
         episode = EpisodeFactory(chapter=chapter)
         BeatFactory(episode=episode, predicate_type=BeatPredicateType.GM_MARKED)
         progress = StoryProgressFactory(story=story, current_episode=episode)
-        transition = TransitionFactory(source_episode=episode)
-        resolve_episode(progress=progress, chosen_transition=transition, resolved_by=gm)
+        TransitionFactory(source_episode=episode)
+        resolve_episode(progress=progress, resolved_by=gm)
         gm.refresh_from_db()
         self.assertIsNotNone(gm.last_active_at)
 
