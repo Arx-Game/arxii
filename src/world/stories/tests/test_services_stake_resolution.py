@@ -640,6 +640,32 @@ class NoFiatSerializerTests(APITestCase):
         resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
+    def test_transitions_subject_asset_rejected_on_unknown_value(self):
+        """A garbage value isn't caught by the kind guard alone (#3561 Task 3
+        review) - the field has no DB-level choices, so this must be enforced
+        in stake_resolution_payload_problems or it 201s and later blows up
+        IllegalAssetTransitionError when the branch fires.
+        """
+        asset = NPCAssetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.ASSET,
+            subject_asset=asset,
+        )
+        resp = self._post_resolution(stake, transitions_subject_asset="not_a_real_status")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transitions_subject_asset", str(resp.data))
+
+    def test_transitions_subject_asset_rejected_on_asset_stake_with_no_subject_asset(self):
+        """An ASSET stake with subject_asset unset still 400s on a non-blank
+        value (the kind guard's existing branch, re-asserted after the value
+        guard was added alongside it).
+        """
+        stake = StakeFactory(beat=self.beat, subject_kind=StakeSubjectKind.ASSET)
+        resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transitions_subject_asset", str(resp.data))
+
     def test_npc_regard_delta_rejected_on_faction_stake(self):
         """npc_regard_delta is NPC_FATE-only; today only StakeResolution.clean()
         catches this - it must also be rejected through the API (#3561 Task 3).

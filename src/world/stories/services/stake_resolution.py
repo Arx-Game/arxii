@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
+from world.assets.constants import AssetStatus
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
@@ -49,6 +50,17 @@ _PILLAR_12_LIFECYCLE_MSG = (
 _MACHINE_MATCH_LIFECYCLE_MSG = (
     "machine_match_lifecycle_state is only allowed for NPC_FATE stakes — it "
     "would otherwise never match anything (#1760)."
+)
+
+# The authored-branch target statuses (#1905, #3561 Task 3 review). ACTIVE is
+# a legal transition target too (COMPROMISED -> ACTIVE recovery, and the
+# ACTIVE -> ACTIVE no-op), but transition_asset_status's legality is a
+# runtime fact about the asset's CURRENT status at fire time, which authoring
+# time can't know - the model field's own help_text restricts authored
+# branches to these three story-negative outcomes; recovery back to ACTIVE
+# is never something a stake branch authors directly.
+_TRANSITIONABLE_ASSET_STATUSES = frozenset(
+    {AssetStatus.COMPROMISED, AssetStatus.LOST, AssetStatus.DISMISSED}
 )
 
 
@@ -146,17 +158,26 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
             )
         )
 
-    if transitions_subject_asset and (
-        stake.subject_kind != StakeSubjectKind.ASSET or stake.subject_asset_id is None
-    ):
-        problems.append(
-            StakePayloadProblem(
-                field="transitions_subject_asset",
-                message=(
-                    "transitions_subject_asset requires an ASSET stake with subject_asset set."
-                ),
+    if transitions_subject_asset:
+        if stake.subject_kind != StakeSubjectKind.ASSET or stake.subject_asset_id is None:
+            problems.append(
+                StakePayloadProblem(
+                    field="transitions_subject_asset",
+                    message=(
+                        "transitions_subject_asset requires an ASSET stake with subject_asset set."
+                    ),
+                )
             )
-        )
+        elif transitions_subject_asset not in _TRANSITIONABLE_ASSET_STATUSES:
+            problems.append(
+                StakePayloadProblem(
+                    field="transitions_subject_asset",
+                    message=(
+                        "transitions_subject_asset must be one of COMPROMISED/LOST/"
+                        f"DISMISSED (got {transitions_subject_asset!r})."
+                    ),
+                )
+            )
 
     return problems
 
