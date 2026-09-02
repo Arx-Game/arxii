@@ -15,6 +15,13 @@
  * - FACTION → society-or-organization toggle + name search, reusing
  *   `searchSocieties`/`searchOrganizations` from `@/events/queries` (the
  *   same pickers `EventInvitations` uses) via `EntitySearchField`.
+ * - ASSET (subject_asset, #3561) → name search over NPCAsset via
+ *   `searchNpcAssets` from `stories/api.ts`, same `EntitySearchField` as
+ *   FACTION. Only `Stake`/`StakeRequest` carry `subject_asset` today -
+ *   `StoryProtectedSubject`/`CustodyClearance` (this component's other two
+ *   consumers) don't, so picking ASSET there still can't be submitted; that
+ *   matches the ASSET kind's pre-#3561 "falls through with no input" gap,
+ *   not a regression.
  * - PERSONAL_JEOPARDY / NPC_FATE (subject_sheet) and ITEM (subject_item) —
  *   no name-search endpoint exists for CharacterSheet or ItemInstance by name
  *   (only retrieve-by-id ViewSets), so these are plain numeric id inputs,
@@ -34,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { searchOrganizations, searchSocieties } from '@/events/queries';
+import { searchNpcAssets } from '../api';
 import type { SubjectKindEnum } from '../types';
 
 import { SUBJECT_KIND_LABELS } from '@/shared/subjectKinds';
@@ -46,6 +54,7 @@ export interface SubjectRefValue {
   subject_item: number | null;
   subject_society: number | null;
   subject_organization: number | null;
+  subject_asset: number | null;
   subject_label: string;
 }
 
@@ -56,6 +65,7 @@ export function emptySubjectRef(kind: SubjectKindEnum = 'custom'): SubjectRefVal
     subject_item: null,
     subject_society: null,
     subject_organization: null,
+    subject_asset: null,
     subject_label: '',
   };
 }
@@ -182,6 +192,17 @@ export function SubjectRefFields({ value, onChange, disabled }: Props) {
             />
           )}
         </div>
+      )}
+
+      {value.subject_kind === 'asset' && (
+        <EntitySearchField
+          label="Asset"
+          placeholder="Search NPC assets…"
+          value={value.subject_asset}
+          onChange={(id) => onChange({ ...value, subject_asset: id })}
+          search={searchNpcAssets}
+          disabled={disabled}
+        />
       )}
 
       {(value.subject_kind === 'location' ||

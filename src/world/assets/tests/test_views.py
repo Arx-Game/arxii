@@ -1,4 +1,4 @@
-"""API tests for the read-only NPCAsset endpoint (#1872)."""
+"""API tests for the read-only NPCAsset endpoint (#1872, #3561)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from rest_framework.test import APIClient
 
 from world.assets.factories import NPCAssetFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.factories import PersonaFactory
 
 
 class NPCAssetViewSetTests(EvenniaTestCase):
@@ -38,3 +40,46 @@ class NPCAssetViewSetTests(EvenniaTestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/assets/")
         self.assertEqual(response.status_code, 403)
+
+    def test_gm_sees_every_asset_by_name_search(self) -> None:
+        """#3561 - the stakes-editor ASSET subject picker: a GM (any level)
+        searches across every NPCAsset by the promoted persona's name, not
+        just assets they personally promoted.
+        """
+        GMProfileFactory(account=self.account)
+        other_persona = PersonaFactory(name="Quiet Informant")
+        mine = NPCAssetFactory(
+            promoter_persona=self.sheet.primary_persona, asset_persona=other_persona
+        )
+        elsewhere_persona = PersonaFactory(name="Loud Bruiser")
+        elsewhere = NPCAssetFactory(asset_persona=elsewhere_persona)  # not mine
+
+        response = self.client.get("/api/assets/?name=quiet")
+        self.assertEqual(response.status_code, 200)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertEqual(ids, [mine.pk])
+
+        response = self.client.get("/api/assets/?name=loud")
+        self.assertEqual(response.status_code, 200)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertEqual(ids, [elsewhere.pk])
+
+    def test_staff_sees_every_asset(self) -> None:
+        self.account.is_staff = True
+        self.account.save()
+        NPCAssetFactory(promoter_persona=self.sheet.primary_persona)
+        elsewhere = NPCAssetFactory()
+
+        response = self.client.get("/api/assets/")
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertIn(elsewhere.pk, ids)
+
+    def test_non_gm_name_search_still_scoped_to_own_persona(self) -> None:
+        mine = NPCAssetFactory(promoter_persona=self.sheet.primary_persona)
+        NPCAssetFactory()  # someone else's, matching name search too
+
+        response = self.client.get(f"/api/assets/?name={mine.asset_persona.name}")
+        self.assertEqual(response.status_code, 200)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertEqual(ids, [mine.pk])

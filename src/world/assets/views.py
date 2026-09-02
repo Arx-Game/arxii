@@ -8,12 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from world.assets.filters import NPCAssetFilter
 from world.assets.models import NPCAsset
 from world.assets.serializers import NPCAssetSerializer
 
@@ -41,17 +43,40 @@ def _active_persona_for_request(request: Request) -> Persona | None:
 
 
 class NPCAssetViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read endpoints for the player's own promoted assets + introduce action."""
+    """Read endpoints for the player's own promoted assets + introduce action.
+
+    Also backs the stakes-editor ASSET subject picker (#3561, `?name=` search)
+    - see `get_queryset`'s staff/GM widening below.
+    """
 
     serializer_class = NPCAssetSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = NPCAssetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = NPCAssetFilter
 
     def get_queryset(self):
+        base = NPCAsset.objects.select_related("asset_persona")
+
+        # #3561: a GM authoring a Stake against an ASSET subject is almost
+        # never the promoter of that asset (the asset is normally another
+        # PC's), so the plain "my own assets" scope below would make the
+        # stakes editor's search field useless for its actual caller. Staff
+        # and any account holding a GMProfile (any level - this is a search
+        # convenience, not a write) see every NPCAsset by name; everyone else
+        # keeps the original own-persona-only scope for the player dashboard.
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        user = self.request.user
+        if user.is_authenticated and (
+            user.is_staff or GMProfile.objects.filter(account=user).exists()
+        ):
+            return base
+
         persona = _active_persona_for_request(self.request)
         if persona is None:
             return NPCAsset.objects.none()
-        return NPCAsset.objects.filter(promoter_persona=persona).select_related("asset_persona")
+        return base.filter(promoter_persona=persona)
 
     @action(detail=True, methods=["post"])
     def extract(self, request: Request, pk: str | None = None) -> Response:
