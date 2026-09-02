@@ -265,6 +265,7 @@ treat those names as hints to confirm, not gospel.
 - [0256 - Beat expiry is a completion, not a field flip](0256-beat-expiry-is-a-completion.md) (#3558)
 - [0257 - Beats never wait for a ruling](0257-beats-never-wait-for-a-ruling.md) (#3559)
 - [0258 - Story beats reuse the mission scenario graph](0258-story-beats-reuse-the-mission-scenario-graph.md) (#3565; applies ADR-0030; extends ADR-0010, ADR-0085; supersedes the 2026-05-18 missions-design tenet 1 framing; reverses the 2026-04-20 stories-design GM_CHOICE mode)
+- [0259 - Views read the account model, never the Account typeclass; signup instantiates the typeclass](0259-views-read-the-account-model-not-the-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
