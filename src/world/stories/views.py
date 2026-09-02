@@ -95,6 +95,7 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryProtectedSubject,
+    StoryScenario,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -179,6 +180,7 @@ from world.stories.serializers import (
     ChapterListSerializer,
     CompleteClaimInputSerializer,
     ContributeBeatInputSerializer,
+    CreateBeatScenarioInputSerializer,
     CreateBulletinPostInputSerializer,
     CreateBulletinReplyInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
@@ -1676,6 +1678,61 @@ class BeatViewSet(viewsets.ModelViewSet):
         )
         output = MissionInstanceSerializer(instance, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="scenario",
+        permission_classes=[CanAssignMissionToBeat],
+    )
+    def scenario(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/beats/{id}/scenario/ — GM authors a scenario graph as this beat's body.
+
+        #3565. Reuses ``CanAssignMissionToBeat`` (Lead GM or staff — the same gate
+        ``assign_mission`` above uses) since authoring a beat's mission body
+        is the same GM-tier gesture as assigning one. POST body:
+        ``{"name", "summary", "risk_tier"}``. 201 + the new
+        MissionTemplateSerializer payload on first call; 200 with the same
+        payload on a repeat call (idempotent — ``create_scenario_for_beat``
+        returns the existing template rather than erroring or duplicating).
+        400 ``{"required_mission": [...]}`` when the beat already uses a
+        catalog (non-scenario) template; 400 ``{"name": [...]}`` on a name
+        collision.
+        """
+        from django.core.exceptions import (  # noqa: PLC0415
+            ValidationError as DjangoValidationError,
+        )
+
+        from world.missions.serializers import MissionTemplateSerializer  # noqa: PLC0415
+        from world.stories.services.scenarios import create_scenario_for_beat  # noqa: PLC0415
+
+        beat = self.get_object()
+        already_linked = (
+            beat.required_mission_id is not None
+            and StoryScenario.objects.filter(
+                template_id=beat.required_mission_id,
+                story=beat.episode.chapter.story,
+            ).exists()
+        )
+
+        input_serializer = CreateBeatScenarioInputSerializer(
+            data=request.data, context={"request": request}
+        )
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+        try:
+            template = create_scenario_for_beat(
+                beat,
+                name=data["name"],
+                summary=data["summary"],
+                risk_tier=data["risk_tier"],
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+
+        output = MissionTemplateSerializer(template, context={"request": request})
+        response_status = status.HTTP_200_OK if already_linked else status.HTTP_201_CREATED
+        return Response(output.data, status=response_status)
 
 
 # ---------------------------------------------------------------------------

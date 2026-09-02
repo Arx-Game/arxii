@@ -25,10 +25,12 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
 
+from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
@@ -54,6 +56,11 @@ from world.missions.models import (
     MissionOptionRouteCandidate,
     MissionOptionRouteReward,
     MissionTemplate,
+)
+from world.missions.permissions import (
+    IsStaffOrScenarioOwner,
+    scenario_scope_q,
+    user_leads_template,
 )
 from world.missions.serializers import (
     BeatResolveRequestSerializer,
@@ -98,11 +105,61 @@ class MissionStudioPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class MissionTemplateViewSet(viewsets.ModelViewSet):
-    """Staff-only browse + edit endpoint for MissionTemplate rows.
+class ScenarioScopedQuerysetMixin:
+    """``get_queryset`` narrowed to a non-staff caller's ``scenario_scope_q`` (#3565).
+
+    Every authoring viewset (template + its node/option/route/candidate/
+    reward children) mixes this in. ``template_prefix`` is the FK path from
+    the queried model to its owning MissionTemplate (empty string on
+    MissionTemplateViewSet itself); ``MissionOptionRouteRewardViewSet``
+    overrides ``get_queryset`` directly instead (its parent is XOR
+    route/candidate, so it needs the OR of two prefixes).
+    """
+
+    template_prefix: str = ""
+
+    def get_queryset(self) -> QuerySet:
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(scenario_scope_q(user, self.template_prefix))
+
+
+class ScenarioOwnedChildMixin:
+    """``perform_create`` ownership gate for scenario-graph child viewsets (#3565).
+
+    DRF never calls ``has_object_permission`` on create (the row doesn't
+    exist yet) -- ``IsStaffOrScenarioOwner.has_permission`` only checks
+    ``scenario_owner_can_create``. This mixin is where the create-time
+    ownership check actually happens: resolve the parent MissionTemplate
+    from the validated payload (via ``parent_template``, implemented per
+    viewset) and reject unless staff or ``user_leads_template``.
+    """
+
+    def parent_template(self, validated_data: dict) -> MissionTemplate:
+        raise NotImplementedError
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        user = self.request.user
+        if not user.is_staff:
+            template = self.parent_template(serializer.validated_data)
+            if not user_leads_template(user, template):
+                msg = "Only the Lead GM of this scenario's story or staff may add to it."
+                raise PermissionDenied(msg)
+        serializer.save()
+
+
+class MissionTemplateViewSet(ScenarioScopedQuerysetMixin, viewsets.ModelViewSet):
+    """Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-    by primary key for stable pagination.
+    by primary key for stable pagination. Non-staff callers are scoped by
+    ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+    plus anything OPEN and within their GM-level risk ceiling; template
+    CREATE stays staff-only -- a scenario template is only ever minted
+    through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+    is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
     Detail (D1.3, pending): returns the §5 footprint — lifetime
     completions + currently-active MissionInstance rows + their current
@@ -121,13 +178,19 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
     # a simple PK-list M2M.
     queryset = (
         MissionTemplate.objects.all()
+        .select_related("story_scenario", "story_scenario__story")
         .prefetch_related("categories")  # noqa: PREFETCH_STRING
         .order_by("pk")
     )
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionTemplateFilterSet
+    template_prefix = ""
+    scenario_owner_can_create = False
+
+    def template_of(self, obj: MissionTemplate) -> MissionTemplate:
+        return obj
 
     def get_serializer_class(self) -> type[BaseSerializer[MissionTemplate]]:
         """Detail (retrieve) uses the augmented serializer; list+CRUD use the basic one.
@@ -140,7 +203,7 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
             return MissionTemplateDetailSerializer
         return MissionTemplateSerializer
 
-    @action(detail=True, methods=("POST",))
+    @action(detail=True, methods=("POST",), permission_classes=[IsAuthenticated, IsAdminUser])
     def copy(self, request: Request, pk: int | None = None) -> Response:
         """D4.2 — duplicate this template + its full graph.
 
@@ -162,7 +225,7 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
         serializer = MissionTemplateSerializer(new_template, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=("POST",))
+    @action(detail=True, methods=("POST",), permission_classes=[IsAuthenticated, IsAdminUser])
     def assign(self, request: Request, pk: int | None = None) -> Response:
         """D4.3 — staff-power: drop this mission on a character.
 
@@ -197,19 +260,31 @@ class MissionTemplateViewSet(viewsets.ModelViewSet):
 # ---------------------------------------------------------------------------
 # D2 editor CRUD viewsets — one per nested model, each a full ModelViewSet
 # (list/retrieve/create/update/partial-update/destroy). Filtered by parent
-# FK (template/node/option/route) via the per-model FilterSets. Staff-only.
+# FK (template/node/option/route) via the per-model FilterSets. Staff, or a
+# GM writing within their own StoryScenario's scope (#3565) — see
+# ScenarioScopedQuerysetMixin / ScenarioOwnedChildMixin / IsStaffOrScenarioOwner.
 # ---------------------------------------------------------------------------
 
 
-class MissionNodeViewSet(viewsets.ModelViewSet):
+class MissionNodeViewSet(
+    ScenarioOwnedChildMixin, ScenarioScopedQuerysetMixin, viewsets.ModelViewSet
+):
     """Editor CRUD for MissionNode rows."""
 
     queryset = MissionNode.objects.all().order_by("pk")
     serializer_class = MissionNodeSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionNodeFilterSet
+    template_prefix = "template__"
+    scenario_owner_can_create = True
+
+    def template_of(self, obj: MissionNode) -> MissionTemplate:
+        return obj.template
+
+    def parent_template(self, validated_data: dict) -> MissionTemplate:
+        return validated_data["template"]
 
     @action(detail=True, methods=("POST",))
     def copy(self, request: Request, pk: str | None = None) -> Response:
@@ -254,48 +329,106 @@ class MissionNodeViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class MissionOptionViewSet(viewsets.ModelViewSet):
+class MissionOptionViewSet(
+    ScenarioOwnedChildMixin, ScenarioScopedQuerysetMixin, viewsets.ModelViewSet
+):
     """Editor CRUD for MissionOption rows (authored + challenge-sourced)."""
 
     queryset = MissionOption.objects.all().order_by("pk")
     serializer_class = MissionOptionSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionFilterSet
+    template_prefix = "node__template__"
+    scenario_owner_can_create = True
+
+    def template_of(self, obj: MissionOption) -> MissionTemplate:
+        return obj.node.template
+
+    def parent_template(self, validated_data: dict) -> MissionTemplate:
+        return validated_data["node"].template
 
 
-class MissionOptionRouteViewSet(viewsets.ModelViewSet):
+class MissionOptionRouteViewSet(
+    ScenarioOwnedChildMixin, ScenarioScopedQuerysetMixin, viewsets.ModelViewSet
+):
     """Editor CRUD for MissionOptionRoute (one row per option per outcome tier)."""
 
     queryset = MissionOptionRoute.objects.all().order_by("pk")
     serializer_class = MissionOptionRouteSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteFilterSet
+    template_prefix = "option__node__template__"
+    scenario_owner_can_create = True
+
+    def template_of(self, obj: MissionOptionRoute) -> MissionTemplate:
+        return obj.option.node.template
+
+    def parent_template(self, validated_data: dict) -> MissionTemplate:
+        return validated_data["option"].node.template
 
 
-class MissionOptionRouteCandidateViewSet(viewsets.ModelViewSet):
+class MissionOptionRouteCandidateViewSet(
+    ScenarioOwnedChildMixin, ScenarioScopedQuerysetMixin, viewsets.ModelViewSet
+):
     """Editor CRUD for MissionOptionRouteCandidate (random-set rolls)."""
 
     queryset = MissionOptionRouteCandidate.objects.all().order_by("pk")
     serializer_class = MissionOptionRouteCandidateSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteCandidateFilterSet
+    template_prefix = "route__option__node__template__"
+    scenario_owner_can_create = True
+
+    def template_of(self, obj: MissionOptionRouteCandidate) -> MissionTemplate:
+        return obj.route.option.node.template
+
+    def parent_template(self, validated_data: dict) -> MissionTemplate:
+        return validated_data["route"].option.node.template
 
 
-class MissionOptionRouteRewardViewSet(viewsets.ModelViewSet):
-    """Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent)."""
+class MissionOptionRouteRewardViewSet(ScenarioOwnedChildMixin, viewsets.ModelViewSet):
+    """Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+    The parent template lives behind an XOR FK (route OR candidate), so
+    ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+    using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+    """
 
     queryset = MissionOptionRouteReward.objects.all().order_by("pk")
     serializer_class = MissionOptionRouteRewardSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     pagination_class = MissionStudioPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = MissionOptionRouteRewardFilterSet
+    scenario_owner_can_create = True
+
+    def get_queryset(self) -> QuerySet:
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(
+            scenario_scope_q(user, "route__option__node__template__")
+            | scenario_scope_q(user, "candidate__route__option__node__template__")
+        )
+
+    def template_of(self, obj: MissionOptionRouteReward) -> MissionTemplate:
+        if obj.route_id is not None:
+            return obj.route.option.node.template
+        return obj.candidate.route.option.node.template
+
+    def parent_template(self, validated_data: dict) -> MissionTemplate:
+        route = validated_data.get("route")
+        if route is not None:
+            return route.option.node.template
+        candidate = validated_data["candidate"]
+        return candidate.route.option.node.template
 
 
 class MissionInstanceViewSet(
@@ -323,18 +456,23 @@ class MissionInstanceViewSet(
 
 
 class MissionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    """Staff-only browse of seeded MissionCategory rows.
+    """Browse of seeded MissionCategory rows -- staff or any GM (#3565).
 
     Categories are managed via fixture/admin — no authoring endpoints.
-    The Mission Studio uses this to populate the category multi-select
-    on the create page and the edit-categories dialog.
+    Read-only, so there is nothing here to scope by ownership; a GM authoring
+    their own scenario needs the same category list staff use for the
+    multi-select on the create page and the edit-categories dialog.
     """
 
     queryset = MissionCategory.objects.all().order_by("display_order", "name")
     serializer_class = MissionCategorySerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
     filter_backends = []
     pagination_class = MissionStudioPagination
+    # No create endpoint on a ReadOnlyModelViewSet, but IsStaffOrScenarioOwner.
+    # has_permission still reads this attribute for a would-be POST (DRF runs
+    # permission checks before routing 405s) -- declared False, never reached.
+    scenario_owner_can_create = False
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +496,10 @@ class PredicateLeafCatalogViewSet(viewsets.ViewSet):
     tree validator (#870) so palette and validation can't drift.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffOrScenarioOwner]
+    # No create endpoint on a plain ViewSet with only list(), but see the
+    # comment on MissionCategoryViewSet -- declared False, never reached.
+    scenario_owner_can_create = False
 
     @extend_schema(
         responses={200: OpenApiResponse(description="List of available predicate leaves.")},

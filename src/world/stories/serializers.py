@@ -10,8 +10,9 @@ from world.events.models import Event
 from world.gm.constants import GMTableStatus
 from world.gm.models import GMLevelCap, GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
+from world.gm.services import gm_max_risk
 from world.items.models import ItemInstance
-from world.missions.models import MissionTemplate
+from world.missions.models import MissionOption, MissionTemplate
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 from world.societies.models import Organization, Society
@@ -974,22 +975,6 @@ class SessionRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "story_id"]
 
 
-def _gm_max_risk(user) -> str:
-    """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
-
-    No GMProfile or no cap row → RenownRisk.NONE.
-    """
-    try:
-        gm_profile = user.gm_profile
-    except GMProfile.DoesNotExist:
-        return RenownRisk.NONE
-    try:
-        cap = GMLevelCap.objects.get(level=gm_profile.level)
-    except GMLevelCap.DoesNotExist:
-        return RenownRisk.NONE
-    return cap.max_beat_risk
-
-
 def _gm_allows_custom_stakes(user) -> bool:
     """Whether a non-staff author's GMLevelCap permits custom (template=null) stakes.
 
@@ -1072,6 +1057,12 @@ class BeatSerializer(serializers.ModelSerializer):
     # button instead of rendering it optimistically and hitting a 403.
     can_mark = serializers.SerializerMethodField(read_only=True)
 
+    # GM-only view of this beat's scenario graph, when required_mission is a
+    # story-owned StoryScenario (#3565). Gated by the same privilege check as
+    # internal_description (see get_scenario) -- a scenario's option keys are
+    # GM planning detail, not player-visible.
+    scenario = serializers.SerializerMethodField(read_only=True)
+
     # #3425 session prep: repeatable child rows. Both are nested read-write,
     # including the update path (see update() / _sync_children below) --
     # required=False so a Beat with no prep authored yet omits them entirely.
@@ -1124,6 +1115,8 @@ class BeatSerializer(serializers.ModelSerializer):
             "updated_at",
             # Client-side permission gating
             "can_mark",
+            # GM-only scenario-graph summary (#3565)
+            "scenario",
             # #3425 session prep child rows
             "opponent_lines",
             "staged_templates",
@@ -1137,6 +1130,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "can_mark",
+            "scenario",
         ]
 
     def get_can_mark(self, obj: Beat) -> bool:
@@ -1155,6 +1149,39 @@ class BeatSerializer(serializers.ModelSerializer):
         if request is None:
             return False
         return CanMarkBeat().has_object_permission(request, None, obj)  # type: ignore[arg-type]
+
+    def get_scenario(self, obj: Beat) -> dict[str, Any] | None:
+        """Read-only GM view of this beat's scenario graph (#3565).
+
+        None when the beat has no ``required_mission``, when that template
+        isn't a story-owned scenario (a catalog mission the GM merely
+        assigned), or when the viewer lacks ``can_view_story_gm_text`` (same
+        gate as ``internal_description`` above) -- node/option keys are GM
+        planning detail, not player-visible.
+        """
+        from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
+
+        template = obj.required_mission
+        if template is None:
+            return None
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        story = obj.episode.chapter.story
+        if user is None or not can_view_story_gm_text(user, story):
+            return None
+        if not hasattr(template, "story_scenario"):
+            return None
+        option_keys = list(
+            MissionOption.objects.filter(node__template=template)
+            .exclude(key="")
+            .order_by("key")
+            .values_list("key", flat=True)
+        )
+        return {
+            "template_id": template.pk,
+            "name": template.name,
+            "option_keys": option_keys,
+        }
 
     def to_representation(self, instance: Beat) -> dict[str, Any]:
         """Gate ``internal_description`` for non-privileged viewers (#1923).
@@ -1237,7 +1264,7 @@ class BeatSerializer(serializers.ModelSerializer):
         if merged_risk != RenownRisk.NONE and not is_staff:
             from world.stories.services.stakes import risk_index  # noqa: PLC0415
 
-            if risk_index(merged_risk) > risk_index(_gm_max_risk(user)):
+            if risk_index(merged_risk) > risk_index(gm_max_risk(user)):
                 raise serializers.ValidationError(
                     {
                         "risk": (
@@ -4147,4 +4174,38 @@ class AssignMissionInputSerializer(serializers.Serializer):
             if template is None:
                 raise serializers.ValidationError({"template": self._ERR_NO_TEMPLATE})
             attrs["template"] = template
+        return attrs
+
+
+class CreateBeatScenarioInputSerializer(serializers.Serializer):
+    """POST /api/beats/{id}/scenario/ body (#3565).
+
+    Authors the MissionTemplate a beat's scenario graph runs on --
+    ``create_scenario_for_beat`` does the actual create/idempotent-return
+    work; this serializer only validates shape and the non-staff risk gate
+    (mirrors the ``risk`` gate ``BeatSerializer.validate()`` applies to
+    ``beat.risk``, using the beat's own author-risk ceiling).
+    """
+
+    name = serializers.CharField(max_length=200)
+    summary = serializers.CharField()
+    risk_tier = serializers.IntegerField(min_value=1, max_value=5)
+
+    _ERR_RISK_TIER = (
+        "Your GM level does not permit authoring scenarios at this risk tier. "
+        "Higher tiers unlock as staff promote your GM level."
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is not None and user.is_authenticated and not user.is_staff:
+            from world.missions.constants import risk_tier_to_renown_risk  # noqa: PLC0415
+            from world.stories.services.stakes import risk_index  # noqa: PLC0415
+
+            if risk_index(risk_tier_to_renown_risk(attrs["risk_tier"])) > risk_index(
+                gm_max_risk(user)
+            ):
+                raise serializers.ValidationError({"risk_tier": self._ERR_RISK_TIER})
         return attrs

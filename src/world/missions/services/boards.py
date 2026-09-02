@@ -54,6 +54,11 @@ def postings_for_giver(giver: MissionGiver, character: ObjectDB) -> list[BoardPo
     NPC-offer path use. No cooldown check, no grant, no announce: this is
     pure preview. Capped at :data:`MAX_BOARD_POSTINGS`.
 
+    A GM's StoryScenario template is excluded outright regardless of its
+    visibility flag (#3565) — it is reached only through its beat, never a
+    board's front door, even when a GM accidentally (or deliberately)
+    attaches it to a giver.
+
     Returns an empty list when the character has no eligible templates
     (RESTRICTED + failing predicate, or all inactive).
     """
@@ -63,7 +68,7 @@ def postings_for_giver(giver: MissionGiver, character: ObjectDB) -> list[BoardPo
         persona = None
 
     eligible: list[MissionTemplate] = []
-    for template in giver.templates.all():
+    for template in giver.templates.filter(story_scenario__isnull=True):
         if template.is_active and template_visible_to(template, character, persona=persona):
             eligible.append(template)
         if len(eligible) >= MAX_BOARD_POSTINGS:
@@ -137,7 +142,9 @@ def take_from_board(giver: MissionGiver, character: ObjectDB, template_id: int) 
 
     if not giver.is_active or giver.giver_kind != GiverKind.BOARD:
         raise BoardTakeError(BoardTakeError.UNAVAILABLE)
-    template = giver.templates.filter(pk=template_id, is_active=True).first()
+    template = giver.templates.filter(
+        pk=template_id, is_active=True, story_scenario__isnull=True
+    ).first()
     if template is None:
         raise BoardTakeError(BoardTakeError.NOT_ON_BOARD)
     try:

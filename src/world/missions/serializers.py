@@ -5,17 +5,26 @@ CRUD serializers for nodes / options / routes / candidates / rewards
 land in D2; giver-library serializers in D3; predicate-tree in D5.
 """
 
-from django.core.exceptions import ValidationError as DjangoValidationError
+from collections.abc import Callable
+
+from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.missions.constants import DeedRewardSink, MissionStatus, NodeLocationMode, ReportStyle
+from world.missions.constants import (
+    DeedRewardSink,
+    MissionStatus,
+    MissionVisibility,
+    NodeLocationMode,
+    ReportStyle,
+)
 from world.missions.models import (
     MissionCategory,
     MissionGiver,
     MissionInstance,
     MissionNode,
     MissionOption,
+    MissionOptionOpponentLine,
     MissionOptionRoute,
     MissionOptionRouteCandidate,
     MissionOptionRouteReward,
@@ -59,7 +68,17 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
     template whose rule admits no PC simply IS staff-only, a valid
     emergent state. ``availability_rule`` IS validated (well-formedness;
     a malformed tree would crash every later availability check).
+
+    ``story_id`` (#3565) is read-only: null for a catalog template, the
+    owning Story's pk when this template is a GM's StoryScenario. Non-staff
+    writers are additionally bounded in ``validate()`` — a JUNIOR/GM-level
+    author can never author above their GM level's risk ceiling, flip
+    ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+    weight into the front door (``base_weight``): a scenario is reached only
+    through its beat, never the quest board.
     """
+
+    story_id = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = MissionTemplate
@@ -81,6 +100,7 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             "visibility",
             "categories",
             "availability_rule",
+            "story_id",
         ]
         read_only_fields = ["id"]
         # Suppress DRF's auto-generated UniqueValidator on ``name``.
@@ -88,6 +108,12 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
         # collisions via auto-suffix before the DB write, so a
         # UniqueValidator firing before create() would block that logic.
         extra_kwargs = {"name": {"validators": []}}
+
+    def get_story_id(self, obj: MissionTemplate) -> int | None:
+        try:
+            return obj.story_scenario.story_id
+        except ObjectDoesNotExist:
+            return None
 
     def validate_name(self, value: str) -> str:
         """On UPDATE: reject names already taken by another template.
@@ -129,7 +155,42 @@ class MissionTemplateSerializer(serializers.ModelSerializer):
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is not None and user.is_authenticated and not user.is_staff:
+            self._validate_non_staff_bounds(field, user)
         return attrs
+
+    _ERR_RISK_TIER_CEILING = "Your GM level does not permit this risk tier."
+    _ERR_VISIBILITY_OPEN = "Non-staff authors may not set visibility to open."
+    _ERR_AVAILABILITY_RULE = "Non-staff authors may not set an availability rule."
+    _ERR_BASE_WEIGHT = "Non-staff authors may not set a nonzero base_weight."
+
+    def _validate_non_staff_bounds(
+        self, field: Callable[[str, object], object], user: object
+    ) -> None:
+        """Cap a non-staff (GM-authored scenario) write at the safe defaults (#3565).
+
+        A scenario is reached only through its beat, never the quest board --
+        so a non-staff writer may never raise risk above their GM level's
+        ceiling, flip visibility to OPEN, set a non-empty availability_rule,
+        or draw front-door weight.
+        """
+        from world.missions.permissions import max_risk_tier_for  # noqa: PLC0415
+
+        errors: dict[str, str] = {}
+        risk_tier = int(field("risk_tier", 1))
+        if risk_tier > max_risk_tier_for(user):
+            errors["risk_tier"] = self._ERR_RISK_TIER_CEILING
+        if field("visibility", MissionVisibility.RESTRICTED) == MissionVisibility.OPEN:
+            errors["visibility"] = self._ERR_VISIBILITY_OPEN
+        if field("availability_rule", {}):
+            errors["availability_rule"] = self._ERR_AVAILABILITY_RULE
+        if field("base_weight", 0):
+            errors["base_weight"] = self._ERR_BASE_WEIGHT
+        if errors:
+            raise serializers.ValidationError(errors)
 
     def validate_availability_rule(self, value: dict) -> dict:
         """Reject malformed predicate trees at author time (#870).
@@ -320,14 +381,37 @@ class MissionNodeSerializer(serializers.ModelSerializer):
         return mode
 
 
+class MissionOptionOpponentLineSerializer(serializers.ModelSerializer):
+    """One authored opponent line on an ENCOUNTER option (#3565).
+
+    ``id`` is writable-but-optional so ``MissionOptionSerializer.update()``
+    can diff incoming rows against the option's existing lines by id --
+    mirrors ``BeatOpponentLineSerializer`` (stories/serializers.py).
+    """
+
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = MissionOptionOpponentLine
+        fields = ["id", "creature_template", "count", "position_name", "order"]
+
+
 class MissionOptionSerializer(serializers.ModelSerializer):
     """Editor CRUD for MissionOption rows (authored or challenge-sourced).
 
     Both source_kind values are editable; consumer code distinguishes via
     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
     rides through; the predicate-tree builder API (D5) is what authors
-    actually use to write it.
+    actually use to write it. ``key`` is the stable per-node authoring key
+    (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+    ``encounter_risk_level`` is required for ENCOUNTER options (model
+    ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+    child list -- create()/update() diff-sync it against the option's
+    existing rows by id (add/edit/delete), same pattern as
+    ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
     """
+
+    opponent_lines = MissionOptionOpponentLineSerializer(many=True, required=False)
 
     class Meta:
         model = MissionOption
@@ -335,8 +419,10 @@ class MissionOptionSerializer(serializers.ModelSerializer):
             "id",
             "node",
             "order",
+            "key",
             "option_kind",
             "source_kind",
+            "encounter_risk_level",
             "visibility_rule",
             "authored_check_type",
             "authored_base_risk",
@@ -344,8 +430,50 @@ class MissionOptionSerializer(serializers.ModelSerializer):
             "authored_ic_framing_needs_rewrite",
             "branch_target",
             "challenge",
+            "opponent_lines",
         ]
         read_only_fields = ["id"]
+
+    def create(self, validated_data: dict) -> MissionOption:  # type: ignore[override]
+        opponent_lines_data = validated_data.pop("opponent_lines", [])
+        option = super().create(validated_data)
+        self._sync_opponent_lines(option, opponent_lines_data)
+        return option
+
+    def update(  # type: ignore[override]
+        self, instance: MissionOption, validated_data: dict
+    ) -> MissionOption:
+        opponent_lines_data = validated_data.pop("opponent_lines", None)
+        option = super().update(instance, validated_data)
+        if opponent_lines_data is not None:
+            self._sync_opponent_lines(option, opponent_lines_data)
+        return option
+
+    @staticmethod
+    def _sync_opponent_lines(option: MissionOption, rows: list[dict]) -> None:
+        """Diff *rows* against ``option``'s existing opponent lines by id.
+
+        Same replace-by-diff semantics as ``BeatSerializer._sync_children``:
+        a row carrying an id matching an existing child updates it in
+        place; a row with no id (or an unrecognized one) creates a new row;
+        any existing child whose id is absent from *rows* is deleted.
+        """
+        existing = {obj.pk: obj for obj in option.opponent_lines.all()}
+        seen_ids: set[int] = set()
+        for raw_row in rows:
+            row = dict(raw_row)
+            row_id = row.pop("id", None)
+            child = existing.get(row_id) if row_id is not None else None
+            if child is not None:
+                for field_name, value in row.items():
+                    setattr(child, field_name, value)
+                child.save()
+                seen_ids.add(row_id)
+            else:
+                MissionOptionOpponentLine.objects.create(option=option, **row)
+        stale_ids = set(existing) - seen_ids
+        if stale_ids:
+            MissionOptionOpponentLine.objects.filter(pk__in=stale_ids).delete()
 
 
 _OUTCOME_TEXT_FIELD = "outcome_text"
@@ -438,6 +566,12 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
     _ERR_BOTH_SET = "Cannot set both route and candidate — pick one."
     _ERR_SUMMONS_NO_OFFER = "Required when sink=FOLLOW_ON_SUMMONS."
     _ERR_OFFER_WRONG_SINK = "May only be set when sink=FOLLOW_ON_SUMMONS."
+    _ERR_NON_STAFF_SINK = (
+        "Non-staff authors may only grant money, resonance, or legend point rewards."
+    )
+    _NON_STAFF_ALLOWED_SINKS = frozenset(
+        {DeedRewardSink.MONEY, DeedRewardSink.RESONANCE, DeedRewardSink.LEGEND_POINTS}
+    )
 
     def validate(self, attrs: dict) -> dict:
         # Honor partial updates: fall back to instance values for fields
@@ -462,6 +596,12 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"followon_offer": self._ERR_SUMMONS_NO_OFFER})
         if sink != DeedRewardSink.FOLLOW_ON_SUMMONS.value and followon_offer is not None:
             raise serializers.ValidationError({"followon_offer": self._ERR_OFFER_WRONG_SINK})
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        is_non_staff = user is not None and user.is_authenticated and not user.is_staff
+        if is_non_staff and sink not in self._NON_STAFF_ALLOWED_SINKS:
+            raise serializers.ValidationError({"sink": self._ERR_NON_STAFF_SINK})
         return attrs
 
 
