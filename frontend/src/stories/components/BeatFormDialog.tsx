@@ -1322,7 +1322,7 @@ export function BeatFormDialog({
                 }}
               />
             )}
-            {fieldErrors.required_mission && (
+            {kindHasRequiredMission(kind) && fieldErrors.required_mission && (
               <p className="text-xs text-destructive">{fieldErrors.required_mission.join(' ')}</p>
             )}
 
