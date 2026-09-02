@@ -67,40 +67,47 @@ export function SidebarTabPanel({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
-      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-9">
-        <TabsTrigger value="room" className="gap-1 text-xs" title={label}>
+      {/*
+        Nine labelled tabs do not fit one row of a ~260px sidebar. A fixed
+        `grid-cols-N` sized every column to width/9 (~28px) while each trigger
+        keeps `px-3` + `whitespace-nowrap`, so the labels overflowed their
+        cells and painted on top of each other. Wrap instead: the row count
+        follows the sidebar's actual width, and `grow` fills each row evenly.
+      */}
+      <TabsList className="mx-2 mt-2 flex h-auto flex-wrap justify-start gap-1">
+        <TabsTrigger value="room" className="grow gap-1 text-xs" title={label}>
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="inline-block max-w-[8rem] truncate">{label}</span>
         </TabsTrigger>
-        <TabsTrigger value="who" className="gap-1 text-xs">
+        <TabsTrigger value="who" className="grow gap-1 text-xs">
           <Users className="h-3 w-3" />
           Who
         </TabsTrigger>
-        <TabsTrigger value="stories" className="gap-1 text-xs">
+        <TabsTrigger value="stories" className="grow gap-1 text-xs">
           <Scroll className="h-3 w-3" />
           Stories
         </TabsTrigger>
-        <TabsTrigger value="events" className="gap-1 text-xs">
+        <TabsTrigger value="events" className="grow gap-1 text-xs">
           <Calendar className="h-3 w-3" />
           Events
         </TabsTrigger>
-        <TabsTrigger value="codex" className="gap-1 text-xs">
+        <TabsTrigger value="codex" className="grow gap-1 text-xs">
           <BookOpen className="h-3 w-3" />
           Codex
         </TabsTrigger>
-        <TabsTrigger value="status" className="gap-1 text-xs">
+        <TabsTrigger value="status" className="grow gap-1 text-xs">
           <Activity className="h-3 w-3" />
           Status
         </TabsTrigger>
-        <TabsTrigger value="inventory" className="gap-1 text-xs">
+        <TabsTrigger value="inventory" className="grow gap-1 text-xs">
           <Backpack className="h-3 w-3" />
           Items
         </TabsTrigger>
-        <TabsTrigger value="journal" className="gap-1 text-xs">
+        <TabsTrigger value="journal" className="grow gap-1 text-xs">
           <PenLine className="h-3 w-3" />
           Journal
         </TabsTrigger>
-        <TabsTrigger value="travel" className="gap-1 text-xs">
+        <TabsTrigger value="travel" className="grow gap-1 text-xs">
           <Ship className="h-3 w-3" />
           Travel
         </TabsTrigger>
