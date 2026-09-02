@@ -21437,38 +21437,6 @@ export interface paths {
     patch: operations['stakes_partial_update'];
     trace?: never;
   };
-  '/api/stakes/{id}/resolve/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
-     *
-     *     Lead GM, staff, or an AGM with an approved claim on the stake's beat
-     *     picks one of the stake's AUTHORED resolution columns; the branch fires
-     *     exactly like the machine path (pool + writers) and the StakeOutcome
-     *     audit row records method=GM_PICK with the GM and notes. Optional
-     *     ``participants`` / ``extra_participants`` carry the personas the
-     *     branch's pool and affection writer credit (MarkBeat semantics).
-     *     Returns 201 with the StakeOutcome.
-     *
-     *     The LEGEND_AWARD participant guards fire inside the service's pool
-     *     walk — pre-validating them in the serializer would duplicate
-     *     resolve_pool_consequences; they are surfaced as 400 here (same
-     *     exception-block carve-out as EpisodeViewSet.resolve).
-     */
-    post: operations['stakes_resolve_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/stories/': {
     parameters: {
       query?: never;
@@ -29570,6 +29538,18 @@ export interface components {
       protected_subjects: components['schemas']['StoryProtectedSubject'][];
       clue_placements: components['schemas']['GMStoryRailClue'][];
       participants: components['schemas']['GMStoryRailParticipant'][];
+      stakes: components['schemas']['GMStoryRailStake'][];
+      activation: components['schemas']['GMStoryRailActivation'] | null;
+    };
+    /**
+     * @description The running beat's lock state: the open activation, or the most recent
+     *     resolved one when none is open.
+     */
+    GMStoryRailActivation: {
+      /** Format: date-time */
+      locked_at: string;
+      effective_risk: string;
+      is_ready: boolean;
     };
     /** @description The running beat's authored state, gated per-field by story standing. */
     GMStoryRailBeat: {
@@ -29596,6 +29576,20 @@ export interface components {
     GMStoryRailParticipant: {
       character_sheet_id: number;
       name: string;
+    };
+    /** @description One stake on the running beat's contract, story-standing viewers only. */
+    GMStoryRailStake: {
+      id: number;
+      player_summary: string;
+      severity: number;
+      subject_kind: string;
+      outcome: components['schemas']['GMStoryRailStakeOutcome'] | null;
+    };
+    /** @description The fired branch for one stake, if the contract has resolved it. */
+    GMStoryRailStakeOutcome: {
+      column: string;
+      outcome_key: string;
+      resolution_summary: string;
     };
     /**
      * @description Read-only payload for a pending GM summon offer (#3071).
@@ -31627,10 +31621,9 @@ export interface components {
     };
     /**
      * @description * `machine` - Machine
-     *     * `gm_pick` - GM pick
      * @enum {string}
      */
-    MethodEnum: 'machine' | 'gm_pick';
+    MethodEnum: 'machine';
     /**
      * @description * `allure` - Allure
      *     * `menace` - Menace
@@ -38293,6 +38286,8 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
+      /** @description For ASSET subjects. Nulls if the asset is deleted. */
+      subject_asset?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
@@ -38337,6 +38332,8 @@ export interface components {
       forfeits_subject_item?: boolean;
       /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
       subject_standing_delta?: number;
+      /** @description Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row. */
+      npc_regard_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -38363,6 +38360,8 @@ export interface components {
       machine_match_lifecycle_state?:
         | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
+      /** @description On fire, transition the stake's subject_asset to this AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct asset transition (use the consequence_pool for check-gated transitions instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes. */
+      transitions_subject_asset?: string;
     };
     /**
      * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
@@ -42376,6 +42375,8 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
+      /** @description For ASSET subjects. Nulls if the asset is deleted. */
+      subject_asset?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
@@ -42425,9 +42426,15 @@ export interface components {
       /** @description The authored branch that fired; null = no branch authored for the column. */
       readonly resolution: number | null;
       readonly column: components['schemas']['ColumnEnum'];
+      /**
+       * @description Always MACHINE (#3561 retired the GM constrained pick).
+       *
+       *     * `machine` - Machine
+       */
       readonly method: components['schemas']['MethodEnum'];
-      /** @description The GM who picked the column (GM_PICK only; null for MACHINE). */
+      /** @description Historical audit field from before #3561 retired the GM constrained pick: the GM who picked the column, on rows resolved that way. Always null on rows resolved since. */
       readonly resolved_by: number | null;
+      /** @description Historical audit field from before #3561 retired the GM constrained pick: the deciding GM's notes, on rows resolved that way. Always blank on rows resolved since. */
       readonly gm_notes: string;
       /** Format: date-time */
       readonly created_at: string;
@@ -42459,6 +42466,8 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
+      /** @description For ASSET subjects. Nulls if the asset is deleted. */
+      subject_asset?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
@@ -42504,6 +42513,8 @@ export interface components {
       forfeits_subject_item?: boolean;
       /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
       subject_standing_delta?: number;
+      /** @description Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row. */
+      npc_regard_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -42530,6 +42541,8 @@ export interface components {
       machine_match_lifecycle_state?:
         | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
+      /** @description On fire, transition the stake's subject_asset to this AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct asset transition (use the consequence_pool for check-gated transitions instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes. */
+      transitions_subject_asset?: string;
       readonly reward_lines: components['schemas']['StakeRewardLine'][];
     };
     /**
@@ -42571,6 +42584,8 @@ export interface components {
       forfeits_subject_item?: boolean;
       /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
       subject_standing_delta?: number;
+      /** @description Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row. */
+      npc_regard_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -42597,6 +42612,8 @@ export interface components {
       machine_match_lifecycle_state?:
         | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
+      /** @description On fire, transition the stake's subject_asset to this AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct asset transition (use the consequence_pool for check-gated transitions instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes. */
+      transitions_subject_asset?: string;
     };
     /**
      * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
@@ -75296,32 +75313,6 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedStakeRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Stake'];
-        };
-      };
-    };
-  };
-  stakes_resolve_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this stake. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['StakeRequest'];
       };
     };
     responses: {
