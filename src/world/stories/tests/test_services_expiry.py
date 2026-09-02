@@ -1,5 +1,8 @@
 """Expiry is a completion (#3558): pool, stakes, activation, ledger."""
 
+from datetime import timedelta
+
+from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
@@ -8,17 +11,34 @@ from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
+from world.gm.factories import GMTableFactory, GMTableMembershipFactory
 from world.societies.factories import LegendSourceTypeFactory
 from world.societies.models import LegendEvent
-from world.stories.constants import StoryScope
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    StakeOutcomeMethod,
+    StakeResolutionColumn,
+    StoryScope,
+)
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    GroupStoryProgressFactory,
+    StakeFactory,
+    StakeResolutionFactory,
     StoryFactory,
     StoryProgressFactory,
+    seed_default_risk_calibrations,
 )
-from world.stories.services.beats import _fire_pool_with_context
+from world.stories.models import BeatCompletion, StakeOutcome
+from world.stories.services.beats import (
+    _fire_pool_with_context,
+    complete_beat_expired,
+    expire_beat,
+)
+from world.stories.services.stakes import activate_stakes_contract, get_open_activation
 
 
 def _pool_with_condition_and_legend(template):
@@ -101,3 +121,107 @@ class SkipEffectTypesTests(EvenniaTestCase):
             skip_effect_types=frozenset({EffectType.LEGEND_AWARD}),
         )
         assert not LegendEvent.objects.exists()
+
+
+def _past(hours: int = 1):
+    return timezone.now() - timedelta(hours=hours)
+
+
+def _character_beat(**beat_kwargs):
+    sheet = CharacterSheetFactory()
+    story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+    episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+    beat = BeatFactory(episode=episode, deadline=_past(), **beat_kwargs)
+    progress = StoryProgressFactory(story=story, character_sheet=sheet)
+    return sheet, beat, progress
+
+
+class CompleteBeatExpiredTests(EvenniaTestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_risk_calibrations()
+
+    def test_fires_expired_pool_and_writes_completion(self) -> None:
+        template = ConditionTemplateFactory()
+        pool = _pool_with_condition_and_legend(template)
+        sheet, beat, _progress = _character_beat(expired_consequences=pool)
+
+        completion = complete_beat_expired(beat)
+
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.EXPIRED
+        assert completion is not None
+        assert completion.outcome == BeatOutcome.EXPIRED
+        assert completion.character_sheet_id == sheet.pk
+        assert completion.gm_notes == "Deadline passed."
+        assert ConditionInstance.objects.filter(target=sheet.character, condition=template).exists()
+        assert not LegendEvent.objects.exists()  # expiry earns no legend
+
+    def test_resolves_stakes_loss_and_closes_activation(self) -> None:
+        sheet, beat, _progress = _character_beat()
+        stake = StakeFactory(beat=beat)
+        loss = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        activation = activate_stakes_contract(beat, [sheet])
+
+        complete_beat_expired(beat)
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        assert outcome.column == StakeResolutionColumn.LOSS
+        assert outcome.method == StakeOutcomeMethod.MACHINE
+        assert outcome.resolution_id == loss.pk
+        assert outcome.activation_id == activation.pk
+        assert get_open_activation(beat) is None
+
+    def test_no_active_progress_flips_only(self) -> None:
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=CharacterSheetFactory())
+        beat = BeatFactory(
+            episode=EpisodeFactory(chapter=ChapterFactory(story=story)), deadline=_past()
+        )
+
+        assert complete_beat_expired(beat) is None
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.EXPIRED
+        assert not BeatCompletion.objects.filter(beat=beat).exists()
+
+    def test_group_scope_uses_table_members(self) -> None:
+        story = StoryFactory(scope=StoryScope.GROUP)
+        table = GMTableFactory()
+        member = GMTableMembershipFactory(table=table)
+        GMTableMembershipFactory(table=table, left_at=timezone.now())  # gone; excluded
+        GroupStoryProgressFactory(story=story, gm_table=table)
+        template = ConditionTemplateFactory()
+        pool = _pool_with_condition_and_legend(template)
+        beat = BeatFactory(
+            episode=EpisodeFactory(chapter=ChapterFactory(story=story)),
+            predicate_type=BeatPredicateType.GM_MARKED,
+            deadline=_past(),
+            expired_consequences=pool,
+        )
+
+        completion = complete_beat_expired(beat)
+
+        assert completion is not None
+        assert completion.gm_table_id == table.pk
+        assert ConditionInstance.objects.filter(
+            target=member.persona.character_sheet.character, condition=template
+        ).exists()
+        assert not LegendEvent.objects.exists()
+
+
+class ExpireBeatTests(EvenniaTestCase):
+    def test_guard_future_deadline(self) -> None:
+        _sheet, beat, _progress = _character_beat()
+        beat.deadline = timezone.now() + timedelta(hours=1)
+        beat.save(update_fields=["deadline"])
+        assert expire_beat(beat) is None
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.UNSATISFIED
+
+    def test_idempotent(self) -> None:
+        _sheet, beat, _progress = _character_beat()
+        first = expire_beat(beat)
+        second = expire_beat(beat)
+        assert first is not None
+        assert second is None
+        assert BeatCompletion.objects.filter(beat=beat).count() == 1

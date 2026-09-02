@@ -22,10 +22,19 @@ Public API:
 
     expire_overdue_beats(now) — flips UNSATISFIED beats with past deadlines to
         EXPIRED outcome. Idempotent; safe for a cron hook.
+
+    complete_beat_expired(beat) - resolves a beat EXPIRED as a real completion
+        (#3558): fires the authored expired pool (LEGEND_AWARD skipped), grades
+        open stakes LOSS, closes the contract, and writes the ledger row.
+
+    expire_beat(beat, now=None) - locks the beat, checks the deadline, and
+        delegates to complete_beat_expired. Idempotent; the cron sweep's
+        per-beat entry point.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
@@ -35,6 +44,8 @@ from world.roster.models import RosterEntry
 from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import AnyStoryProgress, StoryStatus
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -212,6 +223,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     outcome_tier: CheckOutcome | None = None,
     withdrawal: bool = False,
     resolved_by: GMProfile | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> BeatCompletion:
     """Persist the outcome, create the BeatCompletion, and fire its consequence pool.
 
@@ -249,6 +261,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
+            skip_effect_types=skip_effect_types,
         )
 
         resolve_stakes_for_completion(
@@ -661,6 +674,73 @@ def expire_overdue_beats(now: datetime | None = None) -> int:
             beat.save(update_fields=["outcome", "updated_at"])
             count += 1
     return count
+
+
+_EXPIRY_NOTE = "Deadline passed."
+
+
+@transaction.atomic
+def complete_beat_expired(beat: Beat) -> BeatCompletion | None:
+    """Resolve ``beat`` EXPIRED as a real completion (#3558).
+
+    Fires the authored expired pool (every row, LEGEND_AWARD skipped: expiry
+    earns no legend), grades open stakes LOSS, closes the contract, writes the
+    ledger row and notifies. A story with no active progress cannot be
+    completed for anyone: the outcome still flips so routing sees it, and
+    ``None`` is returned. No deadline check here; ``expire_beat`` guards the
+    deadline and the scene clock (#3567) calls this directly when it fills.
+    """
+    from world.checks.constants import EffectType  # noqa: PLC0415
+    from world.stories.services.progress import (  # noqa: PLC0415
+        get_active_progress_for_story,
+    )
+
+    story = beat.episode.chapter.story
+    progress = get_active_progress_for_story(story)
+    if progress is None:
+        logger.debug("Beat %s expired with no active progress; flipping only.", beat.pk)
+        beat.outcome = BeatOutcome.EXPIRED
+        beat.save(update_fields=["outcome", "updated_at"])
+        return None
+
+    scope = story.scope
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=BeatOutcome.EXPIRED,
+        era=Era.objects.get_active(),
+        gm_notes=_EXPIRY_NOTE,
+        progress=progress,
+        scope=scope,
+        outcome_tier=None,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=BeatOutcome.EXPIRED,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=_expiry_participants(progress, scope),
+        outcome_tier=None,
+        skip_effect_types=frozenset({EffectType.LEGEND_AWARD}),
+    )
+
+
+@transaction.atomic
+def expire_beat(beat: Beat, *, now: datetime | None = None) -> BeatCompletion | None:
+    """Lock, check the deadline, then complete the beat EXPIRED.
+
+    Lock-then-check closes the race between the cron sweep and a lazy
+    transition-time expiry. Idempotent: an already-resolved beat or an
+    unexpired deadline returns ``None`` untouched.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    if now is None:
+        now = timezone.now()
+    beat = Beat.objects.select_for_update().get(pk=beat.pk)
+    if beat.outcome != BeatOutcome.UNSATISFIED or beat.deadline is None or beat.deadline >= now:
+        return None
+    return complete_beat_expired(beat)
 
 
 # ---------------------------------------------------------------------------
@@ -1145,6 +1225,25 @@ def _group_scope_participants(
     return []
 
 
+def _expiry_participants(progress: AnyStoryProgress, scope: str) -> list[Persona]:
+    """Who an expiry credits: the character, or the table's present members.
+
+    GROUP scope has no completing character to derive from, so the table's
+    members whose membership is still open stand in (#3558 Decision 7).
+    GLOBAL scope credits nobody.
+    """
+    if scope == StoryScope.CHARACTER:
+        return [progress.character_sheet.primary_persona]
+    if scope == StoryScope.GROUP:
+        from world.gm.models import GMTableMembership  # noqa: PLC0415
+
+        memberships = GMTableMembership.objects.filter(
+            table=progress.gm_table, left_at__isnull=True
+        ).select_related("persona")
+        return [m.persona for m in memberships]
+    return []
+
+
 def _derive_aggregate_participants(beat: Beat) -> list[Persona]:
     """Map every distinct contributing character sheet to its PRIMARY persona.
 
@@ -1169,13 +1268,14 @@ def _derive_aggregate_participants(beat: Beat) -> list[Persona]:
     return derived
 
 
-def _maybe_fire_pool_on_completion(
+def _maybe_fire_pool_on_completion(  # noqa: PLR0913
     *,
     completion: BeatCompletion,
     progress: AnyStoryProgress | None,
     scope: str,
     explicit_participants: list[Persona] | None = None,
     outcome_tier: CheckOutcome | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> None:
     """Fire the consequence pool matching the completion's outcome, if any.
 
@@ -1196,6 +1296,8 @@ def _maybe_fire_pool_on_completion(
             None (the existing GM-marked / auto-evaluated / aggregate paths), every
             row in the pool fires via apply_pool_deterministically — unchanged
             behavior.
+        skip_effect_types: forwarded to _fire_pool_with_context (an expiry
+            completion passes {EffectType.LEGEND_AWARD}: expiry earns no legend).
     """
     pool = _pool_for_outcome(completion.beat, completion.outcome)
     if pool is None:
@@ -1214,6 +1316,7 @@ def _maybe_fire_pool_on_completion(
         scope=scope,
         participants=participants,
         outcome_tier=outcome_tier,
+        skip_effect_types=skip_effect_types,
     )
 
 
@@ -1237,7 +1340,7 @@ def _fire_pool_with_context(  # noqa: PLR0913
     ``skip_effect_types``: effect types to leave unfired (an expiry completion
     passes ``{EffectType.LEGEND_AWARD}``: expiry earns no legend, ADR-0066).
     When it contains LEGEND_AWARD, the two LEGEND_AWARD participant guards
-    below are also skipped — the effect will not fire, so the guards have
+    below are also skipped: the effect will not fire, so the guards have
     nothing to protect.
     """
     from world.checks.consequence_resolution import (  # noqa: PLC0415

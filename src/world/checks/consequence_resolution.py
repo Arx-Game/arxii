@@ -154,7 +154,7 @@ def apply_pool_deterministically(
     select_consequence handles inheritance.
 
     ``skip_effect_types``: forwarded to apply_all_effects() for every
-    Consequence — effect types to leave unfired (see its docstring).
+    Consequence - effect types to leave unfired (see its docstring).
     """
     from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
 
