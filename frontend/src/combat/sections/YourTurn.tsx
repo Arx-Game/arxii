@@ -1288,6 +1288,16 @@ export function YourTurn({
 
   const isLocked = readOnly || submitted || serverReady;
 
+  const renderDispatch = () => {
+    if (dispatchPending) {
+      return 'Submitting…';
+    }
+    if (encounter?.pace_mode === 'ready') {
+      return 'Submit declarations · mark ready';
+    }
+    return 'Submit declarations';
+  };
+
   return (
     <div className="space-y-4" data-testid="your-turn-section">
       <PendingAttacks
@@ -2069,11 +2079,7 @@ export function YourTurn({
             : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
         )}
       >
-        {dispatchPending
-          ? 'Submitting…'
-          : encounter?.pace_mode === 'ready'
-            ? 'Submit declarations · mark ready'
-            : 'Submit declarations'}
+        {renderDispatch()}
       </button>
 
       {/* Inline submit error — shown when a dispatch rejects */}

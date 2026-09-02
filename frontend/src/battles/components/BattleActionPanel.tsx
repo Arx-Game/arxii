@@ -274,6 +274,15 @@ interface DeclarationProps {
   myParticipant: NonNullable<BattleDetail['participants']>[number];
 }
 
+/**
+ * A move targets a place when the commander orders a unit there, and the acting
+ * unit itself otherwise. Every other action kind has a fixed scope.
+ */
+function scopeFor(actionKind: BattleActionKind, moveIsCommanderOrder: boolean): BattleActionScope {
+  if (actionKind !== 'move') return FORCED_SCOPE_FOR_KIND[actionKind];
+  return moveIsCommanderOrder ? 'place' : 'unit';
+}
+
 /** The target-picker state a declaration reads from, whatever shape it turns out to need. */
 interface TargetSelection {
   targetUnitId: number | '';
@@ -362,12 +371,7 @@ function BattleDeclarationSection({
   const { data: castableTechniques = [] } = useCastableTechniques(myPersonaId);
 
   const targetShape = BATTLE_ACTION_TARGET_SHAPES[actionKind];
-  const scope: BattleActionScope =
-    actionKind === 'move'
-      ? moveIsCommanderOrder
-        ? 'place'
-        : 'unit'
-      : FORCED_SCOPE_FOR_KIND[actionKind];
+  const scope: BattleActionScope = scopeFor(actionKind, moveIsCommanderOrder);
 
   const opposingUnits = detail.units.filter((u) => u.side_id !== myParticipant.side_id);
   const ownUnits = detail.units.filter((u) => u.side_id === myParticipant.side_id);

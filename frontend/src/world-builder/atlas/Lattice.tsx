@@ -143,6 +143,13 @@ function pendingLinkKey(x: number, y: number, floor: number): string {
   return `${x},${y}@${floor}`;
 }
 
+/** What clicking a lattice square will do, as a hover hint. */
+function squareHint(state: string): string {
+  if (state === 'planned') return 'planned square — click to add';
+  if (state === 'void') return 'carved out — right-click to restore';
+  return 'empty ground — click to plan';
+}
+
 export function Lattice({
   mode,
   nodeId,
@@ -489,6 +496,15 @@ export function Lattice({
     }
   }
 
+  const renderConnecting = () => {
+    if (connecting) {
+      return connectSrc
+        ? `now click the room to join ${connectSrc.name} to…`
+        : 'click the first room…';
+    }
+    return 'click it, then click two rooms to join them — or add exits from inside any room';
+  };
+
   return (
     <div data-testid="lattice" data-mode={mode}>
       {mode === 'rooms' && (
@@ -606,13 +622,7 @@ export function Lattice({
                   data-cell-key={key}
                   data-testid={`lattice-cell-${x}-${y}`}
                   data-cell-state={state}
-                  aria-label={
-                    state === 'planned'
-                      ? 'planned square — click to add'
-                      : state === 'void'
-                        ? 'carved out — right-click to restore'
-                        : 'empty ground — click to plan'
-                  }
+                  aria-label={squareHint(state)}
                   className={cn(
                     'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
                     state === 'empty' && 'border-dotted text-muted-foreground',
@@ -703,11 +713,7 @@ export function Lattice({
             className="font-body text-xs italic text-muted-foreground"
             data-testid="lattice-connect-note"
           >
-            {connecting
-              ? connectSrc
-                ? `now click the room to join ${connectSrc.name} to…`
-                : 'click the first room…'
-              : 'click it, then click two rooms to join them — or add exits from inside any room'}
+            {renderConnecting()}
           </span>
         )}
       </div>

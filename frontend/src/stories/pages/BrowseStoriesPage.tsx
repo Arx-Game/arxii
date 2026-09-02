@@ -141,6 +141,30 @@ function BrowseStoriesInner() {
 
   const hasAny = allStories.length > 0;
 
+  const renderAny = () => {
+    if (!hasAny) {
+      return (
+        <p className="py-8 text-center text-muted-foreground">{EMPTY_MESSAGES[scopeFilter]}</p>
+      );
+    }
+    if (scopeFilter === 'all') {
+      return (
+        <div className="space-y-6">
+          <StorySection title="Personal Stories" stories={characterStories} />
+          <StorySection title="Group Stories" stories={groupStories} />
+          <StorySection title="Global Stories" stories={globalStories} />
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {allStories.map((s) => (
+          <StoryRow key={s.id} story={s} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Filter chips */}
@@ -161,21 +185,7 @@ function BrowseStoriesInner() {
       </div>
 
       {/* Content */}
-      {!hasAny ? (
-        <p className="py-8 text-center text-muted-foreground">{EMPTY_MESSAGES[scopeFilter]}</p>
-      ) : scopeFilter === 'all' ? (
-        <div className="space-y-6">
-          <StorySection title="Personal Stories" stories={characterStories} />
-          <StorySection title="Group Stories" stories={groupStories} />
-          <StorySection title="Global Stories" stories={globalStories} />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {allStories.map((s) => (
-            <StoryRow key={s.id} story={s} />
-          ))}
-        </div>
-      )}
+      {renderAny()}
     </div>
   );
 }

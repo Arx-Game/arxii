@@ -32,6 +32,13 @@ const STAGES = [
   Stage.REVIEW,
 ];
 
+/** Which ring a stage's badge wears: the one you're on, one you've finished, or the rest. */
+function badgeBorderClass(isCurrent: boolean, isComplete: boolean): string {
+  if (isCurrent) return 'border-primary-foreground';
+  if (isComplete) return 'border-primary';
+  return 'border-muted-foreground/50';
+}
+
 /** The circle, check or warning badge that stands for one stage's state. */
 function StageBadge({
   index,
@@ -56,11 +63,7 @@ function StageBadge({
     <span
       className={cn(
         'flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs',
-        isCurrent
-          ? 'border-primary-foreground'
-          : isComplete
-            ? 'border-primary'
-            : 'border-muted-foreground/50'
+        badgeBorderClass(isCurrent, isComplete)
       )}
     >
       {index + 1}

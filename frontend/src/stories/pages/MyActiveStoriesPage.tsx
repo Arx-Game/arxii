@@ -106,6 +106,30 @@ function MyActiveStoriesInner() {
 
   const hasAny = visibleCharacter.length > 0 || visibleGroup.length > 0 || visibleGlobal.length > 0;
 
+  const renderAny = () => {
+    if (!hasAny) {
+      return (
+        <p className="py-8 text-center text-muted-foreground">{EMPTY_MESSAGES[scopeFilter]}</p>
+      );
+    }
+    if (scopeFilter === 'all') {
+      return (
+        <div className="space-y-6">
+          <StorySectionList entries={visibleCharacter} title="Personal Stories" />
+          <StorySectionList entries={visibleGroup} title="Group Stories" />
+          <StorySectionList entries={visibleGlobal} title="Global Stories" />
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {[...visibleCharacter, ...visibleGroup, ...visibleGlobal].map((entry) => (
+          <StoryCard key={entry.story_id} entry={entry} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Filter chips */}
@@ -126,21 +150,7 @@ function MyActiveStoriesInner() {
       </div>
 
       {/* Content */}
-      {!hasAny ? (
-        <p className="py-8 text-center text-muted-foreground">{EMPTY_MESSAGES[scopeFilter]}</p>
-      ) : scopeFilter === 'all' ? (
-        <div className="space-y-6">
-          <StorySectionList entries={visibleCharacter} title="Personal Stories" />
-          <StorySectionList entries={visibleGroup} title="Group Stories" />
-          <StorySectionList entries={visibleGlobal} title="Global Stories" />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {[...visibleCharacter, ...visibleGroup, ...visibleGlobal].map((entry) => (
-            <StoryCard key={entry.story_id} entry={entry} />
-          ))}
-        </div>
-      )}
+      {renderAny()}
     </div>
   );
 }

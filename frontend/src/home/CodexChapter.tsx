@@ -15,6 +15,32 @@ import { useFeaturedLore } from './queries';
 export function CodexChapter() {
   const { data: entries, isLoading } = useFeaturedLore();
 
+  const renderEntries = () => {
+    if (isLoading) {
+      return (
+        <div className="mt-8 space-y-4">
+          <Skeleton className="h-5 w-1/2" />
+          <Skeleton className="h-5 w-2/3" />
+        </div>
+      );
+    }
+    if (entries && entries.length > 0) {
+      return (
+        <ul className="gatefold-index-list">
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              <span className="gatefold-entry-name">
+                <Link to={`/codex?entry=${entry.id}`}>{entry.name}</Link>
+              </span>
+              <p>{entry.summary}</p>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="gatefold-leaf" id="codex">
       <div className="gatefold-leaf-main">
@@ -37,23 +63,7 @@ export function CodexChapter() {
             fallen.
           </p>
         </div>
-        {isLoading ? (
-          <div className="mt-8 space-y-4">
-            <Skeleton className="h-5 w-1/2" />
-            <Skeleton className="h-5 w-2/3" />
-          </div>
-        ) : entries && entries.length > 0 ? (
-          <ul className="gatefold-index-list">
-            {entries.map((entry) => (
-              <li key={entry.id}>
-                <span className="gatefold-entry-name">
-                  <Link to={`/codex?entry=${entry.id}`}>{entry.name}</Link>
-                </span>
-                <p>{entry.summary}</p>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {renderEntries()}
         <p className="gatefold-more-line">
           <Link to="/codex">
             Open the Codex <span aria-hidden="true">→</span>

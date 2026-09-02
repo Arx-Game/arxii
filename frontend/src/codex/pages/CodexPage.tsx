@@ -201,26 +201,28 @@ function CodexSidebarResults({
   onSelectSubject: (id: number) => void;
   onSelectEntry: (id: number) => void;
 }) {
+  const renderSearchResults = () => {
+    if (searchLoading) {
+      return (
+        <div className="flex items-center gap-2 py-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Searching...</span>
+        </div>
+      );
+    }
+    if (searchResults?.length === 0) {
+      return <div className="py-2 text-sm text-muted-foreground">No results found</div>;
+    }
+    return searchResults?.map((entry) => (
+      <SearchResultItem key={entry.id} entry={entry} onClick={() => onSelectEntry(entry.id)} />
+    ));
+  };
+
   if (showSearchResults) {
     return (
       <div className="space-y-1">
         <div className="text-sm font-medium text-muted-foreground">Search Results</div>
-        {searchLoading ? (
-          <div className="flex items-center gap-2 py-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Searching...</span>
-          </div>
-        ) : searchResults?.length === 0 ? (
-          <div className="py-2 text-sm text-muted-foreground">No results found</div>
-        ) : (
-          searchResults?.map((entry) => (
-            <SearchResultItem
-              key={entry.id}
-              entry={entry}
-              onClick={() => onSelectEntry(entry.id)}
-            />
-          ))
-        )}
+        {renderSearchResults()}
       </div>
     );
   }

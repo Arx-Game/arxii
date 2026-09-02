@@ -208,30 +208,36 @@ function OffersSection({ roleId }: { roleId: number }) {
     if (typeof d.offer === 'number') clueDetailsByOffer.set(d.offer, d);
   }
 
+  const renderDetails = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (offers.length === 0) {
+      return <p className="text-sm text-muted-foreground">No offers yet.</p>;
+    }
+    return offers.map((offer) => (
+      <OfferCard
+        key={offer.id}
+        roleId={roleId}
+        offer={offer}
+        details={detailsByOffer.get(offer.id) ?? null}
+        permitDetails={permitDetailsByOffer.get(offer.id) ?? null}
+        clueDetails={clueDetailsByOffer.get(offer.id) ?? null}
+      />
+    ));
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Offers</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : offers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No offers yet.</p>
-        ) : (
-          offers.map((offer) => (
-            <OfferCard
-              key={offer.id}
-              roleId={roleId}
-              offer={offer}
-              details={detailsByOffer.get(offer.id) ?? null}
-              permitDetails={permitDetailsByOffer.get(offer.id) ?? null}
-              clueDetails={clueDetailsByOffer.get(offer.id) ?? null}
-            />
-          ))
-        )}
+        {renderDetails()}
         <AddOfferForm roleId={roleId} />
       </CardContent>
     </Card>
@@ -521,6 +527,16 @@ function PermitDetailsPanel({
   const pending = createDetails.isPending || patchDetails.isPending;
   const error = createDetails.error ?? patchDetails.error;
 
+  const renderDetails2 = () => {
+    if (pending) {
+      return 'Saving…';
+    }
+    if (details) {
+      return 'Save permit details';
+    }
+    return 'Create permit details';
+  };
+
   return (
     <div className="space-y-3 rounded-md border border-dashed p-3">
       <p className="text-xs font-medium text-muted-foreground">Permit details</p>
@@ -580,7 +596,7 @@ function PermitDetailsPanel({
         </p>
       )}
       <Button size="sm" variant="secondary" onClick={save} disabled={pending}>
-        {pending ? 'Saving…' : details ? 'Save permit details' : 'Create permit details'}
+        {renderDetails2()}
       </Button>
     </div>
   );

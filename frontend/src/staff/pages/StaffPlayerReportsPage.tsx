@@ -14,6 +14,51 @@ export function StaffPlayerReportsPage() {
   const { data, isLoading } = usePlayerReportList(statusFilter, page);
   const items = data?.results;
 
+  const renderItems = () => {
+    if (isLoading) {
+      return <p className="text-muted-foreground">Loading...</p>;
+    }
+    if (!items?.length) {
+      return <p className="text-muted-foreground">No player reports found.</p>;
+    }
+    return (
+      <>
+        <div className="space-y-3">
+          {items.map((item) => (
+            <Link key={item.id} to={`/staff/player-reports/${item.id}`}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="font-medium">
+                      {item.behavior_description.length > 80
+                        ? item.behavior_description.slice(0, 80) + '...'
+                        : item.behavior_description}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Reported: {item.reported_persona_name} ({item.reported_account_username})
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.reporter_persona_name} ({item.reporter_account_username}) &middot;{' '}
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+
+        <NextPrevPagination
+          page={page}
+          hasPrevious={!!data?.previous}
+          hasNext={!!data?.next}
+          onPageChange={setPage}
+        />
+      </>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Player Reports</h1>
@@ -27,46 +72,7 @@ export function StaffPlayerReportsPage() {
         }}
       />
 
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : !items?.length ? (
-        <p className="text-muted-foreground">No player reports found.</p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {items.map((item) => (
-              <Link key={item.id} to={`/staff/player-reports/${item.id}`}>
-                <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div>
-                      <p className="font-medium">
-                        {item.behavior_description.length > 80
-                          ? item.behavior_description.slice(0, 80) + '...'
-                          : item.behavior_description}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Reported: {item.reported_persona_name} ({item.reported_account_username})
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.reporter_persona_name} ({item.reporter_account_username}) &middot;{' '}
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-
-          <NextPrevPagination
-            page={page}
-            hasPrevious={!!data?.previous}
-            hasNext={!!data?.next}
-            onPageChange={setPage}
-          />
-        </>
-      )}
+      {renderItems()}
     </div>
   );
 }

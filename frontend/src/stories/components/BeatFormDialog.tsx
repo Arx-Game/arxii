@@ -53,6 +53,7 @@ import type {
   BeatVisibility,
   ReferencedMilestoneType,
 } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -1142,13 +1143,7 @@ export function BeatFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Beat'
-                  : 'Create Beat'}
+              {formSubmitLabel(isPending, isEdit, 'Beat')}
             </Button>
           </DialogFooter>
         </form>

@@ -75,6 +75,21 @@ function StoryRow({
   const { data: beat } = useBeat(entry.instance_id, roomKey);
   const liveHere = (beat?.options.length ?? 0) > 0;
 
+  const renderOpen = () => {
+    if (open) {
+      return entry.participant_count > 1 ? (
+        <GroupBeatCard
+          instanceId={entry.instance_id}
+          roomKey={roomKey}
+          isContractHolder={entry.is_contract_holder}
+        />
+      ) : (
+        <BeatCard instanceId={entry.instance_id} roomKey={roomKey} />
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="rounded border" data-testid={`story-row-${entry.instance_id}`}>
       <Button
@@ -92,17 +107,7 @@ function StoryRow({
         ) : null}
       </Button>
       {!open ? <CompassLine entry={entry} /> : null}
-      {open ? (
-        entry.participant_count > 1 ? (
-          <GroupBeatCard
-            instanceId={entry.instance_id}
-            roomKey={roomKey}
-            isContractHolder={entry.is_contract_holder}
-          />
-        ) : (
-          <BeatCard instanceId={entry.instance_id} roomKey={roomKey} />
-        )
-      ) : null}
+      {renderOpen()}
     </div>
   );
 }

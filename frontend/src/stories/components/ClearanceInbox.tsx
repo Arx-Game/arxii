@@ -149,6 +149,30 @@ function NonStaffInbox() {
 
   const isLoading = subjectsLoading || clearancesLoading;
 
+  const renderOutgoing = () => {
+    if (isLoading) {
+      return <SectionSkeleton />;
+    }
+    if (outgoing.length === 0) {
+      return <p className="py-2 text-sm text-muted-foreground">No outgoing requests.</p>;
+    }
+    return outgoing.map((c) => (
+      <ClearanceRow key={c.id} clearance={c} isIncoming={false} isStaff={false} />
+    ));
+  };
+
+  const renderIncoming = () => {
+    if (isLoading) {
+      return <SectionSkeleton />;
+    }
+    if (incoming.length === 0) {
+      return <p className="py-2 text-sm text-muted-foreground">No incoming requests.</p>;
+    }
+    return incoming.map((c) => (
+      <ClearanceRow key={c.id} clearance={c} isIncoming isStaff={false} />
+    ));
+  };
+
   return (
     <>
       <section data-testid="incoming-clearances-section">
@@ -156,17 +180,7 @@ function NonStaffInbox() {
         <p className="text-sm text-muted-foreground">
           Requests from other GMs to act on your stories&apos; protected subjects.
         </p>
-        <div className="mt-3 space-y-3">
-          {isLoading ? (
-            <SectionSkeleton />
-          ) : incoming.length === 0 ? (
-            <p className="py-2 text-sm text-muted-foreground">No incoming requests.</p>
-          ) : (
-            incoming.map((c) => (
-              <ClearanceRow key={c.id} clearance={c} isIncoming isStaff={false} />
-            ))
-          )}
-        </div>
+        <div className="mt-3 space-y-3">{renderIncoming()}</div>
       </section>
 
       <section className="mt-8" data-testid="outgoing-clearances-section">
@@ -174,17 +188,7 @@ function NonStaffInbox() {
         <p className="text-sm text-muted-foreground">
           Your own requests on other stories&apos; subjects.
         </p>
-        <div className="mt-3 space-y-3">
-          {isLoading ? (
-            <SectionSkeleton />
-          ) : outgoing.length === 0 ? (
-            <p className="py-2 text-sm text-muted-foreground">No outgoing requests.</p>
-          ) : (
-            outgoing.map((c) => (
-              <ClearanceRow key={c.id} clearance={c} isIncoming={false} isStaff={false} />
-            ))
-          )}
-        </div>
+        <div className="mt-3 space-y-3">{renderOutgoing()}</div>
       </section>
     </>
   );
@@ -194,38 +198,38 @@ function StaffEscalationQueue() {
   const { data, isLoading } = useCustodyClearances({ status: 'escalated', page_size: 200 });
   const escalated = data?.results ?? [];
 
+  const renderEscalated = () => {
+    if (isLoading) {
+      return <SectionSkeleton />;
+    }
+    if (escalated.length === 0) {
+      return <p className="py-2 text-sm text-muted-foreground">No escalated clearances.</p>;
+    }
+    return escalated.map((c) => (
+      <Card key={c.id} data-testid="clearance-row">
+        <CardContent className="space-y-2 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Protected subject #{c.protected_subject}</span>
+            <ClearanceStatusBadge status={c.status} />
+            <Badge variant="outline">{c.scope}</Badge>
+          </div>
+          {c.message && <p className="text-sm text-muted-foreground">{c.message}</p>}
+          <p className="text-xs text-muted-foreground">
+            Requested {formatRelativeTime(c.created_at)}
+          </p>
+          <div className="pt-1">
+            <ResolveClearanceDialog clearanceId={c.id} />
+          </div>
+        </CardContent>
+      </Card>
+    ));
+  };
+
   return (
     <section data-testid="staff-escalation-section">
       <h3 className="text-base font-semibold">Staff Escalation Queue ({escalated.length})</h3>
       <p className="text-sm text-muted-foreground">Clearances escalated for a staff tiebreak.</p>
-      <div className="mt-3 space-y-3">
-        {isLoading ? (
-          <SectionSkeleton />
-        ) : escalated.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">No escalated clearances.</p>
-        ) : (
-          escalated.map((c) => (
-            <Card key={c.id} data-testid="clearance-row">
-              <CardContent className="space-y-2 py-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">
-                    Protected subject #{c.protected_subject}
-                  </span>
-                  <ClearanceStatusBadge status={c.status} />
-                  <Badge variant="outline">{c.scope}</Badge>
-                </div>
-                {c.message && <p className="text-sm text-muted-foreground">{c.message}</p>}
-                <p className="text-xs text-muted-foreground">
-                  Requested {formatRelativeTime(c.created_at)}
-                </p>
-                <div className="pt-1">
-                  <ResolveClearanceDialog clearanceId={c.id} />
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+      <div className="mt-3 space-y-3">{renderEscalated()}</div>
     </section>
   );
 }

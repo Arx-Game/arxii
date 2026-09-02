@@ -84,6 +84,23 @@ export function DuranceCard({ characterId }: DuranceCardProps) {
 
   const declaredPathId = intentData?.intent?.intended_path.id ?? null;
 
+  // Takes the gate rather than reading `status`: the call site is inside a
+  // `{status && ...}` guard, and TypeScript does not flow that narrowing into a
+  // closure declared above it.
+  const renderUnlockStatus = (gate: NonNullable<NonNullable<typeof status>['unlock_gate']>) => {
+    if (gate.purchased) {
+      return 'purchased';
+    }
+    if (gate.xp_cost === 0) {
+      return (
+        <Badge variant="outline" data-testid="durance-cost-unset">
+          Cost unset (staff)
+        </Badge>
+      );
+    }
+    return `not purchased (cost ${gate.xp_cost} XP)`;
+  };
+
   return (
     <Card data-testid="durance-card">
       <CardHeader>
@@ -127,16 +144,7 @@ export function DuranceCard({ characterId }: DuranceCardProps) {
                   </>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  XP unlock:{' '}
-                  {status.unlock_gate.purchased ? (
-                    'purchased'
-                  ) : status.unlock_gate.xp_cost === 0 ? (
-                    <Badge variant="outline" data-testid="durance-cost-unset">
-                      Cost unset (staff)
-                    </Badge>
-                  ) : (
-                    `not purchased (cost ${status.unlock_gate.xp_cost} XP)`
-                  )}
+                  XP unlock: {renderUnlockStatus(status.unlock_gate)}
                 </p>
               </div>
             )}

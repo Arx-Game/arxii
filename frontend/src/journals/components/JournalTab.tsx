@@ -31,6 +31,41 @@ export function JournalTab() {
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const recent = (data?.results ?? []).slice(0, 5);
 
+  const renderRecent = () => {
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading…</p>;
+    }
+    if (recent.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground" data-testid="journal-tab-empty">
+          You haven&apos;t written anything yet.
+        </p>
+      );
+    }
+    return (
+      <ul className="space-y-2">
+        {recent.map((entry) => {
+          const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
+          const canVote = entry.is_public && !isOwnEntry;
+          return (
+            <li key={entry.id} className="flex items-center gap-1">
+              <Link
+                to="/journals"
+                className="block min-w-0 flex-1 rounded border px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <span className="block truncate font-medium">{entry.title}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {new Date(entry.created_at).toLocaleDateString()}
+                </span>
+              </Link>
+              {canVote ? <VoteButton targetType="journal" targetId={entry.id} /> : null}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
   return (
     <div className="space-y-3 p-3">
       <Button
@@ -43,34 +78,7 @@ export function JournalTab() {
         Write an entry
       </Button>
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : recent.length === 0 ? (
-        <p className="text-sm text-muted-foreground" data-testid="journal-tab-empty">
-          You haven&apos;t written anything yet.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {recent.map((entry) => {
-            const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
-            const canVote = entry.is_public && !isOwnEntry;
-            return (
-              <li key={entry.id} className="flex items-center gap-1">
-                <Link
-                  to="/journals"
-                  className="block min-w-0 flex-1 rounded border px-2 py-1.5 text-sm hover:bg-accent"
-                >
-                  <span className="block truncate font-medium">{entry.title}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {new Date(entry.created_at).toLocaleDateString()}
-                  </span>
-                </Link>
-                {canVote ? <VoteButton targetType="journal" targetId={entry.id} /> : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {renderRecent()}
 
       <Link to="/journals" className="block text-xs text-muted-foreground underline">
         Full journal →

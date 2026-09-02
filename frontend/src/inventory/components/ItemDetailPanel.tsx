@@ -241,6 +241,18 @@ function ItemContent({
     });
   }
 
+  // Takes the result rather than closing over `useResult`: the call site sits
+  // inside a `{useResult && ...}` guard, and that narrowing does not reach a
+  // closure declared above it.
+  const renderUseOutcome = (result: NonNullable<typeof useResult>) => {
+    if (!isConsumable) {
+      return 'Used.';
+    }
+    return result.destroyed
+      ? 'Consumed: last charge spent.'
+      : `Used: ${result.charges_remaining} charge(s) remaining.`;
+  };
+
   return (
     <>
       <div className="flex flex-col gap-4 p-6 pb-4">
@@ -342,11 +354,7 @@ function ItemContent({
           data-testid="use-result"
           className="mx-4 mb-2 rounded-md border bg-muted/40 p-3 text-sm text-foreground"
         >
-          {isConsumable
-            ? useResult.destroyed
-              ? 'Consumed: last charge spent.'
-              : `Used: ${useResult.charges_remaining} charge(s) remaining.`
-            : 'Used.'}
+          {renderUseOutcome(useResult)}
           {useResult.applied_effect_count > 0 && (
             <span className="ml-1 text-muted-foreground">
               {useResult.applied_effect_count} effect(s) applied.

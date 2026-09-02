@@ -209,31 +209,37 @@ function CovenantsCard({ characterSheetId }: { characterSheetId: number }) {
   const { data: roles, isLoading } = useCovenantRolesQuery(characterSheetId);
   const activeRoles = (roles ?? []).filter((r: CharacterCovenantRole) => r.is_active);
 
+  const renderActiveRoles = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (activeRoles.length === 0) {
+      return <p className="text-sm text-muted-foreground">No active covenant roles.</p>;
+    }
+    return (
+      <ul className="space-y-2 text-sm">
+        {activeRoles.map((role) => (
+          <li key={role.id} className="flex items-center justify-between">
+            <Link to={`/covenants/${role.covenant}`} className="font-medium hover:underline">
+              {role.covenant_role.name}
+            </Link>
+            <div className="flex items-center gap-2">
+              {role.engaged && <Badge variant="default">Engaged</Badge>}
+              <Badge variant="outline">{role.rank.name}</Badge>
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <Card>
-      <CardContent className="py-4">
-        {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : activeRoles.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active covenant roles.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {activeRoles.map((role) => (
-              <li key={role.id} className="flex items-center justify-between">
-                <Link to={`/covenants/${role.covenant}`} className="font-medium hover:underline">
-                  {role.covenant_role.name}
-                </Link>
-                <div className="flex items-center gap-2">
-                  {role.engaged && <Badge variant="default">Engaged</Badge>}
-                  <Badge variant="outline">{role.rank.name}</Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
+      <CardContent className="py-4">{renderActiveRoles()}</CardContent>
     </Card>
   );
 }

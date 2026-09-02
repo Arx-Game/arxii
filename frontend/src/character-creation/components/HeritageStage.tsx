@@ -143,6 +143,90 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const spentPoints = draft.cg_points_spent ?? 0;
   const remainingPoints = draft.cg_points_remaining ?? startingPoints;
 
+  const renderSpecies = () => {
+    if (speciesLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="h-40 animate-pulse rounded-lg bg-muted" />
+          <div className="h-40 animate-pulse rounded-lg bg-muted" />
+        </div>
+      );
+    }
+    if (selectedParent === null) {
+      return (
+        <>
+          {/* Top-level: standalones + parent groups */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {speciesGroups.standalones.map((species) => (
+              <SpeciesCard
+                key={species.id}
+                species={species}
+                isSelected={draft.selected_species?.id === species.id}
+                onSelect={() => handleSpeciesSelect(species.id)}
+                disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
+                onHover={setHoveredSpecies}
+              />
+            ))}
+            {Array.from(speciesGroups.parentGroups.entries()).map(
+              ([parentId, { name, children }]) => (
+                <SpeciesGroupCard
+                  key={`parent-${parentId}`}
+                  parentName={name}
+                  childCount={children.length}
+                  isChildSelected={children.some((c) => c.id === draft.selected_species?.id)}
+                  onClick={() => setSelectedParent(parentId)}
+                  onHover={() => setHoveredSpecies(null)}
+                />
+              )
+            )}
+            {speciesGroups.standalones.length === 0 && speciesGroups.parentGroups.size === 0 && (
+              <Card>
+                <CardContent className="py-8">
+                  <p className="text-center text-sm text-muted-foreground">
+                    No species available for this beginnings path.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </>
+      );
+    }
+    return (
+      <>
+        {/* Drill-down: breadcrumb + subspecies */}
+        <button
+          type="button"
+          className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => {
+            setSelectedParent(null);
+            setHoveredSpecies(null);
+          }}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          All Species
+          <span className="mx-1 text-muted-foreground/50">/</span>
+          <span className="text-foreground">
+            {speciesGroups.parentGroups.get(selectedParent)?.name}
+          </span>
+        </button>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {speciesGroups.parentGroups.get(selectedParent)?.children.map((species) => (
+            <SpeciesCard
+              key={species.id}
+              species={species}
+              isSelected={draft.selected_species?.id === species.id}
+              onSelect={() => handleSpeciesSelect(species.id)}
+              disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
+              onHover={setHoveredSpecies}
+            />
+          ))}
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
       {/* Main Content */}
@@ -270,82 +354,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
               </h3>
               <p className="text-sm text-muted-foreground">{copy?.heritage_species_desc ?? ''}</p>
             </div>
-            {speciesLoading ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-40 animate-pulse rounded-lg bg-muted" />
-              </div>
-            ) : selectedParent === null ? (
-              <>
-                {/* Top-level: standalones + parent groups */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {speciesGroups.standalones.map((species) => (
-                    <SpeciesCard
-                      key={species.id}
-                      species={species}
-                      isSelected={draft.selected_species?.id === species.id}
-                      onSelect={() => handleSpeciesSelect(species.id)}
-                      disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
-                      onHover={setHoveredSpecies}
-                    />
-                  ))}
-                  {Array.from(speciesGroups.parentGroups.entries()).map(
-                    ([parentId, { name, children }]) => (
-                      <SpeciesGroupCard
-                        key={`parent-${parentId}`}
-                        parentName={name}
-                        childCount={children.length}
-                        isChildSelected={children.some((c) => c.id === draft.selected_species?.id)}
-                        onClick={() => setSelectedParent(parentId)}
-                        onHover={() => setHoveredSpecies(null)}
-                      />
-                    )
-                  )}
-                  {speciesGroups.standalones.length === 0 &&
-                    speciesGroups.parentGroups.size === 0 && (
-                      <Card>
-                        <CardContent className="py-8">
-                          <p className="text-center text-sm text-muted-foreground">
-                            No species available for this beginnings path.
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Drill-down: breadcrumb + subspecies */}
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => {
-                    setSelectedParent(null);
-                    setHoveredSpecies(null);
-                  }}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  All Species
-                  <span className="mx-1 text-muted-foreground/50">/</span>
-                  <span className="text-foreground">
-                    {speciesGroups.parentGroups.get(selectedParent)?.name}
-                  </span>
-                </button>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {speciesGroups.parentGroups.get(selectedParent)?.children.map((species) => (
-                    <SpeciesCard
-                      key={species.id}
-                      species={species}
-                      isSelected={draft.selected_species?.id === species.id}
-                      onSelect={() => handleSpeciesSelect(species.id)}
-                      disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
-                      onHover={setHoveredSpecies}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+            {renderSpecies()}
 
             {/* Mobile: Species detail below cards */}
             {draft.selected_species && (

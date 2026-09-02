@@ -105,6 +105,16 @@ export function AuthorSecretDialog({ subjectId, secret, trigger }: AuthorSecretD
     }
   };
 
+  const renderMutation = () => {
+    if (mutation.isPending) {
+      return 'Saving…';
+    }
+    if (isEdit) {
+      return 'Save changes';
+    }
+    return 'Author secret';
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -191,7 +201,7 @@ export function AuthorSecretDialog({ subjectId, secret, trigger }: AuthorSecretD
             onClick={handleSubmit}
             disabled={content.trim().length === 0 || mutation.isPending}
           >
-            {mutation.isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Author secret'}
+            {renderMutation()}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -23,6 +23,32 @@ export function Layout({ children }: LayoutProps) {
   const isFullViewport = FULL_VIEWPORT_ROUTES.includes(location.pathname);
   const isFullBleed = FULL_BLEED_ROUTES.includes(location.pathname);
 
+  const renderFullViewport = () => {
+    if (isFullViewport) {
+      return (
+        <main id="main-content" className="flex min-h-0 flex-1 flex-col">
+          {children}
+        </main>
+      );
+    }
+    if (isFullBleed) {
+      return (
+        <>
+          <main id="main-content">{children}</main>
+          <Footer />
+        </>
+      );
+    }
+    return (
+      <>
+        <main id="main-content" className="container mx-auto px-4 py-8">
+          {children}
+        </main>
+        <Footer />
+      </>
+    );
+  };
+
   return (
     <div
       className={`bg-background ${isFullViewport ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen'}`}
@@ -36,23 +62,7 @@ export function Layout({ children }: LayoutProps) {
       <PendingAlterationBanner />
       <SeanceOfferBanner />
       <ConversionOfferBanner />
-      {isFullViewport ? (
-        <main id="main-content" className="flex min-h-0 flex-1 flex-col">
-          {children}
-        </main>
-      ) : isFullBleed ? (
-        <>
-          <main id="main-content">{children}</main>
-          <Footer />
-        </>
-      ) : (
-        <>
-          <main id="main-content" className="container mx-auto px-4 py-8">
-            {children}
-          </main>
-          <Footer />
-        </>
-      )}
+      {renderFullViewport()}
     </div>
   );
 }

@@ -36,6 +36,7 @@ import {
   useBeatList,
 } from '../queries';
 import type { Transition } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -222,11 +223,7 @@ export function TransitionFormDialog({
   const isEdit = transition !== undefined;
 
   const [targetEpisode, setTargetEpisode] = useState<string>(
-    transition?.target_episode != null
-      ? String(transition.target_episode)
-      : defaultTargetEpisodeId != null
-        ? String(defaultTargetEpisodeId)
-        : ''
+    String(transition?.target_episode ?? defaultTargetEpisodeId ?? '')
   );
   const [mode, setMode] = useState<string>(transition?.mode ?? 'auto');
   const [connectionType, setConnectionType] = useState<string>(transition?.connection_type ?? '');
@@ -272,13 +269,7 @@ export function TransitionFormDialog({
   const isPending = saveMutation.isPending;
 
   function resetForm() {
-    setTargetEpisode(
-      transition?.target_episode != null
-        ? String(transition.target_episode)
-        : defaultTargetEpisodeId != null
-          ? String(defaultTargetEpisodeId)
-          : ''
-    );
+    setTargetEpisode(String(transition?.target_episode ?? defaultTargetEpisodeId ?? ''));
     setMode(transition?.mode ?? 'auto');
     setConnectionType(transition?.connection_type ?? '');
     setConnectionSummary(transition?.connection_summary ?? '');
@@ -535,13 +526,7 @@ export function TransitionFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Transition'
-                  : 'Create Transition'}
+              {formSubmitLabel(isPending, isEdit, 'Transition')}
             </Button>
           </DialogFooter>
         </form>

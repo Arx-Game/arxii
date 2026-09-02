@@ -105,6 +105,37 @@ export function CharacterCardDrawer({
     onClose();
   };
 
+  const renderSearching = () => {
+    if (searching) {
+      return <p className="mt-4 text-sm text-muted-foreground">Loading…</p>;
+    }
+    if (match && entry) {
+      return (
+        <div className="mt-4 space-y-4">
+          <BackgroundSection background={entry.character.background} />
+          <StatsSection
+            age={entry.character.age}
+            birthday={entry.character.birthday}
+            gender={entry.character.gender}
+            race={entry.character.race}
+            charClass={entry.character.char_class}
+            level={entry.character.level}
+            concept={entry.character.concept}
+            family={entry.character.family}
+            vocation={entry.character.vocation}
+            socialRank={entry.character.social_rank}
+          />
+          <CharacterLink id={match.id} className="text-sm underline">
+            Full profile →
+          </CharacterLink>
+        </div>
+      );
+    }
+    return (
+      <p className="mt-4 text-sm text-muted-foreground">This face isn't on the public roster.</p>
+    );
+  };
+
   return (
     <Sheet
       open={persona !== null}
@@ -189,32 +220,7 @@ export function CharacterCardDrawer({
               />
             )}
 
-            {searching ? (
-              <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
-            ) : match && entry ? (
-              <div className="mt-4 space-y-4">
-                <BackgroundSection background={entry.character.background} />
-                <StatsSection
-                  age={entry.character.age}
-                  birthday={entry.character.birthday}
-                  gender={entry.character.gender}
-                  race={entry.character.race}
-                  charClass={entry.character.char_class}
-                  level={entry.character.level}
-                  concept={entry.character.concept}
-                  family={entry.character.family}
-                  vocation={entry.character.vocation}
-                  socialRank={entry.character.social_rank}
-                />
-                <CharacterLink id={match.id} className="text-sm underline">
-                  Full profile →
-                </CharacterLink>
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-muted-foreground">
-                This face isn't on the public roster.
-              </p>
-            )}
+            {renderSearching()}
 
             <RelationshipWriteupDialog
               open={writeupOpen}

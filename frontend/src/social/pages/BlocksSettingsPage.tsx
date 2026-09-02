@@ -58,6 +58,22 @@ function BlockRow({ block }: { block: Block }) {
 export function BlocksSettingsPage() {
   const { data, isLoading } = useBlocks();
   const blocks = data?.results ?? [];
+  const renderBlocks = () => {
+    if (isLoading) {
+      return <Skeleton className="h-20 w-full" />;
+    }
+    if (blocks.length === 0) {
+      return <p className="text-sm text-muted-foreground">You haven't blocked anyone.</p>;
+    }
+    return (
+      <div className="space-y-3">
+        {blocks.map((block) => (
+          <BlockRow key={block.id} block={block} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <ErrorBoundary>
       <div className="space-y-4">
@@ -67,17 +83,7 @@ export function BlocksSettingsPage() {
             Unblocking takes a full cron cycle to clear, so blocks are deliberate.
           </p>
         </div>
-        {isLoading ? (
-          <Skeleton className="h-20 w-full" />
-        ) : blocks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">You haven't blocked anyone.</p>
-        ) : (
-          <div className="space-y-3">
-            {blocks.map((block) => (
-              <BlockRow key={block.id} block={block} />
-            ))}
-          </div>
-        )}
+        {renderBlocks()}
       </div>
     </ErrorBoundary>
   );
