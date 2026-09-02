@@ -187,7 +187,9 @@ class BeatView:
     ``options`` carries only the LIVE options (location conjunct ∧
     visibility predicate already applied) — visibility=eligibility, never
     a greyed-out entry. Empty options with an active node means "nothing
-    you can do HERE" (the journal compass says where to go).
+    you can do HERE" (the journal compass says where to go). ``is_paused``
+    (#3565) is true while a scenario ENCOUNTER option's fight is in
+    progress - no option is pickable until it resolves.
     """
 
     instance_id: int
@@ -195,6 +197,7 @@ class BeatView:
     node_key: str
     flavor_text: str
     options: tuple[BeatOption, ...]
+    is_paused: bool
 
 
 @dataclass(frozen=True)
@@ -231,7 +234,8 @@ class GroupBeatView:
     ``options`` is the UNION group option list (every participant's live
     options, owner-tagged). ``phase`` is ``"pick"`` until every participant
     has picked, then ``"vote"``. ``expires_at`` is the ISO deadline (None
-    until the first pick opens the window).
+    until the first pick opens the window). ``is_paused`` (#3565) is true
+    while a scenario ENCOUNTER option's fight is in progress.
     """
 
     instance_id: int
@@ -242,6 +246,7 @@ class GroupBeatView:
     options: tuple[BeatOption, ...]
     ballots: tuple[GroupBallotState, ...]
     expires_at: str | None
+    is_paused: bool
     support_moves: tuple[SupportMove, ...] = ()
     declared_supports: tuple[SupportDeclarationView, ...] = ()
 

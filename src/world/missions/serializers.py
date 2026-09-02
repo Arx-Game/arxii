@@ -632,6 +632,7 @@ class BeatViewSerializer(serializers.Serializer):
     node_key = serializers.CharField()
     flavor_text = serializers.CharField(allow_blank=True)
     options = BeatOptionSerializer(many=True)
+    is_paused = serializers.BooleanField()
 
 
 class ResolvedBeatSerializer(serializers.Serializer):
@@ -702,6 +703,7 @@ class GroupBeatViewSerializer(serializers.Serializer):
     options = BeatOptionSerializer(many=True)
     ballots = GroupBallotStateSerializer(many=True)
     expires_at = serializers.CharField(allow_null=True)
+    is_paused = serializers.BooleanField()
 
 
 class GroupBeatResultSerializer(serializers.Serializer):

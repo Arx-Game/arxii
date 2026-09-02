@@ -404,20 +404,18 @@ def _probe_capability_bridges() -> ProbeResult:
 
 
 def _probe_encounter_outcome_mappings() -> ProbeResult:
-    """`EncounterOutcomeMapping` rows exist for every (VICTORY|DEFEAT) x RiskLevel pair.
+    """`EncounterOutcomeMapping` rows exist for every `EncounterOutcome` x `RiskLevel` pair.
 
-    Consumer: `world/combat/beat_wiring.py classify_battle_outcome()`. A missing
-    pair means a fight linked to a story beat concludes and the beat never
-    resolves; the error log names the pair (#3559).
+    Consumer: `world/combat/beat_wiring.py classify_battle_outcome()`. VICTORY/DEFEAT
+    grade a story beat; FLED/ABANDONED grade a scenario ENCOUNTER option's route
+    instead (#3565) - either way a missing pair means the outcome never resolves
+    (a fight linked to a story beat, or a scenario run's ENCOUNTER pick); the error
+    log names the pair (#3559, #3565).
     """
     from world.combat.constants import EncounterOutcome, RiskLevel  # noqa: PLC0415
     from world.combat.models import EncounterOutcomeMapping  # noqa: PLC0415
 
-    expected = {
-        (outcome, risk)
-        for outcome in (EncounterOutcome.VICTORY, EncounterOutcome.DEFEAT)
-        for risk in RiskLevel.values
-    }
+    expected = {(outcome, risk) for outcome in EncounterOutcome.values for risk in RiskLevel.values}
     existing = set(EncounterOutcomeMapping.objects.values_list("outcome", "risk_level"))
     missing = tuple(f"{o}/{r}" for (o, r) in sorted(expected - existing))
     detail = f"Missing EncounterOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
@@ -1117,11 +1115,14 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="world/combat/beat_wiring.py:69 classify_battle_outcome()",
             consequence=(
-                "A (VICTORY|DEFEAT) x RiskLevel pair with no authored "
-                "EncounterOutcomeMapping row means a fight linked to a story "
-                "beat concludes and the beat never resolves - the error log "
-                "names the pair, but nothing grades the beat until a GM "
-                "authors the missing row."
+                "An EncounterOutcome x RiskLevel pair with no authored "
+                "EncounterOutcomeMapping row means the fight's outcome never "
+                "resolves what it's grading: VICTORY/DEFEAT grade a story "
+                "beat (concludes with the beat never resolved), FLED/ABANDONED "
+                "grade a scenario ENCOUNTER option's route instead (#3565, "
+                "concludes with the run left paused) - the error log names "
+                "the pair, but nothing grades until a GM authors the missing "
+                "row."
             ),
             probe=CustomProbe(fn=_probe_encounter_outcome_mappings),
         ),

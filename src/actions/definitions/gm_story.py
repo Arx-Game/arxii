@@ -37,8 +37,7 @@ from actions.base import Action
 from actions.definitions.gm_stories import _actor_is_lead_gm
 from actions.prerequisites import IsSceneGMPrerequisite, MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
-from commands.exceptions import CommandError
-from commands.utils.gm_resolution import resolve_account_or_none, resolve_position_by_name
+from commands.utils.gm_resolution import resolve_account_or_none
 from world.gm.constants import GMLevel
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind
@@ -223,11 +222,10 @@ class RunBeatAction(Action):
         self, beat: Beat, scene: Scene, account: AccountDB | None
     ) -> dict[str, Any]:
         """Create the CombatEncounter and spawn every authored opponent line."""
-        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
+        from world.combat.encounter_prep import spawn_opponent_lines  # noqa: PLC0415
         from world.combat.models import CombatEncounter  # noqa: PLC0415
         from world.combat.services import (  # noqa: PLC0415
             finalize_new_encounter,
-            spawn_from_creature_template,
             update_encounter_settings,
         )
 
@@ -237,54 +235,8 @@ class RunBeatAction(Action):
         encounter.save(update_fields=["story_beat"])
         update_encounter_settings(encounter, risk_level=_RISK_MAP.get(beat.risk, "low"))
 
-        room = encounter.room
-        outcomes: list[dict[str, Any]] = []
         lines = beat.opponent_lines.select_related("creature_template").order_by("order")
-        for line in lines:
-            position = None
-            note = ""
-            if line.position_name and room is not None:
-                try:
-                    position = resolve_position_by_name(room, line.position_name)
-                except CommandError:
-                    note = f"position '{line.position_name}' not found; spawned without it"
-            for _index in range(line.count):
-                try:
-                    with transaction.atomic():
-                        opponent = spawn_from_creature_template(
-                            encounter,
-                            line.creature_template,
-                            position=position,
-                            acting_account=account,
-                        )
-                except (ValueError, PositionError) as exc:
-                    # Per-line log-and-continue: a bad line (e.g. the encounter's
-                    # scaling formula rejecting the template, or a cross-room
-                    # position) never costs the GM every other authored line.
-                    logger.warning(
-                        "run_beat: failed to spawn opponent line %s (beat %s): %s",
-                        line.pk,
-                        beat.pk,
-                        exc,
-                    )
-                    outcomes.append(
-                        {
-                            "line_id": line.pk,
-                            "creature": line.creature_template.name,
-                            "success": False,
-                            "message": str(exc),
-                        }
-                    )
-                    continue
-                outcomes.append(
-                    {
-                        "line_id": line.pk,
-                        "creature": line.creature_template.name,
-                        "opponent_id": opponent.pk,
-                        "success": True,
-                        "message": note,
-                    }
-                )
+        outcomes = spawn_opponent_lines(encounter, lines, acting_account=account)
         return {
             "encounter_id": encounter.pk,
             "risk_level": encounter.risk_level,
