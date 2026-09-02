@@ -426,8 +426,6 @@ function App() {
             <Route path="blocks" element={<BlocksSettingsPage />} />
             <Route path="mutes" element={<MutesSettingsPage />} />
             <Route index element={<Navigate to="mail" replace />} />
-            {/* Stale deep URLs (see ProfilePage.test.tsx) land on mail instead of a blank tab. */}
-            <Route path="*" element={<Navigate to="/profile/mail" replace />} />
           </Route>
           <Route path="/roster" element={<RosterListPage />} />
           <Route path="/characters/create" element={<CharacterCreationPage />} />
