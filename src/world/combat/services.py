@@ -2058,12 +2058,14 @@ def _validate_redirect_declaration(
             raise ValueError(msg)
 
 
-def declare_interpose(
+def declare_interpose(  # noqa: PLR0913 - interpose declaration requires all redirect/consent fields
     participant: CombatParticipant,
     ally: CombatParticipant | None = None,
     technique: Technique | None = None,
     redirect_opponent_target: CombatOpponent | None = None,
     redirect_object_target: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+    *,
+    confirm_soulfray_risk: bool = False,
 ) -> CombatRoundAction:
     """Declare an interposing maneuver — passives-only, auto-ready.
 
@@ -2089,6 +2091,10 @@ def declare_interpose(
     kwargs are accepted regardless of the declared technique's flavor (harmless
     no-ops for non-REDIRECT declarations); resolution
     (``_try_technique_interpose``) only reads them on the REDIRECT branch.
+
+    ``confirm_soulfray_risk`` (#3573) records the guardian's consent to keep the
+    reaction firing past zero anima at the cost of Soulfray; read by
+    ``_try_technique_interpose``.
     """
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
     from world.magic.services.targeting import protective_flavor  # noqa: PLC0415
@@ -2150,6 +2156,7 @@ def declare_interpose(
             "is_ready": True,
             "redirect_opponent_target": redirect_opponent_target,
             "redirect_object_target": redirect_object_target,
+            "confirm_soulfray_risk": confirm_soulfray_risk,
         },
     )
     return action
