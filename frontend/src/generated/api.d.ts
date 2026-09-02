@@ -586,7 +586,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets + introduce action. */
+    /**
+     * @description Read endpoints for the player's own promoted assets + introduce action.
+     *
+     *     Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+     *     search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+     *     per-player private content (name, role_context, status, created_at), so
+     *     that widening is scoped narrowly: a non-staff GM only sees assets
+     *     promoted by a character who participates in a story that GM LEADS, never
+     *     every asset in the game (#3561 review fix - the first cut let any
+     *     GMProfile holder, unrelated to the asset's owner, list every player's
+     *     private assets, which was a privacy leak).
+     */
     get: operations['assets_list'];
     put?: never;
     post?: never;
@@ -603,7 +614,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets + introduce action. */
+    /**
+     * @description Read endpoints for the player's own promoted assets + introduce action.
+     *
+     *     Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+     *     search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+     *     per-player private content (name, role_context, status, created_at), so
+     *     that widening is scoped narrowly: a non-staff GM only sees assets
+     *     promoted by a character who participates in a story that GM LEADS, never
+     *     every asset in the game (#3561 review fix - the first cut let any
+     *     GMProfile holder, unrelated to the asset's owner, list every player's
+     *     private assets, which was a privacy leak).
+     */
     get: operations['assets_retrieve'];
     put?: never;
     post?: never;
@@ -19467,6 +19489,47 @@ export interface paths {
      *     telnet and web converge on the same ``action.run()`` seam.
      */
     post: operations['scenes_set_round_mode_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/scenes/{id}/stakes-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/scenes/{id}/stakes-summary/ (#3561) - what the scene's running beat
+     *     wagers, for the party's opt-in prompt.
+     *
+     *     Composed read only -- no writes, no models, no migration. Scene-level gate via
+     *     ``get_permissions``: ``IsAuthenticated`` + ``ReadOnlyOrSceneParticipant`` -- the
+     *     same participant/staff floor ``scenario``/``gm-rail`` use (``Scene.is_viewable_by``).
+     *
+     *     Exists because a player never receives the running beat id from any scene
+     *     payload (``SceneListSerializer``/``SceneDetailSerializer`` deliberately omit
+     *     ``running_beat`` -- see the #3562 leak rule this preserves): the beat-scoped
+     *     ``GET /api/beats/{id}/stakes-summary/`` (``BeatViewSet.stakes_summary``) is
+     *     unreachable to a player who was never handed a beat id, so this resolves
+     *     ``scene.running_beat`` server-side and delegates to the identical
+     *     ``stakes_summary_for_beat`` builder -- one payload shape, two entry points.
+     *     Leaks only ``player_summary``/``severity`` per stake, plus declared/effective
+     *     risk and readiness (#1770 pillar 9); branch contents (``StakeResolution`` rows)
+     *     are never included.
+     *
+     *     When the scene runs no beat, returns the same shape with ``declared_risk``/
+     *     ``effective_risk`` null and an empty ``stakes`` list, built by hand rather than
+     *     through ``StakesSummarySerializer`` (whose ``declared_risk``/``effective_risk``
+     *     ``CharField``s forbid null) -- there is no beat to build a
+     *     ``StakesSummarySerializer``-shaped instance from.
+     */
+    get: operations['scenes_stakes_summary_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -46557,6 +46620,7 @@ export interface operations {
   assets_list: {
     parameters: {
       query?: {
+        name?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
       };
@@ -72722,6 +72786,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  scenes_stakes_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakesSummary'];
         };
       };
     };
