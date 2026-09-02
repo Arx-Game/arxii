@@ -172,7 +172,7 @@ class ResolveEpisodeActionTests(GMStoryActionTestBase):
     def test_multiple_eligible_transitions_lowest_order_fires(self) -> None:
         """Several eligible transitions: the lowest-order one fires automatically (#3565).
 
-        Routing is decided by the author, never by a GM after the fact — there
+        Routing is decided by the author, never by a GM after the fact - there
         is no transition id to pass.
         """
         from actions.definitions.gm_stories import ResolveEpisodeAction

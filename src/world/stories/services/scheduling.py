@@ -53,7 +53,7 @@ def maybe_create_session_request(progress: AnyStoryProgress) -> SessionRequest |
            current episode has an UNSATISFIED beat someone has to run
            face-to-face (SITUATION or ENCOUNTER kind), or a fact only a GM
            can mark (predicate_type=GM_MARKED). Routing itself is never a
-           reason a session is needed — it always fires automatically.
+           reason a session is needed - it always fires automatically.
     """
     # Defer import to avoid circular import — beats.py imports from models.py
     # which is shared, but scheduling.py would create a mutual import with

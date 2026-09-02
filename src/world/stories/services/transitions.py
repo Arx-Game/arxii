@@ -4,7 +4,7 @@ Public API:
     get_eligible_transitions(progress) — returns the transitions from the
         current episode whose progression requirements AND routing predicates
         are all satisfied.
-    validate_routing_readiness(episode) — reports outbound transition pairs
+    validate_routing_readiness(episode) - reports outbound transition pairs
         whose requirement sets never contradict (#3565): an authoring-time
         warning, since the lowest (order, pk) fires silently at runtime.
 """
@@ -101,10 +101,10 @@ def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
     An empty requirement set is unconditionally satisfied (the transition has
     no routing predicate, so it fires whenever progression requirements pass).
     """
-    return all(_routing_req_met(req) for req in routing_reqs)
+    return all(routing_requirement_met(req) for req in routing_reqs)
 
 
-def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
+def routing_requirement_met(req: TransitionRequiredOutcome) -> bool:
     """Whether one routing requirement is currently satisfied.
 
     Stake-level requirement (#1770 PR2): satisfied iff the stake's single

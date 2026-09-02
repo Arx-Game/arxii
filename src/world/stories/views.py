@@ -261,6 +261,7 @@ from world.stories.services.participation import create_story_participation
 from world.stories.services.progress import get_active_progress_for_story
 from world.stories.services.save_transition import OutcomeInput, save_transition_with_outcomes
 from world.stories.services.story_log import serialize_story_log
+from world.stories.services.transitions import routing_requirement_met
 from world.stories.types import (
     AnyStoryProgress,
     AssignedRequestEntry,
@@ -2224,20 +2225,9 @@ def _eligible_transitions_from_prefetched(
     eligible: list[Transition] = []
     for transition in transitions_by_episode.get(episode.pk, []):
         routing = transition.cached_required_outcomes
-        if all(_prefetched_routing_req_met(r) for r in routing):
+        if all(routing_requirement_met(r) for r in routing):
             eligible.append(transition)
     return eligible
-
-
-def _prefetched_routing_req_met(req: TransitionRequiredOutcome) -> bool:
-    """Mirror ``services.transitions._routing_req_met``'s beat-level branch (#3565).
-
-    This in-memory path only ever sees beat-level routing rows (stake-level
-    routing is not exercised by the GM queue's batched eligibility check).
-    """
-    if req.beat.outcome != req.required_outcome:
-        return False
-    return not req.required_outcome_key or req.beat.outcome_key == req.required_outcome_key
 
 
 def _expire_overdue_beats_for_episodes(episode_ids: list[int]) -> None:

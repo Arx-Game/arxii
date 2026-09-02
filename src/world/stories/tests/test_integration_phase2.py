@@ -467,7 +467,7 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
             "is required (routing is automatic, no remaining UNSATISFIED GM_MARKED beat).",
         )
 
-        # Resolve the episode — the single eligible transition (t_to_2a) fires.
+        # Resolve the episode - the single eligible transition (t_to_2a) fires.
         resolution = resolve_episode(progress=group_progress)
         group_progress.refresh_from_db()
         self.assertEqual(

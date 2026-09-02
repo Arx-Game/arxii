@@ -2,7 +2,7 @@
 
 Public API:
     resolve_episode(*, progress, gm_notes="", resolved_by=None)
-        — evaluates eligibility, selects the transition, creates an
+        - evaluates eligibility, selects the transition, creates an
           EpisodeResolution row, and advances progress.
 """
 

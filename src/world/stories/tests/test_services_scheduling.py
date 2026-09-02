@@ -237,7 +237,7 @@ class SessionRequestAutoCreatedFromBeatsTests(EvenniaTestCase):
             episode=episode, beat=gm_beat, required_outcome=BeatOutcome.SUCCESS
         )
         TransitionFactory(source_episode=episode, target_episode=target)
-        # A second GM_MARKED beat still UNSATISFIED after the gate clears — a
+        # A second GM_MARKED beat still UNSATISFIED after the gate clears - a
         # session is needed to mark it (#3565: routing itself needs no GM).
         BeatFactory(
             episode=episode,
