@@ -126,7 +126,7 @@ def _narrate_encounter_resolution(
         )
     anchor_room = instance.anchor_room
     if anchor_room is not None:
-        emit_ambient_room_stir(anchor_room)
+        emit_ambient_room_stir(anchor_room.objectdb)
 
 
 def complete_encounter_for_option(encounter: CombatEncounter) -> MissionDeedRecord | None:

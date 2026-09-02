@@ -589,7 +589,7 @@ def resolve_option(  # noqa: PLR0913
 
     Either CHECK then matches the route for the rolled outcome tier, applies
     that route's consequence (authored or synthetic fallback) via
-    ``apply_resolution``, and advances ``current_node`` or completes the run
+    ``apply_all_effects``, and advances ``current_node`` or completes the run
     (terminal route). Emits and returns the :class:`MissionDeedRecord`
     (moral consequence follows the actor).
 

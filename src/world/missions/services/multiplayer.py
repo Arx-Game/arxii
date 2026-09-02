@@ -232,7 +232,7 @@ def _emit_group_resolution_narrative(
             )
     anchor_room = instance.anchor_room
     if anchor_room is not None:
-        emit_ambient_room_stir(anchor_room)
+        emit_ambient_room_stir(anchor_room.objectdb)
 
 
 def _tally_group_winner(
