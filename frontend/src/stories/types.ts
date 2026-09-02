@@ -292,7 +292,6 @@ export interface CanonReviewChangesBody {
 
 export interface ResolveEpisodeBody {
   progress_id?: number | null;
-  chosen_transition?: number | null;
   gm_notes?: string;
 }
 

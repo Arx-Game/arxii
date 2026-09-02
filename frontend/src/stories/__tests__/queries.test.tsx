@@ -320,13 +320,13 @@ describe('Stories Query Hooks', () => {
         await result.current.mutateAsync({
           episodeId: 20,
           storyId: 5,
-          chosen_transition: 7,
+          progress_id: 9,
           gm_notes: 'Great session.',
         });
       });
 
       expect(api.resolveEpisode).toHaveBeenCalledWith(20, {
-        chosen_transition: 7,
+        progress_id: 9,
         gm_notes: 'Great session.',
       });
       expect(invalidateSpy).toHaveBeenCalledWith(

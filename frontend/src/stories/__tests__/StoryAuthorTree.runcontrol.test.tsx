@@ -3,7 +3,7 @@
  *
  * F2 makes the author page an author-AND-run cockpit: the GM marks beats
  * from the same page they author it on. The MarkBeatDialog component +
- * its endpoint already exist and are tested in their own suite — this
+ * its endpoint already exist and are tested in their own suite; this
  * task is PURE WIRING:
  *
  *   - a GM_MARKED beat row exposes the existing MarkBeatDialog "Mark"

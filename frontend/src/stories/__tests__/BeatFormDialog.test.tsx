@@ -166,7 +166,7 @@ describe('BeatFormDialog', () => {
     setupMocks();
     renderWithProviders(<BeatFormDialog {...defaultProps} />);
 
-    // outcome_tier radio should be selected — GM-choice retired, most beats
+    // outcome_tier radio should be selected; GM-choice retired, most beats
     // now resolve off a scenario/fight/check outcome rather than a manual mark.
     const predicateGroup = screen.getByTestId('predicate-type-group');
     const outcomeTierRadio = within(predicateGroup).getByRole('radio', { name: /outcome tier/i });
@@ -692,7 +692,7 @@ describe('BeatFormDialog', () => {
   });
 
   // -------------------------------------------------------------------------
-  // #3565 — Scenario section (SITUATION/TASK beats, edit mode only)
+  // #3565 - Scenario section (SITUATION/TASK beats, edit mode only)
   // -------------------------------------------------------------------------
 
   function makeSituationBeat(

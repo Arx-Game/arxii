@@ -721,7 +721,7 @@ function StagedTemplatesEditor({ lines, onChange, rowErrors }: StagedTemplatesEd
 }
 
 // ---------------------------------------------------------------------------
-// Scenario section (#3565) — a SITUATION/TASK beat may run its own scenario
+// Scenario section (#3565) - a SITUATION/TASK beat may run its own scenario
 // graph instead of (or as well as) a catalog mission. Edit mode only: a
 // scenario is minted against an existing beat id, so create mode just tells
 // the author to save first.
@@ -1195,7 +1195,7 @@ export function BeatFormDialog({
               />
             )}
 
-            {/* Scenario graph (#3565) — a SITUATION/TASK beat's own body */}
+            {/* Scenario graph (#3565) - a SITUATION/TASK beat's own body */}
             {(kind === 'situation' || kind === 'task') && <ScenarioSection beat={beat} />}
 
             {/* Advances */}

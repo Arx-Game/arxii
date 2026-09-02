@@ -297,7 +297,7 @@ describe('TransitionFormDialog', () => {
     await user.click(screen.getByTestId('add-routing-row-btn'));
     const addForm = screen.getByTestId('add-routing-row-form');
 
-    // Select the beat — its scenario is non-null, so the Option select appears.
+    // Select the beat; its scenario is non-null, so the Option select appears.
     const beatTrigger = within(addForm).getAllByRole('combobox')[0];
     await user.click(beatTrigger);
     await user.click(await screen.findByText(/Defeat the boss/i));

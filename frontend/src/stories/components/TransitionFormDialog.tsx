@@ -9,7 +9,7 @@
  * sent together with the transition fields in one request.  If the server
  * rolls back (e.g. DB integrity error), no partial state is left behind.
  *
- * #3565: GM-choice transitions are retired — every transition now fires
+ * #3565: GM-choice transitions are retired; every transition now fires
  * automatically once its routing predicate is satisfied, so there is no
  * `mode` field left to author. A beat-level routing row may additionally
  * pin a scenario option key (e.g. "negotiate") when the picked beat runs a
@@ -130,7 +130,7 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
 
   // #3565: when the selected beat runs a scenario graph, offer its option
   // keys so the row can pin a specific branch. "" ("Any option") is always
-  // the first entry — blank means the row is satisfied by any option.
+  // the first entry; blank means the row is satisfied by any option.
   const selectedBeat = beats.find((b) => String(b.id) === beatId);
   const scenarioOptionKeys = selectedBeat?.scenario?.option_keys ?? [];
   const optionKeyOptions = [
