@@ -842,7 +842,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
     def episodes(self, request: Request, pk: int | None = None) -> Response:
         """Get all episodes for a chapter"""
         chapter = self.get_object()
-        episodes = chapter.episodes.all().order_by("order")
+        episodes = chapter.episodes.annotate(scenes_count=Count("episode_scenes")).order_by("order")
         serializer = EpisodeListSerializer(episodes, many=True)
         return Response(serializer.data)
 
@@ -853,7 +853,9 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     Manages story episodes with narrative connection tracking.
     """
 
-    queryset = Episode.objects.all()
+    queryset = Episode.objects.select_related("chapter__story__primary_table").annotate(
+        scenes_count=Count("episode_scenes")
+    )
     permission_classes = [IsEpisodeStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -873,6 +875,21 @@ class EpisodeViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return EpisodeCreateSerializer
         return EpisodeDetailSerializer
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Preload one routing report per episode on the page (#3563)."""
+        from world.stories.services.routing import routing_reports_for_episodes  # noqa: PLC0415
+
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        episodes = page if page is not None else list(queryset)
+        serializer = self.get_serializer(episodes, many=True)
+        serializer.context["routing_reports"] = routing_reports_for_episodes(
+            [episode.pk for episode in episodes]
+        )
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def scenes(self, request: Request, pk: int | None = None) -> Response:

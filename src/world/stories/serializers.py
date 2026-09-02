@@ -82,6 +82,7 @@ from world.stories.permissions import user_owns_or_leads_story
 from world.stories.types import (
     AnyStoryProgress,
     ConnectionType,
+    RoutingReport,
     StoryLogBeatEntry,
     StoryLogEpisodeEntry,
 )
@@ -235,9 +236,26 @@ def _gm_text_gate(
         data.pop("description", None)
         # consequences is absent on the Story serializer — pop default is safe.
         data.pop("consequences", None)
+        # routing_problems is absent on the Story serializer: pop default is safe.
+        data.pop("routing_problems", None)
         if node_maturity == StoryMaturity.PITCH:
             data["summary"] = ""
     return data
+
+
+def _routing_report_for(serializer: serializers.BaseSerializer, episode: Episode) -> RoutingReport:
+    """One report per episode per serializer context.
+
+    ``EpisodeViewSet.list`` preloads the page's reports under
+    ``context["routing_reports"]``; detail and bare serializations compute
+    on first use and memoize in the same context dict.
+    """
+    from world.stories.services.routing import routing_report  # noqa: PLC0415
+
+    reports = serializer.context.setdefault("routing_reports", {})
+    if episode.pk not in reports:
+        reports[episode.pk] = routing_report(episode)
+    return reports[episode.pk]
 
 
 class StoryDetailSerializer(serializers.ModelSerializer):
@@ -465,10 +483,8 @@ class EpisodeListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for episode lists"""
 
     chapter = serializers.StringRelatedField(read_only=True)
-    scenes_count = serializers.IntegerField(
-        source="episode_scenes.count",
-        read_only=True,
-    )
+    scenes_count = serializers.IntegerField(read_only=True)
+    routing_problems = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -480,7 +496,16 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             "is_active",
             "scenes_count",
             "completed_at",
+            "routing_problems",
         ]
+
+    def get_routing_problems(self, obj: Episode) -> list[str]:
+        return list(_routing_report_for(self, obj).problems)
+
+    def to_representation(self, instance: Episode) -> dict[str, object]:
+        """Gate GM-only routing text for player-tier viewers (#3563)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance.chapter.story, str(instance.maturity))
 
 
 class EpisodeDetailSerializer(serializers.ModelSerializer):
@@ -488,6 +513,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 
     chapter = serializers.StringRelatedField(read_only=True)
     routing_ambiguous = serializers.SerializerMethodField()
+    routing_problems = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -507,13 +533,15 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "routing_ambiguous",
+            "routing_problems",
         ]
 
     def get_routing_ambiguous(self, obj: Episode) -> bool:
         """Whether any pair of this episode's outbound transitions is ambiguous (#3565)."""
-        from world.stories.services.routing import routing_report  # noqa: PLC0415
+        return _routing_report_for(self, obj).is_ambiguous
 
-        return routing_report(obj).is_ambiguous
+    def get_routing_problems(self, obj: Episode) -> list[str]:
+        return list(_routing_report_for(self, obj).problems)
 
     def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
