@@ -42,22 +42,31 @@ def _running_instance(scene: Scene) -> MissionInstance | None:
     ).first()
 
 
-def _viewer_character(scene: Scene, user: AccountDB) -> ObjectDB | None:
-    """The ObjectDB character the viewing account plays in this scene's party.
+def _viewer_character(scene: Scene, user: AccountDB, instance: MissionInstance) -> ObjectDB | None:
+    """The ObjectDB character the viewing account plays *on this run*, if any.
 
     Walks ``scene.persona_handler.active_participant_personas()`` (already
-    scene-scoped) and returns the first persona's character whose owning
-    account is ``user`` - via
+    scene-scoped) and, for every persona whose owning account is ``user`` - via
     ``character_sheet.roster_entry_or_none.current_tenure.player_data.account``,
-    the same ownership chain ``CharacterSheet.decay_tier`` walks. None when the
-    viewer has no active character among this scene's participants (e.g. a GM
-    who is not playing a PC here).
+    the same ownership chain ``CharacterSheet.decay_tier`` walks - returns the
+    first one that is also a ``MissionParticipant`` on ``instance``. An account
+    may have more than one active character among this scene's participants
+    (tenure ordering is newest-first); the FIRST account-matching persona is
+    not necessarily the one actually on the run, so every candidate is checked
+    against the instance's participant set (fetched once, #3565 fix round 1)
+    rather than stopping at the first match. None when none of the viewer's
+    characters here are on this run (e.g. a GM who is not playing a PC here).
     """
+    participant_sheet_ids = set(
+        MissionParticipant.objects.filter(instance=instance).values_list("character_id", flat=True)
+    )
     for persona in scene.persona_handler.active_participant_personas():
         sheet = persona.character_sheet
         entry = sheet.roster_entry_or_none
         tenure = entry.current_tenure if entry is not None else None
-        if tenure is not None and tenure.player_data.account_id == user.pk:
+        if tenure is None or tenure.player_data.account_id != user.pk:
+            continue
+        if sheet.pk in participant_sheet_ids:
             return sheet.character
     return None
 
@@ -78,7 +87,7 @@ def _gm_ballots(instance: MissionInstance) -> tuple[GroupBallotState, ...]:
     if node is None:
         return ()
     ballots = MissionGroupBallot.objects.filter(instance=instance, node=node).select_related(
-        "participant", "participant__character"
+        "participant", "participant__character", "participant__character__character"
     )
     return tuple(
         GroupBallotState(
@@ -132,11 +141,8 @@ def build_scene_scenario_payload(scene: Scene, user: AccountDB) -> dict[str, Any
     if instance is None:
         return payload
 
-    character = _viewer_character(scene, user)
-    if (
-        character is not None
-        and MissionParticipant.objects.filter(instance=instance, character_id=character.pk).exists()
-    ):
+    character = _viewer_character(scene, user, instance)
+    if character is not None:
         payload["viewer_is_participant"] = True
         payload["group_beat"] = group_beat_service(instance, character)
 

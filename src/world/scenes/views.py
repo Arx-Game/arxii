@@ -246,6 +246,22 @@ class SceneViewSet(viewsets.ModelViewSet):
             # filters interactions through Interaction.visible_to, so individual poses
             # are gated even where scene-level access is granted.
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
+        elif self.action in ["scenario", "gm_rail"]:
+            # #3565 fix round 1 (CRITICAL): these composed reads previously fell
+            # through to the `else` branch's bare IsAuthenticatedOrReadOnly, which has
+            # no has_object_permission -- ANY authenticated account could pull a
+            # PRIVATE/EPHEMERAL scene's running-scenario or story-rail state by id,
+            # even with zero standing on the scene. IsAuthenticated (not
+            # IsAuthenticatedOrReadOnly -- that would let an ANONYMOUS request through
+            # for a PUBLIC scene, which these two actions have never allowed; see the
+            # #3565 task-7 report) plus ReadOnlyOrSceneParticipant's object-level
+            # `Scene.is_viewable_by` gives the same private/ephemeral floor `retrieve`
+            # already has: anonymous -> 401 (IsAuthenticated fails first), an
+            # authenticated viewer who cannot see the scene -> 403, a viewer who can
+            # -> through to the action's own further per-viewer gating
+            # (`viewer_qualifies_for_rail` / `build_scene_scenario_payload`'s
+            # per-section checks).
+            permission_classes = [permissions.IsAuthenticated, ReadOnlyOrSceneParticipant]
         else:
             # Default permissions for list, create, spotlight
             permission_classes = self.permission_classes
@@ -410,14 +426,19 @@ class SceneViewSet(viewsets.ModelViewSet):
         """GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
         material, protected subjects, and room clue placements, gated per-viewer.
 
-        Composed read only -- no writes, no models, no migration. View-level gate
-        (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
-        the scene owner and is too broad -- see the #3434 spec's anti-reinvention
-        ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
-        (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
-        ``CharacterVitalsView``, the scene itself is already visible through the
-        plain detail endpoint, so this gate is refusing a sub-resource, not hiding
-        the scene's existence.
+        Composed read only -- no writes, no models, no migration. Scene-level gate
+        via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+        ``ReadOnlyOrSceneParticipant`` -- a viewer must be able to see the scene at
+        all (``Scene.is_viewable_by``) before this action's own body runs; this was
+        previously missing (a PRIVATE/EPHEMERAL scene's story rail leaked to any
+        authenticated account, #3565 fix round 1 CRITICAL). On top of that,
+        view-level gate (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff``
+        includes the scene owner and is too broad -- see the #3434 spec's
+        anti-reinvention ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+        (``viewer_qualifies_for_rail``). Denial there is 403 (not 404) -- unlike
+        ``CharacterVitalsView``, a viewer who can see the scene at all (the gate
+        above) already knows it exists, so this second gate is refusing a
+        sub-resource, not hiding the scene's existence.
 
         Payload sections are gated further, per-viewer, inside
         ``build_gm_story_rail_payload``: the beat summary for any qualifying
@@ -439,18 +460,17 @@ class SceneViewSet(viewsets.ModelViewSet):
         return Response(payload)
 
     @extend_schema(responses=SceneScenarioSerializer, tags=["scenes"])
-    @action(
-        detail=True,
-        methods=[HTTPMethod.GET],
-        url_path="scenario",
-        permission_classes=[permissions.IsAuthenticated],
-    )
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="scenario")
     def scenario(self, request: Request, pk: int | None = None) -> Response:
         """GET /api/scenes/{id}/scenario/ (#3565) - the mission scenario this scene is
         currently running, gated per-viewer.
 
-        Composed read only -- no writes, no models, no migration. Any authenticated
-        viewer gets 200: ``instance_id`` is null when the scene runs no scenario.
+        Composed read only -- no writes, no models, no migration. Scene-level gate
+        via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+        ``ReadOnlyOrSceneParticipant`` -- a viewer must be authenticated AND able to
+        see the scene at all (``Scene.is_viewable_by`` -- public, staff, or a scene
+        participant) before this action's own body ever runs. Past that gate: any
+        such viewer gets 200, ``instance_id`` null when the scene runs no scenario.
         Sub-sections are gated inside ``build_scene_scenario_payload``: ``group_beat``
         (the same shape as ``journal/{id}/group-beat/``) only for a viewer playing a
         participant on the run; ``gm`` (current node, every ballot, the last deed,
