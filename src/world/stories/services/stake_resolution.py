@@ -1,9 +1,10 @@
-"""Per-stake resolution: machine grading, GM constrained pick, world-state writers.
+"""Per-stake resolution: machine grading, world-state writers.
 
 #1770 PR2. stakes.py owns readiness/activation; this module owns what happens
 when a staked beat completes — grading each stake to a column, firing the
 authored branch's consequence pool, applying its structured world-state
-writers, and writing the StakeOutcome audit/routing row.
+writers, and writing the StakeOutcome audit/routing row. #3561 retired the GM
+constrained pick (resolve_stake_by_gm_pick); every outcome is machine-graded.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from world.stories.constants import (
     StakeResolutionColumn,
     StakeRewardSink,
     StakeSubjectKind,
-    StoryScope,
 )
 from world.stories.models import StakeOutcome, StakeResolution, StakeRewardLine
 from world.stories.types import StakePayloadProblem
@@ -149,7 +149,7 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
 
 
 # ---------------------------------------------------------------------------
-# Per-stake resolution (machine grading + GM constrained pick)
+# Per-stake resolution (machine grading)
 # ---------------------------------------------------------------------------
 
 
@@ -157,9 +157,9 @@ def _open_stakes_for(beat: Beat) -> list[Stake]:
     """Every stake on this beat still needing a grade, prefetched for firing.
 
     The prefetch (resolutions + their reward lines) and the "already has a
-    StakeOutcome" idempotency filter (a GM's earlier constrained pick, say)
-    are shared by resolve_stakes_for_completion and resolve_stakes_for_withdrawal
-    (#3559) - both callers enumerate open stakes the same way.
+    StakeOutcome" idempotency filter are shared by resolve_stakes_for_completion
+    and resolve_stakes_for_withdrawal (#3559) - both callers enumerate open
+    stakes the same way.
     """
     stakes = list(
         beat.stakes.prefetch_related(
@@ -210,7 +210,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
 
     Semantics (#1770 pillars 11-12; #3559):
       - No stakes -> []. Idempotent: any stake that already has a StakeOutcome
-        row (e.g. a GM's earlier constrained pick) is skipped.
+        row is skipped.
       - Withdrawal (the party walked away) never reaches this function - it
         resolves through the separate resolve_stakes_for_withdrawal, which
         leaves the beat's own outcome untouched.
@@ -509,8 +509,10 @@ def _fire_branch_and_record(  # noqa: PLR0913
 ) -> StakeOutcome:
     """Claim one stake's audit row, then fire its branch (pool + writer payloads).
 
-    Shared by the machine path and the GM constrained pick — the only
-    differences between them are ``method``/``resolved_by``/``gm_notes``.
+    Shared by the completion machine path and the withdrawal path.
+    ``resolved_by``/``gm_notes`` are historical audit params from before #3561
+    retired the GM constrained pick; no live caller passes them now, but the
+    StakeOutcome fields they write remain (see StakeOutcome.resolved_by).
 
     Claim-before-pay (#1770 PR3 review): the StakeOutcome row is created
     FIRST — winning the ``unique_outcome_per_stake`` constraint is the claim.
@@ -566,115 +568,6 @@ def _fire_branch_and_record(  # noqa: PLR0913
             column,
         )
     return outcome
-
-
-def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcome's surface
-    stake: Stake,
-    *,
-    column: str,
-    outcome_key: str = "",
-    gm_profile: GMProfile | None,
-    gm_notes: str = "",
-    participants: list[Persona] | None = None,
-    extra_participants: list[Persona] | None = None,
-) -> StakeOutcome:
-    """Resolve one stake at a GM-chosen column (#1770 PR2 — constrained pick).
-
-    Fires the chosen column's authored branch exactly like the machine path
-    (pool + writer payloads) but records method=GM_PICK with the deciding GM
-    and their notes. The pick is constrained: the column must be among the
-    stake's authored resolutions — a GM never composes a consequence freehand
-    at resolution time.
-
-    ``participants`` / ``extra_participants`` — same semantics as
-    record_gm_marked_outcome (and the machine path's participant derivation):
-    GROUP scope uses ``participants`` (required when the picked branch's pool
-    carries LEGEND_AWARD); CHARACTER scope credits the progress's primary
-    persona plus ``extra_participants``; GLOBAL takes none. The same list
-    feeds the branch's subject_standing_delta writer.
-
-    Defensive guards only (ResolveStakeInputSerializer validates for API
-    callers): the stake must be unresolved and the column must be authored.
-    ``outcome_key`` narrows the pick to one specific named branch within
-    ``column`` (#1760) — blank picks the column's plain default branch,
-    matching pre-#1760 authoring.
-    """
-    from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
-
-    # Direct table query — never the related manager, whose prefetched cache
-    # on the idmapper-shared Stake instance can be stale.
-    if StakeOutcome.objects.filter(stake=stake).exists():
-        msg = (
-            f"Stake {stake.pk} already has a StakeOutcome; "
-            "ResolveStakeInputSerializer should have rejected this."
-        )
-        raise ValueError(msg)
-    resolution = stake.resolutions.filter(column=column, outcome_key=outcome_key).first()
-    if resolution is None:
-        msg = (
-            f"Stake {stake.pk} has no authored resolution for column {column!r} "
-            f"outcome_key {outcome_key!r}; a GM pick is constrained to authored "
-            "branches."
-        )
-        raise ValueError(msg)
-
-    story = stake.beat.episode.chapter.story
-    scope = story.scope
-    progress = get_active_progress_for_story(story)
-    resolved_participants: list[Persona] = []
-    if scope == StoryScope.CHARACTER:
-        if progress is not None:
-            resolved_participants = [progress.character_sheet.primary_persona]
-        if extra_participants:
-            resolved_participants.extend(extra_participants)
-    elif scope == StoryScope.GROUP and participants:
-        resolved_participants = list(participants)
-
-    activation = _activation_for_gm_pick(stake.beat)
-
-    with transaction.atomic():
-        outcome = _fire_branch_and_record(
-            stake=stake,
-            resolution=resolution,
-            column=column,
-            method=StakeOutcomeMethod.GM_PICK,
-            activation=activation,
-            progress=progress,
-            scope=scope,
-            participants=resolved_participants,
-            resolved_by=gm_profile,
-            gm_notes=gm_notes,
-        )
-
-    # Stamp GM activity (#2004) — the pick succeeded.
-    if gm_profile is not None:
-        from world.gm.services import touch_gm_activity  # noqa: PLC0415
-
-        touch_gm_activity(gm_profile)
-
-    return outcome
-
-
-def _activation_for_gm_pick(beat: Beat) -> StakeContractActivation | None:
-    """The activation the pended stakes actually ran under (#1770 PR3 review).
-
-    A GM pick resolves a stake that pended at some earlier completion. Prefer
-    the most recent activation locked at-or-before the beat's most recent
-    BeatCompletion — a NEW activation opened after the stake pended (the beat
-    re-engaged) must not change the pended stake's payout gate or its
-    StakeOutcome.activation audit row. Fall back to the open activation, then
-    the most recent one (picks on a beat with no completion yet).
-    """
-    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
-
-    completion = beat.completions.order_by("-recorded_at", "-pk").first()
-    if completion is not None:
-        # StakeContractActivation.Meta.ordering is ["-locked_at"], so first()
-        # is the most recent activation at-or-before that completion.
-        activation = beat.stake_activations.filter(locked_at__lte=completion.recorded_at).first()
-        if activation is not None:
-            return activation
-    return get_open_activation(beat) or beat.stake_activations.first()
 
 
 # ---------------------------------------------------------------------------

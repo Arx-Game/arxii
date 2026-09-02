@@ -116,7 +116,6 @@ from world.stories.permissions import (
     CanMarkBeat,
     CanParticipateInStory,
     CanReplyToBulletinPost,
-    CanResolveStake,
     CanViewBeatStakesSummary,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
@@ -217,13 +216,11 @@ from world.stories.serializers import (
     ResolveEpisodeInputSerializer,
     ResolveForeclosureInputSerializer,
     ResolveSessionRequestInputSerializer,
-    ResolveStakeInputSerializer,
     RiskCalibrationSerializer,
     SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
     StakeAvailabilitySerializer,
     StakeContractActivationSerializer,
-    StakeOutcomeSerializer,
     StakeResolutionSerializer,
     StakeRewardLineSerializer,
     StakeSerializer,
@@ -3485,60 +3482,6 @@ class StakeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["severity", "created_at", "updated_at"]
     ordering = ["beat", "-severity", "pk"]
-
-    @action(
-        detail=True,
-        methods=[HTTPMethod.POST],
-        url_path="resolve",
-        permission_classes=[CanResolveStake],
-    )
-    def resolve(self, request: Request, pk: int | None = None) -> Response:
-        """POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
-
-        Lead GM, staff, or an AGM with an approved claim on the stake's beat
-        picks one of the stake's AUTHORED resolution columns; the branch fires
-        exactly like the machine path (pool + writers) and the StakeOutcome
-        audit row records method=GM_PICK with the GM and notes. Optional
-        ``participants`` / ``extra_participants`` carry the personas the
-        branch's pool and affection writer credit (MarkBeat semantics).
-        Returns 201 with the StakeOutcome.
-
-        The LEGEND_AWARD participant guards fire inside the service's pool
-        walk — pre-validating them in the serializer would duplicate
-        resolve_pool_consequences; they are surfaced as 400 here (same
-        exception-block carve-out as EpisodeViewSet.resolve).
-        """
-        from world.gm.models import GMProfile  # noqa: PLC0415
-        from world.societies.exceptions import (  # noqa: PLC0415
-            LegendAwardParticipantMissingError,
-            LegendAwardScopeError,
-        )
-        from world.stories.services.stake_resolution import (  # noqa: PLC0415
-            resolve_stake_by_gm_pick,
-        )
-
-        stake = self.get_object()
-        ser = ResolveStakeInputSerializer(data=request.data, context={"stake": stake})
-        ser.is_valid(raise_exception=True)
-
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            gm_profile = None
-
-        try:
-            outcome = resolve_stake_by_gm_pick(
-                stake,
-                column=ser.validated_data["column"],
-                outcome_key=ser.validated_data.get("outcome_key", ""),
-                gm_profile=gm_profile,
-                gm_notes=ser.validated_data["gm_notes"],
-                participants=ser.validated_data.get("participants") or None,
-                extra_participants=ser.validated_data.get("extra_participants") or None,
-            )
-        except (LegendAwardParticipantMissingError, LegendAwardScopeError) as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(StakeOutcomeSerializer(outcome).data, status=status.HTTP_201_CREATED)
 
 
 class StakeResolutionViewSet(viewsets.ModelViewSet):
