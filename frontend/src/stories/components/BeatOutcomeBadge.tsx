@@ -1,6 +1,6 @@
 /**
  * Beat outcome pill badge.
- * SUCCESS=green, FAILURE=red, EXPIRED=gray, UNSATISFIED=neutral, PENDING_GM_REVIEW=amber.
+ * SUCCESS=green, FAILURE=red, EXPIRED=gray, UNSATISFIED=neutral.
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,6 @@ const OUTCOME_LABELS: Record<BeatOutcome, string> = {
   success: 'Success',
   failure: 'Failure',
   expired: 'Expired',
-  pending_gm_review: 'Pending Review',
 };
 
 const OUTCOME_CLASSES: Record<BeatOutcome, string> = {
@@ -20,7 +19,6 @@ const OUTCOME_CLASSES: Record<BeatOutcome, string> = {
   success: 'bg-green-600 text-white border-transparent',
   failure: 'bg-red-600 text-white border-transparent',
   expired: 'bg-gray-500 text-white border-transparent',
-  pending_gm_review: 'bg-amber-600 text-white border-transparent',
 };
 
 interface BeatOutcomeBadgeProps {

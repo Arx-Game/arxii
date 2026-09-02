@@ -405,24 +405,25 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
   unready contract that ran anyway is auditable, not invisible).
 - Idempotent: stakes that already carry a `StakeOutcome` (e.g. an earlier GM
   pick) are skipped. Participant resolution happens inside the resolver,
-  after the no-stakes/deferred early-returns — an unstaked completion never
-  pays its cost.
-- `PENDING_GM_REVIEW` (non-withdrawal) defers all stakes — they wait for the
-  GM's pick or final mark.
+  after the no-stakes early return - an unstaked completion never pays its
+  cost.
 - The aggregate-crossing tail (`_finalize_aggregate_crossing`) resolves stakes
   at `WIN` and closes the open activation, same as the shared tail.
 
 **Withdrawal (combat FLED/ABANDONED):** the combat auto-wire
-(`world.combat.beat_wiring.encounter_completed_beat_handler`) passes
-`withdrawal=True` through `record_outcome_tier_completion` (legal only with
-`force_outcome=PENDING_GM_REVIEW`). The withdrawal path is **structural**:
+(`world.combat.beat_wiring.encounter_completed_beat_handler`) calls
+`resolve_stakes_for_withdrawal(beat, progress, participants)` directly (#3559),
+a separate function from the completion path, not a flag through
+`record_outcome_tier_completion`. The withdrawal path is **structural**:
 FLED/ABANDONED take it regardless of any authored `EncounterOutcomeMapping`
-row for the pair — a mapped tier is ignored (withdrawal routes to withdrawal
-branches by spec semantics, not data convention). Stakes **with** an authored
-`WITHDRAWAL` resolution fire it immediately (method `MACHINE`); stakes without
-one pend with the beat's `PENDING_GM_REVIEW` for the GM's constrained pick.
-The beat outcome itself stays `PENDING_GM_REVIEW` (a GM still adjudicates the
-beat). This resolves #1746's deferred withdrawal design.
+row for the pair - a mapped tier is never even looked up (withdrawal routes to
+withdrawal branches by spec semantics, not data convention). Every open stake
+gets a `StakeOutcome` immediately: one **with** an authored `WITHDRAWAL`
+resolution fires it (method `MACHINE`); one without still records an
+audit-honest `StakeOutcome` with `resolution=None` rather than waiting for a
+GM's pick. The beat's own outcome is untouched - it stays `UNSATISFIED`, since
+walking away is neither success nor failure of the objective (#3559 removed
+the `PENDING_GM_REVIEW` state this paragraph used to describe).
 
 **GM constrained pick:** `resolve_stake_by_gm_pick` /
 `POST /api/stakes/{id}/resolve/` — the GM picks **among the stake's authored
@@ -437,10 +438,10 @@ Optional `participants` / `extra_participants` carry the personas the branch's
 pool and affection writer credit (same semantics as the beat mark endpoint:
 GROUP scope needs an explicit list for LEGEND_AWARD pools — the guard surfaces
 as a 400, not a 500). One pick per stake (a second attempt is rejected; the
-`unique_outcome_per_stake` constraint is the backstop). When a GM later
-finally marks a pending beat, the completion tail's resolver auto-resolves the
-*remaining* unresolved stakes at the marked column; picked stakes are
-untouched (idempotency).
+`unique_outcome_per_stake` constraint is the backstop). When a GM later marks
+a GM_MARKED beat via `record_gm_marked_outcome`, the completion tail's
+resolver auto-resolves the *remaining* unresolved stakes at the marked
+column; picked stakes are untouched (idempotency).
 
 **Escalation:** `escalates_to_risk` stays recorded on the fired resolution and
 is readable by authoring; there is no automatic scene-spawn in PR2 (the fuse
@@ -673,23 +674,29 @@ stake's severity label + `player_summary` and the locked effective risk.
 | `reward_band_problems_for_beat` | `(beat: Beat) -> list[str]` | Re-runnable reward-band check (PR3): the readiness path *and* `_apply_stake_rewards` at pay time both use it |
 
 `StakesReadinessReport` (`world.stories.types`): `is_staked: bool`,
-`is_ready: bool`, `problems: tuple[str, ...]`.
+`is_ready: bool`, `problems: tuple[str, ...]`,
+`advisories: tuple[str, ...]` - non-blocking authoring notes (a success pool
+with no success-polarity row, a failure pool with no failure-polarity row);
+surfaced by the readiness endpoint #3562 adds.
 
 ## Services (`world.stories.services.stake_resolution`, PR2)
 
 | Function | Signature | Purpose |
 |---|---|---|
-| `resolve_stakes_for_completion` | `(*, beat, outcome, completion, progress, scope, explicit_participants=None, outcome_tier=None, withdrawal=False) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches — see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
+| `resolve_stakes_for_completion` | `(*, beat, outcome, completion, progress, scope, explicit_participants=None, outcome_tier=None) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches - see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
+| `resolve_stakes_for_withdrawal` | `(beat, progress, participants) -> list[StakeOutcome]` | The party walked away (#3559) - fires each open stake's authored WITHDRAWAL branch structurally, without consulting a graded tier; leaves `beat.outcome` as `UNSATISFIED`. Called by `world.combat.beat_wiring.encounter_completed_beat_handler` on FLED/ABANDONED |
 | `resolve_stake_by_gm_pick` | `(stake, *, column, outcome_key="", gm_profile, gm_notes="", participants=None, extra_participants=None) -> StakeOutcome` | The GM constrained pick — `outcome_key` narrows the pick to one named branch within `column` (#1760; blank = the column's plain default). Fires the authored branch like the machine path, records `GM_PICK` |
 | `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, subject_standing_delta, npc_regard_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`); #2039 added the `npc_regard_delta`-requires-`NPC_FATE` check |
 | `sheet_is_player_held` | `(sheet: CharacterSheet) -> bool` | The pillar-12 gate: RosterEntry with a current tenure |
 
-Plumbing added in PR2: `record_outcome_tier_completion` gained
-`withdrawal: bool = False` (legal only with `force_outcome=PENDING_GM_REVIEW`);
-`beats._fire_pool_with_context` is the extracted shared pool-fire core;
-`vitals.services._mark_dead` now propagates `LifecycleState.DEAD` to the
-sheet's roster lifecycle (the single seam where combat death reaches the
-roster).
+Plumbing added in PR2: `beats._fire_pool_with_context` is the extracted
+shared pool-fire core; `vitals.services._mark_dead` now propagates
+`LifecycleState.DEAD` to the sheet's roster lifecycle (the single seam where
+combat death reaches the roster). #3559 removed the `withdrawal` flag PR2
+originally gave `record_outcome_tier_completion` (legal only with the
+now-deleted `force_outcome=PENDING_GM_REVIEW`) - a fled/abandoned fight
+never reaches `record_outcome_tier_completion` at all now; it resolves
+through `resolve_stakes_for_withdrawal` above instead.
 
 ## API
 

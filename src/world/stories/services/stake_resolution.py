@@ -153,52 +153,14 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
-def resolve_stakes_for_completion(  # noqa: PLR0913
-    *,
-    beat: Beat,
-    outcome: BeatOutcome,
-    completion: BeatCompletion,
-    progress: AnyStoryProgress | None,
-    scope: str,
-    explicit_participants: list[Persona] | None = None,
-    outcome_tier: CheckOutcome | None = None,
-    withdrawal: bool = False,
-) -> list[StakeOutcome]:
-    """Grade every open stake on a completing beat and fire the chosen branches.
+def _open_stakes_for(beat: Beat) -> list[Stake]:
+    """Every stake on this beat still needing a grade, prefetched for firing.
 
-    Called inside the atomic completion tail
-    (world.stories.services.beats._create_completion_and_fire_pool), between
-    the beat-level pool fire and resolve_open_activation — so the open
-    activation is still readable for the audit FK.
-
-    Participant resolution (same derivation as the beat-level pool fire,
-    ``beats._resolve_participants_for_pool``) happens INSIDE this function,
-    after the early returns — an unstaked or deferred completion never pays
-    the participant-derivation queries and can never be rolled back by a
-    participant-resolution edge case.
-
-    Semantics (#1770 pillars 11-12):
-      - No stakes -> []. Idempotent: any stake that already has a StakeOutcome
-        row (e.g. a GM's earlier constrained pick) is skipped.
-      - outcome == PENDING_GM_REVIEW and not withdrawal -> no-op; the stakes
-        wait for the GM's pick / final mark.
-      - withdrawal=True (combat FLED/ABANDONED): stakes WITH an authored
-        WITHDRAWAL resolution fire it (method=MACHINE); stakes without one are
-        left unresolved — they pend with the beat's PENDING_GM_REVIEW.
-      - Otherwise the beat's outcome maps to a column (SUCCESS -> WIN,
-        FAILURE/EXPIRED -> LOSS), with a data-where-it-exists override: an
-        NPC_FATE stake whose subject's vitals read DEAD grades LOSS even on a
-        beat-level SUCCESS (pillar 11 — the vitals write IS the grade).
-      - The chosen column's authored branch fires its consequence pool
-        (tier-aware, same guards/context as beat pools) and applies its writer
-        payloads. A missing branch still writes a StakeOutcome with
-        resolution=None (audit honesty — an unready contract that ran anyway).
-      - escalates_to_risk stays recorded on the fired resolution for authoring;
-        no automatic scene-spawn here (the fuse walk validates reachability).
+    The prefetch (resolutions + their reward lines) and the "already has a
+    StakeOutcome" idempotency filter (a GM's earlier constrained pick, say)
+    are shared by resolve_stakes_for_completion and resolve_stakes_for_withdrawal
+    (#3559) - both callers enumerate open stakes the same way.
     """
-    from world.stories.services.beats import _resolve_participants_for_pool  # noqa: PLC0415
-    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
-
     stakes = list(
         beat.stakes.prefetch_related(
             Prefetch(
@@ -216,12 +178,59 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     )
     if not stakes:
         return []
-    if outcome == BeatOutcome.PENDING_GM_REVIEW and not withdrawal:
-        return []
-
     already_resolved = set(
         StakeOutcome.objects.filter(stake__in=stakes).values_list("stake_id", flat=True)
     )
+    return [stake for stake in stakes if stake.pk not in already_resolved]
+
+
+def resolve_stakes_for_completion(  # noqa: PLR0913
+    *,
+    beat: Beat,
+    outcome: BeatOutcome,
+    completion: BeatCompletion,
+    progress: AnyStoryProgress | None,
+    scope: str,
+    explicit_participants: list[Persona] | None = None,
+    outcome_tier: CheckOutcome | None = None,
+) -> list[StakeOutcome]:
+    """Grade every open stake on a completing beat and fire the chosen branches.
+
+    Called inside the atomic completion tail
+    (world.stories.services.beats._create_completion_and_fire_pool), between
+    the beat-level pool fire and resolve_open_activation - so the open
+    activation is still readable for the audit FK.
+
+    Participant resolution (same derivation as the beat-level pool fire,
+    ``beats._resolve_participants_for_pool``) happens INSIDE this function,
+    after the early return - an unstaked completion never pays the
+    participant-derivation queries and can never be rolled back by a
+    participant-resolution edge case.
+
+    Semantics (#1770 pillars 11-12; #3559):
+      - No stakes -> []. Idempotent: any stake that already has a StakeOutcome
+        row (e.g. a GM's earlier constrained pick) is skipped.
+      - Withdrawal (the party walked away) never reaches this function - it
+        resolves through the separate resolve_stakes_for_withdrawal, which
+        leaves the beat's own outcome untouched.
+      - Otherwise the beat's outcome maps to a column (SUCCESS -> WIN,
+        FAILURE/EXPIRED -> LOSS), with a data-where-it-exists override: an
+        NPC_FATE stake whose subject's vitals read DEAD grades LOSS even on a
+        beat-level SUCCESS (pillar 11 - the vitals write IS the grade).
+      - The chosen column's authored branch fires its consequence pool
+        (tier-aware, same guards/context as beat pools) and applies its writer
+        payloads. A missing branch still writes a StakeOutcome with
+        resolution=None (audit honesty - an unready contract that ran anyway).
+      - escalates_to_risk stays recorded on the fired resolution for authoring;
+        no automatic scene-spawn here (the fuse walk validates reachability).
+    """
+    from world.stories.services.beats import _resolve_participants_for_pool  # noqa: PLC0415
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    stakes = _open_stakes_for(beat)
+    if not stakes:
+        return []
+
     activation = get_open_activation(beat)
     participants = _resolve_participants_for_pool(
         completion=completion,
@@ -233,12 +242,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
 
     outcomes: list[StakeOutcome] = []
     for stake in stakes:
-        if stake.pk in already_resolved:
-            continue
-        picked = _select_stake_resolution(stake, outcome, withdrawal, withdrawn_stake_ids)
-        if picked is None:
-            continue
-        resolution, column = picked
+        resolution, column = _select_stake_resolution(stake, outcome, withdrawn_stake_ids)
         outcomes.append(
             _fire_branch_and_record(
                 stake=stake,
@@ -255,39 +259,69 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     return outcomes
 
 
+@transaction.atomic
+def resolve_stakes_for_withdrawal(
+    beat: Beat,
+    progress: AnyStoryProgress,
+    participants: list[Persona],
+) -> list[StakeOutcome]:
+    """The party walked away (a fled or abandoned fight, #3559).
+
+    Fires each open stake's authored WITHDRAWAL branch, records an empty
+    outcome for stakes with none, and closes the contract. The beat's own
+    outcome is not touched: walking away is neither success nor failure of
+    the objective; the story routes on the beat as it stands.
+    """
+    from world.stories.services.stakes import (  # noqa: PLC0415
+        get_open_activation,
+        resolve_open_activation,
+    )
+
+    activation = get_open_activation(beat)
+    if activation is None:
+        return []
+    scope = progress.story.scope
+    outcomes = [
+        _fire_branch_and_record(
+            stake=stake,
+            resolution=_branch_for_column(stake, StakeResolutionColumn.WITHDRAWAL),
+            column=StakeResolutionColumn.WITHDRAWAL,
+            method=StakeOutcomeMethod.MACHINE,
+            activation=activation,
+            progress=progress,
+            scope=scope,
+            participants=participants,
+            outcome_tier=None,
+        )
+        for stake in _open_stakes_for(beat)
+    ]
+    resolve_open_activation(beat)
+    return outcomes
+
+
 def _select_stake_resolution(
     stake: Stake,
     outcome: BeatOutcome,
-    withdrawal: bool,
     withdrawn_stake_ids: set[int],
-) -> tuple[StakeResolution | None, StakeResolutionColumn] | None:
-    """Pick the (resolution, column) for a single open stake, or None to skip.
+) -> tuple[StakeResolution | None, StakeResolutionColumn]:
+    """Pick the (resolution, column) for a single open stake.
 
-    Returns None (pend for a GM's constrained pick) when the selected branch is
-    unauthored. The three top-level branches mirror ``resolve_stakes_for_completion``:
+    A missing authored branch still returns its column with resolution=None -
+    _fire_branch_and_record then writes an audit-honest StakeOutcome rather
+    than skipping (#3559: withdrawal now resolves through its own function,
+    so this never needs to leave a stake pending). The two branches mirror
+    ``resolve_stakes_for_completion``:
 
-    - ``withdrawal`` (combat FLED/ABANDONED): only the WITHDRAWAL branch fires.
     - revoked-consent subject (#1771 story 5): a WITHDRAWAL column is forced.
     - otherwise the beat outcome maps to a column (WIN/LOSS), with a
       lifecycle-state match (#1760) potentially selecting the other column.
     """
-    if withdrawal:
-        resolution = _branch_for_column(stake, StakeResolutionColumn.WITHDRAWAL)
-        if resolution is None:
-            # No authored withdrawal branch: the stake pends with the
-            # beat's PENDING_GM_REVIEW for a GM's constrained pick.
-            return None
-        return resolution, StakeResolutionColumn.WITHDRAWAL
     if stake.pk in withdrawn_stake_ids:
         # #1771 story 5: the stake's treasured subject had its sign-off
-        # withdrawn on this beat — a revoked-consent wager never grades
+        # withdrawn on this beat - a revoked-consent wager never grades
         # WIN/LOSS, even though the beat itself resolves normally.
         column = StakeResolutionColumn.WITHDRAWAL
         resolution = _branch_for_column(stake, column)
-        if resolution is None:
-            # No authored WITHDRAWAL branch: pend for a GM's constrained
-            # pick, same semantics as the whole-encounter withdrawal path.
-            return None
         return resolution, column
     column = _machine_column_for_stake(stake, outcome)
     resolution = _branch_for_column(
@@ -295,7 +329,7 @@ def _select_stake_resolution(
     )
     if resolution is not None:
         # A lifecycle-state match may have selected a branch on the
-        # OTHER column (#1760 — e.g. a DEAD/CAPTURED override firing
+        # OTHER column (#1760 - e.g. a DEAD/CAPTURED override firing
         # LOSS on a beat-level SUCCESS); record the branch's actual
         # column, not the outcome-derived default.
         column = resolution.column
@@ -334,12 +368,12 @@ def _withdrawn_consent_stake_ids(beat: Beat, stakes: list[Stake]) -> set[int]:
     """Ids of ``stakes`` whose treasured subject has a WITHDRAWN sign-off on ``beat``.
 
     #1771 story 5 (per-stake override, distinct from the whole-encounter
-    ``withdrawal=True`` FLED/ABANDONED path): a player who withdraws a
-    ``TreasuredSignoff`` mid-story must never have that stake grade WIN/LOSS
-    at a later ordinary completion, even though sibling stakes grade
-    normally. Batched — one query for the beat's withdrawn
-    ``TreasuredSignoff`` rows, one for the ``TreasuredSubject`` rows they
-    point at — no query inside the loop over ``stakes``. Reuses
+    ``resolve_stakes_for_withdrawal`` FLED/ABANDONED path, #3559): a player
+    who withdraws a ``TreasuredSignoff`` mid-story must never have that
+    stake grade WIN/LOSS at a later ordinary completion, even though
+    sibling stakes grade normally. Batched — one query for the beat's
+    withdrawn ``TreasuredSignoff`` rows, one for the ``TreasuredSubject``
+    rows they point at — no query inside the loop over ``stakes``. Reuses
     ``boundaries._subject_identity`` (#1771 task 3) as the single identity-key
     definition also used by ``check_stake_boundaries``.
     """

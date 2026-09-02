@@ -1,20 +1,23 @@
-"""Tests for the ENCOUNTER_COMPLETED → beat auto-wiring (#1746)."""
+"""Tests for the ENCOUNTER_COMPLETED → beat auto-wiring (#1746, #3559)."""
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 
+from flows.events.payloads import EncounterCompletedPayload
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.beat_wiring import (
     classify_battle_outcome,
+    encounter_completed_beat_handler,
     install_encounter_beat_trigger,
     wire_encounter_beat_triggers,
 )
 from world.combat.constants import EncounterOutcome, RiskLevel
-from world.combat.factories import CombatEncounterFactory
+from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.combat.models import CombatEncounter, EncounterOutcomeMapping
 from world.combat.services import complete_encounter
 from world.stories.constants import (
+    BeatKind,
     BeatOutcome,
     BeatPredicateType,
     StakeOutcomeMethod,
@@ -32,7 +35,18 @@ from world.stories.factories import (
     StoryProgressFactory,
 )
 from world.stories.models import BeatCompletion, StakeOutcome
+from world.stories.services.stakes import activate_stakes_contract, get_open_activation
 from world.traits.models import CheckOutcome
+
+
+def _payload(encounter: CombatEncounter) -> EncounterCompletedPayload:
+    """Build the ENCOUNTER_COMPLETED payload directly (#3559 handler-level tests)."""
+    return EncounterCompletedPayload(
+        encounter=encounter,
+        outcome=str(encounter.outcome),
+        scene=encounter.scene,
+        room=encounter.room,
+    )
 
 
 class EncounterOutcomeMappingModelTests(TestCase):
@@ -54,14 +68,15 @@ class EncounterOutcomeMappingModelTests(TestCase):
                     check_outcome=outcome,
                 )
 
-    def test_mapping_allows_null_check_outcome(self) -> None:
-        """A null check_outcome means 'resolve to PENDING_GM_REVIEW' (FLED/ABANDONED)."""
-        mapping = EncounterOutcomeMapping.objects.create(
-            outcome=EncounterOutcome.FLED,
-            risk_level=RiskLevel.MODERATE,
-            check_outcome=None,
-        )
-        self.assertIsNone(mapping.check_outcome)
+    def test_check_outcome_is_required(self) -> None:
+        """check_outcome is required content now (#3559) - no more null 'pend' row."""
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                EncounterOutcomeMapping.objects.create(
+                    outcome=EncounterOutcome.VICTORY,
+                    risk_level=RiskLevel.LETHAL,
+                    check_outcome=None,
+                )
 
     def test_str_representation(self) -> None:
         outcome = CheckOutcome.objects.create(name="Defeat", success_level=-5)
@@ -75,7 +90,7 @@ class EncounterOutcomeMappingModelTests(TestCase):
 
 
 class ClassifyBattleOutcomeTests(TestCase):
-    """classify_battle_outcome: (EncounterOutcome, risk_level) → CheckOutcome | None."""
+    """classify_battle_outcome: (EncounterOutcome, risk_level) → CheckOutcome."""
 
     def test_victory_returns_mapped_check_outcome(self) -> None:
         tier = CheckOutcome.objects.create(name="Decisive Victory", success_level=5)
@@ -89,22 +104,11 @@ class ClassifyBattleOutcomeTests(TestCase):
         )
         self.assertEqual(classify_battle_outcome(encounter), tier)
 
-    def test_unmapped_pair_returns_none(self) -> None:
-        """A pair with no mapping row → None (signals PENDING_GM_REVIEW)."""
+    def test_unmapped_pair_raises(self) -> None:
+        """A pair with no mapping row raises - missing content, not a runtime branch."""
         encounter = CombatEncounterFactory(outcome=EncounterOutcome.FLED, risk_level=RiskLevel.LOW)
-        self.assertIsNone(classify_battle_outcome(encounter))
-
-    def test_null_check_outcome_mapping_returns_none(self) -> None:
-        """A mapping row whose check_outcome is null → None (FLED/ABANDONED review)."""
-        EncounterOutcomeMapping.objects.create(
-            outcome=EncounterOutcome.ABANDONED,
-            risk_level=RiskLevel.MODERATE,
-            check_outcome=None,
-        )
-        encounter = CombatEncounterFactory(
-            outcome=EncounterOutcome.ABANDONED, risk_level=RiskLevel.MODERATE
-        )
-        self.assertIsNone(classify_battle_outcome(encounter))
+        with self.assertRaises(EncounterOutcomeMapping.DoesNotExist):
+            classify_battle_outcome(encounter)
 
     def test_empty_outcome_raises_value_error(self) -> None:
         """An encounter with no outcome set is programmer error."""
@@ -115,7 +119,7 @@ class ClassifyBattleOutcomeTests(TestCase):
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class EncounterCompletedBeatWiringTests(EvenniaTestCase):
-    """Integration: ENCOUNTER_COMPLETED resolves a linked OUTCOME_TIER beat.
+    """Integration: ENCOUNTER_COMPLETED resolves at most one beat (#1746, #3559).
 
     flows.FlowDefinition/TriggerDefinition are content-repo-owned (#2698);
     wire_encounter_beat_triggers() only invents them under SEED_SAMPLE_CONTENT —
@@ -144,7 +148,7 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         )
         StoryProgressFactory(story=story, character_sheet=sheet)
         encounter = CombatEncounterFactory(
-            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE, story_beat=beat
         )
         EpisodeSceneFactory(episode=episode, scene=encounter.scene)
         install_encounter_beat_trigger(encounter)
@@ -154,8 +158,17 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
 
-    def test_fled_resolves_to_pending_gm_review(self) -> None:
-        """A fled encounter resolves the linked beat to PENDING_GM_REVIEW."""
+    def test_no_linked_beat_noops(self) -> None:
+        """An encounter with no routed beat and no running beat completes without error."""
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+        )
+        install_encounter_beat_trigger(encounter)
+        # No story_beat, no scene.running_beat - must not raise.
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+    def test_unlinked_encounter_grades_nothing(self) -> None:
+        """No story_beat and no running ENCOUNTER beat: the episode's beat stays open."""
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
         chapter = ChapterFactory(story=story)
@@ -166,30 +179,118 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
             outcome=BeatOutcome.UNSATISFIED,
         )
         StoryProgressFactory(story=story, character_sheet=sheet)
-        encounter = CombatEncounterFactory(
-            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE
+        tier = CheckOutcome.objects.create(name="Unlinked Victory", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=tier,
         )
-        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
-        install_encounter_beat_trigger(encounter)
-
-        complete_encounter(encounter, outcome=EncounterOutcome.FLED)
-
-        beat.refresh_from_db()
-        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
-
-    def test_no_linked_beat_noops(self) -> None:
-        """An encounter whose scene has no OUTCOME_TIER beat completes without error."""
         encounter = CombatEncounterFactory(
             outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
         )
-        install_encounter_beat_trigger(encounter)
-        # No EpisodeScene linking this scene to any beat — must not raise.
-        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
 
-    def test_fled_fires_withdrawal_stakes_and_pends_the_rest(self) -> None:
-        """FLED = withdrawal (#1770 PR2): a stake with an authored WITHDRAWAL
-        branch resolves immediately (method=MACHINE); a stake without one pends
-        with the beat's PENDING_GM_REVIEW for the GM's constrained pick.
+        encounter_completed_beat_handler(payload=_payload(encounter))
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_running_encounter_beat_is_graded(self) -> None:
+        """scene.running_beat of kind ENCOUNTER grades even with no explicit story_beat."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            kind=BeatKind.ENCOUNTER,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        tier = CheckOutcome.objects.create(name="Running Victory", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=tier,
+        )
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+        )
+        encounter.scene.running_beat = beat
+        encounter.scene.save(update_fields=["running_beat"])
+
+        encounter_completed_beat_handler(payload=_payload(encounter))
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_running_beat_of_other_kind_is_not_graded(self) -> None:
+        """A running beat that isn't kind ENCOUNTER never grades from a fight."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            kind=BeatKind.SITUATION,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        tier = CheckOutcome.objects.create(name="Situation Victory", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=tier,
+        )
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+        )
+        encounter.scene.running_beat = beat
+        encounter.scene.save(update_fields=["running_beat"])
+
+        encounter_completed_beat_handler(payload=_payload(encounter))
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_fled_leaves_beat_open_and_resolves_withdrawal(self) -> None:
+        """FLED never grades the beat (#3559): the party walked away from the wager,
+        and resolve_stakes_for_withdrawal fires the open stake's WITHDRAWAL branch.
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        stake = StakeFactory(beat=beat)
+        branch = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WITHDRAWAL)
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        activate_stakes_contract(beat, [sheet])
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE, story_beat=beat
+        )
+        CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+
+        encounter_completed_beat_handler(payload=_payload(encounter))
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
+        self.assertEqual(outcome.method, StakeOutcomeMethod.MACHINE)
+        self.assertEqual(outcome.resolution_id, branch.pk)
+        self.assertIsNone(get_open_activation(beat))
+
+    def test_fled_fires_every_open_stake_authored_or_not(self) -> None:
+        """FLED resolves every open stake (#3559): an authored WITHDRAWAL branch
+        fires; a stake with no authored branch still gets an audit-honest,
+        resolution-less StakeOutcome rather than being left to a GM's pick.
         """
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
@@ -206,27 +307,27 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         )
         unauthored = StakeFactory(beat=beat)
         StoryProgressFactory(story=story, character_sheet=sheet)
+        activate_stakes_contract(beat, [sheet])
         encounter = CombatEncounterFactory(
-            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE
+            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE, story_beat=beat
         )
-        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
-        install_encounter_beat_trigger(encounter)
+        CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
 
-        complete_encounter(encounter, outcome=EncounterOutcome.FLED)
+        encounter_completed_beat_handler(payload=_payload(encounter))
 
         beat.refresh_from_db()
-        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
-        outcome = StakeOutcome.objects.get(stake=authored)
-        self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
-        self.assertEqual(outcome.method, StakeOutcomeMethod.MACHINE)
-        self.assertEqual(outcome.resolution_id, withdrawal_branch.pk)
-        self.assertFalse(StakeOutcome.objects.filter(stake=unauthored).exists())
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        authored_outcome = StakeOutcome.objects.get(stake=authored)
+        self.assertEqual(authored_outcome.column, StakeResolutionColumn.WITHDRAWAL)
+        self.assertEqual(authored_outcome.resolution_id, withdrawal_branch.pk)
+        unauthored_outcome = StakeOutcome.objects.get(stake=unauthored)
+        self.assertEqual(unauthored_outcome.column, StakeResolutionColumn.WITHDRAWAL)
+        self.assertIsNone(unauthored_outcome.resolution_id)
 
     def test_fled_withdraws_even_when_a_mapping_row_is_authored(self) -> None:
-        """Withdrawal is structural (#1770 PR2): a designer-authored
-        EncounterOutcomeMapping tier for FLED is ignored — the beat still
-        pends and the withdrawal branch fires; the mapped tier never grades
-        the beat.
+        """Withdrawal is structural (#1770 PR2, #3559): a designer-authored
+        EncounterOutcomeMapping tier for FLED is never consulted - the beat
+        still stays open and the withdrawal branch fires regardless.
         """
         mapped_tier = CheckOutcome.objects.create(name="Fled Mapped Tier", success_level=5)
         EncounterOutcomeMapping.objects.create(
@@ -246,19 +347,44 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         stake = StakeFactory(beat=beat)
         branch = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WITHDRAWAL)
         StoryProgressFactory(story=story, character_sheet=sheet)
+        activate_stakes_contract(beat, [sheet])
         encounter = CombatEncounterFactory(
-            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE
+            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE, story_beat=beat
         )
-        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
-        install_encounter_beat_trigger(encounter)
+        CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
 
-        complete_encounter(encounter, outcome=EncounterOutcome.FLED)
+        encounter_completed_beat_handler(payload=_payload(encounter))
 
         beat.refresh_from_db()
-        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
         outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
         self.assertEqual(outcome.resolution_id, branch.pk)
+
+    def test_missing_mapping_logs_and_leaves_beat_open(self) -> None:
+        """A non-withdrawal outcome with no authored mapping row is content, not
+        a pause (#3559): it's logged as an error and the beat is left open.
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE, story_beat=beat
+        )
+        # No EncounterOutcomeMapping row for (VICTORY, MODERATE).
+
+        with self.assertLogs("world.combat.beat_wiring", level="ERROR"):
+            encounter_completed_beat_handler(payload=_payload(encounter))
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
 
     def test_story_beat_routes_to_only_that_beat(self) -> None:
         """Two beats share one scene; only the encounter's own story_beat resolves."""
@@ -301,10 +427,9 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
     def test_story_beat_set_but_already_resolved_is_a_noop(self) -> None:
         """A routed story_beat that's already resolved (not UNSATISFIED) is untouched.
 
-        Guards the ``and encounter.story_beat.outcome == BeatOutcome.UNSATISFIED``
-        clause on the routed branch: if a future refactor dropped it, a routed
-        encounter would incorrectly stamp its outcome onto an already-resolved
-        beat instead of no-opping.
+        Guards the gradability check in beat_for_scene_conclusion: if a future
+        refactor dropped it, a routed encounter would incorrectly stamp its
+        outcome onto an already-resolved beat instead of no-opping.
         """
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
@@ -329,42 +454,6 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
         self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
-
-    def test_unset_story_beat_falls_back_to_legacy_find_all(self) -> None:
-        """story_beat=None preserves today's find-all-UNSATISFIED behavior."""
-        sheet = CharacterSheetFactory()
-        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
-        chapter = ChapterFactory(story=story)
-        episode = EpisodeFactory(chapter=chapter)
-        beat_a = BeatFactory(
-            episode=episode,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        beat_b = BeatFactory(
-            episode=episode,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        StoryProgressFactory(story=story, character_sheet=sheet)
-        tier = CheckOutcome.objects.create(name="Legacy Victory", success_level=5)
-        EncounterOutcomeMapping.objects.create(
-            outcome=EncounterOutcome.VICTORY,
-            risk_level=RiskLevel.MODERATE,
-            check_outcome=tier,
-        )
-        encounter = CombatEncounterFactory(
-            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
-        )
-        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
-        install_encounter_beat_trigger(encounter)
-
-        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
-
-        beat_a.refresh_from_db()
-        beat_b.refresh_from_db()
-        self.assertEqual(beat_a.outcome, BeatOutcome.SUCCESS)
-        self.assertEqual(beat_b.outcome, BeatOutcome.SUCCESS)
 
 
 class CombatEncounterStoryBeatFieldTests(EvenniaTestCase):

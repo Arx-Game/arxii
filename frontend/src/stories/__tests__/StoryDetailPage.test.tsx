@@ -403,7 +403,6 @@ describe('BeatRow outcome states', () => {
     { outcome: 'success', label: 'Success' },
     { outcome: 'failure', label: 'Failure' },
     { outcome: 'expired', label: 'Expired' },
-    { outcome: 'pending_gm_review', label: 'Pending Review' },
   ];
 
   for (const { outcome, label } of OUTCOMES) {

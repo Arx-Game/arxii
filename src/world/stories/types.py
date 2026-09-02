@@ -363,11 +363,17 @@ class StakesReadinessReport:
     is_ready: the contract is complete enough to activate at declared risk;
         False means activation auto-downgrades effective risk to NONE.
     problems: human-readable reasons is_ready is False (empty when ready).
+    advisories: informational notes that never affect is_ready - e.g. a pool
+        with no row of one polarity, so an in-range clamp still fires nothing
+        on that side (#3559). Empty when there's nothing to flag.
     """
 
     is_staked: bool
     is_ready: bool
     problems: tuple[str, ...] = ()
+    # Consumer: the GM readiness endpoint #3562 adds. This branch (#3559)
+    # deliberately adds only the data - no endpoint surfaces it yet.
+    advisories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

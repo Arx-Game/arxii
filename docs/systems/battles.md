@@ -38,7 +38,13 @@ All models use `SharedMemoryModel` from `evennia.utils.idmapper.models`.
 | `round_limit` | PositiveSmallIntegerField | Default 10; auto-concludes at expiry |
 | `outcome` | CharField | `BattleOutcome` choice; default UNRESOLVED |
 | `concluded_at` | DateTimeField (null) | Timestamp when concluded |
+| `is_paused` | BooleanField | Default False; set when a participant disconnects (#1899) - see `maybe_pause_battle_for_disconnect` |
 | `afk_peril_override` | BooleanField | Default False; when True, Surrounded peril escalates every round regardless of declaration (#1733, see ADR-0074) |
+| `risk_level` | CharField | `RiskLevel` choice; default LOW. Stakes axis for companion death-gating (#1873) - EXTREME/LETHAL make companion death possible on defeat. Mirrors `CombatEncounter.risk_level` |
+| `region` | FK → `arxii.Area` (null, `on_delete=SET_NULL`) | Optional region anchor for ambient weather resolution (#1715); battles are otherwise location-less (ADR-0081) - this is additive, not a return to room-graph coupling |
+| `weather_override` | FK → `WeatherType` (null, `on_delete=SET_NULL`, `related_name="overriding_battles"`) | Battle-wide cast-set weather (#1715); takes precedence over ambient (via `region`) when present; cleared at round-boundary expiry |
+| `weather_override_expires_round` | PositiveIntegerField (null) | Absolute round number `weather_override` expires at (#1715); cleared alongside it at round-boundary expiry |
+| `story_beat` | FK → `stories.Beat` (null, `on_delete=SET_NULL`, `related_name="resolving_battles"`) | The one Beat this battle resolves (#3559), mirroring `CombatEncounter.story_beat`. See [Stakes / Beat Wiring](#stakes--beat-wiring-1785-3559). |
 | `created_at` | DateTimeField (auto) | |
 
 **Properties:**
@@ -598,7 +604,7 @@ Telnet: `battle declare move <place> with <technique>` (self-move),
 `battle declare move <unit> to <place> with <technique>` (commander order),
 `battle declare move withdraw with <technique>`.
 
-## Stakes / Beat Wiring (#1785)
+## Stakes / Beat Wiring (#1785, #3559)
 
 `world.battles.beat_wiring` wires a concluded `Battle` into the same
 `record_outcome_tier_completion` seam #1746 built for `CombatEncounter` —
@@ -608,16 +614,20 @@ reusing the stakes-contract engine (`world.stories.services.stakes`,
 ### `BattleOutcomeMapping`
 
 A designer-authored map from `BattleOutcome` to a `traits.CheckOutcome` tier
-(`outcome` unique, `check_outcome` nullable FK). Unlike combat's
-`EncounterOutcomeMapping`, there's no separate risk-level axis —
+(`outcome` unique, `check_outcome` a required FK, `on_delete=PROTECT`). Unlike
+combat's `EncounterOutcomeMapping`, there's no separate risk-level axis -
 `BattleOutcome`'s four values already encode decisive-vs-marginal severity.
-Starts empty; a missing row or a null `check_outcome` resolves to
-`PENDING_GM_REVIEW`. Admin-registered (`world/battles/admin.py`).
+Starts empty; a missing row is required content, not an alternate resolution
+path (#3559) - `resolve_battle_beats` logs an error and leaves the beat open,
+surfaced on the admin sentinel (#3444). Admin-registered
+(`world/battles/admin.py`).
 
-### `classify_battle_conclusion_outcome(battle) -> CheckOutcome | None`
+### `classify_battle_conclusion_outcome(battle) -> CheckOutcome`
 
 Looks up the `BattleOutcomeMapping` row for `battle.outcome`. Raises
-`ValueError` if called before the battle has a graded outcome.
+`ValueError` if called before the battle has a graded outcome, or
+`BattleOutcomeMapping.DoesNotExist` if no row is authored for the outcome
+(#3559 - the caller, `resolve_battle_beats`, catches this and logs).
 
 ### `activate_stakes_for_battle(battle) -> None`
 
@@ -640,13 +650,15 @@ prices at its declared risk unconditionally. See **ADR-0080**.
 Called directly from `conclude_battle` — not via a flow event/`TriggerDefinition`
 like combat's `ENCOUNTER_COMPLETED` wiring, since `Battle` has no location
 (`Battle.scene.location` is `None`, per #1733) and `conclude_battle` is already
-the single call-site choke point for battle conclusion. Finds every
-`UNSATISFIED` `OUTCOME_TIER` beat linked to `battle.scene` (identical
-`Scene → EpisodeScene → Episode → Beat` discovery to combat's wiring),
-classifies `battle.outcome` once, and resolves every linked beat to that same
-tier (one `Battle` grades as one outcome, applied uniformly — per-front
-independent grading is **#1760**'s job, not duplicated here). No `withdrawal`
-path: `BattleOutcome` has no FLED/ABANDONED-equivalent value.
+the single call-site choke point for battle conclusion.
+`beat_for_scene_conclusion` (`world.stories.services.beats`, #3559) picks at
+most **one** beat the battle may grade: `battle.story_beat` when it's set and
+still an `UNSATISFIED` `OUTCOME_TIER` beat, else the battle scene's
+`running_beat` when that is itself the objective (`kind=ENCOUNTER`) - the
+legacy every-`EpisodeScene`-linked-beat scan is gone. Classifies
+`battle.outcome` and resolves that one beat; per-front independent grading is
+still **#1760**'s job. No `withdrawal` path: `BattleOutcome` has no
+FLED/ABANDONED-equivalent value.
 
 ## Legend Wiring (#2184)
 
@@ -699,7 +711,7 @@ Multi-write operations use `@transaction.atomic`.
 | `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
 | `open_siege_engine_encounter` | `(*, battle_place, participant, opponent_kwargs, tier=OpponentTier.ELITE) -> CombatEncounter` | Binds `battle_place` to a discrete siege-engine skirmish — same bridge and `create_lethal_duel` call as `open_champion_duel`, no Champion-role requirement (#1713). Raises `PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
-| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
+| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves the one story beat this battle grades, if any, via `resolve_battle_beats` (#1785, #3559). Does NOT call `complete_story` - a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
 | `create_battle_vehicle` | `(*, battle, side, place_name, vehicle_kind=VehicleKind.SHIP, is_structural=True) -> BattleVehicle` | Creates a vessel/mount: a paired `BattleUnit` + `BattlePlace`, plus a hull `Fortification` if `is_structural` (#1714). The unit's own `place` stays `None`; other units/participants embed by pointing their own `place` FK at `vehicle.place`. |
 | `places_overlap` | `(place_a, place_b) -> bool` | Whether two `BattlePlace` footprints intersect on the battle map: distance between `(x, y)` centers < sum of `footprint_radius` values (#1714, ADR-0085). |

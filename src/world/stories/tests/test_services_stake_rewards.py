@@ -19,7 +19,7 @@ from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.currency.models import CurrencyTransfer
 from world.currency.services import get_or_create_purse
-from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.gm.factories import GMProfileFactory
 from world.magic.constants import GainSource
 from world.magic.factories import ResonanceFactory
 from world.magic.models import CharacterResonance, ResonanceGrant
@@ -39,7 +39,6 @@ from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
-    GroupStoryProgressFactory,
     StakeFactory,
     StakeResolutionFactory,
     StakeRewardLineFactory,
@@ -240,12 +239,12 @@ class AntiFarmingGateTests(EvenniaTestCase):
 
 
 def _group_story_ready_pending_beat():
-    """A GROUP-scope story with a ready, activated HIGH beat pending GM review."""
+    """A GROUP-scope story with a ready, activated HIGH beat awaiting a GM's
+    constrained pick (#3559 - resolve_stake_by_gm_pick needs only an open
+    activation, never a completed beat)."""
     story = StoryFactory(scope=StoryScope.GROUP)
     chapter = ChapterFactory(story=story)
     episode = EpisodeFactory(chapter=chapter)
-    gm_table = GMTableFactory()
-    progress = GroupStoryProgressFactory(story=story, gm_table=gm_table, current_episode=episode)
     beat = BeatFactory(
         episode=episode,
         risk=RenownRisk.HIGH,
@@ -259,9 +258,6 @@ def _group_story_ready_pending_beat():
     _add_removal_jeopardy(beat)
     party_sheet = _level_sheet(CharacterSheetFactory(), 4)
     activation = activate_stakes_contract(beat, [party_sheet])
-    record_outcome_tier_completion(
-        progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-    )
     return stake, activation
 
 
@@ -409,7 +405,7 @@ class CompletedBeatEditRefusalTests(APITestCase):
         from world.stories.models import Beat
 
         beat = Beat.objects.get(pk=self.beat.pk)
-        beat.outcome = BeatOutcome.PENDING_GM_REVIEW
+        beat.outcome = BeatOutcome.FAILURE
         beat.save(update_fields=["outcome"])
 
     def test_reward_line_create_refused_after_completion(self):
@@ -460,13 +456,10 @@ class PayTimeBandRecheckTests(EvenniaTestCase):
         cls.gm_profile = GMProfileFactory()
 
     def test_out_of_band_at_pay_time_skips_payout(self):
-        sheet, beat, progress, stake, win = _character_story_ready_beat(money=300)
+        sheet, beat, _progress, stake, win = _character_story_ready_beat(money=300)
         _level_sheet(sheet, 4)
         activation = activate_stakes_contract(beat, [sheet])
         self.assertTrue(activation.is_ready)
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
 
         # Simulate the bypass: the line changes after the contract ran
         # (e.g. via admin or a pre-fix API); HIGH's ceiling is 1500.
@@ -528,26 +521,31 @@ class ClaimBeforePayTests(EvenniaTestCase):
 
 class GMPickGateAndActivationTests(EvenniaTestCase):
     """GM picks honor the anti-farming gate and resolve under the activation
-    the stake actually pended with (#1770 PR3 review findings 3 + 5)."""
+    the stake actually pended with (#1770 PR3 review findings 3 + 5).
+
+    Finding 5's test survives #3559 in restructured form: a completion now
+    machine-grades every stake open at that moment, so the stake can no
+    longer exist BEFORE the activation it pends under (unlike pre-#3559,
+    where the beat parked in PENDING_GM_REVIEW with the stake already
+    authored). Instead the activation locks first with no stakes yet (so
+    it never reads as ready), the beat completes with nothing to grade,
+    and only then is the stake authored - it still pends for a pick under
+    that first, now-closed activation rather than a later one reopened
+    afterward.
+    """
 
     @classmethod
     def setUpTestData(cls):
         seed_default_risk_calibrations()
         cls.gm_profile = GMProfileFactory()
 
-    def _pend(self, progress, beat):
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
-
     def test_pick_under_unready_activation_skips_payout(self):
-        sheet, beat, progress, stake, _win = _character_story_ready_beat(
+        sheet, beat, _progress, stake, _win = _character_story_ready_beat(
             target_level=None, money=300
         )
         _level_sheet(sheet, 4)
         activation = activate_stakes_contract(beat, [sheet])
         self.assertFalse(activation.is_ready)
-        self._pend(progress, beat)
 
         outcome = resolve_stake_by_gm_pick(
             stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
@@ -559,11 +557,10 @@ class GMPickGateAndActivationTests(EvenniaTestCase):
         self.assertEqual(purse.balance, 0)
 
     def test_pick_under_effective_none_activation_skips_payout(self):
-        sheet, beat, progress, stake, _win = _character_story_ready_beat(money=300)
+        sheet, beat, _progress, stake, _win = _character_story_ready_beat(money=300)
         _level_sheet(sheet, 12)  # target 4 + 8 over -> effective NONE
         activation = activate_stakes_contract(beat, [sheet])
         self.assertEqual(activation.effective_risk, RenownRisk.NONE)
-        self._pend(progress, beat)
 
         resolve_stake_by_gm_pick(
             stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
@@ -573,18 +570,44 @@ class GMPickGateAndActivationTests(EvenniaTestCase):
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 0)
 
-    def test_pick_uses_activation_of_the_pended_completion(self):
-        """A new activation opened AFTER the pend (beat re-engaged) must not
-        change the pended stake's gate or its audit row."""
-        sheet, beat, progress, stake, _win = _character_story_ready_beat(money=300)
-        _level_sheet(sheet, 4)
+    def test_pick_resolves_under_the_pre_completion_activation_not_a_later_one(self):
+        """A stake authored only after a completion still resolves under the
+        activation locked (and closed by that completion) beforehand, not a
+        newer one opened afterward (#1770 PR3 review finding 5)."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            risk=RenownRisk.HIGH,
+            target_level=4,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+        )
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+
+        # Locks with zero stakes declared yet - "no stakes declared" leaves
+        # it unready (effective NONE), same as a beat that pends before any
+        # stake is authored.
         pended_under = activate_stakes_contract(beat, [sheet])
-        self.assertEqual(pended_under.effective_risk, RenownRisk.HIGH)
-        self._pend(progress, beat)
+        self.assertEqual(pended_under.effective_risk, RenownRisk.NONE)
+
+        win_tier = CheckOutcomeFactory(success_level=3)
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=win_tier)
+        pended_under.refresh_from_db()
+        self.assertIsNotNone(pended_under.resolved_at)  # closed by the completion
+
+        # Only now is the stake authored - it never existed at completion
+        # time, so machine grading never touched it.
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StakeRewardLineFactory(resolution=win, sink=StakeRewardSink.MONEY, amount=300)
 
         # Beat re-engaged by a grossly over-leveled party: a NEW open
         # activation at effective NONE. The old selection logic (open
-        # activation first) would starve the pended stake's payout.
+        # activation first) would starve the pended stake's payout gate
+        # with the wrong activation's verdict.
         overleveled = _level_sheet(CharacterSheetFactory(), 12)
         later = activate_stakes_contract(beat, [overleveled])
         self.assertIsNone(later.resolved_at)
@@ -597,4 +620,4 @@ class GMPickGateAndActivationTests(EvenniaTestCase):
         self.assertEqual(outcome.activation_id, pended_under.pk)
         purse = get_or_create_purse(sheet)
         purse.refresh_from_db()
-        self.assertEqual(purse.balance, 300)
+        self.assertEqual(purse.balance, 0)  # pended_under's own gate (NONE) is honored

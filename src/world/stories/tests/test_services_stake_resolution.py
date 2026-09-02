@@ -57,7 +57,10 @@ from world.stories.services.beats import (
     record_gm_marked_outcome,
     record_outcome_tier_completion,
 )
-from world.stories.services.stake_resolution import resolve_stake_by_gm_pick
+from world.stories.services.stake_resolution import (
+    resolve_stake_by_gm_pick,
+    resolve_stakes_for_withdrawal,
+)
 from world.stories.services.stakes import activate_stakes_contract, get_open_activation
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.constants import CharacterLifeState
@@ -161,19 +164,6 @@ class MachineGradingTests(EvenniaTestCase):
         self.assertEqual(outcomes[0].pk, prior.pk)
         self.assertEqual(outcomes[0].column, StakeResolutionColumn.WIN)
 
-    def test_pending_gm_review_defers_stakes(self):
-        """force_outcome=PENDING_GM_REVIEW (no withdrawal): stakes wait for the GM."""
-        _sheet, beat, progress = _character_story_beat()
-        stake = StakeFactory(beat=beat)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
-
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
-
-        self.assertFalse(StakeOutcome.objects.filter(stake=stake).exists())
-
     def test_npc_fate_dead_subject_grades_loss_even_on_beat_success(self):
         """Pillar 11 (#1760: generalized to the LifecycleState ladder — the
         old implicit is-dead override is gone; reproducing it now requires an
@@ -240,33 +230,49 @@ class MachineGradingTests(EvenniaTestCase):
         outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.resolution_id, captured_branch.pk)
 
-    def test_withdrawal_fires_authored_branch_and_pends_the_rest(self):
-        _sheet, beat, progress = _character_story_beat()
+    def test_withdrawal_fires_authored_branch_and_records_the_rest(self):
+        """resolve_stakes_for_withdrawal: authored WITHDRAWAL fires; unauthored records
+        an empty outcome; the activation closes; the beat is untouched."""
+        sheet, beat, progress = _character_story_beat()
         authored = StakeFactory(beat=beat)
-        branch = StakeResolutionFactory(stake=authored, column=StakeResolutionColumn.WITHDRAWAL)
-        unauthored = StakeFactory(beat=beat)
-
-        record_outcome_tier_completion(
-            progress=progress,
-            beat=beat,
-            force_outcome=BeatOutcome.PENDING_GM_REVIEW,
-            withdrawal=True,
+        StakeResolutionFactory(stake=authored, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=authored, column=StakeResolutionColumn.LOSS)
+        pool = ConsequencePoolFactory()
+        consequence = ConsequenceFactory(outcome_tier=self.fail_tier)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=LegendSourceTypeFactory(),
+            legend_description_template="Withdrew.",
         )
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        branch = StakeResolutionFactory(
+            stake=authored, column=StakeResolutionColumn.WITHDRAWAL, consequence_pool=pool
+        )
+        bare = StakeFactory(beat=beat)
+        StakeResolutionFactory(stake=bare, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=bare, column=StakeResolutionColumn.LOSS)
+        activation = activate_stakes_contract(beat, [sheet])
 
+        outcomes = resolve_stakes_for_withdrawal(beat, progress, [sheet.primary_persona])
+
+        assert {o.stake_id for o in outcomes} == {authored.pk, bare.pk}
+        fired = StakeOutcome.objects.get(stake=authored)
+        assert fired.resolution_id == branch.pk
+        assert fired.column == StakeResolutionColumn.WITHDRAWAL
+        empty = StakeOutcome.objects.get(stake=bare)
+        assert empty.resolution is None
+        assert empty.column == StakeResolutionColumn.WITHDRAWAL
+        assert empty.activation_id == activation.pk
+        assert get_open_activation(beat) is None
         beat.refresh_from_db()
-        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
-        outcome = StakeOutcome.objects.get(stake=authored)
-        self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
-        self.assertEqual(outcome.method, StakeOutcomeMethod.MACHINE)
-        self.assertEqual(outcome.resolution_id, branch.pk)
-        self.assertFalse(StakeOutcome.objects.filter(stake=unauthored).exists())
+        assert beat.outcome == BeatOutcome.UNSATISFIED
 
-    def test_withdrawal_requires_pending_gm_review(self):
-        _sheet, beat, progress = _character_story_beat()
-        with self.assertRaises(ValueError):
-            record_outcome_tier_completion(
-                progress=progress, beat=beat, outcome_tier=self.fail_tier, withdrawal=True
-            )
+    def test_withdrawal_without_activation_is_noop(self):
+        sheet, beat, progress = _character_story_beat()
+        StakeFactory(beat=beat)
+        assert resolve_stakes_for_withdrawal(beat, progress, [sheet.primary_persona]) == []
 
     def test_withdrawn_treasured_signoff_routes_stake_to_withdrawal(self):
         """#1771 story 5: a revoked-consent wager never grades against the
@@ -388,13 +394,14 @@ class GMPickTests(EvenniaTestCase):
         cls.gm_profile = GMProfileFactory()
 
     def _pending_staked_beat(self):
+        """A staked beat with an activated (locked) contract and an unresolved
+        stake, awaiting a GM's constrained pick (#3559 - resolve_stake_by_gm_pick
+        needs only an open activation, never a completed beat)."""
         sheet, beat, progress = _character_story_beat()
         stake = StakeFactory(beat=beat)
         win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
         loss = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
+        activate_stakes_contract(beat, [sheet])
         return sheet, beat, progress, stake, win, loss
 
     def test_pick_fires_branch_and_records_gm(self):
@@ -517,11 +524,13 @@ class ResolveStakeEndpointTests(APITestCase):
         cls.staff = AccountFactory(is_staff=True)
         cls.player = AccountFactory(is_staff=False)
         cls.sheet, cls.beat, cls.progress = _character_story_beat()
+        # Complete the beat with no stakes present yet (#3559 - a completion
+        # now grades every stake open at that moment), then author the stake
+        # afterward so it still awaits the GM's pick on a completed beat.
+        win_tier = CheckOutcomeFactory(success_level=3)
+        record_outcome_tier_completion(progress=cls.progress, beat=cls.beat, outcome_tier=win_tier)
         cls.stake = StakeFactory(beat=cls.beat)
         cls.win = StakeResolutionFactory(stake=cls.stake, column=StakeResolutionColumn.WIN)
-        record_outcome_tier_completion(
-            progress=cls.progress, beat=cls.beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
 
     def _url(self, stake):
         return reverse("stake-resolve", kwargs={"pk": stake.pk})
@@ -1057,13 +1066,19 @@ class StakeRoutingTests(EvenniaTestCase):
 
 
 def _group_story_pending_staked_beat():
-    """A GROUP-scope story with a staked OUTCOME_TIER beat pending GM review."""
+    """A GROUP-scope story with a completed OUTCOME_TIER beat and a stake
+    authored (and still unresolved) only after that completion (#3559 - a
+    completion grades every stake open at that moment, so the stake this
+    helper returns must not have existed yet when the beat completed)."""
     story = StoryFactory(scope=StoryScope.GROUP)
     chapter = ChapterFactory(story=story)
     episode = EpisodeFactory(chapter=chapter)
     gm_table = GMTableFactory()
     progress = GroupStoryProgressFactory(story=story, gm_table=gm_table, current_episode=episode)
     beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+    win_tier = CheckOutcomeFactory(success_level=3)
+    record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=win_tier)
+
     stake = StakeFactory(beat=beat)
     consequence = ConsequenceFactory()  # no tier: fires deterministically on pick
     ConsequenceEffectFactory(
@@ -1076,9 +1091,6 @@ def _group_story_pending_staked_beat():
     pool = ConsequencePoolFactory()
     ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
     StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, consequence_pool=pool)
-    record_outcome_tier_completion(
-        progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-    )
     return stake
 
 

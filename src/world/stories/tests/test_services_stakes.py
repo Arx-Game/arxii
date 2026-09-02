@@ -92,6 +92,55 @@ class ValidateStakesReadinessTests(TestCase):
         self.assertFalse(report.is_staked)
         self.assertTrue(report.is_ready)
 
+    def test_no_pools_carries_no_advisories(self):
+        report = validate_stakes_readiness(BeatFactory(risk=RenownRisk.NONE))
+        self.assertEqual(report.advisories, ())
+
+    def test_success_pool_missing_success_row_advises_without_blocking(self):
+        """A success pool with only a failure-polarity row (#3559): advisory, not blocked."""
+        fail_tier = CheckOutcomeFactory(success_level=-2)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(
+            pool=pool, consequence=ConsequenceFactory(outcome_tier=fail_tier)
+        )
+        beat = self._ready_shape_high(win_reward=400)
+        beat.success_consequences = pool
+        beat.save()
+
+        report = validate_stakes_readiness(beat)
+
+        self.assertIn("success pool has no success-polarity row", report.advisories)
+        self.assertTrue(report.is_ready)
+
+    def test_failure_pool_missing_failure_row_advises_without_blocking(self):
+        win_tier = CheckOutcomeFactory(success_level=3)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(
+            pool=pool, consequence=ConsequenceFactory(outcome_tier=win_tier)
+        )
+        beat = self._ready_shape_high(win_reward=400)
+        beat.failure_consequences = pool
+        beat.save()
+
+        report = validate_stakes_readiness(beat)
+
+        self.assertIn("failure pool has no failure-polarity row", report.advisories)
+        self.assertTrue(report.is_ready)
+
+    def test_pool_with_matching_polarity_row_carries_no_advisory(self):
+        win_tier = CheckOutcomeFactory(success_level=3)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(
+            pool=pool, consequence=ConsequenceFactory(outcome_tier=win_tier)
+        )
+        beat = self._ready_shape_high(win_reward=400)
+        beat.success_consequences = pool
+        beat.save()
+
+        report = validate_stakes_readiness(beat)
+
+        self.assertEqual(report.advisories, ())
+
     def test_missing_target_level_blocks(self):
         beat = self._staked_beat(target_level=None)
         self._complete_stake(beat, severity=StakeSeverity.REMOVAL)

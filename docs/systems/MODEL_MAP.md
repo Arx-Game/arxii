@@ -662,6 +662,7 @@
   - campaign_story -> stories.Story [FK] (nullable)
   - region -> areas.Area [FK] (nullable)
   - weather_override -> weather.WeatherType [FK] (nullable)
+  - story_beat -> stories.Beat [FK] (nullable)
 **Pointed to by:**
   - sides <- battles.BattleSide
   - places <- battles.BattlePlace
@@ -689,7 +690,7 @@
 
 ### BattleOutcomeMapping
 **Foreign Keys:**
-  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
 
 ### BattleParticipant
 **Foreign Keys:**
@@ -850,7 +851,7 @@
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' - Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' - Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' - Check whether any side has reached its victory threshold.`
-- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' - Set the battle's outcome, end the backing scene, and resolve any linked`
+- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' - Set the battle's outcome, end the backing scene, and resolve the one`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10, risk_level: 'str' = RiskLevel.LOW) -> 'Battle' - Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' - Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
 - `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None, max_integrity: 'int | None' = None) -> 'Fortification' - Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
@@ -864,7 +865,7 @@
 - `open_place_encounter(*, battle_place: 'BattlePlace') -> 'CombatEncounter' - Bind *battle_place* to a new general party-scale combat encounter (#2008).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' - Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' - Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
-- `resolve_battle_beats(battle: 'Battle') -> 'None' - Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
+- `resolve_battle_beats(battle: 'Battle') -> 'None' - Resolve the one beat linked to a concluded battle (#3559).`
 - `run_battle_conclusion_hooks(battle: 'Battle') -> 'None' - Invoke every registered conclusion hook with ``battle``.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' - Set a battle side's tactical posture (#1711).`
 
@@ -2349,7 +2350,7 @@
 
 ### EncounterOutcomeMapping
 **Foreign Keys:**
-  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
 
 ### EncounterRiskAcknowledgement
 **Foreign Keys:**
@@ -9371,6 +9372,7 @@
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)
   - expired_consequences -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
+  - resolving_battles <- battles.Battle
   - resolving_encounters <- combat.CombatEncounter
   - running_scenes <- scenes.Scene
   - decisive_markers <- scenes.DecisiveCheckMarker

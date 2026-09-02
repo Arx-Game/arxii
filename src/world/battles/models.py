@@ -133,6 +133,20 @@ class Battle(SharedMemoryModel):
         help_text="Absolute round number this battle's weather_override expires at "
         "(#1715). Cleared alongside weather_override at round-boundary expiry.",
     )
+    story_beat = models.ForeignKey(
+        "arxii.Beat",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolving_battles",
+        help_text=(
+            "The one Beat this specific battle resolves (#3559), mirroring "
+            "CombatEncounter.story_beat. When set (and still UNSATISFIED "
+            "OUTCOME_TIER), resolve_battle_beats grades only this beat with the "
+            "battle's own outcome; when unset, the battle scene's running beat "
+            "grades instead if it is itself the objective (kind ENCOUNTER)."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -845,21 +859,22 @@ class BattleOutcomeMapping(SharedMemoryModel):
     Used by ``classify_battle_conclusion_outcome`` (``world.battles.beat_wiring``)
     to select the CheckOutcome tier for beat completion when a war-scale Battle
     concludes (#1785). Unlike combat's ``EncounterOutcomeMapping``, there is no
-    separate risk-level axis — ``BattleOutcome`` already encodes decisive-vs-marginal
-    severity in its four resolved values. A missing row, or a row whose
-    ``check_outcome`` is null, signals the caller to resolve the beat to
-    PENDING_GM_REVIEW rather than firing a consequence pool. Starts empty; GMs
-    author rows via admin.
+    separate risk-level axis - ``BattleOutcome`` already encodes decisive-vs-marginal
+    severity in its four resolved values. A missing row is required content, not
+    an alternate resolution path (#3559): resolve_battle_beats logs an error and
+    leaves the beat open, surfaced on the admin sentinel (#3444). Starts empty;
+    GMs author rows via admin.
     """
 
     outcome = models.CharField(max_length=30, choices=BattleOutcome.choices, unique=True)
     check_outcome = models.ForeignKey(
         CHECK_OUTCOME_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="battle_outcome_mappings",
-        help_text="CheckOutcome tier for this outcome. Null = resolve to PENDING_GM_REVIEW.",
+        help_text=(
+            "CheckOutcome tier for this outcome (required content: a missing row "
+            "is reported on the admin sentinel)."
+        ),
     )
 
     class Meta:

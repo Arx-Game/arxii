@@ -20,6 +20,11 @@ Public API:
         CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
         consequences matching that tier.
 
+    beat_for_scene_conclusion(scene, explicit_beat) - the one beat a concluded
+        fight or battle may grade (#3559): an explicit routed beat wins,
+        otherwise the scene's running beat when the GM declared the fight
+        itself as the objective (kind ENCOUNTER), else None.
+
     expire_overdue_beats(now) - completes every UNSATISFIED beat with a past
         deadline via expire_beat (#3558), one savepoint per beat. Returns the
         count of beats whose outcome changed. Idempotent; safe for a cron hook.
@@ -43,7 +48,13 @@ from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
-from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
+from world.stories.constants import (
+    BeatKind,
+    BeatOutcome,
+    BeatPredicateType,
+    StoryMilestoneType,
+    StoryScope,
+)
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import AnyStoryProgress, StoryStatus
 
@@ -55,7 +66,7 @@ if TYPE_CHECKING:
 
     from actions.models.consequence_pools import ConsequencePool
     from world.gm.models import GMProfile
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene as SceneModel
     from world.stories.models import Episode, Story
     from world.traits.models import CheckOutcome
 
@@ -223,7 +234,6 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None,
     outcome_tier: CheckOutcome | None = None,
-    withdrawal: bool = False,
     resolved_by: GMProfile | None = None,
     skip_effect_types: frozenset[str] = frozenset(),
     defer_notify: bool = False,
@@ -233,13 +243,13 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     Shared atomic-transaction tail for record_gm_marked_outcome and
     record_outcome_tier_completion: flips beat.outcome in-place, creates the
     BeatCompletion row, fires the matching consequence pool (tier-aware when
-    outcome_tier is set), resolves the beat's stakes (#1770 PR2 — per-stake
-    machine grading, or WITHDRAWAL branches when ``withdrawal`` is set), closes
+    outcome_tier is set), resolves the beat's stakes (#1770 PR2 - per-stake
+    machine grading), closes
     the open stake activation, and opens a SessionRequest if the episode is now
     ready-to-run. Notifies after the ``with transaction.atomic():`` block above
     exits so a notify failure can't roll back the completion.
 
-    ``defer_notify`` — False (default) calls ``_notify_beat_completion``
+    ``defer_notify`` - False (default) calls ``_notify_beat_completion``
     directly, exactly as before this flag existed. record_gm_marked_outcome and
     record_outcome_tier_completion are NOT themselves atomic, so their calls
     land after the real commit already; a global switch to
@@ -252,18 +262,22 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     ``@transaction.atomic`` (currently just complete_beat_expired via
     expire_beat/expire_overdue_beats, #3558): there, the block below is merely
     a savepoint, so a direct call would run inside the still-open outer
-    transaction — a notify failure would roll back the whole completion, and
+    transaction - a notify failure would roll back the whole completion, and
     the real-time push could reach a client before the commit. Deferring via
     ``transaction.on_commit`` schedules the notify for when the OUTER
     transaction actually commits.
 
-    ``resolved_by`` (#2123) — only ever passed by record_gm_marked_outcome
+    ``resolved_by`` (#2123) - only ever passed by record_gm_marked_outcome
     (never by the machine-graded record_outcome_tier_completion, which is
     OUTCOME_TIER-only and excluded from GM Story Reward by construction).
     Credits GM Story Reward XP after commit when the outcome is SUCCESS or
     FAILURE (EXPIRED is system-caused, not GM effort, and never reaches this
-    path via record_gm_marked_outcome anyway — _GM_MARKED_VALID_OUTCOMES
+    path via record_gm_marked_outcome anyway - _GM_MARKED_VALID_OUTCOMES
     excludes it).
+
+    A withdrawal (combat FLED/ABANDONED) never reaches this function - it
+    resolves through the separate resolve_stakes_for_withdrawal instead,
+    leaving the beat's own outcome untouched (#3559).
     """
     from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
     from world.stories.services.stake_resolution import (  # noqa: PLC0415
@@ -293,7 +307,6 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
-            withdrawal=withdrawal,
         )
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
@@ -329,172 +342,43 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     return completion
 
 
-_OUTLIER_SUCCESS_LEVEL_THRESHOLD = 8
+def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> BeatOutcome:
+    """Derive the coarse BeatOutcome for a graded CheckOutcome: the plain sign rule.
+
+    success_level > 0 -> SUCCESS; success_level <= 0 -> FAILURE. A roll beyond
+    every authored tier no longer defers to PENDING_GM_REVIEW (#3559) - the
+    caller fires whatever the pool has at or below the rolled tier via
+    ``clamp_tier_to_pool`` (see ``_fire_pool_with_context``); ``beat`` is
+    unused now but kept for call-site stability.
+    """
+    del beat
+    return BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
 
 
-def _validate_outcome_tier_args(
-    beat: Beat, withdrawal: bool, force_outcome: BeatOutcome | None
-) -> None:
-    """Raise ValueError for a malformed record_outcome_tier_completion call."""
+def record_outcome_tier_completion(
+    *,
+    progress: AnyStoryProgress,
+    beat: Beat,
+    outcome_tier: CheckOutcome,
+    participants: list[Persona] | None = None,
+    gm_notes: str = "",
+) -> BeatCompletion:
+    """Record a machine-graded outcome on an OUTCOME_TIER beat.
+
+    success_level > 0 is SUCCESS, otherwise FAILURE. The pool fires at the
+    best authored tier not exceeding the roll (clamp_tier_to_pool, #3559); the
+    completion records the true tier. A fled or abandoned fight never comes
+    here: it resolves the stakes through resolve_stakes_for_withdrawal and
+    leaves the beat open.
+    """
     if beat.predicate_type != BeatPredicateType.OUTCOME_TIER:
         msg = (
             f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
             "only OUTCOME_TIER beats can be resolved via record_outcome_tier_completion."
         )
         raise ValueError(msg)
-    if withdrawal and force_outcome != BeatOutcome.PENDING_GM_REVIEW:
-        msg = (
-            f"Beat {beat.pk}: withdrawal=True is only legal with "
-            "force_outcome=PENDING_GM_REVIEW (the beat pends; withdrawal-authored "
-            "stakes fire their WITHDRAWAL branch)."
-        )
-        raise ValueError(msg)
-
-
-def _record_forced_review_completion(  # noqa: PLR0913
-    *,
-    beat: Beat,
-    progress: AnyStoryProgress,
-    scope: StoryScope,
-    gm_notes: str,
-    participants: list[Persona] | None,
-    withdrawal: bool,
-    force_outcome: BeatOutcome,
-) -> BeatCompletion:
-    """Resolve a machine-detected non-success/failure beat to PENDING_GM_REVIEW.
-
-    Fires no consequence pool - the beat sits in PENDING_GM_REVIEW for a GM to
-    adjudicate. Only PENDING_GM_REVIEW is accepted; any other force_outcome raises.
-    """
-    if force_outcome != BeatOutcome.PENDING_GM_REVIEW:
-        msg = (
-            f"force_outcome {force_outcome!r} is not valid; only "
-            "PENDING_GM_REVIEW is accepted by the machine-driven path."
-        )
-        raise ValueError(msg)
-    completion_kwargs = _scope_completion_kwargs(
-        beat=beat,
-        outcome=BeatOutcome.PENDING_GM_REVIEW,
-        era=Era.objects.get_active(),
-        gm_notes=gm_notes,
-        progress=progress,
-        scope=scope,
-        outcome_tier=None,
-    )
-    return _create_completion_and_fire_pool(
-        beat=beat,
-        outcome=BeatOutcome.PENDING_GM_REVIEW,
-        completion_kwargs=completion_kwargs,
-        progress=progress,
-        scope=scope,
-        explicit_participants=participants if scope == StoryScope.GROUP else None,
-        outcome_tier=None,
-        withdrawal=withdrawal,
-    )
-
-
-def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> BeatOutcome:
-    """Derive the coarse BeatOutcome for a graded CheckOutcome, honoring the outlier-crit gate.
-
-    Outlier-crit: when outcome_tier.success_level is at or above
-    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has no
-    Consequence row at that exact tier, the outcome resolves to PENDING_GM_REVIEW
-    instead of SUCCESS (the pool does not fire for this call).
-    """
-    outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
-    is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD
-    if outcome != BeatOutcome.SUCCESS or not is_outlier_crit:
-        return outcome
-
-    pool = _pool_for_outcome(beat, BeatOutcome.SUCCESS)
-    has_authored_tier = False
-    if pool is not None:
-        from world.checks.consequence_resolution import (  # noqa: PLC0415
-            resolve_pool_consequences,
-        )
-
-        has_authored_tier = any(
-            c.outcome_tier_id == outcome_tier.pk for c in resolve_pool_consequences(pool)
-        )
-    return outcome if has_authored_tier else BeatOutcome.PENDING_GM_REVIEW
-
-
-def record_outcome_tier_completion(  # noqa: PLR0913
-    *,
-    progress: AnyStoryProgress,
-    beat: Beat,
-    outcome_tier: CheckOutcome | None = None,
-    participants: list[Persona] | None = None,
-    gm_notes: str = "",
-    force_outcome: BeatOutcome | None = None,
-    withdrawal: bool = False,
-) -> BeatCompletion:
-    """Record a machine-graded outcome on an OUTCOME_TIER beat.
-
-    Called by the combat/mission/scene auto-wire once they've resolved a graded
-    CheckOutcome for a linked beat (PR2-PR4). Works across all three story scopes,
-    same as record_gm_marked_outcome.
-
-    Derives the coarse BeatOutcome from outcome_tier.success_level:
-      - success_level > 0  -> SUCCESS
-      - success_level <= 0 -> FAILURE
-
-    Outlier-crit path: when outcome_tier.success_level is at or above
-    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has
-    no Consequence row at that exact tier, the outcome resolves to
-    PENDING_GM_REVIEW instead of SUCCESS and the pool does not fire — the win is
-    real but exceeded what was authored, so it's held for a GM to write up (and
-    later resolved via the existing record_gm_marked_outcome, same as any other
-    PENDING_GM_REVIEW beat).
-
-    ``force_outcome`` — when set to PENDING_GM_REVIEW, skips the success_level
-        derivation entirely and resolves the beat to PENDING_GM_REVIEW without
-        firing a consequence pool. Used by the combat auto-wire for
-        fled/abandoned encounters (machine-detected non-success/failure terminal
-        outcomes that need a GM's adjudication). Only PENDING_GM_REVIEW is
-        accepted here; any other value raises ValueError. When ``force_outcome``
-        is set, ``outcome_tier`` is ignored (and may be omitted).
-
-    ``participants`` — same semantics as record_gm_marked_outcome: explicit Persona
-        list for GROUP-scope LEGEND_AWARD pools.
-
-    ``withdrawal`` — the party walked away from the wager (combat FLED/ABANDONED,
-        #1770 PR2). Only legal with force_outcome=PENDING_GM_REVIEW: the beat
-        still pends for GM adjudication, but stakes with an authored WITHDRAWAL
-        resolution fire it immediately; unauthored stakes pend with the beat.
-
-    Defensive assertions (programmer error — callers own building the right
-    outcome_tier for their domain; there is no user-facing serializer for this path
-    since it's machine-driven, not authored):
-        - beat.predicate_type == OUTCOME_TIER
-
-    Flips beat.outcome in-place, creates and returns a BeatCompletion row.
-    """
-    _validate_outcome_tier_args(beat, withdrawal, force_outcome)
 
     scope = progress.story.scope
-
-    # Forced-review path: a machine-detected non-success/failure terminal outcome
-    # (e.g. a fled/abandoned encounter). Skips success_level derivation; fires no
-    # consequence pool — the beat sits in PENDING_GM_REVIEW for a GM to adjudicate.
-    if force_outcome is not None:
-        return _record_forced_review_completion(
-            beat=beat,
-            progress=progress,
-            scope=scope,
-            gm_notes=gm_notes,
-            participants=participants,
-            withdrawal=withdrawal,
-            force_outcome=force_outcome,
-        )
-
-    if outcome_tier is None:
-        msg = (
-            f"Beat {beat.pk}: outcome_tier is required (or pass "
-            "force_outcome=PENDING_GM_REVIEW for a machine-detected review)."
-        )
-        raise ValueError(msg)
-
     outcome = _derive_outcome_tier_outcome(beat, outcome_tier)
 
     completion_kwargs = _scope_completion_kwargs(
@@ -513,8 +397,31 @@ def record_outcome_tier_completion(  # noqa: PLR0913
         progress=progress,
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else None,
-        outcome_tier=outcome_tier if outcome != BeatOutcome.PENDING_GM_REVIEW else None,
+        outcome_tier=outcome_tier,
     )
+
+
+def beat_for_scene_conclusion(scene: SceneModel | None, explicit_beat: Beat | None) -> Beat | None:
+    """The one beat a concluded fight or battle may grade (#3559, objective-first).
+
+    An explicitly linked beat wins; otherwise the scene's running beat, and only
+    when the GM declared the fight itself as the objective (kind ENCOUNTER).
+    Anything else grades nothing: a brawl during a heist never closes the heist.
+    """
+
+    def _gradable(beat: Beat | None) -> bool:
+        return (
+            beat is not None
+            and beat.predicate_type == BeatPredicateType.OUTCOME_TIER
+            and beat.outcome == BeatOutcome.UNSATISFIED
+        )
+
+    if _gradable(explicit_beat):
+        return explicit_beat
+    running = scene.running_beat if scene is not None else None
+    if _gradable(running) and running.kind == BeatKind.ENCOUNTER:
+        return running
+    return None
 
 
 def record_aggregate_contribution(
@@ -1331,10 +1238,11 @@ def _maybe_fire_pool_on_completion(  # noqa: PLR0913
             - CHARACTER: extra personas to credit alongside the primary persona.
             - GROUP: the explicit participant list (required for LEGEND_AWARD pools).
             - GLOBAL: ignored.
-        outcome_tier: When set, filters the pool to only Consequence rows matching
-            this CheckOutcome via apply_pool_for_tier (graded completion path). When
-            None (the existing GM-marked / auto-evaluated / aggregate paths), every
-            row in the pool fires via apply_pool_deterministically — unchanged
+        outcome_tier: When set, fires the pool at the best authored tier not
+            exceeding this CheckOutcome via apply_pool_for_tier and
+            clamp_tier_to_pool (graded completion path, #3559). When None (the
+            existing GM-marked / auto-evaluated / aggregate paths), every row
+            in the pool fires via apply_pool_deterministically - unchanged
             behavior.
         skip_effect_types: forwarded to _fire_pool_with_context (an expiry
             completion passes {EffectType.LEGEND_AWARD}: expiry earns no legend).
@@ -1386,6 +1294,7 @@ def _fire_pool_with_context(  # noqa: PLR0913
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_pool_deterministically,
         apply_pool_for_tier,
+        clamp_tier_to_pool,
     )
     from world.checks.constants import EffectType  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
@@ -1436,7 +1345,17 @@ def _fire_pool_with_context(  # noqa: PLR0913
         outcome_tier=outcome_tier,
     )
     if outcome_tier is not None:
-        apply_pool_for_tier(pool=pool, outcome_tier=outcome_tier, context=context)
+        fired = clamp_tier_to_pool(pool, outcome_tier)
+        if fired is None:
+            logger.info(
+                "Pool %s has no %s-polarity row for tier %s on beat %s; nothing fires.",
+                pool.pk,
+                "success" if outcome_tier.success_level > 0 else "failure",
+                outcome_tier.pk,
+                beat.pk,
+            )
+            return
+        apply_pool_for_tier(pool=pool, outcome_tier=fired, context=context)
     else:
         apply_pool_deterministically(
             pool=pool, context=context, skip_effect_types=skip_effect_types
