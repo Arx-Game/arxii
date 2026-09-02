@@ -368,12 +368,12 @@ def _withdrawn_consent_stake_ids(beat: Beat, stakes: list[Stake]) -> set[int]:
     """Ids of ``stakes`` whose treasured subject has a WITHDRAWN sign-off on ``beat``.
 
     #1771 story 5 (per-stake override, distinct from the whole-encounter
-    ``withdrawal=True`` FLED/ABANDONED path): a player who withdraws a
-    ``TreasuredSignoff`` mid-story must never have that stake grade WIN/LOSS
-    at a later ordinary completion, even though sibling stakes grade
-    normally. Batched — one query for the beat's withdrawn
-    ``TreasuredSignoff`` rows, one for the ``TreasuredSubject`` rows they
-    point at — no query inside the loop over ``stakes``. Reuses
+    ``resolve_stakes_for_withdrawal`` FLED/ABANDONED path, #3559): a player
+    who withdraws a ``TreasuredSignoff`` mid-story must never have that
+    stake grade WIN/LOSS at a later ordinary completion, even though
+    sibling stakes grade normally. Batched — one query for the beat's
+    withdrawn ``TreasuredSignoff`` rows, one for the ``TreasuredSubject``
+    rows they point at — no query inside the loop over ``stakes``. Reuses
     ``boundaries._subject_identity`` (#1771 task 3) as the single identity-key
     definition also used by ``check_stake_boundaries``.
     """

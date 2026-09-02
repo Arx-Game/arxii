@@ -520,15 +520,18 @@ class ClaimBeforePayTests(EvenniaTestCase):
 
 
 class GMPickGateAndActivationTests(EvenniaTestCase):
-    """GM picks honor the anti-farming gate (#1770 PR3 review finding 3).
+    """GM picks honor the anti-farming gate and resolve under the activation
+    the stake actually pended with (#1770 PR3 review findings 3 + 5).
 
-    finding 5 (a pick resolves under the activation the stake actually
-    pended with, even after a newer one reopens the contract) is dropped
-    with its one test (#3559): a completion now machine-grades every stake
-    open at that moment, so a stake can no longer survive an activation
-    locked before a real beat completion and still await a later pick -
-    the "pended under an older activation, superseded by a newer one"
-    state this covered no longer exists.
+    Finding 5's test survives #3559 in restructured form: a completion now
+    machine-grades every stake open at that moment, so the stake can no
+    longer exist BEFORE the activation it pends under (unlike pre-#3559,
+    where the beat parked in PENDING_GM_REVIEW with the stake already
+    authored). Instead the activation locks first with no stakes yet (so
+    it never reads as ready), the beat completes with nothing to grade,
+    and only then is the stake authored - it still pends for a pick under
+    that first, now-closed activation rather than a later one reopened
+    afterward.
     """
 
     @classmethod
@@ -566,3 +569,55 @@ class GMPickGateAndActivationTests(EvenniaTestCase):
         purse = get_or_create_purse(sheet)
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 0)
+
+    def test_pick_resolves_under_the_pre_completion_activation_not_a_later_one(self):
+        """A stake authored only after a completion still resolves under the
+        activation locked (and closed by that completion) beforehand, not a
+        newer one opened afterward (#1770 PR3 review finding 5)."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            risk=RenownRisk.HIGH,
+            target_level=4,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+        )
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+
+        # Locks with zero stakes declared yet - "no stakes declared" leaves
+        # it unready (effective NONE), same as a beat that pends before any
+        # stake is authored.
+        pended_under = activate_stakes_contract(beat, [sheet])
+        self.assertEqual(pended_under.effective_risk, RenownRisk.NONE)
+
+        win_tier = CheckOutcomeFactory(success_level=3)
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=win_tier)
+        pended_under.refresh_from_db()
+        self.assertIsNotNone(pended_under.resolved_at)  # closed by the completion
+
+        # Only now is the stake authored - it never existed at completion
+        # time, so machine grading never touched it.
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StakeRewardLineFactory(resolution=win, sink=StakeRewardSink.MONEY, amount=300)
+
+        # Beat re-engaged by a grossly over-leveled party: a NEW open
+        # activation at effective NONE. The old selection logic (open
+        # activation first) would starve the pended stake's payout gate
+        # with the wrong activation's verdict.
+        overleveled = _level_sheet(CharacterSheetFactory(), 12)
+        later = activate_stakes_contract(beat, [overleveled])
+        self.assertIsNone(later.resolved_at)
+        self.assertEqual(later.effective_risk, RenownRisk.NONE)
+
+        outcome = resolve_stake_by_gm_pick(
+            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
+        )
+
+        self.assertEqual(outcome.activation_id, pended_under.pk)
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 0)  # pended_under's own gate (NONE) is honored
