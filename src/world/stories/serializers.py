@@ -8,9 +8,9 @@ from rest_framework.exceptions import ErrorDetail
 from world.character_sheets.models import CharacterSheet
 from world.events.models import Event
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMLevelCap, GMProfile, GMTable
+from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
-from world.gm.services import gm_max_risk
+from world.gm.services import cap_for_profile, gm_max_risk
 from world.items.models import ItemInstance
 from world.missions.models import MissionOption, MissionTemplate
 from world.scenes.models import Persona
@@ -981,10 +981,10 @@ def _gm_allows_custom_stakes(user) -> bool:
     No GMProfile or no cap row → False.
     """
     try:
-        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
-    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
         return False
-    return cap.allow_custom_stakes
+    return bool(cap and cap.allow_custom_stakes)
 
 
 def _gm_allows_global_scope(user) -> bool:
@@ -994,10 +994,10 @@ def _gm_allows_global_scope(user) -> bool:
     ``_gm_allows_custom_stakes``).
     """
     try:
-        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
-    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
         return False
-    return cap.allow_global_scope_authoring
+    return bool(cap and cap.allow_global_scope_authoring)
 
 
 class BeatOpponentLineSerializer(serializers.ModelSerializer):

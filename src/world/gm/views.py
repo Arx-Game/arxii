@@ -217,11 +217,14 @@ class GMProfileViewSet(
         profile = GMProfile.objects.filter(account=request.user).first()
         if profile is None:
             return Response(status=404)
+        context = {"request": request}
         if request.method == "PATCH":
-            body = GMProfileMineSerializer(profile, data=request.data, partial=True)
+            body = GMProfileMineSerializer(
+                profile, data=request.data, partial=True, context=context
+            )
             body.is_valid(raise_exception=True)
             body.save()
-        return Response(GMProfileMineSerializer(profile).data)
+        return Response(GMProfileMineSerializer(profile, context=context).data)
 
     @extend_schema(
         request=MintGMCharacterRequestSerializer,

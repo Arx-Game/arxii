@@ -57,6 +57,20 @@ DEFAULT_INVITE_DURATION_DAYS = 30
 logger = logging.getLogger(__name__)
 
 
+def cap_for_profile(profile: GMProfile) -> GMLevelCap | None:
+    """The ``GMLevelCap`` row for ``profile.level``, or None when unseeded.
+
+    Single lookup shared by ``gm_max_risk`` and the stories authoring gates
+    (``_gm_allows_custom_stakes``, ``_gm_allows_global_scope``) so a caller
+    with a resolved ``GMProfile`` in hand does one query, not a re-derivation
+    of the same level->cap lookup at each call site (#3562).
+    """
+    try:
+        return GMLevelCap.objects.get(level=profile.level)
+    except GMLevelCap.DoesNotExist:
+        return None
+
+
 def gm_max_risk(user) -> str:
     """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
 
@@ -70,11 +84,8 @@ def gm_max_risk(user) -> str:
         gm_profile = user.gm_profile
     except GMProfile.DoesNotExist:
         return RenownRisk.NONE
-    try:
-        cap = GMLevelCap.objects.get(level=gm_profile.level)
-    except GMLevelCap.DoesNotExist:
-        return RenownRisk.NONE
-    return cap.max_beat_risk
+    cap = cap_for_profile(gm_profile)
+    return cap.max_beat_risk if cap else RenownRisk.NONE
 
 
 def touch_gm_activity(gm_profile: GMProfile) -> None:

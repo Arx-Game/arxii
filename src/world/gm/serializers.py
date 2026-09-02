@@ -154,14 +154,49 @@ class GMProfileSerializer(serializers.ModelSerializer):
 
 
 class GMProfileMineSerializer(serializers.ModelSerializer):
-    """The requesting GM's own profile: operational fields are writable (#3478)."""
+    """The requesting GM's own profile: operational fields are writable (#3478).
+
+    ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+    GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+    options from the same ceiling the API enforces, instead of a client-side
+    guess. Staff get the top of each scale regardless of any cap row.
+    """
 
     level_display = serializers.CharField(source="get_level_display", read_only=True)
+    max_beat_risk = serializers.SerializerMethodField()
+    allow_custom_stakes = serializers.SerializerMethodField()
 
     class Meta:
         model = GMProfile
-        fields = ["id", "level", "level_display", "contact_times", "ooc_info"]
+        fields = [
+            "id",
+            "level",
+            "level_display",
+            "contact_times",
+            "ooc_info",
+            "max_beat_risk",
+            "allow_custom_stakes",
+        ]
         read_only_fields = ["id", "level", "level_display"]
+
+    def get_max_beat_risk(self, obj: GMProfile) -> str:
+        """RenownRisk ceiling: "extreme" for staff, else the caller's GMLevelCap."""
+        from world.gm.services import cap_for_profile  # noqa: PLC0415
+        from world.societies.constants import RenownRisk  # noqa: PLC0415
+
+        if self.context["request"].user.is_staff:
+            return RenownRisk.EXTREME
+        cap = cap_for_profile(obj)
+        return cap.max_beat_risk if cap else RenownRisk.NONE
+
+    def get_allow_custom_stakes(self, obj: GMProfile) -> bool:
+        """Whether this GM may author custom (template=null) stakes: True for staff."""
+        from world.gm.services import cap_for_profile  # noqa: PLC0415
+
+        if self.context["request"].user.is_staff:
+            return True
+        cap = cap_for_profile(obj)
+        return bool(cap and cap.allow_custom_stakes)
 
 
 class MintGMCharacterRequestSerializer(serializers.Serializer):
