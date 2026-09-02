@@ -197,9 +197,13 @@ def start_scenario_for_scene(beat: Beat, scene: Scene) -> MissionInstance:
     template = beat.required_mission
     if template is None:
         raise ValueError(_ERR_NO_SCENARIO)
-    sheets = [
-        persona.character_sheet for persona in scene.persona_handler.active_participant_personas()
-    ]
+    # One participant row per sheet even if a persona list repeats one (dict keeps order).
+    sheets = list(
+        {
+            persona.character_sheet_id: persona.character_sheet
+            for persona in scene.persona_handler.active_participant_personas()
+        }.values()
+    )
     if not sheets:
         raise ValueError(_ERR_NO_PARTY)
     existing = (
