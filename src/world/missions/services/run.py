@@ -7,7 +7,11 @@ once the player selects a MISSION-kind ``NPCServiceOffer``. Per #686.
 
 This module retains ``staff_assign_mission`` (staff-power drop without a
 giver context — used by the Phase-D staff-assign action) and
-``share_mission`` (the non-contract-holder participant add).
+``share_mission`` (the non-contract-holder participant add). It also carries
+``start_scenario_for_scene`` (#3565) -- the beat-run scenario starter that
+brings a whole scene's party onto a beat's mission graph at once, the seam
+``RunBeatAction`` (``actions/definitions/gm_story.py``) calls for a TASK or
+SITUATION beat that has one.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from evennia_extensions.models import RoomProfile
+from world.missions.constants import MissionStatus
 from world.missions.models import (
     MissionInstance,
     MissionNode,
@@ -30,7 +35,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionInvite, MissionTemplate
     from world.projects.models import Project
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene
     from world.stories.models import Beat
 
 
@@ -165,6 +170,59 @@ def gm_assign_mission(
         character=character.sheet_data,
         is_contract_holder=True,
     )
+    enter_node(instance, _entry_node(template))
+    return instance
+
+
+_ERR_NO_SCENARIO = "This beat has no scenario to run."
+_ERR_NO_PARTY = "Nobody in this scene can take part in the scenario."
+
+
+@transaction.atomic
+def start_scenario_for_scene(beat: Beat, scene: Scene) -> MissionInstance:
+    """Start (or rejoin) the beat's scenario for everyone in the scene (#3565).
+
+    The scene's active participant personas are the party. If an ACTIVE run
+    already exists for this beat (started here earlier, or by
+    gm_assign_mission), it is the run: newcomers are added as non-holder
+    participants and it is returned. A second run is never created for one
+    beat. The first participant is the contract holder, which only anchors
+    cooldown and giver economy and means nothing for a story scenario.
+    Stakes arm on the party's first action through activate_stakes_for_instance,
+    as for any beat-bound run.
+    """
+    from world.stories.models import Beat  # noqa: PLC0415
+
+    beat = Beat.objects.select_for_update().get(pk=beat.pk)
+    template = beat.required_mission
+    if template is None:
+        raise ValueError(_ERR_NO_SCENARIO)
+    sheets = [
+        persona.character_sheet for persona in scene.persona_handler.active_participant_personas()
+    ]
+    if not sheets:
+        raise ValueError(_ERR_NO_PARTY)
+    existing = (
+        MissionInstance.objects.filter(source_beat=beat, status=MissionStatus.ACTIVE)
+        .order_by("pk")
+        .first()
+    )
+    if existing is not None:
+        on_run = set(existing.participants.values_list("character_id", flat=True))
+        for sheet in sheets:
+            if sheet.pk not in on_run:
+                MissionParticipant.objects.create(
+                    instance=existing, character=sheet, is_contract_holder=False
+                )
+        return existing
+    anchor_room = anchor_room_for(sheets[0].character)
+    instance = MissionInstance.objects.create(
+        template=template, anchor_room=anchor_room, source_beat=beat
+    )
+    for index, sheet in enumerate(sheets):
+        MissionParticipant.objects.create(
+            instance=instance, character=sheet, is_contract_holder=index == 0
+        )
     enter_node(instance, _entry_node(template))
     return instance
 

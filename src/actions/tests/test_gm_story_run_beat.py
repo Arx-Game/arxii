@@ -27,6 +27,8 @@ from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.mechanics.factories import SituationTemplateFactory
 from world.mechanics.models import SituationInstance
+from world.missions.factories import MissionNodeFactory, MissionTemplateFactory
+from world.missions.models import MissionInstance
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.societies.constants import RenownRisk
@@ -57,6 +59,12 @@ def _make_actor_with_account(db_key: str, room: object, account: object) -> tupl
         end_date=None,
     ).roster_entry
     return char, entry.character_sheet
+
+
+def _make_template_with_entry():
+    template = MissionTemplateFactory()
+    MissionNodeFactory(template=template, key="entry", is_entry=True)
+    return template
 
 
 class RunBeatActionTestBase(TestCase):
@@ -250,3 +258,36 @@ class GMListRunnableBeatsActionTests(RunBeatActionTestBase):
         self.assertTrue(result.success, result.message)
         ids = [row["id"] for row in result.data["beats"]]
         self.assertNotIn(self.beat.pk, ids)
+
+
+class RunBeatActionScenarioJourneyTests(RunBeatActionTestBase):
+    """TASK beats with a scenario, and a SITUATION beat that also starts one (#3565)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.template = _make_template_with_entry()
+
+    def test_situation_beat_with_scenario_starts_it_for_the_scene(self) -> None:
+        beat = BeatFactory(
+            episode=self.episode, kind=BeatKind.SITUATION, required_mission=self.template
+        )
+        result = RunBeatAction().run(self.lead_gm_actor, beat_id=beat.pk)
+        self.assertTrue(result.success, result.message)
+
+        instance = MissionInstance.objects.get(pk=result.data["scenario_instance_id"])
+        player_sheet_id = self.player_actor.character_sheet.pk
+        participant_ids = set(instance.participants.values_list("character_id", flat=True))
+        self.assertIn(player_sheet_id, participant_ids)
+
+    def test_task_beat_with_scenario_is_runnable(self) -> None:
+        beat = BeatFactory(episode=self.episode, kind=BeatKind.TASK, required_mission=self.template)
+        result = RunBeatAction().run(self.lead_gm_actor, beat_id=beat.pk)
+        self.assertTrue(result.success, result.message)
+        self.assertIn("scenario_instance_id", result.data)
+
+    def test_gm_list_runnable_beats_includes_task_with_scenario(self) -> None:
+        beat = BeatFactory(episode=self.episode, kind=BeatKind.TASK, required_mission=self.template)
+        result = GMListRunnableBeatsAction().run(self.lead_gm_actor)
+        self.assertTrue(result.success, result.message)
+        row = next(r for r in result.data["beats"] if r["id"] == beat.pk)
+        self.assertTrue(row["has_scenario"])
