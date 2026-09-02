@@ -2673,7 +2673,7 @@ class StakeResolution(SharedMemoryModel):
         help_text=(
             "On automatic (machine) grading, if the stake's subject_sheet's "
             "actual lifecycle_state equals this value, THIS branch is "
-            "selected over the column's plain default (#1760 — generalizes "
+            "selected over the column's plain default (#1760, generalizing "
             "the old is-dead-only override to the full LifecycleState "
             "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; "
             "blank means no machine-match, so the branch keyed to the "
