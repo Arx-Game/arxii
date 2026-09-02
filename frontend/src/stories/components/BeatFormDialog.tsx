@@ -40,6 +40,7 @@ import {
 import { getMissionTemplate, listMissionTemplates } from '@/missions/api';
 import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
 import { ConsequencePoolPicker } from './ConsequencePoolPicker';
+import { StakesPanel } from './stakes/StakesPanel';
 import {
   useCreateBeat,
   useUpdateBeat,
@@ -1328,6 +1329,19 @@ export function BeatFormDialog({
 
             {/* Scenario graph (#3565) - a SITUATION/TASK beat's own body */}
             {(kind === 'situation' || kind === 'task') && <ScenarioSection beat={beat} />}
+
+            {/* Stakes (#3561) - a stake is minted against an existing beat id, so
+                create mode just tells the author to save first. */}
+            {beat ? (
+              <StakesPanel beat={beat} />
+            ) : (
+              <div className="space-y-1.5" data-testid="beat-stakes-section">
+                <Label>Stakes</Label>
+                <p className="text-xs text-muted-foreground">
+                  Save the beat, then declare its stakes.
+                </p>
+              </div>
+            )}
 
             {/* Readiness (#3562) - GM readiness dashboard, edit mode only. */}
             {isEdit && readinessQuery.data && (
