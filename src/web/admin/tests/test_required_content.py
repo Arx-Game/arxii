@@ -236,6 +236,21 @@ class TestRealDeclarations(TestCase):
             with self.subTest(key=dep.key):
                 self.assertNotEqual(dep.label, dep.probe.model_label())
 
+    def test_bare_account_rows_are_a_required_dependency(self) -> None:
+        """An account pinned to the bare AccountDB class 500s every persona-aware
+        endpoint (Sentry ARX2-8). Django's ``create_superuser`` still makes them,
+        so the ops panel has to say so rather than let the next one surface as a
+        Sentry issue."""
+        from evennia.accounts.models import AccountDB
+
+        dep = next(d for d in rc._declarations() if d.key == "typeclassed-accounts")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        self.assertTrue(dep.probe.resolve(None).present)
+        AccountDB.objects.create_superuser("rc_bare_root", "rcbare@example.com", "pw-123456")
+        result = dep.probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("rc_bare_root", result.detail)
+
     def test_game_clock_singleton_is_a_required_dependency(self) -> None:
         """An unset clock 503s `GET /api/clock/` and blanks every IC-date reader.
 

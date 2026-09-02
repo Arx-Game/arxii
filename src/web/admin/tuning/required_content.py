@@ -239,6 +239,33 @@ def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDe
     return tuple(registry)
 
 
+def _probe_typeclassed_accounts() -> ProbeResult:
+    """No account row is pinned to the bare ``AccountDB`` class.
+
+    Consumer: every view that reads typeclass state off ``request.user``
+    (``get_available_characters`` behind the ``X-Character-ID`` header,
+    ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
+    ``create_superuser`` still produces bare rows; migration 0211 repaired the
+    ones that existed and ``ArxAccountAdapter.new_user`` stops signup making
+    more, so a hit here is a staff account made with ``createsuperuser``.
+    """
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    bare = tuple(
+        AccountDB.objects.filter(
+            db_typeclass_path__in=("", "evennia.accounts.models.AccountDB")
+        ).values_list("username", flat=True)
+    )
+    detail = (
+        f"Account(s) pinned to the bare AccountDB class: {', '.join(bare)}. "
+        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS (migration 0211 does "
+        "this for existing rows on deploy)."
+        if bare
+        else ""
+    )
+    return ProbeResult(present=not bare, missing=bare, detail=detail)
+
+
 def _probe_audere_majora_thresholds() -> ProbeResult:
     """`AudereMajoraThreshold` rows exist for every tier-crossing boundary level.
 
@@ -1216,6 +1243,23 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "error, so players believe the offer failed for no reason."
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
+        ),
+        ContentDependency(
+            key="typeclassed-accounts",
+            label="Accounts load as the Account typeclass",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "web/api/mixins.py:63 get_available_characters (X-Character-ID auth); "
+                "world/checks/views.py:135 played_character_sheet_ids; "
+                "world/combat/views.py:1207 played_character_sheet_ids"
+            ),
+            consequence=(
+                "An account pinned to the bare AccountDB class has no typeclass "
+                "attributes, so every persona-aware endpoint answers 500 for that "
+                "player or staff member (Sentry ARX2-8). createsuperuser still "
+                "makes such rows."
+            ),
+            probe=CustomProbe(fn=_probe_typeclassed_accounts),
         ),
         ContentDependency(
             key="game-clock",
