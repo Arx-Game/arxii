@@ -213,7 +213,13 @@ function OptionEditor({ option }: { option: MissionOption }) {
         // Coerce string-typed leaf params to int / bool / float per the
         // D5 catalog so the backend resolver gets the type it expects.
         visibility_rule: coercePredicate(draft.visibility_rule, leaves.data ?? []),
-        opponent_lines: opponentLineDraftsToPayload(draft.opponent_lines),
+        // Only an ENCOUNTER option may carry a risk level or opponent lines; the
+        // backend rejects them on any other kind, so a re-kinded option sends none.
+        encounter_risk_level: draft.option_kind === 'encounter' ? draft.encounter_risk_level : '',
+        opponent_lines:
+          draft.option_kind === 'encounter'
+            ? opponentLineDraftsToPayload(draft.opponent_lines)
+            : [],
       }),
     onSuccess: () => {
       qc.invalidateQueries({
