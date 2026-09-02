@@ -360,7 +360,7 @@ def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> Beat
     """Derive the coarse BeatOutcome for a graded CheckOutcome: the plain sign rule.
 
     success_level > 0 -> SUCCESS; success_level <= 0 -> FAILURE. A roll beyond
-    every authored tier no longer defers to PENDING_GM_REVIEW (#3559) — the
+    every authored tier no longer defers to PENDING_GM_REVIEW (#3559) - the
     caller fires whatever the pool has at or below the rolled tier via
     ``clamp_tier_to_pool`` (see ``_fire_pool_with_context``); ``beat`` is
     unused now but kept for call-site stability.
@@ -390,7 +390,7 @@ def record_outcome_tier_completion(  # noqa: PLR0913
       - success_level <= 0 -> FAILURE
 
     A roll beyond every authored tier (#3559) still resolves SUCCESS/FAILURE
-    by sign — the pool fires the best authored tier of matching polarity via
+    by sign - the pool fires the best authored tier of matching polarity via
     ``clamp_tier_to_pool`` instead of parking the beat in PENDING_GM_REVIEW;
     the BeatCompletion still records the TRUE rolled outcome_tier.
 
