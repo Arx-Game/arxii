@@ -2,14 +2,17 @@
 
 from django.test import TestCase
 
-from world.stories.constants import BeatOutcome, BeatPredicateType
+from world.stories.constants import BeatOutcome, BeatPredicateType, StakeResolutionColumn
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    StakeFactory,
+    StakeResolutionFactory,
     StoryFactory,
     StoryProgressFactory,
 )
+from world.stories.models import StakeOutcome
 from world.stories.services.beats import record_scenario_outcome
 from world.traits.factories import CheckOutcomeFactory
 from world.traits.models import CheckOutcome
@@ -48,6 +51,27 @@ class RecordScenarioOutcomeTests(TestCase):
             outcome_key="negotiate",
         )
         self.assertEqual(completion.outcome_tier_id, tier.pk)
+
+    def test_stake_branch_selected_by_scenario_outcome_key(self) -> None:
+        """#3561 end-to-end: the mission scenario's terminal MissionOption.key
+        arrives as outcome_key and picks the matching authored stake branch,
+        not the column's plain default."""
+        stake = StakeFactory(beat=self.beat)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        surrendered_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        record_scenario_outcome(
+            progress=self.progress,
+            beat=self.beat,
+            outcome=BeatOutcome.FAILURE,
+            outcome_tier=None,
+            outcome_key="surrendered",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, surrendered_branch.pk)
 
     def test_gm_marked_beat_rejected(self) -> None:
         beat = BeatFactory(episode=self.beat.episode, predicate_type=BeatPredicateType.GM_MARKED)

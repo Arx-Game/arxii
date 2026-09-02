@@ -229,6 +229,109 @@ class MachineGradingTests(EvenniaTestCase):
         outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.resolution_id, captured_branch.pk)
 
+    def test_outcome_key_selects_named_branch_over_plain_default(self) -> None:
+        """#3561: a LOSS column with a plain ("") branch and a named
+        "surrendered" branch fires the named one when the completion carries
+        that outcome_key."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        surrendered_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+            outcome_key="surrendered",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, surrendered_branch.pk)
+
+    def test_blank_outcome_key_fires_plain_branch(self) -> None:
+        """A blank outcome_key (the ordinary/no-scenario-graph path) still
+        fires the plain default branch, not any named one."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        plain_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key=""
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, plain_branch.pk)
+
+    def test_unknown_outcome_key_falls_back_to_plain_branch(self) -> None:
+        """An outcome_key that names no authored branch on the column falls
+        back to the plain default rather than leaving resolution=None."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        plain_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key=""
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+            outcome_key="no-such-branch",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, plain_branch.pk)
+
+    def test_lifecycle_match_wins_over_outcome_key(self) -> None:
+        """#1760 still wins over #3561's key selection: a matching
+        machine_match_lifecycle_state branch fires even when outcome_key
+        names a different authored branch."""
+        subject = CharacterSheetFactory()
+        subject.lifecycle_state = LifecycleState.CAPTURED
+        subject.save(update_fields=["lifecycle_state"])
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=subject
+        )
+        captured_branch = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            machine_match_lifecycle_state=LifecycleState.CAPTURED,
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.SUCCESS,
+            outcome_key="surrendered",
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, captured_branch.pk)
+
     def test_withdrawal_fires_authored_branch_and_records_the_rest(self):
         """resolve_stakes_for_withdrawal: authored WITHDRAWAL fires; unauthored records
         an empty outcome; the activation closes; the beat is untouched."""

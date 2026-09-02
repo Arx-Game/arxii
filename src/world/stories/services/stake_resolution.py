@@ -193,6 +193,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None = None,
     outcome_tier: CheckOutcome | None = None,
+    outcome_key: str = "",
 ) -> list[StakeOutcome]:
     """Grade every open stake on a completing beat and fire the chosen branches.
 
@@ -217,6 +218,11 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
         FAILURE/EXPIRED -> LOSS), with a data-where-it-exists override: an
         NPC_FATE stake whose subject's vitals read DEAD grades LOSS even on a
         beat-level SUCCESS (pillar 11 - the vitals write IS the grade).
+      - ``outcome_key`` (#3561) - the authored option key the party's chosen
+        route ended on (e.g. a mission scenario's terminal MissionOption.key)
+        - selects a named branch within the graded column when one is
+        authored for it; blank, or a key naming no branch, falls back to the
+        column's plain default, same as before #3561.
       - The chosen column's authored branch fires its consequence pool
         (tier-aware, same guards/context as beat pools) and applies its writer
         payloads. A missing branch still writes a StakeOutcome with
@@ -242,7 +248,9 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
 
     outcomes: list[StakeOutcome] = []
     for stake in stakes:
-        resolution, column = _select_stake_resolution(stake, outcome, withdrawn_stake_ids)
+        resolution, column = _select_stake_resolution(
+            stake, outcome, withdrawn_stake_ids, outcome_key=outcome_key
+        )
         outcomes.append(
             _fire_branch_and_record(
                 stake=stake,
@@ -303,6 +311,8 @@ def _select_stake_resolution(
     stake: Stake,
     outcome: BeatOutcome,
     withdrawn_stake_ids: set[int],
+    *,
+    outcome_key: str = "",
 ) -> tuple[StakeResolution | None, StakeResolutionColumn]:
     """Pick the (resolution, column) for a single open stake.
 
@@ -314,18 +324,23 @@ def _select_stake_resolution(
 
     - revoked-consent subject (#1771 story 5): a WITHDRAWAL column is forced.
     - otherwise the beat outcome maps to a column (WIN/LOSS), with a
-      lifecycle-state match (#1760) potentially selecting the other column.
+      lifecycle-state match (#1760) potentially selecting the other column,
+      and ``outcome_key`` (#3561) potentially selecting a named branch within
+      the chosen column.
     """
     if stake.pk in withdrawn_stake_ids:
         # #1771 story 5: the stake's treasured subject had its sign-off
         # withdrawn on this beat - a revoked-consent wager never grades
         # WIN/LOSS, even though the beat itself resolves normally.
         column = StakeResolutionColumn.WITHDRAWAL
-        resolution = _branch_for_column(stake, column)
+        resolution = _branch_for_column(stake, column, outcome_key=outcome_key)
         return resolution, column
     column = _machine_column_for_stake(stake, outcome)
     resolution = _branch_for_column(
-        stake, column, prefer_lifecycle_state=_subject_lifecycle_state(stake)
+        stake,
+        column,
+        prefer_lifecycle_state=_subject_lifecycle_state(stake),
+        outcome_key=outcome_key,
     )
     if resolution is not None:
         # A lifecycle-state match may have selected a branch on the
@@ -433,21 +448,32 @@ def _withdrawn_consent_stake_ids(beat: Beat, stakes: list[Stake]) -> set[int]:
 
 
 def _branch_for_column(
-    stake: Stake, column: str, *, prefer_lifecycle_state: str | None = None
+    stake: Stake,
+    column: str,
+    *,
+    prefer_lifecycle_state: str | None = None,
+    outcome_key: str = "",
 ) -> StakeResolution | None:
     """The stake's authored resolution for `column`, from the prefetch when present.
 
     #1760: when prefer_lifecycle_state is set, a branch whose
-    machine_match_lifecycle_state equals it wins over the column's plain
-    (outcome_key="") default — and over the outcome-derived column itself,
+    machine_match_lifecycle_state equals it wins over everything else,
+    including outcome_key, and over the outcome-derived column itself,
     searched across ALL of the stake's authored branches (not just `column`).
     This generalizes the old is-dead-only override (which forced LOSS
     regardless of the beat's WIN/LOSS polarity) to the full LifecycleState
     ladder: an authored branch's own column wins when its
     machine_match_lifecycle_state matches the subject's actual state, same as
-    a dead NPC always graded LOSS even on a beat-level SUCCESS. Falls back to
-    the plain default within `column` when no branch matches — preserves
-    pre-#1760 single-branch-per-column content unchanged.
+    a dead NPC always graded LOSS even on a beat-level SUCCESS.
+
+    #3561: absent a lifecycle match, a non-blank ``outcome_key`` (the
+    authored option key the party's chosen route ended on, e.g. a mission
+    scenario's terminal MissionOption.key) selects the branch in `column`
+    whose own outcome_key equals it. Falls back to the plain (outcome_key="")
+    default within `column` when outcome_key is blank or names no authored
+    branch (preserves pre-#3561 single-branch-per-column content unchanged),
+    and finally to the first authored branch in `column` when even the plain
+    default is missing.
     """
     resolutions = stake.prefetched_resolutions
     if prefer_lifecycle_state:
@@ -458,6 +484,10 @@ def _branch_for_column(
         if matched is not None:
             return matched
     candidates = [r for r in resolutions if r.column == column]
+    if outcome_key:
+        keyed = next((r for r in candidates if r.outcome_key == outcome_key), None)
+        if keyed is not None:
+            return keyed
     return next((r for r in candidates if r.outcome_key == ""), None) or next(
         iter(candidates), None
     )
