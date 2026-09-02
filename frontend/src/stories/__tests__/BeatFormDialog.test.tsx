@@ -29,6 +29,10 @@ vi.mock('../queries', () => ({
   useStoryList: vi.fn(),
   useChapterList: vi.fn(),
   useEpisodeList: vi.fn(),
+  useBeatReadiness: vi.fn(),
+  useOpenBeatActivation: vi.fn(),
+  useBeatConsequencePools: vi.fn(),
+  useConsequencePoolDetail: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -49,6 +53,17 @@ vi.mock('@/gm-adjudication/queries', () => ({
   useChallengeTemplateCatalog: vi.fn(() => ({
     data: [{ id: 9, name: 'Locked Gate', category: 1, category_name: 'Exploration' }],
   })),
+}));
+
+// #3562 - the requesting account's own GM profile (risk cap).
+vi.mock('@/gm/queries', () => ({
+  useGMProfileMine: vi.fn(),
+}));
+
+// #3562 - required_mission's EntitySearchField search/resolve wrappers.
+vi.mock('@/missions/api', () => ({
+  listMissionTemplates: vi.fn(),
+  getMissionTemplate: vi.fn(),
 }));
 
 // Mock the auth/account selector hook the component uses to determine
@@ -80,6 +95,8 @@ vi.mock('@/store/hooks', () => ({
 }));
 
 import * as queries from '../queries';
+import * as gmQueries from '@/gm/queries';
+import * as missionsApi from '@/missions/api';
 import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
@@ -135,6 +152,52 @@ function setupMocks() {
     isError: false,
     error: null,
   } as unknown as ReturnType<typeof queries.useEpisodeList>);
+
+  // #3562 - readiness/lock (edit mode only; harmless defaults in create
+  // mode since the component gates both queries on `isEdit`), the
+  // beat-scoped consequence pool catalog/detail, and the GM profile risk
+  // cap. Individual tests override any of these as needed.
+  vi.mocked(queries.useBeatReadiness).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useBeatReadiness>);
+
+  vi.mocked(queries.useOpenBeatActivation).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useOpenBeatActivation>);
+
+  vi.mocked(queries.useBeatConsequencePools).mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useBeatConsequencePools>);
+
+  vi.mocked(queries.useConsequencePoolDetail).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useConsequencePoolDetail>);
+
+  vi.mocked(gmQueries.useGMProfileMine).mockReturnValue({
+    data: null,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof gmQueries.useGMProfileMine>);
+
+  vi.mocked(missionsApi.listMissionTemplates).mockResolvedValue({
+    count: 0,
+    next: null,
+    previous: null,
+    results: [],
+  });
 
   return createMock;
 }
@@ -238,6 +301,90 @@ describe('BeatFormDialog', () => {
     // Referenced Story and Milestone Type comboboxes should appear
     expect(screen.getByText('Referenced Story')).toBeInTheDocument();
     expect(screen.getByText('Milestone Type')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // #3562 - ninth predicate: faction_standing_at_least (Society | Organization XOR)
+  // -------------------------------------------------------------------------
+
+  it('faction_standing_at_least shows the Society/Organization XOR picker and submits one id', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 200 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const predicateGroup = screen.getByTestId('predicate-type-group');
+    await user.click(
+      within(predicateGroup).getByRole('radio', { name: /faction standing at least/i })
+    );
+
+    // Society is the default side of the XOR.
+    expect(screen.getByLabelText(/required society id/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/required organization id/i)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/required society id/i), '12');
+    await user.type(screen.getByLabelText(/required standing/i), '50');
+    await user.type(screen.getByLabelText(/internal description/i), 'Standing beat');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          predicate_type: 'faction_standing_at_least',
+          required_society: 12,
+          required_organization: null,
+          required_standing: 50,
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('faction_standing_at_least: switching to Organization submits required_organization instead', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 201 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const predicateGroup = screen.getByTestId('predicate-type-group');
+    await user.click(
+      within(predicateGroup).getByRole('radio', { name: /faction standing at least/i })
+    );
+
+    const factionScopeGroup = screen.getByTestId('faction-scope-group');
+    await user.click(within(factionScopeGroup).getByRole('radio', { name: /organization/i }));
+
+    expect(screen.getByLabelText(/required organization id/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/required society id/i)).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/required organization id/i), '7');
+    await user.type(screen.getByLabelText(/required standing/i), '25');
+    await user.type(screen.getByLabelText(/internal description/i), 'Org standing beat');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          predicate_type: 'faction_standing_at_least',
+          required_society: null,
+          required_organization: 7,
+          required_standing: 25,
+        }),
+        expect.any(Object)
+      );
+    });
   });
 
   it('submits gm_marked beat with correct payload', async () => {
@@ -447,16 +594,23 @@ describe('BeatFormDialog', () => {
     expect(within(riskSelect).getByRole('option', { name: /^moderate$/i })).toBeInTheDocument();
     expect(within(riskSelect).getByRole('option', { name: /^high$/i })).toBeInTheDocument();
     expect(within(riskSelect).getByRole('option', { name: /^extreme$/i })).toBeInTheDocument();
-    expect(screen.getByText(/only staff may set risk above none/i)).toBeInTheDocument();
+    expect(screen.getByText(/only gms may set risk/i)).toBeInTheDocument();
   });
 
-  it('disables the risk select for non-staff users', () => {
+  it('disables the risk select for non-staff users with no GM profile', () => {
     accountState.is_staff = false;
     setupMocks();
+    vi.mocked(gmQueries.useGMProfileMine).mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof gmQueries.useGMProfileMine>);
     renderWithProviders(<BeatFormDialog {...defaultProps} />);
 
     const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
     expect(riskSelect).toBeDisabled();
+    expect(screen.getByText(/only gms may set risk/i)).toBeInTheDocument();
   });
 
   it('enables the risk select for staff users', () => {
@@ -466,6 +620,51 @@ describe('BeatFormDialog', () => {
 
     const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
     expect(riskSelect).toBeEnabled();
+  });
+
+  it('shows the full risk ladder and "Staff may set any risk" for staff (#3562)', () => {
+    accountState.is_staff = true;
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
+    expect(within(riskSelect).getByRole('option', { name: /^none$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^low$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^moderate$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^high$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^extreme$/i })).toBeInTheDocument();
+    expect(screen.getByText(/staff may set any risk/i)).toBeInTheDocument();
+  });
+
+  it("caps the risk options to a GM profile's max_beat_risk (#3562)", () => {
+    accountState.is_staff = false;
+    setupMocks();
+    vi.mocked(gmQueries.useGMProfileMine).mockReturnValue({
+      data: {
+        id: 1,
+        level: 'junior',
+        level_display: 'Junior',
+        max_beat_risk: 'low',
+        allow_custom_stakes: false,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof gmQueries.useGMProfileMine>);
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
+    expect(riskSelect).toBeEnabled();
+    expect(within(riskSelect).getByRole('option', { name: /^none$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^low$/i })).toBeInTheDocument();
+    expect(
+      within(riskSelect).queryByRole('option', { name: /^moderate$/i })
+    ).not.toBeInTheDocument();
+    expect(within(riskSelect).queryByRole('option', { name: /^high$/i })).not.toBeInTheDocument();
+    expect(
+      within(riskSelect).queryByRole('option', { name: /^extreme$/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/your gm level allows up to low/i)).toBeInTheDocument();
   });
 
   it('includes kind / advances / risk in the create submit body', async () => {
@@ -802,5 +1001,154 @@ describe('BeatFormDialog', () => {
       '/stories/scenarios/88/canvas'
     );
     expect(screen.queryByTestId('design-scenario-btn')).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // #3562 - consequence pools, readiness, the stakes-contract lock, and the
+  // required_mission picker.
+  // -------------------------------------------------------------------------
+
+  it('the consequence pool picker submits success_consequences and renders entries from a mocked detail', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 300 });
+    });
+
+    vi.mocked(queries.useBeatConsequencePools).mockReturnValue({
+      data: [{ id: 7, name: 'Wild Magic Surge', description: '' }],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useBeatConsequencePools>);
+
+    vi.mocked(queries.useConsequencePoolDetail).mockReturnValue({
+      data: {
+        id: 7,
+        name: 'Wild Magic Surge',
+        description: '',
+        entries: [
+          {
+            consequence_id: 1,
+            name: 'Arcane Backlash',
+            outcome_tier: { id: 1, name: 'Severe', success_level: -2 },
+            effect_types: ['condition'],
+            character_loss: false,
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useConsequencePoolDetail>);
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/internal description/i), 'Consequence beat');
+    await user.selectOptions(screen.getByLabelText('Success'), '7');
+
+    expect(screen.getByTestId('consequence-pool-entries-7')).toHaveTextContent('Arcane Backlash');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({ success_consequences: 7 }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('shows the readiness strip with problems, advisories, and effective risk in edit mode', () => {
+    setupMocks();
+    vi.mocked(queries.useBeatReadiness).mockReturnValue({
+      data: {
+        is_staked: true,
+        is_ready: false,
+        problems: ['Missing target_level.'],
+        advisories: ['Consider raising the target level.'],
+        declared_risk: 'moderate',
+        effective_risk: 'low',
+        locked: false,
+        locked_at: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useBeatReadiness>);
+
+    const beat = makeSituationBeat();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    const strip = screen.getByTestId('beat-readiness-strip');
+    expect(strip).toHaveTextContent('Not ready');
+    expect(strip).toHaveTextContent('Missing target_level.');
+    expect(strip).toHaveTextContent('Consider raising the target level.');
+    expect(strip).toHaveTextContent('Effective risk for the table: Low');
+  });
+
+  it('the lock banner disables risk, target level, and the three pool controls while an activation is open', () => {
+    accountState.is_staff = true;
+    setupMocks();
+    vi.mocked(queries.useOpenBeatActivation).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          beat: 7,
+          locked_at: '2026-09-01T12:00:00Z',
+          resolved_at: null,
+          party_average_level: 5,
+          declared_target_level: 5,
+          declared_risk: 'moderate',
+          effective_risk: 'moderate',
+          is_ready: true,
+          readiness_notes: '',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useOpenBeatActivation>);
+
+    const beat = makeSituationBeat();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    expect(screen.getByTestId('beat-lock-banner')).toHaveTextContent(
+      'Locked while the scene runs (since 2026-09-01T12:00:00Z)'
+    );
+    expect(screen.getByLabelText(/^risk$/i)).toBeDisabled();
+    expect(screen.getByLabelText(/target level/i)).toBeDisabled();
+    expect(screen.getByLabelText('Success')).toBeDisabled();
+    expect(screen.getByLabelText('Failure')).toBeDisabled();
+    expect(screen.getByLabelText('Expired')).toBeDisabled();
+  });
+
+  it('required_mission search calls listMissionTemplates with the typed name', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    vi.mocked(missionsApi.listMissionTemplates).mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 9, name: 'The Long Watch', story_id: null, risk_tier: 2 }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const beat = makeSituationBeat();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    const missionInput = screen.getByLabelText(/required mission/i);
+    await user.type(missionInput, 'Watch');
+
+    await waitFor(() => {
+      expect(missionsApi.listMissionTemplates).toHaveBeenCalledWith({
+        name: 'Watch',
+        page_size: 20,
+      });
+    });
+
+    expect(await screen.findByText('The Long Watch')).toBeInTheDocument();
   });
 });

@@ -30,12 +30,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
+import { EntitySearchField } from '@/components/EntitySearchField';
 import { useAccount } from '@/store/hooks';
+import { useGMProfileMine } from '@/gm/queries';
 import {
   useSituationTemplateCatalog,
   useChallengeTemplateCatalog,
 } from '@/gm-adjudication/queries';
+import { getMissionTemplate, listMissionTemplates } from '@/missions/api';
 import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
+import { ConsequencePoolPicker } from './ConsequencePoolPicker';
 import {
   useCreateBeat,
   useUpdateBeat,
@@ -43,6 +47,8 @@ import {
   useStoryList,
   useChapterList,
   useEpisodeList,
+  useBeatReadiness,
+  useOpenBeatActivation,
 } from '../queries';
 import type {
   Beat,
@@ -83,6 +89,14 @@ interface DRFFieldErrors {
   referenced_chapter?: string[];
   referenced_episode?: string[];
   required_points?: string[];
+  required_society?: string[];
+  required_organization?: string[];
+  required_standing?: string[];
+  target_level?: string[];
+  success_consequences?: string[];
+  failure_consequences?: string[];
+  expired_consequences?: string[];
+  required_mission?: string[];
   non_field_errors?: string[];
   detail?: string;
   // #3425 session prep: DRF nested list-of-dicts field errors, one entry per
@@ -107,6 +121,7 @@ const PREDICATE_OPTIONS: { value: BeatPredicateType; label: string }[] = [
   { value: 'codex_entry_unlocked', label: 'Codex Entry Unlocked' },
   { value: 'story_at_milestone', label: 'Story At Milestone' },
   { value: 'aggregate_threshold', label: 'Aggregate Threshold' },
+  { value: 'faction_standing_at_least', label: 'Faction standing at least' },
 ];
 
 const KIND_OPTIONS: { value: BeatKind; label: string }[] = [
@@ -124,6 +139,35 @@ const RISK_OPTIONS: { value: BeatRisk; label: string }[] = [
   { value: 'extreme', label: 'Extreme' },
 ];
 
+// Mirrors the backend's RenownRisk ladder (`GMLevelCap.risk_index`, #3562):
+// index into this array is how a viewer's cap ("up to moderate") and a
+// beat's declared risk compare, without hand-rolling the comparison per site.
+const RISK_LADDER: BeatRisk[] = ['none', 'low', 'moderate', 'high', 'extreme'];
+
+function riskLabel(value: string): string {
+  return RISK_OPTIONS.find((opt) => opt.value === value)?.label ?? value;
+}
+
+/**
+ * How far up `RISK_LADDER` the current viewer may set risk: staff top out
+ * the ladder; a non-staff GM tops out at their `GMLevelCap.max_beat_risk`;
+ * an account with no GM profile at all is capped to `none` (index 0) - the
+ * caller separately disables the control entirely in that case via
+ * `canSetRisk`, this index only governs which options render.
+ */
+function riskCapIndexFor(isStaff: boolean, maxBeatRisk: string | undefined): number {
+  if (isStaff) return RISK_LADDER.length - 1;
+  if (maxBeatRisk === undefined) return 0;
+  return Math.max(0, RISK_LADDER.indexOf(maxBeatRisk as BeatRisk));
+}
+
+/** Caption under the risk select explaining the current cap (or its absence). */
+function riskCaptionFor(isStaff: boolean, hasGMProfile: boolean, capIndex: number): string {
+  if (isStaff) return 'Staff may set any risk';
+  if (!hasGMProfile) return 'Only GMs may set risk';
+  return `Your GM level allows up to ${riskLabel(RISK_LADDER[capIndex])}`;
+}
+
 const VISIBILITY_OPTIONS: { value: BeatVisibility; label: string }[] = [
   { value: 'hinted', label: 'Hinted; player sees a vague hint' },
   { value: 'visible', label: 'Visible; player sees full details' },
@@ -140,6 +184,9 @@ const MILESTONE_OPTIONS: { value: ReferencedMilestoneType; label: string }[] = [
 // Blank config state
 // ---------------------------------------------------------------------------
 
+/** Which side of the FACTION_STANDING_AT_LEAST XOR is currently authored. */
+type FactionScope = 'society' | 'organization';
+
 interface BeatConfig {
   required_level: string;
   required_achievement: string;
@@ -150,6 +197,10 @@ interface BeatConfig {
   referenced_chapter: string;
   referenced_episode: string;
   required_points: string;
+  faction_scope: FactionScope;
+  required_society: string;
+  required_organization: string;
+  required_standing: string;
 }
 
 function blankConfig(): BeatConfig {
@@ -163,6 +214,10 @@ function blankConfig(): BeatConfig {
     referenced_chapter: '',
     referenced_episode: '',
     required_points: '',
+    faction_scope: 'society',
+    required_society: '',
+    required_organization: '',
+    required_standing: '',
   };
 }
 
@@ -197,6 +252,18 @@ function predicateConfigPayload(
       };
     case 'aggregate_threshold':
       return { required_points: numOrNull(config.required_points) };
+    case 'faction_standing_at_least':
+      return config.faction_scope === 'organization'
+        ? {
+            required_society: null,
+            required_organization: numOrNull(config.required_organization),
+            required_standing: numOrNull(config.required_standing),
+          }
+        : {
+            required_society: numOrNull(config.required_society),
+            required_organization: null,
+            required_standing: numOrNull(config.required_standing),
+          };
     default:
       return {};
   }
@@ -217,6 +284,11 @@ function configFromBeat(beat: Beat): BeatConfig {
     referenced_chapter: beat.referenced_chapter != null ? String(beat.referenced_chapter) : '',
     referenced_episode: beat.referenced_episode != null ? String(beat.referenced_episode) : '',
     required_points: beat.required_points != null ? String(beat.required_points) : '',
+    faction_scope: beat.required_organization != null ? 'organization' : 'society',
+    required_society: beat.required_society != null ? String(beat.required_society) : '',
+    required_organization:
+      beat.required_organization != null ? String(beat.required_organization) : '',
+    required_standing: beat.required_standing != null ? String(beat.required_standing) : '',
   };
 }
 
@@ -444,6 +516,76 @@ function PredicateConfigFields({ predicateType, config, onChange, errors }: Conf
           )}
         </div>
       );
+
+    case 'faction_standing_at_least': {
+      const scope = config.faction_scope;
+      return (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label>Faction Type</Label>
+            <RadioGroup
+              value={scope}
+              onValueChange={(val) => onChange({ faction_scope: val as FactionScope })}
+              className="flex gap-4"
+              data-testid="faction-scope-group"
+            >
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <RadioGroupItem value="society" id="faction-scope-society" />
+                <span>Society</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <RadioGroupItem value="organization" id="faction-scope-organization" />
+                <span>Organization</span>
+              </label>
+            </RadioGroup>
+          </div>
+          {scope === 'society' ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="beat-required-society">Required Society ID</Label>
+              <Input
+                id="beat-required-society"
+                type="number"
+                min={1}
+                value={config.required_society}
+                onChange={(e) => onChange({ required_society: e.target.value })}
+                placeholder="Society ID"
+              />
+              {errors.required_society && (
+                <p className="text-xs text-destructive">{errors.required_society.join(' ')}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="beat-required-organization">Required Organization ID</Label>
+              <Input
+                id="beat-required-organization"
+                type="number"
+                min={1}
+                value={config.required_organization}
+                onChange={(e) => onChange({ required_organization: e.target.value })}
+                placeholder="Organization ID"
+              />
+              {errors.required_organization && (
+                <p className="text-xs text-destructive">{errors.required_organization.join(' ')}</p>
+              )}
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="beat-required-standing">Required Standing</Label>
+            <Input
+              id="beat-required-standing"
+              type="number"
+              value={config.required_standing}
+              onChange={(e) => onChange({ required_standing: e.target.value })}
+              placeholder="e.g. 50"
+            />
+            {errors.required_standing && (
+              <p className="text-xs text-destructive">{errors.required_standing.join(' ')}</p>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     default:
       return null;
@@ -784,10 +926,23 @@ export function BeatFormDialog({
 }: BeatFormDialogProps) {
   const isEdit = beat !== undefined;
 
-  // Risk authoring is staff-gated server-side; the UI disables the control
-  // for non-staff as defense-in-depth (the server remains the real boundary).
+  // Risk authoring is staff-gated server-side, or capped to a non-staff GM's
+  // own GMLevelCap (`GMProfileMine.max_beat_risk`, #3562); the UI mirrors
+  // both as defense-in-depth (the server remains the real boundary).
   const account = useAccount();
-  const canSetRisk = account?.is_staff ?? false;
+  const isStaff = account?.is_staff ?? false;
+  const gmProfileQuery = useGMProfileMine();
+  const gmProfile = gmProfileQuery.data;
+  const hasGMProfile = gmProfile != null;
+  const canSetRisk = isStaff || hasGMProfile;
+  const riskCapIndex = riskCapIndexFor(isStaff, gmProfile?.max_beat_risk);
+
+  // #3562 readiness dashboard + open stakes-contract-activation lock -
+  // edit mode only (a beat must exist to have either).
+  const readinessQuery = useBeatReadiness(beat?.id ?? -1, isEdit);
+  const activationQuery = useOpenBeatActivation(beat?.id ?? -1, isEdit);
+  const openActivation = activationQuery.data?.[0] ?? null;
+  const isLocked = openActivation != null;
 
   const [predicateType, setPredicateType] = useState<BeatPredicateType>(
     beat?.predicate_type ?? 'outcome_tier'
@@ -802,6 +957,21 @@ export function BeatFormDialog({
   const [kind, setKind] = useState<BeatKind>(beat?.kind ?? 'task');
   const [advances, setAdvances] = useState<boolean>(beat?.advances ?? true);
   const [risk, setRisk] = useState<BeatRisk>(beat?.risk ?? 'none');
+  const [targetLevel, setTargetLevel] = useState<string>(
+    beat?.target_level != null ? String(beat.target_level) : ''
+  );
+  const [successConsequences, setSuccessConsequences] = useState<number | null>(
+    beat?.success_consequences ?? null
+  );
+  const [failureConsequences, setFailureConsequences] = useState<number | null>(
+    beat?.failure_consequences ?? null
+  );
+  const [expiredConsequences, setExpiredConsequences] = useState<number | null>(
+    beat?.expired_consequences ?? null
+  );
+  const [requiredMission, setRequiredMission] = useState<number | null>(
+    beat?.required_mission ?? null
+  );
   const [order, setOrder] = useState<string>(beat?.order !== undefined ? String(beat.order) : '');
   const [deadline, setDeadline] = useState(beat?.deadline ?? '');
   const [agmEligible, setAgmEligible] = useState(beat?.agm_eligible ?? false);
@@ -812,6 +982,16 @@ export function BeatFormDialog({
     stagedTemplateDraftsFromBeat(beat)
   );
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
+
+  // Never hide an already-authored value the current viewer's cap wouldn't
+  // let them newly select - show up to whichever is higher, cap or the
+  // beat's existing risk, then rely on `disabled`/`canSetRisk` to stop a
+  // capped viewer from moving it further.
+  const riskVisibleMaxIndex = Math.max(riskCapIndex, RISK_LADDER.indexOf(risk));
+  const riskOptionsToShow = canSetRisk
+    ? RISK_OPTIONS.filter((opt) => RISK_LADDER.indexOf(opt.value) <= riskVisibleMaxIndex)
+    : RISK_OPTIONS;
+  const riskCaption = riskCaptionFor(isStaff, hasGMProfile, riskCapIndex);
 
   const createMutation = useCreateBeat();
   const updateMutation = useUpdateBeat();
@@ -837,6 +1017,11 @@ export function BeatFormDialog({
     setKind(beat?.kind ?? 'task');
     setAdvances(beat?.advances ?? true);
     setRisk(beat?.risk ?? 'none');
+    setTargetLevel(beat?.target_level != null ? String(beat.target_level) : '');
+    setSuccessConsequences(beat?.success_consequences ?? null);
+    setFailureConsequences(beat?.failure_consequences ?? null);
+    setExpiredConsequences(beat?.expired_consequences ?? null);
+    setRequiredMission(beat?.required_mission ?? null);
     setOrder(beat?.order !== undefined ? String(beat.order) : '');
     setDeadline(beat?.deadline ?? '');
     setAgmEligible(beat?.agm_eligible ?? false);
@@ -877,6 +1062,11 @@ export function BeatFormDialog({
       kind,
       advances,
       risk,
+      target_level: targetLevel !== '' ? Number(targetLevel) : null,
+      success_consequences: successConsequences,
+      failure_consequences: failureConsequences,
+      expired_consequences: expiredConsequences,
+      required_mission: requiredMission,
       order: order !== '' ? Number(order) : undefined,
       deadline: deadline ? new Date(deadline).toISOString() : undefined,
       agm_eligible: agmEligible,
@@ -1093,8 +1283,78 @@ export function BeatFormDialog({
               />
             )}
 
+            {/* Required mission (#3562) - the catalog-mission alternative to
+                the bespoke scenario graph below, for SITUATION/TASK beats. */}
+            {(kind === 'situation' || kind === 'task') && (
+              <EntitySearchField
+                label="Required mission"
+                value={requiredMission}
+                onChange={setRequiredMission}
+                placeholder="Search mission templates…"
+                search={async (query) => {
+                  const res = await listMissionTemplates({ name: query, page_size: 20 });
+                  return res.results.map((template) => ({
+                    id: template.id,
+                    name: template.name,
+                    hint: template.story_id != null ? 'scenario' : `tier ${template.risk_tier}`,
+                  }));
+                }}
+                resolveById={async (id) => {
+                  const template = await getMissionTemplate(id);
+                  return {
+                    id: template.id,
+                    name: template.name,
+                    hint: template.story_id != null ? 'scenario' : `tier ${template.risk_tier}`,
+                  };
+                }}
+              />
+            )}
+            {fieldErrors.required_mission && (
+              <p className="text-xs text-destructive">{fieldErrors.required_mission.join(' ')}</p>
+            )}
+
             {/* Scenario graph (#3565) - a SITUATION/TASK beat's own body */}
             {(kind === 'situation' || kind === 'task') && <ScenarioSection beat={beat} />}
+
+            {/* Readiness (#3562) - GM readiness dashboard, edit mode only. */}
+            {isEdit && readinessQuery.data && (
+              <div
+                className="space-y-1 rounded-md border p-3 text-sm"
+                data-testid="beat-readiness-strip"
+              >
+                <p className="font-medium">
+                  {readinessQuery.data.is_ready ? 'Ready' : 'Not ready'}
+                </p>
+                {readinessQuery.data.problems.length > 0 && (
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-destructive">
+                    {readinessQuery.data.problems.map((problem, i) => (
+                      <li key={i}>{problem}</li>
+                    ))}
+                  </ul>
+                )}
+                {readinessQuery.data.advisories.length > 0 && (
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+                    {readinessQuery.data.advisories.map((advisory, i) => (
+                      <li key={i}>{advisory}</li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Effective risk for the table: {riskLabel(readinessQuery.data.effective_risk)}
+                </p>
+              </div>
+            )}
+
+            {/* Lock banner (#3562) - an open stakes-contract activation
+                locks risk / target_level / the three consequence pools. */}
+            {isEdit && openActivation && (
+              <div
+                className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+                data-testid="beat-lock-banner"
+              >
+                Locked while the scene runs (since {openActivation.locked_at})
+              </div>
+            )}
 
             {/* Advances */}
             <div className="space-y-1.5">
@@ -1116,25 +1376,85 @@ export function BeatFormDialog({
               )}
             </div>
 
-            {/* Risk */}
-            <div className="space-y-1.5">
-              <Label htmlFor="beat-risk">Risk</Label>
-              <select
-                id="beat-risk"
-                value={risk}
-                onChange={(e) => setRisk(e.target.value as BeatRisk)}
-                disabled={!canSetRisk}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              >
-                {RISK_OPTIONS.map(({ value, label }) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">Only staff may set risk above None</p>
-              {fieldErrors.risk && (
-                <p className="text-xs text-destructive">{fieldErrors.risk.join(' ')}</p>
+            {/* Risk and target level side-by-side (#3562) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="beat-risk">Risk</Label>
+                <select
+                  id="beat-risk"
+                  value={risk}
+                  onChange={(e) => setRisk(e.target.value as BeatRisk)}
+                  disabled={!canSetRisk || isLocked}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                >
+                  {riskOptionsToShow.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">{riskCaption}</p>
+                {fieldErrors.risk && (
+                  <p className="text-xs text-destructive">{fieldErrors.risk.join(' ')}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="beat-target-level">Target Level</Label>
+                <Input
+                  id="beat-target-level"
+                  type="number"
+                  min={1}
+                  value={targetLevel}
+                  onChange={(e) => setTargetLevel(e.target.value)}
+                  disabled={isLocked}
+                  placeholder="e.g. 4"
+                />
+                {fieldErrors.target_level && (
+                  <p className="text-xs text-destructive">{fieldErrors.target_level.join(' ')}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Consequences (#3562) - the ConsequencePool that fires on each outcome. */}
+            <div
+              className="space-y-2 rounded-md border p-3"
+              data-testid="beat-consequences-section"
+            >
+              <Label>Consequences</Label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <ConsequencePoolPicker
+                  label="Success"
+                  value={successConsequences}
+                  onChange={setSuccessConsequences}
+                  disabled={isLocked}
+                />
+                <ConsequencePoolPicker
+                  label="Failure"
+                  value={failureConsequences}
+                  onChange={setFailureConsequences}
+                  disabled={isLocked}
+                />
+                <ConsequencePoolPicker
+                  label="Expired"
+                  value={expiredConsequences}
+                  onChange={setExpiredConsequences}
+                  disabled={isLocked}
+                />
+              </div>
+              {fieldErrors.success_consequences && (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.success_consequences.join(' ')}
+                </p>
+              )}
+              {fieldErrors.failure_consequences && (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.failure_consequences.join(' ')}
+                </p>
+              )}
+              {fieldErrors.expired_consequences && (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.expired_consequences.join(' ')}
+                </p>
               )}
             </div>
 

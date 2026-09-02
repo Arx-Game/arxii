@@ -45,6 +45,18 @@ export type Episode = EpisodeDetail;
 export type BeatOpponentLine = components['schemas']['BeatOpponentLine'];
 export type BeatStagedTemplate = components['schemas']['BeatStagedTemplate'];
 
+// #3562: the beat-authoring GM readiness dashboard
+// (`GET /api/beats/{id}/readiness/`) and the stakes-contract lock it
+// surfaces (`GET /api/stake-activations/?beat=&resolved_at_isnull=true`).
+export type BeatReadiness = components['schemas']['BeatReadiness'];
+export type StakeContractActivation = components['schemas']['StakeContractActivation'];
+
+// #3562: the beat-authoring consequence pool picker's catalog (list) and
+// detail (resolved entries, for the picker's preview) shapes.
+export type ConsequencePoolCatalog = components['schemas']['ConsequencePoolCatalog'];
+export type ConsequencePoolDetail = components['schemas']['ConsequencePoolDetail'];
+export type ConsequencePoolEntry = components['schemas']['ConsequencePoolEntry'];
+
 // #3565: the beat's scenario graph, GM-view only. spectacular cannot
 // introspect this SerializerMethodField's shape (it types as a bare
 // Record<string, unknown>), so we hand-type it here from the actual
@@ -433,6 +445,19 @@ export interface BeatCreateBody {
   referenced_chapter?: number | null; // STORY_AT_MILESTONE/chapter_reached
   referenced_episode?: number | null; // STORY_AT_MILESTONE/episode_reached
   required_points?: number | null; // AGGREGATE_THRESHOLD
+  required_society?: number | null; // FACTION_STANDING_AT_LEAST (society-level)
+  required_organization?: number | null; // FACTION_STANDING_AT_LEAST (organization-level)
+  required_standing?: number | null; // FACTION_STANDING_AT_LEAST minimum raw reputation
+
+  // #3562 stakes/consequences - the character level this beat's stakes are
+  // declared against, the ConsequencePools that fire on each outcome, and
+  // an optional MissionTemplate this beat requires (completion engine
+  // flips the beat when a launched instance terminates).
+  target_level?: number | null;
+  success_consequences?: number | null;
+  failure_consequences?: number | null;
+  expired_consequences?: number | null;
+  required_mission?: number | null;
 
   // #3425 session prep — repeatable child rows. omit to leave untouched on a
   // PATCH; an explicit [] clears every existing row (see BeatSerializer.update()).
