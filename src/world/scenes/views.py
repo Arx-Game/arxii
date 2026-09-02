@@ -43,6 +43,7 @@ from world.scenes.permissions import (
 )
 from world.scenes.rail_serializers import GMStoryRailSerializer
 from world.scenes.rail_services import build_gm_story_rail_payload, viewer_qualifies_for_rail
+from world.scenes.scenario_services import build_scene_scenario_payload
 from world.scenes.scene_admin_services import finish_scene_full
 from world.scenes.serializers import (
     ActivePersonaResultSerializer,
@@ -52,6 +53,7 @@ from world.scenes.serializers import (
     PersonaSerializer,
     SceneDetailSerializer,
     SceneListSerializer,
+    SceneScenarioSerializer,
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
     SetActivePersonaRequestSerializer,
@@ -435,6 +437,31 @@ class SceneViewSet(viewsets.ModelViewSet):
         # is documentation-only (see its module docstring); re-running the payload
         # through it here would double-serialize those already-flat dicts.
         return Response(payload)
+
+    @extend_schema(responses=SceneScenarioSerializer, tags=["scenes"])
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="scenario",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def scenario(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/scenes/{id}/scenario/ (#3565) - the mission scenario this scene is
+        currently running, gated per-viewer.
+
+        Composed read only -- no writes, no models, no migration. Any authenticated
+        viewer gets 200: ``instance_id`` is null when the scene runs no scenario.
+        Sub-sections are gated inside ``build_scene_scenario_payload``: ``group_beat``
+        (the same shape as ``journal/{id}/group-beat/``) only for a viewer playing a
+        participant on the run; ``gm`` (current node, every ballot, the last deed,
+        the running beat's outcome) only for staff or viewers with standing on the
+        running story (``viewer_has_story_standing`` -- the same #3434 leak
+        invariant). A bystander with neither gets both null but still 200.
+        """
+        scene = self.get_object()
+        user = cast(AccountDB, request.user)
+        payload = build_scene_scenario_payload(scene, user)
+        return Response(SceneScenarioSerializer(payload).data)
 
     @extend_schema(responses=HighlightReelSerializer, tags=["scenes"])
     @action(
