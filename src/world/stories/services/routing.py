@@ -47,19 +47,18 @@ def rule_accepts(
     beat_outcomes: dict[int, str],
     stake_columns: dict[int, str],
 ) -> bool:
-    """True when ``req`` is confirmed met by a hypothetical, fully-known outcome map.
+    """True when ``req`` could be met under a hypothetical outcome map.
 
-    A dead-end check pins exactly one subject (one beat or one stake) to the
-    failure-shaped outcome under test; every other subject is absent from the
-    maps. A rule about an absent subject is not confirmed satisfiable, so it
-    does not count as accepting: crediting a transition on an unconfirmed
-    subject would let an unrelated rule (say a different stake's column) paper
-    over a real dead end. This is closed-world by design, unlike
-    ``transitions.routing_requirement_met`` (which reads the live row).
+    A beat or stake absent from the maps is unknown and counts as satisfiable;
+    only what the map pins down can rule a requirement out. Option keys are
+    never pinned, so a key requirement is satisfiable whenever its outcome is.
+    Mirrors ``transitions.routing_requirement_met`` without reading any row.
     """
     if req.stake_id is not None:
-        return stake_columns.get(req.stake_id) == req.required_stake_column
-    return beat_outcomes.get(req.beat_id) == req.required_outcome
+        column = stake_columns.get(req.stake_id)
+        return column is None or column == req.required_stake_column
+    outcome = beat_outcomes.get(req.beat_id)
+    return outcome is None or outcome == req.required_outcome
 
 
 def routing_report(episode: Episode) -> RoutingReport:
@@ -84,14 +83,11 @@ def routing_reports_for_episodes(episode_ids: Iterable[int]) -> dict[int, Routin
     # already seen once would silently reuse the first call's stale rule list instead
     # of re-querying (confirmed by repro; see #3563 task-1-report.md).
     rules_by_transition: dict[int, list[TransitionRequiredOutcome]] = defaultdict(list)
-    referenced_stake_ids: set[int] = set()
     transition_ids = [t.pk for t in all_transitions]
     for rule in TransitionRequiredOutcome.objects.filter(
         transition_id__in=transition_ids
     ).select_related("beat", "stake"):
         rules_by_transition[rule.transition_id].append(rule)
-        if rule.stake_id is not None:
-            referenced_stake_ids.add(rule.stake_id)
     for transition in all_transitions:
         transition.cached_required_outcomes = rules_by_transition.get(transition.pk, [])
 
@@ -119,7 +115,6 @@ def routing_reports_for_episodes(episode_ids: Iterable[int]) -> dict[int, Routin
             transitions_by_episode.get(episode_id, []),
             candidates_by_episode[episode_id],
             stakes_by_beat,
-            referenced_stake_ids,
         )
         for episode_id in ids
     }
@@ -146,11 +141,10 @@ def _build_report(
     transitions: list[Transition],
     candidate_beats: list[Beat],
     stakes_by_beat: dict[int, list[Stake]],
-    referenced_stake_ids: set[int],
 ) -> RoutingReport:
     if not transitions:
         return RoutingReport()
-    dead_ends = _dead_end_lines(transitions, candidate_beats, stakes_by_beat, referenced_stake_ids)
+    dead_ends = _dead_end_lines(transitions, candidate_beats, stakes_by_beat)
     pairs = [
         (first.pk, second.pk)
         for i, first in enumerate(transitions)
@@ -188,7 +182,6 @@ def _dead_end_lines(
     transitions: list[Transition],
     candidate_beats: list[Beat],
     stakes_by_beat: dict[int, list[Stake]],
-    referenced_stake_ids: set[int],
 ) -> list[str]:
     lines: list[str] = []
     for beat in candidate_beats:
@@ -200,12 +193,7 @@ def _dead_end_lines(
             for outcome in outcomes
             if not _any_transition_accepts(transitions, {beat.pk: outcome}, {})
         )
-        # A stake with no routing rule referencing it plays no part in routing
-        # at all, so its resolution can never strand the run - skip it rather
-        # than flag a false dead end (its beat's own coverage is what matters).
         for stake in stakes_by_beat.get(beat.pk, []):
-            if stake.pk not in referenced_stake_ids:
-                continue
             pinned = {stake.pk: StakeResolutionColumn.LOSS}
             if not _any_transition_accepts(transitions, {}, pinned):
                 lines.append(

@@ -79,6 +79,9 @@ class DeadEndTests(_Base):
         self.assertIn("= EXPIRED: no transition accepts it", lines[0])
 
     def test_stake_loss_with_no_accepting_edge_is_a_dead_end(self) -> None:
+        # The only edge pins the stake to WIN. FAILURE pins the beat alone, so
+        # that edge still accepts it (ruling 6); LOSS pins the stake and nothing
+        # accepts it.
         stake = StakeFactory(beat=self.beat, player_summary="The hostage")
         self._edge(
             self.next_a,
@@ -88,7 +91,6 @@ class DeadEndTests(_Base):
             required_outcome="",
             required_stake_column=StakeResolutionColumn.WIN,
         )
-        self._edge(self.next_b, 2, beat=self.beat, required_outcome=BeatOutcome.FAILURE)
         lines = routing_report(self.episode).dead_ends
         self.assertEqual(
             lines,
@@ -97,6 +99,26 @@ class DeadEndTests(_Base):
                 " = LOSS: no transition accepts it",
             ),
         )
+
+    def test_edge_accepting_the_loss_column_clears_it(self) -> None:
+        stake = StakeFactory(beat=self.beat, player_summary="The hostage")
+        self._edge(
+            self.next_a,
+            1,
+            beat=self.beat,
+            stake=stake,
+            required_outcome="",
+            required_stake_column=StakeResolutionColumn.WIN,
+        )
+        self._edge(
+            self.next_b,
+            2,
+            beat=self.beat,
+            stake=stake,
+            required_outcome="",
+            required_stake_column=StakeResolutionColumn.LOSS,
+        )
+        self.assertEqual(routing_report(self.episode).dead_ends, ())
 
     def test_unreferenced_stake_is_never_a_dead_end(self) -> None:
         StakeFactory(beat=self.beat, player_summary="The hostage")
@@ -182,7 +204,9 @@ class BatchTests(_Base):
         with self.assertNumQueries(4):
             reports = routing_reports_for_episodes(episode_ids)
         self.assertEqual(set(reports), {self.episode.pk, self.next_a.pk, self.next_b.pk})
-        self.assertEqual(len(reports[self.episode.pk].dead_ends), 2)
+        # the WIN-pinned edge accepts FAILURE (beat unpinned) but rejects the
+        # stake's LOSS, so exactly one line
+        self.assertEqual(len(reports[self.episode.pk].dead_ends), 1)
         self.assertEqual(len(reports[self.next_a.pk].dead_ends), 1)
         self.assertEqual(reports[self.next_b.pk].problems, ())
 
