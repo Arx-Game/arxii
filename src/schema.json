@@ -39947,7 +39947,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeD50Enum'
+          - $ref: '#/components/schemas/Outcome425Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -39955,7 +39955,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
         visibility:
           $ref: '#/components/schemas/BeatVisibilityEnum'
         internal_description:
@@ -40238,7 +40237,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeD50Enum'
+          - $ref: '#/components/schemas/Outcome425Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -40246,7 +40245,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
         visibility:
           $ref: '#/components/schemas/BeatVisibilityEnum'
         internal_description:
@@ -58880,6 +58878,18 @@ components:
       - name
       - prompt
       - sort_order
+    Outcome425Enum:
+      enum:
+      - unsatisfied
+      - success
+      - failure
+      - expired
+      type: string
+      description: |-
+        * `unsatisfied` - Unsatisfied
+        * `success` - Success
+        * `failure` - Failure
+        * `expired` - Expired
     Outcome5d6Enum:
       enum:
       - unresolved
@@ -58906,20 +58916,6 @@ components:
         * `defeat` - Defeat
         * `fled` - Fled
         * `abandoned` - Abandoned
-    OutcomeD50Enum:
-      enum:
-      - unsatisfied
-      - success
-      - failure
-      - expired
-      - pending_gm_review
-      type: string
-      description: |-
-        * `unsatisfied` - Unsatisfied
-        * `success` - Success
-        * `failure` - Failure
-        * `expired` - Expired
-        * `pending_gm_review` - Pending GM review
     OutcomeDetail:
       type: object
       properties:
@@ -64181,7 +64177,7 @@ components:
           default: gm_marked
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeD50Enum'
+          - $ref: '#/components/schemas/Outcome425Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -64189,7 +64185,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
         visibility:
           $ref: '#/components/schemas/BeatVisibilityEnum'
         internal_description:
@@ -66651,7 +66646,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
           oneOf:
           - $ref: '#/components/schemas/RequiredOutcomeEnum'
           - $ref: '#/components/schemas/BlankEnum'
@@ -70353,14 +70347,12 @@ components:
       - success
       - failure
       - expired
-      - pending_gm_review
       type: string
       description: |-
         * `unsatisfied` - Unsatisfied
         * `success` - Success
         * `failure` - Failure
         * `expired` - Expired
-        * `pending_gm_review` - Pending GM review
     RequiredStakeColumnEnum:
       enum:
       - win
@@ -78452,7 +78444,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
           oneOf:
           - $ref: '#/components/schemas/RequiredOutcomeEnum'
           - $ref: '#/components/schemas/BlankEnum'
@@ -78499,7 +78490,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
           oneOf:
           - $ref: '#/components/schemas/RequiredOutcomeEnum'
           - $ref: '#/components/schemas/BlankEnum'

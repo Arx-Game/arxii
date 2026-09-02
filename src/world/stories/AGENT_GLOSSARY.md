@@ -69,7 +69,7 @@ The `StakeResolution.outcome_key` slug (#1760) — an open, designer-authored vo
 _Avoid_: sub-branch, variant (reserve "branch" for the `StakeResolution` row itself; Outcome Key is the naming dimension that distinguishes branches sharing a column).
 
 **Withdrawal Column**:
-The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED (`withdrawal=True` through `record_outcome_tier_completion`); stakes without an authored WITHDRAWAL branch pend with the beat's PENDING_GM_REVIEW for a Constrained Pick. The beat itself still awaits GM adjudication.
+The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED, via `resolve_stakes_for_withdrawal` (#3559); stakes without an authored WITHDRAWAL branch still record an empty (`resolution=None`) StakeOutcome (audit honesty). The beat's own outcome is left untouched (still open) - a withdrawal never completes the beat.
 _Avoid_: flee branch, retreat outcome.
 
 **Reward Line**:

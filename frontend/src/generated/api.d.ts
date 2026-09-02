@@ -24233,9 +24233,8 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeD50Enum'];
+      outcome?: components['schemas']['Outcome425Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -24391,9 +24390,8 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeD50Enum'];
+      outcome?: components['schemas']['Outcome425Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -33381,6 +33379,14 @@ export interface components {
       readonly is_required: boolean;
     };
     /**
+     * @description * `unsatisfied` - Unsatisfied
+     *     * `success` - Success
+     *     * `failure` - Failure
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    Outcome425Enum: 'unsatisfied' | 'success' | 'failure' | 'expired';
+    /**
      * @description * `unresolved` - Unresolved
      *     * `attacker_decisive` - Attacker — decisive
      *     * `attacker_marginal` - Attacker — marginal
@@ -33402,15 +33408,6 @@ export interface components {
      * @enum {string}
      */
     Outcome88eEnum: 'victory' | 'defeat' | 'fled' | 'abandoned';
-    /**
-     * @description * `unsatisfied` - Unsatisfied
-     *     * `success` - Success
-     *     * `failure` - Failure
-     *     * `expired` - Expired
-     *     * `pending_gm_review` - Pending GM review
-     * @enum {string}
-     */
-    OutcomeD50Enum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
     OutcomeDetail: {
       action_interaction_id: number;
       effects: components['schemas']['EffectRow'][];
@@ -36763,9 +36760,8 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeD50Enum'];
+      outcome?: components['schemas']['Outcome425Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description?: string;
@@ -38228,7 +38224,6 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
       required_outcome?:
         | components['schemas']['RequiredOutcomeEnum']
@@ -40065,10 +40060,9 @@ export interface components {
      *     * `success` - Success
      *     * `failure` - Failure
      *     * `expired` - Expired
-     *     * `pending_gm_review` - Pending GM review
      * @enum {string}
      */
-    RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired';
     /**
      * @description * `win` - Win
      *     * `loss` - Loss
@@ -44064,7 +44058,6 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
       required_outcome?:
         | components['schemas']['RequiredOutcomeEnum']
@@ -44102,7 +44095,6 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
       required_outcome?:
         | components['schemas']['RequiredOutcomeEnum']

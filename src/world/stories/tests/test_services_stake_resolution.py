@@ -274,13 +274,6 @@ class MachineGradingTests(EvenniaTestCase):
         StakeFactory(beat=beat)
         assert resolve_stakes_for_withdrawal(beat, progress, [sheet.primary_persona]) == []
 
-    def test_withdrawal_requires_pending_gm_review(self):
-        _sheet, beat, progress = _character_story_beat()
-        with self.assertRaises(ValueError):
-            record_outcome_tier_completion(
-                progress=progress, beat=beat, outcome_tier=self.fail_tier, withdrawal=True
-            )
-
     def test_withdrawn_treasured_signoff_routes_stake_to_withdrawal(self):
         """#1771 story 5: a revoked-consent wager never grades against the
         player. A stake whose treasured subject has a WITHDRAWN signoff
@@ -401,13 +394,14 @@ class GMPickTests(EvenniaTestCase):
         cls.gm_profile = GMProfileFactory()
 
     def _pending_staked_beat(self):
+        """A staked beat with an activated (locked) contract and an unresolved
+        stake, awaiting a GM's constrained pick (#3559 - resolve_stake_by_gm_pick
+        needs only an open activation, never a completed beat)."""
         sheet, beat, progress = _character_story_beat()
         stake = StakeFactory(beat=beat)
         win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
         loss = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
+        activate_stakes_contract(beat, [sheet])
         return sheet, beat, progress, stake, win, loss
 
     def test_pick_fires_branch_and_records_gm(self):
@@ -530,11 +524,13 @@ class ResolveStakeEndpointTests(APITestCase):
         cls.staff = AccountFactory(is_staff=True)
         cls.player = AccountFactory(is_staff=False)
         cls.sheet, cls.beat, cls.progress = _character_story_beat()
+        # Complete the beat with no stakes present yet (#3559 - a completion
+        # now grades every stake open at that moment), then author the stake
+        # afterward so it still awaits the GM's pick on a completed beat.
+        win_tier = CheckOutcomeFactory(success_level=3)
+        record_outcome_tier_completion(progress=cls.progress, beat=cls.beat, outcome_tier=win_tier)
         cls.stake = StakeFactory(beat=cls.beat)
         cls.win = StakeResolutionFactory(stake=cls.stake, column=StakeResolutionColumn.WIN)
-        record_outcome_tier_completion(
-            progress=cls.progress, beat=cls.beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
 
     def _url(self, stake):
         return reverse("stake-resolve", kwargs={"pk": stake.pk})
@@ -1070,13 +1066,19 @@ class StakeRoutingTests(EvenniaTestCase):
 
 
 def _group_story_pending_staked_beat():
-    """A GROUP-scope story with a staked OUTCOME_TIER beat pending GM review."""
+    """A GROUP-scope story with a completed OUTCOME_TIER beat and a stake
+    authored (and still unresolved) only after that completion (#3559 - a
+    completion grades every stake open at that moment, so the stake this
+    helper returns must not have existed yet when the beat completed)."""
     story = StoryFactory(scope=StoryScope.GROUP)
     chapter = ChapterFactory(story=story)
     episode = EpisodeFactory(chapter=chapter)
     gm_table = GMTableFactory()
     progress = GroupStoryProgressFactory(story=story, gm_table=gm_table, current_episode=episode)
     beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+    win_tier = CheckOutcomeFactory(success_level=3)
+    record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=win_tier)
+
     stake = StakeFactory(beat=beat)
     consequence = ConsequenceFactory()  # no tier: fires deterministically on pick
     ConsequenceEffectFactory(
@@ -1089,9 +1091,6 @@ def _group_story_pending_staked_beat():
     pool = ConsequencePoolFactory()
     ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
     StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, consequence_pool=pool)
-    record_outcome_tier_completion(
-        progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-    )
     return stake
 
 

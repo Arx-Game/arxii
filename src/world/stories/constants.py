@@ -116,7 +116,6 @@ class BeatOutcome(models.TextChoices):
     SUCCESS = "success", "Success"
     FAILURE = "failure", "Failure"
     EXPIRED = "expired", "Expired"
-    PENDING_GM_REVIEW = "pending_gm_review", "Pending GM review"
 
 
 class BeatVisibility(models.TextChoices):

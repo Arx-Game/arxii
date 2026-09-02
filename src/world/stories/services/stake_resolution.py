@@ -210,8 +210,6 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     Semantics (#1770 pillars 11-12; #3559):
       - No stakes -> []. Idempotent: any stake that already has a StakeOutcome
         row (e.g. a GM's earlier constrained pick) is skipped.
-      - outcome == PENDING_GM_REVIEW -> no-op; the stakes wait for the GM's
-        pick / final mark. (Removed with the enum in Task 3 of #3559.)
       - Withdrawal (the party walked away) never reaches this function - it
         resolves through the separate resolve_stakes_for_withdrawal, which
         leaves the beat's own outcome untouched.
@@ -231,9 +229,6 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
 
     stakes = _open_stakes_for(beat)
     if not stakes:
-        return []
-    if outcome == BeatOutcome.PENDING_GM_REVIEW:
-        # Removed with the enum in Task 3 of #3559.
         return []
 
     activation = get_open_activation(beat)
