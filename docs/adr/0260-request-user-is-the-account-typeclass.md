@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-02
 **Status:** Accepted
-**Context:** Sentry ARX2-7 and ARX2-8 (production, first day with an outside player).
+**Context:** Sentry ARX2-7 and ARX2-8 (production, 2026-09-02). ARX2-7 is explained and fixed here; ARX2-8's production trigger is still open (see Why).
 
 ## Decision
 
@@ -30,21 +30,33 @@
 Evennia swaps an instance's class from `db_typeclass_path` in `__init__`, and when
 that column is empty it pins the column to the class the instance was built as.
 allauth's default `new_user` is `get_user_model()()`, and Django's `create_superuser`
-has the same shape, so every web-signup account and every `createsuperuser` account
-was a bare `AccountDB` forever: no `puppet`, no `get_available_characters`, no
-`cached_primary_persona_ids`. The events lists, the `X-Character-ID` auth mixin,
-checks and combat views all answered 500 for those players. Tests never saw it
-because factories build accounts through `create.create_account`.
+has the same shape, so an account created either way is a bare `AccountDB` forever:
+no `puppet`, no `get_available_characters`, no `cached_primary_persona_ids`, and a
+500 from every view that reads them. The signup journey test proves the row shape
+end to end (it failed before the adapter change). Tests never saw it before because
+factories build accounts through `create.create_account`.
+
+**What ARX2-8 in production actually was is not that.** The three production
+accounts all carry the Account typeclass, and the journal event (ARX2-7, 18:06 UTC)
+shows the same account with a working `puppet` earlier in the same release. From
+21:47 UTC the events endpoints saw that account as a bare `AccountDB` for two hours.
+Evennia's `set_class_from_typeclass` falls back to the bare model, after logging a
+traceback, when both the configured typeclass and `DefaultAccount` fail to import at
+the moment the row is first loaded in a process; the identity map then keeps that
+bare instance for the life of the process. The server log around 21:47 UTC is the
+evidence for or against that; it is not in Sentry (only `web.api.exceptions` reports
+there). Until it is read, the production trigger is open.
 
 The first fix attempt moved the persona query off the typeclass into a per-request
-memo on the viewset. That was papering over the symptom: the persona list is account
-data, the Account is persistent, and the cache on it was already right. The bug was
-the account not being an Account.
+memo on the viewset so a bare `request.user` would not crash. That was papering over
+the symptom: the persona list is account data, the Account is persistent, and the
+cache on it was already right. Whatever made the account bare is the bug.
 
-`request.user.puppet` has a separate problem: under `MULTISESSION_MODE = 2` it is the
-list of every puppet, empty with no session and never `None`, so the missions journal
-handed a list to `journal_for`. The web already has a server-side answer to "who am
-I" that needs no session, and that is the only answer the web should use.
+`request.user.puppet` has a separate, confirmed problem: under `MULTISESSION_MODE = 2`
+it is the list of every puppet, empty with no session and never `None`, so the
+missions journal handed a list to `journal_for`. The web already has a server-side
+answer to "who am I" that needs no session, and that is the only answer the web
+should use.
 
 ## Rejected
 

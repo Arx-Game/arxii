@@ -1258,8 +1258,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=(
                 "An account pinned to the bare AccountDB class has no typeclass "
                 "attributes, so every persona-aware endpoint answers 500 for that "
-                "player or staff member (Sentry ARX2-8). createsuperuser still "
-                "makes such rows, and pre-adapter rows stay bare until fixed by hand."
+                "player or staff member (the ARX2-8 signature). createsuperuser "
+                "still makes such rows, and pre-adapter signup rows stay bare "
+                "until fixed by hand."
             ),
             probe=CustomProbe(fn=_probe_typeclassed_accounts),
         ),
