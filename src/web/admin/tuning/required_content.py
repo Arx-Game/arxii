@@ -1217,6 +1217,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
         ),
+        ContentDependency(
+            key="game-clock",
+            label="Game clock (IC time anchor)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/game_clock/views.py:55 ClockViewSet.list(); "
+                "world/events/services.py:46 derive_ic_time_from_real(); "
+                "world/conditions/services.py:698 _compute_ingame_time_expires()"
+            ),
+            consequence=(
+                "GET /api/clock/ answers 503 NOT_CONFIGURED, the Hall's Time plate "
+                "reads 'Time is currently frozen', and every IC-date reader (event "
+                "scheduling, in-game-time condition expiry, journals) gets None and "
+                "skips. Seed it once through Django admin (add is allowed only while "
+                "no row exists) or POST /api/clock/adjust/ as staff."
+            ),
+            probe=AnyRowProbe(label="GameClock"),
+        ),
     )
 
 
