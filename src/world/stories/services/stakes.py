@@ -401,6 +401,30 @@ def get_open_activation(beat: Beat) -> StakeContractActivation | None:
     return beat.stake_activations.filter(resolved_at__isnull=True).first()
 
 
+def beat_readiness_payload(beat: Beat) -> dict:
+    """Build the GM readiness payload for a beat (#3562).
+
+    Combines ``validate_stakes_readiness`` (is the contract complete),
+    ``effective_risk_for_beat`` (locked-vs-declared risk), and
+    ``get_open_activation`` (lock state) into the single read the readiness
+    endpoint and ``BeatReadinessSerializer`` share. Unlike
+    ``stakes_summary_for_beat`` (player-safe, pillar 9), ``problems`` here is
+    GM planning detail and is never surfaced to players.
+    """
+    report = validate_stakes_readiness(beat)
+    activation = get_open_activation(beat)
+    return {
+        "is_staked": report.is_staked,
+        "is_ready": report.is_ready,
+        "problems": list(report.problems),
+        "advisories": list(report.advisories),
+        "declared_risk": beat.risk,
+        "effective_risk": effective_risk_for_beat(beat),
+        "locked": activation is not None,
+        "locked_at": activation.locked_at if activation is not None else None,
+    }
+
+
 def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:
     """Staked, still-open beats on episodes linked to this scene (#1770 PR4).
 

@@ -169,6 +169,7 @@ from world.stories.serializers import (
     AssignStoryToTableInputSerializer,
     AssistantGMClaimSerializer,
     BeatCompletionSerializer,
+    BeatReadinessSerializer,
     BeatSerializer,
     CancelClaimInputSerializer,
     CancelSessionRequestInputSerializer,
@@ -1614,6 +1615,28 @@ class BeatViewSet(viewsets.ModelViewSet):
         """
         beat = self.get_object()
         return Response(stakes_summary_for_beat(beat))
+
+    @extend_schema(responses=BeatReadinessSerializer)
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="readiness",
+        permission_classes=[CanAssignMissionToBeat],
+    )
+    def readiness(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/beats/{id}/readiness/ — GM readiness dashboard for this beat (#3562).
+
+        Unlike ``stakes-summary`` (player-safe, pillar 9), this surfaces the
+        raw ``problems`` list — GM planning detail, like
+        ``internal_description`` — so it is gated to the Lead GM or staff via
+        ``CanAssignMissionToBeat`` rather than the broader stakes-summary
+        audience.
+        """
+        from world.stories.services.stakes import beat_readiness_payload  # noqa: PLC0415
+
+        beat = self.get_object()
+        payload = beat_readiness_payload(beat)
+        return Response(BeatReadinessSerializer(payload).data)
 
     @action(
         detail=True,

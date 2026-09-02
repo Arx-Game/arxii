@@ -5,9 +5,12 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
+from world.missions.constants import MissionVisibility
+from world.missions.factories import MissionTemplateFactory
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind, BeatPredicateType
-from world.stories.factories import ChapterFactory, EpisodeFactory, StoryFactory
+from world.stories.factories import BeatFactory, ChapterFactory, EpisodeFactory, StoryFactory
+from world.stories.models import StakeContractActivation
 
 
 class BeatRiskGateTests(APITestCase):
@@ -150,3 +153,109 @@ class BeatRiskGMLevelCapTests(APITestCase):
         resp = self.client.post(reverse("beat-list"), self._payload(RenownRisk.LOW), format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("risk", resp.data)
+
+
+class BeatSerializerRequiredMissionCapTests(APITestCase):
+    """#3562: non-staff ``required_mission`` is capped to ``scenario_scope_q``.
+
+    A GM may only assign a mission the missions Studio scope already lets
+    them author into: their own StoryScenario, or an OPEN template within
+    their GM level's risk ceiling. RESTRICTED catalog templates they don't
+    own are out of scope regardless of risk tier.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.caps = seed_default_gm_level_caps()
+        cls.gm_account = AccountFactory(is_staff=False)
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.JUNIOR)
+        cls.staff = AccountFactory(is_staff=True)
+        cls.story = StoryFactory(owners=[cls.gm_account, cls.staff])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.restricted_template = MissionTemplateFactory(
+            name="beat-cap-restricted", visibility=MissionVisibility.RESTRICTED, risk_tier=1
+        )
+        cls.open_template = MissionTemplateFactory(
+            name="beat-cap-open", visibility=MissionVisibility.OPEN, risk_tier=1
+        )
+
+    def setUp(self):
+        self.beat = BeatFactory(episode=self.episode, risk=RenownRisk.NONE)
+
+    def test_non_staff_out_of_scope_template_rejected(self):
+        self.client.force_authenticate(user=self.gm_account)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": self.beat.pk}),
+            {"required_mission": self.restricted_template.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("required_mission", resp.data)
+
+    def test_non_staff_open_template_within_cap_accepted(self):
+        self.client.force_authenticate(user=self.gm_account)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": self.beat.pk}),
+            {"required_mission": self.open_template.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["required_mission"], self.open_template.pk)
+
+    def test_staff_any_template_accepted(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": self.beat.pk}),
+            {"required_mission": self.restricted_template.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+
+class BeatSerializerStakeLockTests(APITestCase):
+    """#3562: an open StakeContractActivation locks the priced fields on the beat.
+
+    Mirrors ``_check_stake_beat_lock``'s no-staff-bypass posture (the Stake
+    lock has none either — a locked contract is locked for everyone until
+    resolved), reusing ``_STAKES_LOCKED_MESSAGE``.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.story = StoryFactory(owners=[cls.staff])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+
+    def setUp(self):
+        self.beat = BeatFactory(
+            episode=self.episode, risk=RenownRisk.HIGH, target_level=5, agm_eligible=False
+        )
+        StakeContractActivation.objects.create(
+            beat=self.beat,
+            party_average_level=5,
+            declared_target_level=5,
+            declared_risk=RenownRisk.HIGH,
+            effective_risk=RenownRisk.HIGH,
+            is_ready=True,
+        )
+
+    def test_patch_risk_locked(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": self.beat.pk}),
+            {"risk": RenownRisk.LOW},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("risk", resp.data)
+
+    def test_patch_unrelated_field_ok(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": self.beat.pk}),
+            {"internal_description": "still fine to edit"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
