@@ -391,6 +391,74 @@ class TestAudereMajoraThresholdsProbe(TestCase):
         self.assertEqual(result.missing, ())
 
 
+class TestEncounterOutcomeMappingsProbe(TestCase):
+    """Every (VICTORY|DEFEAT) x RiskLevel pair must have a mapping row (#3559)."""
+
+    def test_missing_when_one_pair_is_absent(self) -> None:
+        from world.combat.constants import EncounterOutcome, RiskLevel
+        from world.combat.models import EncounterOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Missing Pair Tier", success_level=1)
+        for outcome in (EncounterOutcome.VICTORY, EncounterOutcome.DEFEAT):
+            for risk in RiskLevel.values:
+                if outcome == EncounterOutcome.DEFEAT and risk == RiskLevel.LETHAL:
+                    continue  # deliberately left absent
+                EncounterOutcomeMapping.objects.create(
+                    outcome=outcome, risk_level=risk, check_outcome=tier
+                )
+        result = rc._probe_encounter_outcome_mappings()
+        self.assertFalse(result.present)
+        self.assertIn("defeat/lethal", result.missing)
+
+    def test_present_when_every_pair_is_covered(self) -> None:
+        from world.combat.constants import EncounterOutcome, RiskLevel
+        from world.combat.models import EncounterOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Complete Pair Tier", success_level=1)
+        for outcome in (EncounterOutcome.VICTORY, EncounterOutcome.DEFEAT):
+            for risk in RiskLevel.values:
+                EncounterOutcomeMapping.objects.create(
+                    outcome=outcome, risk_level=risk, check_outcome=tier
+                )
+        result = rc._probe_encounter_outcome_mappings()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestBattleOutcomeMappingsProbe(TestCase):
+    """Every BattleOutcome except UNRESOLVED must have a mapping row (#3559)."""
+
+    def test_missing_when_one_outcome_is_absent(self) -> None:
+        from world.battles.constants import BattleOutcome
+        from world.battles.models import BattleOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Missing Outcome Tier", success_level=1)
+        for outcome in BattleOutcome.values:
+            if outcome in (BattleOutcome.UNRESOLVED, BattleOutcome.DEFENDER_DECISIVE):
+                continue  # UNRESOLVED is never graded; DEFENDER_DECISIVE deliberately absent
+            BattleOutcomeMapping.objects.create(outcome=outcome, check_outcome=tier)
+        result = rc._probe_battle_outcome_mappings()
+        self.assertFalse(result.present)
+        self.assertIn(BattleOutcome.DEFENDER_DECISIVE, result.missing)
+
+    def test_present_when_every_resolved_outcome_is_covered(self) -> None:
+        from world.battles.constants import BattleOutcome
+        from world.battles.models import BattleOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Complete Outcome Tier", success_level=1)
+        for outcome in BattleOutcome.values:
+            if outcome == BattleOutcome.UNRESOLVED:
+                continue
+            BattleOutcomeMapping.objects.create(outcome=outcome, check_outcome=tier)
+        result = rc._probe_battle_outcome_mappings()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
 class TestCapabilityBridgesProbe(TestCase):
     """Patches build_capability_power_panel per the brief - no real corpus needed."""
 

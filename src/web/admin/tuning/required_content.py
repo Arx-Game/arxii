@@ -403,6 +403,46 @@ def _probe_capability_bridges() -> ProbeResult:
     return ProbeResult(present=unbridged == 0, detail=detail)
 
 
+def _probe_encounter_outcome_mappings() -> ProbeResult:
+    """`EncounterOutcomeMapping` rows exist for every (VICTORY|DEFEAT) x RiskLevel pair.
+
+    Consumer: `world/combat/beat_wiring.py classify_battle_outcome()`. A missing
+    pair means a fight linked to a story beat concludes and the beat never
+    resolves; the error log names the pair (#3559).
+    """
+    from world.combat.constants import EncounterOutcome, RiskLevel  # noqa: PLC0415
+    from world.combat.models import EncounterOutcomeMapping  # noqa: PLC0415
+
+    expected = {
+        (outcome, risk)
+        for outcome in (EncounterOutcome.VICTORY, EncounterOutcome.DEFEAT)
+        for risk in RiskLevel.values
+    }
+    existing = set(EncounterOutcomeMapping.objects.values_list("outcome", "risk_level"))
+    missing = tuple(f"{o}/{r}" for (o, r) in sorted(expected - existing))
+    detail = f"Missing EncounterOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_battle_outcome_mappings() -> ProbeResult:
+    """`BattleOutcomeMapping` rows exist for every `BattleOutcome` except UNRESOLVED.
+
+    Consumer: `world/battles/beat_wiring.py classify_battle_conclusion_outcome()`. A
+    missing outcome means a battle linked to a story beat concludes and the beat
+    never resolves; the error log names the outcome (#3559). UNRESOLVED is not a
+    graded conclusion (`resolve_battle_beats` is only reached once a battle has
+    concluded to one of the other four), so it is excluded from the expected set.
+    """
+    from world.battles.constants import BattleOutcome  # noqa: PLC0415
+    from world.battles.models import BattleOutcomeMapping  # noqa: PLC0415
+
+    expected = {outcome for outcome in BattleOutcome.values if outcome != BattleOutcome.UNRESOLVED}
+    existing = set(BattleOutcomeMapping.objects.values_list("outcome", flat=True))
+    missing = tuple(sorted(expected - existing))
+    detail = f"Missing BattleOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _declarations() -> tuple[ContentDependency, ...]:
     """Every hard-coded row dependency the sentinel tracks.
 
@@ -1070,6 +1110,34 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "automatically."
             ),
             probe=CustomProbe(fn=_probe_escalation_curves),
+        ),
+        ContentDependency(
+            key="encounter-outcome-mappings",
+            label="Encounter outcome-tier mappings",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/beat_wiring.py:classify_battle_outcome()",
+            consequence=(
+                "A (VICTORY|DEFEAT) x RiskLevel pair with no authored "
+                "EncounterOutcomeMapping row means a fight linked to a story "
+                "beat concludes and the beat never resolves - the error log "
+                "names the pair, but nothing grades the beat until a GM "
+                "authors the missing row."
+            ),
+            probe=CustomProbe(fn=_probe_encounter_outcome_mappings),
+        ),
+        ContentDependency(
+            key="battle-outcome-mappings",
+            label="Battle outcome-tier mappings",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/battles/beat_wiring.py:classify_battle_conclusion_outcome()",
+            consequence=(
+                "A resolved BattleOutcome (any value except UNRESOLVED) with no "
+                "authored BattleOutcomeMapping row means a battle linked to a "
+                "story beat concludes and the beat never resolves - the error "
+                "log names the outcome, but nothing grades the beat until a GM "
+                "authors the missing row."
+            ),
+            probe=CustomProbe(fn=_probe_battle_outcome_mappings),
         ),
         ContentDependency(
             key="capability-power-bridges",
