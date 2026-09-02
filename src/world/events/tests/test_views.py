@@ -470,10 +470,13 @@ class EventDetailQueryCountTestCase(APITestCase):
         #   1. session lookup
         #   2. event detail (with select_related / prefetch)
         #   3. ``_get_viewer_gm_event_ids`` — single query for the GM-event set
-        # The active-persona-ids lookup that previously fired here is now a
-        # cached_property on the Account typeclass — populated once per
-        # account per process by the warmup, free thereafter.
-        with self.assertNumQueries(3):
+        #   4. ``primary_persona_ids_for`` — the caller's PRIMARY persona ids,
+        #      once per request. This used to hide behind a cached_property on
+        #      the Account typeclass (free after warmup), but the view can no
+        #      longer read the typeclass: signup and ``create_superuser``
+        #      accounts are the bare ``AccountDB`` at request time (Sentry
+        #      ARX2-8), so the view memoizes per request instead.
+        with self.assertNumQueries(4):
             response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_gm"])
@@ -767,3 +770,29 @@ class EventInvitationListVisibilityTestCase(APITestCase):
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotIn(self.invitation.id, self._invitation_ids(response))
+
+
+class BareAccountDBRegressionTests(APITestCase):
+    """Sentry ARX2-8 (prod, 2026-09-02): ``request.user`` is a bare ``AccountDB``.
+
+    Accounts made by allauth signup (``get_user_model()()``) or Django's
+    ``create_superuser`` never pass through Evennia's typeclass swap, so the
+    ``Account`` typeclass's ``cached_primary_persona_ids`` is not there and
+    every list 500'd for those players. The view must work on the model, not
+    the typeclass.
+    """
+
+    def setUp(self):
+        from evennia.accounts.models import AccountDB
+
+        self.account = AccountDB.objects.create_user("bare_events_user", "bare@example.com", "pw")
+        self.assertFalse(hasattr(self.account, "cached_primary_persona_ids"))
+        self.client.force_authenticate(user=self.account)
+
+    def test_invitations_list_answers_for_a_bare_account(self):
+        response = self.client.get("/api/events/invitations/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_upcoming_events_list_answers_for_a_bare_account(self):
+        response = self.client.get("/api/events/?upcoming=true")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)

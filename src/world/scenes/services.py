@@ -9,6 +9,8 @@ from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.scenes.models import Persona, Scene
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet, Profile
     from world.forms.models import CharacterForm
@@ -40,6 +42,29 @@ class MissingPrimaryPersonaError(LookupError):
             "or test setup."
         )
         self.character = character
+
+
+def primary_persona_ids_for(account: AccountDB) -> list[int]:
+    """IDs of the PRIMARY personas ``account`` is currently playing.
+
+    Takes the ``AccountDB`` model, not the ``Account`` typeclass: accounts made
+    by allauth signup (``get_user_model()()``) or Django's ``create_superuser``
+    never pass through Evennia's typeclass swap, so ``request.user`` in a view
+    may be the bare model (Sentry ARX2-8, 2026-09-02). Anything a view reads
+    off the requesting account has to live here, on the model, and the
+    typeclass's ``cached_primary_persona_ids`` delegates to this.
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    return list(
+        Persona.objects.filter(
+            character_sheet__roster_entry__tenures__player_data__account=account,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+            persona_type=PersonaType.PRIMARY,
+        )
+        .values_list("id", flat=True)
+        .distinct()
+    )
 
 
 def persona_for_character(character: Character) -> Persona:

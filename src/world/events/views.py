@@ -55,6 +55,7 @@ from world.game_clock.constants import TimePhase
 from world.scenes.block_services import blocked_player_ids_for
 from world.scenes.models import Persona, Scene
 from world.scenes.mute_services import muted_player_ids_for
+from world.scenes.services import primary_persona_ids_for
 from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -90,21 +91,26 @@ class _EventActorMixin:
     ObjectDB handed to the Action as ``actor``.
     """
 
+    _primary_persona_ids_memo: list[int] | None = None
+
     request: Request
 
     def _active_persona_ids(self) -> list[int]:
         """PRIMARY persona IDs for the requesting user's active characters.
 
-        Reads ``user.cached_primary_persona_ids`` — a cached_property on
-        the Account typeclass. Evennia's identity map keeps the same
-        Account instance in memory across requests, so this list is
-        computed once per account per process and reused across requests.
-        Invalidation is wired via ``RosterTenure.related_cache_fields``.
+        Goes through ``primary_persona_ids_for`` on the ``AccountDB`` model
+        rather than the ``Account`` typeclass's cached property: an account
+        made by allauth signup or ``create_superuser`` is the bare model at
+        request time, and reading the typeclass attribute 500'd every list
+        for those players (Sentry ARX2-8, 2026-09-02).
         """
         user = self.request.user
         if not user.is_authenticated:
             return []
-        return user.cached_primary_persona_ids
+        if self._primary_persona_ids_memo is None:
+            # DRF builds one viewset instance per request, so this is per-request.
+            self._primary_persona_ids_memo = primary_persona_ids_for(user)
+        return self._primary_persona_ids_memo
 
     def _actor_or_400(self) -> object:
         """Resolve the caller's active character ObjectDB, or 400 with NO_PERSONA.
