@@ -1211,19 +1211,19 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
                 progress=self.progress, beat=gm_marked_beat, outcome_tier=self.decisive
             )
 
-    def test_outlier_success_level_with_no_matching_tier_routes_to_pending_gm_review(self) -> None:
-        """success_level>=8 with no authored Consequence at that tier defers to a GM."""
+    def test_outlier_success_level_clamps_to_best_authored_tier(self) -> None:
+        """success_level 9 with rows only at 6: SUCCESS, the tier-6 pool fires, tier 9 recorded."""
         outlier_tier = CheckOutcomeFactory(name="Outlier Unauthored RTC", success_level=9)
 
         completion = record_outcome_tier_completion(
             progress=self.progress, beat=self.beat, outcome_tier=outlier_tier
         )
 
-        assert completion.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert completion.outcome == BeatOutcome.SUCCESS
         assert completion.outcome_tier_id == outlier_tier.pk
         self.beat.refresh_from_db()
-        assert self.beat.outcome == BeatOutcome.PENDING_GM_REVIEW
-        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
+        assert self.beat.outcome == BeatOutcome.SUCCESS
+        assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
 
     def test_outlier_success_level_with_matching_tier_resolves_success_normally(self) -> None:
         """success_level>=8 with an authored matching Consequence stays SUCCESS, pool fires."""

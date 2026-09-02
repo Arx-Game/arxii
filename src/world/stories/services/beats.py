@@ -26,6 +26,7 @@ Public API:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
@@ -35,6 +36,8 @@ from world.roster.models import RosterEntry
 from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import AnyStoryProgress, StoryStatus
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -292,9 +295,6 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     return completion
 
 
-_OUTLIER_SUCCESS_LEVEL_THRESHOLD = 8
-
-
 def _validate_outcome_tier_args(
     beat: Beat, withdrawal: bool, force_outcome: BeatOutcome | None
 ) -> None:
@@ -357,29 +357,16 @@ def _record_forced_review_completion(  # noqa: PLR0913
 
 
 def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> BeatOutcome:
-    """Derive the coarse BeatOutcome for a graded CheckOutcome, honoring the outlier-crit gate.
+    """Derive the coarse BeatOutcome for a graded CheckOutcome: the plain sign rule.
 
-    Outlier-crit: when outcome_tier.success_level is at or above
-    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has no
-    Consequence row at that exact tier, the outcome resolves to PENDING_GM_REVIEW
-    instead of SUCCESS (the pool does not fire for this call).
+    success_level > 0 -> SUCCESS; success_level <= 0 -> FAILURE. A roll beyond
+    every authored tier no longer defers to PENDING_GM_REVIEW (#3559) — the
+    caller fires whatever the pool has at or below the rolled tier via
+    ``clamp_tier_to_pool`` (see ``_fire_pool_with_context``); ``beat`` is
+    unused now but kept for call-site stability.
     """
-    outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
-    is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD
-    if outcome != BeatOutcome.SUCCESS or not is_outlier_crit:
-        return outcome
-
-    pool = _pool_for_outcome(beat, BeatOutcome.SUCCESS)
-    has_authored_tier = False
-    if pool is not None:
-        from world.checks.consequence_resolution import (  # noqa: PLC0415
-            resolve_pool_consequences,
-        )
-
-        has_authored_tier = any(
-            c.outcome_tier_id == outcome_tier.pk for c in resolve_pool_consequences(pool)
-        )
-    return outcome if has_authored_tier else BeatOutcome.PENDING_GM_REVIEW
+    del beat
+    return BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
 
 
 def record_outcome_tier_completion(  # noqa: PLR0913
@@ -402,13 +389,10 @@ def record_outcome_tier_completion(  # noqa: PLR0913
       - success_level > 0  -> SUCCESS
       - success_level <= 0 -> FAILURE
 
-    Outlier-crit path: when outcome_tier.success_level is at or above
-    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has
-    no Consequence row at that exact tier, the outcome resolves to
-    PENDING_GM_REVIEW instead of SUCCESS and the pool does not fire — the win is
-    real but exceeded what was authored, so it's held for a GM to write up (and
-    later resolved via the existing record_gm_marked_outcome, same as any other
-    PENDING_GM_REVIEW beat).
+    A roll beyond every authored tier (#3559) still resolves SUCCESS/FAILURE
+    by sign — the pool fires the best authored tier of matching polarity via
+    ``clamp_tier_to_pool`` instead of parking the beat in PENDING_GM_REVIEW;
+    the BeatCompletion still records the TRUE rolled outcome_tier.
 
     ``force_outcome`` — when set to PENDING_GM_REVIEW, skips the success_level
         derivation entirely and resolves the beat to PENDING_GM_REVIEW without
@@ -476,7 +460,7 @@ def record_outcome_tier_completion(  # noqa: PLR0913
         progress=progress,
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else None,
-        outcome_tier=outcome_tier if outcome != BeatOutcome.PENDING_GM_REVIEW else None,
+        outcome_tier=outcome_tier,
     )
 
 
@@ -1236,6 +1220,7 @@ def _fire_pool_with_context(  # noqa: PLR0913
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_pool_deterministically,
         apply_pool_for_tier,
+        clamp_tier_to_pool,
     )
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.societies.exceptions import (  # noqa: PLC0415
@@ -1283,6 +1268,16 @@ def _fire_pool_with_context(  # noqa: PLR0913
         outcome_tier=outcome_tier,
     )
     if outcome_tier is not None:
-        apply_pool_for_tier(pool=pool, outcome_tier=outcome_tier, context=context)
+        fired = clamp_tier_to_pool(pool, outcome_tier)
+        if fired is None:
+            logger.info(
+                "Pool %s has no %s-polarity row for tier %s on beat %s; nothing fires.",
+                pool.pk,
+                "success" if outcome_tier.success_level > 0 else "failure",
+                outcome_tier.pk,
+                beat.pk,
+            )
+            return
+        apply_pool_for_tier(pool=pool, outcome_tier=fired, context=context)
     else:
         apply_pool_deterministically(pool=pool, context=context)

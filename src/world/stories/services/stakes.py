@@ -39,6 +39,7 @@ from world.stories.types import StakesReadinessReport
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Scene
 
@@ -277,16 +278,58 @@ def reward_band_problems_for_beat(beat: Beat) -> list[str]:
     return _reward_band_problems(beat, calibration, stakes)
 
 
+def _pool_polarities(pool: ConsequencePool) -> tuple[bool, bool]:
+    """(has_success_row, has_failure_row) among the pool's resolved consequences.
+
+    Used to flag an advisory (#3559) when clamp_tier_to_pool would find nothing
+    to fire on one side of an outcome, not to block readiness - a pool can be
+    one-sided by design (e.g. a success-only reward pool).
+    """
+    from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+
+    consequences = resolve_pool_consequences(pool)
+    has_success = any(c.outcome_tier.success_level > 0 for c in consequences)
+    has_failure = any(c.outcome_tier.success_level <= 0 for c in consequences)
+    return has_success, has_failure
+
+
+def _readiness_advisories(beat: Beat) -> tuple[str, ...]:
+    """Informational (non-blocking) readiness notes for a beat's pools (#3559).
+
+    A roll clamps to the best authored tier of matching polarity; when a pool
+    has no row of the rolled polarity at all, nothing fires for that side.
+    This never flips is_ready - it's a heads-up for the author, not a gate.
+    """
+    advisories: list[str] = []
+    success_pool = beat.success_consequences
+    if success_pool is not None:
+        has_success, _ = _pool_polarities(success_pool)
+        if not has_success:
+            advisories.append("success pool has no success-polarity row")
+    failure_pool = beat.failure_consequences
+    if failure_pool is not None:
+        _, has_failure = _pool_polarities(failure_pool)
+        if not has_failure:
+            advisories.append("failure pool has no failure-polarity row")
+    return tuple(advisories)
+
+
 def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     """Is this beat's contract complete enough to run at its declared risk?
 
-    Unready never blocks play (#1770 pillar 7) — activation downgrades
+    Unready never blocks play (#1770 pillar 7) - activation downgrades
     effective risk to NONE instead. Rules: target_level declared; >=1 stake;
     every stake authored for WIN and LOSS; severity within the tier's
     calibration bands; removal-from-play reachable within max_fuse_hops.
+
+    Also carries non-blocking ``advisories`` (#3559) about a beat's pools
+    regardless of staked status - a pool missing a row of one polarity never
+    flips ``is_ready``.
     """
     if beat.risk == RenownRisk.NONE:
-        return StakesReadinessReport(is_staked=False, is_ready=True)
+        return StakesReadinessReport(
+            is_staked=False, is_ready=True, advisories=_readiness_advisories(beat)
+        )
 
     problems: list[str] = []
     if not beat.target_level:
@@ -310,7 +353,12 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     # hard-block: the beat still activates (effective NONE) and the scene runs.
     problems.extend(_canon_review_problems(beat))
 
-    return StakesReadinessReport(is_staked=True, is_ready=not problems, problems=tuple(problems))
+    return StakesReadinessReport(
+        is_staked=True,
+        is_ready=not problems,
+        problems=tuple(problems),
+        advisories=_readiness_advisories(beat),
+    )
 
 
 def _canon_review_problems(beat: Beat) -> list[str]:

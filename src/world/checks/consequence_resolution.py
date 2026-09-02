@@ -211,3 +211,25 @@ def resolve_pool_consequences(pool: ConsequencePool) -> list[Consequence]:
 
 # Private alias preserved for backward compatibility.
 _resolve_pool_consequences = resolve_pool_consequences
+
+
+def clamp_tier_to_pool(pool: ConsequencePool, outcome_tier: CheckOutcome) -> CheckOutcome | None:
+    """The authored tier a roll fires when the pool has no row at the exact tier (#3559).
+
+    Same polarity as the roll (success_level > 0 is a success; <= 0 a failure),
+    greatest absolute success level not exceeding the roll's. ``None`` when the
+    pool authors nothing on that side. An exact match returns itself.
+    """
+    rolled = outcome_tier.success_level
+    is_success = rolled > 0
+    best: CheckOutcome | None = None
+    for consequence in resolve_pool_consequences(pool):
+        tier = consequence.outcome_tier
+        level = tier.success_level
+        if (level > 0) != is_success:
+            continue
+        if abs(level) > abs(rolled):
+            continue
+        if best is None or abs(level) > abs(best.success_level):
+            best = tier
+    return best
