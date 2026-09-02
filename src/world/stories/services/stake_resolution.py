@@ -99,6 +99,7 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
     sets_subject_lifecycle: str,
     machine_match_lifecycle_state: str = "",
     npc_regard_delta: int = 0,
+    transitions_subject_asset: str = "",
 ) -> list[StakePayloadProblem]:
     """Validate a StakeResolution's writer payloads against its stake (pillar 12).
 
@@ -142,6 +143,18 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
             StakePayloadProblem(
                 field="npc_regard_delta",
                 message="npc_regard_delta requires subject_kind=NPC_FATE.",
+            )
+        )
+
+    if transitions_subject_asset and (
+        stake.subject_kind != StakeSubjectKind.ASSET or stake.subject_asset_id is None
+    ):
+        problems.append(
+            StakePayloadProblem(
+                field="transitions_subject_asset",
+                message=(
+                    "transitions_subject_asset requires an ASSET stake with subject_asset set."
+                ),
             )
         )
 

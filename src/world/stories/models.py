@@ -2720,6 +2720,7 @@ class StakeResolution(SharedMemoryModel):
             sets_subject_lifecycle=self.sets_subject_lifecycle,
             machine_match_lifecycle_state=self.machine_match_lifecycle_state,
             npc_regard_delta=self.npc_regard_delta,
+            transitions_subject_asset=self.transitions_subject_asset,
         ):
             raise ValidationError({problem.field: problem.message})
 

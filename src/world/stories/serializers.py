@@ -3064,6 +3064,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_item",
             "subject_society",
             "subject_organization",
+            "subject_asset",
             "subject_label",
             "player_summary",
             "outcomes",
@@ -3167,6 +3168,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_item",
             "subject_society",
             "subject_organization",
+            "subject_asset",
             "subject_label",
             "player_summary",
         )
@@ -3409,8 +3411,10 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "narrative_summary",
             "forfeits_subject_item",
             "subject_standing_delta",
+            "npc_regard_delta",
             "sets_subject_lifecycle",
             "machine_match_lifecycle_state",
+            "transitions_subject_asset",
             "reward_lines",
         ]
         read_only_fields = ["id"]
@@ -3505,6 +3509,8 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             subject_standing_delta=merged("subject_standing_delta", default=0),
             sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
             machine_match_lifecycle_state=merged("machine_match_lifecycle_state", default=""),
+            npc_regard_delta=merged("npc_regard_delta", default=0),
+            transitions_subject_asset=merged("transitions_subject_asset", default=""),
         )
         if problems:
             raise serializers.ValidationError({p.field: p.message for p in problems})

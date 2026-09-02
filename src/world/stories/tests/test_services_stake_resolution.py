@@ -16,6 +16,8 @@ from rest_framework.test import APITestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
+from world.assets.constants import AssetStatus
+from world.assets.factories import NPCAssetFactory
 from world.boundaries.factories import TreasuredSubjectFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
@@ -616,6 +618,45 @@ class NoFiatSerializerTests(APITestCase):
             subject_sheet=npc_sheet,
         )
         resp = self._post_resolution(stake, machine_match_lifecycle_state=LifecycleState.DEAD)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_transitions_subject_asset_rejected_on_item_stake(self):
+        """transitions_subject_asset is ASSET-only (#3561 Task 3), symmetric with
+        sets_subject_lifecycle's existing pillar-12 guard.
+        """
+        item = ItemInstanceFactory(template=ItemTemplateFactory())
+        stake = StakeFactory(beat=self.beat, subject_kind=StakeSubjectKind.ITEM, subject_item=item)
+        resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transitions_subject_asset", str(resp.data))
+
+    def test_transitions_subject_asset_allowed_on_asset_stake(self):
+        asset = NPCAssetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.ASSET,
+            subject_asset=asset,
+        )
+        resp = self._post_resolution(stake, transitions_subject_asset=AssetStatus.COMPROMISED)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_npc_regard_delta_rejected_on_faction_stake(self):
+        """npc_regard_delta is NPC_FATE-only; today only StakeResolution.clean()
+        catches this - it must also be rejected through the API (#3561 Task 3).
+        """
+        stake = StakeFactory(beat=self.beat, subject_kind=StakeSubjectKind.FACTION)
+        resp = self._post_resolution(stake, npc_regard_delta=-2)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("npc_regard_delta", str(resp.data))
+
+    def test_npc_regard_delta_allowed_on_npc_fate(self):
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            subject_sheet=npc_sheet,
+        )
+        resp = self._post_resolution(stake, npc_regard_delta=-2)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
 

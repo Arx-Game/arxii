@@ -3472,6 +3472,7 @@ class StakeViewSet(viewsets.ModelViewSet):
         "subject_item",
         "subject_society",
         "subject_organization",
+        "subject_asset",
         # DRF's nested StakeOutcomeSerializer reads the related manager, so the
         # prefetch must populate the default cache (to_attr would be unused).
     ).prefetch_related("outcomes")  # noqa: PREFETCH_STRING
