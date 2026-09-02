@@ -79456,16 +79456,10 @@ components:
           type: string
           readOnly: true
         required_outcome:
-          allOf:
-          - $ref: '#/components/schemas/RequiredOutcomeEnum'
           readOnly: true
-          description: |-
-            Required beat outcome; blank on stake-level rows.
-
-            * `unsatisfied` - Unsatisfied
-            * `success` - Success
-            * `failure` - Failure
-            * `expired` - Expired
+          oneOf:
+          - $ref: '#/components/schemas/RequiredOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         required_outcome_key:
           type: string
           readOnly: true
@@ -79481,15 +79475,10 @@ components:
           type: string
           readOnly: true
         required_stake_column:
-          allOf:
-          - $ref: '#/components/schemas/RequiredStakeColumnEnum'
           readOnly: true
-          description: |-
-            Required StakeOutcome column; only with stake set.
-
-            * `win` - Win
-            * `loss` - Loss
-            * `withdrawal` - Withdrawal
+          oneOf:
+          - $ref: '#/components/schemas/RequiredStakeColumnEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - beat
       - beat_title

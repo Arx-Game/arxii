@@ -44720,28 +44720,17 @@ export interface components {
       readonly id: number;
       readonly beat: number;
       readonly beat_title: string;
-      /**
-       * @description Required beat outcome; blank on stake-level rows.
-       *
-       *     * `unsatisfied` - Unsatisfied
-       *     * `success` - Success
-       *     * `failure` - Failure
-       *     * `expired` - Expired
-       */
-      readonly required_outcome: components['schemas']['RequiredOutcomeEnum'];
+      readonly required_outcome:
+        | components['schemas']['RequiredOutcomeEnum']
+        | components['schemas']['BlankEnum'];
       /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
       readonly required_outcome_key: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       readonly stake: number | null;
       readonly stake_summary: string;
-      /**
-       * @description Required StakeOutcome column; only with stake set.
-       *
-       *     * `win` - Win
-       *     * `loss` - Loss
-       *     * `withdrawal` - Withdrawal
-       */
-      readonly required_stake_column: components['schemas']['RequiredStakeColumnEnum'];
+      readonly required_stake_column:
+        | components['schemas']['RequiredStakeColumnEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description One trap visible to the requesting character (#3011).

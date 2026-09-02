@@ -1487,6 +1487,12 @@ class TransitionRoutingRuleSerializer(serializers.ModelSerializer):
 
     beat_title = serializers.SerializerMethodField()
     stake_summary = serializers.SerializerMethodField()
+    required_outcome = serializers.ChoiceField(
+        choices=BeatOutcome.choices, allow_blank=True, read_only=True
+    )
+    required_stake_column = serializers.ChoiceField(
+        choices=StakeResolutionColumn.choices, allow_blank=True, read_only=True
+    )
 
     class Meta:
         model = TransitionRequiredOutcome
