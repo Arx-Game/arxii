@@ -476,13 +476,15 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
     def _render_windup_lines(participant: Any, pending: list[Any]) -> list[str]:
         if not pending:
             return []
+        from world.combat.constants import WINDUP_NO_TARGET_LABEL  # noqa: PLC0415
+
         round_number = participant.encounter.round_number
         lines = ["|wWind-ups|n:"]
         for row in pending:
             target = (
                 str(row.target.character_sheet.character)
                 if row.target_id
-                else "no one in particular"
+                else WINDUP_NO_TARGET_LABEL
             )
             left = max(row.resolves_round - round_number, 0)
             landing = "lands this round" if left == 0 else f"lands in {left}"

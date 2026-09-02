@@ -37,7 +37,7 @@ export type EncounterDetail = components['schemas']['EncounterDetail'];
 // the encounter.
 export type EngagementLock = components['schemas']['EngagementLock'];
 
-// pending_attacks is schema-typed via @extend_schema_field (#3572) — a real
+// pending_attacks is schema-typed via @extend_schema_field (#3572) - a real
 // component, not {[key: string]: unknown}[]. Telegraphed NPC wind-ups not yet
 // landed, soonest-landing first.
 export type PendingAttack = components['schemas']['PendingAttack'];

@@ -9,6 +9,8 @@
 import { cn } from '@/lib/utils';
 import type { PendingAttack } from '../types';
 
+// Mirrors the backend's WINDUP_FIZZLE_DOWNGRADES (the wreck-cancel threshold) - keep
+// these two in lockstep if that value ever changes.
 const PIP_COUNT = 3;
 
 export interface PendingAttacksProps {
@@ -28,7 +30,10 @@ function landingLabel(attack: PendingAttack): string {
 
 function DowngradePips({ downgrades }: { downgrades: number }) {
   return (
-    <span className="inline-flex gap-0.5" aria-label={`${downgrades} of ${PIP_COUNT} staggers`}>
+    <span
+      className="inline-flex gap-0.5"
+      aria-label={`${Math.min(downgrades, PIP_COUNT)} of ${PIP_COUNT} staggers`}
+    >
       {Array.from({ length: PIP_COUNT }, (_, i) => {
         const filled = i < downgrades;
         return (

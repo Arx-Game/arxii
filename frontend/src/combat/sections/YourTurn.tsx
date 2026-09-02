@@ -1107,7 +1107,7 @@ export function YourTurn({
     });
   }
 
-  // Pending-attacks strip prefills (#3572) — Guard the wind-up's target, or
+  // Pending-attacks strip prefills (#3572) - Guard the wind-up's target, or
   // steer the focused declaration at the opponent still winding it up.
   const guardControlRef = useRef<HTMLDivElement | null>(null);
   function handlePrefillGuard(targetParticipantId: number) {
