@@ -523,9 +523,11 @@ def _finish_terminal(
     BRANCH terminal with no route object). ``option`` is the
     :class:`MissionOption` whose pick ended the run - its ``key`` becomes the
     beat completion's ``outcome_key`` (#3560) - threaded through so it's
-    obvious at every call site which option resolved the terminal (Task 5
-    later extracts the post-roll part of ``resolve_option`` around this call).
-    JOINT terminals call ``_finish_terminal`` exactly once (Phase 4
+    obvious at every call site which option resolved the terminal (called
+    from both ``resolve_option``'s BRANCH path and ``_route_graded_outcome``,
+    #3565's extraction of the post-roll routing shared with a classified
+    ENCOUNTER outcome). JOINT terminals call ``_finish_terminal`` exactly
+    once (Phase 4
     invariant), so the seam fires exactly once per instance termination.
     """
     # #1753 — a mission with an NPC to report to pauses at RESOLVED until the player
