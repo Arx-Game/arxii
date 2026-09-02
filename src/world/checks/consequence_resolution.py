@@ -142,6 +142,7 @@ def apply_pool_deterministically(
     *,
     pool: ConsequencePool,
     context: ResolutionContext,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> list[AppliedEffect]:
     """Run every Consequence in the pool (including inherited parent rows
     where not excluded). No weighted selection — deterministic application
@@ -151,13 +152,16 @@ def apply_pool_deterministically(
     Walks parent pool first (in declaration order, skipping is_excluded rows
     from the child), then child pool entries. This mirrors how
     select_consequence handles inheritance.
+
+    ``skip_effect_types``: forwarded to apply_all_effects() for every
+    Consequence — effect types to leave unfired (see its docstring).
     """
     from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
 
     consequences = resolve_pool_consequences(pool)
     applied: list[AppliedEffect] = []
     for c in consequences:
-        applied.extend(apply_all_effects(c, context))
+        applied.extend(apply_all_effects(c, context, skip_effect_types=skip_effect_types))
     return applied
 
 

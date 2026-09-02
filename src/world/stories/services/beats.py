@@ -1225,6 +1225,7 @@ def _fire_pool_with_context(  # noqa: PLR0913
     scope: str,
     participants: list[Persona],
     outcome_tier: CheckOutcome | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> None:
     """Guard, contextualize, and fire one consequence pool for a beat.
 
@@ -1232,23 +1233,32 @@ def _fire_pool_with_context(  # noqa: PLR0913
     per-stake resolution (world.stories.services.stake_resolution) fires a
     StakeResolution's pool with exactly the same guards, ResolutionContext
     construction, and tier-aware application as the beat-level pools.
+
+    ``skip_effect_types``: effect types to leave unfired (an expiry completion
+    passes ``{EffectType.LEGEND_AWARD}``: expiry earns no legend, ADR-0066).
+    When it contains LEGEND_AWARD, the two LEGEND_AWARD participant guards
+    below are also skipped — the effect will not fire, so the guards have
+    nothing to protect.
     """
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_pool_deterministically,
         apply_pool_for_tier,
     )
+    from world.checks.constants import EffectType  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.societies.exceptions import (  # noqa: PLC0415
         LegendAwardParticipantMissingError,
         LegendAwardScopeError,
     )
 
+    skipping_legend = EffectType.LEGEND_AWARD in skip_effect_types
+
     # Guard: GLOBAL scope cannot fire LEGEND_AWARD effects.
-    if scope == StoryScope.GLOBAL and _pool_has_legend_award(pool):
+    if not skipping_legend and scope == StoryScope.GLOBAL and _pool_has_legend_award(pool):
         raise LegendAwardScopeError
 
     # Guard: non-GLOBAL scopes require at least one participant for LEGEND_AWARD.
-    if not participants and _pool_has_legend_award(pool):
+    if not skipping_legend and not participants and _pool_has_legend_award(pool):
         raise LegendAwardParticipantMissingError
 
     # Resolve the "resolving character" for the context:
@@ -1285,4 +1295,6 @@ def _fire_pool_with_context(  # noqa: PLR0913
     if outcome_tier is not None:
         apply_pool_for_tier(pool=pool, outcome_tier=outcome_tier, context=context)
     else:
-        apply_pool_deterministically(pool=pool, context=context)
+        apply_pool_deterministically(
+            pool=pool, context=context, skip_effect_types=skip_effect_types
+        )
