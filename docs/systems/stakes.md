@@ -373,7 +373,7 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
 **Machine grading (pillar 11 — grade off data where it exists):**
 
 - Beat `SUCCESS` → `WIN` column; `FAILURE`/`EXPIRED` → `LOSS`.
-- **EXPIRED is a completion, not a field flip (#3558, ADR-0255):** a past-deadline
+- **EXPIRED is a completion, not a field flip (#3558, ADR-0256):** a past-deadline
   beat resolves through `expire_beat` / `complete_beat_expired`
   (`world.stories.services.beats`), the same atomic completion tail as every other
   outcome. EXPIRED grades every open stake LOSS through the completion tail; an

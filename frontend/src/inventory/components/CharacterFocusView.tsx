@@ -45,6 +45,39 @@ export function CharacterFocusView({
   );
   const { data: visibleMarkings = [] } = useVisibleMarkings(character.id, observerId ?? undefined);
 
+  const renderVisibleItems = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2" data-testid="visible-worn-loading">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      );
+    }
+    if (visibleItems.length === 0) {
+      return <p className="text-sm italic text-muted-foreground">Nothing visible.</p>;
+    }
+    return (
+      <ul className="space-y-1">
+        {visibleItems.map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => onItemClick({ id: item.id, name: item.display_name })}
+              className="flex w-full items-baseline justify-between gap-2 rounded-md p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="truncate text-sm">{item.display_name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {humanizeRegionLayer(item.body_region, item.equipment_layer)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <div className={cn('flex flex-col gap-4 p-4', className)}>
       <header>
@@ -66,32 +99,7 @@ export function CharacterFocusView({
           Wearing
         </h3>
 
-        {isLoading ? (
-          <div className="space-y-2" data-testid="visible-worn-loading">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : visibleItems.length === 0 ? (
-          <p className="text-sm italic text-muted-foreground">Nothing visible.</p>
-        ) : (
-          <ul className="space-y-1">
-            {visibleItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => onItemClick({ id: item.id, name: item.display_name })}
-                  className="flex w-full items-baseline justify-between gap-2 rounded-md p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="truncate text-sm">{item.display_name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {humanizeRegionLayer(item.body_region, item.equipment_layer)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        {renderVisibleItems()}
       </section>
 
       {visibleMarkings.length > 0 && (

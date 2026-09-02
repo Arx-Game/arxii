@@ -22,6 +22,39 @@ export function NPCRolesLibraryPage() {
   const { data, isLoading } = useRoles({ name: search || undefined });
   const roles = data?.results ?? [];
 
+  const renderRoles = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (roles.length === 0) {
+      return <p className="py-6 text-center text-sm text-muted-foreground">No roles found.</p>;
+    }
+    return (
+      <ul className="space-y-2">
+        {roles.map((role) => (
+          <li key={role.id}>
+            <Link to={`/staff/npc-services/roles/${role.id}`}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="py-3">
+                  <div className="font-medium">{role.name}</div>
+                  {role.description && (
+                    <div className="line-clamp-1 text-sm text-muted-foreground">
+                      {role.description}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-6">
       <div>
@@ -41,32 +74,7 @@ export function NPCRolesLibraryPage() {
           aria-label="Search roles"
         />
 
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : roles.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No roles found.</p>
-        ) : (
-          <ul className="space-y-2">
-            {roles.map((role) => (
-              <li key={role.id}>
-                <Link to={`/staff/npc-services/roles/${role.id}`}>
-                  <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                    <CardContent className="py-3">
-                      <div className="font-medium">{role.name}</div>
-                      {role.description && (
-                        <div className="line-clamp-1 text-sm text-muted-foreground">
-                          {role.description}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
+        {renderRoles()}
       </div>
     </div>
   );

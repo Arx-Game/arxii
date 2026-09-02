@@ -248,18 +248,33 @@ function SubjectNode({
     }
   };
 
+  const renderChildren = () => {
+    if (hasChildren) {
+      return isExpanded ? (
+        <FolderOpen className="h-4 w-4 text-muted-foreground" />
+      ) : (
+        <Folder className="h-4 w-4 text-muted-foreground" />
+      );
+    }
+    return <FileText className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const renderToggleIcon = () => {
+    if (isLoading) {
+      return <Loader2 className="h-4 w-4 animate-spin" />;
+    }
+    if (isExpanded) {
+      return <ChevronDown className="h-4 w-4" />;
+    }
+    return <ChevronRight className="h-4 w-4" />;
+  };
+
   return (
     <div>
       <div className="flex items-center">
         {hasChildren ? (
           <button onClick={handleToggle} className="rounded p-0.5 hover:bg-accent">
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
+            {renderToggleIcon()}
           </button>
         ) : (
           <span className="w-5" />
@@ -271,15 +286,7 @@ function SubjectNode({
             isSelected ? 'bg-accent' : ''
           }`}
         >
-          {hasChildren ? (
-            isExpanded ? (
-              <FolderOpen className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <Folder className="h-4 w-4 text-muted-foreground" />
-            )
-          ) : (
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          )}
+          {renderChildren()}
           <span>{subject.name}</span>
           {subject.entry_count > 0 && (
             <span className="text-xs text-muted-foreground">({subject.entry_count})</span>

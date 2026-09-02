@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useCreateStory, useUpdateStory } from '../queries';
 import type { Story, StoryScope } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -257,13 +258,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Story'
-                  : 'Create Story'}
+              {formSubmitLabel(isPending, isEdit, 'Story')}
             </Button>
           </DialogFooter>
         </form>

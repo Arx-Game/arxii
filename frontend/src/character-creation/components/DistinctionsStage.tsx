@@ -233,6 +233,75 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     );
   }
 
+  const renderCardContent = () => {
+    if (!isInitialized) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (localSelections.size > 0) {
+      return (
+        <div className="space-y-2">
+          {[...localSelections.values()].map((entry) => (
+            <SelectedDistinctionItem
+              key={entry.distinction.id}
+              distinction={entry.distinction}
+              rank={entry.rank}
+              onRemove={() => handleRemoveDistinction(entry.distinction.id)}
+            />
+          ))}
+        </div>
+      );
+    }
+    return (
+      <p className="py-4 text-center text-sm text-muted-foreground">
+        No distinctions selected yet. Browse the categories above to add some.
+      </p>
+    );
+  };
+
+  const renderDistinctionList = () => {
+    if (distinctionsLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (!distinctions || distinctions.length === 0) {
+      return (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-center text-sm text-muted-foreground">
+              {searchQuery
+                ? 'No distinctions match your search.'
+                : 'No distinctions available in this category.'}
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {distinctions.map((distinction) => {
+          const entry = localSelections.get(distinction.id);
+          return (
+            <DistinctionCard
+              key={distinction.id}
+              distinction={distinction}
+              isSelected={!!entry}
+              selectedRank={entry?.rank}
+              onToggle={() => handleToggleDistinction(distinction)}
+              onHover={setHoveredDistinction}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
       {/* Main Content */}
@@ -296,37 +365,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
           {/* Distinction List */}
           {categoriesWithAll.map((category) => (
             <TabsContent key={category.slug} value={category.slug} className="mt-4 space-y-3">
-              {distinctionsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : distinctions && distinctions.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {distinctions.map((distinction) => {
-                    const entry = localSelections.get(distinction.id);
-                    return (
-                      <DistinctionCard
-                        key={distinction.id}
-                        distinction={distinction}
-                        isSelected={!!entry}
-                        selectedRank={entry?.rank}
-                        onToggle={() => handleToggleDistinction(distinction)}
-                        onHover={setHoveredDistinction}
-                      />
-                    );
-                  })}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="py-8">
-                    <p className="text-center text-sm text-muted-foreground">
-                      {searchQuery
-                        ? 'No distinctions match your search.'
-                        : 'No distinctions available in this category.'}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
+              {renderDistinctionList()}
             </TabsContent>
           ))}
         </Tabs>
@@ -348,28 +387,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {!isInitialized ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : localSelections.size > 0 ? (
-              <div className="space-y-2">
-                {[...localSelections.values()].map((entry) => (
-                  <SelectedDistinctionItem
-                    key={entry.distinction.id}
-                    distinction={entry.distinction}
-                    rank={entry.rank}
-                    onRemove={() => handleRemoveDistinction(entry.distinction.id)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                No distinctions selected yet. Browse the categories above to add some.
-              </p>
-            )}
-          </CardContent>
+          <CardContent>{renderCardContent()}</CardContent>
         </Card>
       </motion.div>
 
@@ -458,6 +476,13 @@ interface DistinctionCardProps {
   onHover: (distinction: Distinction | null) => void;
 }
 
+/** How a distinction card reads at a glance: chosen, unavailable, or offered. */
+function cardStateClass(isSelected?: boolean, isLocked?: boolean): string {
+  if (isSelected) return 'bg-primary/10 ring-2 ring-primary';
+  if (isLocked) return 'cursor-not-allowed opacity-50';
+  return 'hover:ring-1 hover:ring-primary/50';
+}
+
 function DistinctionCard({
   distinction,
   isSelected,
@@ -469,13 +494,7 @@ function DistinctionCard({
 
   return (
     <Card
-      className={`cursor-pointer transition-all ${
-        isSelected
-          ? 'bg-primary/10 ring-2 ring-primary'
-          : isLocked
-            ? 'cursor-not-allowed opacity-50'
-            : 'hover:ring-1 hover:ring-primary/50'
-      }`}
+      className={`cursor-pointer transition-all ${cardStateClass(isSelected, isLocked)}`}
       onClick={() => {
         if (isLocked) return;
         onToggle();

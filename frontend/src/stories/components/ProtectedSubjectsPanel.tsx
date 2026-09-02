@@ -109,6 +109,32 @@ export function ProtectedSubjectsPanel({ storyId }: ProtectedSubjectsPanelProps)
   const { data, isLoading } = useProtectedSubjects({ story: storyId, page_size: 100 });
   const subjects = data?.results ?? [];
 
+  const renderSubjects = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2" data-testid="protected-subjects-loading">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      );
+    }
+    if (subjects.length === 0) {
+      return (
+        <p className="text-sm italic text-muted-foreground" data-testid="protected-subjects-empty">
+          No protected subjects yet.
+        </p>
+      );
+    }
+    return (
+      <ul className="space-y-2" data-testid="protected-subjects-list">
+        {subjects.map((subject) => (
+          <ProtectedSubjectRow key={subject.id} subject={subject} />
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <div className="space-y-4" data-testid="protected-subjects-panel">
       <div className="flex items-center justify-between">
@@ -119,23 +145,7 @@ export function ProtectedSubjectsPanel({ storyId }: ProtectedSubjectsPanelProps)
         <ProtectedSubjectFormDialog storyId={storyId} />
       </div>
 
-      {isLoading ? (
-        <div className="space-y-2" data-testid="protected-subjects-loading">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </div>
-      ) : subjects.length === 0 ? (
-        <p className="text-sm italic text-muted-foreground" data-testid="protected-subjects-empty">
-          No protected subjects yet.
-        </p>
-      ) : (
-        <ul className="space-y-2" data-testid="protected-subjects-list">
-          {subjects.map((subject) => (
-            <ProtectedSubjectRow key={subject.id} subject={subject} />
-          ))}
-        </ul>
-      )}
+      {renderSubjects()}
     </div>
   );
 }

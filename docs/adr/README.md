@@ -151,6 +151,7 @@ treat those names as hints to confirm, not gospel.
 - [0059 — Allegiance is the unified substrate for summons and future charm/switch-sides](0059-allegiance-is-the-summon-charm-substrate.md)
 - [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
 - [0118 — Declared guardian reactions roll the caster's cast check outside `use_technique`](0118-guardian-reaction-seam.md) (extends ADR-0060/0096)
+- [0255 - Consented reactions join the Soulfray ledger; flat pay-or-fizzle stays the default](0255-consented-reactions-join-the-soulfray-ledger.md) (#3573; amends ADR-0118 guardian-reaction-seam; related ADR-0118 reactive-costs-debit-the-applier, ADR-0060)
 - [0061 — Access-change fires one shared surface; discoverability is a shared abstract base](0061-access-change-fires-one-surface-discoverable-is-shared-base.md)
 - [0202 - Achievement earning is gated at the grant_achievement chokepoint, not per-caller](0202-achievement-earning-gated-at-grant-chokepoint.md) (#3024; extends ADR-0061, #2899)
 - [0069 — Succor is a RoundContext capability; location shelter is a hard gate, not arithmetic resistance](0069-succor-roundcontext-capability.md)
@@ -261,7 +262,7 @@ treat those names as hints to confirm, not gospel.
 - [0252 - Honors size a deed within the ceiling its event already proved](0252-honors-size-a-deed-within-the-ceiling-its-event-proved.md) (#3466; extends ADR-0249)
 - [0253 - Titles belong to the Persona, not the CharacterSheet](0253-titles-belong-to-the-persona-not-the-charactersheet.md) (#3466; extends #1522, companion to ADR-0252)
 - [0254 - The Sentry digest issue is a pointer, never a reproduction](0254-sentry-digest-is-a-pointer-not-a-reproduction.md) (extends #2236 Phase 5)
-- [0255 - Beat expiry is a completion, not a field flip](0255-beat-expiry-is-a-completion.md) (#3558)
+- [0256 - Beat expiry is a completion, not a field flip](0256-beat-expiry-is-a-completion.md) (#3558)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -60,6 +60,16 @@ export function CovenantRolePickerField({
 
   const isDisabled = disabled || covenantType == null || isLoading;
 
+  const renderCovenantType = () => {
+    if (covenantType == null) {
+      return 'Select a covenant type first';
+    }
+    if (isLoading) {
+      return 'Loading roles…';
+    }
+    return 'Select a role';
+  };
+
   return (
     <div className="space-y-2">
       <Label htmlFor={field.name}>{field.label}</Label>
@@ -69,15 +79,7 @@ export function CovenantRolePickerField({
         disabled={isDisabled}
       >
         <SelectTrigger id={field.name}>
-          <SelectValue
-            placeholder={
-              covenantType == null
-                ? 'Select a covenant type first'
-                : isLoading
-                  ? 'Loading roles…'
-                  : 'Select a role'
-            }
-          />
+          <SelectValue placeholder={renderCovenantType()} />
         </SelectTrigger>
         <SelectContent>
           {roles.map((role) => (

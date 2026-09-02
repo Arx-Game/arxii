@@ -66,6 +66,22 @@ export function TriggerGiversPage() {
   const { data, isLoading } = useGivers({ page_size: 100 });
   const givers = data?.results ?? [];
 
+  const renderGivers = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (givers.length === 0) {
+      return (
+        <p className="py-6 text-center text-sm text-muted-foreground">No trigger givers yet.</p>
+      );
+    }
+    return givers.map((giver) => <GiverCard key={giver.id} giver={giver} />);
+  };
+
   return (
     <div className="container mx-auto max-w-3xl space-y-6 py-6">
       <div>
@@ -77,15 +93,7 @@ export function TriggerGiversPage() {
 
       <CreateGiverCard />
 
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : givers.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No trigger givers yet.</p>
-      ) : (
-        givers.map((giver) => <GiverCard key={giver.id} giver={giver} />)
-      )}
+      {renderGivers()}
     </div>
   );
 }

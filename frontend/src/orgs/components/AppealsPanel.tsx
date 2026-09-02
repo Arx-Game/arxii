@@ -219,24 +219,28 @@ function AppealRow({ orgId, appeal }: { orgId: number; appeal: OrgAppeal }) {
 export function AppealsPanel({ orgId }: { orgId: number }) {
   const { data: appeals = [], isLoading } = useOrgAppealsQuery(orgId);
 
+  const renderAppeals = () => {
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading…</p>;
+    }
+    if (appeals.length === 0) {
+      return <p className="text-sm text-muted-foreground">No appeals have been lodged.</p>;
+    }
+    return (
+      <ul className="space-y-2">
+        {appeals.map((appeal) => (
+          <AppealRow key={appeal.id} orgId={orgId} appeal={appeal} />
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <Card data-testid="appeals-panel">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Appeals</CardTitle>
       </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : appeals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No appeals have been lodged.</p>
-        ) : (
-          <ul className="space-y-2">
-            {appeals.map((appeal) => (
-              <AppealRow key={appeal.id} orgId={orgId} appeal={appeal} />
-            ))}
-          </ul>
-        )}
-      </CardContent>
+      <CardContent>{renderAppeals()}</CardContent>
     </Card>
   );
 }

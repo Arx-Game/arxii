@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useGMApplicationDetail, useUpdateGMApplication } from '@/staff/queries';
 
-const TERMINAL_STATUSES = ['approved', 'denied', 'withdrawn'];
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['approved', 'denied', 'withdrawn']);
 
 export function StaffGMApplicationDetailPage() {
   const navigate = useNavigate();
@@ -28,7 +28,7 @@ export function StaffGMApplicationDetailPage() {
   if (isError) return <p className="p-8 text-muted-foreground">Failed to load application.</p>;
   if (!application) return <p className="p-8 text-muted-foreground">GM application not found.</p>;
 
-  const isTerminal = TERMINAL_STATUSES.includes(application.status);
+  const isTerminal = TERMINAL_STATUSES.has(application.status);
 
   function handleApprove() {
     if (!appId) return;

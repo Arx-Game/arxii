@@ -60,6 +60,54 @@ export function FashionPresentationPanel({ eventId }: FashionPresentationPanelPr
     presentMutation.mutate({ event: eventId, ...(outfit ? { outfit } : {}) });
   };
 
+  const renderFashionRows = () => {
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading presentations…</p>;
+    }
+    if (isError) {
+      return (
+        <p className="text-sm text-destructive" role="alert">
+          Failed to load fashion presentations.
+        </p>
+      );
+    }
+    if ((presentations ?? []).length === 0) {
+      return <p className="text-sm text-muted-foreground">No one has presented a look yet.</p>;
+    }
+    return (
+      <ul className="space-y-2" data-testid="fashion-rows">
+        {(presentations ?? []).map((p) => {
+          const isOwn = p.presenter === mySheetId;
+          const name = isOwn ? (activeEntry?.name ?? 'You') : `Presenter #${p.presenter}`;
+          return (
+            <li
+              key={p.id}
+              className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+            >
+              <span className="flex items-baseline gap-2">
+                <span className="font-medium">{name}</span>
+                {isOwn && <span className="text-xs text-muted-foreground">(You)</span>}
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">Acclaim: {p.acclaim}</span>
+                {!isOwn && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => judgeMutation.mutate({ presentation: p.id })}
+                    disabled={judgeMutation.isPending}
+                  >
+                    Judge
+                  </Button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
   return (
     <Card data-testid="fashion-panel">
       <CardHeader>
@@ -99,46 +147,7 @@ export function FashionPresentationPanel({ eventId }: FashionPresentationPanelPr
         )}
 
         {/* Presentation list */}
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading presentations…</p>
-        ) : isError ? (
-          <p className="text-sm text-destructive" role="alert">
-            Failed to load fashion presentations.
-          </p>
-        ) : (presentations ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground">No one has presented a look yet.</p>
-        ) : (
-          <ul className="space-y-2" data-testid="fashion-rows">
-            {(presentations ?? []).map((p) => {
-              const isOwn = p.presenter === mySheetId;
-              const name = isOwn ? (activeEntry?.name ?? 'You') : `Presenter #${p.presenter}`;
-              return (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
-                >
-                  <span className="flex items-baseline gap-2">
-                    <span className="font-medium">{name}</span>
-                    {isOwn && <span className="text-xs text-muted-foreground">(You)</span>}
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">Acclaim: {p.acclaim}</span>
-                    {!isOwn && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => judgeMutation.mutate({ presentation: p.id })}
-                        disabled={judgeMutation.isPending}
-                      >
-                        Judge
-                      </Button>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        {renderFashionRows()}
       </CardContent>
     </Card>
   );

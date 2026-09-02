@@ -61,14 +61,17 @@ export interface StoryBuilderActionInput {
 }
 
 /** Actions that reshape the area list itself, not just one area's manager payload. */
-const AREA_LIST_KEYS: StoryBuilderActionKey[] = [
+const AREA_LIST_KEYS: ReadonlySet<StoryBuilderActionKey> = new Set([
   'create_story_area',
   'edit_story_area',
   'remove_story_area',
-];
+]);
 
 /** Actions that reshape the GM's temp scene rooms list. */
-const INSTANCE_KEYS: StoryBuilderActionKey[] = ['spin_up_scene_room', 'close_scene_room'];
+const INSTANCE_KEYS: ReadonlySet<StoryBuilderActionKey> = new Set([
+  'spin_up_scene_room',
+  'close_scene_room',
+]);
 
 /**
  * Grant/revoke actions (#2450 Fix round 1) — the room they target may be a
@@ -79,7 +82,10 @@ const INSTANCE_KEYS: StoryBuilderActionKey[] = ['spin_up_scene_room', 'close_sce
  * simpler than threading "which kind of room" through the mutation, and
  * invalidating a query nobody's watching is a no-op.
  */
-const GRANT_KEYS: StoryBuilderActionKey[] = ['grant_story_room', 'revoke_story_room'];
+const GRANT_KEYS: ReadonlySet<StoryBuilderActionKey> = new Set([
+  'grant_story_room',
+  'revoke_story_room',
+]);
 
 /**
  * The one mutation every GM story-builder verb goes through: dispatch by
@@ -107,11 +113,11 @@ export function useStoryBuilderAction(characterId: number, areaId: number | null
       if (areaId != null) {
         queryClient.invalidateQueries({ queryKey: storyBuilderKeys.manager(areaId) });
       }
-      if (AREA_LIST_KEYS.includes(key)) {
+      if (AREA_LIST_KEYS.has(key)) {
         queryClient.invalidateQueries({ queryKey: [...storyBuilderKeys.all, 'areas'] });
         queryClient.invalidateQueries({ queryKey: [...storyBuilderKeys.all, 'area'] });
       }
-      if (INSTANCE_KEYS.includes(key) || GRANT_KEYS.includes(key)) {
+      if (INSTANCE_KEYS.has(key) || GRANT_KEYS.has(key)) {
         queryClient.invalidateQueries({ queryKey: storyBuilderKeys.instances() });
       }
     },

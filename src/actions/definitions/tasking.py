@@ -87,13 +87,11 @@ class ListOrgTasksAction(Action):
         persona = _active_persona(actor)
         if persona is None:
             return _NO_PERSONA
-        member_org_ids = list(
-            OrganizationMembership.objects.filter(
-                persona=persona,
-                left_at__isnull=True,
-                exiled_at__isnull=True,
-            ).values_list("organization_id", flat=True)
-        )
+        member_org_ids = OrganizationMembership.objects.filter(
+            persona=persona,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+        ).values_list("organization_id", flat=True)
         allowed = set(member_org_ids) | set(overseen_org_ids(persona))
         org_id = kwargs.get("org_id")
         if org_id:

@@ -60,6 +60,48 @@ export function EntryFlourishOfferDialog({
     onOpenChange(next);
   }
 
+  const renderResonances = () => {
+    if (isLoading) {
+      return (
+        <p className="text-sm text-muted-foreground" data-testid="entry-flourish-loading">
+          Loading resonances…
+        </p>
+      );
+    }
+    if (resonances.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground" data-testid="entry-flourish-empty">
+          You have no claimed resonances to declare.
+        </p>
+      );
+    }
+    return (
+      <div
+        className="flex flex-wrap gap-2 rounded-md border border-emerald-500/30 bg-emerald-950/20 p-3"
+        data-testid="entry-flourish-resonance-picker"
+      >
+        {resonances.map((cr) => {
+          const isSelected = selectedResonanceId === cr.resonance;
+          return (
+            <button
+              key={cr.resonance}
+              type="button"
+              onClick={() => setSelectedResonanceId(cr.resonance)}
+              data-testid={`resonance-chip-${cr.resonance}`}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                isSelected
+                  ? 'border-emerald-500 bg-emerald-500/20 font-semibold text-emerald-300'
+                  : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500/60 hover:text-emerald-300'
+              }`}
+            >
+              {cr.resonance_name}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="border-emerald-500/60 shadow-[0_0_60px_-12px] shadow-emerald-500/50">
@@ -74,39 +116,7 @@ export function EntryFlourishOfferDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground" data-testid="entry-flourish-loading">
-            Loading resonances…
-          </p>
-        ) : resonances.length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="entry-flourish-empty">
-            You have no claimed resonances to declare.
-          </p>
-        ) : (
-          <div
-            className="flex flex-wrap gap-2 rounded-md border border-emerald-500/30 bg-emerald-950/20 p-3"
-            data-testid="entry-flourish-resonance-picker"
-          >
-            {resonances.map((cr) => {
-              const isSelected = selectedResonanceId === cr.resonance;
-              return (
-                <button
-                  key={cr.resonance}
-                  type="button"
-                  onClick={() => setSelectedResonanceId(cr.resonance)}
-                  data-testid={`resonance-chip-${cr.resonance}`}
-                  className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                    isSelected
-                      ? 'border-emerald-500 bg-emerald-500/20 font-semibold text-emerald-300'
-                      : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500/60 hover:text-emerald-300'
-                  }`}
-                >
-                  {cr.resonance_name}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {renderResonances()}
 
         {respond.isError ? (
           <div

@@ -48,6 +48,15 @@ def name_culture_for_room(room: RoomProfile) -> NameCulture | None:
     return NameCulture.objects.filter(area__isnull=True, society__isnull=True).first()
 
 
+def _surname_for(family, culture) -> str:
+    """A family name if the NPC has one, else a culturally-weighted draw, else nothing."""
+    if family is not None:
+        return family.name
+    if culture:
+        return _weighted_value(culture, NamePart.SURNAME)
+    return ""
+
+
 def _weighted_value(culture: NameCulture, part: str) -> str:
     entries = list(NameCultureEntry.objects.filter(culture=culture, part=part))
     if not entries:
@@ -70,11 +79,7 @@ def generate_person_name(
     given = _weighted_value(culture, NamePart.GIVEN) if culture else ""
     if not given:
         given = "Sojourner"  # PLACEHOLDER: unseeded shard fallback
-    surname = (
-        family.name
-        if family is not None
-        else (_weighted_value(culture, NamePart.SURNAME) if culture else "")
-    )
+    surname = _surname_for(family, culture)
     return f"{given} {surname}".strip()
 
 

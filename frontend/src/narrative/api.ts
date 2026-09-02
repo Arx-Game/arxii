@@ -7,7 +7,7 @@
  * Uses apiFetch from @/evennia_replacements/api and BASE_URL = '/api/narrative'.
  */
 
-import { apiFetch } from '@/evennia_replacements/api';
+import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import type {
   BroadcastGemitBody,
   Gemit,
@@ -34,7 +34,7 @@ export async function getMyMessages(params?: MyMessagesQueryParams): Promise<Pag
   }
   if (params?.page) search.set('page', String(params.page));
   const qs = search.toString();
-  const res = await apiFetch(`${BASE_URL}/my-messages/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${BASE_URL}/my-messages/`, qs));
   if (!res.ok) {
     throw new Error('Failed to load narrative messages');
   }
@@ -67,7 +67,7 @@ export async function getGemits(params?: GemitListParams): Promise<PaginatedGemi
     search.set('related_story', String(params.related_story));
   if (params?.page !== undefined) search.set('page', String(params.page));
   const qs = search.toString();
-  const res = await apiFetch(`${BASE_URL}/gemits/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${BASE_URL}/gemits/`, qs));
   if (!res.ok) {
     throw new Error('Failed to load gemits');
   }

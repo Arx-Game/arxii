@@ -674,7 +674,7 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
 def _expire_each(beats: list[Beat], *, now: datetime) -> int:
     """Expire every beat in ``beats`` in its own savepoint; count outcomes that changed.
 
-    Log-and-continue (ADR-0255): one beat's failure never aborts the
+    Log-and-continue (ADR-0256): one beat's failure never aborts the
     sweep or the request that triggered a lazy expiry.
     """
     count = 0

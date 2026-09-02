@@ -2,6 +2,15 @@ import React, { useMemo } from 'react';
 
 import { type Segment, parseFormattedContent } from '@/lib/formatParser';
 
+/*
+ * The index IS the identity of a segment here, not a fallback key.
+ *
+ * Segments are parsed positionally out of `content`, and the whole list is
+ * rebuilt whenever that string changes, so a segment cannot move relative to its
+ * neighbours and none of them holds state. A key built from the segment text
+ * would be strictly worse: repeated words would collide.
+ */
+
 interface FormattedContentProps {
   content: string;
   className?: string;

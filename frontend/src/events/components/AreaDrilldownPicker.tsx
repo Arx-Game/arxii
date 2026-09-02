@@ -84,6 +84,65 @@ export function AreaDrilldownPicker({ value, onChange }: AreaDrilldownPickerProp
   const isLoading = areasLoading || (currentParentId != null && roomsLoading);
   const isError = areasError || roomsError;
 
+  const renderAreas = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (isError) {
+      return (
+        <p className="px-3 py-4 text-center text-sm text-muted-foreground">Failed to load areas.</p>
+      );
+    }
+    if (!hasAreas && !hasRooms) {
+      return (
+        <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+          No areas or rooms found.
+        </p>
+      );
+    }
+    return (
+      <>
+        {/* Child areas */}
+        {areas.map((area) => (
+          <button
+            key={area.id}
+            type="button"
+            onClick={() => drillInto(area)}
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
+          >
+            <div>
+              <span className="font-medium">{area.name}</span>
+              <span className="ml-2 text-xs text-muted-foreground">{area.level_display}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              {area.children_count > 0 && <span>{area.children_count}</span>}
+              <ChevronRight className="h-4 w-4" />
+            </div>
+          </button>
+        ))}
+        {/* Rooms in current area */}
+        {hasRooms && hasAreas && (
+          <div className="border-t px-3 py-1 text-xs font-medium text-muted-foreground">Rooms</div>
+        )}
+        {rooms.map((room) => (
+          <button
+            key={room.id}
+            type="button"
+            onClick={() => selectRoom(room)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+          >
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <span>{room.name}</span>
+          </button>
+        ))}
+      </>
+    );
+  };
+
   return (
     <div className="rounded-md border">
       {/* Breadcrumbs */}
@@ -116,59 +175,7 @@ export function AreaDrilldownPicker({ value, onChange }: AreaDrilldownPickerProp
       )}
 
       {/* Content */}
-      <div className="max-h-64 overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : isError ? (
-          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-            Failed to load areas.
-          </p>
-        ) : !hasAreas && !hasRooms ? (
-          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-            No areas or rooms found.
-          </p>
-        ) : (
-          <>
-            {/* Child areas */}
-            {areas.map((area) => (
-              <button
-                key={area.id}
-                type="button"
-                onClick={() => drillInto(area)}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-              >
-                <div>
-                  <span className="font-medium">{area.name}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">{area.level_display}</span>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  {area.children_count > 0 && <span>{area.children_count}</span>}
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-              </button>
-            ))}
-            {/* Rooms in current area */}
-            {hasRooms && hasAreas && (
-              <div className="border-t px-3 py-1 text-xs font-medium text-muted-foreground">
-                Rooms
-              </div>
-            )}
-            {rooms.map((room) => (
-              <button
-                key={room.id}
-                type="button"
-                onClick={() => selectRoom(room)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-              >
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span>{room.name}</span>
-              </button>
-            ))}
-          </>
-        )}
-      </div>
+      <div className="max-h-64 overflow-y-auto">{renderAreas()}</div>
     </div>
   );
 }

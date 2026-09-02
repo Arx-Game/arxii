@@ -13,7 +13,7 @@ export function Breadcrumb({ items }: BreadcrumbProps) {
   return (
     <div className="flex items-center gap-1 text-sm text-muted-foreground">
       {items.map((item, index) => (
-        <span key={index} className="flex items-center gap-1">
+        <span key={item.label} className="flex items-center gap-1">
           {index > 0 && <ChevronRight className="h-3 w-3" />}
           {item.onClick ? (
             <button onClick={item.onClick} className="hover:text-foreground hover:underline">

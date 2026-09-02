@@ -55,6 +55,39 @@ export function MessagesSection() {
   const totalCount = data?.count ?? 0;
   const hasMore = data?.next !== null && data?.next !== undefined;
 
+  const renderMessages = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <MessageRowSkeleton key={i} />
+          ))}
+        </div>
+      );
+    }
+    if (results.length === 0) {
+      return (
+        <p className="py-8 text-center text-muted-foreground">
+          No messages yet. Narrative messages from your GM will appear here.
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {results.map((delivery) => (
+          <MessageRow key={delivery.id} delivery={delivery} />
+        ))}
+        {hasMore && (
+          <div className="mt-4 flex justify-center">
+            <Button variant="outline" onClick={() => setPage((p) => p + 1)}>
+              Load more ({totalCount - results.length} remaining)
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <section aria-labelledby="messages-section-heading">
       <div className="mb-4 flex items-center justify-between">
@@ -81,30 +114,7 @@ export function MessagesSection() {
 
         {FILTER_TABS.map((tab) => (
           <TabsContent key={tab.value} value={tab.value}>
-            {isLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <MessageRowSkeleton key={i} />
-                ))}
-              </div>
-            ) : results.length === 0 ? (
-              <p className="py-8 text-center text-muted-foreground">
-                No messages yet. Narrative messages from your GM will appear here.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {results.map((delivery) => (
-                  <MessageRow key={delivery.id} delivery={delivery} />
-                ))}
-                {hasMore && (
-                  <div className="mt-4 flex justify-center">
-                    <Button variant="outline" onClick={() => setPage((p) => p + 1)}>
-                      Load more ({totalCount - results.length} remaining)
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+            {renderMessages()}
           </TabsContent>
         ))}
       </Tabs>

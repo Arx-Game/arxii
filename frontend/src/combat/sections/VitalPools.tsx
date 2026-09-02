@@ -92,6 +92,16 @@ export function VitalPools({
     { key: 'mental', label: 'Mental' },
   ];
 
+  const renderAnima = () => {
+    if (!animaLoading && animaCurrent !== null && animaMaximum !== null) {
+      return `${animaCurrent} / ${animaMaximum}`;
+    }
+    if (animaLoading) {
+      return '…';
+    }
+    return '-';
+  };
+
   return (
     <div className="rounded-md border border-border bg-card" data-testid="vital-pools-section">
       {/* Section header */}
@@ -131,13 +141,7 @@ export function VitalPools({
           {/* Anima */}
           <StatBar
             label="Anima"
-            valueText={
-              !animaLoading && animaCurrent !== null && animaMaximum !== null
-                ? `${animaCurrent} / ${animaMaximum}`
-                : animaLoading
-                  ? '…'
-                  : '-'
-            }
+            valueText={renderAnima()}
             percent={
               animaCurrent !== null && animaMaximum !== null && animaMaximum > 0
                 ? (animaCurrent / animaMaximum) * 100

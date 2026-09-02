@@ -42,6 +42,22 @@ function MuteRow({ mute }: { mute: Mute }) {
 export function MutesSettingsPage() {
   const { data, isLoading } = useMutes();
   const mutes = data?.results ?? [];
+  const renderMutes = () => {
+    if (isLoading) {
+      return <Skeleton className="h-20 w-full" />;
+    }
+    if (mutes.length === 0) {
+      return <p className="text-sm text-muted-foreground">You haven't muted anyone.</p>;
+    }
+    return (
+      <div className="space-y-3">
+        {mutes.map((mute) => (
+          <MuteRow key={mute.id} mute={mute} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <ErrorBoundary>
       <div className="space-y-4">
@@ -51,17 +67,7 @@ export function MutesSettingsPage() {
             Characters you've quietly filtered from your own feed. They are never told.
           </p>
         </div>
-        {isLoading ? (
-          <Skeleton className="h-20 w-full" />
-        ) : mutes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">You haven't muted anyone.</p>
-        ) : (
-          <div className="space-y-3">
-            {mutes.map((mute) => (
-              <MuteRow key={mute.id} mute={mute} />
-            ))}
-          </div>
-        )}
+        {renderMutes()}
       </div>
     </ErrorBoundary>
   );

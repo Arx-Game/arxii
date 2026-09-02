@@ -134,6 +134,14 @@ export function countUnread(
   }).length;
 }
 
+/** Which channel a thread key names. */
+function channelKind(key: string): 'room' | 'place' | 'whisper' | 'target' {
+  if (key === 'room') return 'room';
+  if (key.startsWith('place:')) return 'place';
+  if (key.startsWith('whisper:')) return 'whisper';
+  return 'target';
+}
+
 export function useThreading(
   interactions: Interaction[],
   roomName: string,
@@ -158,14 +166,7 @@ export function useThreading(
     }
     const threadList = [...groups.entries()]
       .map(([key, threadInteractions]) => {
-        const type: Thread['type'] =
-          key === 'room'
-            ? 'room'
-            : key.startsWith('place:')
-              ? 'place'
-              : key.startsWith('whisper:')
-                ? 'whisper'
-                : 'target';
+        const type: Thread['type'] = channelKind(key);
         return {
           key,
           type,

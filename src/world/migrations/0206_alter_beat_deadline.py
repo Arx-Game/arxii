@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0204_alter_legendlevelcalibration_options_legendhonor"),
-    ]
+    dependencies = [("arxii", "0205_conditioninstance_soulfray_consented")]
 
     operations = [
         migrations.AlterField(

@@ -157,6 +157,13 @@ function NodeView({
   );
 }
 
+/** Which boolean operator a filter node is, read off its shape. */
+function operatorOf(value: FilterNode): 'and' | 'or' | 'not' {
+  if (isAnd(value)) return 'and';
+  if ('or' in value) return 'or';
+  return 'not';
+}
+
 function GroupView({
   value,
   onChange,
@@ -172,7 +179,7 @@ function GroupView({
   depth: number;
   builderId: string;
 }) {
-  const op: 'and' | 'or' | 'not' = isAnd(value) ? 'and' : 'or' in value ? 'or' : 'not';
+  const op: 'and' | 'or' | 'not' = operatorOf(value);
   const children = childrenOf(value);
 
   const setOp = (nextOp: 'and' | 'or' | 'not') => {

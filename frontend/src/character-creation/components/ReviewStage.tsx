@@ -54,7 +54,7 @@ import {
 } from '../queries';
 import type { ApplicationStatus, CharacterDraft } from '../types';
 import { Stage, STAGE_LABELS } from '../types';
-import { statusLabel, statusVariant } from '../utils';
+import { statusLabel, statusVariant, composeFullName } from '../utils';
 
 interface ReviewStageProps {
   draft: CharacterDraft;
@@ -95,11 +95,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const draftData = draft.draft_data;
   const familyName =
     draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
-  const fullName = draftData.first_name
-    ? familyName
-      ? `${draftData.first_name} ${familyName}`
-      : draftData.first_name
-    : 'Unnamed Character';
+  const fullName = composeFullName(draftData.first_name, familyName, 'Unnamed Character');
 
   const appStatus = application.data?.status ?? null;
   const hasApplication = application.data != null;

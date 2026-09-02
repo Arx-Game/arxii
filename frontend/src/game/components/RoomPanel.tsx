@@ -148,6 +148,46 @@ export function RoomPanel({
     send(character, cmd);
   };
 
+  // Owner and tenant get different affordances here, and a visitor gets none.
+  const renderTenancyAction = (charId: number) => {
+    if (room.is_owner && forRoom.data?.building_id != null) {
+      return (
+        <div className="border-b p-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setBuilderOpen(true)}
+          >
+            Manage Building
+          </Button>
+          <BuildingBuilderDialog
+            buildingId={forRoom.data.building_id}
+            characterId={charId}
+            open={builderOpen}
+            onOpenChange={setBuilderOpen}
+          />
+        </div>
+      );
+    }
+    if (forRoom.data?.is_tenant && !forRoom.data.is_primary_home_here) {
+      return (
+        <div className="border-b p-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={setHome.isPending}
+            onClick={() => setHome.mutate()}
+          >
+            Set as Home
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="flex flex-col gap-0">
       <RoomHeader
@@ -186,37 +226,7 @@ export function RoomPanel({
         </Dialog>
       )}
 
-      {characterId != null &&
-        (room.is_owner && forRoom.data?.building_id != null ? (
-          <div className="border-b p-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => setBuilderOpen(true)}
-            >
-              Manage Building
-            </Button>
-            <BuildingBuilderDialog
-              buildingId={forRoom.data.building_id}
-              characterId={characterId}
-              open={builderOpen}
-              onOpenChange={setBuilderOpen}
-            />
-          </div>
-        ) : forRoom.data?.is_tenant && !forRoom.data.is_primary_home_here ? (
-          <div className="border-b p-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={setHome.isPending}
-              onClick={() => setHome.mutate()}
-            >
-              Set as Home
-            </Button>
-          </div>
-        ) : null)}
+      {characterId != null && renderTenancyAction(characterId)}
 
       {characterId != null && (forRoom.data?.is_tenant || forRoom.data?.is_owner) && (
         <RoomAuraPicker characterId={characterId} roomId={room.id} />

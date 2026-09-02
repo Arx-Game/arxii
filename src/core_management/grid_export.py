@@ -415,15 +415,11 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
     from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
     from world.travel.models import TravelHub  # noqa: PLC0415
 
-    travel_hubs = list(
-        TravelHub.objects.filter(room_profile_id__in=room_objectdb_ids, is_active=True)
-    )
-    functionaries = list(
-        Functionary.objects.filter(room_id__in=room_objectdb_ids, is_active=True).select_related(
-            "role"
-        )
-    )
-    feature_instances = list(
+    travel_hubs = TravelHub.objects.filter(room_profile_id__in=room_objectdb_ids, is_active=True)
+    functionaries = Functionary.objects.filter(
+        room_id__in=room_objectdb_ids, is_active=True
+    ).select_related("role")
+    feature_instances = (
         RoomFeatureInstance.objects.filter(room_profile_id__in=room_objectdb_ids)
         .active()
         .select_related("feature_kind")

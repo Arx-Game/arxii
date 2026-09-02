@@ -260,6 +260,22 @@ class CmdCombatArgResolutionTests(TestCase):
         cmd._subverb, cmd._rest = "interpose", ""
         self.assertEqual(cmd.resolve_action_args(), {"ally_participant_id": None})
 
+    def test_interpose_soulfray_token_sets_consent(self) -> None:
+        cmd = _make_cmd("interpose Kira with Aegis Field soulfray")
+        with (
+            patch.object(cmd, "_resolve_ally_pk", return_value=5),
+            patch.object(cmd, "_find_technique_id", return_value=7),
+        ):
+            kwargs = cmd._resolve_interpose_args("Kira with Aegis Field soulfray")
+        self.assertEqual(kwargs["ally_participant_id"], 5)
+        self.assertEqual(kwargs["technique_id"], 7)
+        self.assertTrue(kwargs["confirm_soulfray_risk"])
+
+    def test_interpose_without_token_has_no_consent_key(self) -> None:
+        cmd = _make_cmd("interpose")
+        kwargs = cmd._resolve_interpose_args("")
+        self.assertNotIn("confirm_soulfray_risk", kwargs)
+
     def test_combo_resolves_combo_kwarg(self) -> None:
         cmd = _make_cmd("combo Whirlwind")
         cmd._subverb, cmd._rest = "combo", "Whirlwind"

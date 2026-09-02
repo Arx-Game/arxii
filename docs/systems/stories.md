@@ -277,7 +277,7 @@ the beat's `expired_consequences` pool with every effect type except `LEGEND_AWA
 skipped (expiry earns no legend, ADR-0066), grades any open stakes LOSS, and closes the
 open `StakeContractActivation` - see [stakes.md](stakes.md). For a GROUP-scope story the
 credited participants are the GM table's current members (`GMTableMembership` rows with
-`left_at__isnull=True`), not whoever satisfied the predicate. See ADR-0255.
+`left_at__isnull=True`), not whoever satisfied the predicate. See ADR-0256.
 
 **Per-predicate config fields (exactly one set should be non-null per predicate type):**
 

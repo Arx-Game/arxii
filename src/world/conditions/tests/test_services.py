@@ -1921,6 +1921,16 @@ class BulkApplyConditionsTest(TestCase):
         assert remaining.count() == 1
         assert remaining.first().condition == fire
 
+    def test_bulk_apply_stamps_soulfray_consent(self) -> None:
+        target = CharacterSheetFactory().character
+        template = ConditionTemplateFactory()
+        results = bulk_apply_conditions(
+            [BulkConditionApplication(target=target, template=template)],
+            source_character=target,
+            soulfray_consented=True,
+        )
+        self.assertTrue(results[0].instance.soulfray_consented)
+
 
 class BulkApplyConditionsPerEntryTests(TestCase):
     """Verifies the per-entry severity/duration/stack_count signature."""

@@ -20,6 +20,7 @@ import { useForm } from 'react-hook-form';
 import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
 import { OriginStorySection } from './OriginStorySection';
+import { composeFullName } from '../utils';
 
 const NONE_VALUE = 'none';
 
@@ -92,11 +93,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
 
   const localFirstName = watch('first_name');
   const familyName = draft.family?.name ?? '';
-  const fullNamePreview = localFirstName
-    ? familyName
-      ? `${localFirstName} ${familyName}`
-      : localFirstName
-    : '';
+  const fullNamePreview = composeFullName(localFirstName, familyName, '');
 
   return (
     <motion.div
