@@ -217,6 +217,18 @@ class CombatEncounter(AbstractRound):
             "the objective (kind ENCOUNTER); otherwise nothing grades."
         ),
     )
+    scenario_deed = models.ForeignKey(
+        "arxii.MissionDeedRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="encounters",
+        help_text=(
+            "The pending scenario deed this fight resolves (#3565): an ENCOUNTER "
+            "option picked inside a story scenario. The ENCOUNTER_COMPLETED "
+            "handler grades the deed's option route, never a beat."
+        ),
+    )
 
     @cached_property
     def combat(self) -> "EncounterCombatHandler":

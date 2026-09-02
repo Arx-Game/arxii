@@ -25,6 +25,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.combat.constants import RiskLevel
 from world.contributors.models import CreditedContent
 from world.missions.constants import (
     LEGEND_RISK_FLOOR_TIER,
@@ -45,6 +46,7 @@ from world.missions.constants import (
     RewardGroupRule,
 )
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
+from world.stories.constants import BeatOutcome
 
 _PERSONA_MODEL_PATH = "arxii.Persona"
 _MISSION_OPTION_ROUTE_MODEL = "arxii.MissionOptionRoute"
@@ -621,6 +623,13 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="Spawned room description (authored prose).",
     )
+    encounter_risk_level = models.CharField(
+        max_length=20,
+        choices=RiskLevel.choices,
+        blank=True,
+        default="",
+        help_text="ENCOUNTER options only: the spawned encounter's risk level (#3565).",
+    )
 
     def _challenge_source_errors(self) -> dict[str, str]:
         """CHALLENGE-sourced options carry a challenge and forbid authored_* fields.
@@ -688,6 +697,32 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["required_act"] = durable_act_error
         return errors
 
+    def _encounter_errors(self) -> dict[str, str]:
+        """ENCOUNTER: requires risk level + AUTHORED source; forbids check/branch fields.
+
+        One fight resolves the whole node, so ENCOUNTER cannot live on a JOINT
+        node (#3565) — there is no per-participant tier to combine.
+        """
+        errors: dict[str, str] = {}
+        if not self.encounter_risk_level:
+            errors["encounter_risk_level"] = "Required for ENCOUNTER options."
+        if self.authored_check_type_id is not None:
+            errors["authored_check_type"] = "Must be null for ENCOUNTER options."
+        if self.authored_base_risk:
+            errors["authored_base_risk"] = "Must be 0 for ENCOUNTER options."
+        if self.branch_target_id is not None:
+            errors["branch_target"] = "Must be null for ENCOUNTER options."
+        if self.challenge_id is not None:
+            errors["challenge"] = "Must be null for ENCOUNTER options."
+        if self.source_kind != OptionSource.AUTHORED:
+            errors["source_kind"] = "ENCOUNTER options must be AUTHORED."
+        if self.node_id is not None and self.node.conflict_mode == ConflictMode.JOINT:
+            errors["option_kind"] = (
+                "ENCOUNTER options cannot live on a JOINT node: one fight resolves "
+                "the node for the whole party."
+            )
+        return errors
+
     def _kind_errors(self) -> dict[str, str]:
         """BRANCH/EXTERNAL_ACT forbid check fields; AUTHORED+CHECK requires a check type."""
         errors: dict[str, str] = {}
@@ -704,8 +739,12 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["authored_check_type"] = "Required for AUTHORED options that resolve a CHECK."
         elif self.option_kind == OptionKind.EXTERNAL_ACT:
             errors.update(self._external_act_errors())
+        elif self.option_kind == OptionKind.ENCOUNTER:
+            errors.update(self._encounter_errors())
         if self.option_kind != OptionKind.EXTERNAL_ACT and self.required_act:
             errors["required_act"] = "Only EXTERNAL_ACT options may set required_act."
+        if self.option_kind != OptionKind.ENCOUNTER and self.encounter_risk_level:
+            errors["encounter_risk_level"] = "Only ENCOUNTER options may set encounter_risk_level."
         return errors
 
     def clean(self) -> None:
@@ -744,6 +783,33 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.node}#{self.order}"
+
+
+class MissionOptionOpponentLine(SharedMemoryModel):
+    """An authored opponent (creature x count x position hint) an ENCOUNTER option spawns.
+
+    The BeatOpponentLine shape keyed on a scenario option instead of a beat
+    (#3565): resolved by name against the run-time room's Position set at spawn
+    time, exactly like the beat form.
+    """
+
+    option = models.ForeignKey(
+        MissionOption, on_delete=models.CASCADE, related_name="opponent_lines"
+    )
+    creature_template = models.ForeignKey(
+        "arxii.CreatureTemplate",
+        on_delete=models.PROTECT,
+        related_name="mission_option_opponent_lines",
+    )
+    count = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
+    position_name = models.CharField(max_length=100, blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["option", "order"]
+
+    def __str__(self) -> str:
+        return f"{self.count}x {self.creature_template_id} on option {self.option_id}"
 
 
 class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -830,6 +896,20 @@ class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "automatically at the model layer — service/serializer responsibility."
         ),
     )
+    beat_outcome = models.CharField(
+        max_length=20,
+        choices=[
+            (BeatOutcome.SUCCESS.value, "Success"),
+            (BeatOutcome.FAILURE.value, "Failure"),
+        ],
+        blank=True,
+        default="",
+        help_text=(
+            "Terminal routes only (#3565, closes #3560): what the linked story "
+            "beat records when the run ends here. Blank = derive from the tier's "
+            "success_level, or SUCCESS for a tier-less terminal."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -846,6 +926,18 @@ class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 name="mor_flag_partial_idx",
             ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.beat_outcome and (self.target_node_id is not None or self.is_random_set):
+            raise ValidationError(
+                {
+                    "beat_outcome": (
+                        "Only a terminal route (no target node, not a random set) "
+                        "may set beat_outcome."
+                    )
+                }
+            )
 
     def __str__(self) -> str:
         tier = self.outcome_tier.name if self.outcome_tier_id else "branch"

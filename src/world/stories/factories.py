@@ -61,6 +61,7 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryProtectedSubject,
+    StoryScenario,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -393,6 +394,16 @@ class BeatFactory(factory_django.DjangoModelFactory):
     referenced_chapter = None
     referenced_episode = None
     required_points = None
+
+
+class StoryScenarioFactory(factory_django.DjangoModelFactory):
+    """Factory for StoryScenario, the story-side link to its scenario graph (#3565)."""
+
+    class Meta:
+        model = StoryScenario
+
+    story = factory.SubFactory(StoryFactory)
+    template = factory.SubFactory("world.missions.factories.MissionTemplateFactory")
 
 
 class BeatOpponentLineFactory(factory_django.DjangoModelFactory):

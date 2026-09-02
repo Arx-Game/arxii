@@ -844,7 +844,7 @@ class Beat(SharedMemoryModel):
     predicate_type = models.CharField(
         max_length=40,
         choices=BeatPredicateType.choices,
-        default=BeatPredicateType.GM_MARKED,
+        default=BeatPredicateType.OUTCOME_TIER,
     )
     outcome = models.CharField(
         max_length=20,
@@ -857,6 +857,16 @@ class Beat(SharedMemoryModel):
             "one progression trail, so this field represents the whole story's state, "
             "not per-character state. Historical per-character contributions live in "
             "BeatCompletion."
+        ),
+    )
+    outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "MissionOption.key of the scenario option that ended the run which "
+            "resolved this beat (#3565); denormalised from the BeatCompletion. "
+            "Blank for combat, battle, decisive-check and GM-marked completions."
         ),
     )
     visibility = models.CharField(
@@ -1170,6 +1180,30 @@ class Beat(SharedMemoryModel):
         return f"Beat({self.predicate_type}) on {self.episode.title}"
 
 
+class StoryScenario(SharedMemoryModel):
+    """A scenario graph owned by a story (#3565).
+
+    The story's Lead GM authors the linked MissionTemplate as the body of one of
+    their beats. The link lives on the stories side so missions never imports
+    Story (ADR-0010): ownership is read through ``template.story_scenario``.
+    A story-owned template is created RESTRICTED with an empty availability
+    rule and zero draw weight, and the board / opportunity querysets exclude
+    it, so it never appears as a quest.
+    """
+
+    story = models.ForeignKey("arxii.Story", on_delete=models.CASCADE, related_name="scenarios")
+    template = models.OneToOneField(
+        "arxii.MissionTemplate", on_delete=models.CASCADE, related_name="story_scenario"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["story", "pk"]
+
+    def __str__(self) -> str:
+        return f"Scenario {self.template_id} of Story {self.story_id}"
+
+
 class BeatOpponentLine(SharedMemoryModel):
     """An authored opponent (creature x count x position hint) to spawn when a beat runs.
 
@@ -1353,6 +1387,15 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         default="",
         help_text="Required StakeOutcome column; only with stake set.",
     )
+    required_outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "Beat-level rows only: also require Beat.outcome_key to equal this "
+            "MissionOption.key (#3565). Blank = any key."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1380,6 +1423,9 @@ class TransitionRequiredOutcome(SharedMemoryModel):
                 raise ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
                 )
+            if self.required_outcome_key:
+                msg = "Only beat-level routing rows may require an option key."
+                raise ValidationError({"required_outcome_key": msg})
         else:
             if not self.required_outcome:
                 raise ValidationError({"required_outcome": "Required when stake is not set."})
@@ -1527,6 +1573,12 @@ class BeatCompletion(SharedMemoryModel):
     outcome = models.CharField(
         max_length=20,
         choices=BeatOutcome.choices,
+    )
+    outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="The scenario option key that resolved the beat, if any (#3565).",
     )
     outcome_tier = models.ForeignKey(
         "arxii.CheckOutcome",
