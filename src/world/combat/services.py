@@ -898,6 +898,7 @@ class CombatTechniqueResolver:
             targets_by_kind=targets_by_kind,
             source_character=caster_od,
             position_params=position_params or None,
+            soulfray_consented=self.action.confirm_soulfray_risk,
         )
         # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
         # through the SAME shared seam, over the same resolved targets. No-op when the
@@ -914,6 +915,7 @@ class CombatTechniqueResolver:
                 eff_intensity=eff_intensity,
                 targets_by_kind=targets_by_kind,
                 source_character=caster_od,
+                soulfray_consented=self.action.confirm_soulfray_risk,
             )
         )
         # Technique treatment (#2668): perform bounded-mend treatments on resolved

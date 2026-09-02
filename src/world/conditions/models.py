@@ -1367,6 +1367,14 @@ class ConditionInstance(SharedMemoryModel):
         blank=True,
         help_text="Freeform description of source (e.g., 'poisoned wine')",
     )
+    soulfray_consented = models.BooleanField(
+        default=False,
+        help_text=(
+            "The caster consented, at cast time, to keep this condition's reactive cost "
+            "and upkeep firing past zero anima at the price of Soulfray (#3573). Read by "
+            "_try_spend_reactive and drain_reactive_upkeep; never changes after creation."
+        ),
+    )
 
     # === State Flags ===
     is_suppressed = models.BooleanField(

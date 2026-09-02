@@ -2458,8 +2458,10 @@
   - participant -> combat.CombatParticipant [FK]
 
 ### Service Functions
+- `accumulate_soulfray(*, character: 'ObjectDB', anima: 'CharacterAnima', deficit: 'int', soulfray_config: 'SoulfrayConfig | None', check_result: 'CheckResult | None', lethal: 'bool' = True) -> 'SoulfrayResult | None' - Accumulate Soulfray severity from the pool state and apply stage consequences.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' - Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' - Idempotently record that a character acknowledged the encounter's risk (#777).`
+- `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
@@ -2484,7 +2486,7 @@
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a covering maneuver for an ally -- passives-only, auto-ready.`
 - `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' - Declare intent to flee -- passives-only maneuver, auto-ready.`
-- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None) -> 'CombatRoundAction' - Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None, *, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare an interposing maneuver — passives-only, auto-ready.`
 - `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' - Declare a joust — a mounted, lance-armed opposed pass (#1843).`
 - `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' - Declare a mark — a directed, round-scoped combatant reference (#2664).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
@@ -2492,6 +2494,7 @@
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
+- `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' - Deduct anima from character, returning the overburn deficit.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
 - `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
@@ -2870,7 +2873,7 @@
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None - On ascending stage changes, apply the stage's on_entry_conditions.`
 - `attempt_break_free(instance: world.conditions.models.ConditionInstance, *, extra_modifiers: int = 0, helper_bonus: int = 0, in_combat_tick: bool = False, level_override: int | None = None) -> world.conditions.types.BreakFreeResult - Resolve a single break-free attempt against an applied condition.`
 - `batch_chronic_effect_tick() -> world.conditions.types.ChronicTickSummary - Scheduler entry point. Advance long-term (chronic) DoT by one tick.`
-- `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
+- `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', soulfray_consented: bool = False) -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
@@ -3363,6 +3366,7 @@
 - `collect_and_distribute(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' - One active collection of a personal asset's accumulated income (#2294).`
 - `collect_org_income(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `count_unredeemed_favor_tokens(*, sheet: 'CharacterSheet', org: 'Organization') -> 'int' - How many of ``org``'s unredeemed Golden Hares ``sheet`` holds (#3466).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' - Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' - Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
 - `distribute_material_allowance(*, organization: 'Organization', landed_by_category: 'list[tuple[MaterialCategory, int]]') -> 'MaterialAllowanceResult' - Auto-split a share of newly landed materials among active piloted members (#2540 slice 2).`
@@ -4073,6 +4077,7 @@
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
 - `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' - The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `has_build_warrant(account: 'AccountDB | None', *, area: 'Area', level: 'int') -> 'bool' - Whether ``account`` may build-author at ``level`` within ``area``'s subtree.`
+- `has_room_budget_capacity(account: 'AccountDB | None', *, area: 'Area', rooms_needed: 'int' = 1) -> 'bool' - Whether digging ``rooms_needed`` more room(s) under ``area`` fits some`
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' - ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' - Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' - Soft-leave a membership. No-op if already left.`
@@ -4916,7 +4921,7 @@
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' - Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' - Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' - Return ALL LocationOwnership rows (active and ended) for a`
-- `resolve_area_art(room_profile: 'RoomProfile | None') -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
+- `resolve_area_art(room_profile: 'RoomProfile | None', *, thumbnail_url: 'object' = <object object>) -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
 - `room_discomfort(room: 'DefaultObject') -> 'int' - Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' - The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' - Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
@@ -9244,7 +9249,7 @@
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a solo legend deed, optionally anchored to a shared event's ceiling.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' - Sum the legend this character earned that was credited to covenants where they held ``role``.`

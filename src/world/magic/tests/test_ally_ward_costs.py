@@ -22,9 +22,14 @@ from world.combat.services import drain_reactive_upkeep
 from world.conditions.constants import FORCE_FIELD_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory
 from world.conditions.models import ConditionInstance, ConditionTemplate
-from world.magic.effect_palette_content import ensure_force_field_content
+from world.magic.effect_palette_content import (
+    FORCE_FIELD_TECHNIQUE_NAME,
+    ensure_force_field_content,
+)
 from world.magic.factories import CharacterAnimaFactory
+from world.magic.models import Technique
 from world.magic.models.anima import CharacterAnima
+from world.magic.services.condition_application import apply_technique_conditions
 from world.magic.services.effect_handlers import absorb_pool
 
 
@@ -125,3 +130,25 @@ class AllyWardReactiveCostTests(TestCase):
             10,
             "the ally bearing the ward should NOT be debited for a caster-sourced condition",
         )
+
+
+class WardConsentStampTests(TestCase):
+    """ConditionInstance.soulfray_consented is stamped from the cast (#3573)."""
+
+    def test_apply_technique_conditions_stamps_consent_on_the_ward(self) -> None:
+        ensure_force_field_content()
+        technique = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        caster = CharacterSheetFactory().character
+        ally = CharacterSheetFactory().character
+        row = technique.condition_applications.get()
+        results = apply_technique_conditions(
+            technique=technique,
+            success_level=2,
+            eff_intensity=5,
+            targets_by_kind={row.target_kind: [ally]},
+            source_character=caster,
+            soulfray_consented=True,
+        )
+        instance = ConditionInstance.objects.get(target=ally, condition=row.condition)
+        self.assertTrue(instance.soulfray_consented)
+        self.assertEqual(len(results), 1)

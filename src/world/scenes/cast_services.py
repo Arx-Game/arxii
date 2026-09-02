@@ -516,6 +516,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         targets_by_kind=targets_by_kind,
         source_character=character,
         position_params=position_params,
+        soulfray_consented=confirm_soulfray_risk,
     )
     # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
     # through the SAME shared seam, over the same resolved targets. No-op when the
@@ -527,6 +528,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         eff_intensity=eff_intensity,
         targets_by_kind=targets_by_kind,
         source_character=character,
+        soulfray_consented=confirm_soulfray_risk,
     )
     # Technique treatment (#2668): perform bounded-mend treatments on resolved
     # targets. Fires BEFORE remove_technique_conditions so the wound condition
