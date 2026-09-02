@@ -54,7 +54,7 @@ The backbone ran end-to-end at first with every richer beat resolving via
 placeholder GM-mark; that placeholder default is gone as of #3565 below.
 Sequenced follow-ups (each its own brainstorm):
 (1) Mission/Challenge engine via existing `resolve_challenge`,
-(2) ✅ Situation/Encounter resolution + Sessions — **session prep on story
+(2) ✅ Situation/Encounter resolution + Sessions - **session prep on story
 beats shipped (#3425)**: `BeatOpponentLine`/`BeatStagedTemplate` let a GM
 author an ENCOUNTER beat's opponent roster or a SITUATION beat's staged
 situation/challenge templates ahead of the table; `RunBeatAction`
@@ -82,7 +82,7 @@ promotion is staff-only for now),
 (5) covenant entity.
 
 The Phase 1–5 record below remains accurate as a description of what is in
-the code — it is the substrate this redesign reshapes. **Exception:** the
+the code - it is the substrate this redesign reshapes. **Exception:** the
 Transition `mode` field and `AmbiguousTransitionError` it describes were
 removed by #3565 (see "Completed by #3565" above and ADR-0258) - routing is
 now fully automatic, the lowest `(order, pk)` eligible transition fires, and
@@ -115,14 +115,14 @@ The task-gated episode progression engine is fully implemented in `src/world/sto
 - **Era model** — temporal metaplot era tag ("Season N" in player-facing UI); partial unique constraint enforces at most one ACTIVE era at a time; `activated_at`/`concluded_at` timestamps; admin-managed
 - **Story extended** — added `scope` (CHARACTER / GROUP / GLOBAL), `character_sheet` FK, `created_in_era` FK
 - **Chapter / Episode hierarchy preserved** — `Episode.connection_to_next` and `Episode.connection_summary` removed (semantics moved to Transition)
-- **Transition** — first-class directed edge between episodes: `source_episode` FK, `target_episode` nullable FK, ~~`mode` (AUTO / GM_CHOICE)~~ (field removed by #3565: routing is now fully automatic, the lowest `(order, pk)` eligible edge always fires), `connection_type` (THEREFORE / BUT), `order` for tie-breaking
+- **Transition** - first-class directed edge between episodes: `source_episode` FK, `target_episode` nullable FK, ~~`mode` (AUTO / GM_CHOICE)~~ (field removed by #3565: routing is now fully automatic, the lowest `(order, pk)` eligible edge always fires), `connection_type` (THEREFORE / BUT), `order` for tie-breaking
 - **EpisodeProgressionRequirement** — a beat that must reach `required_outcome` before any outbound transition is eligible (episode-level gate; AND semantics)
 - **TransitionRequiredOutcome** — per-transition routing predicate; AND across all rows; OR expressed by multiple transitions
 - **Beat** — flat predicate discriminator model with `outcome`, visibility tiers, deadline scaffolding. Phase 1 predicate types: `GM_MARKED`, `CHARACTER_LEVEL_AT_LEAST`
 - **BeatCompletion** — append-only audit ledger (beat, character_sheet, outcome, era, gm_notes)
 - **EpisodeResolution** — append-only audit ledger (episode, character_sheet, chosen_transition, era, gm_notes)
 - **StoryProgress** — per-character pointer into a CHARACTER-scope story's DAG
-- **Typed exception hierarchy** — `StoryError` base; concrete: `BeatNotResolvableError`, `NoEligibleTransitionError`, ~~`AmbiguousTransitionError`~~ (removed by #3565 alongside `TransitionMode.GM_CHOICE`), `ProgressionRequirementNotMetError`
+- **Typed exception hierarchy** - `StoryError` base; concrete: `BeatNotResolvableError`, `NoEligibleTransitionError`, ~~`AmbiguousTransitionError`~~ (removed by #3565 alongside `TransitionMode.GM_CHOICE`), `ProgressionRequirementNotMetError`
 - **Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `get_eligible_transitions`, `resolve_episode`
 - **End-to-end integration test** — Crucible "Who Am I?" scenario. 121 stories tests pass; 626 tests across 5-app regression on fresh DB.
 
@@ -170,7 +170,7 @@ All Phase 2 model/service/API infrastructure is implemented. 510 stories tests p
 
 **Wave 7 — SessionRequest + Events bridge:**
 - `SessionRequest(episode, status, event, open_to_any_gm, assigned_gm, initiated_by_account, notes)` model
-- `maybe_create_session_request(progress)` — idempotent; called from write-side services; creates OPEN request when episode has eligible transitions AND GM involvement is required (as of #3565: an UNSATISFIED SITUATION/ENCOUNTER-kind beat someone has to run face-to-face, or an UNSATISFIED GM_MARKED beat - the retired GM_CHOICE transition mode is no longer a reason)
+- `maybe_create_session_request(progress)` - idempotent; called from write-side services; creates OPEN request when episode has eligible transitions AND GM involvement is required (as of #3565: an UNSATISFIED SITUATION/ENCOUNTER-kind beat someone has to run face-to-face, or an UNSATISFIED GM_MARKED beat - the retired GM_CHOICE transition mode is no longer a reason)
 - `create_event_from_session_request(*, session_request, name, scheduled_real_time, host_persona, location_id, description, is_public)` — bridges to events system; transitions request to SCHEDULED
 - `cancel_session_request(*, session_request)` — OPEN → CANCELLED
 - `resolve_session_request(*, session_request)` — SCHEDULED → RESOLVED
@@ -195,7 +195,7 @@ All Phase 2 model/service/API infrastructure is implemented. 510 stories tests p
 - `compute_story_status_line(progress)` — service function producing human-readable status string for player dashboard
 
 **Wave 11 — Action endpoints:**
-- ~~`POST /api/stories/{pk}/resolve-episode/` — fire `resolve_episode` with optional `chosen_transition`~~ (moved to `POST /api/episodes/{pk}/resolve/` and lost `chosen_transition` by #3565 - routing is fully automatic)
+- ~~`POST /api/stories/{pk}/resolve-episode/` - fire `resolve_episode` with optional `chosen_transition`~~ (moved to `POST /api/episodes/{pk}/resolve/` and lost `chosen_transition` by #3565 - routing is fully automatic)
 - `POST /api/beats/{pk}/mark/` — `record_gm_marked_outcome` (GM-gated)
 - `POST /api/beats/{pk}/contribute/` — `record_aggregate_contribution` (participant-gated)
 - `POST /api/assistant-gm-claims/{pk}/approve/` / `reject/` / `complete/` — AGM claim lifecycle transitions

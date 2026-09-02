@@ -701,7 +701,7 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         """ENCOUNTER: requires risk level + AUTHORED source; forbids check/branch fields.
 
         One fight resolves the whole node, so ENCOUNTER cannot live on a JOINT
-        node (#3565) — there is no per-participant tier to combine.
+        node (#3565) - there is no per-participant tier to combine.
         """
         errors: dict[str, str] = {}
         if not self.encounter_risk_level:
