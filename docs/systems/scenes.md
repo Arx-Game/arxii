@@ -463,6 +463,17 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   - `protected_subjects` - active `StoryProtectedSubject` rows for the running beat's
     story, same scoping `stories.permissions.user_owns_or_leads_story` enforces
     (never widened - see `IsProtectedSubjectStoryOwnerOrStaff`'s "no carve-out" invariant)
+  - `stakes` (#3561) - gated the same as `internal_description`/`protected_subjects`
+    (story standing required): the running beat's `Stake` rows, each with
+    `id`/`player_summary`/`severity`/`subject_kind` and its fired `outcome`
+    (`{column, outcome_key, resolution_summary}`, or `null` while unresolved) -
+    lets the GM narrate what the machine decided without opening the editor.
+    Branch contents for an *unresolved* stake are not included; only what
+    already fired is shown
+  - `activation` (#3561) - same gate: the running beat's locked-contract state,
+    `{locked_at, effective_risk, is_ready}` or `null` if the beat has never
+    activated. Prefers the open activation, falling back to the most recent one
+    so a resolved contract still shows its lock instead of disappearing
   - `clue_placements` - the room's active `RoomClue` placements, staff-only
   - `participants` - characters currently present in the scene's room
     (location-derived, same room-contents read `Scene.has_character_present` uses)
@@ -471,7 +482,24 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   (`frontend/src/scenes/components/GMStoryRail.tsx`), mounted from `SceneDetailPage` as a
   `CombatRail`-pattern sibling whenever `scene.viewer_can_gm`; renders a "no beat running"
   hint when there's no running beat, and tolerates a denied per-participant
-  conditions/vitals fetch without breaking the rest of the rail.
+  conditions/vitals fetch without breaking the rest of the rail. **Stakes section (#3561):**
+  lists each stake's `player_summary`/severity and, once fired, its outcome column and
+  narrative summary, plus the activation strip (`locked_at`/`effective_risk`/`is_ready`)
+  when the beat has ever activated.
+- `GET /api/scenes/{id}/stakes-summary/` (#3561) - what the scene's running beat wagers,
+  for the party's opt-in prompt. `IsAuthenticated` + `ReadOnlyOrSceneParticipant` (the
+  same participant/staff floor `scenario`/`gm-rail` use). Composed read only - no models,
+  no writes, no migration: resolves `scene.running_beat` server-side and delegates to the
+  same `stakes_summary_for_beat` builder `GET /api/beats/{id}/stakes-summary/` uses (see
+  [stakes.md](stakes.md)'s "Opt-in & Visibility Surfaces" section), so it exists purely
+  because a player never receives the running beat's id from any scene payload
+  (`SceneListSerializer`/`SceneDetailSerializer` deliberately omit `running_beat`) - the
+  beat-scoped endpoint is unreachable without one. With no running beat, returns the same
+  shape with `declared_risk`/`effective_risk` null and an empty `stakes` list. Frontend:
+  `SceneHeader.tsx`'s `DeclaredRiskBadge` is a toggle button - clicking it opens "What is
+  wagered", a panel listing each stake's `player_summary` + severity label and the
+  effective risk (`data-testid="scene-header-stakes-panel"`); branch contents are never
+  part of the payload.
 
 **Filters:** `is_active`, `is_public`, `location`, `participant`, `status` (active/completed/upcoming), `gm`, `player`
 
@@ -684,6 +712,13 @@ badge, `data-testid="scene-header-risk-badge"`, copy `"<TIER> stakes"`. Tier map
 stakes tags were considered and rejected (2026-08-29 ruling) - stakes consent already happens at
 beat activation via the boundaries/stakes-contract flow, so a header-only read of authored data
 is the whole surface; no per-roll noise.
+
+**"What is wagered" panel (#3561).** The badge is now a toggle: clicking it opens a small
+panel (`data-testid="scene-header-stakes-panel"`) polling `GET /api/scenes/{id}/stakes-summary/`
+(see "API Endpoints" above) and listing each stake's `player_summary` + severity label plus
+the effective risk - the player-visible half of the contract, at the same opt-in moment
+[stakes.md](stakes.md)'s "Opt-in & Visibility Surfaces" section describes. Branch contents
+(what a WIN/LOSS/WITHDRAWAL actually does) are never part of the payload.
 
 ### Lifecycle Actions
 

@@ -37,6 +37,7 @@ import { EpisodeFormDialog } from './EpisodeFormDialog';
 import { BeatFormDialog } from './BeatFormDialog';
 import { TransitionFormDialog } from './TransitionFormDialog';
 import { MarkBeatDialog } from './MarkBeatDialog';
+import { StakesPanel } from './stakes/StakesPanel';
 
 // ---------------------------------------------------------------------------
 // Delete confirm helper
@@ -151,6 +152,7 @@ interface BeatRowAuthorProps {
 
 function BeatRowAuthor({ beat }: BeatRowAuthorProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [stakesExpanded, setStakesExpanded] = useState(false);
   const deleteMutation = useDeleteBeat();
 
   // Run-control (F2): GM-marked beats expose the existing MarkBeatDialog
@@ -170,35 +172,55 @@ function BeatRowAuthor({ beat }: BeatRowAuthorProps) {
   }
 
   return (
-    <li
-      className="flex items-center justify-between py-1 pl-8 text-xs"
-      data-testid="beat-row-author"
-    >
-      <span>
-        <span className="font-mono text-muted-foreground">#{beat.id}</span>{' '}
-        <span className="inline-block max-w-[200px] truncate align-bottom">
-          {beat.internal_description?.slice(0, 60) ?? '(no description)'}
+    <li data-testid="beat-row-author">
+      <div className="flex items-center justify-between py-1 pl-8 text-xs">
+        <span>
+          <span className="font-mono text-muted-foreground">#{beat.id}</span>{' '}
+          <span className="inline-block max-w-[200px] truncate align-bottom">
+            {beat.internal_description?.slice(0, 60) ?? '(no description)'}
+          </span>
+          <span className="ml-1 text-muted-foreground">({beat.predicate_type})</span>
+          {beat.risk && beat.risk !== 'none' && (
+            <Badge variant="outline" className="ml-2" data-testid="beat-risk-badge">
+              {beat.risk.charAt(0).toUpperCase() + beat.risk.slice(1)}
+            </Badge>
+          )}
         </span>
-        <span className="ml-1 text-muted-foreground">({beat.predicate_type})</span>
-        {beat.risk && beat.risk !== 'none' && (
-          <Badge variant="outline" className="ml-2" data-testid="beat-risk-badge">
-            {beat.risk.charAt(0).toUpperCase() + beat.risk.slice(1)}
-          </Badge>
-        )}
-      </span>
-      <div className="flex items-center gap-1">
-        {canMark && <MarkBeatDialog beat={beat} />}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0"
-          onClick={() => setEditOpen(true)}
-          aria-label="Edit beat"
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
-        <DeleteButton label="Beat" onConfirm={handleDelete} disabled={deleteMutation.isPending} />
+        <div className="flex items-center gap-1">
+          {canMark && <MarkBeatDialog beat={beat} />}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => setStakesExpanded((v) => !v)}
+            aria-expanded={stakesExpanded}
+            aria-label="Toggle stakes"
+            data-testid="beat-stakes-toggle"
+          >
+            {stakesExpanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+            Stakes
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => setEditOpen(true)}
+            aria-label="Edit beat"
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <DeleteButton label="Beat" onConfirm={handleDelete} disabled={deleteMutation.isPending} />
+        </div>
       </div>
+      {stakesExpanded && (
+        <div className="pb-2 pl-10 pr-2" data-testid="beat-stakes-panel">
+          <StakesPanel beat={beat} />
+        </div>
+      )}
       <BeatFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}

@@ -70,31 +70,3 @@ class GMVerbActivityStampingTests(TestCase):
         resolve_episode(progress=progress, resolved_by=gm)
         gm.refresh_from_db()
         self.assertIsNotNone(gm.last_active_at)
-
-    def test_resolve_stake_by_gm_pick_stamps(self) -> None:
-        from world.societies.constants import RenownRisk
-        from world.stories.constants import (
-            BeatPredicateType,
-            StakeResolutionColumn,
-            StakeSeverity,
-        )
-        from world.stories.factories import (
-            BeatFactory,
-            StakeFactory,
-            StakeResolutionFactory,
-        )
-        from world.stories.services.stake_resolution import resolve_stake_by_gm_pick
-
-        gm = GMProfileFactory()
-        self.assertIsNone(gm.last_active_at)
-        beat = BeatFactory(
-            risk=RenownRisk.HIGH,
-            target_level=4,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-        )
-        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
-        resolve_stake_by_gm_pick(stake, column=StakeResolutionColumn.WIN, gm_profile=gm)
-        gm.refresh_from_db()
-        self.assertIsNotNone(gm.last_active_at)

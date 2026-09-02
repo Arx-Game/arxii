@@ -265,7 +265,6 @@ treat those names as hints to confirm, not gospel.
 - [0256 - Beat expiry is a completion, not a field flip](0256-beat-expiry-is-a-completion.md) (#3558)
 - [0257 - Beats never wait for a ruling](0257-beats-never-wait-for-a-ruling.md) (#3559)
 - [0258 - Story beats reuse the mission scenario graph](0258-story-beats-reuse-the-mission-scenario-graph.md) (#3565; applies ADR-0030; extends ADR-0010, ADR-0085; supersedes the 2026-05-18 missions-design tenet 1 framing; reverses the 2026-04-20 stories-design GM_CHOICE mode)
-- [0259 - Views read the account model, never the Account typeclass; signup instantiates the typeclass](0259-views-read-the-account-model-not-the-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
@@ -308,4 +307,6 @@ treat those names as hints to confirm, not gospel.
 - [0097 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`](0097-gm-trust-is-gmprofile-level.md)
 - [0098 — Custody is story-declared narrative-structure protection, distinct from player boundaries](0098-custody-is-story-structure-distinct-from-boundaries.md)
 - [0099 — Custody clearance requests are identity-based, not protected_subject-pk-based](0099-custody-clearance-requests-are-identity-based.md) (supersedes the pk-only Task 6 first pass)
+- [0259 - Stake branches are chosen by authored key, never by a GM pick](0259-stake-branches-are-chosen-by-authored-key.md) (#3561; supersedes the PR2 constrained-pick decision recorded in stakes.md; extends ADR-0067, ADR-0078; related ADR-0257)
+- [0260 - Views read the account model, never the Account typeclass; signup instantiates the typeclass](0260-views-read-the-account-model-not-the-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

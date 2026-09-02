@@ -1,4 +1,4 @@
-"""Migration 0211 repoints bare ``AccountDB`` rows at the Account typeclass.
+"""Migration 0213 repoints bare ``AccountDB`` rows at the Account typeclass.
 
 Accounts created by allauth signup (before the adapter fix) or by Django's
 ``create_superuser`` carry ``db_typeclass_path`` of the bare model, so they
@@ -14,7 +14,7 @@ from evennia.accounts.models import AccountDB
 
 from evennia_extensions.factories import AccountFactory
 
-BACKFILL = importlib.import_module("world.migrations.0211_account_typeclass_backfill")
+BACKFILL = importlib.import_module("world.migrations.0213_account_typeclass_backfill")
 
 
 class AccountTypeclassBackfillTests(TestCase):

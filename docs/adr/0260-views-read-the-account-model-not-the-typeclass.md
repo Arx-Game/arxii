@@ -1,4 +1,4 @@
-# ADR-0259: Views read the account model, never the Account typeclass; signup instantiates the typeclass
+# ADR-0260: Views read the account model, never the Account typeclass; signup instantiates the typeclass
 
 **Date:** 2026-09-02
 **Status:** Accepted

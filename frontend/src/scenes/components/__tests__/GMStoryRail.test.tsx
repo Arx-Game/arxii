@@ -104,6 +104,8 @@ function buildPayload(overrides: Partial<GMStoryRailPayload> = {}): GMStoryRailP
     protected_subjects: [],
     clue_placements: [],
     participants: [{ character_sheet_id: 100, name: 'Aerande' }],
+    stakes: [],
+    activation: null,
     ...overrides,
   };
 }
@@ -236,6 +238,56 @@ describe('GMStoryRail', () => {
     render(<GMStoryRail scene={buildScene()} />);
     expect(screen.getByTestId('gm-story-rail-protected-subjects')).toHaveTextContent('npc_fate');
     expect(screen.getByTestId('gm-story-rail-clue-placements')).toHaveTextContent('Torn Letter');
+  });
+
+  it('renders the Stakes section with severity labels, activation, and a resolved outcome', () => {
+    useGMStoryRailQuery.mockReturnValue({
+      data: buildPayload({
+        stakes: [
+          {
+            id: 11,
+            player_summary: 'A dueling scar, worn for all to see.',
+            severity: 4,
+            subject_kind: 'personal_jeopardy',
+            outcome: { column: 'loss', outcome_key: '', resolution_summary: 'It goes badly.' },
+          },
+          {
+            id: 12,
+            player_summary: 'Standing with the merchant guild.',
+            severity: 1,
+            subject_kind: 'faction',
+            outcome: null,
+          },
+        ],
+        activation: { locked_at: '2026-09-02T19:51:39Z', effective_risk: 'high', is_ready: true },
+      }),
+    });
+    render(<GMStoryRail scene={buildScene()} />);
+
+    const section = screen.getByTestId('gm-story-rail-stakes');
+    expect(section).toHaveTextContent('Stakes');
+    expect(screen.getByTestId('gm-story-rail-activation')).toHaveTextContent('high');
+    expect(screen.getByTestId('gm-story-rail-activation')).toHaveTextContent('ready');
+
+    const firstStake = screen.getByTestId('gm-story-rail-stake-11');
+    expect(firstStake).toHaveTextContent('A dueling scar, worn for all to see.');
+    expect(firstStake).toHaveTextContent('Dire');
+    expect(firstStake).toHaveTextContent('personal_jeopardy');
+    expect(screen.getByTestId('gm-story-rail-stake-outcome-11')).toHaveTextContent('Loss');
+    expect(screen.getByTestId('gm-story-rail-stake-outcome-11')).toHaveTextContent(
+      'It goes badly.'
+    );
+
+    const secondStake = screen.getByTestId('gm-story-rail-stake-12');
+    expect(secondStake).toHaveTextContent('Standing with the merchant guild.');
+    expect(secondStake).toHaveTextContent('Setback');
+    expect(screen.queryByTestId('gm-story-rail-stake-outcome-12')).not.toBeInTheDocument();
+  });
+
+  it('renders no Stakes section when there are no stakes and no activation', () => {
+    useGMStoryRailQuery.mockReturnValue({ data: buildPayload() });
+    render(<GMStoryRail scene={buildScene()} />);
+    expect(screen.queryByTestId('gm-story-rail-stakes')).not.toBeInTheDocument();
   });
 
   it('renders the Scenario section with ballots and the last deed when gm is present', () => {

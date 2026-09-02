@@ -25,6 +25,7 @@ import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { COLUMN_LABELS, severityLabel } from '@/stories/components/stakes/constants';
 import type { GMStoryRailParticipant, SceneDetail } from '../types';
 import { useGMStoryRailQuery, useSceneScenarioQuery } from '../queries';
 
@@ -171,6 +172,42 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
               <p className="text-muted-foreground" data-testid="gm-story-rail-internal-description">
                 {rail.beat.internal_description}
               </p>
+            )}
+          </div>
+        )}
+
+        {rail && (rail.stakes.length > 0 || rail.activation !== null) && (
+          <div data-testid="gm-story-rail-stakes" className="space-y-1 text-sm">
+            <div className="font-medium">Stakes</div>
+            {rail.activation && (
+              <div className="text-muted-foreground" data-testid="gm-story-rail-activation">
+                Locked while the scene runs, {rail.activation.effective_risk} risk
+                {rail.activation.is_ready ? ', ready' : ', not ready'}
+              </div>
+            )}
+            {rail.stakes.length > 0 && (
+              <ul className="space-y-1" data-testid="gm-story-rail-stake-list">
+                {rail.stakes.map((stake) => (
+                  <li key={stake.id} data-testid={`gm-story-rail-stake-${stake.id}`}>
+                    <div>{stake.player_summary}</div>
+                    <div className="text-muted-foreground">
+                      {severityLabel(stake.severity)} - {stake.subject_kind}
+                    </div>
+                    {stake.outcome && (
+                      <div
+                        className="text-muted-foreground"
+                        data-testid={`gm-story-rail-stake-outcome-${stake.id}`}
+                      >
+                        {COLUMN_LABELS[stake.outcome.column] ?? stake.outcome.column}
+                        {stake.outcome.outcome_key ? ` (${stake.outcome.outcome_key})` : ''}
+                        {stake.outcome.resolution_summary
+                          ? `: ${stake.outcome.resolution_summary}`
+                          : ''}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}

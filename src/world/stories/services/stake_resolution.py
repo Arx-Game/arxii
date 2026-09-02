@@ -1,9 +1,10 @@
-"""Per-stake resolution: machine grading, GM constrained pick, world-state writers.
+"""Per-stake resolution: machine grading, world-state writers.
 
 #1770 PR2. stakes.py owns readiness/activation; this module owns what happens
 when a staked beat completes — grading each stake to a column, firing the
 authored branch's consequence pool, applying its structured world-state
-writers, and writing the StakeOutcome audit/routing row.
+writers, and writing the StakeOutcome audit/routing row. #3561 retired the GM
+constrained pick (resolve_stake_by_gm_pick); every outcome is machine-graded.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
+from world.assets.constants import AssetStatus
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
@@ -23,7 +25,6 @@ from world.stories.constants import (
     StakeResolutionColumn,
     StakeRewardSink,
     StakeSubjectKind,
-    StoryScope,
 )
 from world.stories.models import StakeOutcome, StakeResolution, StakeRewardLine
 from world.stories.types import StakePayloadProblem
@@ -49,6 +50,17 @@ _PILLAR_12_LIFECYCLE_MSG = (
 _MACHINE_MATCH_LIFECYCLE_MSG = (
     "machine_match_lifecycle_state is only allowed for NPC_FATE stakes — it "
     "would otherwise never match anything (#1760)."
+)
+
+# The authored-branch target statuses (#1905, #3561 Task 3 review). ACTIVE is
+# a legal transition target too (COMPROMISED -> ACTIVE recovery, and the
+# ACTIVE -> ACTIVE no-op), but transition_asset_status's legality is a
+# runtime fact about the asset's CURRENT status at fire time, which authoring
+# time can't know - the model field's own help_text restricts authored
+# branches to these three story-negative outcomes; recovery back to ACTIVE
+# is never something a stake branch authors directly.
+_TRANSITIONABLE_ASSET_STATUSES = frozenset(
+    {AssetStatus.COMPROMISED, AssetStatus.LOST, AssetStatus.DISMISSED}
 )
 
 
@@ -99,6 +111,7 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
     sets_subject_lifecycle: str,
     machine_match_lifecycle_state: str = "",
     npc_regard_delta: int = 0,
+    transitions_subject_asset: str = "",
 ) -> list[StakePayloadProblem]:
     """Validate a StakeResolution's writer payloads against its stake (pillar 12).
 
@@ -145,11 +158,32 @@ def stake_resolution_payload_problems(  # noqa: PLR0913
             )
         )
 
+    if transitions_subject_asset:
+        if stake.subject_kind != StakeSubjectKind.ASSET or stake.subject_asset_id is None:
+            problems.append(
+                StakePayloadProblem(
+                    field="transitions_subject_asset",
+                    message=(
+                        "transitions_subject_asset requires an ASSET stake with subject_asset set."
+                    ),
+                )
+            )
+        elif transitions_subject_asset not in _TRANSITIONABLE_ASSET_STATUSES:
+            problems.append(
+                StakePayloadProblem(
+                    field="transitions_subject_asset",
+                    message=(
+                        "transitions_subject_asset must be one of COMPROMISED/LOST/"
+                        f"DISMISSED (got {transitions_subject_asset!r})."
+                    ),
+                )
+            )
+
     return problems
 
 
 # ---------------------------------------------------------------------------
-# Per-stake resolution (machine grading + GM constrained pick)
+# Per-stake resolution (machine grading)
 # ---------------------------------------------------------------------------
 
 
@@ -157,9 +191,9 @@ def _open_stakes_for(beat: Beat) -> list[Stake]:
     """Every stake on this beat still needing a grade, prefetched for firing.
 
     The prefetch (resolutions + their reward lines) and the "already has a
-    StakeOutcome" idempotency filter (a GM's earlier constrained pick, say)
-    are shared by resolve_stakes_for_completion and resolve_stakes_for_withdrawal
-    (#3559) - both callers enumerate open stakes the same way.
+    StakeOutcome" idempotency filter are shared by resolve_stakes_for_completion
+    and resolve_stakes_for_withdrawal (#3559) - both callers enumerate open
+    stakes the same way.
     """
     stakes = list(
         beat.stakes.prefetch_related(
@@ -193,6 +227,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None = None,
     outcome_tier: CheckOutcome | None = None,
+    outcome_key: str = "",
 ) -> list[StakeOutcome]:
     """Grade every open stake on a completing beat and fire the chosen branches.
 
@@ -209,7 +244,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
 
     Semantics (#1770 pillars 11-12; #3559):
       - No stakes -> []. Idempotent: any stake that already has a StakeOutcome
-        row (e.g. a GM's earlier constrained pick) is skipped.
+        row is skipped.
       - Withdrawal (the party walked away) never reaches this function - it
         resolves through the separate resolve_stakes_for_withdrawal, which
         leaves the beat's own outcome untouched.
@@ -217,6 +252,11 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
         FAILURE/EXPIRED -> LOSS), with a data-where-it-exists override: an
         NPC_FATE stake whose subject's vitals read DEAD grades LOSS even on a
         beat-level SUCCESS (pillar 11 - the vitals write IS the grade).
+      - ``outcome_key`` (#3561) - the authored option key the party's chosen
+        route ended on (e.g. a mission scenario's terminal MissionOption.key)
+        - selects a named branch within the graded column when one is
+        authored for it; blank, or a key naming no branch, falls back to the
+        column's plain default, same as before #3561.
       - The chosen column's authored branch fires its consequence pool
         (tier-aware, same guards/context as beat pools) and applies its writer
         payloads. A missing branch still writes a StakeOutcome with
@@ -242,7 +282,9 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
 
     outcomes: list[StakeOutcome] = []
     for stake in stakes:
-        resolution, column = _select_stake_resolution(stake, outcome, withdrawn_stake_ids)
+        resolution, column = _select_stake_resolution(
+            stake, outcome, withdrawn_stake_ids, outcome_key=outcome_key
+        )
         outcomes.append(
             _fire_branch_and_record(
                 stake=stake,
@@ -303,6 +345,8 @@ def _select_stake_resolution(
     stake: Stake,
     outcome: BeatOutcome,
     withdrawn_stake_ids: set[int],
+    *,
+    outcome_key: str = "",
 ) -> tuple[StakeResolution | None, StakeResolutionColumn]:
     """Pick the (resolution, column) for a single open stake.
 
@@ -314,18 +358,23 @@ def _select_stake_resolution(
 
     - revoked-consent subject (#1771 story 5): a WITHDRAWAL column is forced.
     - otherwise the beat outcome maps to a column (WIN/LOSS), with a
-      lifecycle-state match (#1760) potentially selecting the other column.
+      lifecycle-state match (#1760) potentially selecting the other column,
+      and ``outcome_key`` (#3561) potentially selecting a named branch within
+      the chosen column.
     """
     if stake.pk in withdrawn_stake_ids:
         # #1771 story 5: the stake's treasured subject had its sign-off
         # withdrawn on this beat - a revoked-consent wager never grades
         # WIN/LOSS, even though the beat itself resolves normally.
         column = StakeResolutionColumn.WITHDRAWAL
-        resolution = _branch_for_column(stake, column)
+        resolution = _branch_for_column(stake, column, outcome_key=outcome_key)
         return resolution, column
     column = _machine_column_for_stake(stake, outcome)
     resolution = _branch_for_column(
-        stake, column, prefer_lifecycle_state=_subject_lifecycle_state(stake)
+        stake,
+        column,
+        prefer_lifecycle_state=_subject_lifecycle_state(stake),
+        outcome_key=outcome_key,
     )
     if resolution is not None:
         # A lifecycle-state match may have selected a branch on the
@@ -345,8 +394,8 @@ def _machine_column_for_stake(
     The specific branch within that polarity is selected separately by
     _branch_for_column's lifecycle-state match (#1760); this function only
     picks WIN vs LOSS. ``stake`` is unused now that the old is-dead override
-    moved into _branch_for_column, but kept in the signature — callers pass
-    it uniformly with the withdrawal/GM-pick branch lookups.
+    moved into _branch_for_column, but kept in the signature - callers pass
+    it uniformly with the withdrawal branch lookups.
     """
     if outcome == BeatOutcome.SUCCESS:
         return StakeResolutionColumn.WIN
@@ -433,21 +482,32 @@ def _withdrawn_consent_stake_ids(beat: Beat, stakes: list[Stake]) -> set[int]:
 
 
 def _branch_for_column(
-    stake: Stake, column: str, *, prefer_lifecycle_state: str | None = None
+    stake: Stake,
+    column: str,
+    *,
+    prefer_lifecycle_state: str | None = None,
+    outcome_key: str = "",
 ) -> StakeResolution | None:
     """The stake's authored resolution for `column`, from the prefetch when present.
 
     #1760: when prefer_lifecycle_state is set, a branch whose
-    machine_match_lifecycle_state equals it wins over the column's plain
-    (outcome_key="") default — and over the outcome-derived column itself,
+    machine_match_lifecycle_state equals it wins over everything else,
+    including outcome_key, and over the outcome-derived column itself,
     searched across ALL of the stake's authored branches (not just `column`).
     This generalizes the old is-dead-only override (which forced LOSS
     regardless of the beat's WIN/LOSS polarity) to the full LifecycleState
     ladder: an authored branch's own column wins when its
     machine_match_lifecycle_state matches the subject's actual state, same as
-    a dead NPC always graded LOSS even on a beat-level SUCCESS. Falls back to
-    the plain default within `column` when no branch matches — preserves
-    pre-#1760 single-branch-per-column content unchanged.
+    a dead NPC always graded LOSS even on a beat-level SUCCESS.
+
+    #3561: absent a lifecycle match, a non-blank ``outcome_key`` (the
+    authored option key the party's chosen route ended on, e.g. a mission
+    scenario's terminal MissionOption.key) selects the branch in `column`
+    whose own outcome_key equals it. Falls back to the plain (outcome_key="")
+    default within `column` when outcome_key is blank or names no authored
+    branch (preserves pre-#3561 single-branch-per-column content unchanged),
+    and finally to the first authored branch in `column` when even the plain
+    default is missing.
     """
     resolutions = stake.prefetched_resolutions
     if prefer_lifecycle_state:
@@ -458,6 +518,10 @@ def _branch_for_column(
         if matched is not None:
             return matched
     candidates = [r for r in resolutions if r.column == column]
+    if outcome_key:
+        keyed = next((r for r in candidates if r.outcome_key == outcome_key), None)
+        if keyed is not None:
+            return keyed
     return next((r for r in candidates if r.outcome_key == ""), None) or next(
         iter(candidates), None
     )
@@ -479,8 +543,10 @@ def _fire_branch_and_record(  # noqa: PLR0913
 ) -> StakeOutcome:
     """Claim one stake's audit row, then fire its branch (pool + writer payloads).
 
-    Shared by the machine path and the GM constrained pick — the only
-    differences between them are ``method``/``resolved_by``/``gm_notes``.
+    Shared by the completion machine path and the withdrawal path.
+    ``resolved_by``/``gm_notes`` are historical audit params from before #3561
+    retired the GM constrained pick; no live caller passes them now, but the
+    StakeOutcome fields they write remain (see StakeOutcome.resolved_by).
 
     Claim-before-pay (#1770 PR3 review): the StakeOutcome row is created
     FIRST — winning the ``unique_outcome_per_stake`` constraint is the claim.
@@ -536,115 +602,6 @@ def _fire_branch_and_record(  # noqa: PLR0913
             column,
         )
     return outcome
-
-
-def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcome's surface
-    stake: Stake,
-    *,
-    column: str,
-    outcome_key: str = "",
-    gm_profile: GMProfile | None,
-    gm_notes: str = "",
-    participants: list[Persona] | None = None,
-    extra_participants: list[Persona] | None = None,
-) -> StakeOutcome:
-    """Resolve one stake at a GM-chosen column (#1770 PR2 — constrained pick).
-
-    Fires the chosen column's authored branch exactly like the machine path
-    (pool + writer payloads) but records method=GM_PICK with the deciding GM
-    and their notes. The pick is constrained: the column must be among the
-    stake's authored resolutions — a GM never composes a consequence freehand
-    at resolution time.
-
-    ``participants`` / ``extra_participants`` — same semantics as
-    record_gm_marked_outcome (and the machine path's participant derivation):
-    GROUP scope uses ``participants`` (required when the picked branch's pool
-    carries LEGEND_AWARD); CHARACTER scope credits the progress's primary
-    persona plus ``extra_participants``; GLOBAL takes none. The same list
-    feeds the branch's subject_standing_delta writer.
-
-    Defensive guards only (ResolveStakeInputSerializer validates for API
-    callers): the stake must be unresolved and the column must be authored.
-    ``outcome_key`` narrows the pick to one specific named branch within
-    ``column`` (#1760) — blank picks the column's plain default branch,
-    matching pre-#1760 authoring.
-    """
-    from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
-
-    # Direct table query — never the related manager, whose prefetched cache
-    # on the idmapper-shared Stake instance can be stale.
-    if StakeOutcome.objects.filter(stake=stake).exists():
-        msg = (
-            f"Stake {stake.pk} already has a StakeOutcome; "
-            "ResolveStakeInputSerializer should have rejected this."
-        )
-        raise ValueError(msg)
-    resolution = stake.resolutions.filter(column=column, outcome_key=outcome_key).first()
-    if resolution is None:
-        msg = (
-            f"Stake {stake.pk} has no authored resolution for column {column!r} "
-            f"outcome_key {outcome_key!r}; a GM pick is constrained to authored "
-            "branches."
-        )
-        raise ValueError(msg)
-
-    story = stake.beat.episode.chapter.story
-    scope = story.scope
-    progress = get_active_progress_for_story(story)
-    resolved_participants: list[Persona] = []
-    if scope == StoryScope.CHARACTER:
-        if progress is not None:
-            resolved_participants = [progress.character_sheet.primary_persona]
-        if extra_participants:
-            resolved_participants.extend(extra_participants)
-    elif scope == StoryScope.GROUP and participants:
-        resolved_participants = list(participants)
-
-    activation = _activation_for_gm_pick(stake.beat)
-
-    with transaction.atomic():
-        outcome = _fire_branch_and_record(
-            stake=stake,
-            resolution=resolution,
-            column=column,
-            method=StakeOutcomeMethod.GM_PICK,
-            activation=activation,
-            progress=progress,
-            scope=scope,
-            participants=resolved_participants,
-            resolved_by=gm_profile,
-            gm_notes=gm_notes,
-        )
-
-    # Stamp GM activity (#2004) — the pick succeeded.
-    if gm_profile is not None:
-        from world.gm.services import touch_gm_activity  # noqa: PLC0415
-
-        touch_gm_activity(gm_profile)
-
-    return outcome
-
-
-def _activation_for_gm_pick(beat: Beat) -> StakeContractActivation | None:
-    """The activation the pended stakes actually ran under (#1770 PR3 review).
-
-    A GM pick resolves a stake that pended at some earlier completion. Prefer
-    the most recent activation locked at-or-before the beat's most recent
-    BeatCompletion — a NEW activation opened after the stake pended (the beat
-    re-engaged) must not change the pended stake's payout gate or its
-    StakeOutcome.activation audit row. Fall back to the open activation, then
-    the most recent one (picks on a beat with no completion yet).
-    """
-    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
-
-    completion = beat.completions.order_by("-recorded_at", "-pk").first()
-    if completion is not None:
-        # StakeContractActivation.Meta.ordering is ["-locked_at"], so first()
-        # is the most recent activation at-or-before that completion.
-        activation = beat.stake_activations.filter(locked_at__lte=completion.recorded_at).first()
-        if activation is not None:
-            return activation
-    return get_open_activation(beat) or beat.stake_activations.first()
 
 
 # ---------------------------------------------------------------------------
@@ -902,14 +859,14 @@ def _apply_stake_rewards(
     activation that was ready and priced above effective NONE — no activation,
     an unready contract, or an over-leveled party (effective NONE) skips the
     payout entirely. Loss/withdrawal consequences are ungated (reality doesn't
-    care; only the payout math does); the GM-pick path honors the same gate
-    via the activation the pick resolves under.
+    care; only the payout math does).
 
     The reward band is re-verified at pay time (#1770 PR3 review): the
-    ``is_ready`` verdict frozen on the activation can go stale in the
-    pending-GM-pick window, so an out-of-band live total also skips the
-    payout (banding bypass closed at both ends — the serializer refuses
-    completed-beat edits, and the payout re-checks the band regardless).
+    ``is_ready`` verdict frozen on the activation can go stale between
+    activation and the beat's completion, so an out-of-band live total also
+    skips the payout (banding bypass closed at both ends - the serializer
+    refuses completed-beat edits, and the payout re-checks the band
+    regardless).
 
     Delivery is per line x participant (ALL_EQUAL, mirroring mission reward
     distribution) through the SAME sink services the missions deed router

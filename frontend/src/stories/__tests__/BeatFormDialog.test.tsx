@@ -35,6 +35,15 @@ vi.mock('../queries', () => ({
   useConsequencePoolDetail: vi.fn(),
 }));
 
+// StakesPanel (#3561) mounts after the Scenario section in edit mode; its
+// own suite (`__tests__/stakes/StakesPanel.test.tsx`) covers its behavior,
+// so this file stubs it out rather than adding its whole query surface
+// (useStakes/useStakeTemplates/useCreateStake/useGMProfileMine/...) to this
+// file's mock.
+vi.mock('../components/stakes/StakesPanel', () => ({
+  StakesPanel: () => <div data-testid="stub-stakes-panel" />,
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

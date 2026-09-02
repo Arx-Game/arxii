@@ -89,7 +89,7 @@ class ArxAccountAdapter(DefaultAccountAdapter):
         gains the ``Account`` typeclass (no ``puppet``, no
         ``get_available_characters``, no persona cache). Every web-signup
         player was in that state until Sentry ARX2-8 (2026-09-02); migration
-        0211 repoints the rows that already exist.
+        0213 repoints the rows that already exist.
         """
         del request  # Signature fixed by allauth; the typeclass does not vary per request.
         return class_from_module(settings.BASE_ACCOUNT_TYPECLASS)()

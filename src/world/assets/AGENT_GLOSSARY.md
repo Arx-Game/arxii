@@ -8,6 +8,11 @@
   one promoter (`NPCAsset.asset_persona`, `OneToOneField`).
 - **Role context** — what kind of relationship the asset serves:
   informant, contact, or personal favor (`AssetRoleContext`).
+- **GM search scope** (#3561) - `NPCAssetViewSet`'s widened `get_queryset` for
+  a non-staff GM: their own promoted assets plus assets promoted by a persona
+  whose character sheet participates in a story that GM leads. Backs the
+  stakes editor's ASSET subject picker (`?name=` search via `NPCAssetFilter`).
+  Never every player's assets - an `NPCAsset` is per-player private content.
 - **Cultivate as Asset** — the player-facing name for the promotion
   `NPCServiceOffer`; not a distinct model or endpoint, just an offer label.
 

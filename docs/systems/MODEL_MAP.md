@@ -4072,6 +4072,7 @@
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' - Approve a roster application on behalf of the overseeing GM.`
 - `archive_table(table: 'GMTable') -> 'None' - Mark a table archived. Sets archived_at timestamp.`
 - `award_gm_story_reward(*, gm_profile: 'GMProfile', players_served: 'int', per_player_xp: 'int', event_cap: 'int', description: 'str') -> 'XPTransaction | None' - Award GM Story Reward XP to ``gm_profile.account`` (#2123).`
+- `cap_for_profile(profile: 'GMProfile') -> 'GMLevelCap | None' - The ``GMLevelCap`` row for ``profile.level``, or None when unseeded.`
 - `claim_invite(invite: 'GMRosterInvite', account: 'AccountDB') -> 'RosterApplication' - Mark an invite claimed and create (or reuse) a RosterApplication.`
 - `create_invite(gm: 'GMProfile', roster_entry: 'RosterEntry', is_public: 'bool' = False, invited_email: 'str' = '', expires_at: 'datetime | None' = None) -> 'GMRosterInvite' - Create a GMRosterInvite. Callers must validate GM oversight.`
 - `create_table(gm: 'GMProfile', name: 'str', description: 'str' = '') -> 'GMTable' - Create a new GM table owned by the given GM.`

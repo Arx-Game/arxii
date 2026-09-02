@@ -25,7 +25,7 @@ def repoint_bare_accounts(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0210_remove_transition_mode"),
+        ("arxii", "0212_alter_stakeresolution_machine_match_lifecycle_state"),
         ("accounts", "0012_defaultaccount_alter_accountdb_id_account_bot_and_more"),
     ]
 

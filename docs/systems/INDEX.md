@@ -2285,7 +2285,7 @@ Character lifecycle management with web-first applications and player anonymity.
   is the account's server-side "who am I browsing as" fact (state 2.5 — selected but
   not necessarily puppeting). Sole mutator `world.roster.services.selection.set_selected_entry`;
   sole reader for "who is this request acting as" `selection.selected_character(account)`
-  (missions journal, NPC interactions; ADR-0259 says why not `request.user.puppet`);
+  (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
@@ -3195,20 +3195,24 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
-### Stakes Contract Engine (#1770 PR1–4)
+### Stakes Contract Engine (#1770 PR1-4; web editor + GM-pick retirement #3561)
 GM-authored, player-visible "what's actually at risk" contract backing a story
 `Beat`'s risk declaration — named stakes with WIN/LOSS/WITHDRAWAL branches, banded
 by designer-tunable calibration rows, priced for the actual party at scene-start
 lock (activation wired at every commit surface, PR4), read by the Legend award,
-resolved per-stake at beat completion (machine grading / GM constrained pick),
-and paying authored win-reward lines through an anti-farming activation gate
-(PR3). ADR-0067.
+resolved per-stake at beat completion (machine grading; a named branch is chosen
+by the completing beat's authored `outcome_key`, never a runtime GM pick - #3561,
+ADR-0259), and paying authored win-reward lines through an anti-farming activation
+gate (PR3). ADR-0067. The full contract is now editable from the story author
+page (`StakesPanel` on the beat, #3561) - see the "Web editor + GM-pick
+retirement" entry below.
 
 - **Models:** `RiskCalibration` (per-tier severity floor/ceiling + `max_fuse_hops`
   chain-rule bound; `reward_floor`/`reward_ceiling` band the WIN reward total —
   PR3, ceiling 0 = unconfigured), `StakeTemplate`
   (menu-first catalog, `min_risk`/`max_risk` band), `Stake` (beat FK
-  `related_name="stakes"`; typed subject FKs + `subject_label`; `player_summary`),
+  `related_name="stakes"`; typed subject FKs incl. `subject_asset` (#3561, →
+  `assets.NPCAsset`) + `subject_label`; `player_summary`),
   `StakeResolution` (stake FK `related_name="resolutions"`; `column`
   WIN/LOSS/WITHDRAWAL; `outcome_key` (#1760 — designer slug naming a branch
   within `column`'s polarity, blank = plain default; unique
@@ -3219,18 +3223,22 @@ and paying authored win-reward lines through an anti-farming activation gate
   `sets_subject_lifecycle` — pillar-12 validated; `machine_match_lifecycle_state`
   (#1760 — generalizes the old NPC-vitals DEAD-only override to the full
   `LifecycleState` ladder; a match wins over the beat-derived column, even
-  crossing WIN/LOSS polarity)), `StakeRewardLine` (PR3;
-  resolution FK `related_name="reward_lines"`; `sink` MONEY/RESONANCE; `amount`
+  crossing WIN/LOSS polarity); `npc_regard_delta` (#2039 writer, exposed on the
+  serializer #3561) and `transitions_subject_asset` (#3561 writer, `ASSET`-only,
+  transitions `subject_asset` to COMPROMISED/LOST/DISMISSED)), `StakeRewardLine`
+  (PR3; resolution FK `related_name="reward_lines"`; `sink` MONEY/RESONANCE; `amount`
   per-participant money-equivalent scalar; `resonance` required iff
   sink=RESONANCE), `StakeContractActivation`
   (lock + audit row; partial-unique open-per-beat; `effective_risk`),
-  `StakeOutcome` (PR2 per-stake resolution audit/routing row; exactly one per stake);
+  `StakeOutcome` (PR2 per-stake resolution audit/routing row; exactly one per
+  stake; `method` is always MACHINE since #3561 retired `GM_PICK`);
   `Beat.target_level`; `TransitionRequiredOutcome.stake` +
-  `required_stake_column` (PR2 stake-level transition routing).
-- **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind`,
-  `StakeResolutionColumn`, `StakeOutcomeMethod` (MACHINE/GM_PICK),
-  `StakeRewardSink` (MONEY/RESONANCE — no Legend sink; Legend stays automatic),
-  `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`.
+  `required_stake_column` (PR2 stake-level transition routing, authorable via
+  `TransitionFormDialog`'s stake-column routing mode, #3561).
+- **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind` (incl.
+  `ASSET`, #3561), `StakeResolutionColumn`, `StakeOutcomeMethod` (`MACHINE` only
+  since #3561 retired `GM_PICK`), `StakeRewardSink` (MONEY/RESONANCE - no Legend
+  sink; Legend stays automatic), `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`.
 - **Key Services (`world.stories.services.stakes`):** `compute_effective_risk`
   (party-level-vs-target-level curve, `LEVELS_PER_TIER=2`, bounded +1 under-level
   upgrade), `validate_stakes_readiness` (severity bands + WIN reward band (PR3)
@@ -3239,19 +3247,24 @@ and paying authored win-reward lines through an anti-farming activation gate
   `activate_stakes_contract` (idempotent lock; unready → effective `NONE`),
   `effective_risk_for_beat` (read seam consumed by `_legend_award`),
   `resolve_open_activation` (wired into the beat-completion tail).
-- **Key Services (`world.stories.services.stake_resolution`, PR2):**
-  `resolve_stakes_for_completion` (completion-tail machine grading; NPC-vitals
-  DEAD → LOSS override; withdrawal branch firing; idempotent audit rows),
-  `resolve_stake_by_gm_pick` (constrained pick by `(column, outcome_key)` pair,
-  #1760; `POST /api/stakes/{id}/resolve/`),
+- **Key Services (`world.stories.services.stake_resolution`, PR2; branch
+  selection reworked #3561):** `resolve_stakes_for_completion` (completion-tail
+  machine grading; NPC-vitals DEAD → LOSS override; `outcome_key`-matched named
+  branch selection, #3561; withdrawal and revoked-consent branch firing both
+  record the empty outcome when unauthored, Decision 2 #3561; idempotent audit
+  rows), `_branch_for_column` (#3561 - the shared branch picker: lifecycle
+  match, then `outcome_key` match, then plain default, then first authored),
   `stake_resolution_payload_problems` + `sheet_is_player_held` (pillar-12
-  no-fiat validation), `_apply_stake_rewards` (PR3 — WIN payout per line ×
+  no-fiat validation; #3561 added the `transitions_subject_asset`-requires-ASSET
+  check), `_apply_stake_rewards` (PR3 - WIN payout per line x
   participant, gated on a ready effective-risk-bearing activation; sinks:
   `currency.deliver_mission_money`, `magic.grant_resonance` with
   `GainSource.STAKE_REWARD`; deliberately NOT the missions deed router).
-  Cross-app writers: `items.forfeit_item_instance`
+  `resolve_stake_by_gm_pick` and `POST /api/stakes/{id}/resolve/` are removed
+  (#3561, ADR-0259). Cross-app writers: `items.forfeit_item_instance`
   (soft-forfeit), `npc_services.adjust_npc_affection`,
-  `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
+  `roster.set_lifecycle_state`, `assets.transition_asset_status` (#3561);
+  `vitals._mark_dead` now propagates
   `LifecycleState.DEAD` to the roster lifecycle.
 - **Opt-in surfaces (PR4):** `check_stake_boundaries`
   (`world.stories.services.boundaries` — real hard-line/treasured-subject
@@ -3259,7 +3272,10 @@ and paying authored win-reward lines through an anti-farming activation gate
   `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
   staff-only, ADR-0033); `stakes_summary_for_beat` +
   `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
-  never serialized); `GET /api/beats/{id}/stakes-summary/`; `combat_stakes` on
+  never serialized); `GET /api/beats/{id}/stakes-summary/`; `GET
+  /api/scenes/{id}/stakes-summary/` (#3561 - the scene-scoped sibling, since a
+  player never receives the running beat's id from any scene payload; delegates
+  to the same builder); `combat_stakes` on
   both consent-prompt serializers (`world.scenes.action_serializers`) rendered
   by `ConsentPrompt`; activation wired at `create_pvp_duel`/`create_lethal_duel`/
   `seed_or_feed_encounter_from_cast` (via `combat.beat_wiring.
@@ -3290,6 +3306,23 @@ and paying authored win-reward lines through an anti-farming activation gate
   beat action (engagement-armed stakes), not at assignment time.
   `BeatViewSet.assign_mission` action (`POST /api/beats/{id}/assign-mission/`,
   `CanAssignMissionToBeat` — Lead GM or staff). ADR-0104.
+- **Web editor + GM-pick retirement (#3561, ADR-0259):** `StakesPanel` mounted
+  under the beat in `StoryAuthorTree` (collapsible) and `BeatFormDialog` (edit
+  mode) - `StakeRow` (template, `SubjectRefFields` subject picker with a new
+  ASSET case), `BranchColumns` (WIN/LOSS/WITHDRAWAL, per-subject-kind writer
+  fields), `RewardLinesEditor`, `ReadinessStrip`. Every write goes through the
+  existing CRUD viewsets - no new write endpoint. `TransitionFormDialog`'s
+  `AddRoutingRow` gained a stake-column routing mode (writes
+  `TransitionRequiredOutcome.stake`/`required_stake_column`). `GMStoryRail`
+  gained a Stakes section (`rail_services._serialize_stakes`/
+  `_serialize_activation`) showing each stake's outcome once fired plus the
+  activation strip. `SceneHeader`'s declared-risk badge is now a toggle opening
+  a "What is wagered" panel reading the scene stakes-summary endpoint above.
+  `NPCAssetViewSet`'s search (`?name=`) backs the ASSET subject picker, widened
+  for a non-staff GM to their own assets plus assets promoted within a story
+  they lead (never every player's assets). Readiness gained two problems for
+  named-branch authoring gaps: a column with a named branch but no default,
+  and a named key the beat's scenario doesn't declare.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
@@ -3298,8 +3331,10 @@ and paying authored win-reward lines through an anti-farming activation gate
   (`_legend_award` scaling), checks (`Consequence.character_loss` reachability
   test; branch pools via the shared `_fire_pool_with_context`), combat
   (FLED/ABANDONED withdrawal wire + PR4 activation seams), items /
-  npc_services / roster (writers), currency / magic (PR3 win-reward sinks),
-  scenes / missions / actions (PR4 opt-in surfaces)
+  npc_services / roster / assets (writers - `assets.transition_asset_status`,
+  #3561), currency / magic (PR3 win-reward sinks),
+  scenes / missions / actions (PR4 opt-in surfaces; #3561 adds the GM rail
+  Stakes section + scene stakes-summary)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
 
@@ -4982,7 +5017,12 @@ ADR-0091.
   Offer is hidden when no active asset has `uncollected_pool > 0`
   (`_asset_has_collectable_income` in `world.npc_services.services`).
 - **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
-  at `/api/assets/`, scoped to the requesting user's own promoted assets.
+  at `/api/assets/`, scoped by default to the requesting user's own promoted
+  assets. **Widened for a non-staff GM (#3561):** own assets plus assets
+  promoted by a persona whose character sheet participates in a story that GM
+  leads (staff see every asset) - backs the stakes editor's ASSET subject
+  picker; `NPCAssetFilter`'s `name` filter (`icontains` on the promoted
+  persona's name) is the search field. Never every player's assets.
 - **Source:** `src/world/assets/`
 
 Deferred follow-ups: distinction-granted starting assets (`needs-design`),

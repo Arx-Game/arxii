@@ -245,7 +245,7 @@ def _probe_typeclassed_accounts() -> ProbeResult:
     Consumer: every view that reads typeclass state off ``request.user``
     (``get_available_characters`` behind the ``X-Character-ID`` header,
     ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
-    ``create_superuser`` still produces bare rows; migration 0211 repaired the
+    ``create_superuser`` still produces bare rows; migration 0213 repaired the
     ones that existed and ``ArxAccountAdapter.new_user`` stops signup making
     more, so a hit here is a staff account made with ``createsuperuser``.
     """
@@ -258,7 +258,7 @@ def _probe_typeclassed_accounts() -> ProbeResult:
     )
     detail = (
         f"Account(s) pinned to the bare AccountDB class: {', '.join(bare)}. "
-        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS (migration 0211 does "
+        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS (migration 0213 does "
         "this for existing rows on deploy)."
         if bare
         else ""
