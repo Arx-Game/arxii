@@ -196,7 +196,7 @@ class GroupVoteApiTests(TestCase):
         self.client.force_authenticate(self.account)
 
     def _as(self, character):
-        return mock.patch("world.missions.views._puppet_character", return_value=character)
+        return mock.patch("world.missions.views._acting_character", return_value=character)
 
     def _url(self, action):
         return f"/api/missions/journal/{self.instance.pk}/{action}/"

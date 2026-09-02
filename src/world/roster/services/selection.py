@@ -13,6 +13,9 @@ from typing import TYPE_CHECKING
 from world.roster.models import RosterEntry
 
 if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
+    from evennia.objects.models import ObjectDB
+
     from evennia_extensions.models import PlayerData
 
 
@@ -26,6 +29,31 @@ class SelectionError(ValueError):
     """
 
     user_message = "That isn't one of your characters."
+
+
+def selected_character(account: AbstractBaseUser | AnonymousUser) -> ObjectDB | None:
+    """The character ``account`` has taken up offscreen (#3412), or ``None``.
+
+    This is how a web endpoint learns "who am I acting as": the durable
+    selection needs no live session and no typeclass. It replaces reading
+    ``Account.puppet`` off ``request.user``, which under ``MULTISESSION_MODE
+    = 2`` is the *list* of all puppets (empty, never ``None``, with no
+    session) and does not exist at all on a bare ``AccountDB`` (Sentry
+    ARX2-7, 2026-09-02).
+    """
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    if not account.is_authenticated:
+        return None
+    player_data = (
+        PlayerData.objects.filter(account=account)
+        .select_related("selected_entry__character_sheet__character")
+        .first()
+    )
+    entry = player_data.selected_entry if player_data is not None else None
+    if entry is None:
+        return None
+    return entry.character_sheet.character
 
 
 def set_selected_entry(player_data: PlayerData, entry: RosterEntry | None) -> None:

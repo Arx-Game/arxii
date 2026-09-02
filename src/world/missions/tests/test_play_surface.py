@@ -413,7 +413,7 @@ class JournalApiTests(TestCase):
         self.instance = staff_assign_mission(self.template, self.character)
         self.client = APIClient()
         self.client.force_authenticate(self.account)
-        patcher = mock.patch("world.missions.views._puppet_character", return_value=self.character)
+        patcher = mock.patch("world.missions.views._acting_character", return_value=self.character)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -434,7 +434,7 @@ class JournalApiTests(TestCase):
 
     def test_non_participant_gets_404(self) -> None:
         outsider = _pc(self.room)
-        with mock.patch("world.missions.views._puppet_character", return_value=outsider):
+        with mock.patch("world.missions.views._acting_character", return_value=outsider):
             res = self.client.get(f"/api/missions/journal/{self.instance.pk}/beat/")
         self.assertEqual(res.status_code, 404)
 
@@ -489,7 +489,7 @@ class TaleApiTests(TestCase):
         resolve_beat_option(self.instance, self.character, option_id=self.second_option.pk)
         self.client = APIClient()
         self.client.force_authenticate(self.account)
-        patcher = mock.patch("world.missions.views._puppet_character", return_value=self.character)
+        patcher = mock.patch("world.missions.views._acting_character", return_value=self.character)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -513,7 +513,7 @@ class TaleApiTests(TestCase):
 
     def test_non_participant_gets_404(self) -> None:
         outsider = _pc(self.room)
-        with mock.patch("world.missions.views._puppet_character", return_value=outsider):
+        with mock.patch("world.missions.views._acting_character", return_value=outsider):
             res = self.client.post(
                 f"/api/missions/journal/{self.instance.pk}/tale/",
                 {"text": "text"},

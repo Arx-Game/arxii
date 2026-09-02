@@ -48,7 +48,7 @@ class _BoardAPIMixin(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.account)
         self._patch = mock.patch(
-            "world.missions.views._puppet_character", return_value=self.character
+            "world.missions.views._acting_character", return_value=self.character
         )
         self._patch.start()
         self.addCleanup(self._patch.stop)

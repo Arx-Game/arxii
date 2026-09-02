@@ -2,7 +2,7 @@
 
 Drives the start/resolve/end flow through HTTP. Session state lives in
 ``request.session``; the viewset rehydrates an ``InteractionSession`` on
-each call. Tests monkey-patch ``InteractionViewSet._puppet_character`` to
+each call. Tests monkey-patch ``InteractionViewSet._acting_character`` to
 return a sheet-bearing Character (Evennia's ``Account.puppet`` is a
 property tied to live Sessions which we don't spin up in unit tests).
 """
@@ -43,10 +43,10 @@ def _pc():
 
 
 def _patch_puppet(character):
-    """Replace InteractionViewSet._puppet_character with a stub returning ``character``."""
+    """Replace InteractionViewSet._acting_character with a stub returning ``character``."""
     return patch.object(
         InteractionViewSet,
-        "_puppet_character",
+        "_acting_character",
         lambda _self, _request: character,
     )
 
@@ -184,10 +184,10 @@ class AuthRequiredTests(TestCase):
 
 
 def _patch_no_puppet():
-    """Make `_puppet_character` raise ValidationError as it does with no puppet."""
+    """Make `_acting_character` raise ValidationError as it does with no puppet."""
     return patch.object(
         InteractionViewSet,
-        "_puppet_character",
+        "_acting_character",
         side_effect=ValidationError("No puppeted character."),
     )
 

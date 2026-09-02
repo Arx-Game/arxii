@@ -596,24 +596,24 @@ def _journal_paginated_response() -> serializers.Serializer:
     )
 
 
-def _puppet_character(request: Request) -> "ObjectDB":
-    """Return the user's currently-puppeted Character ObjectDB.
+def _acting_character(request: Request) -> "ObjectDB":
+    """Return the character the caller is acting as, or 400.
 
-    Mirrors ``npc_services.views.InteractionViewSet._puppet_character``
-    (DRF's ``request.user`` is the AccountDB; ``puppet`` is the live
-    puppet or None). Surfaced as 400 — the client must assume a character
-    before using the journal.
+    Resolved from the account's durable selection (``PlayerData.selected_entry``,
+    #3412) via ``selected_character`` rather than ``request.user.puppet``:
+    under ``MULTISESSION_MODE = 2`` that property is a list (empty with no
+    session, never ``None``) and it does not exist on a bare ``AccountDB``
+    at all, which is how the journal 500'd in production (Sentry ARX2-7).
     """
     from rest_framework.exceptions import ValidationError  # noqa: PLC0415
 
-    try:
-        puppet = request.user.puppet
-    except (AttributeError, Exception):  # noqa: BLE001
-        puppet = None
-    if puppet is None:
-        msg = "No puppeted character — assume a character before using the journal."
+    from world.roster.services.selection import selected_character  # noqa: PLC0415
+
+    character = selected_character(request.user)
+    if character is None:
+        msg = "Select a character before using the journal."
         raise ValidationError(msg)
-    return puppet
+    return character
 
 
 def _resolve_character_sheet(character_id: int) -> "CharacterSheet | None":
@@ -650,7 +650,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
             participant_for,
         )
 
-        character = _puppet_character(request)
+        character = _acting_character(request)
         instance = MissionInstance.objects.filter(pk=pk).first()
         if instance is None:
             raise NotFound(_MSG_NO_SUCH_MISSION)
@@ -664,7 +664,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
     def list(self, request: Request) -> Response:
         from world.missions.services.journal import journal_for  # noqa: PLC0415
 
-        character = _puppet_character(request)
+        character = _acting_character(request)
         entries = journal_for(character)
         paginator = MissionStudioPagination()
         # DRF pagination accepts any sized iterable at runtime; the stub
@@ -687,7 +687,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
             pending_invites_for_character,
         )
 
-        character = _puppet_character(request)
+        character = _acting_character(request)
         invites = pending_invites_for_character(character)
         return Response(PendingMissionInviteSerializer(invites, many=True).data)
 
@@ -1024,7 +1024,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
         body = MissionInviteRespondSerializer(data=request.data)
         body.is_valid(raise_exception=True)
 
-        character = _puppet_character(request)
+        character = _acting_character(request)
         persona = character.sheet_data.primary_persona
 
         invite = MissionInvite.objects.filter(
@@ -1063,7 +1063,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
             opportunities_for_character,
         )
 
-        character = _puppet_character(request)
+        character = _acting_character(request)
         result = opportunities_for_character(character)
         serializer = OpportunitiesSerializer(result)
         return Response(serializer.data)
@@ -1111,7 +1111,7 @@ class MissionBoardViewSet(viewsets.ViewSet):
 
         from world.missions.services.boards import postings_for_giver  # noqa: PLC0415
 
-        character = _puppet_character(request)
+        character = _acting_character(request)
         giver = self._giver_for(pk)
         if giver is None:
             raise NotFound(self._MSG_NO_BOARD)
@@ -1144,7 +1144,7 @@ class MissionBoardViewSet(viewsets.ViewSet):
 
         body = BoardTakeRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        character = _puppet_character(request)
+        character = _acting_character(request)
         giver = self._giver_for(pk)
         if giver is None:
             raise NotFound(self._MSG_NO_BOARD)

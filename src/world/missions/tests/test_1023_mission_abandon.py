@@ -138,7 +138,7 @@ class AbandonMissionAPITests(TestCase):
         self.client.force_authenticate(self.account)
 
     def _post_abandon(self, as_character):
-        with mock.patch("world.missions.views._puppet_character", return_value=as_character):
+        with mock.patch("world.missions.views._acting_character", return_value=as_character):
             return self.client.post(f"/api/missions/journal/{self.instance.pk}/abandon/")
 
     def test_contract_holder_abandon_returns_200(self):

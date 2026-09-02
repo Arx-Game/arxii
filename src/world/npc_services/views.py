@@ -250,28 +250,26 @@ class InteractionViewSet(viewsets.ViewSet):
 
     permission_classes = [IsAuthenticated]
 
-    def _puppet_character(self, request: Request):
-        """Return the user's currently-puppeted Character ObjectDB.
+    def _acting_character(self, request: Request):
+        """Return the character the caller is acting as, or 400.
 
-        DRF's ``request.user`` is the AccountDB; the ``puppet`` property
-        on the typeclass returns the live puppet (or None when no
-        Session has puppeted anything). A missing attribute means
-        "no puppet" and is surfaced as 400.
+        Resolved from the account's durable selection (``PlayerData.selected_entry``,
+        #3412) via ``selected_character``; see ``missions.views._acting_character``
+        for why ``request.user.puppet`` is not usable here (Sentry ARX2-7).
         """
-        puppet = request.user.puppet if hasattr(request.user, "puppet") else None
-        if puppet is None:
-            msg = (
-                "No puppeted character — log in and assume a character before "
-                "starting an NPC interaction."
-            )
+        from world.roster.services.selection import selected_character  # noqa: PLC0415
+
+        character = selected_character(request.user)
+        if character is None:
+            msg = "Select a character before starting an NPC interaction."
             raise ValidationError(msg)
-        return puppet
+        return character
 
     @extend_schema(
         request=InteractionStartRequestSerializer,
         responses={
             201: InteractionStateSerializer,
-            400: OpenApiResponse(description="No puppeted character or no role was provided."),
+            400: OpenApiResponse(description="No selected character or no role was provided."),
             404: OpenApiResponse(description="NPC role or persona was not found."),
             409: OpenApiResponse(description="An interaction is already in flight."),
             500: OpenApiResponse(
@@ -288,7 +286,7 @@ class InteractionViewSet(viewsets.ViewSet):
             )
         body = InteractionStartRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        character = self._puppet_character(request)
+        character = self._acting_character(request)
 
         result = start_npc_interaction.run(
             actor=character,
@@ -324,7 +322,7 @@ class InteractionViewSet(viewsets.ViewSet):
         body = InteractionResolveRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         session = _rehydrate(request)
-        character = self._puppet_character(request)
+        character = self._acting_character(request)
 
         result = resolve_npc_offer.run(
             actor=character,
@@ -358,7 +356,7 @@ class InteractionViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"])
     def end(self, request: Request) -> Response:
         session = _rehydrate(request)
-        character = self._puppet_character(request)
+        character = self._acting_character(request)
 
         result = end_npc_interaction.run(actor=character, session=session)
         if not result.success:
