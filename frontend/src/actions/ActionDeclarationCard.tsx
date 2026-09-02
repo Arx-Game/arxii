@@ -695,6 +695,53 @@ export function ActionDeclarationCard({
 
   const hasTechnique = actionContext.techniqueId !== undefined;
 
+  const renderTechniqueDetail = () => {
+    if (techniqueDetail) {
+      return (
+        <CostPreview
+          intensity={techniqueDetail.intensity ?? 0}
+          control={techniqueDetail.control ?? 0}
+          animaCost={techniqueDetail.anima_cost}
+        />
+      );
+    }
+    if (techniqueError) {
+      return <p className="text-xs text-muted-foreground">Cost unavailable</p>;
+    }
+    return (
+      <p className="text-xs text-muted-foreground">
+        {hasTechnique && techniqueLoading ? 'Loading cost...' : '(select a technique first)'}
+      </p>
+    );
+  };
+
+  const renderTechniquePicker = () => {
+    if (isLoading) {
+      return <p className="text-xs text-muted-foreground">Loading techniques...</p>;
+    }
+    if (!hasTechnique) {
+      return (
+        <div className="space-y-2">
+          <p className="text-xs italic text-muted-foreground">Pick a technique</p>
+          <TechniquePicker
+            techniques={techniques}
+            selectedId={actionContext.techniqueId}
+            onSelect={handleTechniqueSelect}
+            disabled={readOnly}
+          />
+        </div>
+      );
+    }
+    return (
+      <TechniquePicker
+        techniques={techniques}
+        selectedId={actionContext.techniqueId}
+        onSelect={handleTechniqueSelect}
+        disabled={readOnly}
+      />
+    );
+  };
+
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm">
       {/* Header */}
@@ -712,28 +759,7 @@ export function ActionDeclarationCard({
       </div>
 
       {/* Technique section */}
-      <Section label="Technique">
-        {isLoading ? (
-          <p className="text-xs text-muted-foreground">Loading techniques...</p>
-        ) : !hasTechnique ? (
-          <div className="space-y-2">
-            <p className="text-xs italic text-muted-foreground">Pick a technique</p>
-            <TechniquePicker
-              techniques={techniques}
-              selectedId={actionContext.techniqueId}
-              onSelect={handleTechniqueSelect}
-              disabled={readOnly}
-            />
-          </div>
-        ) : (
-          <TechniquePicker
-            techniques={techniques}
-            selectedId={actionContext.techniqueId}
-            onSelect={handleTechniqueSelect}
-            disabled={readOnly}
-          />
-        )}
-      </Section>
+      <Section label="Technique">{renderTechniquePicker()}</Section>
 
       {/* Target section */}
       <Section label="Target">
@@ -803,21 +829,7 @@ export function ActionDeclarationCard({
       </Section>
 
       {/* Cost section */}
-      <Section label="Cost">
-        {techniqueDetail ? (
-          <CostPreview
-            intensity={techniqueDetail.intensity ?? 0}
-            control={techniqueDetail.control ?? 0}
-            animaCost={techniqueDetail.anima_cost}
-          />
-        ) : techniqueError ? (
-          <p className="text-xs text-muted-foreground">Cost unavailable</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {hasTechnique && techniqueLoading ? 'Loading cost...' : '(select a technique first)'}
-          </p>
-        )}
-      </Section>
+      <Section label="Cost">{renderTechniqueDetail()}</Section>
 
       {/* Thread pulls section — Phase 6.4 */}
       <Section label="Thread Pulls">

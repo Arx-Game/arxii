@@ -233,6 +233,35 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     );
   }
 
+  const renderCardContent = () => {
+    if (!isInitialized) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (localSelections.size > 0) {
+      return (
+        <div className="space-y-2">
+          {[...localSelections.values()].map((entry) => (
+            <SelectedDistinctionItem
+              key={entry.distinction.id}
+              distinction={entry.distinction}
+              rank={entry.rank}
+              onRemove={() => handleRemoveDistinction(entry.distinction.id)}
+            />
+          ))}
+        </div>
+      );
+    }
+    return (
+      <p className="py-4 text-center text-sm text-muted-foreground">
+        No distinctions selected yet. Browse the categories above to add some.
+      </p>
+    );
+  };
+
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
       {/* Main Content */}
@@ -348,28 +377,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {!isInitialized ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : localSelections.size > 0 ? (
-              <div className="space-y-2">
-                {[...localSelections.values()].map((entry) => (
-                  <SelectedDistinctionItem
-                    key={entry.distinction.id}
-                    distinction={entry.distinction}
-                    rank={entry.rank}
-                    onRemove={() => handleRemoveDistinction(entry.distinction.id)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                No distinctions selected yet. Browse the categories above to add some.
-              </p>
-            )}
-          </CardContent>
+          <CardContent>{renderCardContent()}</CardContent>
         </Card>
       </motion.div>
 

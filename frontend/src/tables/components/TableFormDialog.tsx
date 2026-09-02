@@ -123,6 +123,16 @@ export function TableFormDialog(props: TableFormDialogProps) {
 
   const isValid = name.trim().length > 0;
 
+  const submitLabel = () => {
+    if (isPending) {
+      return 'Saving…';
+    }
+    if (isEdit) {
+      return 'Save Changes';
+    }
+    return 'Create Table';
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{props.children}</DialogTrigger>
@@ -173,7 +183,7 @@ export function TableFormDialog(props: TableFormDialogProps) {
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid || isPending}>
-              {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Table'}
+              {submitLabel()}
             </Button>
           </DialogFooter>
         </form>

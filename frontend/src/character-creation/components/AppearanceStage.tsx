@@ -278,6 +278,80 @@ export function AppearanceStage({
     return selectedId ? String(selectedId) : '';
   };
 
+  const renderFormOptions = () => {
+    if (formOptionsLoading) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded bg-muted" />
+          ))}
+        </div>
+      );
+    }
+    if (mergedFormOptions.length > 0) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {mergedFormOptions.map((formOption) => (
+            <div key={formOption.trait.id} className="space-y-2">
+              <Label htmlFor={`trait-${formOption.trait.name}`}>
+                {formOption.trait.display_name}
+                {formOption.is_required && (
+                  <span
+                    className="ml-1 text-destructive"
+                    title="Required for your species"
+                    aria-label="required"
+                  >
+                    *
+                  </span>
+                )}
+              </Label>
+              <Select
+                value={getSelectedOptionId(formOption.trait.name)}
+                onValueChange={(value) =>
+                  handleFormTraitChange(formOption.trait.name, parseInt(value, 10))
+                }
+              >
+                <SelectTrigger id={`trait-${formOption.trait.name}`}>
+                  <SelectValue placeholder={`Select ${formOption.trait.display_name}`} />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 overflow-y-auto">
+                  {formOption.options.map((option) => (
+                    <SelectItem key={option.id} value={String(option.id)}>
+                      {option.display_name}
+                    </SelectItem>
+                  ))}
+                  {formOption.inherited.map((group) => (
+                    <SelectGroup key={`${formOption.trait.id}-${group.source}`}>
+                      <SelectLabel className="text-accent-foreground">
+                        From your {group.source}
+                      </SelectLabel>
+                      {group.options.map((option) => (
+                        <SelectItem key={option.id} value={String(option.id)}>
+                          {option.display_name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                aria-label={`Describe your ${formOption.trait.display_name.toLowerCase()}`}
+                placeholder="Describe it (optional): e.g. flowing crimson"
+                defaultValue={getTraitDescriptor(formOption.trait.name)}
+                onBlur={(e) => handleTraitDescriptorCommit(formOption.trait.name, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <p className="text-sm italic text-muted-foreground">
+        No physical features available for this species.
+      </p>
+    );
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -457,73 +531,7 @@ export function AppearanceStage({
           <p className="text-sm text-muted-foreground">
             Select your character's physical features.
           </p>
-          {formOptionsLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 animate-pulse rounded bg-muted" />
-              ))}
-            </div>
-          ) : mergedFormOptions.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {mergedFormOptions.map((formOption) => (
-                <div key={formOption.trait.id} className="space-y-2">
-                  <Label htmlFor={`trait-${formOption.trait.name}`}>
-                    {formOption.trait.display_name}
-                    {formOption.is_required && (
-                      <span
-                        className="ml-1 text-destructive"
-                        title="Required for your species"
-                        aria-label="required"
-                      >
-                        *
-                      </span>
-                    )}
-                  </Label>
-                  <Select
-                    value={getSelectedOptionId(formOption.trait.name)}
-                    onValueChange={(value) =>
-                      handleFormTraitChange(formOption.trait.name, parseInt(value, 10))
-                    }
-                  >
-                    <SelectTrigger id={`trait-${formOption.trait.name}`}>
-                      <SelectValue placeholder={`Select ${formOption.trait.display_name}`} />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60 overflow-y-auto">
-                      {formOption.options.map((option) => (
-                        <SelectItem key={option.id} value={String(option.id)}>
-                          {option.display_name}
-                        </SelectItem>
-                      ))}
-                      {formOption.inherited.map((group) => (
-                        <SelectGroup key={`${formOption.trait.id}-${group.source}`}>
-                          <SelectLabel className="text-accent-foreground">
-                            From your {group.source}
-                          </SelectLabel>
-                          {group.options.map((option) => (
-                            <SelectItem key={option.id} value={String(option.id)}>
-                              {option.display_name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    aria-label={`Describe your ${formOption.trait.display_name.toLowerCase()}`}
-                    placeholder="Describe it (optional): e.g. flowing crimson"
-                    defaultValue={getTraitDescriptor(formOption.trait.name)}
-                    onBlur={(e) =>
-                      handleTraitDescriptorCommit(formOption.trait.name, e.target.value)
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm italic text-muted-foreground">
-              No physical features available for this species.
-            </p>
-          )}
+          {renderFormOptions()}
         </section>
       )}
 

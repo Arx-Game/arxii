@@ -153,6 +153,16 @@ export function ChapterFormDialog({
   const nonFieldErrors = fieldErrors.non_field_errors ?? [];
   const detailError = fieldErrors.detail ?? '';
 
+  const submitLabel = () => {
+    if (isPending) {
+      return isEdit ? 'Saving…' : 'Creating…';
+    }
+    if (isEdit) {
+      return 'Save Chapter';
+    }
+    return 'Create Chapter';
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -259,13 +269,7 @@ export function ChapterFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Chapter'
-                  : 'Create Chapter'}
+              {submitLabel()}
             </Button>
           </DialogFooter>
         </form>

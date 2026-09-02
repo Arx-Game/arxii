@@ -15,6 +15,51 @@ export function StaffSystemErrorsPage() {
   const { data, isLoading } = useSystemErrorList(statusFilter, page);
   const items = data?.results;
 
+  const renderItems = () => {
+    if (isLoading) {
+      return <p className="text-muted-foreground">Loading...</p>;
+    }
+    if (!items?.length) {
+      return <p className="text-muted-foreground">No system errors found.</p>;
+    }
+    return (
+      <>
+        <div className="space-y-3">
+          {items.map((item) => (
+            <Link key={item.id} to={`/staff/system-errors/${item.id}`}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      <span className="font-mono">{item.exception_type}</span> in {item.label}
+                    </p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {item.message || 'No message'} &middot; last seen{' '}
+                      {new Date(item.last_seen).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="ml-4 flex shrink-0 items-center gap-2">
+                    {item.occurrence_count > 1 && (
+                      <Badge variant="secondary">&times;{item.occurrence_count}</Badge>
+                    )}
+                    <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+
+        <NextPrevPagination
+          page={page}
+          hasPrevious={!!data?.previous}
+          hasNext={!!data?.next}
+          onPageChange={setPage}
+        />
+      </>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-2 text-2xl font-bold">System Errors</h1>
@@ -32,46 +77,7 @@ export function StaffSystemErrorsPage() {
         }}
       />
 
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : !items?.length ? (
-        <p className="text-muted-foreground">No system errors found.</p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {items.map((item) => (
-              <Link key={item.id} to={`/staff/system-errors/${item.id}`}>
-                <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">
-                        <span className="font-mono">{item.exception_type}</span> in {item.label}
-                      </p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {item.message || 'No message'} &middot; last seen{' '}
-                        {new Date(item.last_seen).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="ml-4 flex shrink-0 items-center gap-2">
-                      {item.occurrence_count > 1 && (
-                        <Badge variant="secondary">&times;{item.occurrence_count}</Badge>
-                      )}
-                      <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-
-          <NextPrevPagination
-            page={page}
-            hasPrevious={!!data?.previous}
-            hasNext={!!data?.next}
-            onPageChange={setPage}
-          />
-        </>
-      )}
+      {renderItems()}
     </div>
   );
 }

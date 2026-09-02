@@ -446,6 +446,35 @@ export function ThreadPullPicker({
   const pulledCount = Object.values(selectedPulls).filter((t) => t > 0).length;
   const passiveCount = Object.values(selectedPulls).filter((t) => t === 0).length;
 
+  const renderFilteredApplicable = () => {
+    if (isLoading) {
+      return <p className="text-xs text-muted-foreground">Loading threads…</p>;
+    }
+    if (filteredApplicable.length === 0) {
+      return (
+        <p className="text-xs italic text-muted-foreground" data-testid="no-applicable-threads">
+          No applicable threads.
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-2" data-testid="applicable-rows">
+        {filteredApplicable.map((thread) => (
+          <ApplicableRow
+            key={thread.id}
+            thread={thread}
+            selectedTier={selectedPulls[thread.id] ?? 0}
+            onSelectTier={(tier) => handleSelectTier(thread.id, tier)}
+            characterSheetId={characterSheetId}
+            balanceByResonanceId={balanceByResonanceId}
+            onOpenDetails={handleOpenDetails}
+            targetPersonaId={actionContext.target_persona_id}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-3" data-testid="thread-pull-picker">
       {/* Header */}
@@ -491,28 +520,7 @@ export function ThreadPullPicker({
       </div>
 
       {/* Applicable rows */}
-      {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading threads…</p>
-      ) : filteredApplicable.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground" data-testid="no-applicable-threads">
-          No applicable threads.
-        </p>
-      ) : (
-        <div className="space-y-2" data-testid="applicable-rows">
-          {filteredApplicable.map((thread) => (
-            <ApplicableRow
-              key={thread.id}
-              thread={thread}
-              selectedTier={selectedPulls[thread.id] ?? 0}
-              onSelectTier={(tier) => handleSelectTier(thread.id, tier)}
-              characterSheetId={characterSheetId}
-              balanceByResonanceId={balanceByResonanceId}
-              onOpenDetails={handleOpenDetails}
-              targetPersonaId={actionContext.target_persona_id}
-            />
-          ))}
-        </div>
-      )}
+      {renderFilteredApplicable()}
 
       {/* Inapplicable rows — under a divider when toggled */}
       {showInapplicable && filteredInapplicable.length > 0 && (

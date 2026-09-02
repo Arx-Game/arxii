@@ -74,6 +74,44 @@ export function PromoteRoleDialog({
   const errorMessage =
     promote.isError && promote.error instanceof Error ? promote.error.message : null;
 
+  const renderSubroles = () => {
+    if (isLoading) {
+      return <p className="py-4 text-sm text-muted-foreground">Loading sub-roles…</p>;
+    }
+    if (!hasSubroles) {
+      return <p className="py-4 text-sm text-muted-foreground">No sub-roles available.</p>;
+    }
+    return (
+      <ul className="space-y-2" role="radiogroup" aria-label="Available sub-roles">
+        {list.map((subrole) => {
+          const selected = selectedId === subrole.id;
+          return (
+            <li key={subrole.id}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setSelectedId(subrole.id)}
+                disabled={promote.isPending}
+                className={
+                  'w-full rounded-md border px-3 py-2 text-left transition-colors ' +
+                  (selected ? 'border-primary bg-accent' : 'border-border hover:bg-accent/50')
+                }
+              >
+                <span className="block text-sm font-medium">{subrole.name}</span>
+                {subrole.description && (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {subrole.description}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -88,41 +126,7 @@ export function PromoteRoleDialog({
           </div>
         )}
 
-        <div className="mt-4">
-          {isLoading ? (
-            <p className="py-4 text-sm text-muted-foreground">Loading sub-roles…</p>
-          ) : !hasSubroles ? (
-            <p className="py-4 text-sm text-muted-foreground">No sub-roles available.</p>
-          ) : (
-            <ul className="space-y-2" role="radiogroup" aria-label="Available sub-roles">
-              {list.map((subrole) => {
-                const selected = selectedId === subrole.id;
-                return (
-                  <li key={subrole.id}>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setSelectedId(subrole.id)}
-                      disabled={promote.isPending}
-                      className={
-                        'w-full rounded-md border px-3 py-2 text-left transition-colors ' +
-                        (selected ? 'border-primary bg-accent' : 'border-border hover:bg-accent/50')
-                      }
-                    >
-                      <span className="block text-sm font-medium">{subrole.name}</span>
-                      {subrole.description && (
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                          {subrole.description}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+        <div className="mt-4">{renderSubroles()}</div>
 
         {hasSubroles && (
           <DialogFooter className="mt-6">

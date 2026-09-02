@@ -89,51 +89,112 @@ export function MotifStylePanel({ characterSheetId }: Props) {
     );
   }
 
+  const renderResonances = () => {
+    if (resonancesLoading) {
+      return <p className="text-sm text-muted-foreground">Loading claimed resonances…</p>;
+    }
+    if (resonances.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground" data-testid="motif-style-no-resonances">
+          Claim a resonance first to bind a style to it.
+        </p>
+      );
+    }
+    return (
+      <div className="flex flex-wrap items-end gap-2">
+        <select
+          id="motif-style-select"
+          data-testid="motif-style-select"
+          className={`${SELECT_CLASS} min-w-40 flex-1`}
+          value={styleId}
+          onChange={(e) => setStyleId(e.target.value === '' ? '' : Number(e.target.value))}
+          disabled={catalogLoading}
+        >
+          <option value="">Select a style…</option>
+          {styles.map((style) => (
+            <option key={style.id} value={style.id}>
+              {style.name} ({style.audacity})
+            </option>
+          ))}
+        </select>
+        <select
+          id="motif-resonance-select"
+          data-testid="motif-resonance-select"
+          className={`${SELECT_CLASS} min-w-40 flex-1`}
+          value={resonanceId}
+          onChange={(e) => setResonanceId(e.target.value === '' ? '' : Number(e.target.value))}
+        >
+          <option value="">Select a resonance…</option>
+          {resonances.map((cr) => (
+            <option key={cr.resonance} value={cr.resonance}>
+              {cr.resonance_name}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="submit"
+          disabled={styleId === '' || resonanceId === '' || bind.isPending}
+          data-testid="motif-style-bind-submit"
+        >
+          Bind
+        </Button>
+      </div>
+    );
+  };
+
+  const renderBindings = () => {
+    if (bindingsLoading) {
+      return <p className="text-sm text-muted-foreground">Loading style bindings…</p>;
+    }
+    if (bindings.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground" data-testid="motif-style-bindings-empty">
+          No styles bound yet.
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-3" data-testid="motif-style-bindings-list">
+        {groups.map((group) => (
+          <div key={group.resonanceId} data-testid={`motif-style-group-${group.resonanceId}`}>
+            <Badge variant="outline">{group.resonanceName}</Badge>
+            <ul className="mt-1 space-y-1">
+              {group.bindings.map((binding) => (
+                <li
+                  key={binding.style_id}
+                  className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
+                  data-testid="motif-style-binding-row"
+                >
+                  <span>
+                    {binding.style_name}{' '}
+                    <span className="text-muted-foreground">({binding.audacity})</span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => unbind.mutate({ style_id: binding.style_id })}
+                    disabled={unbind.isPending}
+                    data-testid={`unbind-style-${binding.style_id}`}
+                  >
+                    Unbind
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <Card data-testid="motif-style-panel">
       <CardHeader>
         <CardTitle className="text-base">Style Bindings</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {bindingsLoading ? (
-          <p className="text-sm text-muted-foreground">Loading style bindings…</p>
-        ) : bindings.length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="motif-style-bindings-empty">
-            No styles bound yet.
-          </p>
-        ) : (
-          <div className="space-y-3" data-testid="motif-style-bindings-list">
-            {groups.map((group) => (
-              <div key={group.resonanceId} data-testid={`motif-style-group-${group.resonanceId}`}>
-                <Badge variant="outline">{group.resonanceName}</Badge>
-                <ul className="mt-1 space-y-1">
-                  {group.bindings.map((binding) => (
-                    <li
-                      key={binding.style_id}
-                      className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
-                      data-testid="motif-style-binding-row"
-                    >
-                      <span>
-                        {binding.style_name}{' '}
-                        <span className="text-muted-foreground">({binding.audacity})</span>
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => unbind.mutate({ style_id: binding.style_id })}
-                        disabled={unbind.isPending}
-                        data-testid={`unbind-style-${binding.style_id}`}
-                      >
-                        Unbind
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
+        {renderBindings()}
 
         {unbind.isError ? (
           <p
@@ -151,54 +212,7 @@ export function MotifStylePanel({ characterSheetId }: Props) {
           data-testid="motif-style-bind-form"
         >
           <Label htmlFor="motif-style-select">Bind a style</Label>
-          {resonancesLoading ? (
-            <p className="text-sm text-muted-foreground">Loading claimed resonances…</p>
-          ) : resonances.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="motif-style-no-resonances">
-              Claim a resonance first to bind a style to it.
-            </p>
-          ) : (
-            <div className="flex flex-wrap items-end gap-2">
-              <select
-                id="motif-style-select"
-                data-testid="motif-style-select"
-                className={`${SELECT_CLASS} min-w-40 flex-1`}
-                value={styleId}
-                onChange={(e) => setStyleId(e.target.value === '' ? '' : Number(e.target.value))}
-                disabled={catalogLoading}
-              >
-                <option value="">Select a style…</option>
-                {styles.map((style) => (
-                  <option key={style.id} value={style.id}>
-                    {style.name} ({style.audacity})
-                  </option>
-                ))}
-              </select>
-              <select
-                id="motif-resonance-select"
-                data-testid="motif-resonance-select"
-                className={`${SELECT_CLASS} min-w-40 flex-1`}
-                value={resonanceId}
-                onChange={(e) =>
-                  setResonanceId(e.target.value === '' ? '' : Number(e.target.value))
-                }
-              >
-                <option value="">Select a resonance…</option>
-                {resonances.map((cr) => (
-                  <option key={cr.resonance} value={cr.resonance}>
-                    {cr.resonance_name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                type="submit"
-                disabled={styleId === '' || resonanceId === '' || bind.isPending}
-                data-testid="motif-style-bind-submit"
-              >
-                Bind
-              </Button>
-            </div>
-          )}
+          {renderResonances()}
         </form>
 
         {bind.isError ? (

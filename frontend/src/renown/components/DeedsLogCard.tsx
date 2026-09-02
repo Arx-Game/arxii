@@ -33,6 +33,21 @@ function DeedAccounts({ personaId, deedId }: { personaId: number; deedId: number
   const [open, setOpen] = useState(false);
   const { data: stories, isLoading } = useDeedStoriesQuery(personaId, deedId, open);
 
+  const renderStories = () => {
+    if (isLoading) {
+      return <p className="text-xs text-muted-foreground">Loading accounts…</p>;
+    }
+    if (!stories || stories.length === 0) {
+      return <p className="text-xs text-muted-foreground">No accounts written yet.</p>;
+    }
+    return stories.map((story) => (
+      <div key={story.id} className="text-xs">
+        <div className="font-medium">{story.author_name}</div>
+        <p className="whitespace-pre-wrap text-muted-foreground">{story.text}</p>
+      </div>
+    ));
+  };
+
   return (
     <div className="mt-1">
       <Button
@@ -43,22 +58,7 @@ function DeedAccounts({ personaId, deedId }: { personaId: number; deedId: number
       >
         {open ? 'Hide accounts' : 'View accounts'}
       </Button>
-      {open && (
-        <div className="mt-1 space-y-2 border-l pl-3">
-          {isLoading ? (
-            <p className="text-xs text-muted-foreground">Loading accounts…</p>
-          ) : !stories || stories.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No accounts written yet.</p>
-          ) : (
-            stories.map((story) => (
-              <div key={story.id} className="text-xs">
-                <div className="font-medium">{story.author_name}</div>
-                <p className="whitespace-pre-wrap text-muted-foreground">{story.text}</p>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {open && <div className="mt-1 space-y-2 border-l pl-3">{renderStories()}</div>}
     </div>
   );
 }

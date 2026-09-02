@@ -50,6 +50,49 @@ export function RealmsChapter() {
   const { data: startingAreas, isLoading } = usePublicStartingAreas();
   const [openAreaId, setOpenAreaId] = useState<string | undefined>(undefined);
 
+  const renderStartingAreas = () => {
+    if (isLoading) {
+      return (
+        <div className="mt-8 space-y-4">
+          <Skeleton className="h-6 w-1/3" />
+          <Skeleton className="h-6 w-1/2" />
+          <Skeleton className="h-6 w-2/5" />
+        </div>
+      );
+    }
+    if (startingAreas && startingAreas.length > 0) {
+      return (
+        <Accordion
+          type="single"
+          collapsible
+          className="mt-8"
+          value={openAreaId}
+          onValueChange={setOpenAreaId}
+        >
+          {startingAreas.map((area) => (
+            <AccordionItem
+              key={area.id}
+              value={String(area.id)}
+              data-realm={area.realm_theme}
+              className="gatefold-realm-item"
+            >
+              <AccordionTrigger className="gatefold-realm-trigger">
+                <span className="gatefold-realm-name" style={{ color: 'hsl(var(--primary))' }}>
+                  {area.name}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <p className="gatefold-realm-desc">{area.description}</p>
+                <BeginningsList startingAreaId={area.id} />
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="gatefold-leaf" id="beginnings">
       <div className="gatefold-leaf-main">
@@ -62,40 +105,7 @@ export function RealmsChapter() {
             written doors into the story, each with its questions left open for you to answer.
           </p>
         </div>
-        {isLoading ? (
-          <div className="mt-8 space-y-4">
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-6 w-1/2" />
-            <Skeleton className="h-6 w-2/5" />
-          </div>
-        ) : startingAreas && startingAreas.length > 0 ? (
-          <Accordion
-            type="single"
-            collapsible
-            className="mt-8"
-            value={openAreaId}
-            onValueChange={setOpenAreaId}
-          >
-            {startingAreas.map((area) => (
-              <AccordionItem
-                key={area.id}
-                value={String(area.id)}
-                data-realm={area.realm_theme}
-                className="gatefold-realm-item"
-              >
-                <AccordionTrigger className="gatefold-realm-trigger">
-                  <span className="gatefold-realm-name" style={{ color: 'hsl(var(--primary))' }}>
-                    {area.name}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <p className="gatefold-realm-desc">{area.description}</p>
-                  <BeginningsList startingAreaId={area.id} />
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        ) : null}
+        {renderStartingAreas()}
         <p className="gatefold-more-line">
           <Link to="/roster">
             Browse every Beginning and the character roster <span aria-hidden="true">→</span>

@@ -60,6 +60,20 @@ function ApprovedClaimBody({ claim }: { claim: AssistantGMClaim }) {
   // Fetch the full Beat so MarkBeatDialog can use it
   const { data: beat, isLoading } = useBeat(claim.beat);
 
+  const renderClaimAction = () => {
+    if (isLoading) {
+      return (
+        <Button variant="outline" size="sm" disabled>
+          Loading…
+        </Button>
+      );
+    }
+    if (beat) {
+      return <MarkBeatDialog beat={beat} />;
+    }
+    return null;
+  };
+
   return (
     <div className="mt-2 space-y-2">
       {claim.framing_note && (
@@ -70,15 +84,7 @@ function ApprovedClaimBody({ claim }: { claim: AssistantGMClaim }) {
           <p className="text-foreground">{claim.framing_note}</p>
         </div>
       )}
-      <div className="mt-2 flex items-center gap-2">
-        {isLoading ? (
-          <Button variant="outline" size="sm" disabled>
-            Loading…
-          </Button>
-        ) : beat ? (
-          <MarkBeatDialog beat={beat} />
-        ) : null}
-      </div>
+      <div className="mt-2 flex items-center gap-2">{renderClaimAction()}</div>
     </div>
   );
 }

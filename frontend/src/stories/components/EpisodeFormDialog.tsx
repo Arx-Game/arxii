@@ -191,6 +191,16 @@ export function EpisodeFormDialog({
   const nonFieldErrors = fieldErrors.non_field_errors ?? [];
   const detailError = fieldErrors.detail ?? '';
 
+  const submitLabel = () => {
+    if (isPending) {
+      return isEdit ? 'Saving…' : 'Creating…';
+    }
+    if (isEdit) {
+      return 'Save Episode';
+    }
+    return 'Create Episode';
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
@@ -351,13 +361,7 @@ export function EpisodeFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || detailLoading}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Episode'
-                  : 'Create Episode'}
+              {submitLabel()}
             </Button>
           </DialogFooter>
         </form>

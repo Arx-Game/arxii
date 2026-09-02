@@ -35,6 +35,54 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
   const routeRows = routes.data?.results ?? [];
   const total = nodeRows.length + optionRows.length + routeRows.length;
 
+  const renderNodes = () => {
+    if (nodes.isLoading || options.isLoading || routes.isLoading) {
+      return <Skeleton className="h-16 w-full" />;
+    }
+    if (total === 0) {
+      return <div className="text-sm text-muted-foreground">All flavor text is clear.</div>;
+    }
+    return (
+      <>
+        {nodeRows.length > 0 ? (
+          <Section title={`Nodes (${nodeRows.length})`}>
+            {nodeRows.map((n) => (
+              <Link
+                key={n.id}
+                to={`/staff/missions/${template.id}/nodes/${n.id}`}
+                className="block rounded border px-2 py-1 text-sm hover:bg-muted"
+              >
+                {n.key}
+              </Link>
+            ))}
+          </Section>
+        ) : null}
+        {optionRows.length > 0 ? (
+          <Section title={`Options (${optionRows.length})`}>
+            {optionRows.map((o) => (
+              <Link
+                key={o.id}
+                to={`/staff/missions/${template.id}/nodes/${o.node}/options/${o.id}`}
+                className="block rounded border px-2 py-1 text-sm hover:bg-muted"
+              >
+                Node {o.node} · option #{o.order} ({o.option_kind})
+              </Link>
+            ))}
+          </Section>
+        ) : null}
+        {routeRows.length > 0 ? (
+          <Section title={`Routes (${routeRows.length})`}>
+            {routeRows.map((r) => (
+              <div key={r.id} className="rounded border px-2 py-1 text-sm text-muted-foreground">
+                Route id={r.id} (option {r.option}): outcome {r.outcome_tier ?? '<branch>'}
+              </div>
+            ))}
+          </Section>
+        ) : null}
+      </>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -46,52 +94,7 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3" data-testid="rewrite-card">
-        {nodes.isLoading || options.isLoading || routes.isLoading ? (
-          <Skeleton className="h-16 w-full" />
-        ) : total === 0 ? (
-          <div className="text-sm text-muted-foreground">All flavor text is clear.</div>
-        ) : (
-          <>
-            {nodeRows.length > 0 ? (
-              <Section title={`Nodes (${nodeRows.length})`}>
-                {nodeRows.map((n) => (
-                  <Link
-                    key={n.id}
-                    to={`/staff/missions/${template.id}/nodes/${n.id}`}
-                    className="block rounded border px-2 py-1 text-sm hover:bg-muted"
-                  >
-                    {n.key}
-                  </Link>
-                ))}
-              </Section>
-            ) : null}
-            {optionRows.length > 0 ? (
-              <Section title={`Options (${optionRows.length})`}>
-                {optionRows.map((o) => (
-                  <Link
-                    key={o.id}
-                    to={`/staff/missions/${template.id}/nodes/${o.node}/options/${o.id}`}
-                    className="block rounded border px-2 py-1 text-sm hover:bg-muted"
-                  >
-                    Node {o.node} · option #{o.order} ({o.option_kind})
-                  </Link>
-                ))}
-              </Section>
-            ) : null}
-            {routeRows.length > 0 ? (
-              <Section title={`Routes (${routeRows.length})`}>
-                {routeRows.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rounded border px-2 py-1 text-sm text-muted-foreground"
-                  >
-                    Route id={r.id} (option {r.option}): outcome {r.outcome_tier ?? '<branch>'}
-                  </div>
-                ))}
-              </Section>
-            ) : null}
-          </>
-        )}
+        {renderNodes()}
       </CardContent>
     </Card>
   );

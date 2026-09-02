@@ -70,6 +70,16 @@ export function RelationshipCapstonePickerField({
 
   const isDisabled = disabled || !hasSineater || isLoading;
 
+  const renderSineater = () => {
+    if (!hasSineater) {
+      return 'Select a Sineater first';
+    }
+    if (isLoading) {
+      return 'Loading capstones…';
+    }
+    return 'Select a capstone';
+  };
+
   return (
     <div className="space-y-2">
       <Label htmlFor={field.name}>{field.label}</Label>
@@ -79,15 +89,7 @@ export function RelationshipCapstonePickerField({
         disabled={isDisabled}
       >
         <SelectTrigger id={field.name}>
-          <SelectValue
-            placeholder={
-              !hasSineater
-                ? 'Select a Sineater first'
-                : isLoading
-                  ? 'Loading capstones…'
-                  : 'Select a capstone'
-            }
-          />
+          <SelectValue placeholder={renderSineater()} />
         </SelectTrigger>
         <SelectContent>
           {capstones.map((capstone) => (

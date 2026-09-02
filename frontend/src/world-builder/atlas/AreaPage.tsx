@@ -177,6 +177,16 @@ function ChildAreaRow({ area, onSelect }: ChildAreaRowProps) {
       : area.level_display
     : `${area.level_display}${area.children_count > 0 ? ` · ${area.children_count} areas` : ''}`;
 
+  const renderUnpublishedCount = () => {
+    if (unpublishedCount == null) {
+      return '';
+    }
+    if (unpublishedCount > 0) {
+      return `${unpublishedCount} unpublished`;
+    }
+    return 'published';
+  };
+
   return (
     <button
       type="button"
@@ -189,11 +199,7 @@ function ChildAreaRow({ area, onSelect }: ChildAreaRowProps) {
         {kindMeta}
       </PlateHead>
       <span className="font-body text-xs italic text-muted-foreground">
-        {unpublishedCount == null
-          ? ''
-          : unpublishedCount > 0
-            ? `${unpublishedCount} unpublished`
-            : 'published'}
+        {renderUnpublishedCount()}
       </span>
     </button>
   );

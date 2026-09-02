@@ -342,6 +342,31 @@ function StandingSection({ orgId, orgName }: { orgId: number; orgName: string })
     [myMemberships, orgId]
   );
 
+  const renderDeclarations = () => {
+    if (isLoading) {
+      return <Skeleton className="h-4 w-40" />;
+    }
+    if (declarations.length === 0) {
+      return <p className="text-sm text-muted-foreground">No standing has been declared.</p>;
+    }
+    return (
+      <ul className="space-y-2 text-sm">
+        {declarations.map((d) => (
+          <li key={d.id} className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <Badge variant={d.direction === 'favor' ? 'secondary' : 'destructive'}>
+                {DIRECTION_LABEL[d.direction]}
+              </Badge>
+              <span className="font-medium">{d.target_persona_name}</span>
+              <span className="text-muted-foreground">by {d.declared_by_persona_name}</span>
+            </div>
+            <p className="text-muted-foreground">{d.citation}</p>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -360,28 +385,7 @@ function StandingSection({ orgId, orgName }: { orgId: number; orgName: string })
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <Skeleton className="h-4 w-40" />
-        ) : declarations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No standing has been declared.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {declarations.map((d) => (
-              <li key={d.id} className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Badge variant={d.direction === 'favor' ? 'secondary' : 'destructive'}>
-                    {DIRECTION_LABEL[d.direction]}
-                  </Badge>
-                  <span className="font-medium">{d.target_persona_name}</span>
-                  <span className="text-muted-foreground">by {d.declared_by_persona_name}</span>
-                </div>
-                <p className="text-muted-foreground">{d.citation}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
+      <CardContent>{renderDeclarations()}</CardContent>
     </Card>
   );
 }

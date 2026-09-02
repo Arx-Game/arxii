@@ -489,6 +489,15 @@ export function Lattice({
     }
   }
 
+  const renderConnecting = () => {
+    if (connecting) {
+      return connectSrc
+        ? `now click the room to join ${connectSrc.name} to…`
+        : 'click the first room…';
+    }
+    return 'click it, then click two rooms to join them — or add exits from inside any room';
+  };
+
   return (
     <div data-testid="lattice" data-mode={mode}>
       {mode === 'rooms' && (
@@ -703,11 +712,7 @@ export function Lattice({
             className="font-body text-xs italic text-muted-foreground"
             data-testid="lattice-connect-note"
           >
-            {connecting
-              ? connectSrc
-                ? `now click the room to join ${connectSrc.name} to…`
-                : 'click the first room…'
-              : 'click it, then click two rooms to join them — or add exits from inside any room'}
+            {renderConnecting()}
           </span>
         )}
       </div>

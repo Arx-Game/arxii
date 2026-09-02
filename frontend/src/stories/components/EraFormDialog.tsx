@@ -88,6 +88,16 @@ export function EraFormDialog({ open, onClose, era }: EraFormDialogProps) {
 
   const isPending = createEra.isPending || updateEra.isPending;
 
+  const submitLabel = () => {
+    if (isPending) {
+      return 'Saving…';
+    }
+    if (isEdit) {
+      return 'Save changes';
+    }
+    return 'Create';
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg">
@@ -159,7 +169,7 @@ export function EraFormDialog({ open, onClose, era }: EraFormDialogProps) {
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
+              {submitLabel()}
             </Button>
           </DialogFooter>
         </form>
