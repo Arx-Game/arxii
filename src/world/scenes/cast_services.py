@@ -75,6 +75,15 @@ if TYPE_CHECKING:
 _PULL_FIZZLE_NOTE = "The declared thread pull fizzles — its committed resonance is spent."
 
 
+def _supplied_or_single(
+    supplied_personas: list[Persona] | None, target_persona: Persona | None
+) -> list[Persona]:
+    """The caller's explicit list when given, else the single target, else nothing."""
+    if supplied_personas is not None:
+        return supplied_personas
+    return [target_persona] if target_persona is not None else []
+
+
 def castable_technique_links_for_sheet(character_sheet_id: int) -> list[CharacterTechnique]:
     """``CharacterTechnique`` links for what *character_sheet_id* can cast standalone.
 
@@ -508,11 +517,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     else:
         # Use the caller-supplied list when provided (FILTERED_GROUP picks a subset);
         # fall back to the single-target form for SELF/SINGLE/AREA paths.
-        _supplied = (
-            supplied_personas
-            if supplied_personas is not None
-            else ([target_persona] if target_persona is not None else [])
-        )
+        _supplied = _supplied_or_single(supplied_personas, target_persona)
         resolved_personas = resolve_targets(
             technique=technique,
             initiator_persona=caster_persona,
