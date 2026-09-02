@@ -589,7 +589,7 @@ GM counterpart to `stakes_summary_for_beat`: `{is_staked, is_ready, problems:
 [str], advisories: [str], declared_risk, effective_risk, locked, locked_at}`
 via `BeatReadinessSerializer`. Unlike the player-safe stakes-summary payload,
 `problems` (the raw `validate_stakes_readiness` reasons) is GM planning
-detail — mirroring `internal_description` — so this is exposed only at
+detail - mirroring `internal_description` - so this is exposed only at
 **`GET /api/beats/{id}/readiness/`** (`BeatViewSet.readiness`, permission
 `CanAssignMissionToBeat`: Lead GM or staff, object-level). `locked`/
 `locked_at` read `get_open_activation(beat)` directly.
@@ -724,7 +724,7 @@ All six ViewSets live in `world.stories.views`, registered in
 | `StakeRewardLineViewSet` (PR3) | `/api/stake-reward-lines/` | `IsStakeRewardLineBeatStoryOwnerOrStaff` (delegates via `obj.resolution.stake.beat`); serializer enforces the create-path ownership walk, the open-activation lock, and resonance-required-iff-`RESONANCE` |
 | `StakeContractActivationViewSet` | `/api/stake-activations/` | Read-only; `IsStakeBeatStoryOwnerOrStaff` |
 | `BeatViewSet.stakes_summary` (#1770 PR4) | `GET /api/beats/{id}/stakes-summary/` | `CanViewBeatStakesSummary` (staff / story owner / linked-scene participant); leaks only `player_summary`/severity + risk/readiness by design |
-| `BeatViewSet.readiness` (#3562) | `GET /api/beats/{id}/readiness/` | `CanAssignMissionToBeat` (Lead GM / staff, object-level); GM-facing — includes the raw `problems` list |
+| `BeatViewSet.readiness` (#3562) | `GET /api/beats/{id}/readiness/` | `CanAssignMissionToBeat` (Lead GM / staff, object-level); GM-facing - includes the raw `problems` list |
 
 `StakeSerializer`, `StakeResolutionSerializer`, and `StakeRewardLineSerializer`
 all enforce, in `validate()`
@@ -750,11 +750,11 @@ counterpart of the lock check above (#3562): while `get_open_activation(self.ins
 is non-null, a changed value on `risk`, `target_level`, `success_consequences`,
 `failure_consequences`, or `expired_consequences` is rejected on that field
 (`_STAKES_LOCKED_MESSAGE`, reused rather than calling the stake-shaped
-`_check_stake_beat_lock`) — no staff bypass, same posture as the Stake lock.
+`_check_stake_beat_lock`) - no staff bypass, same posture as the Stake lock.
 It also caps a non-staff `required_mission` write to `scenario_scope_q(user)`
 (`world.missions.permissions`) when the value is set and changing, mirroring
 the same scope the missions Studio API already enforces on that GM's own
-authoring surface (#3565) — a GM cannot assign a mission through a beat that
+authoring surface (#3565) - a GM cannot assign a mission through a beat that
 they couldn't have authored directly.
 
 ## PR Spine: Shipped & Remaining
@@ -809,14 +809,14 @@ issues:
   the freeform-scene GM declaration
 - `src/world/scenes/tests/test_scene_action_request_serializer.py` —
   `combat_stakes` gating on both consent-prompt serializers
-- `src/world/stories/tests/test_beat_readiness_endpoint.py` (#3562) — the
+- `src/world/stories/tests/test_beat_readiness_endpoint.py` (#3562) - the
   readiness endpoint's permission gate (Lead GM/staff 200, player 403) and
   `locked`/`locked_at` on an open activation
-- `src/world/stories/tests/test_serializers_beat_risk.py` (#3562, extended) —
+- `src/world/stories/tests/test_serializers_beat_risk.py` (#3562, extended) -
   the `required_mission` `scenario_scope_q` cap and the beat-side stakes lock
   (`risk` rejected while open, unrelated fields still writable)
 - `src/world/missions/tests/test_scenario_authoring_permissions.py` (#3562,
-  extended) — `scenario_scope_q`'s `risk_tier=0` exclusion
+  extended) - `scenario_scope_q`'s `risk_tier=0` exclusion
 
 ## Integrates With
 

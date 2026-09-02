@@ -1,7 +1,7 @@
-"""GET /api/beats/{id}/readiness/ — GM readiness dashboard for a beat (#3562).
+"""GET /api/beats/{id}/readiness/ - GM readiness dashboard for a beat (#3562).
 
 Unlike stakes-summary (player-safe, pillar 9), readiness surfaces the raw
-``problems`` list — GM planning detail like ``internal_description`` — so
+``problems`` list - GM planning detail like ``internal_description`` - so
 it is gated to the Lead GM or staff via ``CanAssignMissionToBeat``, not
 opened to any story participant.
 """

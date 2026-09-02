@@ -1624,11 +1624,11 @@ class BeatViewSet(viewsets.ModelViewSet):
         permission_classes=[CanAssignMissionToBeat],
     )
     def readiness(self, request: Request, pk: int | None = None) -> Response:
-        """GET /api/beats/{id}/readiness/ — GM readiness dashboard for this beat (#3562).
+        """GET /api/beats/{id}/readiness/ - GM readiness dashboard for this beat (#3562).
 
         Unlike ``stakes-summary`` (player-safe, pillar 9), this surfaces the
-        raw ``problems`` list — GM planning detail, like
-        ``internal_description`` — so it is gated to the Lead GM or staff via
+        raw ``problems`` list - GM planning detail, like
+        ``internal_description`` - so it is gated to the Lead GM or staff via
         ``CanAssignMissionToBeat`` rather than the broader stakes-summary
         audience.
         """

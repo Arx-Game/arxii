@@ -217,7 +217,7 @@ class BeatSerializerStakeLockTests(APITestCase):
     """#3562: an open StakeContractActivation locks the priced fields on the beat.
 
     Mirrors ``_check_stake_beat_lock``'s no-staff-bypass posture (the Stake
-    lock has none either — a locked contract is locked for everyone until
+    lock has none either - a locked contract is locked for everyone until
     resolved), reusing ``_STAKES_LOCKED_MESSAGE``.
     """
 
