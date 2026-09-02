@@ -119,6 +119,13 @@ def get_fatigue_percentage(character_sheet: CharacterSheet, category: str) -> fl
     return (current / capacity) * 100
 
 
+def _fatigue_percentage(current: int, capacity: int) -> float:
+    """Fill percentage, treating a zero capacity as full when anything is spent."""
+    if capacity > 0:
+        return current / capacity * 100
+    return 100.0 if current > 0 else 0.0
+
+
 def _zone_from_percentage(percentage: float) -> str:
     """Return the FatigueZone for a given fatigue percentage.
 
@@ -650,7 +657,7 @@ def get_full_status(character_sheet: CharacterSheet, *, pool: FatiguePool | None
         cat = category.value
         capacity = get_fatigue_capacity(character_sheet, cat, well_rested=well_rested)
         current = pool.get_current(cat) if pool else 0
-        pct = (current / capacity * 100) if capacity > 0 else (100.0 if current > 0 else 0.0)
+        pct = _fatigue_percentage(current, capacity)
         zone = _zone_from_percentage(pct)
         status[cat] = {
             "current": current,

@@ -55,6 +55,21 @@ class PublicFeedItem:
     category: str | None = None
 
 
+# Which way a stature shift reads in the public feed.
+_STATURE_RISES = "rises"
+_STATURE_FALLS = "falls"
+_STATURE_HOLDS = "holds"
+
+
+def _stature_direction(delta: int) -> str:
+    """Which way a stature shift reads in the feed."""
+    if delta > 0:
+        return _STATURE_RISES
+    if delta < 0:
+        return _STATURE_FALLS
+    return _STATURE_HOLDS
+
+
 def _viewer_society_ids(persona: Persona) -> set[int]:
     """Societies a persona hears public tidings through: its reputations + its orgs' societies.
 
@@ -420,7 +435,7 @@ def _stature_shift_items(organization, *, limit: int) -> list[PublicFeedItem]:
         elif row.subject_persona is not None:
             subject = row.subject_persona.name
         delta = row.delta_perceived or row.delta_true
-        direction = "rises" if delta > 0 else "falls" if delta < 0 else "holds"
+        direction = _stature_direction(delta)
         items.append(
             PublicFeedItem(
                 kind=FeedItemKind.STATURE,

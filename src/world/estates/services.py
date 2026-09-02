@@ -567,11 +567,7 @@ def _deliver_specific_item(
     if item is None or item.holder_character_sheet_id != sheet.pk:
         return None  # ademption — the estate no longer owns it
     recipient_persona = bequest.recipient_persona
-    target = (
-        recipient_persona
-        if _persona_can_receive_item(recipient_persona, item)
-        else (heir_persona if _persona_can_receive_item(heir_persona, item) else None)
-    )
+    target = _first_eligible_recipient(item, recipient_persona, heir_persona)
     if target is None:
         _clear_item_ownership(item, sheet)
     else:
@@ -702,6 +698,15 @@ def _flip_item(item: Any, sheet: CharacterSheet, target_persona: Any) -> None:
         from_persona_display=sheet.primary_persona,
         to_persona_display=target_persona,
     )
+
+
+def _first_eligible_recipient(item, recipient_persona, heir_persona):
+    """The named recipient if they can hold it, else the heir, else nobody."""
+    if _persona_can_receive_item(recipient_persona, item):
+        return recipient_persona
+    if _persona_can_receive_item(heir_persona, item):
+        return heir_persona
+    return None
 
 
 def _clear_item_ownership(item: Any, sheet: CharacterSheet) -> None:

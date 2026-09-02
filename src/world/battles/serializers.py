@@ -33,6 +33,15 @@ from world.scenes.constants import PersonaType
 from world.societies.models import LegendEntry
 
 
+def _persona_thumbnail(character, persona, cached_conditions):
+    """A live character resolves its own thumbnail; a bare persona falls back to its own."""
+    from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+    if character is not None:
+        return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
+    return persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
+
+
 class FortificationSerializer(serializers.ModelSerializer):
     """A defensible structure at a BattlePlace."""
 
@@ -214,7 +223,6 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         persona = self._primary_persona(obj)
         if persona is None:
             return None
-        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
 
         try:
             character = persona.character_sheet.character
@@ -229,15 +237,7 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
             if character is not None
             else None
         )
-        thumbnail_media_url = (
-            resolve_thumbnail(
-                character,
-                persona=persona,
-                cached_conditions=cached_conditions,
-            )
-            if character is not None
-            else (persona.thumbnail.cloudinary_url if persona.thumbnail_id else None)
-        )
+        thumbnail_media_url = _persona_thumbnail(character, persona, cached_conditions)
         return {
             "id": persona.id,
             "name": persona.name,

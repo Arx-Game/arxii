@@ -33,6 +33,18 @@ _UNKNOWN = "Unknown"
 _NO_IDENTITY = "You have no active character to view sections with."
 
 
+_TONE_NEUTRAL = "neutral"
+
+
+def _affection_tone(affection: int) -> str:
+    """How a relationship reads on the sheet: warm, cold, or neither."""
+    if affection > 0:
+        return "|gwarm|n"
+    if affection < 0:
+        return "|rcold|n"
+    return _TONE_NEUTRAL
+
+
 def _viewer_sheet(command: Command) -> CharacterSheet:
     """The active character's sheet (the viewer). Raises ``CommandError`` if there's no puppet."""
     try:
@@ -199,7 +211,7 @@ def _format_relationships(relationships: list) -> list[str]:
     for relationship in relationships:
         target = relationship.target.character.db_key
         affection = relationship.affection
-        tone = "|gwarm|n" if affection > 0 else ("|rcold|n" if affection < 0 else "neutral")
+        tone = _affection_tone(affection)
         status = " (pending)" if relationship.is_pending else ""
         tether = (
             f" |m[tether: {relationship.soul_tether_role}]|n" if relationship.is_soul_tether else ""
