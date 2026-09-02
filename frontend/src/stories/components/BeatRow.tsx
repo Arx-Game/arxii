@@ -18,6 +18,7 @@ import { AggregateProgressBar } from './AggregateProgressBar';
 import { ContributeBeatDialog } from './ContributeBeatDialog';
 import { MarkBeatDialog } from './MarkBeatDialog';
 import type { Beat } from '../types';
+import { beatLabel } from '../beatLabel';
 
 interface BeatRowProps {
   beat: Beat;
@@ -52,12 +53,7 @@ export function BeatRow({
   const isResolved = outcome === 'success' || outcome === 'failure' || outcome === 'expired';
 
   // Visible title: player_hint if set, otherwise a generic label
-  const visibleTitle =
-    beat.player_hint && beat.player_hint.trim().length > 0
-      ? beat.player_hint
-      : beat.visibility === 'secret'
-        ? '(Hidden Beat)'
-        : 'Beat';
+  const visibleTitle = beatLabel(beat);
 
   return (
     <li className="space-y-2 rounded-md border bg-card p-3">

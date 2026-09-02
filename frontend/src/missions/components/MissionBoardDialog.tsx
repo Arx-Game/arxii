@@ -61,6 +61,40 @@ export function MissionBoardDialog({
     });
   };
 
+  const renderPostings = () => {
+    if (postings.isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading postings…</p>;
+    }
+    if (postings.data && postings.data.results.length > 0) {
+      return (
+        <ul className="space-y-2" data-testid="board-postings-list">
+          {postings.data.results.map((posting) => (
+            <li
+              key={posting.template_id}
+              className="flex items-start justify-between gap-3 rounded-md border p-3"
+            >
+              <div>
+                <p className="text-sm font-medium">{posting.name}</p>
+                {posting.summary ? (
+                  <p className="text-xs text-muted-foreground">{posting.summary}</p>
+                ) : null}
+              </div>
+              <Button
+                size="sm"
+                disabled={take.isPending}
+                onClick={() => handleTake(posting.template_id)}
+                data-testid={`take-posting-${posting.template_id}`}
+              >
+                Take
+              </Button>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return <p className="text-sm text-muted-foreground">No postings for you right now.</p>;
+  };
+
   return (
     <Dialog
       open={open}
@@ -75,35 +109,7 @@ export function MissionBoardDialog({
           <DialogDescription>Postings you&apos;re eligible to take.</DialogDescription>
         </DialogHeader>
 
-        {postings.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading postings…</p>
-        ) : postings.data && postings.data.results.length > 0 ? (
-          <ul className="space-y-2" data-testid="board-postings-list">
-            {postings.data.results.map((posting) => (
-              <li
-                key={posting.template_id}
-                className="flex items-start justify-between gap-3 rounded-md border p-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{posting.name}</p>
-                  {posting.summary ? (
-                    <p className="text-xs text-muted-foreground">{posting.summary}</p>
-                  ) : null}
-                </div>
-                <Button
-                  size="sm"
-                  disabled={take.isPending}
-                  onClick={() => handleTake(posting.template_id)}
-                  data-testid={`take-posting-${posting.template_id}`}
-                >
-                  Take
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">No postings for you right now.</p>
-        )}
+        {renderPostings()}
 
         {takenInstanceId != null ? (
           <p className="text-sm" data-testid="board-take-journal-link">

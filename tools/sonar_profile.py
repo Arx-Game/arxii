@@ -28,6 +28,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -38,6 +39,21 @@ SONAR_BASE = "https://sonarcloud.io/api"
 BUILTIN_PARENT = "Sonar way"
 RULES_FILE = Path(__file__).resolve().parent.parent / "sonar-rules.yaml"
 HTTP_NO_CONTENT = 204
+HTTP_RETRIES = 4
+
+# A rule key's repository prefix determines its language. Resolving this locally
+# keeps the drift check from making one API call per rule - it was 45 sequential
+# calls, and any one of them resetting failed the build. Unknown prefixes still
+# fall back to `rules/show`.
+LANG_BY_REPO = {
+    "python": "py",
+    "pythonbugs": "py",
+    "pythonenterprise": "py",
+    "typescript": "ts",
+    "javascript": "js",
+    "css": "css",
+    "Web": "web",
+}
 
 
 class SonarError(RuntimeError):
@@ -45,26 +61,39 @@ class SonarError(RuntimeError):
 
 
 def _request(path: str, params: dict[str, str], *, post: bool = False) -> dict | None:
-    """Call the SonarCloud API, returning parsed JSON (None for empty 204 bodies)."""
+    """Call the SonarCloud API, returning parsed JSON (None for empty 204 bodies).
+
+    Retries transient transport failures. A single `ConnectionResetError` used to
+    fail the whole drift check, which runs on every PR - a flaky network is not a
+    policy violation.
+    """
     token = os.environ.get("SONAR_TOKEN", "")
     encoded = urllib.parse.urlencode(params)
-    if post:
-        req = urllib.request.Request(  # noqa: S310 - fixed https host
-            f"{SONAR_BASE}/{path}", data=encoded.encode(), method="POST"
-        )
-    else:
-        req = urllib.request.Request(f"{SONAR_BASE}/{path}?{encoded}")  # noqa: S310
-    if token:
-        basic = base64.b64encode(f"{token}:".encode()).decode()
-        req.add_header("Authorization", f"Basic {basic}")
-    try:
-        with urllib.request.urlopen(req) as resp:  # noqa: S310
-            body = resp.read().decode()
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode()[:400]
-        msg = f"{path} -> HTTP {exc.code}: {detail}"
-        raise SonarError(msg) from exc
-    return json.loads(body) if body.strip() else None
+    last: Exception | None = None
+    for attempt in range(HTTP_RETRIES):
+        if post:
+            req = urllib.request.Request(  # noqa: S310 - fixed https host
+                f"{SONAR_BASE}/{path}", data=encoded.encode(), method="POST"
+            )
+        else:
+            req = urllib.request.Request(f"{SONAR_BASE}/{path}?{encoded}")  # noqa: S310
+        if token:
+            basic = base64.b64encode(f"{token}:".encode()).decode()
+            req.add_header("Authorization", f"Basic {basic}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+                body = resp.read().decode()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode()[:400]
+            msg = f"{path} -> HTTP {exc.code}: {detail}"
+            raise SonarError(msg) from exc
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            last = exc
+            time.sleep(2**attempt)
+            continue
+        return json.loads(body) if body.strip() else None
+    msg = f"{path} -> transport failure after {HTTP_RETRIES} attempts: {last}"
+    raise SonarError(msg)
 
 
 def load_policy() -> dict:
@@ -91,6 +120,11 @@ def rule_languages(rule_keys: list[str], organization: str) -> dict[str, str]:
     """
     languages: dict[str, str] = {}
     for key in rule_keys:
+        repo = key.split(":", 1)[0]
+        known = LANG_BY_REPO.get(repo)
+        if known is not None:
+            languages[key] = known
+            continue
         data = _request("rules/show", {"organization": organization, "key": key})
         if data is None or "rule" not in data:
             msg = f"rule {key} not found on SonarCloud - is the key a typo?"

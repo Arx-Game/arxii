@@ -91,13 +91,11 @@ class OrgRosterViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         persona = active_persona_for_request(self.request)
         if persona is None:
             return NPCAsset.objects.none()
-        member_org_ids = list(
-            OrganizationMembership.objects.filter(
-                persona=persona,
-                left_at__isnull=True,
-                exiled_at__isnull=True,
-            ).values_list("organization_id", flat=True)
-        )
+        member_org_ids = OrganizationMembership.objects.filter(
+            persona=persona,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+        ).values_list("organization_id", flat=True)
         allowed = set(member_org_ids) | set(overseen_org_ids(persona))
         return NPCAsset.objects.filter(promoter_org_id__in=allowed).select_related("asset_persona")
 
@@ -133,13 +131,11 @@ class ListenerPostViewSet(
         persona = active_persona_for_request(self.request)
         if persona is None:
             return ListenerPost.objects.none()
-        member_org_ids = list(
-            OrganizationMembership.objects.filter(
-                persona=persona,
-                left_at__isnull=True,
-                exiled_at__isnull=True,
-            ).values_list("organization_id", flat=True)
-        )
+        member_org_ids = OrganizationMembership.objects.filter(
+            persona=persona,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+        ).values_list("organization_id", flat=True)
         allowed = set(member_org_ids) | set(overseen_org_ids(persona))
         visible = Q(handler=persona) | Q(assignment__npc_asset__promoter_org_id__in=allowed)
         return (

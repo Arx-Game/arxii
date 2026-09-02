@@ -454,7 +454,10 @@ class EntranceAction(_SocialTemplateAction):
         Mirrors ``CastTechniqueAction.execute`` (scene/persona/technique/target
         resolution, soulfray ``PendingCast`` gating) but routes the outcome through
         the deferral matrix instead of a flat success/failure — see
-        ``_dispatch_entrance_cast`` for the branch-by-branch breakdown.
+        ``_dispatch_entrance_cast`` for the branch-by-branch breakdown. Entrance-cast
+        wards never carry Soulfray consent today (#3573) - there is no entrance-side
+        consent control, so ``_dispatch_entrance_cast`` always passes
+        ``soulfray_consented=False`` regardless of ``confirm_soulfray_risk``.
         """
         from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
         from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
@@ -557,6 +560,9 @@ class EntranceAction(_SocialTemplateAction):
                 target_persona=target,
                 technique=technique,
                 confirm_soulfray_risk=confirm_soulfray_risk,
+                # No entrance-side consent control exists yet; never imply ward
+                # consent from the halt-bypass flag (#3573).
+                soulfray_consented=False,
                 originated_as_entrance=True,
             )
         except MagicError as exc:

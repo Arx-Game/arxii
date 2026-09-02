@@ -413,3 +413,31 @@ class EntranceTechniqueActionTests(CastScenarioMixin):
         self.assertEqual(call_args[0], self._actor())
         self.assertEqual(call_args[1], self.target.pk)
         self.assertIs(call_args[2], resolution)
+
+    # -------------------------------------------------------------------------
+    # Entrance never implies ward consent from confirm_soulfray_risk (#3573 review).
+    # -------------------------------------------------------------------------
+
+    def test_never_passes_soulfray_consent(self) -> None:
+        """No entrance-side consent control exists yet - regardless of
+        ``confirm_soulfray_risk`` (the halt-bypass flag), ``request_technique_cast``
+        must always be called with an explicit ``soulfray_consented=False`` so a
+        ward cast through ``enter <technique>`` never silently accrues Soulfray.
+        """
+        technique = make_benign_castable_technique()
+        grant_technique(self.caster, technique)
+
+        with patch("world.scenes.cast_services.request_technique_cast") as mock_cast:
+            mock_cast.return_value.soulfray_warning = None
+            mock_cast.return_value.result = None
+            mock_cast.return_value.encounter = None
+
+            EntranceAction().execute(
+                self._actor(),
+                None,
+                technique_id=technique.pk,
+                confirm_soulfray_risk=True,
+            )
+
+        mock_cast.assert_called_once()
+        self.assertFalse(mock_cast.call_args.kwargs["soulfray_consented"])

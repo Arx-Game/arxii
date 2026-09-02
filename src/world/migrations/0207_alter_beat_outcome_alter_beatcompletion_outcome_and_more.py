@@ -40,7 +40,7 @@ def rewrite_parked_rows(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0204_alter_legendlevelcalibration_options_legendhonor"),
+        ("arxii", "0206_alter_beat_deadline"),
     ]
 
     operations = [

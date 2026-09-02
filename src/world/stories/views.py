@@ -2232,20 +2232,21 @@ def _eligible_transitions_from_prefetched(
 
 
 def _expire_overdue_beats_for_episodes(episode_ids: list[int]) -> None:
-    """Bulk-detect and expire overdue UNSATISFIED beats across all episodes.
+    """Bulk-detect and expire overdue UNSATISFIED beats across all episodes (#3558).
 
     One query for the whole candidate set (replaces the per-episode SELECT
     that ``get_eligible_transitions`` issued in a loop). Each overdue beat is
-    saved individually so the SharedMemoryModel identity-map cache is updated
-    in place — a bulk .update() would leave stale Python objects and break the
-    subsequent FK walks. The number of saves is bounded by the count of
-    actually-overdue beats (data-dependent, typically zero), not by story
-    count, so the query bound is preserved.
+    completed through ``expire_beat`` individually, in its own savepoint, so
+    the SharedMemoryModel identity-map cache is updated in place and one
+    beat's failure never aborts the batch. The number of completions is
+    bounded by the count of actually-overdue beats (data-dependent, typically
+    zero), not by story count, so the query bound is preserved.
     """
     if not episode_ids:
         return
 
     from world.stories.constants import BeatOutcome  # noqa: PLC0415
+    from world.stories.services.beats import _expire_each  # noqa: PLC0415
 
     now = timezone.now()
     overdue = Beat.objects.filter(
@@ -2254,9 +2255,7 @@ def _expire_overdue_beats_for_episodes(episode_ids: list[int]) -> None:
         deadline__isnull=False,
         deadline__lt=now,
     )
-    for beat in overdue:
-        beat.outcome = BeatOutcome.EXPIRED
-        beat.save(update_fields=["outcome", "updated_at"])
+    _expire_each(list(overdue), now=now)
 
 
 def _group_progress_by_story(
@@ -2613,9 +2612,13 @@ class GMQueueView(APIView):
 class ExpireOverdueBeatsView(APIView):
     """POST /api/stories/expire-overdue-beats/
 
-    Staff-only trigger that flips all UNSATISFIED beats with past deadlines
-    to EXPIRED. Designed for manual triggering and cron hooks.
-    Returns {"expired_count": N}.
+    Staff-only trigger that completes every UNSATISFIED beat with a past
+    deadline as EXPIRED through the shared completion tail (#3558): fires the
+    beat's expired consequence pool (no legend), grades its open stakes LOSS,
+    closes its stake contract, and notifies - one savepoint per beat, so one
+    beat's failure never stops the sweep. Designed for manual triggering and
+    cron hooks. Returns {"expired_count": N}, the count of beats whose
+    outcome changed.
     """
 
     permission_classes = [permissions.IsAdminUser]

@@ -174,6 +174,11 @@ export function ActionPanel({ sceneId }: Props) {
   // form, which is what a bare cast does; the base form is variant_id null.
   const [selectedForm, setSelectedForm] = useState<FormChoice>(null);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
+  // The caster's consent (#3573) to hold the selected ward-bearing technique's
+  // protective condition alive past zero anima via Soulfray. Only meaningful
+  // when selectedTechnique.reactive_anima_cost != null; reset whenever the
+  // selected technique changes (handleTechniqueSelect).
+  const [castWardSoulfrayAccepted, setCastWardSoulfrayAccepted] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -442,6 +447,7 @@ export function ActionPanel({ sceneId }: Props) {
     setCastTargetPersonaId(null);
     setCastTargetPersonaIds([]);
     setCastLedgerResult(null);
+    setCastWardSoulfrayAccepted(false);
     performCast.reset();
     pull.reset();
   }
@@ -453,6 +459,13 @@ export function ActionPanel({ sceneId }: Props) {
       pull.setPullNotice(payload.error);
       return;
     }
+    // #3573: only meaningful (and only sent) for a ward-bearing technique - a
+    // stale true from a prior selection can't leak since handleTechniqueSelect
+    // resets it on every technique change.
+    const soulfrayKwarg =
+      selectedTechnique.reactive_anima_cost != null && castWardSoulfrayAccepted
+        ? { soulfray_consented: true }
+        : {};
     const cardinality = selectedTechnique.target_spec?.cardinality ?? selectedTechnique.target_type;
     if (cardinality === 'filtered_group') {
       performCast.mutate({
@@ -460,6 +473,7 @@ export function ActionPanel({ sceneId }: Props) {
         target_persona_ids: castTargetPersonaIds,
         ...formSelection(selectedTechnique, selectedForm),
         ...payload,
+        ...soulfrayKwarg,
       });
     } else {
       // SELF, SINGLE, AREA — pass the single target persona (or null for self/area/no-target).
@@ -468,6 +482,7 @@ export function ActionPanel({ sceneId }: Props) {
         target_persona: castTargetPersonaId ?? null,
         ...formSelection(selectedTechnique, selectedForm),
         ...payload,
+        ...soulfrayKwarg,
       });
     }
   }
@@ -762,6 +777,22 @@ export function ActionPanel({ sceneId }: Props) {
                           <AlertTriangle className="h-3 w-3 shrink-0" />
                           Hostile: casting at another character may start combat.
                         </p>
+                      )}
+
+                      {selectedTechnique.reactive_anima_cost != null && (
+                        <label className="flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            data-testid="cast-ward-soulfray-toggle"
+                            checked={castWardSoulfrayAccepted}
+                            onChange={(e) => setCastWardSoulfrayAccepted(e.target.checked)}
+                            disabled={performCast.isPending}
+                          />
+                          <span>
+                            Hold this ward into Soulfray (fee{' '}
+                            {selectedTechnique.reactive_anima_cost} anima per fire)
+                          </span>
+                        </label>
                       )}
 
                       {/* Target selector — driven by target_spec.cardinality (#1321) */}

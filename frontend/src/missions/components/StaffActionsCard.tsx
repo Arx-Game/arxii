@@ -43,6 +43,16 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
   const isOpen = template.visibility === 'open';
   const nextVisibility = isOpen ? 'restricted' : 'open';
 
+  const renderPatch = () => {
+    if (patch.isPending) {
+      return 'Flipping…';
+    }
+    if (isOpen) {
+      return 'Restrict';
+    }
+    return 'Open up';
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -73,7 +83,7 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
               disabled={patch.isPending}
               data-testid="visibility-flip"
             >
-              {patch.isPending ? 'Flipping…' : isOpen ? 'Restrict' : 'Open up'}
+              {renderPatch()}
             </Button>
           </div>
           {patch.error ? (

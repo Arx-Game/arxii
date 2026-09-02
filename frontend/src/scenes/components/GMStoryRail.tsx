@@ -64,6 +64,24 @@ function ParticipantRow({ participant, actorCharacterId }: ParticipantRowProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participant.character_sheet_id, actorCharacterId]);
 
+  const renderConditionsUnavailable = () => {
+    if (conditionsUnavailable) {
+      return <div className="text-xs text-muted-foreground">Conditions unavailable.</div>;
+    }
+    if (conditions.length > 0) {
+      return (
+        <ul className="text-xs text-muted-foreground" data-testid="gm-rail-participant-conditions">
+          {conditions.map((c) => (
+            <li key={c.id}>
+              {c.name} (severity {c.severity})
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return <div className="text-xs text-muted-foreground">No active conditions.</div>;
+  };
+
   return (
     <div
       className="rounded border p-2 text-sm"
@@ -77,19 +95,7 @@ function ParticipantRow({ participant, actorCharacterId }: ParticipantRowProps) 
       ) : (
         <div className="text-xs text-muted-foreground">Vitals unavailable.</div>
       )}
-      {conditionsUnavailable ? (
-        <div className="text-xs text-muted-foreground">Conditions unavailable.</div>
-      ) : conditions.length > 0 ? (
-        <ul className="text-xs text-muted-foreground" data-testid="gm-rail-participant-conditions">
-          {conditions.map((c) => (
-            <li key={c.id}>
-              {c.name} (severity {c.severity})
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="text-xs text-muted-foreground">No active conditions.</div>
-      )}
+      {renderConditionsUnavailable()}
     </div>
   );
 }

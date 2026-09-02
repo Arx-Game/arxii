@@ -443,8 +443,13 @@ WINDUP_CALLED_OUT_DOWNGRADE: int = 2
 WINDUP_BLIND_DOWNGRADE: int = 1
 
 # Fallback telegraph text when ThreatPoolEntry.windup_telegraph is blank.
-# {opponent} is substituted with the opponent's display name.
-WINDUP_GENERIC_TELEGRAPH: str = "{opponent} begins something enormous..."
+# {opponent} is substituted with the opponent's display name, {target} with the
+# targeted character's name.
+WINDUP_GENERIC_TELEGRAPH: str = "{opponent} begins something enormous, bearing down on {target}..."
+# Appended to an authored ``windup_telegraph`` that carries no ``{target}`` placeholder, so
+# authored prose never silently hides whom the blow is aimed at (#3572).
+WINDUP_TARGET_CLAUSE: str = " It is aimed at {target}."
+WINDUP_NO_TARGET_LABEL: str = "no one in particular"
 
 # ---------------------------------------------------------------------------
 # PC sustained actions (#2705) — extends ADR-0161's shape to the PC side

@@ -9,7 +9,7 @@
  * Uses apiFetch from @/evennia_replacements/api.
  */
 
-import { apiFetch } from '@/evennia_replacements/api';
+import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { parseDispatchBody, readErrorDetail } from '@/lib/errors';
 import type { components } from '@/generated/api';
 
@@ -299,7 +299,7 @@ export async function getCovenantRoles(params: {
   if (params.covenant_type != null) search.set('covenant_type', params.covenant_type);
   if (params.parent_role != null) search.set('parent_role', String(params.parent_role));
   const query = search.toString();
-  const res = await apiFetch(`${ROLES_URL}/${query ? `?${query}` : ''}`);
+  const res = await apiFetch(withQuery(`${ROLES_URL}/`, query));
   if (!res.ok) throw new Error('Failed to load covenant roles');
   return res.json() as Promise<CovenantRoleWithParent[]>;
 }

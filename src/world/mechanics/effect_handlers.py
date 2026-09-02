@@ -63,12 +63,18 @@ def apply_effect(
 def apply_all_effects(
     consequence: "Consequence",
     context: "ResolutionContext",
+    *,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> list[AppliedEffect]:
-    """Apply all effects on a consequence. Returns empty list for unsaved consequences."""
+    """Apply all effects on a consequence. Returns empty list for unsaved consequences.
+
+    ``skip_effect_types``: effect types to leave unfired (an expiry completion
+    passes ``{EffectType.LEGEND_AWARD}``: expiry earns no legend, ADR-0066).
+    """
     if consequence.pk is None:
         return []
     effects = consequence.effects.all().order_by("execution_order")
-    return [apply_effect(e, context) for e in effects]
+    return [apply_effect(e, context) for e in effects if e.effect_type not in skip_effect_types]
 
 
 def _resolve_target(

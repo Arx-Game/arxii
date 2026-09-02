@@ -105,6 +105,7 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
     applied_condition_rows: Iterable | None = None,
     position_params: dict[str, int] | None = None,
+    soulfray_consented: bool = False,
 ) -> list[AppliedConditionResult]:
     """Apply authored applied-condition rows to pre-resolved targets.
 
@@ -144,6 +145,10 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
             ``compute_duration_rounds`` / ``target_kind`` / ``stack_count``), and
             provenance still points at *technique*. SHARED with the technique's own
             conditions AND combat — keep the default branch byte-identical.
+        soulfray_consented: The caster's consent, at cast time, to keep this batch's
+            reactive cost and upkeep firing past zero anima at the price of Soulfray
+            (#3573). Forwarded to ``bulk_apply_conditions`` and stamped onto every
+            created ``ConditionInstance``.
 
     Returns:
         List of ``AppliedConditionResult``, one per ``BulkConditionApplication``
@@ -202,6 +207,7 @@ def apply_technique_conditions(  # noqa: PLR0913 - cohesive condition-applicatio
         bulk_applications,
         source_character=source_character,
         source_technique=technique,
+        soulfray_consented=soulfray_consented,
     )
     out: list[AppliedConditionResult] = []
     for app, result in zip(bulk_applications, bulk_results, strict=True):

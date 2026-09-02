@@ -82,3 +82,13 @@ class DeclareInterposeServiceTest(TestCase):
         # No ValueError expected — this is just a smoke test for the None path
         action = declare_interpose(self.participant, None)
         assert action.maneuver == CombatManeuver.INTERPOSE
+
+    def test_declare_interpose_records_soulfray_consent(self) -> None:
+        action = declare_interpose(self.participant, confirm_soulfray_risk=True)
+        action.refresh_from_db()
+        self.assertTrue(action.confirm_soulfray_risk)
+
+    def test_declare_interpose_defaults_to_no_consent(self) -> None:
+        action = declare_interpose(self.participant)
+        action.refresh_from_db()
+        self.assertFalse(action.confirm_soulfray_risk)

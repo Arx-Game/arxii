@@ -714,6 +714,70 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 | `protective_condition_and_flavor(technique) -> tuple[ConditionTemplate, str] \| None` (#2207) | Classifies a technique's reactive-trigger handler into `barrier`/`blink`/`redirect` by walking `condition_applications → condition.reactive_triggers → flow_definition.steps` (one batched Prefetch query); returns the matched `ConditionTemplate` too, since combat's guardian resolution needs its `reactive_anima_cost`. No new authored field — derives from the existing effect-palette data. |
 | `protective_flavor(technique) -> str \| None` (#2207) | Thin wrapper over `protective_condition_and_flavor` returning only the flavor string; used by `declare_interpose`'s declaration-time gate (combat, `world/combat/services.py`) |
 
+**`PlayerAction.reactive_anima_cost` / `CastableTechniqueSerializer.reactive_anima_cost`** (#3573)
+both carry the protective condition's flat fee (`ConditionTemplate.reactive_anima_cost`), resolved
+from the same `protective_condition_and_flavor(technique)` call `protective_flavor` and the
+guardian resolution already make (`actions/player_interface.py`'s `_combat_actions` for
+`PlayerAction`; `world/scenes/action_serializers.py`'s `CastableTechniqueSerializer.
+get_reactive_anima_cost`, one call per row, for the standalone-cast list) - `None` when the
+technique carries no protective handler. `AvailableEnhancement` does NOT carry this field: the
+technique-enhancement commit path (`create_action_request` -> `_resolve_enhanced_action` ->
+`use_technique`) never calls `apply_technique_conditions`, so an enhancement can never mint the
+condition a ward consent would attach to (tried and reverted in #3573's Task 6 fix round).
+
+Three consent surfaces read `reactive_anima_cost` before offering "hold this ward into Soulfray"
+(consent must ALWAYS be available, not gated behind an active Soulfray warning):
+- **Guard control** (`YourTurn.tsx`, combat) - `guard-soulfray-toggle`, fee + current anima shown;
+  `useGuardMutation`'s `confirmSoulfrayRisk` rides straight into `InterposeAction.execute`'s
+  `confirm_soulfray_risk`, which Task 4's `declare_interpose`/guardian resolution reads directly.
+- **Focused cast card** (`YourTurn.tsx`, combat) - `cast-ward-soulfray-toggle`, shown only when no
+  active Soulfray warning already surfaces `SoulfrayAcceptGate` (whose acceptance covers both).
+- **Standalone cast panel** (`ActionPanel.tsx`'s `castableTechniques` list, out of combat) -
+  `cast-ward-soulfray-toggle`, sends `soulfray_consented: true` via `castTechnique` ->
+  `TechniqueCastCreateSerializer.soulfray_consented` (`world/scenes/action_serializers.py`) ->
+  `SceneActionRequestViewSet.cast` -> `request_technique_cast`'s `soulfray_consented` kwarg,
+  threaded explicitly through `_route_immediate_cast`/`_route_filtered_group_cast`/
+  `_route_other_pc_cast` into `_resolve_and_pose_cast`. This is the REAL integration point for a
+  standalone ward cast (e.g. party wards): unlike the enhancement path, it does apply conditions.
+
+**Web cast consent is explicit, not derived** (#3573 fix round): `request_technique_cast`'s
+`confirm_soulfray_risk` defaults `True` on the web path (the telnet-only soulfray halt/accept
+offer, `world.magic.offer_handlers.SoulfrayPendingHandler`, must never block a web cast), and
+`_resolve_and_pose_cast` derives `soulfray_consented` from `confirm_soulfray_risk` when
+`soulfray_consented` is left `None`. Before this fix, `SceneActionRequestViewSet.cast` never
+passed `soulfray_consented` at all, so EVERY web-cast ward was silently stamped consented. The
+view now reads `soulfray_consented` from the serializer (`default=False`) and always passes it
+explicitly, bypassing the derivation on the web path only - every other caller (telnet's
+`CastTechniqueAction`, `offer_handlers.py`'s accept-soulfray re-dispatch, `berserk_compulsion.py`,
+`clash.py`, `battles/resolution.py`) still omits it and keeps the old derived behavior unchanged.
+
+**Telnet** (`commands/combat.py`'s `CmdDeclareTechnique`) - a trailing `soulfray` keyword on
+`cast`/`declare` (mirrors `combat interpose ... soulfray`, #3573 Task 1) sets
+`confirm_soulfray_risk=True` via `_inject_cast_mode_kwargs`, pre-consenting and skipping the
+separate "accept soulfray"/"decline soulfray" offer prompt that would otherwise gate a cast made
+while the caster has an active Soulfray stage.
+
+**Reactive protections and Soulfray (#3573).** Consent is captured before a reaction ever
+fires, never at fire time, since a reaction fires inside someone else's resolution:
+`declare_interpose`'s `confirm_soulfray_risk` for a declared technique-guardian interpose
+(`CombatRoundAction.confirm_soulfray_risk`), or `ConditionInstance.soulfray_consented`
+stamped at cast time (via `bulk_apply_conditions` -> `_ApplyConditionParams` ->
+`_create_instance_from_context`, from both `apply_technique_conditions` and
+`apply_signature_bonus_conditions`) for a standing ward. Three seams read that consent and
+branch on it - unconsented is unchanged (fizzle or lapse); consented debits through
+`deduct_anima(lethal=encounter.is_lethal)` (glut-first, deficit-capable) and accrues
+through `world.magic.services.soulfray.accumulate_soulfray`, the SAME function
+`use_technique`'s step 7 calls, so a guardian or ward-holder running dry accrues Soulfray
+the way a caster does: `_try_technique_interpose` (declared interpose fire),
+`_try_spend_reactive` (a Barrier/other reactive-condition fire, `effect_handlers.py`), and
+`drain_reactive_upkeep` (per-round upkeep drain, via `_debit_ally_paid_upkeep`/
+`_pay_upkeep`). Lethality for the clamp comes from `active_combat_engagement_for`
+(`None` when the bearer has no live COMBAT engagement - treated as lethal, since a
+ward held outside combat has no encounter to read `is_lethal` from). A consented deficit
+fire narrates distinctly (`_broadcast_commitment_line`): "tears at their own soul to hold
+the line over {ally}" for an interpose, "bleeds soul to keep the ward on {bearer}" for
+upkeep. See ADR-0255 (amends ADR-0118).
+
 **Consent routing** (in `world/scenes/cast_services.py:request_technique_cast`):
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
 - Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).

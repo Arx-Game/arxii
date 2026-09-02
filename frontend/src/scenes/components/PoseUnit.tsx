@@ -189,13 +189,7 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
         <button
           key={entry.emoji}
           className="text-sm opacity-60 transition-opacity hover:opacity-100"
-          title={
-            entry.valence > 0
-              ? 'Warms your regard for the author'
-              : entry.valence < 0
-                ? 'Cools your regard for the author'
-                : undefined
-          }
+          title={valenceTitle(entry.valence)}
           onClick={() => reactionMutation.mutate(entry.emoji)}
         >
           {entry.emoji}
@@ -230,6 +224,13 @@ export interface PoseUnitProps {
    * PersonaContextMenu remains the action surface either way.
    */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
+}
+
+/** Why a reaction chip nudges your regard, shown on hover. */
+function valenceTitle(valence: number): string | undefined {
+  if (valence > 0) return 'Warms your regard for the author';
+  if (valence < 0) return 'Cools your regard for the author';
+  return undefined;
 }
 
 export function PoseUnit({

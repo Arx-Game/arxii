@@ -11,7 +11,7 @@
  * is no player accept step.
  */
 
-import { apiFetch } from '@/evennia_replacements/api';
+import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 
 import type {
@@ -42,7 +42,7 @@ export async function listUpdateRequests(
     if (value !== undefined) search.set(key, String(value));
   }
   const qs = search.toString();
-  const res = await apiFetch(`${REQUESTS_URL}/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${REQUESTS_URL}/`, qs));
   if (!res.ok) await throwApiError(res, 'Failed to load update requests');
   return res.json() as Promise<PaginatedTableUpdateRequests>;
 }

@@ -56,6 +56,46 @@ export function MissionBrowserPage() {
     setParams(next, { replace: true });
   };
 
+  const renderMission = () => {
+    if (isError) {
+      return (
+        <div
+          className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
+          role="alert"
+          data-testid="mission-list-error"
+        >
+          <p className="font-medium">Couldn't load missions.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => {
+              refetch().catch(() => {});
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      );
+    }
+    if (isLoading) {
+      return <ListSkeleton />;
+    }
+    if ((data?.results?.length ?? 0) === 0) {
+      return (
+        <div className="p-4 text-sm text-muted-foreground">No missions match these filters.</div>
+      );
+    }
+    return (data?.results ?? []).map((t) => (
+      <MissionRow
+        key={t.id}
+        template={t}
+        selected={t.id === selectedId}
+        onSelect={() => handleSelectId(t.id)}
+      />
+    ));
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-4 flex items-center justify-between">
@@ -77,40 +117,7 @@ export function MissionBrowserPage() {
       <div className="mt-4 grid gap-4 md:grid-cols-[1fr_2fr]">
         <Card>
           <CardContent className="space-y-1 p-3" data-testid="mission-list">
-            {isError ? (
-              <div
-                className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
-                role="alert"
-                data-testid="mission-list-error"
-              >
-                <p className="font-medium">Couldn't load missions.</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {
-                    refetch().catch(() => {});
-                  }}
-                >
-                  Retry
-                </Button>
-              </div>
-            ) : isLoading ? (
-              <ListSkeleton />
-            ) : (data?.results?.length ?? 0) === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">
-                No missions match these filters.
-              </div>
-            ) : (
-              (data?.results ?? []).map((t) => (
-                <MissionRow
-                  key={t.id}
-                  template={t}
-                  selected={t.id === selectedId}
-                  onSelect={() => handleSelectId(t.id)}
-                />
-              ))
-            )}
+            {renderMission()}
             {data && data.count > (data.results?.length ?? 0) ? (
               <Pagination
                 page={page}

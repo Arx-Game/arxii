@@ -1,4 +1,4 @@
-import { apiFetch } from '@/evennia_replacements/api';
+import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 
 import type {
@@ -41,7 +41,7 @@ export function fetchStoryAreas(params: StoryAreaListParams = {}): Promise<Pagin
   if (params.hasParent !== undefined) search.set('has_parent', String(params.hasParent));
   if (params.parent !== undefined) search.set('parent', String(params.parent));
   const qs = search.toString();
-  return getJson(`/api/gm/story-areas/${qs ? `?${qs}` : ''}`, 'Failed to load story areas.');
+  return getJson(withQuery(`/api/gm/story-areas/`, qs), 'Failed to load story areas.');
 }
 
 export function fetchStoryArea(areaId: number): Promise<StoryArea> {

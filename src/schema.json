@@ -40064,8 +40064,8 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
         success_consequences:
           type: integer
           nullable: true
@@ -40355,8 +40355,8 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
         success_consequences:
           type: integer
           nullable: true
@@ -41797,6 +41797,16 @@ components:
           items:
             $ref: '#/components/schemas/TechniqueForm'
           readOnly: true
+        reactive_anima_cost:
+          type: integer
+          nullable: true
+          description: |-
+            Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
+
+            One protective_condition_and_flavor call per row - same traversal
+            actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
+            authored field.
+          readOnly: true
       required:
       - anima_cost
       - control
@@ -41808,6 +41818,7 @@ components:
       - intensity
       - name
       - reach
+      - reactive_anima_cost
       - target_spec
       - target_type
       - tier
@@ -48009,6 +48020,11 @@ components:
           items:
             $ref: '#/components/schemas/EngagementLock'
           readOnly: true
+        pending_attacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAttack'
+          readOnly: true
         resolution_order:
           type: array
           items:
@@ -48091,6 +48107,7 @@ components:
       - opponents
       - outcome
       - participants
+      - pending_attacks
       - position_adjacency
       - position_edges
       - position_nodes
@@ -64295,8 +64312,8 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
         success_consequences:
           type: integer
           nullable: true
@@ -67198,6 +67215,56 @@ components:
         * `open` - Open
         * `resolved` - Resolved
         * `staff_cleared` - Staff Cleared
+    PendingAttack:
+      type: object
+      description: |-
+        Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+
+        Never instantiated for serialization (same idiom as EngagementLockSerializer):
+        exists so drf-spectacular emits a concrete component. Threat-entry internals
+        (damage, defense check, cooldown) are deliberately absent; the row carries only
+        what the telegraph already announced plus the downgrade state.
+      properties:
+        id:
+          type: integer
+        opponent_id:
+          type: integer
+        opponent_name:
+          type: string
+        target_participant_id:
+          type: integer
+          nullable: true
+        target_name:
+          type: string
+          nullable: true
+        declared_round:
+          type: integer
+        resolves_round:
+          type: integer
+        rounds_until_landing:
+          type: integer
+        downgrades:
+          type: integer
+        called_out:
+          type: boolean
+        damage_scale:
+          type: number
+          format: double
+        cancelled:
+          type: boolean
+      required:
+      - called_out
+      - cancelled
+      - damage_scale
+      - declared_round
+      - downgrades
+      - id
+      - opponent_id
+      - opponent_name
+      - resolves_round
+      - rounds_until_landing
+      - target_name
+      - target_participant_id
     PendingAudereMajoraOffer:
       type: object
       description: |-
@@ -68063,6 +68130,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        reactive_anima_cost:
+          type: integer
+          readOnly: true
+          nullable: true
         position_target_shape:
           type: string
           readOnly: true
@@ -68097,6 +68168,7 @@ components:
       - prerequisite_reasons
       - protective_flavor
       - reach
+      - reactive_anima_cost
       - ref
       - soulfray_warning
       - strain
@@ -77143,6 +77215,9 @@ components:
           type: integer
           nullable: true
         cast_openly:
+          type: boolean
+          default: false
+        soulfray_consented:
           type: boolean
           default: false
       required:

@@ -119,6 +119,16 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
 
   const currentFacets = itemFacetsQuery.data ?? [];
 
+  const renderCraftMutation = () => {
+    if (craftMutation.isPending) {
+      return 'Attaching…';
+    }
+    if (quoteQuery.data != null && !quoteQuery.data.affordable) {
+      return "Can't afford";
+    }
+    return 'Attach (quality set by your Enchanting skill)';
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -194,11 +204,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
               (quoteQuery.data != null && !quoteQuery.data.affordable)
             }
           >
-            {craftMutation.isPending
-              ? 'Attaching…'
-              : quoteQuery.data != null && !quoteQuery.data.affordable
-                ? "Can't afford"
-                : 'Attach (quality set by your Enchanting skill)'}
+            {renderCraftMutation()}
           </Button>
         </DialogFooter>
       </DialogContent>

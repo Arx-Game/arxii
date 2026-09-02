@@ -35,49 +35,55 @@ export function JournalPage() {
   // first mission) never saw the invite.
   const { data: pendingInvites = [] } = usePendingInvites();
 
+  const renderActive = () => {
+    if (isError) {
+      return <p className="text-sm text-destructive">Couldn't load your journal.</p>;
+    }
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">…</p>;
+    }
+    return (
+      <div className="space-y-6">
+        <OpportunitiesTab />
+        <PendingInvitesSection invites={pendingInvites} />
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Active stories
+          </h2>
+          {active.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing in motion.</p>
+          ) : (
+            active.map((entry) => <JournalEntryCard key={entry.instance_id} entry={entry} />)
+          )}
+        </section>
+        {awaitingReport.length > 0 ? (
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              Awaiting report
+            </h2>
+            {awaitingReport.map((entry) => (
+              <JournalEntryCard key={entry.instance_id} entry={entry} />
+            ))}
+          </section>
+        ) : null}
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Concluded
+          </h2>
+          {past.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No stories concluded yet.</p>
+          ) : (
+            past.map((entry) => <JournalEntryCard key={entry.instance_id} entry={entry} />)
+          )}
+        </section>
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">
       <h1 className="mb-4 text-2xl font-semibold">Journal</h1>
-      {isError ? (
-        <p className="text-sm text-destructive">Couldn't load your journal.</p>
-      ) : isLoading ? (
-        <p className="text-sm text-muted-foreground">…</p>
-      ) : (
-        <div className="space-y-6">
-          <OpportunitiesTab />
-          <PendingInvitesSection invites={pendingInvites} />
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              Active stories
-            </h2>
-            {active.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing in motion.</p>
-            ) : (
-              active.map((entry) => <JournalEntryCard key={entry.instance_id} entry={entry} />)
-            )}
-          </section>
-          {awaitingReport.length > 0 ? (
-            <section className="space-y-3">
-              <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-                Awaiting report
-              </h2>
-              {awaitingReport.map((entry) => (
-                <JournalEntryCard key={entry.instance_id} entry={entry} />
-              ))}
-            </section>
-          ) : null}
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              Concluded
-            </h2>
-            {past.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No stories concluded yet.</p>
-            ) : (
-              past.map((entry) => <JournalEntryCard key={entry.instance_id} entry={entry} />)
-            )}
-          </section>
-        </div>
-      )}
+      {renderActive()}
     </div>
   );
 }

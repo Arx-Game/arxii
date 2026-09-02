@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ConsequencePool
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
+    from world.magic.models import CharacterAnima
     from world.mechanics.types import AppliedEffect
 
 
@@ -253,6 +254,43 @@ def _handle_soulfray_accumulation(
         stage_advanced=advance_result.stage_changed,
         resilience_check=resilience_check,
         stage_consequence=stage_consequence,
+    )
+
+
+def accumulate_soulfray(  # noqa: PLR0913
+    *,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    anima: CharacterAnima,
+    deficit: int,
+    soulfray_config: SoulfrayConfig | None,
+    check_result: CheckResult | None,
+    lethal: bool = True,
+) -> SoulfrayResult | None:
+    """Accumulate Soulfray severity from the pool state and apply stage consequences.
+
+    Shared by ``use_technique`` (step 7) and, since #3573, by consented reactive
+    protections (technique-interpose fire, standing-ward fire, upkeep). No-op when
+    Soulfray is unconfigured or severity is non-positive. ``lethal=False`` bounds the
+    accrued severity below the first death-risk stage.
+    """
+    if not soulfray_config:
+        return None
+    anima.refresh_from_db()
+    soulfray_severity = calculate_soulfray_severity(
+        current_anima=anima.current,
+        max_anima=anima.maximum,
+        deficit=deficit,
+        config=soulfray_config,
+        lethal=lethal,
+    )
+    if soulfray_severity <= 0:
+        return None
+    return _handle_soulfray_accumulation(
+        character=character,
+        soulfray_severity=soulfray_severity,
+        soulfray_config=soulfray_config,
+        technique_check_result=check_result,
+        lethal=lethal,
     )
 
 

@@ -16,6 +16,31 @@ export function EventsSidebarPanel() {
     queryFn: () => fetchEvents({ status }),
   });
 
+  const renderResults = () => {
+    if (isError) {
+      return (
+        <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+          Failed to load events.
+        </p>
+      );
+    }
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (!data?.results?.length) {
+      return (
+        <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+          No {status === 'scheduled' ? 'upcoming' : status} events.
+        </p>
+      );
+    }
+    return data.results.map((event) => <EventCard key={event.id} event={event} compact />);
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b px-3 py-2">
@@ -30,23 +55,7 @@ export function EventsSidebarPanel() {
         </Tabs>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {isError ? (
-          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-            Failed to load events.
-          </p>
-        ) : isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : !data?.results?.length ? (
-          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-            No {status === 'scheduled' ? 'upcoming' : status} events.
-          </p>
-        ) : (
-          data.results.map((event) => <EventCard key={event.id} event={event} compact />)
-        )}
-      </div>
+      <div className="flex-1 overflow-y-auto">{renderResults()}</div>
 
       <div className="border-t px-3 py-2">
         <a

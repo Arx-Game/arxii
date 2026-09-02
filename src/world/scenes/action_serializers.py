@@ -260,6 +260,14 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     # unusable without it.
     preferred_resonance_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     cast_openly = serializers.BooleanField(required=False, default=False)
+    # #3573: the caster's explicit consent to hold a ward-bearing cast's protective
+    # condition alive past zero anima via Soulfray. Defaults False (unconsented) -
+    # request_technique_cast's own confirm_soulfray_risk defaults True on the web
+    # path (the telnet-only soulfray halt/accept flow must not block web casts), so
+    # without this field every web-cast ward was silently stamped consented. The
+    # view passes this explicitly into request_technique_cast's soulfray_consented
+    # kwarg so it no longer derives from confirm_soulfray_risk on the web path.
+    soulfray_consented = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
         """Cap strain by anima; cap fury by provocation; validate pull (#854)."""
@@ -296,6 +304,11 @@ class CastableTechniqueSerializer(serializers.Serializer):
     target_spec = serializers.SerializerMethodField()
     effect_summary = serializers.SerializerMethodField()
     forms = serializers.SerializerMethodField()
+    # #3573: flat reactive anima fee of the technique's protective condition, or
+    # None when the technique carries no protective reactive-trigger handler.
+    # Lets the standalone-cast UI offer a Soulfray consent toggle up front, the
+    # same fee PlayerAction.reactive_anima_cost exposes for the Guard panel.
+    reactive_anima_cost = serializers.SerializerMethodField()
 
     @extend_schema_field(TechniqueEffectSummarySerializer)
     def get_effect_summary(self, obj: Technique) -> dict:
@@ -329,6 +342,18 @@ class CastableTechniqueSerializer(serializers.Serializer):
     def get_hostile(self, obj: Technique) -> bool:
         # Read off the same summary the block ships, so the two can never disagree.
         return obj.cached_effect_summary["hostile"]
+
+    def get_reactive_anima_cost(self, obj: Technique) -> int | None:
+        """Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
+
+        One protective_condition_and_flavor call per row - same traversal
+        actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
+        authored field.
+        """
+        from world.magic.services.targeting import protective_condition_and_flavor  # noqa: PLC0415
+
+        resolved = protective_condition_and_flavor(obj)
+        return resolved[0].reactive_anima_cost if resolved is not None else None
 
     def get_target_spec(self, obj: Technique) -> dict | None:
         """Derive and serialize the TargetSpec for this technique.

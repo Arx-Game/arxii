@@ -373,6 +373,11 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
 **Machine grading (pillar 11 — grade off data where it exists):**
 
 - Beat `SUCCESS` → `WIN` column; `FAILURE`/`EXPIRED` → `LOSS`.
+- **EXPIRED is a completion, not a field flip (#3558, ADR-0256):** a past-deadline
+  beat resolves through `expire_beat` / `complete_beat_expired`
+  (`world.stories.services.beats`), the same atomic completion tail as every other
+  outcome. EXPIRED grades every open stake LOSS through the completion tail; an
+  expired beat's contract closes like any other.
 - **Lifecycle-match override (#1760, generalizes the old NPC-vitals DEAD-only
   override):** for an `NPC_FATE` stake, `_branch_for_column` first checks the
   subject sheet's *actual* `lifecycle_state` against every authored branch's

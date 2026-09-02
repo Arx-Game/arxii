@@ -1032,11 +1032,13 @@ class Beat(SharedMemoryModel):
         help_text="Lead GM may flag this beat to be claimable by Assistant GMs.",
     )
 
-    # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Optional wall-clock deadline. Expiry handling deferred to Phase 3+.",
+        help_text=(
+            "Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: "
+            "the expired consequence pool fires and stakes grade LOSS."
+        ),
     )
 
     order = models.PositiveIntegerField(default=0)

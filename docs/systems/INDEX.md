@@ -6698,7 +6698,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
-    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060. **Consented upkeep
+    (#3573):** unaffordable upkeep on an instance with `ConditionInstance.soulfray_consented`
+    debits into deficit (via `_debit_ally_paid_upkeep`/`_pay_upkeep`) instead of lapsing the
+    condition, and accrues Soulfray; a deficit fire narrates "bleeds soul to keep the ward on
+    {bearer}". Both here and in interpose, lethality is `encounter.is_lethal` (already a
+    live combat encounter by construction). Same consent branch structure applies to a
+    Barrier/other reactive-condition fire (`_try_spend_reactive`, `world/magic/services/
+    effect_handlers.py`) - since that seam can fire on a ward held outside a combat
+    encounter, it instead reads `active_combat_engagement_for(payer)` (extracted from
+    `ParticipantSerializer._combat_engagement`, #3573) for the character's live COMBAT
+    `CharacterEngagement`, falling back to lethal when None. See ADR-0255 (amends
+    ADR-0118).
   - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
     True when the target has an active `ConditionInstance` whose
     `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
@@ -6763,6 +6774,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
     the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
     `CONDITION_APPLIED`.
+  - `ConditionInstance.soulfray_consented` (bool, default False, #3573) - the caster
+    consented at cast time to keep this condition's reactive cost/upkeep firing past zero
+    anima at the price of Soulfray; stamped by `_create_instance_from_context` from both
+    `apply_technique_conditions` and `apply_signature_bonus_conditions`, never changes
+    after creation. Read by `_try_spend_reactive` and `drain_reactive_upkeep`.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
@@ -6779,7 +6795,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `redirect_opponent_target`/`redirect_object_target` (mutually exclusive, both
     `None` = "away") declare a REDIRECT-flavor technique's saved-damage destination
     at declaration time (ADR-0032/0122), validated by `_validate_redirect_declaration`
-    — see combat `AGENT_GLOSSARY.md`'s Redirect entry.
+    - see combat `AGENT_GLOSSARY.md`'s Redirect entry. **Soulfray consent (#3573):**
+    a keyword-only `confirm_soulfray_risk` (bool, default False) is captured at
+    declaration time, since a reaction fires inside someone else's resolution and
+    can't stop to prompt - stored on `CombatRoundAction.confirm_soulfray_risk` and
+    read by `_try_technique_interpose`. Telnet: a trailing `soulfray` keyword on
+    `combat interpose ...` (`commands/combat_maneuvers.py`) sets it. See ADR-0255
+    (amends ADR-0118).
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
     an armed interpose challenge naming *participant* (or "any ally") and dispatches it
     via `_dispatch_interpose_action`
@@ -6804,15 +6826,21 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     inventing an action outside `get_available_actions`'s output (ADR-0032).
   - `_try_technique_interpose(action, interposer, protected, pre_payload, *, extra_modifiers=0)`
     (#2207) — resolves a technique-guardian's declared protective reaction. Affordability
-    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`;
-    unaffordable → fizzle, no roll/no cost); rolls the guardian's own cast check
+    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`,
+    gated by `_guardian_can_fire_technique_interpose`: affordable fires unconditionally;
+    unaffordable fires only when `action.confirm_soulfray_risk` was set at declaration
+    (#3573) - no pool at all still fizzles regardless); rolls the guardian's own cast check
     (`resolve_cast_check_type`, None-guarded — an unprovisioned caster fizzles the same way)
     against the mundane Interpose challenge's severity; debits anima (not fatigue) on any
-    non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
-    (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
-    guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
-    `CombatRoundAction.cast_destination`, preferred once that field lands. See ADR-0118
-    for why this rolls outside `use_technique`. **`redirect`-flavored resolution
+    non-fizzle fire via `_settle_technique_interpose_cost` (#3573) - `deduct_anima(lethal=
+    encounter.is_lethal)` runs the guardian into deficit when consented, and a consented
+    fire also accrues Soulfray through `world.magic.services.soulfray.accumulate_soulfray`
+    (deficit>0 narrates "tears at their own soul to hold the line over {ally}"); grades via
+    the SAME `_grade_interpose_damage` the mundane path uses (SHIELD divisor included). A
+    clean `blink`-flavored block relocates the ward to the guardian's own current position
+    (`force_move_to_position`) - a stand-in for #2206's `CombatRoundAction.cast_destination`,
+    preferred once that field lands. See ADR-0118 (amended by ADR-0255, #3573) for why this
+    rolls outside `use_technique`. **`redirect`-flavored resolution
     (#2210):** `saved = amount_before - pre_payload.amount` after grading (zero
     redirects nothing); `_resolve_technique_redirect` dispatches the saved amount to
     the declared destination (`_redirect_away` / `_redirect_to_opponent` /
@@ -6911,9 +6939,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Telegraphed enemy wind-ups + reaction economy (#2637, #2639; ADR-0161 — extends
   ADR-0118's pre-armed-policy shape):**
   - `ThreatPoolEntry.windup_rounds` (PositiveSmallInt, default 0) + `windup_telegraph`
-    (CharField, blank → generic fallback "`{opponent} begins something enormous...`" at
-    broadcast time) — authored data on existing threat pools; 0 is today's same-round
-    behavior unchanged.
+    (CharField) — authored data on existing threat pools; 0 is today's same-round behavior
+    unchanged. `_broadcast_windup_telegraph` always names a target (#3572): authored text
+    may use `{opponent}` and `{target}`; if it lacks `{target}`, `WINDUP_TARGET_CLAUSE`
+    (`" It is aimed at {target}."`) is appended; a room-targeting wind-up (no `target`)
+    formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
+    falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
+    bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -6933,6 +6965,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     active-engaged `CharacterCovenantRole` whose role (or that role's `parent_role` — rides
     the same shape as `blend_weight_for`) has the flag; at most one call-out per round per
     encounter. v1 is partially-passive — it picks THAT a wind-up gets called, not WHICH one.
+  - **Client surface (#3572):** `EncounterDetailSerializer.pending_attacks`
+    (`get_pending_attacks`, schema-typed via `PendingAttackSerializer`, the same
+    schema-only idiom as `EngagementLockSerializer`) lists pending `PendingOpponentAttack`
+    rows soonest-landing first: id, opponent_id, opponent_name, target_participant_id,
+    target_name, declared_round, resolves_round, rounds_until_landing, downgrades,
+    called_out, damage_scale (`windup_damage_scale`), cancelled. One query, select_related
+    on opponent/target. `frontend/src/combat/components/PendingAttacks.tsx` renders the
+    rows as the threat strip at the top of `YourTurn` (Guard/Strike prefills) and
+    read-only for observers in `CombatTurnPanel`; telnet bare `combat`
+    (`src/commands/combat_maneuvers.py`) prints the same rows as a `Wind-ups:` block.
   - **Maturation:** `_mature_pending_opponent_attacks` runs in `resolve_round` after the
     encounter flips to RESOLVING but BEFORE the round's `CombatOpponentAction` rows are
     queried, so a matured wind-up's synthesized action (real `CombatOpponentAction`,
@@ -7164,7 +7206,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   technique reveals a destination select (Away / `encounter.opponents` / `encounter.
   volatile_objects`) — dispatches via `useGuardMutation`'s `redirectOpponentTargetId`/
   `redirectObjectTargetId` args (`frontend/src/combat/queries.ts`) and shows a
-  "Guarding" badge once armed.
+  "Guarding" badge once armed. **Soulfray consent + fee (#3573):** when a protective
+  technique is selected, a `guard-soulfray-toggle` checkbox (fee read from
+  `PlayerAction.reactive_anima_cost`, anima from `useCharacterAnima`) lets the
+  guardian consent up front to hold the ward alive past zero anima by drawing on
+  Soulfray - `confirm_soulfray_risk` rides `useGuardMutation`'s `confirmSoulfrayRisk`
+  arg; resets to false when the technique select reverts to mundane. The focused cast
+  card carries the same consent for a ward-bearing technique with no active Soulfray
+  warning (`cast-ward-soulfray-toggle`, bound to the existing `soulfrayAccepted`
+  state) - when a warning IS active, `SoulfrayAcceptGate`'s acceptance alone covers
+  both. The real out-of-combat integration point (party wards) is the standalone
+  cast panel (`ActionPanel.tsx`'s `castableTechniques` list), not the technique-
+  enhancement path: a selected technique's `reactive_anima_cost` (exposed via
+  `CastableTechniqueSerializer`) drives its own `cast-ward-soulfray-toggle`, which
+  sends `soulfray_consented: true` through `castTechnique` - see the
+  `TechniqueCastCreateSerializer.soulfray_consented` note in `docs/systems/magic.md`
+  for the full wire-to-`ConditionInstance.soulfray_consented` path.
 - **Telnet parity (#2207/#2210):** `combat interpose [ally] [with <technique>] [into
   <destination>]` (`CmdCombat._resolve_interpose_args`, `src/commands/
   combat_maneuvers.py`) — all three clauses optional; `with <technique>` splits on

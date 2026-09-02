@@ -1,4 +1,4 @@
-"""Tests for migration 0205's rewrite_parked_rows RunPython (#3559).
+"""Tests for migration 0207's rewrite_parked_rows RunPython (#3559).
 
 Deliberate discard of the PENDING_GM_REVIEW state: parked crits (a completion
 with an authored outcome_tier) become their tier's SUCCESS/FAILURE, forced
@@ -23,12 +23,12 @@ from world.stories.models import Beat, BeatCompletion
 from world.traits.factories import CheckOutcomeFactory
 
 _migration = importlib.import_module(
-    "world.migrations.0205_alter_beat_outcome_alter_beatcompletion_outcome_and_more"
+    "world.migrations.0207_alter_beat_outcome_alter_beatcompletion_outcome_and_more"
 )
 
 
 class RewriteParkedRowsTests(EvenniaTestCase):
-    """world.migrations.0205_....rewrite_parked_rows"""
+    """world.migrations.0207_....rewrite_parked_rows"""
 
     def _run(self):
         _migration.rewrite_parked_rows(django_apps, None)
