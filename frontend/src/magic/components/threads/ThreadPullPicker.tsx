@@ -181,13 +181,7 @@ function TierStrip({
             className={cn(
               'min-w-[28px] rounded border px-2 py-0.5 text-xs font-medium transition-colors',
               'disabled:cursor-not-allowed',
-              isTier0 && isSelected
-                ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300'
-                : isUnaffordable
-                  ? 'border-muted bg-muted/30 text-muted-foreground opacity-60'
-                  : isSelected
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+              pullChipClass(isTier0, isSelected, isUnaffordable)
             )}
           >
             {String(tier)}
@@ -333,6 +327,18 @@ function InapplicableRow({ thread, applicabilityRow }: InapplicableRowProps) {
 // ---------------------------------------------------------------------------
 // ThreadPullPicker
 // ---------------------------------------------------------------------------
+
+/**
+ * How a pull chip reads: a free tier-0 pick, one you cannot afford, one you have
+ * taken, or one still on offer. Order matters - a selected tier-0 chip is styled
+ * as such before affordability is considered, since it costs nothing.
+ */
+function pullChipClass(isTier0: boolean, isSelected: boolean, isUnaffordable: boolean): string {
+  if (isTier0 && isSelected) return 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300';
+  if (isUnaffordable) return 'border-muted bg-muted/30 text-muted-foreground opacity-60';
+  if (isSelected) return 'border-primary bg-primary/10 text-primary';
+  return 'border-border bg-background text-muted-foreground hover:border-primary/40';
+}
 
 export function ThreadPullPicker({
   characterSheetId,
