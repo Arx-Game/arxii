@@ -72,6 +72,10 @@ _Avoid_: sub-branch, variant (reserve "branch" for the `StakeResolution` row its
 The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED, via `resolve_stakes_for_withdrawal` (#3559); stakes without an authored WITHDRAWAL branch still record an empty (`resolution=None`) StakeOutcome (audit honesty). The beat's own outcome is left untouched (still open) - a withdrawal never completes the beat.
 _Avoid_: flee branch, retreat outcome.
 
+**Objective-First Grading**:
+The rule (#3559) that no OUTCOME_TIER beat ever waits on a GM ruling to close - three structural replacements stand in for the deleted `BeatOutcome.PENDING_GM_REVIEW`. `beat_for_scene_conclusion` scopes a concluded fight or battle to at most one gradable beat (its explicit `story_beat`, else the scene's `running_beat` only when that beat is itself the objective). An outlier roll clamps to the best authored tier of the same polarity (`clamp_tier_to_pool`) instead of parking the beat. A missing `EncounterOutcomeMapping`/`BattleOutcomeMapping` row is required content, reported on the admin sentinel (#3444), not a fallback state.
+_Avoid_: pending review, GM review queue, parked beat.
+
 **Reward Line**:
 One authored win payout on a stake's branch (`StakeRewardLine`, #1770 PR3) — a `sink` (`StakeRewardSink`: MONEY or RESONANCE), an `amount` (a money-equivalent scalar paid to EACH completion participant, ALL_EQUAL), and a `resonance` FK when the sink is RESONANCE. Hangs off a WIN-column `StakeResolution` (WIN-only, enforced in clean() + serializer); paid by `_apply_stake_rewards` only under a ready, effective-risk-bearing Activation, with the Reward Band re-checked at pay time. Distinct from missions' `MissionDeedRewardLine` (deed-anchored; stakes deliberately reuse the sink *services*, not the deed router).
 _Avoid_: reward row, payout entry, deed line.

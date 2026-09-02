@@ -38,7 +38,12 @@ All models use `SharedMemoryModel` from `evennia.utils.idmapper.models`.
 | `round_limit` | PositiveSmallIntegerField | Default 10; auto-concludes at expiry |
 | `outcome` | CharField | `BattleOutcome` choice; default UNRESOLVED |
 | `concluded_at` | DateTimeField (null) | Timestamp when concluded |
+| `is_paused` | BooleanField | Default False; set when a participant disconnects (#1899) - see `maybe_pause_battle_for_disconnect` |
 | `afk_peril_override` | BooleanField | Default False; when True, Surrounded peril escalates every round regardless of declaration (#1733, see ADR-0074) |
+| `risk_level` | CharField | `RiskLevel` choice; default LOW. Stakes axis for companion death-gating (#1873) - EXTREME/LETHAL make companion death possible on defeat. Mirrors `CombatEncounter.risk_level` |
+| `region` | FK → `arxii.Area` (null, `on_delete=SET_NULL`) | Optional region anchor for ambient weather resolution (#1715); battles are otherwise location-less (ADR-0081) - this is additive, not a return to room-graph coupling |
+| `weather_override` | FK → `WeatherType` (null, `on_delete=SET_NULL`, `related_name="overriding_battles"`) | Battle-wide cast-set weather (#1715); takes precedence over ambient (via `region`) when present; cleared at round-boundary expiry |
+| `weather_override_expires_round` | PositiveIntegerField (null) | Absolute round number `weather_override` expires at (#1715); cleared alongside it at round-boundary expiry |
 | `story_beat` | FK → `stories.Beat` (null, `on_delete=SET_NULL`, `related_name="resolving_battles"`) | The one Beat this battle resolves (#3559), mirroring `CombatEncounter.story_beat`. See [Stakes / Beat Wiring](#stakes--beat-wiring-1785-3559). |
 | `created_at` | DateTimeField (auto) | |
 

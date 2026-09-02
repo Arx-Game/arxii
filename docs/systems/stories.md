@@ -35,7 +35,7 @@ from world.stories.constants import (
                             # CONDITION_HELD, CODEX_ENTRY_UNLOCKED, STORY_AT_MILESTONE,
                             # AGGREGATE_THRESHOLD
     StoryMilestoneType,     # STORY_RESOLVED, CHAPTER_REACHED, EPISODE_REACHED
-    BeatOutcome,            # UNSATISFIED, SUCCESS, FAILURE, EXPIRED, PENDING_GM_REVIEW
+    BeatOutcome,            # UNSATISFIED, SUCCESS, FAILURE, EXPIRED
     BeatVisibility,         # HINTED, SECRET, VISIBLE
     TransitionMode,         # AUTO, GM_CHOICE
     AssistantClaimStatus,   # REQUESTED, APPROVED, REJECTED, CANCELLED, COMPLETED
@@ -361,6 +361,37 @@ beat" pointer, written only by `RunBeatAction` and cleared by
 `finish_scene_full`. Exposed on the scene serializers as `running_beat`
 (id + risk only) for GM/staff viewers — never beat internals.
 
+#### Objective-first grading (#3559)
+
+An OUTCOME_TIER beat never waits on a GM ruling to close. Three replacements
+for the old "park it and let a GM review" path, all deleted along with
+`BeatOutcome.PENDING_GM_REVIEW`:
+
+- **Scope:** `beat_for_scene_conclusion(scene, explicit_beat)`
+  (`world.stories.services.beats`) is the single seam a concluded fight or
+  battle asks "which beat do I grade." An explicitly linked beat
+  (`CombatEncounter.story_beat` / `Battle.story_beat`) wins when it's still
+  UNSATISFIED OUTCOME_TIER; otherwise the scene's `running_beat` wins under
+  the same condition **and only when its `kind` is ENCOUNTER** (a GM declared
+  the fight itself as the objective). Anything else grades nothing - a brawl
+  during a heist never closes the heist, and combat/battle grading each touch
+  at most one beat, never every beat sharing the scene.
+- **Outlier clamp:** a roll that lands above or below every authored tier no
+  longer parks the beat - `clamp_tier_to_pool` (`world.checks
+  .consequence_resolution`) fires the best authored tier of the same polarity
+  that doesn't exceed the roll (an exact match fires itself); `beat.outcome`
+  still records the true rolled tier via `record_outcome_tier_completion`.
+- **Withdrawal:** a fled or abandoned encounter never grades the beat at all
+  - `resolve_stakes_for_withdrawal` (`world.stories.services.stake_resolution`)
+  resolves the open stakes contract's WITHDRAWAL branches structurally and
+  leaves the beat `UNSATISFIED`, open for a future attempt. See
+  [stakes.md](stakes.md#resolution-pr2).
+- **Missing tier row is content, not a pause:** `EncounterOutcomeMapping` and
+  `BattleOutcomeMapping` rows are required, non-null content now - a missing
+  (outcome, risk) pair or outcome logs an error and leaves the beat open
+  rather than falling back to a pending state. Tracked on the admin
+  required-content sentinel (`web.admin.tuning.required_content`, #3444).
+
 ---
 
 ### AggregateBeatContribution
@@ -537,6 +568,8 @@ All services in `src/world/stories/services/`.
 | `evaluate_auto_beats` | `(progress: AnyStoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats; flips UNSATISFIED beats whose predicate is now met; writes BeatCompletion rows; calls `maybe_create_session_request` on exit |
 | `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="", participants=None, extra_participants=None, resolved_by=None) -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome. `resolved_by` (#2123) — the marking GM's `GMProfile` (Lead GM or an approved Assistant GM); when set and the outcome is SUCCESS/FAILURE, credits GM Story Reward XP via `world.stories.services.gm_rewards.credit_gm_story_reward` after commit. `None` (the default, and always the case from the machine-graded `record_outcome_tier_completion`) skips the award |
 | `record_aggregate_contribution` | `(*, beat, character_sheet, points, source_note="") -> AggregateBeatContribution` | Records contribution, re-evaluates beat atomically, flips to SUCCESS if threshold crossed |
+| `record_outcome_tier_completion` | `(*, progress, beat, outcome_tier, participants=None, gm_notes="") -> BeatCompletion` | Machine-graded outcome on an OUTCOME_TIER beat (#3559): `success_level > 0` is SUCCESS, else FAILURE; the pool fires at the best authored tier not exceeding the roll (`clamp_tier_to_pool`), the completion records the true tier. A fled or abandoned fight never reaches this - see `resolve_stakes_for_withdrawal` |
+| `beat_for_scene_conclusion` | `(scene, explicit_beat) -> Beat \| None` | The one beat a concluded fight or battle may grade (#3559) - see [Objective-first grading](#objective-first-grading-3559) above |
 | `expire_overdue_beats` | `(now=None) -> int` | Idempotent bulk sweep; flips UNSATISFIED past-deadline beats to EXPIRED; returns count |
 
 ### transitions.py
