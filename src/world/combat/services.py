@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from world.magic.services.cast_observation import CastAudience
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
+    from world.mechanics.engagement import CharacterEngagement
     from world.mechanics.models import ObjectProperty
     from world.scenes.models import Interaction, Persona
     from world.stories.models import Story
@@ -10653,6 +10654,27 @@ def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_
         return CharacterAnima.objects.get(character_id=character.pk)
     except CharacterAnima.DoesNotExist:
         return None
+
+
+def active_combat_engagement_for(character: ObjectDB) -> CharacterEngagement | None:  # noqa: OBJECTDB_PARAM
+    """The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.
+
+    The reverse OneToOne accessor caches on the identity-mapped instance (no query on
+    a warm path); a pk-less engagement is a row deleted through a queryset; a non-COMBAT
+    engagement (challenge/mission stakes) is not combat. Extracted from
+    ``EncounterDetailSerializer._combat_engagement`` (#3573) so reactive-cost seams can
+    read ``engagement.source.is_lethal``.
+    """
+    from world.mechanics.constants import EngagementType  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    try:
+        engagement = character.engagement
+    except (AttributeError, CharacterEngagement.DoesNotExist):
+        return None
+    if engagement.pk is None or engagement.engagement_type != EngagementType.COMBAT:
+        return None
+    return engagement
 
 
 def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[AvailableCombo]:

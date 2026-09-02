@@ -23,9 +23,8 @@ from world.magic.services.resonance_environment import (
     resonance_environment_for_cast,
 )
 from world.magic.services.soulfray import (
-    _handle_soulfray_accumulation,
     _resolve_mishap,
-    calculate_soulfray_severity,
+    accumulate_soulfray,
     get_soulfray_warning,
     select_mishap_pool,
 )
@@ -52,10 +51,10 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.forms.models import FormCombatProfile
-    from world.magic.models import SoulfrayConfig, Technique
+    from world.magic.models import Technique
     from world.magic.services.power_terms import ApplicableThread
     from world.magic.services.resonance_environment import ResonanceEnvironmentEffect
-    from world.magic.types import MishapResult, SoulfrayResult
+    from world.magic.types import MishapResult
     from world.magic.types.pull import CastPullDeclaration
     from world.mechanics.models import ModifierTarget
 
@@ -696,44 +695,6 @@ def _resolve_check_result(
     return None
 
 
-def _accumulate_soulfray(  # noqa: PLR0913
-    *,
-    character: ObjectDB,
-    anima: CharacterAnima,
-    deficit: int,
-    soulfray_config: SoulfrayConfig | None,
-    check_result: CheckResult | None,
-    lethal: bool = True,
-) -> SoulfrayResult | None:
-    """Step 7: accumulate Soulfray severity and apply stage consequences.
-
-    No-op (returns ``None``) when Soulfray is unconfigured or severity is non-positive.
-
-    ``lethal`` defaults to ``True``. When ``False`` (non-lethal encounter) the accrued
-    severity is bounded below the first death-risk stage and the stage consequence pool
-    never fires a ``character_loss`` consequence.
-    """
-    if not soulfray_config:
-        return None
-    anima.refresh_from_db()
-    soulfray_severity = calculate_soulfray_severity(
-        current_anima=anima.current,
-        max_anima=anima.maximum,
-        deficit=deficit,
-        config=soulfray_config,
-        lethal=lethal,
-    )
-    if soulfray_severity <= 0:
-        return None
-    return _handle_soulfray_accumulation(
-        character=character,
-        soulfray_severity=soulfray_severity,
-        soulfray_config=soulfray_config,
-        technique_check_result=check_result,
-        lethal=lethal,
-    )
-
-
 def _resolve_control_mishap(
     *,
     character: ObjectDB,
@@ -1230,7 +1191,7 @@ def use_technique(  # noqa: PLR0913, PLR0915 — orchestrator; multiple small re
     effective_check_result = _resolve_check_result(check_result, resolution_result)
 
     # Step 7: Soulfray accumulation and stage consequences
-    soulfray_result = _accumulate_soulfray(
+    soulfray_result = accumulate_soulfray(
         character=character,
         anima=anima,
         deficit=deficit,
