@@ -412,6 +412,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     fizzle_note: str | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
+    soulfray_consented: bool | None = None,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
@@ -428,7 +429,17 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
             targets already resolved from ``target_persona_ids``. Passed directly to
             ``resolve_targets`` as ``supplied_personas``. If ``None``, falls back to
             ``[target_persona]`` (the pre-existing single-target path).
+        soulfray_consented: The caster's Soulfray consent (#3573) to stamp on any
+            condition minted by this cast. When ``None`` (the default, used by the
+            immediate path), derived from ``confirm_soulfray_risk`` — that flag
+            means "the caster confirmed this cast" on the immediate path, so it
+            doubles as consent there. The consent-accept path passes ``False``
+            explicitly: its ``confirm_soulfray_risk=True`` only bypasses the
+            re-halt on a cast the caster already got past, and is NOT the
+            caster's Soulfray consent.
     """
+    if soulfray_consented is None:
+        soulfray_consented = confirm_soulfray_risk
     character = caster_persona.character_sheet.character
     target = target_persona.character_sheet.character if target_persona is not None else None
 
@@ -516,7 +527,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         targets_by_kind=targets_by_kind,
         source_character=character,
         position_params=position_params,
-        soulfray_consented=confirm_soulfray_risk,
+        soulfray_consented=soulfray_consented,
     )
     # Signature-motif bonus (#1582): apply the signed technique's bonus conditions
     # through the SAME shared seam, over the same resolved targets. No-op when the
@@ -528,7 +539,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
         eff_intensity=eff_intensity,
         targets_by_kind=targets_by_kind,
         source_character=character,
-        soulfray_consented=confirm_soulfray_risk,
+        soulfray_consented=soulfray_consented,
     )
     # Technique treatment (#2668): perform bounded-mend treatments on resolved
     # targets. Fires BEFORE remove_technique_conditions so the wound condition
@@ -747,6 +758,9 @@ def resolve_accepted_cast(
                 cast_pull=pull,
                 fizzle_note=note,
                 confirm_soulfray_risk=True,  # consent-accept always confirms soulfray
+                # the True above bypasses the re-halt; it is not the caster's Soulfray
+                # consent, which the pending request does not persist (#3573)
+                soulfray_consented=False,
             )
 
     try:
