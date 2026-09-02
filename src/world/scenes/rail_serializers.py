@@ -84,3 +84,5 @@ class GMStoryRailSerializer(serializers.Serializer):
     protected_subjects = StoryProtectedSubjectSerializer(many=True)
     clue_placements = GMStoryRailClueSerializer(many=True)
     participants = GMStoryRailParticipantSerializer(many=True)
+    stakes = GMStoryRailStakeSerializer(many=True)
+    activation = GMStoryRailActivationSerializer(allow_null=True)
