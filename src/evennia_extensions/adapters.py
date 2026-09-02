@@ -4,6 +4,8 @@ import json
 import logging
 
 from allauth.account.adapter import DefaultAccountAdapter
+from django.conf import settings
+from evennia.utils.utils import class_from_module
 
 from evennia_extensions.models import PlayerData
 from world.registration import services as registration_services
@@ -77,6 +79,20 @@ class ArxAccountAdapter(DefaultAccountAdapter):
         if not isinstance(data, dict):
             return "", ""
         return str(data.get("email") or ""), str(data.get("invite_token") or "")
+
+    def new_user(self, request):
+        """Instantiate the configured Account typeclass, not the bare ``AccountDB``.
+
+        allauth's default is ``get_user_model()()``. Evennia pins
+        ``db_typeclass_path`` to whatever class an instance was built as, so a
+        bare instance stays the bare model on every later load and never
+        gains the ``Account`` typeclass (no ``puppet``, no
+        ``get_available_characters``, no persona cache). Every web-signup
+        player was in that state until Sentry ARX2-8 (2026-09-02); migration
+        0211 repoints the rows that already exist.
+        """
+        del request  # Signature fixed by allauth; the typeclass does not vary per request.
+        return class_from_module(settings.BASE_ACCOUNT_TYPECLASS)()
 
     def save_user(self, request, user, form, commit=True):
         """Save user, create associated PlayerData, and stamp invite redemption."""
