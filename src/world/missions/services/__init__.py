@@ -25,9 +25,11 @@ Public surface:
     LP/Resonance grant helpers are stub-sealed in 5b.2 pending
     payload-enrichment work (DESIGN §13.3).
   * :func:`on_mission_complete_for_beat` (Phase 5b.3 / #1747) — Mission→Beat
-    seam called at terminal. Completes the linked ``Beat`` via
-    ``record_outcome_tier_completion`` (graded tier) or
-    ``record_gm_marked_outcome(SUCCESS)`` (BRANCH terminal). Free-run
+    seam called at terminal. Decides the ending with ``beat_outcome_for_route``
+    (authored ``beat_outcome``, else the tier's sign, else SUCCESS) and completes
+    the linked ``Beat`` via ``record_scenario_outcome`` (OUTCOME_TIER beats) or
+    ``record_gm_marked_outcome`` (GM_MARKED beats), carrying the terminal
+    option's key as ``outcome_key`` (#3560, #3565). Free-run
     instances (``source_beat=None``) are a no-op.
 """
 

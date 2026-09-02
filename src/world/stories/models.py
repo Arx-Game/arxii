@@ -983,9 +983,10 @@ class Beat(SharedMemoryModel):
     # to flip the Beat when a launched instance terminates SHIPPED in #1757:
     # ``world.missions.services.beat.on_mission_complete_for_beat`` resolves
     # ``instance.source_beat``, guards already-resolved beats, resolves
-    # scope-aware progress, and completes the beat via
-    # ``record_outcome_tier_completion`` (graded routes) or
-    # ``record_gm_marked_outcome(SUCCESS)`` (BRANCH terminals) — called from
+    # scope-aware progress, decides the ending with ``beat_outcome_for_route``
+    # (authored ``beat_outcome``, tier sign, else SUCCESS) and completes the
+    # beat via ``record_scenario_outcome`` / ``record_gm_marked_outcome`` with
+    # the terminal option's key as ``outcome_key`` (#3560) - called from
     # ``_finish_terminal`` (``services/resolution.py``) and covered by
     # ``test_services_beat.py``/``test_services_resolution_beat.py``. The FK
     # is independent of ``predicate_type``; predicate-type-vs-required_mission

@@ -17,7 +17,8 @@ Public API:
 
     record_outcome_tier_completion(*, progress, beat, outcome_tier, participants,
         gm_notes) — machine-graded completion for an OUTCOME_TIER beat from a known
-        CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
+        CheckOutcome (combat/battle/decisive-check auto-wire; a scenario run
+        reports through record_scenario_outcome instead); fires only the pool's
         consequences matching that tier.
 
     record_scenario_outcome(*, progress, beat, outcome, outcome_tier, outcome_key,
