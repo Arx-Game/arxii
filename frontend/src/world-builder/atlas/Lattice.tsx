@@ -625,9 +625,8 @@ export function Lattice({
                   {state === 'planned' && (
                     <>
                       <span className="italic">planned</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         aria-label="unplan this square"
                         title="remove from the plan"
                         className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
@@ -635,16 +634,10 @@ export function Lattice({
                           event.stopPropagation();
                           updateSketch((prev) => unplanCell(prev, key));
                         }}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return;
-                          event.preventDefault();
-                          event.stopPropagation();
-                          updateSketch((prev) => unplanCell(prev, key));
-                        }}
                         data-testid={`lattice-unplan-${x}-${y}`}
                       >
                         ✕
-                      </span>
+                      </button>
                     </>
                   )}
                   {state === 'empty' && <span aria-hidden>⊕</span>}

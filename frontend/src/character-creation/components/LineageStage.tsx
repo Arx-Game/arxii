@@ -167,7 +167,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               <Users className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-base">Orphan / No Family</CardTitle>
             </div>
-            <span role="presentation" onClick={(e) => e.stopPropagation()}>
+            {/* Swallows the card click so toggling the switch does not also select the card. */}
+            <span onClick={(e) => e.stopPropagation()}>
               <Switch
                 checked={isOrphan}
                 onCheckedChange={(checked) => {
