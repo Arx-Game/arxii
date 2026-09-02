@@ -32,7 +32,6 @@ from world.stories.constants import (
     StoryMaturity,
     StoryMilestoneType,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.types import (
     ConnectionType,
@@ -760,7 +759,12 @@ class Era(SharedMemoryModel):
 
 
 class Transition(SharedMemoryModel):
-    """A guarded edge from one Episode to another."""
+    """A guarded edge from one Episode to another.
+
+    Every transition is automatic: it fires when its routing requirements
+    are met. When several are eligible the lowest (order, pk) fires (#3565);
+    authoring warns about that case through validate_routing_readiness.
+    """
 
     source_episode = models.ForeignKey(
         EPISODE_MODEL,
@@ -774,15 +778,6 @@ class Transition(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="inbound_transitions",
         help_text="May be null when next episode is unauthored (frontier pause).",
-    )
-    mode = models.CharField(
-        max_length=20,
-        choices=TransitionMode.choices,
-        default=TransitionMode.AUTO,
-        help_text=(
-            "AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead "
-            "GM to pick from the eligible set."
-        ),
     )
     connection_type = models.CharField(
         max_length=20,
@@ -844,7 +839,7 @@ class Beat(SharedMemoryModel):
     predicate_type = models.CharField(
         max_length=40,
         choices=BeatPredicateType.choices,
-        default=BeatPredicateType.GM_MARKED,
+        default=BeatPredicateType.OUTCOME_TIER,
     )
     outcome = models.CharField(
         max_length=20,
@@ -857,6 +852,16 @@ class Beat(SharedMemoryModel):
             "one progression trail, so this field represents the whole story's state, "
             "not per-character state. Historical per-character contributions live in "
             "BeatCompletion."
+        ),
+    )
+    outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "MissionOption.key of the scenario option that ended the run which "
+            "resolved this beat (#3565); denormalised from the BeatCompletion. "
+            "Blank for combat, battle, decisive-check and GM-marked completions."
         ),
     )
     visibility = models.CharField(
@@ -978,9 +983,10 @@ class Beat(SharedMemoryModel):
     # to flip the Beat when a launched instance terminates SHIPPED in #1757:
     # ``world.missions.services.beat.on_mission_complete_for_beat`` resolves
     # ``instance.source_beat``, guards already-resolved beats, resolves
-    # scope-aware progress, and completes the beat via
-    # ``record_outcome_tier_completion`` (graded routes) or
-    # ``record_gm_marked_outcome(SUCCESS)`` (BRANCH terminals) — called from
+    # scope-aware progress, decides the ending with ``beat_outcome_for_route``
+    # (authored ``beat_outcome``, tier sign, else SUCCESS) and completes the
+    # beat via ``record_scenario_outcome`` / ``record_gm_marked_outcome`` with
+    # the terminal option's key as ``outcome_key`` (#3560) - called from
     # ``_finish_terminal`` (``services/resolution.py``) and covered by
     # ``test_services_beat.py``/``test_services_resolution_beat.py``. The FK
     # is independent of ``predicate_type``; predicate-type-vs-required_mission
@@ -1170,6 +1176,30 @@ class Beat(SharedMemoryModel):
         return f"Beat({self.predicate_type}) on {self.episode.title}"
 
 
+class StoryScenario(SharedMemoryModel):
+    """A scenario graph owned by a story (#3565).
+
+    The story's Lead GM authors the linked MissionTemplate as the body of one of
+    their beats. The link lives on the stories side so missions never imports
+    Story (ADR-0010): ownership is read through ``template.story_scenario``.
+    A story-owned template is created RESTRICTED with an empty availability
+    rule and zero draw weight, and the board / opportunity querysets exclude
+    it, so it never appears as a quest.
+    """
+
+    story = models.ForeignKey("arxii.Story", on_delete=models.CASCADE, related_name="scenarios")
+    template = models.OneToOneField(
+        "arxii.MissionTemplate", on_delete=models.CASCADE, related_name="story_scenario"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["story", "pk"]
+
+    def __str__(self) -> str:
+        return f"Scenario {self.template_id} of Story {self.story_id}"
+
+
 class BeatOpponentLine(SharedMemoryModel):
     """An authored opponent (creature x count x position hint) to spawn when a beat runs.
 
@@ -1353,6 +1383,15 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         default="",
         help_text="Required StakeOutcome column; only with stake set.",
     )
+    required_outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "Beat-level rows only: also require Beat.outcome_key to equal this "
+            "MissionOption.key (#3565). Blank = any key."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1380,6 +1419,9 @@ class TransitionRequiredOutcome(SharedMemoryModel):
                 raise ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
                 )
+            if self.required_outcome_key:
+                msg = "Only beat-level routing rows may require an option key."
+                raise ValidationError({"required_outcome_key": msg})
         else:
             if not self.required_outcome:
                 raise ValidationError({"required_outcome": "Required when stake is not set."})
@@ -1527,6 +1569,12 @@ class BeatCompletion(SharedMemoryModel):
     outcome = models.CharField(
         max_length=20,
         choices=BeatOutcome.choices,
+    )
+    outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="The scenario option key that resolved the beat, if any (#3565).",
     )
     outcome_tier = models.ForeignKey(
         "arxii.CheckOutcome",

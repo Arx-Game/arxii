@@ -1,12 +1,20 @@
-"""GM session-prep run actions (#3425).
+"""GM session-prep run actions (#3425, scenario runs #3565).
 
 A GM authors what a beat stages ahead of a session -- opponent lines
 (``BeatOpponentLine``) for an ENCOUNTER beat, situation/challenge templates
-(``BeatStagedTemplate``) for a SITUATION beat -- and, at the table, presses
-"Run this beat" to instantiate all of it into the live scene at once:
-``RunBeatAction``. ``GMListRunnableBeatsAction`` is the read side that feeds
-the web "Run Beat" tab (and telnet, if a future command wants it) a scoped
-list of ENCOUNTER/SITUATION beats on episodes the acting GM currently runs.
+(``BeatStagedTemplate``) for a SITUATION beat, or a mission scenario graph
+(``Beat.required_mission``) for a TASK beat (and optionally alongside a
+SITUATION beat's staged templates) -- and, at the table, presses "Run this
+beat" to instantiate all of it into the live scene at once: ``RunBeatAction``.
+A beat with ``required_mission`` set starts (or rejoins) that scenario for
+the whole scene's party via
+``world.missions.services.run.start_scenario_for_scene`` -- the beat's
+authored options play out as story choices on the mission graph rather than
+a bespoke option engine (#3565). ``GMListRunnableBeatsAction`` is the read
+side that feeds the web "Run Beat" tab (and telnet, if a future command
+wants it) a scoped list of runnable beats -- ENCOUNTER/SITUATION beats, plus
+any TASK beat that carries a scenario (``has_scenario``) -- on episodes the
+acting GM currently runs.
 
 Deliberately a new module (not ``gm_stories.py``, which holds the story/beat
 *lifecycle* actions -- complete/resolve/promote/mark/declare-stakes): this is
@@ -23,13 +31,13 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 
 from actions.base import Action
 from actions.definitions.gm_stories import _actor_is_lead_gm
 from actions.prerequisites import IsSceneGMPrerequisite, MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
-from commands.exceptions import CommandError
-from commands.utils.gm_resolution import resolve_account_or_none, resolve_position_by_name
+from commands.utils.gm_resolution import resolve_account_or_none
 from world.gm.constants import GMLevel
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind
@@ -44,7 +52,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_NOT_RUNNABLE_KIND = "Only ENCOUNTER and SITUATION beats can be run into a scene."
+_NOT_RUNNABLE_KIND = (
+    "Only ENCOUNTER and SITUATION beats, or a TASK beat with a scenario, can be run into a scene."
+)
 _NO_BEAT = "A beat is required."
 _NO_SUCH_BEAT = "No beat with that ID exists."
 _NO_BEAT_PERMISSION = "You do not have authority over this beat's story."
@@ -64,7 +74,7 @@ _RISK_MAP: dict[str, str] = {
     RenownRisk.EXTREME: "extreme",
 }
 
-_RUNNABLE_KINDS = (BeatKind.ENCOUNTER, BeatKind.SITUATION)
+_RUNNABLE_KINDS = (BeatKind.ENCOUNTER, BeatKind.SITUATION, BeatKind.TASK)
 
 
 def _actor_may_run_beat(account: AccountDB | None, beat: Beat) -> bool:
@@ -98,11 +108,20 @@ class RunBeatAction(Action):
     GM standing over this scene, not story-level authority over an arbitrary
     beat id supplied in the kwargs.
 
-    Refuses TASK/REQUIREMENT kinds (nothing to stage) and refuses when the
-    scene is already running a *different* beat; re-running the same beat is
-    an idempotent no-op (the pointer write is skipped, and the response says
-    so) rather than a second refused attempt, since a GM who presses the
-    button twice should never spawn a second copy of the roster.
+    Refuses REQUIREMENT kinds and a TASK beat with no scenario (nothing to
+    run), and refuses when the scene is already running a *different* beat;
+    re-running the same beat is an idempotent no-op (the pointer write is
+    skipped, and the response says so) rather than a second refused attempt,
+    since a GM who presses the button twice should never spawn a second copy
+    of the roster.
+
+    A beat carrying a scenario (``required_mission`` set -- always true for
+    a runnable TASK beat, optionally true for a SITUATION beat alongside its
+    staged templates) also starts that scenario for the scene's whole party
+    via ``start_scenario_for_scene`` (#3565), reusing (never duplicating) an
+    already-ACTIVE run for the same beat -- the same run ``gm_assign_mission``
+    may have started for one character earlier. The new run/rejoin's id
+    surfaces in ``result.data["scenario_instance_id"]``.
 
     Partial-failure rule: each opponent/staged-template line runs in its own
     savepoint and failures are logged and skipped rather than aborting the
@@ -142,6 +161,9 @@ class RunBeatAction(Action):
         if beat.kind not in _RUNNABLE_KINDS:
             return ActionResult(success=False, message=_NOT_RUNNABLE_KIND)
 
+        if beat.kind == BeatKind.TASK and beat.required_mission_id is None:
+            return ActionResult(success=False, message=_NOT_RUNNABLE_KIND)
+
         account = resolve_account_or_none(actor)
         if not _actor_may_run_beat(account, beat):
             return ActionResult(success=False, message=_NO_BEAT_PERMISSION)
@@ -179,7 +201,15 @@ class RunBeatAction(Action):
         if beat.kind == BeatKind.ENCOUNTER:
             data = self._run_encounter_beat(beat, scene, account)
         else:
-            data = self._run_situation_beat(actor, beat, scene)
+            if beat.kind == BeatKind.SITUATION:
+                data = self._run_situation_beat(actor, beat, scene)
+            else:
+                data = {}
+            if beat.required_mission_id is not None:
+                from world.missions.services.run import start_scenario_for_scene  # noqa: PLC0415
+
+                instance = start_scenario_for_scene(beat, scene)
+                data["scenario_instance_id"] = instance.pk
         data["beat_id"] = beat.pk
 
         return ActionResult(
@@ -192,11 +222,10 @@ class RunBeatAction(Action):
         self, beat: Beat, scene: Scene, account: AccountDB | None
     ) -> dict[str, Any]:
         """Create the CombatEncounter and spawn every authored opponent line."""
-        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
+        from world.combat.encounter_prep import spawn_opponent_lines  # noqa: PLC0415
         from world.combat.models import CombatEncounter  # noqa: PLC0415
         from world.combat.services import (  # noqa: PLC0415
             finalize_new_encounter,
-            spawn_from_creature_template,
             update_encounter_settings,
         )
 
@@ -206,54 +235,8 @@ class RunBeatAction(Action):
         encounter.save(update_fields=["story_beat"])
         update_encounter_settings(encounter, risk_level=_RISK_MAP.get(beat.risk, "low"))
 
-        room = encounter.room
-        outcomes: list[dict[str, Any]] = []
         lines = beat.opponent_lines.select_related("creature_template").order_by("order")
-        for line in lines:
-            position = None
-            note = ""
-            if line.position_name and room is not None:
-                try:
-                    position = resolve_position_by_name(room, line.position_name)
-                except CommandError:
-                    note = f"position '{line.position_name}' not found; spawned without it"
-            for _index in range(line.count):
-                try:
-                    with transaction.atomic():
-                        opponent = spawn_from_creature_template(
-                            encounter,
-                            line.creature_template,
-                            position=position,
-                            acting_account=account,
-                        )
-                except (ValueError, PositionError) as exc:
-                    # Per-line log-and-continue: a bad line (e.g. the encounter's
-                    # scaling formula rejecting the template, or a cross-room
-                    # position) never costs the GM every other authored line.
-                    logger.warning(
-                        "run_beat: failed to spawn opponent line %s (beat %s): %s",
-                        line.pk,
-                        beat.pk,
-                        exc,
-                    )
-                    outcomes.append(
-                        {
-                            "line_id": line.pk,
-                            "creature": line.creature_template.name,
-                            "success": False,
-                            "message": str(exc),
-                        }
-                    )
-                    continue
-                outcomes.append(
-                    {
-                        "line_id": line.pk,
-                        "creature": line.creature_template.name,
-                        "opponent_id": opponent.pk,
-                        "success": True,
-                        "message": note,
-                    }
-                )
+        outcomes = spawn_opponent_lines(encounter, lines, acting_account=account)
         return {
             "encounter_id": encounter.pk,
             "risk_level": encounter.risk_level,
@@ -313,17 +296,21 @@ class RunBeatAction(Action):
 
 @dataclass
 class GMListRunnableBeatsAction(Action):
-    """GM: list ENCOUNTER/SITUATION beats runnable at the acting GM's current tables (#3425).
+    """GM: list beats runnable at the acting GM's current tables (#3425, #3565).
 
     Read-only survey (the ``list_room_traps`` result-data pattern: rows in
     ``result.data["beats"]``, a human-readable joined line per row in
-    ``result.message``). Scoped to episodes currently active (per
-    ``get_active_progress_for_story``) on stories the acting GM runs: staff see
-    every table-assigned story; a non-staff GM sees only stories where they are
-    the Lead GM (``primary_table.gm``) -- the same Lead-GM chain
-    ``CanMarkBeat``/``RunBeatAction`` gate on, so nothing appears here that
-    ``run_beat`` would then refuse. ``internal_description`` is never included
-    in the row payload (GM-only authoring text stays off this list surface).
+    ``result.message``). A row is ENCOUNTER, SITUATION, or a TASK beat that
+    carries a scenario (``required_mission`` set); each row's
+    ``has_scenario`` flags whether ``run_beat`` will also start that beat's
+    mission scenario for the scene (#3565). Scoped to episodes currently
+    active (per ``get_active_progress_for_story``) on stories the acting GM
+    runs: staff see every table-assigned story; a non-staff GM sees only
+    stories where they are the Lead GM (``primary_table.gm``) -- the same
+    Lead-GM chain ``CanMarkBeat``/``RunBeatAction`` gate on, so nothing
+    appears here that ``run_beat`` would then refuse.
+    ``internal_description`` is never included in the row payload (GM-only
+    authoring text stays off this list surface).
     """
 
     key: str = "gm_list_runnable_beats"
@@ -360,7 +347,10 @@ class GMListRunnableBeatsAction(Action):
             episode = progress.current_episode if progress is not None else None
             if episode is None:
                 continue
-            beats = episode.beats.filter(kind__in=_RUNNABLE_KINDS)
+            beats = episode.beats.filter(
+                Q(kind__in=(BeatKind.ENCOUNTER, BeatKind.SITUATION))
+                | Q(kind=BeatKind.TASK, required_mission__isnull=False)
+            )
             rows.extend(
                 {
                     "id": beat.pk,
@@ -370,6 +360,7 @@ class GMListRunnableBeatsAction(Action):
                     "risk": beat.risk,
                     "opponent_line_count": beat.opponent_lines.count(),
                     "staged_template_count": beat.staged_templates.count(),
+                    "has_scenario": beat.required_mission_id is not None,
                 }
                 for beat in beats
             )

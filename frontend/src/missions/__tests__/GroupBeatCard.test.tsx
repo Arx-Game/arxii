@@ -35,6 +35,7 @@ const PICK_BEAT: GroupBeatResult = {
       { character_id: 2, character_name: 'Companion', picked_option_id: 31, voted_option_id: null },
     ],
     expires_at: null,
+    is_paused: false,
   },
   resolved: null,
 };

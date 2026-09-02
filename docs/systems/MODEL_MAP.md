@@ -2145,6 +2145,7 @@
   - escalation_curve -> combat.EscalationCurve [FK] (nullable)
   - duel_winner -> character_sheets.CharacterSheet [FK] (nullable)
   - story_beat -> stories.Beat [FK] (nullable)
+  - scenario_deed -> missions.MissionDeedRecord [FK] (nullable)
 **Pointed to by:**
   - battle_places <- battles.BattlePlace
   - covenant_rite_instances <- covenants.CovenantRiteInstance
@@ -2326,6 +2327,7 @@
   - bossphase_set <- combat.BossPhase
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
   - phase_templates <- combat.CreaturePhaseTemplate
+  - mission_option_opponent_lines <- missions.MissionOptionOpponentLine
   - beat_opponent_lines <- stories.BeatOpponentLine
 
 ### DramaticSurgeRecord
@@ -2544,6 +2546,7 @@
 - `update_encounter_settings(encounter: 'CombatEncounter', *, stakes_level: 'str | None' = None, risk_level: 'str | None' = None, pace_mode: 'str | None' = None, pace_timer_minutes: 'int | None' = None) -> 'CombatEncounter' - GM-driven mid-encounter settings change (#3383).`
 - `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' - Mark a PC's round action as upgraded to a combo.`
 - `wind_penalty(felt: int) -> int - The missile check penalty for a room's felt WIND exposure (#1555).`
+- `windup_damage_scale(downgrades: 'int') -> 'float' - The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3).`
 
 
 ## world.companions
@@ -4076,6 +4079,7 @@
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' - Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' - Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
+- `gm_max_risk(user) -> 'str' - RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.`
 - `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' - The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `has_build_warrant(account: 'AccountDB | None', *, area: 'Area', level: 'int') -> 'bool' - Whether ``account`` may build-author at ``level`` within ``area``'s subtree.`
 - `has_room_budget_capacity(account: 'AccountDB | None', *, area: 'Area', rooms_needed: 'int' = 1) -> 'bool' - Whether digging ``rooms_needed`` more room(s) under ``area`` fits some`
@@ -6437,6 +6441,7 @@
   - route_candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - legend_entries -> societies.LegendEntry [M2M]
 **Pointed to by:**
+  - encounters <- combat.CombatEncounter
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
   - explaining_secrets <- secrets.Secret
@@ -6539,7 +6544,13 @@
   - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
   - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
+  - opponent_lines <- missions.MissionOptionOpponentLine
   - routes <- missions.MissionOptionRoute
+
+### MissionOptionOpponentLine
+**Foreign Keys:**
+  - option -> missions.MissionOption [FK]
+  - creature_template -> combat.CreatureTemplate [FK]
 
 ### MissionOptionRoute
 **Foreign Keys:**
@@ -6627,6 +6638,7 @@
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
   - givers <- missions.MissionGiver
+  - story_scenario <- stories.StoryScenario
   - task_templates <- tasking.TaskTemplate
 
 ### Service Functions
@@ -6641,7 +6653,7 @@
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' - Record entry into ``node`` and advance the run's position.`
 - `invite_to_mission(instance: 'MissionInstance', holder_persona: 'Persona', invitee_persona: 'Persona') -> 'MissionInvite' - Create a PENDING invite for ``invitee_persona`` to join ``instance``.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' - Return one :class:`JournalEntry` per mission this character is in.`
-- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
+- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None, option: 'MissionOption | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' - Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' - Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0) -> 'MissionDeedRecord' - Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
@@ -9599,6 +9611,7 @@
   - chapters <- stories.Chapter
   - feedback <- stories.StoryFeedback
   - referenced_by_beats <- stories.Beat
+  - scenarios <- stories.StoryScenario
   - group_progress_records <- stories.GroupStoryProgress
   - global_progress <- stories.GlobalStoryProgress
   - progress_records <- stories.StoryProgress
@@ -9652,6 +9665,11 @@
   - beat -> stories.Beat [FK] (nullable)
 **Pointed to by:**
   - clearances <- stories.CustodyClearance
+
+### StoryScenario
+**Foreign Keys:**
+  - story -> stories.Story [FK]
+  - template -> missions.MissionTemplate [OneToOne]
 
 ### StoryTrustRequirement
 **Foreign Keys:**

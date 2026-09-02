@@ -23,7 +23,6 @@ from world.stories.constants import (
     BeatPredicateType,
     EraStatus,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.factories import (
@@ -97,13 +96,11 @@ class FullLoopPhase1IntegrationTest(EvenniaTestCase):
         t_to_2a = TransitionFactory(
             source_episode=ep_1,
             target_episode=ep_2a,
-            mode=TransitionMode.AUTO,
             connection_type=ConnectionType.THEREFORE,
         )
         t_to_2b = TransitionFactory(
             source_episode=ep_1,
             target_episode=ep_2b,
-            mode=TransitionMode.AUTO,
             connection_type=ConnectionType.BUT,
         )
         TransitionRequiredOutcomeFactory(

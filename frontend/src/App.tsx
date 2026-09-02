@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { GMRoute } from './components/GMRoute';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RequireCharacter } from './components/RequireCharacter';
@@ -928,6 +929,41 @@ function App() {
                   <StoryAuthorPage />
                 </ProtectedRoute>
               </Suspense>
+            }
+          />
+          {/* Scenario Studio (#3565) - the same Mission Studio editor pages,
+              reachable by a story's GM under /stories/scenarios/... instead
+              of /staff/missions/..., behind GMRoute instead of StaffRoute.
+              Must come before /stories/:id below so "scenarios" isn't
+              swallowed by the catch-all. */}
+          <Route
+            path="/stories/scenarios/:id/canvas"
+            element={
+              <GMRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionCanvasPage />
+                </Suspense>
+              </GMRoute>
+            }
+          />
+          <Route
+            path="/stories/scenarios/:id/nodes/:nodeId"
+            element={
+              <GMRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionNodePage />
+                </Suspense>
+              </GMRoute>
+            }
+          />
+          <Route
+            path="/stories/scenarios/:id/nodes/:nodeId/options/:optionId"
+            element={
+              <GMRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionOptionPage />
+                </Suspense>
+              </GMRoute>
             }
           />
           {/* /stories/:id must come after the named /stories/* paths */}

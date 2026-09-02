@@ -7,6 +7,7 @@ import type {
   Interaction,
   ReactionEmojiEntry,
   SceneRoundModeValue,
+  SceneScenarioPayload,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ export type {
   HighlightReel,
   GMStoryRailPayload,
   SceneRoundModeValue,
+  SceneScenarioPayload,
 } from './types';
 
 export async function fetchScenes(params: string) {
@@ -135,6 +137,30 @@ export function useGMStoryRailQuery(sceneId: string, enabled: boolean) {
     queryFn: () => fetchGMStoryRail(sceneId),
     enabled,
     staleTime: 10_000,
+  });
+}
+
+/**
+ * Fetch the mission scenario a scene is running its beats on (#3565): the
+ * running instance id, whether the scene's active encounter has it paused,
+ * the participant-facing group-beat view, and (staff or viewers with
+ * standing on the running story) the GM-only referee view. Returns null on
+ * 401/403/404 - an anonymous viewer or a scene the caller cannot see simply
+ * gets no scenario card, mirroring `fetchGMStoryRail`'s convention.
+ */
+export async function fetchSceneScenario(sceneId: string): Promise<SceneScenarioPayload | null> {
+  const res = await apiFetch(`/api/scenes/${sceneId}/scenario/`);
+  if (res.status === 401 || res.status === 403 || res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to load scene scenario');
+  return res.json();
+}
+
+export function useSceneScenarioQuery(sceneId: string, enabled: boolean) {
+  return useQuery<SceneScenarioPayload | null>({
+    queryKey: ['scene-scenario', sceneId],
+    queryFn: () => fetchSceneScenario(sceneId),
+    enabled,
+    refetchInterval: 5_000,
   });
 }
 

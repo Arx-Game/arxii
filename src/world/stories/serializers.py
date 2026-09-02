@@ -10,8 +10,9 @@ from world.events.models import Event
 from world.gm.constants import GMTableStatus
 from world.gm.models import GMLevelCap, GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
+from world.gm.services import gm_max_risk
 from world.items.models import ItemInstance
-from world.missions.models import MissionTemplate
+from world.missions.models import MissionOption, MissionTemplate
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 from world.societies.models import Organization, Society
@@ -30,7 +31,6 @@ from world.stories.constants import (
     StoryGMOfferStatus,
     StoryMaturity,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.exceptions import MaturityPromotionError
 from world.stories.models import (
@@ -475,6 +475,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     """Full serializer for episode details"""
 
     chapter = serializers.StringRelatedField(read_only=True)
+    routing_ambiguous = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -493,7 +494,14 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "completed_at",
             "created_at",
             "updated_at",
+            "routing_ambiguous",
         ]
+
+    def get_routing_ambiguous(self, obj: Episode) -> bool:
+        """Whether any pair of this episode's outbound transitions is ambiguous (#3565)."""
+        from world.stories.services.transitions import validate_routing_readiness  # noqa: PLC0415
+
+        return validate_routing_readiness(obj).is_ambiguous
 
     def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
@@ -967,22 +975,6 @@ class SessionRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "story_id"]
 
 
-def _gm_max_risk(user) -> str:
-    """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
-
-    No GMProfile or no cap row → RenownRisk.NONE.
-    """
-    try:
-        gm_profile = user.gm_profile
-    except GMProfile.DoesNotExist:
-        return RenownRisk.NONE
-    try:
-        cap = GMLevelCap.objects.get(level=gm_profile.level)
-    except GMLevelCap.DoesNotExist:
-        return RenownRisk.NONE
-    return cap.max_beat_risk
-
-
 def _gm_allows_custom_stakes(user) -> bool:
     """Whether a non-staff author's GMLevelCap permits custom (template=null) stakes.
 
@@ -1065,6 +1057,12 @@ class BeatSerializer(serializers.ModelSerializer):
     # button instead of rendering it optimistically and hitting a 403.
     can_mark = serializers.SerializerMethodField(read_only=True)
 
+    # GM-only view of this beat's scenario graph, when required_mission is a
+    # story-owned StoryScenario (#3565). Gated by the same privilege check as
+    # internal_description (see get_scenario) -- a scenario's option keys are
+    # GM planning detail, not player-visible.
+    scenario = serializers.SerializerMethodField(read_only=True)
+
     # #3425 session prep: repeatable child rows. Both are nested read-write,
     # including the update path (see update() / _sync_children below) --
     # required=False so a Beat with no prep authored yet omits them entirely.
@@ -1117,6 +1115,8 @@ class BeatSerializer(serializers.ModelSerializer):
             "updated_at",
             # Client-side permission gating
             "can_mark",
+            # GM-only scenario-graph summary (#3565)
+            "scenario",
             # #3425 session prep child rows
             "opponent_lines",
             "staged_templates",
@@ -1130,6 +1130,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "can_mark",
+            "scenario",
         ]
 
     def get_can_mark(self, obj: Beat) -> bool:
@@ -1148,6 +1149,39 @@ class BeatSerializer(serializers.ModelSerializer):
         if request is None:
             return False
         return CanMarkBeat().has_object_permission(request, None, obj)  # type: ignore[arg-type]
+
+    def get_scenario(self, obj: Beat) -> dict[str, Any] | None:
+        """Read-only GM view of this beat's scenario graph (#3565).
+
+        None when the beat has no ``required_mission``, when that template
+        isn't a story-owned scenario (a catalog mission the GM merely
+        assigned), or when the viewer lacks ``can_view_story_gm_text`` (same
+        gate as ``internal_description`` above) -- node/option keys are GM
+        planning detail, not player-visible.
+        """
+        from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
+
+        template = obj.required_mission
+        if template is None:
+            return None
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        story = obj.episode.chapter.story
+        if user is None or not can_view_story_gm_text(user, story):
+            return None
+        if not hasattr(template, "story_scenario"):
+            return None
+        option_keys = list(
+            MissionOption.objects.filter(node__template=template)
+            .exclude(key="")
+            .order_by("key")
+            .values_list("key", flat=True)
+        )
+        return {
+            "template_id": template.pk,
+            "name": template.name,
+            "option_keys": option_keys,
+        }
 
     def to_representation(self, instance: Beat) -> dict[str, Any]:
         """Gate ``internal_description`` for non-privileged viewers (#1923).
@@ -1230,7 +1264,7 @@ class BeatSerializer(serializers.ModelSerializer):
         if merged_risk != RenownRisk.NONE and not is_staff:
             from world.stories.services.stakes import risk_index  # noqa: PLC0415
 
-            if risk_index(merged_risk) > risk_index(_gm_max_risk(user)):
+            if risk_index(merged_risk) > risk_index(gm_max_risk(user)):
                 raise serializers.ValidationError(
                     {
                         "risk": (
@@ -1357,7 +1391,6 @@ class TransitionSerializer(serializers.ModelSerializer):
             "source_episode_title",
             "target_episode",
             "target_episode_title",
-            "mode",
             "connection_type",
             "connection_summary",
             "order",
@@ -1413,6 +1446,7 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
             "transition",
             "beat",
             "required_outcome",
+            "required_outcome_key",
             "stake",
             "required_stake_column",
         ]
@@ -1422,24 +1456,38 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
         """Mirror the model clean(): exactly one predicate shape per row."""
         existing: dict[str, Any] = {}
         if self.instance is not None:
-            for field_name in ("beat", "stake", "required_outcome", "required_stake_column"):
+            for field_name in (
+                "beat",
+                "stake",
+                "required_outcome",
+                "required_outcome_key",
+                "required_stake_column",
+            ):
                 existing[field_name] = getattr(self.instance, field_name)
         merged = {**existing, **attrs}
 
         stake = merged.get("stake")
         required_outcome = merged.get("required_outcome") or ""
+        required_outcome_key = merged.get("required_outcome_key") or ""
         required_stake_column = merged.get("required_stake_column") or ""
         beat = merged.get("beat")
 
         if stake is not None:
-            self._validate_stake_row(stake, required_stake_column, required_outcome, beat)
+            self._validate_stake_row(
+                stake, required_stake_column, required_outcome, required_outcome_key, beat
+            )
         else:
             self._validate_outcome_row(required_outcome, required_stake_column)
 
         return attrs
 
     def _validate_stake_row(
-        self, stake: Any, required_stake_column: str, required_outcome: str, beat: Any
+        self,
+        stake: Any,
+        required_stake_column: str,
+        required_outcome: str,
+        required_outcome_key: str,
+        beat: Any,
     ) -> None:
         """Validate a stake-level predicate row (stake set, outcome blank)."""
         if not required_stake_column:
@@ -1449,6 +1497,9 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
         if required_outcome:
             msg = "Must be blank when stake is set (stake rows route on the stake column)."
             raise serializers.ValidationError({"required_outcome": msg})
+        if required_outcome_key:
+            msg = "Only beat-level routing rows may require an option key."
+            raise serializers.ValidationError({"required_outcome_key": msg})
         if beat is not None and stake.beat_id != beat.pk:
             raise serializers.ValidationError(
                 {"stake": "The stake must belong to this requirement's beat."}
@@ -1485,6 +1536,9 @@ class OutcomeInputSerializer(serializers.Serializer):
     required_outcome = serializers.ChoiceField(
         choices=BeatOutcome.choices, required=False, allow_blank=True, default=""
     )
+    required_outcome_key = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=100
+    )
     stake = serializers.PrimaryKeyRelatedField(
         queryset=Stake.objects.all(), required=False, allow_null=True, default=None
     )
@@ -1504,6 +1558,7 @@ class OutcomeInputSerializer(serializers.Serializer):
         """Exactly one predicate shape, mirroring TransitionRequiredOutcome.clean()."""
         stake = attrs.get("stake")
         required_outcome = attrs.get("required_outcome") or ""
+        required_outcome_key = attrs.get("required_outcome_key") or ""
         required_stake_column = attrs.get("required_stake_column") or ""
         beat = attrs["beat"]
 
@@ -1515,6 +1570,9 @@ class OutcomeInputSerializer(serializers.Serializer):
             if required_outcome:
                 msg = "Must be blank when stake is set (stake rows route on the stake column)."
                 raise serializers.ValidationError({"required_outcome": msg})
+            if required_outcome_key:
+                msg = "Only beat-level routing rows may require an option key."
+                raise serializers.ValidationError({"required_outcome_key": msg})
             if stake.beat_id != beat.pk:
                 raise serializers.ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
@@ -1554,7 +1612,6 @@ class SaveTransitionWithOutcomesInputSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
-    mode = serializers.ChoiceField(choices=TransitionMode.choices)
     connection_type = serializers.ChoiceField(
         choices=ConnectionType.choices,
         required=False,
@@ -1686,29 +1743,17 @@ class ResolveEpisodeInputSerializer(serializers.Serializer):
         episode (Episode): the episode being resolved.
 
     Validates:
-        - chosen_transition belongs to this episode (if provided).
         - An active progress record exists for the episode's story.
 
-    Stores resolved ``progress`` and ``chosen_transition`` in validated_data.
+    Routing is automatic (#3565): the transition fires by authored order, so
+    this only ever resolves ``progress`` into validated_data.
     """
 
     progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    chosen_transition = serializers.PrimaryKeyRelatedField(
-        queryset=Transition.objects.all(),
-        required=False,
-        allow_null=True,
-        default=None,
-    )
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
         episode: Episode = self.context["episode"]
-
-        transition: Transition | None = attrs.get("chosen_transition")
-        if transition is not None and transition.source_episode_id != episode.pk:
-            raise serializers.ValidationError(
-                {"chosen_transition": "Transition does not belong to this episode."}
-            )
 
         progress = _resolve_progress(episode, attrs.get("progress_id"))
         if progress is None:
@@ -4129,4 +4174,38 @@ class AssignMissionInputSerializer(serializers.Serializer):
             if template is None:
                 raise serializers.ValidationError({"template": self._ERR_NO_TEMPLATE})
             attrs["template"] = template
+        return attrs
+
+
+class CreateBeatScenarioInputSerializer(serializers.Serializer):
+    """POST /api/beats/{id}/scenario/ body (#3565).
+
+    Authors the MissionTemplate a beat's scenario graph runs on --
+    ``create_scenario_for_beat`` does the actual create/idempotent-return
+    work; this serializer only validates shape and the non-staff risk gate
+    (mirrors the ``risk`` gate ``BeatSerializer.validate()`` applies to
+    ``beat.risk``, using the beat's own author-risk ceiling).
+    """
+
+    name = serializers.CharField(max_length=200)
+    summary = serializers.CharField()
+    risk_tier = serializers.IntegerField(min_value=1, max_value=5)
+
+    _ERR_RISK_TIER = (
+        "Your GM level does not permit authoring scenarios at this risk tier. "
+        "Higher tiers unlock as staff promote your GM level."
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is not None and user.is_authenticated and not user.is_staff:
+            from world.missions.constants import risk_tier_to_renown_risk  # noqa: PLC0415
+            from world.stories.services.stakes import risk_index  # noqa: PLC0415
+
+            if risk_index(risk_tier_to_renown_risk(attrs["risk_tier"])) > risk_index(
+                gm_max_risk(user)
+            ):
+                raise serializers.ValidationError({"risk_tier": self._ERR_RISK_TIER})
         return attrs

@@ -71,10 +71,7 @@ const fullResponse: GMQueueResponse = {
       episode_title: 'The Reckoning',
       progress_type: 'character',
       progress_id: 5,
-      eligible_transitions: [
-        { transition_id: 1, mode: 'auto' as const },
-        { transition_id: 2, mode: 'gm_choice' as const },
-      ],
+      eligible_transitions: [{ transition_id: 1 }, { transition_id: 2 }],
       open_session_request_id: 3,
     },
     {
@@ -85,7 +82,7 @@ const fullResponse: GMQueueResponse = {
       episode_title: 'The Siege',
       progress_type: 'group',
       progress_id: 8,
-      eligible_transitions: [{ transition_id: 3, mode: 'auto' as const }],
+      eligible_transitions: [{ transition_id: 3 }],
       open_session_request_id: null,
     },
   ],

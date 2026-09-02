@@ -1,18 +1,27 @@
-"""Combat encounter -> story beat auto-wiring (#1746).
+"""Combat encounter -> story beat / scenario-option auto-wiring (#1746, #3565).
 
-Wires the ENCOUNTER_COMPLETED reactive event to record_outcome_tier_completion:
-when a CombatEncounter completes, beat_for_scene_conclusion (#3559) picks the
-single beat it may grade - the encounter's own explicitly routed story_beat,
-or the scene's running beat when it is itself the objective (kind ENCOUNTER) -
-classify_battle_outcome maps the encounter's (EncounterOutcome, RiskLevel) to a
-designer-tunable CheckOutcome, and record_outcome_tier_completion resolves it.
+Wires the ENCOUNTER_COMPLETED reactive event to one of two grading targets,
+mutually exclusive per encounter:
 
-FLED/ABANDONED encounters never grade the beat: the party walked away from the
-wager, so the beat stays UNSATISFIED and resolve_stakes_for_withdrawal fires
-each open stake's authored WITHDRAWAL branch instead. An outcome x risk pair
-with no authored EncounterOutcomeMapping row is missing content, not a pause -
-it is logged as an error (surfaced on the admin sentinel, #3444) and the beat
-is left open.
+* A scenario ENCOUNTER option (``encounter.scenario_deed`` set, #3565): the
+  fight grades its option's route on the mission scenario graph, never a
+  story beat - ``world.missions.services.encounter_option.
+  complete_encounter_for_option`` classifies and routes it, and FLED/
+  ABANDONED are mapped tiers there like any other, authored the same as
+  VICTORY/DEFEAT.
+* A story beat (no ``scenario_deed``): beat_for_scene_conclusion (#3559)
+  picks the single beat it may grade - the encounter's own explicitly routed
+  story_beat, or the scene's running beat when it is itself the objective
+  (kind ENCOUNTER) - classify_battle_outcome maps the encounter's
+  (EncounterOutcome, RiskLevel) to a designer-tunable CheckOutcome, and
+  record_outcome_tier_completion resolves it. FLED/ABANDONED never grade a
+  beat here: the party walked away from the wager, so the beat stays
+  UNSATISFIED and resolve_stakes_for_withdrawal fires each open stake's
+  authored WITHDRAWAL branch instead.
+
+Either way, an outcome x risk pair with no authored EncounterOutcomeMapping
+row is missing content, not a pause - it is logged as an error (surfaced on
+the admin sentinel, #3444) and the beat/run is left open/paused.
 """
 
 from __future__ import annotations
@@ -117,16 +126,21 @@ def _participant_personas(encounter: CombatEncounter) -> list[Persona]:
 def encounter_completed_beat_handler(*, payload: object) -> None:
     """Flow-callable subscriber for ENCOUNTER_COMPLETED (#1746, routed #1760).
 
-    Resolves at most ONE beat per completed encounter (#3559,
-    beat_for_scene_conclusion): the encounter's own explicitly routed
+    Grades at most ONE thing per completed encounter: a scenario ENCOUNTER
+    option's route when ``encounter.scenario_deed`` is set (#3565 - delegates
+    to ``encounter_option.complete_encounter_for_option`` and returns; never
+    also grades a beat), otherwise a story beat via
+    beat_for_scene_conclusion (#3559): the encounter's own explicitly routed
     ``story_beat``, or the scene's running beat when that beat is itself the
     objective (kind ENCOUNTER). Anything else - no linked beat, or one that
     isn't gradable - leaves the story untouched.
 
-    FLED/ABANDONED encounters never grade the beat: the party walked away
-    from the wager, so resolve_stakes_for_withdrawal fires each open stake's
-    authored WITHDRAWAL branch and the beat stays UNSATISFIED. Any other
-    outcome classifies via classify_battle_outcome and completes through
+    FLED/ABANDONED encounters never grade a story beat: the party walked
+    away from the wager, so resolve_stakes_for_withdrawal fires each open
+    stake's authored WITHDRAWAL branch and the beat stays UNSATISFIED. (A
+    scenario ENCOUNTER option's FLED/ABANDONED tiers are graded like any
+    other - see ``encounter_option`` above.) Any other outcome classifies
+    via classify_battle_outcome and completes through
     record_outcome_tier_completion; a missing EncounterOutcomeMapping row is
     content, not a pause - it is logged as an error (surfaced on the admin
     sentinel, #3444) and the beat is left open.
@@ -153,6 +167,14 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
         return
 
     encounter = payload.encounter
+    if encounter.scenario_deed_id is not None:
+        from world.missions.services.encounter_option import (  # noqa: PLC0415
+            complete_encounter_for_option,
+        )
+
+        complete_encounter_for_option(encounter)
+        return
+
     beat = beat_for_scene_conclusion(scene, encounter.story_beat)
     if beat is None:
         return

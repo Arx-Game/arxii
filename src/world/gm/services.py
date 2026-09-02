@@ -21,6 +21,7 @@ from world.gm.constants import (
 from world.gm.models import (
     AreaBuildGrant,
     CatalogSuggestion,
+    GMLevelCap,
     GMLevelChange,
     GMProfile,
     GMRewardConfig,
@@ -34,6 +35,7 @@ from world.gm.models import (
 from world.gm.types import CategoryFeedback, GMEvidenceSummary
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+from world.societies.constants import RenownRisk
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -53,6 +55,26 @@ if TYPE_CHECKING:
 DEFAULT_INVITE_DURATION_DAYS = 30
 
 logger = logging.getLogger(__name__)
+
+
+def gm_max_risk(user) -> str:
+    """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
+
+    No GMProfile or no cap row -> RenownRisk.NONE. Moved from
+    ``world.stories.serializers._gm_max_risk`` (#3565) so the missions
+    authoring permission layer (``world.missions.permissions``) can share it
+    without stories importing missions or vice versa -- this is the neutral
+    GM-tier home both sides depend on.
+    """
+    try:
+        gm_profile = user.gm_profile
+    except GMProfile.DoesNotExist:
+        return RenownRisk.NONE
+    try:
+        cap = GMLevelCap.objects.get(level=gm_profile.level)
+    except GMLevelCap.DoesNotExist:
+        return RenownRisk.NONE
+    return cap.max_beat_risk
 
 
 def touch_gm_activity(gm_profile: GMProfile) -> None:

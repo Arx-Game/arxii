@@ -392,7 +392,12 @@ class TestAudereMajoraThresholdsProbe(TestCase):
 
 
 class TestEncounterOutcomeMappingsProbe(TestCase):
-    """Every (VICTORY|DEFEAT) x RiskLevel pair must have a mapping row (#3559)."""
+    """Every EncounterOutcome x RiskLevel pair must have a mapping row (#3559, #3565).
+
+    VICTORY/DEFEAT grade a story beat; FLED/ABANDONED grade a scenario
+    ENCOUNTER option's route instead (#3565) - the probe covers all four
+    values either way.
+    """
 
     def test_missing_when_one_pair_is_absent(self) -> None:
         from world.combat.constants import EncounterOutcome, RiskLevel
@@ -400,7 +405,7 @@ class TestEncounterOutcomeMappingsProbe(TestCase):
         from world.traits.models import CheckOutcome
 
         tier = CheckOutcome.objects.create(name="Missing Pair Tier", success_level=1)
-        for outcome in (EncounterOutcome.VICTORY, EncounterOutcome.DEFEAT):
+        for outcome in EncounterOutcome.values:
             for risk in RiskLevel.values:
                 if outcome == EncounterOutcome.DEFEAT and risk == RiskLevel.LETHAL:
                     continue  # deliberately left absent
@@ -417,7 +422,7 @@ class TestEncounterOutcomeMappingsProbe(TestCase):
         from world.traits.models import CheckOutcome
 
         tier = CheckOutcome.objects.create(name="Complete Pair Tier", success_level=1)
-        for outcome in (EncounterOutcome.VICTORY, EncounterOutcome.DEFEAT):
+        for outcome in EncounterOutcome.values:
             for risk in RiskLevel.values:
                 EncounterOutcomeMapping.objects.create(
                     outcome=outcome, risk_level=risk, check_outcome=tier

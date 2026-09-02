@@ -114,13 +114,15 @@ class CmdStorySubverbTests(TestCase):
         self.assertIn("Episode resolved.", messages)
 
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
-    def test_resolve_with_numeric_transition(self, mock_run: MagicMock) -> None:
+    def test_resolve_leading_digit_token_becomes_notes(self, mock_run: MagicMock) -> None:
+        """Routing is automatic (#3565): every token after episode-id is GM notes."""
         mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
         episode_id = str(self.episode.pk)
         self._run(f"resolve {episode_id} 5")
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["episode_id"], episode_id)
-        self.assertEqual(kwargs["chosen_transition_id"], "5")
+        self.assertNotIn("chosen_transition_id", kwargs)
+        self.assertEqual(kwargs["gm_notes"], "5")
 
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
     def test_resolve_with_notes(self, mock_run: MagicMock) -> None:
@@ -133,14 +135,14 @@ class CmdStorySubverbTests(TestCase):
         self.assertEqual(kwargs["gm_notes"], "final confrontation")
 
     @patch("actions.definitions.gm_stories.ResolveEpisodeAction.run")
-    def test_resolve_with_transition_and_notes(self, mock_run: MagicMock) -> None:
+    def test_resolve_leading_digit_token_and_notes_combined(self, mock_run: MagicMock) -> None:
         mock_run.return_value = ActionResult(success=True, message="Episode resolved.")
         episode_id = str(self.episode.pk)
         self._run(f"resolve {episode_id} 5 final confrontation")
         kwargs = mock_run.call_args.kwargs
         self.assertEqual(kwargs["episode_id"], episode_id)
-        self.assertEqual(kwargs["chosen_transition_id"], "5")
-        self.assertEqual(kwargs["gm_notes"], "final confrontation")
+        self.assertNotIn("chosen_transition_id", kwargs)
+        self.assertEqual(kwargs["gm_notes"], "5 final confrontation")
 
     def test_resolve_requires_episode_id(self) -> None:
         messages = self._run("resolve")

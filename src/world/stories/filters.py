@@ -411,11 +411,10 @@ class TransitionFilter(django_filters.FilterSet):
     story = django_filters.NumberFilter(
         field_name="source_episode__chapter__story_id",
     )
-    mode = django_filters.CharFilter(field_name="mode")
 
     class Meta:
         model = Transition
-        fields = ["source_episode", "target_episode", "mode"]
+        fields = ["source_episode", "target_episode"]
 
 
 class EpisodeProgressionRequirementFilter(django_filters.FilterSet):

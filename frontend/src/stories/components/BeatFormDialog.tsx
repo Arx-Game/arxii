@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -30,14 +31,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
 import { useAccount } from '@/store/hooks';
-import { useCreatureTemplates } from '@/combat/queries';
 import {
   useSituationTemplateCatalog,
   useChallengeTemplateCatalog,
 } from '@/gm-adjudication/queries';
+import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
 import {
   useCreateBeat,
   useUpdateBeat,
+  useCreateBeatScenario,
   useStoryList,
   useChapterList,
   useEpisodeList,
@@ -94,6 +96,10 @@ interface DRFFieldErrors {
 // ---------------------------------------------------------------------------
 
 const PREDICATE_OPTIONS: { value: BeatPredicateType; label: string }[] = [
+  {
+    value: 'outcome_tier',
+    label: 'Outcome tier; resolved by the scenario, a fight, a battle or a decisive check',
+  },
   { value: 'gm_marked', label: 'GM Marked; GM manually resolves this beat' },
   { value: 'character_level_at_least', label: 'Character Level At Least' },
   { value: 'achievement_held', label: 'Achievement Held' },
@@ -452,14 +458,6 @@ function PredicateConfigFields({ predicateType, config, onChange, errors }: Conf
 // diffs incoming rows against the beat's existing children by id.
 // ---------------------------------------------------------------------------
 
-/** Draft shape for one opponent-line row while the form is open. */
-interface OpponentLineDraft {
-  id?: number;
-  creature_template: string;
-  count: string;
-  position_name: string;
-}
-
 function opponentLineDraftsFromBeat(beat: Beat | undefined): OpponentLineDraft[] {
   return (beat?.opponent_lines ?? []).map((line) => ({
     id: line.id,
@@ -479,100 +477,6 @@ function opponentLineDraftsToPayload(drafts: OpponentLineDraft[]): BeatOpponentL
       position_name: d.position_name.trim(),
       order: 0,
     }));
-}
-
-interface OpponentLinesEditorProps {
-  lines: OpponentLineDraft[];
-  onChange: (lines: OpponentLineDraft[]) => void;
-  rowErrors: Record<string, string[]>[] | undefined;
-}
-
-function OpponentLinesEditor({ lines, onChange, rowErrors }: OpponentLinesEditorProps) {
-  const [search, setSearch] = useState('');
-  const { data: creatureTemplates = [] } = useCreatureTemplates(search);
-
-  function updateRow(index: number, partial: Partial<OpponentLineDraft>) {
-    onChange(lines.map((line, i) => (i === index ? { ...line, ...partial } : line)));
-  }
-
-  function addRow() {
-    onChange([...lines, { creature_template: '', count: '1', position_name: '' }]);
-  }
-
-  function removeRow(index: number) {
-    onChange(lines.filter((_, i) => i !== index));
-  }
-
-  return (
-    <div className="space-y-2" data-testid="beat-opponent-lines">
-      <div className="flex items-center justify-between">
-        <Label>Encounter prep — opponent lines</Label>
-        <Button type="button" size="sm" variant="outline" onClick={addRow}>
-          Add opponent
-        </Button>
-      </div>
-      <Input
-        placeholder="Search the bestiary…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      {lines.length === 0 && (
-        <p className="text-xs text-muted-foreground">No opponents authored yet.</p>
-      )}
-      {lines.map((line, index) => {
-        const errors = rowErrors?.[index];
-        return (
-          <div
-            key={line.id ?? `new-${index}`}
-            className="grid grid-cols-[1fr_auto_1fr_auto] items-start gap-2 rounded-md border p-2"
-            data-testid={`beat-opponent-line-row-${index}`}
-          >
-            <div className="space-y-1">
-              <select
-                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-                value={line.creature_template}
-                onChange={(e) => updateRow(index, { creature_template: e.target.value })}
-                data-testid={`beat-opponent-line-creature-${index}`}
-              >
-                <option value="">Select a creature…</option>
-                {creatureTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.tier})
-                  </option>
-                ))}
-              </select>
-              {errors?.creature_template && (
-                <p className="text-xs text-destructive">{errors.creature_template.join(' ')}</p>
-              )}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              className="w-16"
-              value={line.count}
-              onChange={(e) => updateRow(index, { count: e.target.value })}
-              data-testid={`beat-opponent-line-count-${index}`}
-            />
-            <Input
-              placeholder="Position (optional)"
-              value={line.position_name}
-              onChange={(e) => updateRow(index, { position_name: e.target.value })}
-              data-testid={`beat-opponent-line-position-${index}`}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => removeRow(index)}
-              data-testid={`beat-opponent-line-remove-${index}`}
-            >
-              Remove
-            </Button>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /** Draft shape for one staged-template row while the form is open. */
@@ -715,6 +619,147 @@ function StagedTemplatesEditor({ lines, onChange, rowErrors }: StagedTemplatesEd
 }
 
 // ---------------------------------------------------------------------------
+// Scenario section (#3565) - a SITUATION/TASK beat may run its own scenario
+// graph instead of (or as well as) a catalog mission. Edit mode only: a
+// scenario is minted against an existing beat id, so create mode just tells
+// the author to save first.
+// ---------------------------------------------------------------------------
+
+const SCENARIO_RISK_TIER_OPTIONS = [1, 2, 3, 4, 5];
+
+interface ScenarioSectionProps {
+  beat: Beat | undefined;
+}
+
+function ScenarioSection({ beat }: ScenarioSectionProps) {
+  const [designing, setDesigning] = useState(false);
+  const [name, setName] = useState('');
+  const [summary, setSummary] = useState('');
+  const [riskTier, setRiskTier] = useState('1');
+  const [error, setError] = useState('');
+  const [created, setCreated] = useState<{ template_id: number; name: string } | null>(null);
+  const createScenario = useCreateBeatScenario();
+
+  const scenario = created ?? beat?.scenario ?? null;
+
+  if (!beat) {
+    return (
+      <div className="space-y-1.5" data-testid="beat-scenario-section">
+        <Label>Scenario</Label>
+        <p className="text-xs text-muted-foreground">Save the beat, then design its scenario.</p>
+      </div>
+    );
+  }
+
+  if (scenario != null) {
+    return (
+      <div className="space-y-1.5" data-testid="beat-scenario-section">
+        <Label>Scenario</Label>
+        <p className="text-sm">{scenario.name}</p>
+        <Link
+          to={`/stories/scenarios/${scenario.template_id}/canvas`}
+          className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Open canvas
+        </Link>
+      </div>
+    );
+  }
+
+  if (!designing) {
+    return (
+      <div className="space-y-1.5" data-testid="beat-scenario-section">
+        <Label>Scenario</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setDesigning(true)}
+          data-testid="design-scenario-btn"
+        >
+          Design scenario
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border p-3" data-testid="beat-scenario-section">
+      <Label>Scenario</Label>
+      <div className="space-y-1">
+        <Label htmlFor="scenario-name" className="text-xs">
+          Name
+        </Label>
+        <Input id="scenario-name" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="scenario-summary" className="text-xs">
+          Summary
+        </Label>
+        <Textarea
+          id="scenario-summary"
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          rows={2}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="scenario-risk-tier" className="text-xs">
+          Risk tier
+        </Label>
+        <select
+          id="scenario-risk-tier"
+          value={riskTier}
+          onChange={(e) => setRiskTier(e.target.value)}
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+        >
+          {SCENARIO_RISK_TIER_OPTIONS.map((tier) => (
+            <option key={tier} value={tier}>
+              {tier}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!name.trim() || createScenario.isPending}
+          data-testid="confirm-design-scenario"
+          onClick={() => {
+            setError('');
+            createScenario.mutate(
+              {
+                beatId: beat.id,
+                name: name.trim(),
+                summary: summary.trim(),
+                risk_tier: Number(riskTier),
+              },
+              {
+                onSuccess: (template) => {
+                  toast.success('Scenario created');
+                  setCreated({ template_id: template.id, name: template.name });
+                  setDesigning(false);
+                },
+                onError: (err: unknown) => {
+                  setError(err instanceof Error ? err.message : 'Failed to create scenario');
+                },
+              }
+            );
+          }}
+        >
+          Create
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setDesigning(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -745,7 +790,7 @@ export function BeatFormDialog({
   const canSetRisk = account?.is_staff ?? false;
 
   const [predicateType, setPredicateType] = useState<BeatPredicateType>(
-    beat?.predicate_type ?? 'gm_marked'
+    beat?.predicate_type ?? 'outcome_tier'
   );
   const [config, setConfig] = useState<BeatConfig>(beat ? configFromBeat(beat) : blankConfig());
   const [internalDescription, setInternalDescription] = useState(beat?.internal_description ?? '');
@@ -783,7 +828,7 @@ export function BeatFormDialog({
   }
 
   function resetForm() {
-    setPredicateType(beat?.predicate_type ?? 'gm_marked');
+    setPredicateType(beat?.predicate_type ?? 'outcome_tier');
     setConfig(beat ? configFromBeat(beat) : blankConfig());
     setInternalDescription(beat?.internal_description ?? '');
     setPlayerHint(beat?.player_hint ?? '');
@@ -1047,6 +1092,9 @@ export function BeatFormDialog({
                 rowErrors={fieldErrors.staged_templates}
               />
             )}
+
+            {/* Scenario graph (#3565) - a SITUATION/TASK beat's own body */}
+            {(kind === 'situation' || kind === 'task') && <ScenarioSection beat={beat} />}
 
             {/* Advances */}
             <div className="space-y-1.5">

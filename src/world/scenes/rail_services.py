@@ -54,7 +54,7 @@ def _present_character_sheets(location: Any) -> list[Any]:
     return present
 
 
-def _viewer_has_story_standing(user: AccountDB, story: Any) -> bool:
+def viewer_has_story_standing(user: AccountDB, story: Any) -> bool:
     """Staff, or the SAME scoping ``IsProtectedSubjectStoryOwnerOrStaff`` uses.
 
     CRITICAL leak invariant (#3434 spec): must never be looser than
@@ -114,7 +114,7 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
     if beat is not None:
         beat_payload = _serialize_beat_summary(beat)
         story = beat.episode.chapter.story
-        if _viewer_has_story_standing(user, story):
+        if viewer_has_story_standing(user, story):
             beat_payload["internal_description"] = beat.internal_description
             beat_payload["opponent_lines"] = BeatOpponentLineSerializer(
                 beat.opponent_lines.all(), many=True

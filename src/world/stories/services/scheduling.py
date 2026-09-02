@@ -22,8 +22,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Q
 
-from world.stories.constants import BeatPredicateType, SessionRequestStatus, TransitionMode
+from world.stories.constants import BeatKind, BeatPredicateType, SessionRequestStatus
 from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.models import SessionRequest
 
@@ -48,15 +49,11 @@ def maybe_create_session_request(progress: AnyStoryProgress) -> SessionRequest |
     Eligibility criteria (ALL must be true):
         1. progress.current_episode is not None
         2. get_eligible_transitions(progress) is non-empty
-        3. The target episode requires GM involvement — indicated by ANY
-           eligible transition being mode=GM_CHOICE, OR any of the current
-           episode's beats being predicate_type=GM_MARKED and still
-           UNSATISFIED (a session is needed to mark them).
-
-    Criterion 3 detail: we check the *current* episode for GM_MARKED beats
-    (at least one still UNSATISFIED means a GM session is needed to make
-    progress), and also check outbound transitions for GM_CHOICE mode (Lead
-    GM must pick the path). Either condition is sufficient.
+        3. A session is needed to run the episode at a table (#3565): the
+           current episode has an UNSATISFIED beat someone has to run
+           face-to-face (SITUATION or ENCOUNTER kind), or a fact only a GM
+           can mark (predicate_type=GM_MARKED). Routing itself is never a
+           reason a session is needed - it always fires automatically.
     """
     # Defer import to avoid circular import — beats.py imports from models.py
     # which is shared, but scheduling.py would create a mutual import with
@@ -78,17 +75,13 @@ def maybe_create_session_request(progress: AnyStoryProgress) -> SessionRequest |
 
     episode = progress.current_episode
 
-    # Check whether GM involvement is required.
-    # Case A: any eligible outbound transition requires a GM to choose the path.
-    needs_gm = any(t.mode == TransitionMode.GM_CHOICE for t in eligible)
-
-    if not needs_gm:
-        # Case B: the current episode has at least one GM_MARKED beat that is
-        # still UNSATISFIED — a GM session is needed to mark it.
-        needs_gm = episode.beats.filter(
-            predicate_type=BeatPredicateType.GM_MARKED,
-            outcome=BeatOutcome.UNSATISFIED,
-        ).exists()
+    # A session is needed when the episode has a beat someone has to run at
+    # a table, or a fact only a GM can mark (#3565).
+    needs_gm = episode.beats.filter(
+        Q(kind__in=(BeatKind.SITUATION, BeatKind.ENCOUNTER))
+        | Q(predicate_type=BeatPredicateType.GM_MARKED),
+        outcome=BeatOutcome.UNSATISFIED,
+    ).exists()
 
     if not needs_gm:
         # No GM required; the episode can self-advance without a session.

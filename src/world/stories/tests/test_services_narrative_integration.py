@@ -17,7 +17,6 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -225,7 +224,6 @@ class EpisodeResolutionNarrativeTests(EvenniaTestCase):
         TransitionFactory(
             source_episode=source,
             target_episode=target,
-            mode=TransitionMode.AUTO,
             connection_summary="Therefore, the story advances.",
         )
         progress = StoryProgressFactory(
@@ -249,7 +247,6 @@ class EpisodeResolutionNarrativeTests(EvenniaTestCase):
         TransitionFactory(
             source_episode=source,
             target_episode=target,
-            mode=TransitionMode.AUTO,
             connection_summary="",
         )
         progress = StoryProgressFactory(

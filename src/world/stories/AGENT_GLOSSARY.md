@@ -1,8 +1,30 @@
 # Stories glossary
 
 **Story / Chapter / Episode / Beat / Transition**:
-The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically or by GM choice. Episodes are nodes and Transitions are edges — a Story progresses by satisfying Beats to make Transitions eligible.
-_Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition).
+The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically - the lowest authored `(order, pk)` eligible edge, never a runtime GM pick (#3565, ADR-0258; the retired mode was called GM Choice). Episodes are nodes and Transitions are edges - a Story progresses by satisfying Beats to make Transitions eligible.
+_Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition), GM choice (routing is never a runtime pick, #3565).
+
+**Scenario / Scenario Graph**:
+A SITUATION or TASK Beat's body is the same authored option -> check -> tier -> consequence
+-> next graph that already runs missions (`MissionTemplate`/`MissionNode`/`MissionOption`/
+`MissionOptionRoute`, `world.missions` - see that app's glossary) - not a second, story-local
+option engine (#3565, ADR-0258). **Scenario** is the GM-facing name for this on the story side
+(the story author page's "Design scenario" action, the scene's Scenario Card/rail section);
+**scenario graph** is the code and glossary term for the shared primitive itself, used whether
+the wrapper is a story beat or a mission. `StoryScenario` (below) is the ownership link that
+makes a scenario a *story's own* scenario rather than staff-authored catalog content.
+_Avoid_: mission (reserve for a scenario graph in its quest wrapper - `MissionTemplate`'s giver
+economy - see Mission in the missions glossary), GM choice (the runtime pick this replaces),
+option engine (there is exactly one, shared).
+
+**StoryScenario**:
+The ownership link (`world.stories.models.StoryScenario`) between a `Story` and the
+`missions.MissionTemplate` a Lead GM authored as one of their beats' bodies - `story` FK +
+`template` O2O (`related_name="story_scenario"`), read via `template.story_scenario.story` so
+`world.missions` never imports `Story` (ADR-0010, #3565). A story-owned template is created
+RESTRICTED with zero draw weight and excluded from boards/opportunities, so it never surfaces
+as a public quest; the link is immutable after creation - a scenario is never re-parented.
+_Avoid_: mission ownership, scenario link (StoryScenario is the specific model name).
 
 **Era**:
 A temporal metaplot tag (player-facing "Season N") that stories and events are stamped against, with exactly one ACTIVE era enforced at a time. It is a temporal label, not a parent in the Story/Chapter/Episode hierarchy.
@@ -68,12 +90,22 @@ _Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bound
 The `StakeResolution.outcome_key` slug (#1760) — an open, designer-authored vocabulary naming *which* branch a resolution is, within one Stake's one `StakeResolutionColumn`. Lets a stake author multiple named branches sharing a polarity (e.g. two distinct LOSS branches, `"destroyed"` and `"captured"`); blank is the column's single plain/default branch and is what every pre-#1760 `StakeResolution` row carries (backward compatible). `column` + `Outcome Key` together — not `column` alone — identify one authored branch (unique `(stake, column, outcome_key)`); a GM's Constrained Pick names both.
 _Avoid_: sub-branch, variant (reserve "branch" for the `StakeResolution` row itself; Outcome Key is the naming dimension that distinguishes branches sharing a column).
 
+**Beat Outcome Key**:
+`Beat.outcome_key`/`BeatCompletion.outcome_key` (#3565) - the `MissionOption.key` of the
+scenario option that ended the run which resolved an OUTCOME_TIER beat, denormalised at
+completion; blank for combat, battle, decisive-check, and GM-marked completions.
+`TransitionRequiredOutcome.required_outcome_key` routes on it, the same shape the Stakes
+`Outcome Key` above used first (#1760) - but a different field on a different model, naming
+which scenario ending fired rather than which stake branch fired.
+_Avoid_: outcome key alone when the Stakes `Outcome Key` is also in scope (name the model);
+option key (that's `MissionOption.key`, the source value this field denormalises).
+
 **Withdrawal Column**:
 The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED, via `resolve_stakes_for_withdrawal` (#3559); stakes without an authored WITHDRAWAL branch still record an empty (`resolution=None`) StakeOutcome (audit honesty). The beat's own outcome is left untouched (still open) - a withdrawal never completes the beat.
 _Avoid_: flee branch, retreat outcome.
 
 **Objective-First Grading**:
-The rule (#3559) that no OUTCOME_TIER beat ever waits on a GM ruling to close - three structural replacements stand in for the deleted `BeatOutcome.PENDING_GM_REVIEW`. `beat_for_scene_conclusion` scopes a concluded fight or battle to at most one gradable beat (its explicit `story_beat`, else the scene's `running_beat` only when that beat is itself the objective). An outlier roll clamps to the best authored tier of the same polarity (`clamp_tier_to_pool`) instead of parking the beat. A missing `EncounterOutcomeMapping`/`BattleOutcomeMapping` row is required content, reported on the admin sentinel (#3444), not a fallback state.
+The rule (#3559) that no OUTCOME_TIER beat ever waits on a GM ruling to close - three structural replacements stand in for the deleted `BeatOutcome.PENDING_GM_REVIEW`. `beat_for_scene_conclusion` scopes a concluded fight or battle to at most one gradable beat (its explicit `story_beat`, else the scene's `running_beat` only when that beat is itself the objective). An outlier roll clamps to the best authored tier of the same polarity (`clamp_tier_to_pool`) instead of parking the beat. A missing `EncounterOutcomeMapping`/`BattleOutcomeMapping` row is required content, reported on the admin sentinel (#3444), not a fallback state. The same "objective-first" principle applies one layer down inside a scenario (#3565, ADR-0258): a fight spawned by an ENCOUNTER scenario option grades that option's route (`CombatEncounter.scenario_deed`), never a beat directly - see the missions glossary's ENCOUNTER Option entry.
 _Avoid_: pending review, GM review queue, parked beat.
 
 **Reward Line**:

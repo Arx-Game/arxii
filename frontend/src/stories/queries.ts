@@ -8,6 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
+  CreateBeatScenarioBody,
   ListBeatsParams,
   ListChaptersParams,
   ListClaimsParams,
@@ -574,6 +575,18 @@ export function useMarkBeat() {
       qc.invalidateQueries({ queryKey: storiesKeys.myActive() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) }).catch(() => {});
+    },
+  });
+}
+
+export function useCreateBeatScenario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ beatId, ...body }: { beatId: number } & CreateBeatScenarioBody) =>
+      api.createBeatScenario(beatId, body),
+    onSuccess: (_, { beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
     },
   });
 }

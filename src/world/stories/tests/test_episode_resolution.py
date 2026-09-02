@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from evennia.utils.test_resources import EvenniaTestCase
 
-from world.stories.constants import StoryScope, TransitionMode
+from world.stories.constants import StoryScope
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
@@ -175,7 +175,6 @@ class EpisodeResolutionScopeTests(EvenniaTestCase):
         transition = TransitionFactory(
             source_episode=source,
             target_episode=target,
-            mode=TransitionMode.AUTO,
         )
 
         progress = GroupStoryProgressFactory(story=story, current_episode=source)
@@ -200,7 +199,6 @@ class EpisodeResolutionScopeTests(EvenniaTestCase):
         TransitionFactory(
             source_episode=source,
             target_episode=target,
-            mode=TransitionMode.AUTO,
         )
 
         progress = GlobalStoryProgressFactory(story=story, current_episode=source)

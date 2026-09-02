@@ -6,7 +6,7 @@
  *   - AGM claims pending approval
  *   - Assigned session requests
  *
- * Action UIs (resolve episode, mark beat, approve/reject claims, schedule events)
+ * Action UIs (advance episode, mark beat, approve/reject claims, schedule events)
  * come in Wave 6.
  *
  * Permission gating: the endpoint returns 403 for non-GMs. We use a local query

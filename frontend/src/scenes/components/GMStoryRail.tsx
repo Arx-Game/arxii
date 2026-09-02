@@ -26,7 +26,7 @@ import { isDispatchFailure } from '@/combat/types';
 import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { GMStoryRailParticipant, SceneDetail } from '../types';
-import { useGMStoryRailQuery } from '../queries';
+import { useGMStoryRailQuery, useSceneScenarioQuery } from '../queries';
 
 interface RailConditionEntry {
   id: number;
@@ -114,6 +114,13 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
 
   const hasRunningBeat = scene.running_beat != null;
   const { data: rail } = useGMStoryRailQuery(String(scene.id), hasRunningBeat);
+  // #3565 - the scenario query is independent of the encounter-beat gate
+  // above (a scene can be mid-scenario with no combat beat running), so it's
+  // enabled off `viewer_can_gm` directly.
+  const { data: scenario } = useSceneScenarioQuery(
+    String(scene.id),
+    scene.viewer_can_gm && hasRunningBeat
+  );
 
   if (!scene.viewer_can_gm) {
     return null;
@@ -164,6 +171,44 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
               <p className="text-muted-foreground" data-testid="gm-story-rail-internal-description">
                 {rail.beat.internal_description}
               </p>
+            )}
+          </div>
+        )}
+
+        {scenario?.gm && (
+          <div data-testid="gm-story-rail-scenario" className="space-y-1 text-sm">
+            <div className="font-medium">Scenario</div>
+            <div>
+              <span className="font-medium">Node:</span> {scenario.gm.node_key}
+            </div>
+            <div>
+              <span className="font-medium">Phase:</span> {scenario.gm.phase}
+            </div>
+            <div>
+              <span className="font-medium">Paused:</span> {scenario.gm.is_paused ? 'yes' : 'no'}
+            </div>
+            {scenario.gm.ballots.length > 0 && (
+              <ul data-testid="gm-story-rail-scenario-ballots" className="text-muted-foreground">
+                {scenario.gm.ballots.map((ballot) => (
+                  <li key={ballot.character_id}>
+                    {ballot.character_name}:{' '}
+                    {ballot.picked_option_id !== null ? 'picked' : 'no pick'},{' '}
+                    {ballot.voted_option_id !== null ? 'voted' : 'no vote'}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div data-testid="gm-story-rail-scenario-last-deed" className="text-muted-foreground">
+              <span className="font-medium">Last deed:</span>{' '}
+              {scenario.gm.last_deed
+                ? `${scenario.gm.last_deed.option_key}: ${scenario.gm.last_deed.outcome_name ?? 'no roll'}`
+                : 'none yet'}
+            </div>
+            {scenario.gm.beat_outcome && (
+              <div data-testid="gm-story-rail-scenario-outcome" className="text-muted-foreground">
+                <span className="font-medium">Outcome so far:</span> {scenario.gm.beat_outcome}
+                {scenario.gm.beat_outcome_key ? ` (${scenario.gm.beat_outcome_key})` : ''}
+              </div>
             )}
           </div>
         )}
