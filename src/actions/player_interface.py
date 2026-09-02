@@ -623,7 +623,7 @@ def _combat_actions(
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         position_target_shape,
-        protective_flavor,
+        protective_condition_and_flavor,
     )
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
@@ -669,6 +669,17 @@ def _combat_actions(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,
         )
+        # Guardian-declaration flavor + fee (#2207, #3573): one batched query per
+        # technique (protective_condition_and_flavor's select_related + nested
+        # Prefetch) - this loop is per-technique already (technique_performable
+        # above), so this adds one more per-technique query on the same cadence,
+        # not a new N+1 shape. Both protective_flavor and reactive_anima_cost are
+        # derived from the SAME resolved (ConditionTemplate, flavor) tuple, so
+        # this call replaces the separate protective_flavor(technique) lookup
+        # rather than adding a second query. Flagging for the reviewer per the
+        # task brief rather than silently shipping: if this loop is ever hoisted
+        # to a batched form, this traversal would need batching too.
+        protective = protective_condition_and_flavor(technique)
         result.append(
             PlayerAction(
                 backend=ActionBackend.COMBAT,
@@ -678,14 +689,10 @@ def _combat_actions(
                 action_template=template,
                 action_category=technique.action_category,
                 reach=technique.reach,
-                # Guardian-declaration flavor (#2207): one batched query per technique
-                # (protective_condition_and_flavor's select_related + nested Prefetch) —
-                # this loop is per-technique already (technique_performable above), so
-                # this adds one more per-technique query on the same cadence, not a new
-                # N+1 shape. Flagging for the reviewer per the task brief rather than
-                # silently shipping: if this loop is ever hoisted to a batched form,
-                # protective_flavor's traversal would need batching too.
-                protective_flavor=protective_flavor(technique),
+                protective_flavor=protective[1] if protective is not None else None,
+                reactive_anima_cost=(
+                    protective[0].reactive_anima_cost if protective is not None else None
+                ),
                 position_target_shape=position_target_shape(technique),
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
@@ -1440,6 +1447,7 @@ def _build_enhancement_index(
         get_runtime_technique_stats,
         get_soulfray_warning,
     )
+    from world.magic.services.targeting import protective_condition_and_flavor  # noqa: PLC0415
     from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
 
     by_action_key: dict[str, list[AvailableEnhancement]] = {}
@@ -1458,6 +1466,10 @@ def _build_enhancement_index(
 
     soulfray_warning = get_soulfray_warning(character) if rows else None
     stats_cache: dict[int, tuple[int, int]] = {}
+    # Ward-bearing fee cache (#3573): one protective_condition_and_flavor query
+    # per DISTINCT technique, same cadence as stats_cache above (a technique can
+    # carry more than one ActionEnhancement row across different base_action_keys).
+    reactive_cost_cache: dict[int, int | None] = {}
 
     for row in rows:
         technique = row.technique
@@ -1467,6 +1479,13 @@ def _build_enhancement_index(
             stats = get_runtime_technique_stats(technique, character)
             stats_cache[technique.pk] = (stats.intensity, stats.control)
         intensity, control = stats_cache[technique.pk]
+
+        if technique.pk not in reactive_cost_cache:
+            protective = protective_condition_and_flavor(technique)
+            reactive_cost_cache[technique.pk] = (
+                protective[0].reactive_anima_cost if protective is not None else None
+            )
+        reactive_anima_cost = reactive_cost_cache[technique.pk]
 
         if anima is not None:
             cost = calculate_effective_anima_cost(
@@ -1485,6 +1504,7 @@ def _build_enhancement_index(
             technique=technique,
             effective_cost=effective_cost,
             soulfray_warning=warning,
+            reactive_anima_cost=reactive_anima_cost,
         )
 
         if row.base_action_key:

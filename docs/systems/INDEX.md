@@ -7177,7 +7177,19 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   technique reveals a destination select (Away / `encounter.opponents` / `encounter.
   volatile_objects`) — dispatches via `useGuardMutation`'s `redirectOpponentTargetId`/
   `redirectObjectTargetId` args (`frontend/src/combat/queries.ts`) and shows a
-  "Guarding" badge once armed.
+  "Guarding" badge once armed. **Soulfray consent + fee (#3573):** when a protective
+  technique is selected, a `guard-soulfray-toggle` checkbox (fee read from
+  `PlayerAction.reactive_anima_cost`, anima from `useCharacterAnima`) lets the
+  guardian consent up front to hold the ward alive past zero anima by drawing on
+  Soulfray - `confirm_soulfray_risk` rides `useGuardMutation`'s `confirmSoulfrayRisk`
+  arg; resets to false when the technique select reverts to mundane. The focused cast
+  card carries the same consent for a ward-bearing technique with no active Soulfray
+  warning (`cast-ward-soulfray-toggle`, bound to the existing `soulfrayAccepted`
+  state) - when a warning IS active, `SoulfrayAcceptGate`'s acceptance alone covers
+  both. The out-of-combat `ActionPanel` enhancement row (party wards) mirrors this
+  with `enhancement-soulfray-toggle-<technique_id>`, though that path's backend
+  wiring is a known gap - see the `reactive_anima_cost` note in
+  `docs/systems/magic.md`.
 - **Telnet parity (#2207/#2210):** `combat interpose [ally] [with <technique>] [into
   <destination>]` (`CmdCombat._resolve_interpose_args`, `src/commands/
   combat_maneuvers.py`) — all three clauses optional; `with <technique>` splits on

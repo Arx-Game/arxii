@@ -23995,6 +23995,7 @@ export interface components {
       readonly technique_name: string;
       readonly effective_cost: number;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
+      readonly reactive_anima_cost: number | null;
     };
     /**
      * @description * `TONE` - Tone
@@ -38985,6 +38986,7 @@ export interface components {
         | null;
       readonly reach: string | null;
       readonly protective_flavor: string | null;
+      readonly reactive_anima_cost: number | null;
       readonly position_target_shape: string;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];

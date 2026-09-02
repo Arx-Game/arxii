@@ -39434,8 +39434,13 @@ components:
           - $ref: '#/components/schemas/SoulfrayWarning'
           readOnly: true
           nullable: true
+        reactive_anima_cost:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - effective_cost
+      - reactive_anima_cost
       - soulfray_warning
       - technique_id
       - technique_name
@@ -68125,6 +68130,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        reactive_anima_cost:
+          type: integer
+          readOnly: true
+          nullable: true
         position_target_shape:
           type: string
           readOnly: true
@@ -68159,6 +68168,7 @@ components:
       - prerequisite_reasons
       - protective_flavor
       - reach
+      - reactive_anima_cost
       - ref
       - soulfray_warning
       - strain

@@ -716,6 +716,70 @@ describe('ActionPanel', () => {
     expect(screen.getByText('2 anima')).toBeInTheDocument();
   });
 
+  // #3573: a ward-bearing enhancement (reactive_anima_cost != null) shows a
+  // Soulfray consent toggle beneath its row; checking it before commit adds
+  // confirm_soulfray_risk to the request kwargs.
+  it('sends confirm_soulfray_risk when the ward-bearing enhancement toggle is checked', async () => {
+    const actions: PlayerActionsResponse = {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        makeAction({
+          display_name: 'Cast Light',
+          enhancements: [
+            {
+              technique_id: 9,
+              technique_name: 'Aegis Field',
+              effective_cost: 2,
+              soulfray_warning: null,
+              reactive_anima_cost: 3,
+            },
+          ],
+          ref: {
+            backend: 'registry',
+            challenge_instance_id: null,
+            approach_id: null,
+            technique_id: null,
+            registry_key: 'cast_light',
+          },
+        }),
+      ],
+    };
+    vi.mocked(fetchAvailableActions).mockResolvedValue(actions);
+    vi.mocked(createActionRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cast Light')).toBeInTheDocument();
+    });
+
+    const expandButton = screen.getByRole('button', { name: /show enhancements/i });
+    await user.click(expandButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Aegis Field')).toBeInTheDocument();
+    });
+
+    const toggle = screen.getByTestId('enhancement-soulfray-toggle-9');
+    expect(toggle).toBeInTheDocument();
+    await user.click(toggle);
+
+    await user.click(screen.getByText('Aegis Field'));
+
+    await waitFor(() => {
+      expect(createActionRequest).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({ technique_id: 9, confirm_soulfray_risk: true })
+      );
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Cast section tests
   // -------------------------------------------------------------------------

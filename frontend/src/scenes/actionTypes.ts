@@ -73,6 +73,11 @@ export interface AvailableEnhancement {
   technique_name: string;
   effective_cost: number;
   soulfray_warning: SoulfrayWarningData | null;
+  /**
+   * Flat reactive anima fee of the technique's protective condition (#3573).
+   * null when the technique carries no protective reactive-trigger handler.
+   */
+  reactive_anima_cost?: number | null;
 }
 
 /**
@@ -130,6 +135,12 @@ export interface PlayerAction {
    * declaration's protective technique.
    */
   protective_flavor?: string | null;
+  /**
+   * Flat reactive anima fee of the technique's protective condition (#3573).
+   * null / absent when the technique carries no protective reactive-trigger
+   * handler (mirrors protective_flavor's null case).
+   */
+  reactive_anima_cost?: number | null;
   /**
    * Cast-time position-targeting shape for this technique (#2206). Hand-typed
    * mirror of the backend `position_target_shape` field (generated api.d.ts

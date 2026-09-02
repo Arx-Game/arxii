@@ -93,6 +93,43 @@ class GetPlayerActionsEnhancementsTests(TestCase):
         self.assertIsNotNone(persuade.target_spec)
         del unrelated_template
 
+    def test_enhancement_carries_reactive_anima_cost_for_ward_bearing_technique(self) -> None:
+        """AvailableEnhancement.reactive_anima_cost mirrors the protective condition's
+        flat fee (#3573) - same resolution PlayerAction.reactive_anima_cost uses, exposed
+        on the enhancement shape too so a ward-bearing enhancement can show its fee."""
+        from world.magic.effect_palette_content import (
+            FORCE_FIELD_TECHNIQUE_NAME,
+            ensure_force_field_content,
+        )
+        from world.magic.models import Technique
+
+        ensure_force_field_content()
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        CharacterTechniqueFactory(character=self.sheet, technique=aegis_field)
+        ActionEnhancement.objects.create(
+            base_action_key="intimidate",
+            variant_name="Warded Intimidate",
+            source_type="technique",
+            technique=aegis_field,
+        )
+        expected = aegis_field.condition_applications.get().condition.reactive_anima_cost
+
+        actions = get_player_actions(self.character)
+        intimidate = next((a for a in actions if a.display_name == "Intimidate"), None)
+        self.assertIsNotNone(intimidate)
+        warded = next(
+            (e for e in intimidate.enhancements if e.technique.pk == aegis_field.pk), None
+        )
+        self.assertIsNotNone(warded)
+        self.assertEqual(warded.reactive_anima_cost, expected)
+        # The mundane "Wave of Dread" enhancement from setUpTestData has no
+        # protective handler, so it carries reactive_anima_cost=None.
+        mundane = next(
+            (e for e in intimidate.enhancements if e.technique.pk == self.technique.pk), None
+        )
+        self.assertIsNotNone(mundane)
+        self.assertIsNone(mundane.reactive_anima_cost)
+
 
 class GetPlayerActionsQueryCountTests(TestCase):
     """get_player_actions performs a bounded query count for a non-trivial setup.
@@ -154,9 +191,15 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # concluding no quick action applies — +1 over the prior baseline of 15. Necessary:
         # the surfacing gate must match the Action's own prerequisite, or a trust-tier GM
         # could execute set_the_stage but never see the quick action.
+        # #3573 (ward-bearing enhancement fee): _build_enhancement_index now resolves
+        # protective_condition_and_flavor(technique) once per DISTINCT technique (cached
+        # alongside stats_cache) to populate AvailableEnhancement.reactive_anima_cost. The
+        # fixture technique here ("Wave of Dread") carries no condition_applications, so the
+        # traversal's base query returns zero rows and neither nested prefetch fires - one
+        # query, not three - +1 over the prior baseline of 16.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            16,
+            17,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

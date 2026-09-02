@@ -145,6 +145,14 @@ export async function createActionRequest(
      * asks carry a sum_tier (never raw coppers); deed asks carry deed_text.
      */
     boon?: BoonAskPayload;
+    /**
+     * Guardian/caster consent (#3573) to hold a ward-bearing technique's
+     * protective condition alive past zero anima via Soulfray. Only
+     * meaningful when technique_id names a ward-bearing technique. See the
+     * KNOWN GAP note on the enhancement checkbox in ActionPanel.tsx - the
+     * backend does not consume this field on the enhancement-commit path yet.
+     */
+    confirm_soulfray_risk?: boolean;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -169,6 +177,7 @@ export async function createActionRequest(
   copyDefinedField(requestBody, 'bond_thread_id', body.bond_thread_id);
   copyDefinedField(requestBody, 'entry_interaction_id', body.entry_interaction_id);
   copyDefinedField(requestBody, 'boon', body.boon);
+  copyDefinedField(requestBody, 'confirm_soulfray_risk', body.confirm_soulfray_risk);
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
     body: JSON.stringify(requestBody),

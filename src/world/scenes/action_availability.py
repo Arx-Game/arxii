@@ -26,3 +26,7 @@ class AvailableEnhancement:
     technique: Technique
     effective_cost: int
     soulfray_warning: SoulfrayWarning | None = None
+    # Flat reactive anima fee of the technique's protective condition (#3573);
+    # None when the technique carries no protective reactive-trigger handler.
+    # Mirrors PlayerAction.reactive_anima_cost (actions/types.py).
+    reactive_anima_cost: int | None = None

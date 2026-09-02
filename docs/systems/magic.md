@@ -714,6 +714,23 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 | `protective_condition_and_flavor(technique) -> tuple[ConditionTemplate, str] \| None` (#2207) | Classifies a technique's reactive-trigger handler into `barrier`/`blink`/`redirect` by walking `condition_applications → condition.reactive_triggers → flow_definition.steps` (one batched Prefetch query); returns the matched `ConditionTemplate` too, since combat's guardian resolution needs its `reactive_anima_cost`. No new authored field — derives from the existing effect-palette data. |
 | `protective_flavor(technique) -> str \| None` (#2207) | Thin wrapper over `protective_condition_and_flavor` returning only the flavor string; used by `declare_interpose`'s declaration-time gate (combat, `world/combat/services.py`) |
 
+**`PlayerAction.reactive_anima_cost` / `AvailableEnhancement.reactive_anima_cost`** (#3573) - both
+carry the protective condition's flat fee (`ConditionTemplate.reactive_anima_cost`), resolved from
+the same `protective_condition_and_flavor(technique)` call `protective_flavor` and the guardian
+resolution already make (`actions/player_interface.py`'s `_combat_actions` and
+`_build_enhancement_index`, one query per distinct technique, cached alongside the runtime-stats
+lookup) - `None` when the technique carries no protective handler. Lets the frontend show the fee
+before the guardian/caster consents to hold the ward into Soulfray: the Guard control's
+`guard-soulfray-toggle`, the focused cast card's `cast-ward-soulfray-toggle` (no active warning),
+and the scene `ActionPanel` enhancement row's `enhancement-soulfray-toggle-<technique_id>`
+(`frontend/src/scenes/components/ActionPanel.tsx`) - the last of these is wired at the request-body
+level only; `SceneActionRequestCreateSerializer` does not yet accept `confirm_soulfray_risk`, and
+the enhancement-commit path (`create_action_request` -> `_resolve_enhanced_action` ->
+`use_technique`) never calls `apply_technique_conditions`, so there is no `ConditionInstance` for
+the consent to attach to on that path yet (unlike the standalone cast path,
+`request_technique_cast`, which already threads `confirm_soulfray_risk` into
+`ConditionInstance.soulfray_consented`).
+
 **Consent routing** (in `world/scenes/cast_services.py:request_technique_cast`):
 - Hostile → `seed_or_feed_encounter_from_cast` (combat).
 - Benign + behavior-altering → PENDING `SceneActionRequest` (consent required).
