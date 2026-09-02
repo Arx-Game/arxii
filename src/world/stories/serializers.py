@@ -238,7 +238,7 @@ def _gm_text_gate(
         data.pop("consequences", None)
         # routing_problems is absent on the Story serializer: pop default is safe.
         data.pop("routing_problems", None)
-        if node_maturity == StoryMaturity.PITCH:
+        if node_maturity == StoryMaturity.PITCH and "summary" in data:  # noqa: STRING_LITERAL
             data["summary"] = ""
     return data
 

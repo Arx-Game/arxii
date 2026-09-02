@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
-from world.stories.constants import BeatOutcome, BeatPredicateType
+from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMaturity
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -86,6 +86,24 @@ class EpisodeRoutingProblemsTests(APITestCase):
         self.assertNotIn(
             "routing_problems", EpisodeDetailSerializer(self.dead_end, context={}).data
         )
+
+    def test_pitch_maturity_list_row_never_carries_summary(self) -> None:
+        # summary isn't a declared EpisodeListSerializer field; _gm_text_gate
+        # must not inject it just because the episode is PITCH-maturity (#3563).
+        pitch_episode = EpisodeFactory(chapter=self.chapter, order=3, maturity=StoryMaturity.PITCH)
+
+        player_response = self._list(self.player_account)
+        self.assertEqual(player_response.status_code, status.HTTP_200_OK)
+        player_row = next(
+            row for row in player_response.data["results"] if row["id"] == pitch_episode.pk
+        )
+        self.assertNotIn("summary", player_row)
+        self.assertNotIn("routing_problems", player_row)
+
+        gm_response = self._list(self.lead_gm_account)
+        self.assertEqual(gm_response.status_code, status.HTTP_200_OK)
+        gm_row = next(row for row in gm_response.data["results"] if row["id"] == pitch_episode.pk)
+        self.assertNotIn("summary", gm_row)
 
     def test_list_query_count_does_not_grow_with_episodes(self) -> None:
         self.client.force_authenticate(user=self.lead_gm_account)
