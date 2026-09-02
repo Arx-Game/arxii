@@ -159,7 +159,7 @@ class GMQueueEpisodesReadyTest(APITestCase):
         transitions = matching[0]["eligible_transitions"]
         assert len(transitions) >= 1
         assert "transition_id" in transitions[0]
-        assert "mode" in transitions[0]
+        assert "mode" not in transitions[0]
 
 
 class GMQueueWaitingForGMTest(APITestCase):
