@@ -13,15 +13,15 @@ interface LayoutProps {
 }
 
 /** Routes that use a full-viewport layout without container padding or footer. */
-const FULL_VIEWPORT_ROUTES = ['/game'];
+const FULL_VIEWPORT_ROUTES: ReadonlySet<string> = new Set(['/game']);
 
 /** Routes that use a full-bleed layout (no container padding) but keep the Footer (#3305). */
-const FULL_BLEED_ROUTES = ['/'];
+const FULL_BLEED_ROUTES: ReadonlySet<string> = new Set(['/']);
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
-  const isFullViewport = FULL_VIEWPORT_ROUTES.includes(location.pathname);
-  const isFullBleed = FULL_BLEED_ROUTES.includes(location.pathname);
+  const isFullViewport = FULL_VIEWPORT_ROUTES.has(location.pathname);
+  const isFullBleed = FULL_BLEED_ROUTES.has(location.pathname);
 
   return (
     <div

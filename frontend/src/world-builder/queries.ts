@@ -73,13 +73,13 @@ export interface WorldBuilderActionInput {
 }
 
 /** Actions that reshape the area tree itself, not just one area's manager payload. */
-const AREA_TREE_KEYS: WorldBuilderActionKey[] = [
+const AREA_TREE_KEYS: ReadonlySet<WorldBuilderActionKey> = new Set([
   'create_area',
   'edit_area',
   'promote_area',
   'staff_remove_area',
   'staff_move_room',
-];
+]);
 
 /**
  * The one mutation every staff world-builder verb goes through: dispatch by
@@ -106,7 +106,7 @@ export function useWorldBuilderAction(characterId: number, areaId: number | null
         queryClient.invalidateQueries({ queryKey: worldBuilderKeys.manager(areaId) });
       }
       queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'room-detail'] });
-      if (AREA_TREE_KEYS.includes(key)) {
+      if (AREA_TREE_KEYS.has(key)) {
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'areas'] });
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'area'] });
       }

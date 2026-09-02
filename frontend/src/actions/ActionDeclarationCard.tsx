@@ -200,8 +200,22 @@ interface TargetPickerProps {
   positionAdjacency?: PositionAdjacencyItem[];
 }
 
+/**
+ * The fallback selector only picks a kind; the combatant list, reach and position
+ * graph belong to the richer `TargetPicker` and are deliberately not in scope here.
+ */
+type TargetKindSelectProps = Pick<
+  TargetPickerProps,
+  'targetId' | 'targetKind' | 'onTargetChange' | 'disabled'
+>;
+
 /** Kind-only fallback selector used in scenes (no combatant list available). */
-function TargetKindSelect({ targetId, targetKind, onTargetChange, disabled }: TargetPickerProps) {
+function TargetKindSelect({
+  targetId,
+  targetKind,
+  onTargetChange,
+  disabled,
+}: TargetKindSelectProps) {
   return (
     <select
       disabled={disabled}
