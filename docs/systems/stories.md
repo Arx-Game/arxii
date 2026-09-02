@@ -20,6 +20,33 @@ matching `privacy` select. See the `Beat` model table and "StoryScenario"
 below, and [stakes.md](stakes.md)'s "Readiness (GM-facing, #3562)" section,
 for the field-by-field detail.
 
+**Stakes editor on the beat (#3561).** A stakes-contract engine has existed
+since #1770 with no web surface at all - only the Django admin could author a
+`Stake`. `StakesPanel` now mounts under the beat in two places: expanded
+inline in `StoryAuthorTree`'s collapsible "Stakes" chevron, and again in
+`BeatFormDialog`'s edit mode after the Scenario section. It carries the
+header (declared/effective risk, target level, readiness verdict, lock
+banner), the beat's `Stake` rows (`StakeRow` - template, `SubjectRefFields`
+subject picker now including an ASSET case, severity, player summary), and
+each stake's WIN/LOSS/WITHDRAWAL `BranchColumns` (pool, escalation, narrative
+summary, and the writer fields the subject kind allows - item forfeit, NPC
+lifecycle/standing/regard, faction standing, or the ASSET status transition;
+WIN branches also mount `RewardLinesEditor` for money/resonance payouts).
+Every write goes straight through the existing `Stake`/`StakeResolution`/
+`StakeRewardLine` CRUD endpoints - no new write surface. "Add stake" reads
+from the `StakeTemplate` catalog banded to the beat's risk; a custom stake is
+offered only when the caller's `GMLevelCap.allow_custom_stakes` (or staff)
+permits it. The form disables under an open activation, same lock the
+serializers already enforce. See [stakes.md](stakes.md)'s "Resolution"
+section for how a named branch is now selected (by authored key, not a GM
+pick after the fact) and the "API" table for the editor's endpoints.
+`TransitionFormDialog`'s `AddRoutingRow` gained a routing mode toggle
+alongside the existing beat-outcome mode: "stake column" picks one of the
+beat's stakes and a `StakeResolutionColumn`, producing a
+`TransitionRequiredOutcome` row with `stake` + `required_stake_column` set
+instead of `required_outcome` - see the `TransitionRequiredOutcome` model
+entry below.
+
 **Source:** `src/world/stories/`
 **API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`, `/api/story-notes/`
 
@@ -264,6 +291,8 @@ Per-transition routing predicate. All rows on a given transition must be satisfi
 | `beat` | FK → Beat | |
 | `required_outcome` | BeatOutcome | |
 | `required_outcome_key` | CharField (blank) | Beat-level rows only (`clean()` rejects it on episode-level rows); also requires `Beat.outcome_key` to equal this value, in addition to the outcome match above. Routes on which scenario option ended the run (#3565) - e.g. "negotiate" vs "fight" - the same shape `StakeResolution.outcome_key` used first (#1760) |
+| `stake` | FK → `stories.Stake` (null) | Stake-level routing instead of beat-level (see [stakes.md](stakes.md)'s "`TransitionRequiredOutcome.stake` + `required_stake_column`" section). Exactly one predicate shape per row: `stake` set requires `required_stake_column` and forbids `required_outcome` (both enforced in `clean()`); `stake` null requires `required_outcome`. Authored via `TransitionFormDialog`'s `AddRoutingRow` stake-column mode (#3561) |
+| `required_stake_column` | `StakeResolutionColumn` (blank) | With `stake` set: satisfied iff that stake's `StakeOutcome.column` equals this value |
 
 ---
 

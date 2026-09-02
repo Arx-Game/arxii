@@ -859,14 +859,14 @@ def _apply_stake_rewards(
     activation that was ready and priced above effective NONE — no activation,
     an unready contract, or an over-leveled party (effective NONE) skips the
     payout entirely. Loss/withdrawal consequences are ungated (reality doesn't
-    care; only the payout math does); the GM-pick path honors the same gate
-    via the activation the pick resolves under.
+    care; only the payout math does).
 
     The reward band is re-verified at pay time (#1770 PR3 review): the
-    ``is_ready`` verdict frozen on the activation can go stale in the
-    pending-GM-pick window, so an out-of-band live total also skips the
-    payout (banding bypass closed at both ends — the serializer refuses
-    completed-beat edits, and the payout re-checks the band regardless).
+    ``is_ready`` verdict frozen on the activation can go stale between
+    activation and the beat's completion, so an out-of-band live total also
+    skips the payout (banding bypass closed at both ends - the serializer
+    refuses completed-beat edits, and the payout re-checks the band
+    regardless).
 
     Delivery is per line x participant (ALL_EQUAL, mirroring mission reward
     distribution) through the SAME sink services the missions deed router
