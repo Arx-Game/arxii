@@ -7418,10 +7418,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Episode model.
-     *     Manages story episodes with narrative connection tracking.
-     */
+    /** @description Preload one routing report per episode on the page (#3563). */
     get: operations['episodes_list'];
     put?: never;
     /**
@@ -28440,6 +28437,7 @@ export interface components {
       readonly updated_at: string;
       /** @description Whether any pair of this episode's outbound transitions is ambiguous (#3565). */
       readonly routing_ambiguous: boolean;
+      readonly routing_problems: string[];
     };
     /** @description Full serializer for episode details */
     EpisodeDetailRequest: {
@@ -28469,6 +28467,7 @@ export interface components {
       readonly scenes_count: number;
       /** Format: date-time */
       completed_at?: string | null;
+      readonly routing_problems: string[];
     };
     /**
      * @description Full serializer for EpisodeProgressionRequirement.
@@ -38708,6 +38707,9 @@ export interface components {
      *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
      *     provide context for the Wave 9 author editor without requiring extra lookups;
      *     they are served free via TransitionViewSet.queryset.select_related.
+     *
+     *     ``required_outcomes`` is GM text: stripped for viewers who fail
+     *     ``can_view_story_gm_text`` (#3563).
      */
     PatchedTransitionRequest: {
       source_episode?: number;
@@ -44573,6 +44575,9 @@ export interface components {
      *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
      *     provide context for the Wave 9 author editor without requiring extra lookups;
      *     they are served free via TransitionViewSet.queryset.select_related.
+     *
+     *     ``required_outcomes`` is GM text: stripped for viewers who fail
+     *     ``can_view_story_gm_text`` (#3563).
      */
     Transition: {
       readonly id: number;
@@ -44596,6 +44601,7 @@ export interface components {
       order?: number;
       /** Format: date-time */
       readonly created_at: string;
+      readonly required_outcomes: components['schemas']['TransitionRoutingRule'][];
     };
     /**
      * @description Full serializer for Transition — guarded episode graph edges.
@@ -44603,6 +44609,9 @@ export interface components {
      *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
      *     provide context for the Wave 9 author editor without requiring extra lookups;
      *     they are served free via TransitionViewSet.queryset.select_related.
+     *
+     *     ``required_outcomes`` is GM text: stripped for viewers who fail
+     *     ``can_view_story_gm_text`` (#3563).
      */
     TransitionRequest: {
       source_episode: number;
@@ -44699,6 +44708,40 @@ export interface components {
       required_stake_column?:
         | components['schemas']['RequiredStakeColumnEnum']
         | components['schemas']['BlankEnum'];
+    };
+    /**
+     * @description One routing rule as the graph and the author tree read it (#3563).
+     *
+     *     Read-only. Rows are written through ``TransitionRequiredOutcomeSerializer``
+     *     and ``save_with_outcomes``; this nested view adds the beat title and the
+     *     stake's player summary so the rule renders without a second fetch.
+     */
+    TransitionRoutingRule: {
+      readonly id: number;
+      readonly beat: number;
+      readonly beat_title: string;
+      /**
+       * @description Required beat outcome; blank on stake-level rows.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       */
+      readonly required_outcome: components['schemas']['RequiredOutcomeEnum'];
+      /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
+      readonly required_outcome_key: string;
+      /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
+      readonly stake: number | null;
+      readonly stake_summary: string;
+      /**
+       * @description Required StakeOutcome column; only with stake set.
+       *
+       *     * `win` - Win
+       *     * `loss` - Loss
+       *     * `withdrawal` - Withdrawal
+       */
+      readonly required_stake_column: components['schemas']['RequiredStakeColumnEnum'];
     };
     /**
      * @description One trap visible to the requesting character (#3011).
