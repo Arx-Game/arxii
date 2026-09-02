@@ -64,6 +64,34 @@ class EncounterOptionCleanTests(TestCase):
             option.full_clean()
         self.assertIn("option_kind", ctx.exception.message_dict)
 
+    def test_non_encounter_option_may_not_set_risk_level(self) -> None:
+        node = MissionNodeFactory(conflict_mode=ConflictMode.GROUP_VOTE)
+        option = MissionOption(
+            node=node,
+            order=1,
+            key="talk",
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+            encounter_risk_level=RiskLevel.LOW,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            option.full_clean()
+        self.assertIn("encounter_risk_level", ctx.exception.message_dict)
+
+    def test_encounter_must_be_authored_source(self) -> None:
+        node = MissionNodeFactory(conflict_mode=ConflictMode.GROUP_VOTE)
+        option = MissionOption(
+            node=node,
+            order=1,
+            key="fight",
+            option_kind=OptionKind.ENCOUNTER,
+            source_kind=OptionSource.CHALLENGE,
+            encounter_risk_level=RiskLevel.LOW,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            option.full_clean()
+        self.assertIn("source_kind", ctx.exception.message_dict)
+
     def test_valid_encounter_option_with_opponent_line(self) -> None:
         node = MissionNodeFactory(conflict_mode=ConflictMode.GROUP_VOTE)
         option = MissionOptionFactory(
