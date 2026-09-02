@@ -81,7 +81,7 @@ const existingStory: Story = {
   maturity: 'plot',
   scope: 'character',
   status: 'active',
-  privacy: 'public',
+  privacy: 'invite_only',
   owners: ['player1'],
   active_gms: [],
   trust_requirements: '',
@@ -245,7 +245,7 @@ describe('StoryFormDialog — Task E2 GM/player text split', () => {
 
     renderWithProviders(<StoryFormDialog {...defaultProps} story={existingStory} />);
 
-    expect((screen.getByLabelText(/privacy/i) as HTMLSelectElement).value).toBe('public');
+    expect((screen.getByLabelText(/privacy/i) as HTMLSelectElement).value).toBe('invite_only');
 
     await user.selectOptions(screen.getByLabelText(/privacy/i), 'private');
     await user.click(screen.getByRole('button', { name: /save story/i }));
