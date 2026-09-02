@@ -53,6 +53,7 @@ import type {
   BeatVisibility,
   ReferencedMilestoneType,
 } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -887,16 +888,6 @@ export function BeatFormDialog({
   const nonFieldErrors = fieldErrors.non_field_errors ?? [];
   const detailError = fieldErrors.detail ?? '';
 
-  const submitLabel = () => {
-    if (isPending) {
-      return isEdit ? 'Saving…' : 'Creating…';
-    }
-    if (isEdit) {
-      return 'Save Beat';
-    }
-    return 'Create Beat';
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
@@ -1152,7 +1143,7 @@ export function BeatFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {submitLabel()}
+              {formSubmitLabel(isPending, isEdit, 'Beat')}
             </Button>
           </DialogFooter>
         </form>

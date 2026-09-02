@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateChapter, useUpdateChapter } from '../queries';
 import type { Chapter, Maturity } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -153,16 +154,6 @@ export function ChapterFormDialog({
   const nonFieldErrors = fieldErrors.non_field_errors ?? [];
   const detailError = fieldErrors.detail ?? '';
 
-  const submitLabel = () => {
-    if (isPending) {
-      return isEdit ? 'Saving…' : 'Creating…';
-    }
-    if (isEdit) {
-      return 'Save Chapter';
-    }
-    return 'Create Chapter';
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -269,7 +260,7 @@ export function ChapterFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {submitLabel()}
+              {formSubmitLabel(isPending, isEdit, 'Chapter')}
             </Button>
           </DialogFooter>
         </form>
