@@ -6910,9 +6910,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Telegraphed enemy wind-ups + reaction economy (#2637, #2639; ADR-0161 — extends
   ADR-0118's pre-armed-policy shape):**
   - `ThreatPoolEntry.windup_rounds` (PositiveSmallInt, default 0) + `windup_telegraph`
-    (CharField, blank → generic fallback "`{opponent} begins something enormous...`" at
-    broadcast time) — authored data on existing threat pools; 0 is today's same-round
-    behavior unchanged.
+    (CharField) — authored data on existing threat pools; 0 is today's same-round behavior
+    unchanged. `_broadcast_windup_telegraph` always names a target (#3572): authored text
+    may use `{opponent}` and `{target}`; if it lacks `{target}`, `WINDUP_TARGET_CLAUSE`
+    (`" It is aimed at {target}."`) is appended; a room-targeting wind-up (no `target`)
+    formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
+    falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
+    bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -6932,6 +6936,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     active-engaged `CharacterCovenantRole` whose role (or that role's `parent_role` — rides
     the same shape as `blend_weight_for`) has the flag; at most one call-out per round per
     encounter. v1 is partially-passive — it picks THAT a wind-up gets called, not WHICH one.
+  - **Client surface (#3572):** `EncounterDetailSerializer.pending_attacks`
+    (`get_pending_attacks`, schema-typed via `PendingAttackSerializer`, the same
+    schema-only idiom as `EngagementLockSerializer`) lists pending `PendingOpponentAttack`
+    rows soonest-landing first: id, opponent_id, opponent_name, target_participant_id,
+    target_name, declared_round, resolves_round, rounds_until_landing, downgrades,
+    called_out, damage_scale (`windup_damage_scale`), cancelled. One query, select_related
+    on opponent/target. `frontend/src/combat/components/PendingAttacks.tsx` renders the
+    rows as the threat strip at the top of `YourTurn` (Guard/Strike prefills) and
+    read-only for observers in `CombatTurnPanel`; telnet bare `combat`
+    (`src/commands/combat_maneuvers.py`) prints the same rows as a `Wind-ups:` block.
   - **Maturation:** `_mature_pending_opponent_attacks` runs in `resolve_round` after the
     encounter flips to RESOLVING but BEFORE the round's `CombatOpponentAction` rows are
     queried, so a matured wind-up's synthesized action (real `CombatOpponentAction`,

@@ -92,7 +92,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   telnet, cooldown bookkeeping, maturation ladder at 0/1/2/3 downgrades, the
   interception rider, auto-callout). `CovenantRole.calls_out_windups` auto-calls at
   most one wind-up per round per encounter (v1 partially-passive — player-directed
-  WHICH-to-call is a follow-up). `Situation.ENEMY_WINDUP_UNDERWAY`/
+  WHICH-to-call is a follow-up). Since #3572 every telegraph names its target and
+  pending wind-ups are visible on the rail (threat strip with Guard/Strike prefills)
+  and in the telnet `combat` hub. `Situation.ENEMY_WINDUP_UNDERWAY`/
   `ENEMY_WINDUP_CALLED_OUT` are live evaluators. Separately, `REACTIONS_PER_ROUND` (1)
   and `ABSORPTION_CAP_PER_MOMENT` (2) now gate the shared interpose fire seam
   (`world/combat/tests/test_reaction_economy.py`: second reaction declines, resets
