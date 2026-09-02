@@ -1230,10 +1230,14 @@ def _expiry_participants(progress: AnyStoryProgress, scope: str) -> list[Persona
 
     GROUP scope has no completing character to derive from, so the table's
     members whose membership is still open stand in (#3558 Decision 7).
-    GLOBAL scope credits nobody.
+    GLOBAL scope credits nobody. CHARACTER scope returns [] deliberately:
+    _character_scope_participants already prepends progress.character_sheet
+    .primary_persona itself, so returning it here too would double it in the
+    resolved participant list (stake writers/reward lines iterate participants
+    and would double-apply, e.g. subject_standing_delta).
     """
     if scope == StoryScope.CHARACTER:
-        return [progress.character_sheet.primary_persona]
+        return []
     if scope == StoryScope.GROUP:
         from world.gm.models import GMTableMembership  # noqa: PLC0415
 

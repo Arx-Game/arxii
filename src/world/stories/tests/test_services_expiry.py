@@ -12,13 +12,14 @@ from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.gm.factories import GMTableFactory, GMTableMembershipFactory
-from world.societies.factories import LegendSourceTypeFactory
-from world.societies.models import LegendEvent
+from world.societies.factories import LegendSourceTypeFactory, SocietyFactory
+from world.societies.models import LegendEvent, SocietyReputation
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     StakeOutcomeMethod,
     StakeResolutionColumn,
+    StakeSubjectKind,
     StoryScope,
 )
 from world.stories.factories import (
@@ -172,6 +173,31 @@ class CompleteBeatExpiredTests(EvenniaTestCase):
         assert outcome.resolution_id == loss.pk
         assert outcome.activation_id == activation.pk
         assert get_open_activation(beat) is None
+
+    def test_faction_standing_delta_applies_once_on_character_scope(self) -> None:
+        """Regression: CHARACTER-scope expiry must not double-credit the persona.
+
+        _expiry_participants returns [] for CHARACTER scope (the completion tail's
+        _character_scope_participants already prepends the primary persona itself);
+        a stake writer that iterates participants (subject_standing_delta) must
+        apply exactly once, not twice.
+        """
+        sheet, beat, _progress = _character_beat()
+        persona = sheet.primary_persona
+        society = SocietyFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.FACTION, subject_society=society
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-5
+        )
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        activate_stakes_contract(beat, [sheet])
+
+        complete_beat_expired(beat)
+
+        rep = SocietyReputation.objects.get(persona=persona, society=society)
+        assert rep.value == -5
 
     def test_no_active_progress_flips_only(self) -> None:
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=CharacterSheetFactory())
