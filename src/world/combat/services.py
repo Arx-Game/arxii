@@ -181,6 +181,9 @@ from world.conditions.constants import Allegiance
 from world.fatigue.constants import EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
+from world.magic.models.soulfray import SoulfrayConfig
+from world.magic.services.anima import deduct_anima
+from world.magic.services.soulfray import accumulate_soulfray
 from world.mechanics.types import ChallengeResolutionResult
 from world.scenes.constants import RoundStatus
 from world.vitals.constants import (
@@ -9900,6 +9903,61 @@ def _dispatch_interpose_action(
         )
 
 
+def _guardian_can_fire_technique_interpose(
+    anima: CharacterAnima | None, cost: int, *, consented: bool
+) -> bool:
+    """True when a cost>0 technique-guardian reaction may fire.
+
+    No pool at all means there's nothing to consent with. Otherwise: affordable
+    fires unconditionally; unaffordable fires only when consented (#3573), which
+    runs the guardian's anima into deficit (:func:`_settle_technique_interpose_cost`
+    handles the actual debit).
+    """
+    if anima is None:
+        return False
+    return anima.current >= cost or consented
+
+
+def _settle_technique_interpose_cost(  # noqa: PLR0913 - debit + accrue needs all of it
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    anima: CharacterAnima,
+    cost: int,
+    consented: bool,
+    check_result: CheckResult | None,
+) -> None:
+    """Debit a firing technique guardian's anima and, if consented, accrue Soulfray.
+
+    Split out of :func:`_try_technique_interpose` (#3573) purely to keep that
+    function's branch count under the complexity budget - the debit-then-accrue
+    sequencing is otherwise a single linear step in that function's flow.
+    """
+    encounter = action.participant.encounter
+    deficit = deduct_anima(interposer, cost, lethal=encounter.is_lethal)
+    if not consented:
+        return
+    accumulate_soulfray(
+        character=interposer,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=check_result,
+        lethal=encounter.is_lethal,
+    )
+    if deficit > 0:
+        ally_name = (
+            str(action.focused_ally_target.character_sheet.character)
+            if action.focused_ally_target_id
+            else str(protected)
+        )
+        _broadcast_commitment_line(
+            encounter,
+            f"{interposer} tears at their own soul to hold the line over {ally_name}!",
+        )
+
+
 def _try_technique_interpose(
     action: CombatRoundAction,
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -9915,14 +9973,16 @@ def _try_technique_interpose(
     a plain mundane interpose. Diverges from :func:`dispatch_interpose` in three
     ways:
 
-    1. **Affordability first.** Cost is the matched protective
+    1. **Affordability first, unless consented.** Cost is the matched protective
        ``ConditionTemplate.reactive_anima_cost`` (resolved via
        :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
        the same traversal :func:`~world.magic.services.targeting.protective_flavor`
        walks at declaration time, first protective-flavored template wins). Can't
        pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
        charged, and damage proceeds unchanged to ``_try_companion_defend`` as
-       today.
+       today. **Unless** ``action.confirm_soulfray_risk`` (#3573) is set: a
+       consented guardian fires regardless of affordability, running the pool
+       into deficit and accruing Soulfray (point 3 below).
     2. **The roll is the guardian's own cast check**
        (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
        against the same authored difficulty as the mundane Interpose challenge
@@ -9931,11 +9991,17 @@ def _try_technique_interpose(
        spellcasting, not martial reflex, so it never touches
        :func:`dispatch_capability_reaction`.
     3. **Cost is anima, not fatigue.** On fire (any non-fizzle resolution) the
-       guardian's anima is debited directly (mirrors
-       :func:`~world.magic.services.effect_handlers._try_spend_reactive`'s debit
-       pattern, minus the ``ConditionInstance`` machinery — the guardian is
-       casting live, not carrying a passive buff). No
-       ``INTERPOSE_BASE_FATIGUE_COST`` is charged on this path.
+       guardian's anima is debited via :func:`~world.magic.services.anima.deduct_anima`
+       (mirrors :func:`~world.magic.services.effect_handlers._try_spend_reactive`'s
+       debit pattern, minus the ``ConditionInstance`` machinery - the guardian is
+       casting live, not carrying a passive buff). No ``INTERPOSE_BASE_FATIGUE_COST``
+       is charged on this path. A consented guardian (``confirm_soulfray_risk``,
+       #3573) may run the pool into deficit - ``deduct_anima``'s ``lethal`` kwarg
+       is threaded from ``action.participant.encounter.is_lethal`` so a non-lethal
+       encounter never draws life force - and every consented fire (deficit or
+       not) accrues Soulfray via
+       :func:`~world.magic.services.soulfray.accumulate_soulfray`. A deficit fire
+       also broadcasts a commitment line to the encounter.
 
     Grading reuses :func:`_grade_interpose_damage` — the SAME clean/partial/fail
     banding (including SHIELD divisor widening) the mundane path uses via
@@ -9980,13 +10046,18 @@ def _try_technique_interpose(
 
     # Affordability first (mirrors _try_spend_reactive's cost<=0 free-fire rule,
     # world/magic/services/effect_handlers.py): a free-cost protective technique
-    # never needs a CharacterAnima row to fire.
+    # never needs a CharacterAnima row to fire. A consented guardian
+    # (confirm_soulfray_risk, #3573) bypasses the affordability gate and fires
+    # into deficit instead.
     cost = condition_template.reactive_anima_cost
+    consented = bool(action.confirm_soulfray_risk)
     anima = None
     if cost > 0:
         anima = CharacterAnima.objects.filter(character_id=interposer.pk).first()
-        if anima is None or anima.current < cost:
-            return  # Fizzle: unaffordable — no roll, no cost, damage proceeds.
+        if not _guardian_can_fire_technique_interpose(anima, cost, consented=consented):
+            # Fizzle: no pool at all, or unaffordable and unconsented - no roll,
+            # no cost, damage proceeds.
+            return
 
     severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
     if severity_template is None:
@@ -10025,10 +10096,21 @@ def _try_technique_interpose(
         situation_ctx=situation_ctx,
     )
 
-    # Debit on fire (any non-fizzle resolution) — anima, not fatigue.
+    # Debit on fire (any non-fizzle resolution) - anima, not fatigue. A consented
+    # guardian may run into deficit and accrues Soulfray on every fire (#3573).
     if cost > 0:
-        anima.current -= cost
-        anima.save(update_fields=["current"])
+        # The earlier affordability gate already returned if cost > 0 and anima
+        # was None, so anima is guaranteed set here.
+        assert anima is not None  # noqa: S101  # type narrowing for ty
+        _settle_technique_interpose_cost(
+            action,
+            interposer,
+            protected,
+            anima=anima,
+            cost=cost,
+            consented=consented,
+            check_result=check_result,
+        )
 
     amount_before = pre_payload.amount
     is_clean_block = _grade_interpose_damage(
