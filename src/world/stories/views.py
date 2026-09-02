@@ -2092,6 +2092,12 @@ class TransitionViewSet(viewsets.ModelViewSet):
     queryset = Transition.objects.select_related(
         "source_episode__chapter__story__primary_table",
         "target_episode",
+    ).prefetch_related(
+        Prefetch(
+            "required_outcomes",
+            queryset=TransitionRequiredOutcome.objects.select_related("beat", "stake"),
+            to_attr="cached_required_outcomes",
+        )
     )
     serializer_class = TransitionSerializer
     permission_classes = [IsLeadGMOnTransitionStoryOrStaff]
@@ -2177,7 +2183,7 @@ class TransitionViewSet(viewsets.ModelViewSet):
             outcomes=outcome_inputs,
             existing_transition=existing,
         )
-        out_ser = TransitionSerializer(transition)
+        out_ser = TransitionSerializer(transition, context={"request": request})
         http_status = status.HTTP_200_OK if existing is not None else status.HTTP_201_CREATED
         return Response(out_ser.data, status=http_status)
 
@@ -2226,6 +2232,26 @@ class TransitionRequiredOutcomeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["id"]
     ordering = ["transition", "id"]
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        """Invalidate the writing transition's cached_required_outcomes (#3563).
+
+        Django skips a to_attr prefetch once the attribute is already in the
+        identity-mapped instance's __dict__, so a stale cache would otherwise
+        outlive this write for the rest of the process.
+        """
+        super().perform_create(serializer)
+        serializer.instance.transition.__dict__.pop("cached_required_outcomes", None)
+
+    def perform_update(self, serializer: BaseSerializer) -> None:
+        """Invalidate the writing transition's cached_required_outcomes (#3563)."""
+        super().perform_update(serializer)
+        serializer.instance.transition.__dict__.pop("cached_required_outcomes", None)
+
+    def perform_destroy(self, instance: TransitionRequiredOutcome) -> None:
+        """Invalidate the writing transition's cached_required_outcomes (#3563)."""
+        super().perform_destroy(instance)
+        instance.transition.__dict__.pop("cached_required_outcomes", None)
 
 
 # ---------------------------------------------------------------------------

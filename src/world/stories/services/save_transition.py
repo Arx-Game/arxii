@@ -73,6 +73,10 @@ def save_transition_with_outcomes(
             transition = existing_transition
             # Replace routing predicates with the new set.
             transition.required_outcomes.all().delete()
+            # Django skips a to_attr prefetch once the target attribute is
+            # already in the identity-mapped instance's __dict__ (#3563), so
+            # drop the stale cache before the fresh rows are created below.
+            transition.__dict__.pop("cached_required_outcomes", None)
         else:
             transition = Transition.objects.create(**transition_data)
 

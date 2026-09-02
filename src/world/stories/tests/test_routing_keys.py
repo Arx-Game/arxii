@@ -60,6 +60,31 @@ class KeyRoutingTests(_Base):
         )
         self.assertEqual(get_eligible_transitions(self.progress), [to_a])
 
+    def test_rules_saved_after_a_prefetch_are_honoured(self) -> None:
+        """A GM's rule edit invalidates the stale prefetch cache (#3563).
+
+        ``get_eligible_transitions`` prefetches onto ``cached_required_outcomes``
+        via ``to_attr``, and Django skips that prefetch whenever the target
+        attribute is already in the identity-mapped instance's ``__dict__``.
+        Without the invalidating ``__dict__.pop`` in
+        ``save_transition_with_outcomes``, the second call below would still see
+        the empty rule set cached by the first call and wrongly report ``to_a``
+        eligible.
+        """
+        from world.stories.services.save_transition import (
+            OutcomeInput,
+            save_transition_with_outcomes,
+        )
+
+        to_a = TransitionFactory(source_episode=self.episode, target_episode=self.next_a, order=1)
+        self.assertEqual(get_eligible_transitions(self.progress), [to_a])
+        save_transition_with_outcomes(
+            transition_data={},
+            outcomes=[OutcomeInput(beat_id=self.beat.pk, required_outcome=BeatOutcome.FAILURE)],
+            existing_transition=to_a,
+        )
+        self.assertEqual(get_eligible_transitions(self.progress), [])
+
 
 class TieBreakTests(_Base):
     def test_lowest_order_fires_when_several_eligible(self) -> None:
