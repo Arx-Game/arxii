@@ -805,17 +805,23 @@ class CreateEncounterActionTests(TestCase):
         self.assertEqual(encounter.pace_mode, PaceMode.READY)
 
     def test_lead_gm_may_route_beat_id(self) -> None:
-        """The story's own Lead GM may route the new encounter onto their beat (#3559)."""
+        """The story's own non-staff Lead GM may route the new encounter onto their beat (#3559)."""
+        lead_gm_account = AccountFactory(username="createtestleadonlygm", is_staff=False)
+        lead_gm_actor, _ = _make_actor_with_account(
+            "create_lead_gm_actor", self.room, lead_gm_account
+        )
+        SceneParticipationFactory(scene=self.scene, account=lead_gm_account, is_gm=True)
+
         story = StoryFactory()
         chapter = ChapterFactory(story=story)
         episode = EpisodeFactory(chapter=chapter)
         beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
-        gm_profile = GMProfileFactory(account=self.gm_account)
+        gm_profile = GMProfileFactory(account=lead_gm_account)
         table = GMTableFactory(gm=gm_profile)
         story.primary_table = table
         story.save()
 
-        result = CreateEncounterAction().run(self.gm_actor, beat_id=beat.pk)
+        result = CreateEncounterAction().run(lead_gm_actor, beat_id=beat.pk)
 
         self.assertTrue(result.success, result.message)
         encounter = CombatEncounter.objects.get(scene=self.scene)

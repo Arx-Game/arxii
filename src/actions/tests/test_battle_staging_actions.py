@@ -149,7 +149,8 @@ class CreateBattleActionTests(BattleStagingActionsTestBase):
         chapter = ChapterFactory(story=story)
         episode = EpisodeFactory(chapter=chapter)
         beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
-        table = GMTableFactory(gm=GMProfileFactory(account=self.gm_account))
+        # self.gm_account already has a GMProfile from BattleStagingActionsTestBase.setUp.
+        table = GMTableFactory(gm=self.gm_account.gm_profile)
         story.primary_table = table
         story.save()
 
