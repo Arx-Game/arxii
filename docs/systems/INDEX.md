@@ -7186,10 +7186,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   card carries the same consent for a ward-bearing technique with no active Soulfray
   warning (`cast-ward-soulfray-toggle`, bound to the existing `soulfrayAccepted`
   state) - when a warning IS active, `SoulfrayAcceptGate`'s acceptance alone covers
-  both. The out-of-combat `ActionPanel` enhancement row (party wards) mirrors this
-  with `enhancement-soulfray-toggle-<technique_id>`, though that path's backend
-  wiring is a known gap - see the `reactive_anima_cost` note in
-  `docs/systems/magic.md`.
+  both. The real out-of-combat integration point (party wards) is the standalone
+  cast panel (`ActionPanel.tsx`'s `castableTechniques` list), not the technique-
+  enhancement path: a selected technique's `reactive_anima_cost` (exposed via
+  `CastableTechniqueSerializer`) drives its own `cast-ward-soulfray-toggle`, which
+  sends `soulfray_consented: true` through `castTechnique` - see the
+  `TechniqueCastCreateSerializer.soulfray_consented` note in `docs/systems/magic.md`
+  for the full wire-to-`ConditionInstance.soulfray_consented` path.
 - **Telnet parity (#2207/#2210):** `combat interpose [ally] [with <technique>] [into
   <destination>]` (`CmdCombat._resolve_interpose_args`, `src/commands/
   combat_maneuvers.py`) — all three clauses optional; `with <technique>` splits on

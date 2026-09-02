@@ -1447,7 +1447,6 @@ def _build_enhancement_index(
         get_runtime_technique_stats,
         get_soulfray_warning,
     )
-    from world.magic.services.targeting import protective_condition_and_flavor  # noqa: PLC0415
     from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
 
     by_action_key: dict[str, list[AvailableEnhancement]] = {}
@@ -1466,10 +1465,6 @@ def _build_enhancement_index(
 
     soulfray_warning = get_soulfray_warning(character) if rows else None
     stats_cache: dict[int, tuple[int, int]] = {}
-    # Ward-bearing fee cache (#3573): one protective_condition_and_flavor query
-    # per DISTINCT technique, same cadence as stats_cache above (a technique can
-    # carry more than one ActionEnhancement row across different base_action_keys).
-    reactive_cost_cache: dict[int, int | None] = {}
 
     for row in rows:
         technique = row.technique
@@ -1479,13 +1474,6 @@ def _build_enhancement_index(
             stats = get_runtime_technique_stats(technique, character)
             stats_cache[technique.pk] = (stats.intensity, stats.control)
         intensity, control = stats_cache[technique.pk]
-
-        if technique.pk not in reactive_cost_cache:
-            protective = protective_condition_and_flavor(technique)
-            reactive_cost_cache[technique.pk] = (
-                protective[0].reactive_anima_cost if protective is not None else None
-            )
-        reactive_anima_cost = reactive_cost_cache[technique.pk]
 
         if anima is not None:
             cost = calculate_effective_anima_cost(
@@ -1504,7 +1492,6 @@ def _build_enhancement_index(
             technique=technique,
             effective_cost=effective_cost,
             soulfray_warning=warning,
-            reactive_anima_cost=reactive_anima_cost,
         )
 
         if row.base_action_key:

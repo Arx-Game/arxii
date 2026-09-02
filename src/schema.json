@@ -39434,13 +39434,8 @@ components:
           - $ref: '#/components/schemas/SoulfrayWarning'
           readOnly: true
           nullable: true
-        reactive_anima_cost:
-          type: integer
-          readOnly: true
-          nullable: true
       required:
       - effective_cost
-      - reactive_anima_cost
       - soulfray_warning
       - technique_id
       - technique_name
@@ -41804,6 +41799,16 @@ components:
           items:
             $ref: '#/components/schemas/TechniqueForm'
           readOnly: true
+        reactive_anima_cost:
+          type: integer
+          nullable: true
+          description: |-
+            Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
+
+            One protective_condition_and_flavor call per row - same traversal
+            actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
+            authored field.
+          readOnly: true
       required:
       - anima_cost
       - control
@@ -41815,6 +41820,7 @@ components:
       - intensity
       - name
       - reach
+      - reactive_anima_cost
       - target_spec
       - target_type
       - tier
@@ -77217,6 +77223,9 @@ components:
           type: integer
           nullable: true
         cast_openly:
+          type: boolean
+          default: false
+        soulfray_consented:
           type: boolean
           default: false
       required:

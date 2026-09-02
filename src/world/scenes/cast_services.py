@@ -922,6 +922,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
     cast_pull: CastPullDeclaration | None,
     supplied_personas: list[Persona],
     confirm_soulfray_risk: bool = True,
+    soulfray_consented: bool | None = None,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
@@ -958,6 +959,7 @@ def _route_filtered_group_cast(  # noqa: PLR0913
         cast_pull=cast_pull,
         supplied_personas=supplied_personas,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        soulfray_consented=soulfray_consented,
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
@@ -976,6 +978,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
     fury_anchor: CharacterSheet | None,
     cast_pull: CastPullDeclaration | None,
     confirm_soulfray_risk: bool = True,
+    soulfray_consented: bool | None = None,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
@@ -1019,6 +1022,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        soulfray_consented=soulfray_consented,
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
@@ -1038,6 +1042,7 @@ def request_technique_cast(  # noqa: PLR0913
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
+    soulfray_consented: bool | None = None,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     originated_as_entrance: bool = False,
@@ -1067,6 +1072,15 @@ def request_technique_cast(  # noqa: PLR0913
             stage, the cast is halted before resolving and a ``CastResult`` with
             ``soulfray_warning`` populated (and no request row) is returned. Defaults
             ``True`` so all existing callers are unaffected.
+        soulfray_consented: The caster's explicit consent (#3573) to hold a
+            ward-bearing cast's protective condition alive past zero anima via
+            Soulfray. ``None`` (the default) preserves every existing caller's
+            behavior unchanged - forwarded through to ``_resolve_and_pose_cast``,
+            which derives it from ``confirm_soulfray_risk`` when ``None``. The web
+            standalone-cast view MUST pass an explicit bool: its
+            ``confirm_soulfray_risk`` defaults ``True`` (the telnet-only soulfray
+            halt/accept flow must not block web casts), so without an explicit
+            value here every web cast would be silently stamped consented.
         originated_as_entrance: Marks the cast as dispatched by a technique-driven
             combat entrance (#2183). Threaded onto the PENDING ``SceneActionRequest``
             row on the other-PC (benign consent / hostile risk-gated) paths only —
@@ -1124,6 +1138,7 @@ def request_technique_cast(  # noqa: PLR0913
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            soulfray_consented=soulfray_consented,
             use_base_form=use_base_form,
             position_params=position_params,
             preferred_resonance=preferred_resonance,
@@ -1146,6 +1161,7 @@ def request_technique_cast(  # noqa: PLR0913
             fury_anchor=fury_anchor,
             cast_pull=cast_pull,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            soulfray_consented=soulfray_consented,
             use_base_form=use_base_form,
             position_params=position_params,
             originated_as_entrance=originated_as_entrance,
@@ -1163,6 +1179,7 @@ def request_technique_cast(  # noqa: PLR0913
         fury_anchor=fury_anchor,
         cast_pull=cast_pull,
         confirm_soulfray_risk=confirm_soulfray_risk,
+        soulfray_consented=soulfray_consented,
         use_base_form=use_base_form,
         position_params=position_params,
         preferred_resonance=preferred_resonance,
@@ -1371,6 +1388,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     cast_pull: CastPullDeclaration | None = None,
     supplied_personas: list[Persona] | None = None,
     confirm_soulfray_risk: bool = True,
+    soulfray_consented: bool | None = None,
     use_base_form: bool = False,
     position_params: dict[str, int] | None = None,
     preferred_resonance: Resonance | None = None,
@@ -1381,6 +1399,13 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
     When ``confirm_soulfray_risk=False`` and the caster has an active Soulfray stage,
     ``use_technique`` will return without resolving. In that case no request row is
     persisted and a ``CastResult`` with only ``soulfray_warning`` populated is returned.
+
+    ``soulfray_consented`` (#3573) is forwarded unchanged to ``_resolve_and_pose_cast``
+    - see that function's docstring for the ``None``-derives-from-``confirm_soulfray_risk``
+    fallback. The web standalone-cast view passes an explicit bool here so a web cast
+    is never silently stamped consented just because ``confirm_soulfray_risk`` defaults
+    ``True`` on that path (the telnet-only soulfray halt/accept flow must not block web
+    casts, so web always confirms - that confirmation is not the caster's ward consent).
     """
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
@@ -1416,6 +1441,7 @@ def _route_immediate_cast(  # noqa: PLR0913 - cohesive immediate-cast routing pa
             cast_pull=cast_pull,
             supplied_personas=supplied_personas,
             confirm_soulfray_risk=confirm_soulfray_risk,
+            soulfray_consented=soulfray_consented,
             use_base_form=use_base_form,
             position_params=position_params,
             preferred_resonance=preferred_resonance,

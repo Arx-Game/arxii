@@ -160,12 +160,6 @@ export function ActionPanel({ sceneId }: Props) {
   } | null>(null);
   // Per-action strain commitment — keyed by the action's stable display key.
   const [strainByAction, setStrainByAction] = useState<Record<string, number>>({});
-  // Per-technique Soulfray consent for a ward-bearing enhancement (#3573) -
-  // "hold this ward into Soulfray" when the technique carries a protective
-  // condition. Keyed by technique_id since the toggle's meaning ("consent to
-  // keep MY ward alive past zero anima") is a property of the technique, not
-  // of which base action it's enhancing.
-  const [wardSoulfrayAccepted, setWardSoulfrayAccepted] = useState<Record<number, boolean>>({});
   // Initiator effort level for social actions (#1275).
   const [effortLevel, setEffortLevel] = useState<string>(DEFAULT_EFFORT);
 
@@ -180,6 +174,11 @@ export function ActionPanel({ sceneId }: Props) {
   // form, which is what a bare cast does; the base form is variant_id null.
   const [selectedForm, setSelectedForm] = useState<FormChoice>(null);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
+  // The caster's consent (#3573) to hold the selected ward-bearing technique's
+  // protective condition alive past zero anima via Soulfray. Only meaningful
+  // when selectedTechnique.reactive_anima_cost != null; reset whenever the
+  // selected technique changes (handleTechniqueSelect).
+  const [castWardSoulfrayAccepted, setCastWardSoulfrayAccepted] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -283,9 +282,6 @@ export function ActionPanel({ sceneId }: Props) {
       effort_level?: string;
       /** Structured-ask payload (#2540) — boon dispatches only. */
       boon?: BoonAskPayload;
-      /** Guardian/caster consent (#3573) to hold a ward-bearing technique's
-       *  protective condition alive past zero anima via Soulfray. */
-      confirm_soulfray_risk?: boolean;
     }) => createActionRequest(sceneId, params),
     onSuccess: (data) => {
       if (data.boon_refused) {
@@ -342,9 +338,6 @@ export function ActionPanel({ sceneId }: Props) {
       technique_id?: number;
       /** Structured-ask payload (#2540) — boon dispatches only. */
       boon?: BoonAskPayload;
-      /** Guardian/caster consent (#3573) to hold a ward-bearing technique's
-       *  protective condition alive past zero anima via Soulfray. */
-      confirm_soulfray_risk?: boolean;
     } = {}
   ) {
     const key = stableId(action);
@@ -359,7 +352,6 @@ export function ActionPanel({ sceneId }: Props) {
         ? { target_persona_ids: extras.target_persona_ids }
         : {}),
       ...(extras.boon !== undefined ? { boon: extras.boon } : {}),
-      ...(extras.confirm_soulfray_risk ? { confirm_soulfray_risk: true } : {}),
       strain_commitment: strain && strain > 0 ? strain : undefined,
       effort_level: effortLevel !== DEFAULT_EFFORT ? effortLevel : undefined,
     });
@@ -375,7 +367,6 @@ export function ActionPanel({ sceneId }: Props) {
   }
 
   function handleEnhancementClick(action: PlayerAction, enhancement: AvailableEnhancement) {
-    const confirmSoulfrayRisk = wardSoulfrayAccepted[enhancement.technique_id] ?? false;
     if (enhancement.soulfray_warning) {
       setPendingWarning({
         enhancement,
@@ -383,21 +374,16 @@ export function ActionPanel({ sceneId }: Props) {
         techniqueId: enhancement.technique_id,
       });
     } else {
-      commitAction(action, {
-        technique_id: enhancement.technique_id,
-        confirm_soulfray_risk: confirmSoulfrayRisk,
-      });
+      commitAction(action, { technique_id: enhancement.technique_id });
     }
   }
 
   function handleWarningConfirm() {
     if (!pendingWarning) return;
-    const confirmSoulfrayRisk = wardSoulfrayAccepted[pendingWarning.techniqueId] ?? false;
     performAction.mutate({
       action_key: pendingWarning.actionKey,
       technique_id: pendingWarning.techniqueId,
       effort_level: effortLevel !== DEFAULT_EFFORT ? effortLevel : undefined,
-      ...(confirmSoulfrayRisk ? { confirm_soulfray_risk: true } : {}),
     });
     setPendingWarning(null);
   }
@@ -461,6 +447,7 @@ export function ActionPanel({ sceneId }: Props) {
     setCastTargetPersonaId(null);
     setCastTargetPersonaIds([]);
     setCastLedgerResult(null);
+    setCastWardSoulfrayAccepted(false);
     performCast.reset();
     pull.reset();
   }
@@ -472,6 +459,13 @@ export function ActionPanel({ sceneId }: Props) {
       pull.setPullNotice(payload.error);
       return;
     }
+    // #3573: only meaningful (and only sent) for a ward-bearing technique - a
+    // stale true from a prior selection can't leak since handleTechniqueSelect
+    // resets it on every technique change.
+    const soulfrayKwarg =
+      selectedTechnique.reactive_anima_cost != null && castWardSoulfrayAccepted
+        ? { soulfray_consented: true }
+        : {};
     const cardinality = selectedTechnique.target_spec?.cardinality ?? selectedTechnique.target_type;
     if (cardinality === 'filtered_group') {
       performCast.mutate({
@@ -479,6 +473,7 @@ export function ActionPanel({ sceneId }: Props) {
         target_persona_ids: castTargetPersonaIds,
         ...formSelection(selectedTechnique, selectedForm),
         ...payload,
+        ...soulfrayKwarg,
       });
     } else {
       // SELF, SINGLE, AREA — pass the single target persona (or null for self/area/no-target).
@@ -487,6 +482,7 @@ export function ActionPanel({ sceneId }: Props) {
         target_persona: castTargetPersonaId ?? null,
         ...formSelection(selectedTechnique, selectedForm),
         ...payload,
+        ...soulfrayKwarg,
       });
     }
   }
@@ -603,56 +599,25 @@ export function ActionPanel({ sceneId }: Props) {
                         )}
                       </div>
                       {isExpanded && hasEnhancements && (
-                        // A ward-bearing enhancement (enh.reactive_anima_cost != null, #3573)
-                        // shows a "hold into Soulfray" toggle beneath its row. KNOWN GAP: the
-                        // toggle sends confirm_soulfray_risk in the commit kwargs, but the
-                        // enhancement-commit path (create_action_request ->
-                        // _resolve_enhanced_action -> use_technique) never calls
-                        // apply_technique_conditions, so no ConditionInstance exists for the
-                        // ward consent to attach to on this path yet (unlike the standalone
-                        // cast path, which already threads confirm_soulfray_risk into
-                        // ConditionInstance.soulfray_consented). The toggle keeps the UI
-                        // consistent with the Guard control's fee-in-view consent gate ahead
-                        // of that pipeline gap closing.
                         <div className="ml-2 mt-1 space-y-1 border-l border-muted pl-2">
                           {action.enhancements.map((enh) => {
                             const costLabel =
                               enh.effective_cost === 0 ? 'Free' : `${enh.effective_cost} anima`;
                             return (
-                              <div key={enh.technique_id}>
-                                <button
-                                  onClick={() => handleEnhancementClick(action, enh)}
-                                  disabled={performAction.isPending}
-                                  className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-muted/50 disabled:opacity-50"
-                                >
-                                  <span className="font-medium">{enh.technique_name}</span>
-                                  <span className="ml-2 flex items-center gap-1 text-muted-foreground">
-                                    {enh.soulfray_warning && (
-                                      <AlertTriangle className="h-3 w-3 text-amber-400" />
-                                    )}
-                                    {costLabel}
-                                  </span>
-                                </button>
-                                {enh.reactive_anima_cost != null && (
-                                  <label className="ml-2 flex items-center gap-1.5 px-2 pb-1 text-[11px] text-muted-foreground">
-                                    <input
-                                      type="checkbox"
-                                      data-testid={`enhancement-soulfray-toggle-${enh.technique_id}`}
-                                      checked={wardSoulfrayAccepted[enh.technique_id] ?? false}
-                                      onChange={(e) =>
-                                        setWardSoulfrayAccepted((prev) => ({
-                                          ...prev,
-                                          [enh.technique_id]: e.target.checked,
-                                        }))
-                                      }
-                                    />
-                                    <span>
-                                      Hold this ward into Soulfray (fee {enh.reactive_anima_cost}{' '}
-                                      anima per fire)
-                                    </span>
-                                  </label>
-                                )}
-                              </div>
+                              <button
+                                key={enh.technique_id}
+                                onClick={() => handleEnhancementClick(action, enh)}
+                                disabled={performAction.isPending}
+                                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-muted/50 disabled:opacity-50"
+                              >
+                                <span className="font-medium">{enh.technique_name}</span>
+                                <span className="ml-2 flex items-center gap-1 text-muted-foreground">
+                                  {enh.soulfray_warning && (
+                                    <AlertTriangle className="h-3 w-3 text-amber-400" />
+                                  )}
+                                  {costLabel}
+                                </span>
+                              </button>
                             );
                           })}
                         </div>
@@ -812,6 +777,21 @@ export function ActionPanel({ sceneId }: Props) {
                           <AlertTriangle className="h-3 w-3 shrink-0" />
                           Hostile: casting at another character may start combat.
                         </p>
+                      )}
+
+                      {selectedTechnique.reactive_anima_cost != null && (
+                        <label className="flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            data-testid="cast-ward-soulfray-toggle"
+                            checked={castWardSoulfrayAccepted}
+                            onChange={(e) => setCastWardSoulfrayAccepted(e.target.checked)}
+                          />
+                          <span>
+                            Hold this ward into Soulfray (fee{' '}
+                            {selectedTechnique.reactive_anima_cost} anima per fire)
+                          </span>
+                        </label>
                       )}
 
                       {/* Target selector — driven by target_spec.cardinality (#1321) */}

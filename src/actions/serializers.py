@@ -110,9 +110,6 @@ class AvailableEnhancementSerializer(serializers.Serializer):
     technique_name = serializers.CharField(source="technique.name", read_only=True)
     effective_cost = serializers.IntegerField(read_only=True)
     soulfray_warning = SoulfrayWarningSerializer(allow_null=True, read_only=True)
-    # Flat reactive anima fee of the technique's protective condition (#3573);
-    # None when the technique carries no protective reactive-trigger handler.
-    reactive_anima_cost = serializers.IntegerField(read_only=True, allow_null=True)
 
 
 class TargetFiltersSerializer(serializers.Serializer):

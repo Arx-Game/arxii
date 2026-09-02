@@ -23995,7 +23995,6 @@ export interface components {
       readonly technique_name: string;
       readonly effective_cost: number;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
-      readonly reactive_anima_cost: number | null;
     };
     /**
      * @description * `TONE` - Tone
@@ -25174,6 +25173,14 @@ export interface components {
       } | null;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
       readonly forms: components['schemas']['TechniqueForm'][];
+      /**
+       * @description Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
+       *
+       *     One protective_condition_and_flavor call per row - same traversal
+       *     actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
+       *     authored field.
+       */
+      readonly reactive_anima_cost: number | null;
     };
     /**
      * @description For staff triaging GM scenario-catalog suggestions (#2127).
@@ -43394,6 +43401,8 @@ export interface components {
       preferred_resonance_id?: number | null;
       /** @default false */
       cast_openly: boolean;
+      /** @default false */
+      soulfray_consented: boolean;
     };
     /**
      * @description What a technique does — the ONE shape every technique surface shares (#2898).

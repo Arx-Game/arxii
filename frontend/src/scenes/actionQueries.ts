@@ -145,14 +145,6 @@ export async function createActionRequest(
      * asks carry a sum_tier (never raw coppers); deed asks carry deed_text.
      */
     boon?: BoonAskPayload;
-    /**
-     * Guardian/caster consent (#3573) to hold a ward-bearing technique's
-     * protective condition alive past zero anima via Soulfray. Only
-     * meaningful when technique_id names a ward-bearing technique. See the
-     * KNOWN GAP note on the enhancement checkbox in ActionPanel.tsx - the
-     * backend does not consume this field on the enhancement-commit path yet.
-     */
-    confirm_soulfray_risk?: boolean;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
@@ -177,7 +169,6 @@ export async function createActionRequest(
   copyDefinedField(requestBody, 'bond_thread_id', body.bond_thread_id);
   copyDefinedField(requestBody, 'entry_interaction_id', body.entry_interaction_id);
   copyDefinedField(requestBody, 'boon', body.boon);
-  copyDefinedField(requestBody, 'confirm_soulfray_risk', body.confirm_soulfray_risk);
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',
     body: JSON.stringify(requestBody),
@@ -423,6 +414,12 @@ export async function castTechnique(
     /** #2901: which form to work — omit for the default. */
     use_base_form?: boolean;
     preferred_resonance_id?: number | null;
+    /**
+     * The caster's explicit consent (#3573) to hold a ward-bearing cast's
+     * protective condition alive past zero anima via Soulfray. Only meaningful
+     * when the cast technique's reactive_anima_cost is non-null.
+     */
+    soulfray_consented?: boolean;
   }
 ): Promise<CastResponse> {
   const body: CastRequestBody = {
@@ -447,6 +444,9 @@ export async function castTechnique(
   }
   if (params.preferred_resonance_id != null) {
     body.preferred_resonance_id = params.preferred_resonance_id;
+  }
+  if (params.soulfray_consented) {
+    body.soulfray_consented = true;
   }
   const res = await apiFetch('/api/action-requests/cast/', {
     method: 'POST',
