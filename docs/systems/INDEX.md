@@ -6420,11 +6420,12 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter` (`story_beat` FK → `stories.Beat`,
-  nullable, #1760 — when set, `encounter_completed_beat_handler` resolves
-  ONLY this one beat with this encounter's graded outcome instead of every
-  UNSATISFIED `OUTCOME_TIER` beat linked to the scene; fixes multiple beats
-  sharing a scene all getting stamped with the same encounter's outcome;
-  unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
+  nullable, #1760, #3559 — `beat_for_scene_conclusion` picks at most ONE beat
+  an encounter may grade: this explicit `story_beat` when it's still
+  UNSATISFIED `OUTCOME_TIER`, else the scene's `running_beat` when that is
+  itself the objective (`kind=ENCOUNTER`); the old find-every-linked-beat
+  scan is gone — an unrouted encounter with no running beat grades nothing),
+  `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
   JOUST (#1843, see "Mounted combat" below); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
@@ -7367,8 +7368,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     applies a drowning/falling hazard consequence; called from resolution on hull
     breach or living-mount defeat)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
-    `conclude_battle` (sets outcome + ends scene; resolves any linked story beat's stakes
-    contract via `resolve_battle_beats`, #1785; runs every registered
+    `conclude_battle` (sets outcome + ends scene; resolves the one story beat this
+    battle grades, if any, via `resolve_battle_beats`, #1785, #3559; runs every registered
     `battles.conclusion_hooks` hook, including win-gated Legend wiring below; still never
     calls `complete_story`),
     `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)

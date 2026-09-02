@@ -408,16 +408,19 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
   at `WIN` and closes the open activation, same as the shared tail.
 
 **Withdrawal (combat FLED/ABANDONED):** the combat auto-wire
-(`world.combat.beat_wiring.encounter_completed_beat_handler`) passes
-`withdrawal=True` through `record_outcome_tier_completion` (legal only with
-`force_outcome=PENDING_GM_REVIEW`). The withdrawal path is **structural**:
+(`world.combat.beat_wiring.encounter_completed_beat_handler`) calls
+`resolve_stakes_for_withdrawal(beat, progress, participants)` directly (#3559)
+— a separate function from the completion path, not a flag through
+`record_outcome_tier_completion`. The withdrawal path is **structural**:
 FLED/ABANDONED take it regardless of any authored `EncounterOutcomeMapping`
-row for the pair — a mapped tier is ignored (withdrawal routes to withdrawal
-branches by spec semantics, not data convention). Stakes **with** an authored
-`WITHDRAWAL` resolution fire it immediately (method `MACHINE`); stakes without
-one pend with the beat's `PENDING_GM_REVIEW` for the GM's constrained pick.
-The beat outcome itself stays `PENDING_GM_REVIEW` (a GM still adjudicates the
-beat). This resolves #1746's deferred withdrawal design.
+row for the pair — a mapped tier is never even looked up (withdrawal routes to
+withdrawal branches by spec semantics, not data convention). Every open stake
+gets a `StakeOutcome` immediately: one **with** an authored `WITHDRAWAL`
+resolution fires it (method `MACHINE`); one without still records an
+audit-honest `StakeOutcome` with `resolution=None` rather than waiting for a
+GM's pick. The beat's own outcome is untouched — it stays `UNSATISFIED`, since
+walking away is neither success nor failure of the objective (#3559 removed
+the `PENDING_GM_REVIEW` state this paragraph used to describe).
 
 **GM constrained pick:** `resolve_stake_by_gm_pick` /
 `POST /api/stakes/{id}/resolve/` — the GM picks **among the stake's authored
