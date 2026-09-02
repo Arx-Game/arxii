@@ -163,9 +163,18 @@ class Account(DefaultAccount):
         sheet that already has an active tenure, that path needs to clear
         this cache explicitly via ``account.clear_cached_properties()``.
         """
-        from world.scenes.services import primary_persona_ids_for
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
 
-        return primary_persona_ids_for(self)
+        return list(
+            Persona.objects.filter(
+                character_sheet__roster_entry__tenures__player_data__account=self,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                persona_type=PersonaType.PRIMARY,
+            )
+            .values_list("id", flat=True)
+            .distinct()
+        )
 
     def clear_cached_properties(self) -> None:
         """Drop every ``@cached_property`` entry from the instance ``__dict__``.

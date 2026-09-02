@@ -98,10 +98,10 @@ fallback, closed by default.
 Evennia pins `db_typeclass_path` to the class an instance was built as, so a bare
 `AccountDB` stays bare on every later load and lacks the whole `Account` typeclass
 (`puppet`, `get_available_characters`, the persona cache); every web-signup player
-was in that state until Sentry ARX2-8 (2026-09-02). Migration
-`0213_account_typeclass_backfill` repoints existing rows, and the ops dashboard's
-required-content panel flags any new one (`typeclassed-accounts`; Django's
-`createsuperuser` still produces them). See ADR-0260.
+was in that state until Sentry ARX2-8 (2026-09-02). Rows from before the fix, and
+any Django `createsuperuser` makes, are repointed by hand; the ops dashboard's
+required-content panel names them (`typeclassed-accounts`). No data migration: a
+handful of pre-launch rows is a shell one-liner, not schema history. See ADR-0260.
 
 `ArxAccountAdapter.is_open_for_signup(request)` (`src/evennia_extensions/adapters.py`)
 is the allauth hook this gate hangs on. It was previously unoverridden — the

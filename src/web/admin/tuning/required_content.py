@@ -245,9 +245,10 @@ def _probe_typeclassed_accounts() -> ProbeResult:
     Consumer: every view that reads typeclass state off ``request.user``
     (``get_available_characters`` behind the ``X-Character-ID`` header,
     ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
-    ``create_superuser`` still produces bare rows; migration 0213 repaired the
-    ones that existed and ``ArxAccountAdapter.new_user`` stops signup making
-    more, so a hit here is a staff account made with ``createsuperuser``.
+    ``ArxAccountAdapter.new_user`` stops signup making bare rows; Django's
+    ``create_superuser`` still does, and rows from before the adapter fix stay
+    bare until repointed by hand (ADR-0260: no data migration for a handful of
+    pre-launch rows). A hit here is one of those.
     """
     from evennia.accounts.models import AccountDB  # noqa: PLC0415
 
@@ -258,8 +259,9 @@ def _probe_typeclassed_accounts() -> ProbeResult:
     )
     detail = (
         f"Account(s) pinned to the bare AccountDB class: {', '.join(bare)}. "
-        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS (migration 0213 does "
-        "this for existing rows on deploy)."
+        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS by hand: "
+        "AccountDB.objects.filter(username=...).update(db_typeclass_path=...) in "
+        "`arx manage shell`."
         if bare
         else ""
     )
@@ -1257,7 +1259,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "An account pinned to the bare AccountDB class has no typeclass "
                 "attributes, so every persona-aware endpoint answers 500 for that "
                 "player or staff member (Sentry ARX2-8). createsuperuser still "
-                "makes such rows."
+                "makes such rows, and pre-adapter rows stay bare until fixed by hand."
             ),
             probe=CustomProbe(fn=_probe_typeclassed_accounts),
         ),

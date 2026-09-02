@@ -88,8 +88,10 @@ class ArxAccountAdapter(DefaultAccountAdapter):
         bare instance stays the bare model on every later load and never
         gains the ``Account`` typeclass (no ``puppet``, no
         ``get_available_characters``, no persona cache). Every web-signup
-        player was in that state until Sentry ARX2-8 (2026-09-02); migration
-        0213 repoints the rows that already exist.
+        player was in that state until Sentry ARX2-8 (2026-09-02). Rows that
+        predate this are repointed by hand (the ops panel's
+        ``typeclassed-accounts`` probe names them; no data migration for a
+        handful of pre-launch rows, ADR-0260).
         """
         del request  # Signature fixed by allauth; the typeclass does not vary per request.
         return class_from_module(settings.BASE_ACCOUNT_TYPECLASS)()
