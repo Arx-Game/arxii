@@ -327,9 +327,11 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     flips ``is_ready``.
     """
     if beat.risk == RenownRisk.NONE:
-        return StakesReadinessReport(
-            is_staked=False, is_ready=True, advisories=_readiness_advisories(beat)
+        has_pool = (
+            beat.success_consequences_id is not None or beat.failure_consequences_id is not None
         )
+        advisories = _readiness_advisories(beat) if has_pool else ()
+        return StakesReadinessReport(is_staked=False, is_ready=True, advisories=advisories)
 
     problems: list[str] = []
     if not beat.target_level:

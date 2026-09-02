@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.definitions.beat_routing import resolve_routed_beat
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
@@ -26,7 +27,6 @@ _NO_ACTIVE_BATTLE = "There is no active battle here."
 _NO_GM_PERMISSION = "Only the battle's GM or staff can do that."
 _NO_CHARACTER_SHEET = "You have no character sheet."
 _NOT_IN_BATTLE = "You are not an active participant in a battle."
-_NO_SUCH_BEAT = "No such beat."
 _NO_BEAT_PERMISSION = "Only that beat's story Lead GM or staff may route a battle onto it."
 
 
@@ -50,6 +50,23 @@ def _active_battle_in_room(actor: ObjectDB) -> Battle | None:
     )
 
 
+def _resolve_optional_routed_beat(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[Beat | None, ActionResult | None]:
+    """Adapt ``resolve_routed_beat`` to the optional-``beat_id``-kwarg convention (#3559).
+
+    Returns ``(beat, None)`` when no ``beat_id`` was given or it resolved and
+    the actor may route onto it; returns ``(None, error_result)`` otherwise.
+    """
+    beat_id = kwargs.get("beat_id")
+    if beat_id is None:
+        return None, None
+    resolved = resolve_routed_beat(actor, beat_id, permission_denied_message=_NO_BEAT_PERMISSION)
+    if isinstance(resolved, str):
+        return None, ActionResult(success=False, message=resolved)
+    return resolved, None
+
+
 def _actor_may_gm_battle(actor: ObjectDB, battle: Battle) -> bool:
     """True when *actor* is staff or the GM of *battle*'s scene."""
     account = resolve_account_or_none(actor)
@@ -58,32 +75,6 @@ def _actor_may_gm_battle(actor: ObjectDB, battle: Battle) -> bool:
     if account.is_staff:
         return True
     return battle.scene.is_gm(account)
-
-
-def _resolve_routed_beat(
-    actor: ObjectDB, kwargs: dict[str, Any]
-) -> tuple[Beat | None, ActionResult | None]:
-    """Resolve an optional ``beat_id`` kwarg into a permitted, routable Beat (#3559).
-
-    Returns ``(beat, None)`` when no ``beat_id`` was given (routing is optional)
-    or it resolved and the actor may route onto it; returns ``(None,
-    error_result)`` when it was given but doesn't resolve or isn't permitted.
-    """
-    from world.stories.models import Beat  # noqa: PLC0415
-    from world.stories.permissions import account_may_route_beat  # noqa: PLC0415
-
-    beat_id = kwargs.get("beat_id")
-    if beat_id is None:
-        return None, None
-    try:
-        beat = Beat.objects.filter(pk=beat_id).first()
-    except (TypeError, ValueError):
-        beat = None
-    if beat is None:
-        return None, ActionResult(success=False, message=_NO_SUCH_BEAT)
-    if not account_may_route_beat(resolve_account_or_none(actor), beat):
-        return None, ActionResult(success=False, message=_NO_BEAT_PERMISSION)
-    return beat, None
 
 
 def _active_battle_for_gm(
@@ -631,7 +622,7 @@ class CreateBattleAction(Action):
             except (Area.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message="No such region.")
 
-        beat, beat_error = _resolve_routed_beat(actor, kwargs)
+        beat, beat_error = _resolve_optional_routed_beat(actor, kwargs)
         if beat_error is not None:
             return beat_error
 

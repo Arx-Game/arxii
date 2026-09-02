@@ -669,7 +669,10 @@ stake's severity label + `player_summary` and the locked effective risk.
 | `reward_band_problems_for_beat` | `(beat: Beat) -> list[str]` | Re-runnable reward-band check (PR3): the readiness path *and* `_apply_stake_rewards` at pay time both use it |
 
 `StakesReadinessReport` (`world.stories.types`): `is_staked: bool`,
-`is_ready: bool`, `problems: tuple[str, ...]`.
+`is_ready: bool`, `problems: tuple[str, ...]`,
+`advisories: tuple[str, ...]` - non-blocking authoring notes (a success pool
+with no success-polarity row, a failure pool with no failure-polarity row);
+surfaced by the readiness endpoint #3562 adds.
 
 ## Services (`world.stories.services.stake_resolution`, PR2)
 

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.base import Action
+from actions.definitions.beat_routing import resolve_routed_beat
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
@@ -50,7 +51,6 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
 _NO_ACTIVE_ENCOUNTER = "There is no active encounter here."
 _NO_GM_PERMISSION = "Only the scene's GM or staff can do that."
 _NO_ACTIVE_SCENE = "There is no active scene here to start an encounter in."
-_NO_SUCH_BEAT = "No such beat."
 _NO_BEAT_PERMISSION = "Only that beat's story Lead GM or staff may route an encounter onto it."
 
 
@@ -958,8 +958,6 @@ class CreateEncounterAction(Action):
         from world.combat.models import CombatEncounter  # noqa: PLC0415
         from world.combat.services import finalize_new_encounter  # noqa: PLC0415
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
-        from world.stories.models import Beat  # noqa: PLC0415
-        from world.stories.permissions import account_may_route_beat  # noqa: PLC0415
 
         scene = get_active_scene(actor.location)
         if scene is None:
@@ -976,14 +974,12 @@ class CreateEncounterAction(Action):
         beat = None
         beat_id = kwargs.get("beat_id")
         if beat_id is not None:
-            try:
-                beat = Beat.objects.filter(pk=beat_id).first()
-            except (TypeError, ValueError):
-                beat = None
-            if beat is None:
-                return ActionResult(success=False, message=_NO_SUCH_BEAT)
-            if not account_may_route_beat(resolve_account_or_none(actor), beat):
-                return ActionResult(success=False, message=_NO_BEAT_PERMISSION)
+            resolved = resolve_routed_beat(
+                actor, beat_id, permission_denied_message=_NO_BEAT_PERMISSION
+            )
+            if isinstance(resolved, str):
+                return ActionResult(success=False, message=resolved)
+            beat = resolved
 
         encounter = CombatEncounter.objects.create(
             scene=scene, pace_mode=resolved_pace_mode, story_beat=beat

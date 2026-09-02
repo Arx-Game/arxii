@@ -1115,7 +1115,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="encounter-outcome-mappings",
             label="Encounter outcome-tier mappings",
             tier=DependencyTier.REQUIRED,
-            consumer="world/combat/beat_wiring.py:classify_battle_outcome()",
+            consumer="world/combat/beat_wiring.py:69 classify_battle_outcome()",
             consequence=(
                 "A (VICTORY|DEFEAT) x RiskLevel pair with no authored "
                 "EncounterOutcomeMapping row means a fight linked to a story "
@@ -1129,7 +1129,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="battle-outcome-mappings",
             label="Battle outcome-tier mappings",
             tier=DependencyTier.REQUIRED,
-            consumer="world/battles/beat_wiring.py:classify_battle_conclusion_outcome()",
+            consumer="world/battles/beat_wiring.py:31 classify_battle_conclusion_outcome()",
             consequence=(
                 "A resolved BattleOutcome (any value except UNRESOLVED) with no "
                 "authored BattleOutcomeMapping row means a battle linked to a "
