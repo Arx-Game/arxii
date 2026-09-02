@@ -5,7 +5,7 @@ import django_filters
 from rest_framework.exceptions import ValidationError
 
 from actions.models import ConsequencePool
-from world.magic.constants import GainSource, ParticipationRule
+from world.magic.constants import ConsequencePoolScope, GainSource, ParticipationRule
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
@@ -19,7 +19,7 @@ from world.magic.models.sessions import RitualSession
 
 
 class ConsequencePoolCatalogFilter(django_filters.FilterSet):
-    """Filter for the consequence-pool flavor catalog listing (#1995).
+    """Filter for the consequence-pool flavor catalog listing (#1995, #3562).
 
     ``action_category=physical`` narrows to the combat offense catalog's flavors;
     any other valid ``ActionCategory`` value narrows to the magic technique-cast
@@ -29,13 +29,24 @@ class ConsequencePoolCatalogFilter(django_filters.FilterSet):
     technique can legally keep at finalize time
     (``resolve_cast_action_template`` enforces the same split at
     submit/finalize).
+
+    ``scope=beat`` (#3562) widens the listing to every authored
+    ``ConsequencePool`` in the game, ordered by name; the beat-authoring
+    picker isn't limited to the curated technique-cast catalog. ``scope=
+    technique`` (also the default with no param) is a no-op: the viewset's
+    ``get_queryset`` already narrowed to the two base pools' children for the
+    list action.
     """
 
     action_category = django_filters.CharFilter(method="filter_by_action_category")
+    scope = django_filters.ChoiceFilter(
+        choices=ConsequencePoolScope.choices,
+        method="filter_scope",
+    )
 
     class Meta:
         model = ConsequencePool
-        fields = ["action_category"]
+        fields = ["action_category", "scope"]
 
     def filter_by_action_category(
         self, queryset: QuerySet[ConsequencePool], name: str, value: str
@@ -57,6 +68,16 @@ class ConsequencePoolCatalogFilter(django_filters.FilterSet):
                 return queryset.none()
             return queryset.filter(parent=pool)
         return queryset.filter(parent=get_standalone_cast_pool())
+
+    def filter_scope(
+        self, queryset: QuerySet[ConsequencePool], name: str, value: str
+    ) -> QuerySet[ConsequencePool]:
+        """``beat`` widens to every authored pool (#3562); ``technique`` is a
+        no-op, since the viewset's ``get_queryset`` already narrowed to the two
+        base pools' children for the list action."""
+        if value == ConsequencePoolScope.BEAT:
+            return ConsequencePool.objects.all().order_by("name")
+        return queryset
 
 
 class ThreadFilter(django_filters.FilterSet):

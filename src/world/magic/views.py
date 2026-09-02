@@ -103,6 +103,7 @@ from world.magic.serializers import (
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
     ConsequencePoolCatalogSerializer,
+    ConsequencePoolDetailSerializer,
     CrossingRespondSerializer,
     CrossingResultSerializer,
     CrossXPLockResponseSerializer,
@@ -222,7 +223,16 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     only offer flavors the technique can legally keep —
     resolve_cast_action_template enforces the same split at submit/finalize
     time. The technique builder's category-agnostic picker keeps the flat
-    union by passing no param."""
+    union by passing no param.
+
+    **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+    every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+    isn't limited to the technique-cast catalog. ``retrieve`` is always
+    unfiltered (any pool, not just a catalog member) and returns
+    ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+    inheritance + own entries minus exclusions) the beat form's pool picker
+    needs to preview a pool before selecting it.
+    """
 
     serializer_class = ConsequencePoolCatalogSerializer
     permission_classes = [IsAuthenticated]
@@ -234,6 +244,13 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     # the schema. Declaring the default here keeps get_queryset's guard a plain
     # attribute read rather than a getattr with a literal name.
     swagger_fake_view = False
+
+    def get_serializer_class(self):
+        """Detail responses resolve a pool's entries; list responses stay the
+        lightweight id/name/description row (#3562)."""
+        if self.action == "retrieve":
+            return ConsequencePoolDetailSerializer
+        return ConsequencePoolCatalogSerializer
 
     def get_queryset(self):
         from actions.models import ConsequencePool  # noqa: PLC0415
@@ -252,10 +269,30 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
         if self.swagger_fake_view:
             return ConsequencePool.objects.none()
 
+        if self.action == "retrieve":
+            # Beat authoring (#3562) can point at any pool, not just a curated
+            # catalog member, so retrieve stays unfiltered by the narrow-list
+            # rule below (and by ?scope=, since it's a no-op unless applied).
+            return (
+                ConsequencePool.objects.all()
+                .order_by("name")
+                .prefetch_related(
+                    Prefetch(
+                        "entries__consequence__effects",
+                        to_attr="cached_pool_detail_effects",
+                    ),
+                    Prefetch(
+                        "entries__consequence__outcome_tier",
+                        to_attr="cached_pool_detail_outcome_tier",
+                    ),
+                )
+            )
+
         # checks.CheckType is content-repo-owned (#2698) — get_melee_offense_pool()
         # is None when the 'Melee Attack' CheckType isn't authored; drop it
         # rather than passing None into __in (which would wrongly also match
-        # every top-level, parent-less pool).
+        # every top-level, parent-less pool). ?scope=beat (#3562) widens this
+        # back out to every pool via the filterset's filter_scope method.
         base_pools = [
             pool
             for pool in (get_standalone_cast_pool(), get_melee_offense_pool())

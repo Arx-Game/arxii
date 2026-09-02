@@ -480,3 +480,110 @@ class ConsequencePoolCatalogViewSetTests(APITestCase):
 
         invalid = self.client.get("/api/magic/consequence-pool-catalog/?action_category=bogus")
         self.assertEqual(invalid.status_code, 400)
+
+    def test_scope_beat_includes_pools_outside_narrow_list(self):
+        """#3562: the beat-authoring picker needs every authored pool, not just
+        children of the two curated base pools. ?scope=beat widens the listing;
+        the default (no param) stays narrow, same as test_list_returns_only_catalog_pools."""
+        from actions.factories import ConsequencePoolFactory
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        ensure_technique_catalog_content()
+        stray = ConsequencePoolFactory(name="Stray Beat Pool")
+
+        default_resp = self.client.get("/api/magic/consequence-pool-catalog/")
+        self.assertEqual(default_resp.status_code, 200)
+        default_names = {row["name"] for row in default_resp.data}
+        self.assertNotIn(stray.name, default_names)
+
+        beat_resp = self.client.get("/api/magic/consequence-pool-catalog/?scope=beat")
+        self.assertEqual(beat_resp.status_code, 200)
+        beat_names = {row["name"] for row in beat_resp.data}
+        self.assertIn(stray.name, beat_names)
+        # Every pool ConsequencePool.objects.all() reports should be present.
+        from actions.models import ConsequencePool
+
+        self.assertEqual(len(beat_resp.data), ConsequencePool.objects.count())
+
+    def test_scope_invalid_value_is_400(self):
+        """An unrecognized ?scope= value is a validation error, not a silent no-op."""
+        resp = self.client.get("/api/magic/consequence-pool-catalog/?scope=bogus")
+        self.assertEqual(resp.status_code, 400)
+
+
+class ConsequencePoolCatalogDetailViewSetTests(APITestCase):
+    """#3562: the entries detail is unfiltered: any ConsequencePool, not just
+    a curated catalog member, so the beat-authoring picker can inspect any
+    pool a GM might type into ?scope=beat."""
+
+    def setUp(self):
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+
+    def test_retrieve_requires_auth(self):
+        from actions.factories import ConsequencePoolFactory
+
+        pool = ConsequencePoolFactory()
+        self.client.force_authenticate(user=None)
+        resp = self.client.get(f"/api/magic/consequence-pool-catalog/{pool.pk}/")
+        self.assertIn(resp.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+    def test_retrieve_merges_parent_and_child_entries_minus_exclusions(self):
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.checks.constants import EffectType
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        tier = CheckOutcomeFactory(name="Solid Success", success_level=3)
+
+        parent = ConsequencePoolFactory(name="Beat Base Pool")
+        kept_parent_consequence = ConsequenceFactory(
+            outcome_tier=tier, label="Kept Parent Row", character_loss=False
+        )
+        ConsequencePoolEntryFactory(pool=parent, consequence=kept_parent_consequence)
+        excluded_parent_consequence = ConsequenceFactory(
+            outcome_tier=tier, label="Excluded Parent Row"
+        )
+        ConsequencePoolEntryFactory(pool=parent, consequence=excluded_parent_consequence)
+
+        child = ConsequencePoolFactory(name="Beat Child Pool", parent=parent)
+        # Child excludes the parent's second row.
+        ConsequencePoolEntryFactory(
+            pool=child, consequence=excluded_parent_consequence, is_excluded=True
+        )
+        own_consequence = ConsequenceFactory(
+            outcome_tier=tier, label="Own Child Row", character_loss=True
+        )
+        ConsequencePoolEntryFactory(pool=child, consequence=own_consequence)
+        ConsequenceEffectFactory(
+            consequence=own_consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            execution_order=0,
+        )
+        ConsequenceEffectFactory(
+            consequence=own_consequence,
+            effect_type=EffectType.GRANT_DISTINCTION,
+            execution_order=1,
+        )
+
+        resp = self.client.get(f"/api/magic/consequence-pool-catalog/{child.pk}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["id"], child.pk)
+        self.assertEqual(resp.data["name"], "Beat Child Pool")
+
+        entries_by_name = {e["name"]: e for e in resp.data["entries"]}
+        self.assertEqual(set(entries_by_name), {"Kept Parent Row", "Own Child Row"})
+
+        kept = entries_by_name["Kept Parent Row"]
+        self.assertEqual(kept["consequence_id"], kept_parent_consequence.pk)
+        self.assertEqual(
+            kept["outcome_tier"],
+            {"id": tier.id, "name": tier.name, "success_level": tier.success_level},
+        )
+        self.assertEqual(kept["effect_types"], [])
+        self.assertFalse(kept["character_loss"])
+
+        own = entries_by_name["Own Child Row"]
+        self.assertEqual(own["consequence_id"], own_consequence.pk)
+        self.assertEqual(own["effect_types"], ["apply_condition", "grant_distinction"])
+        self.assertTrue(own["character_loss"])

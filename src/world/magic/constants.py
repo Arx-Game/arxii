@@ -17,6 +17,18 @@ class TechniqueCategory(models.TextChoices):
     UTILITY = "utility", "Utility"
 
 
+class ConsequencePoolScope(models.TextChoices):
+    """``?scope=`` value for ConsequencePoolCatalogFilter (#3562).
+
+    TECHNIQUE (default) keeps the viewset's narrow children-of-the-two-base-
+    pools listing; BEAT widens it to every authored ConsequencePool for the
+    beat-authoring stakes picker.
+    """
+
+    TECHNIQUE = "technique", "Technique"
+    BEAT = "beat", "Beat"
+
+
 class TechniqueFunction(models.TextChoices):
     """Fine-grained technique job labels (#2443, Layer 2 of the vow-power model).
 

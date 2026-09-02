@@ -163,6 +163,63 @@ class ConsequencePoolCatalogSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "description"]
 
 
+class ConsequencePoolEntryOutcomeTierSerializer(serializers.Serializer):
+    """The outcome-tier triple embedded in a ConsequencePoolDetailSerializer entry
+    (#3562); schema typing only. ConsequencePoolDetailSerializer builds the dict
+    directly rather than instantiating this serializer."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    success_level = serializers.IntegerField()
+
+
+class ConsequencePoolEntrySerializer(serializers.Serializer):
+    """One resolved Consequence row in a ConsequencePoolDetailSerializer's ``entries``
+    list (#3562); schema typing only. See ``get_entries`` below for the builder."""
+
+    consequence_id = serializers.IntegerField()
+    name = serializers.CharField()
+    outcome_tier = ConsequencePoolEntryOutcomeTierSerializer(allow_null=True)
+    effect_types = serializers.ListField(child=serializers.CharField())
+    character_loss = serializers.BooleanField()
+
+
+class ConsequencePoolDetailSerializer(serializers.ModelSerializer):
+    """Detail view of any ``ConsequencePool``'s resolved consequences (#3562), the
+    beat-authoring picker's pool preview. ``entries`` is built from
+    ``resolve_pool_consequences`` (parent inheritance plus the pool's own entries,
+    minus anything excluded), not straight from ``ConsequencePoolEntry`` rows, so
+    it matches what actually fires when the pool is applied."""
+
+    entries = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConsequencePool
+        fields = ["id", "name", "description", "entries"]
+
+    @extend_schema_field(ConsequencePoolEntrySerializer(many=True))
+    def get_entries(self, pool: ConsequencePool) -> list[dict]:
+        from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+
+        entries = []
+        for consequence in resolve_pool_consequences(pool):
+            tier = consequence.outcome_tier
+            entries.append(
+                {
+                    "consequence_id": consequence.id,
+                    "name": consequence.label,
+                    "outcome_tier": (
+                        None
+                        if tier is None
+                        else {"id": tier.id, "name": tier.name, "success_level": tier.success_level}
+                    ),
+                    "effect_types": [effect.effect_type for effect in consequence.effects.all()],
+                    "character_loss": consequence.character_loss,
+                }
+            )
+        return entries
+
+
 class EffectTypeSerializer(serializers.ModelSerializer):
     """Serializer for EffectType lookup records."""
 
