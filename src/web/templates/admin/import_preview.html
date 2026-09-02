@@ -109,6 +109,7 @@
                         </td>
                         <td>
                             <select name="action_{{ model.app_label }}.{{ model.model_name }}"
+                                    aria-label="Import action for {{ model.app_label }}.{{ model.model_name }}"
                                     style="padding: 4px;">
                                 {% if model.is_instance_data %}
                                     {# Instance data defaults to skip #}

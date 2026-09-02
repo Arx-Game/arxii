@@ -5,14 +5,17 @@
 <div id="trait-option-groups">
     {% for group in traits_with_options %}
     <div class="trait-group" data-trait-id="{{ group.trait.pk }}">
-        <h3 class="trait-header collapsible"
-            role="button"
-            tabindex="0"
-            aria-expanded="false"
-            aria-controls="trait-{{ group.trait.pk }}">
-            <span class="toggle-icon" aria-hidden="true">&#9654;</span>
-            {{ group.trait.display_name }}
-            <span class="option-count">({{ group.count }} options)</span>
+        <h3 class="trait-heading">
+            {# A real <button> rather than role="button" + tabindex on the heading:
+               native focus, Enter/Space and role come for free (#3548). #}
+            <button type="button"
+                    class="trait-header collapsible"
+                    aria-expanded="false"
+                    aria-controls="trait-{{ group.trait.pk }}">
+                <span class="toggle-icon" aria-hidden="true">&#9654;</span>
+                {{ group.trait.display_name }}
+                <span class="option-count">({{ group.count }} options)</span>
+            </button>
         </h3>
         <div class="trait-options collapsed" id="trait-{{ group.trait.pk }}">
             <table>
@@ -60,6 +63,10 @@
     border-radius: 4px;
 }
 
+.trait-heading {
+    margin: 0;
+}
+
 .trait-header {
     display: flex;
     align-items: center;
@@ -69,6 +76,13 @@
     background: var(--darkened-bg);
     cursor: pointer;
     font-size: 1rem;
+    /* Button reset - this class moved from the <h3> onto a <button>. */
+    width: 100%;
+    border: 0;
+    font-family: inherit;
+    font-weight: inherit;
+    color: inherit;
+    text-align: left;
 }
 
 .trait-header:hover {
@@ -122,12 +136,6 @@ document.addEventListener('DOMContentLoaded', function() {
             this.setAttribute('aria-expanded', !expanded);
             const content = document.getElementById(this.getAttribute('aria-controls'));
             content.classList.toggle('collapsed', expanded);
-        });
-        header.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                this.click();
-            }
         });
     });
 
