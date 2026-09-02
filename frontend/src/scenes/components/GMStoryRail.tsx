@@ -117,7 +117,10 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
   // #3565 - the scenario query is independent of the encounter-beat gate
   // above (a scene can be mid-scenario with no combat beat running), so it's
   // enabled off `viewer_can_gm` directly.
-  const { data: scenario } = useSceneScenarioQuery(String(scene.id), scene.viewer_can_gm);
+  const { data: scenario } = useSceneScenarioQuery(
+    String(scene.id),
+    scene.viewer_can_gm && hasRunningBeat
+  );
 
   if (!scene.viewer_can_gm) {
     return null;
