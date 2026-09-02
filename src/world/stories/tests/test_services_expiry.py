@@ -1,6 +1,7 @@
 """Expiry is a completion (#3558): pool, stakes, activation, ledger."""
 
 from datetime import timedelta
+from unittest import mock
 
 from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
@@ -38,8 +39,10 @@ from world.stories.services.beats import (
     _fire_pool_with_context,
     complete_beat_expired,
     expire_beat,
+    expire_overdue_beats,
 )
 from world.stories.services.stakes import activate_stakes_contract, get_open_activation
+from world.stories.services.transitions import get_eligible_transitions
 
 
 def _pool_with_condition_and_legend(template):
@@ -251,3 +254,46 @@ class ExpireBeatTests(EvenniaTestCase):
         assert first is not None
         assert second is None
         assert BeatCompletion.objects.filter(beat=beat).count() == 1
+
+
+class ExpirySitesTests(EvenniaTestCase):
+    def test_cron_fires_pool(self) -> None:
+        template = ConditionTemplateFactory()
+        pool = _pool_with_condition_and_legend(template)
+        sheet, _beat, _progress = _character_beat(expired_consequences=pool)
+
+        assert expire_overdue_beats() == 1
+        assert ConditionInstance.objects.filter(target=sheet.character, condition=template).exists()
+
+    def test_lazy_transition_expiry_fires_pool(self) -> None:
+        template = ConditionTemplateFactory()
+        pool = _pool_with_condition_and_legend(template)
+        _sheet, beat, progress = _character_beat(expired_consequences=pool)
+        progress.current_episode = beat.episode
+        progress.save(update_fields=["current_episode"])
+
+        get_eligible_transitions(progress)
+
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.EXPIRED
+        assert BeatCompletion.objects.filter(beat=beat, outcome=BeatOutcome.EXPIRED).exists()
+
+    def test_one_failure_does_not_stop_the_batch(self) -> None:
+        _, first, _ = _character_beat()
+        _, second, _ = _character_beat()
+        real = complete_beat_expired
+
+        def boom(beat):
+            if beat.pk == first.pk:
+                msg = "boom"
+                raise RuntimeError(msg)
+            return real(beat)
+
+        with mock.patch("world.stories.services.beats.complete_beat_expired", side_effect=boom):
+            count = expire_overdue_beats()
+
+        second.refresh_from_db()
+        first.refresh_from_db()
+        assert count == 1
+        assert second.outcome == BeatOutcome.EXPIRED
+        assert first.outcome == BeatOutcome.UNSATISFIED

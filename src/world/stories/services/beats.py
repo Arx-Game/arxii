@@ -20,16 +20,17 @@ Public API:
         CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
         consequences matching that tier.
 
-    expire_overdue_beats(now) — flips UNSATISFIED beats with past deadlines to
-        EXPIRED outcome. Idempotent; safe for a cron hook.
+    expire_overdue_beats(now) — completes every UNSATISFIED beat with a past
+        deadline via expire_beat (#3558), one savepoint per beat. Returns the
+        count of beats whose outcome changed. Idempotent; safe for a cron hook.
 
     complete_beat_expired(beat) - resolves a beat EXPIRED as a real completion
         (#3558): fires the authored expired pool (LEGEND_AWARD skipped), grades
         open stakes LOSS, closes the contract, and writes the ledger row.
 
     expire_beat(beat, now=None) - locks the beat, checks the deadline, and
-        delegates to complete_beat_expired. Idempotent; the cron sweep's
-        per-beat entry point.
+        delegates to complete_beat_expired. Idempotent; the cron sweep's and
+        lazy-expiry sites' per-beat entry point.
 """
 
 from __future__ import annotations
@@ -647,33 +648,40 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
         _notify_beat_completion(aggregate_completion, agg_progress)
 
 
+def _expire_each(beats: list[Beat], *, now: datetime) -> int:
+    """Expire every beat in ``beats`` in its own savepoint; count outcomes that changed.
+
+    Log-and-continue (ADR-0009 style): one beat's failure never aborts the
+    sweep or the request that triggered a lazy expiry.
+    """
+    count = 0
+    for beat in beats:
+        try:
+            with transaction.atomic():
+                before = beat.outcome
+                expire_beat(beat, now=now)
+                beat.refresh_from_db(fields=["outcome"])
+                if beat.outcome != before:
+                    count += 1
+        except Exception:
+            logger.exception("Expiring beat %s failed; continuing the sweep.", beat.pk)
+    return count
+
+
 def expire_overdue_beats(now: datetime | None = None) -> int:
-    """Flip outcome to EXPIRED for every UNSATISFIED beat whose deadline has passed.
+    """Complete every UNSATISFIED beat whose deadline has passed as EXPIRED (#3558).
 
-    Returns count of beats expired. Idempotent — repeated calls do nothing
-    to already-expired beats. Safe for a cron hook.
-
-    No BeatCompletion row is created — expiry is system-caused and not
-    attributable to a specific character. The beat's updated_at timestamp
-    records when the flip happened.
+    Returns the count of beats whose outcome changed. Idempotent and safe for
+    a cron hook; each beat runs in its own savepoint.
     """
     from django.utils import timezone  # noqa: PLC0415
 
     if now is None:
         now = timezone.now()
-
-    overdue_qs = Beat.objects.filter(
-        outcome=BeatOutcome.UNSATISFIED,
-        deadline__isnull=False,
-        deadline__lt=now,
+    overdue = Beat.objects.filter(
+        outcome=BeatOutcome.UNSATISFIED, deadline__isnull=False, deadline__lt=now
     )
-    count = 0
-    with transaction.atomic():
-        for beat in overdue_qs:
-            beat.outcome = BeatOutcome.EXPIRED
-            beat.save(update_fields=["outcome", "updated_at"])
-            count += 1
-    return count
+    return _expire_each(list(overdue), now=now)
 
 
 _EXPIRY_NOTE = "Deadline passed."
