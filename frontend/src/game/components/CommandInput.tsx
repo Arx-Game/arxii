@@ -36,7 +36,16 @@ export interface ComposerMode {
 // <name>=<message>` typed while a composer mode is set (pose/say/etc.) gets
 // wrapped by buildFullCommand into IC prose instead of reaching CmdPage
 // verbatim as OOC.
-const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk', 'page'];
+const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
+  'pose',
+  'say',
+  'emit',
+  'emote',
+  'whisper',
+  'tt',
+  'tabletalk',
+  'page',
+]);
 
 // #2993 — the language selector only makes sense for speech modes (comprehension
 // gating applies to say/whisper/mutter; pose/emit/tt carry no in-fiction language).
@@ -51,7 +60,7 @@ function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string 
   if (!composerMode) return trimmed;
 
   const firstWord = trimmed.split(' ')[0].toLowerCase();
-  const hasExplicitCommand = KNOWN_COMMANDS.includes(firstWord);
+  const hasExplicitCommand = KNOWN_COMMANDS.has(firstWord);
   if (hasExplicitCommand) return trimmed;
 
   if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {

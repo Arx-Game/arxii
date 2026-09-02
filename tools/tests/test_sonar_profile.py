@@ -55,3 +55,21 @@ def test_load_policy_rejects_a_rule_with_no_rationale(tmp_path, monkeypatch) -> 
 def test_rules_file_points_at_the_repo_root_copy() -> None:
     assert RULES_FILE.name == "sonar-rules.yaml"
     assert RULES_FILE.exists()
+
+
+def test_every_policy_rule_has_a_known_language_prefix() -> None:
+    """The drift check resolves rule languages locally; an unknown prefix costs an API call.
+
+    That fallback is correct but slow and flaky - one call per rule is what made a
+    single ConnectionResetError fail every PR. This keeps the map honest as rules
+    are added.
+    """
+    from sonar_profile import LANG_BY_REPO
+
+    policy = load_policy()
+    keys = [e["rule"] for e in policy["disabled"]] + [e["rule"] for e in policy.get("keep", [])]
+    unknown = sorted({k.split(":", 1)[0] for k in keys} - set(LANG_BY_REPO))
+    assert not unknown, (
+        f"rule repositories with no entry in LANG_BY_REPO: {unknown}. "
+        "Add them so the drift check does not fall back to one API call per rule."
+    )

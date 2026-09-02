@@ -45,7 +45,6 @@ const RESIST_EFFORT_OPTIONS = [
 ] as const;
 
 interface ConsentCardProps {
-  cardKey: string;
   initiatorName: string;
   actionKey: string;
   techniqueName?: string | null;
@@ -278,7 +277,6 @@ export function ConsentPrompt({ sceneId }: Props) {
         return (
           <ConsentCard
             key={req.id}
-            cardKey={cardKey}
             initiatorName={req.initiator_name}
             actionKey={req.action_key}
             techniqueName={req.technique_name}
@@ -310,7 +308,6 @@ export function ConsentPrompt({ sceneId }: Props) {
         return (
           <ConsentCard
             key={`target-${t.action_target_id}`}
-            cardKey={cardKey}
             initiatorName={t.initiator_name}
             actionKey={t.action_key}
             techniqueName={t.technique_name}

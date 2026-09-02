@@ -22,8 +22,6 @@ export function DenyClearanceDialog({ clearanceId }: Props) {
       submitLabel="Deny"
       pendingLabel="Denying…"
       isPending={denyMutation.isPending}
-      successToast="Clearance denied"
-      errorFallback="Failed to deny clearance."
       submitVariant="destructive"
       triggerTestId="deny-clearance-btn"
       triggerLabel="Deny"

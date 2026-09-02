@@ -36,10 +36,8 @@ export function ConnectedAccounts() {
   });
 
   // Find providers that aren't connected yet
-  const connectedProviderIds = connectedAccounts.map((account) => account.provider);
-  const availableProviders = providers.filter(
-    (provider) => !connectedProviderIds.includes(provider.id)
-  );
+  const connectedProviderIds = new Set(connectedAccounts.map((account) => account.provider));
+  const availableProviders = providers.filter((provider) => !connectedProviderIds.has(provider.id));
 
   const handleConnect = (providerId: string) => {
     initiateSocialLogin(providerId, 'connect');
