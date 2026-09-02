@@ -164,7 +164,10 @@ _from_email = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
 DEFAULT_FROM_EMAIL = (
     _from_email if parseaddr(_from_email)[0] else formataddr(("Arx II", _from_email))
 )
-SITE_URL = env("SITE_URL", default="https://arxmush.org")
+# Prod renders SITE_URL (and FRONTEND_URL) into the EnvironmentFile from the
+# deployed web FQDN (infra/ansible/roles/secrets_vault), so this default only
+# reaches a dev box whose .env leaves it unset. It used to be the Arx I domain.
+SITE_URL = env("SITE_URL", default="https://play.arx2.com")
 
 # systemd writes this file when a shutdown/reboot is scheduled and removes it on
 # cancel; world.downtime derives the automatic-reboot announcement from it (#3194).

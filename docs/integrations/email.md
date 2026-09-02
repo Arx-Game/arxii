@@ -21,7 +21,7 @@ Required environment variables in `src/.env`:
 ```env
 RESEND_API_KEY=re_your-resend-api-key
 DEFAULT_FROM_EMAIL=noreply@arx2.com
-SITE_URL=https://arx2.com
+SITE_URL=https://play.arx2.com
 ```
 
 `DEFAULT_FROM_EMAIL` must be an address on a domain Resend has verified for sending —
