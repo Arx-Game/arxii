@@ -104,7 +104,7 @@ events list. The signup journey test proves the row shape end to end. Rows from
 before the fix, and
 any Django `createsuperuser` makes, are repointed by hand; the ops dashboard's
 required-content panel names them (`typeclassed-accounts`). No data migration: a
-handful of pre-launch rows is a shell one-liner, not schema history. See ADR-0261.
+handful of pre-launch rows is a shell one-liner, not schema history. See ADR-0260.
 
 `ArxAccountAdapter.is_open_for_signup(request)` (`src/evennia_extensions/adapters.py`)
 is the allauth hook this gate hangs on. It was previously unoverridden — the

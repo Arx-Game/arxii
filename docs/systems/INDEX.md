@@ -2285,7 +2285,7 @@ Character lifecycle management with web-first applications and player anonymity.
   is the account's server-side "who am I browsing as" fact (state 2.5 — selected but
   not necessarily puppeting). Sole mutator `world.roster.services.selection.set_selected_entry`;
   sole reader for "who is this request acting as" `selection.selected_character(account)`
-  (missions journal, NPC interactions; ADR-0261 says why not `request.user.puppet`);
+  (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
