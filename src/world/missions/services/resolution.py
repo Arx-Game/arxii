@@ -69,9 +69,10 @@ from evennia_extensions.models import RoomProfile
 from world.areas.services import area_subtree_pks
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
-from world.checks.services import perform_check
+from world.checks.services import level_opposition, perform_check
 from world.checks.theater import maybe_emit_resolution_theater
 from world.checks.types import CheckResult, ResolutionContext
+from world.covenants.mentorship import effective_combat_level
 from world.mechanics.effect_handlers import apply_all_effects
 from world.missions.constants import MissionStatus, NodeLocationMode, OptionKind, OptionSource
 from world.missions.models import (
@@ -79,6 +80,7 @@ from world.missions.models import (
     MissionNodeSnapshot,
     MissionOptionRoute,
     MissionOptionRouteCandidate,
+    MissionTrackProgress,
 )
 from world.missions.services._situation import mission_situation_ctx
 from world.missions.services.beat import on_mission_complete_for_beat
@@ -103,6 +105,7 @@ if TYPE_CHECKING:
         MissionOption,
         MissionParticipant,
     )
+    from world.stories.constants import BeatOutcome
 
 _ERR_CHECK_NO_TYPE = (
     "OptionKind.CHECK option {option_pk} has no authored_check_type — "
@@ -117,6 +120,13 @@ _ERR_CHALLENGE_NO_CHALLENGE = (
     "this; the row is corrupt."
 )
 _ERR_NO_OUTCOME_TIERS = "Cannot synthesize an auto-success result: no CheckOutcome tiers exist."
+
+SUCCESS_LEVEL = 1
+
+
+def tier_is_success(outcome: CheckOutcome | None) -> bool:
+    """True when a resolved tier counts as a success (success_level >= 1) (#3568)."""
+    return outcome is not None and int(outcome.success_level) >= SUCCESS_LEVEL
 
 
 def build_option_list(
@@ -303,6 +313,13 @@ def enter_node(instance: MissionInstance, node: MissionNode) -> None:
     instance.current_node = node
     instance.save()
 
+    if node.is_track:
+        # #3568: a re-entry is a fresh track (0/0), matching MissionNodeSnapshot's
+        # per-visit semantics; a first entry creates the row.
+        MissionTrackProgress.objects.update_or_create(
+            instance=instance, node=node, defaults={"successes": 0, "failures": 0}
+        )
+
     from world.missions.services.external_acts import fast_forward_external_acts  # noqa: PLC0415
 
     fast_forward_external_acts(instance, node)
@@ -318,6 +335,21 @@ def _resolve_check_type(option: MissionOption) -> CheckType:
     if check_type is None:
         raise ValueError(_ERR_CHECK_NO_TYPE.format(option_pk=option.pk))
     return check_type
+
+
+def _contest_opposition(option: MissionOption) -> int:
+    """The passive opposition term a CONTEST adds to the template's difficulty (#3568).
+
+    ``level_opposition`` at the opposition sheet's effective combat level; the
+    NPC never rolls (spec Decision 2). Every caller of ``level_opposition`` adds
+    it to an authored difficulty, as here.
+    """
+    sheet = option.opposition_sheet
+    return level_opposition(
+        option.opposition_check_type,
+        level=effective_combat_level(sheet),
+        character=sheet.character,
+    )
 
 
 def _auto_success_result(check_type: CheckType) -> CheckResult:
@@ -513,6 +545,7 @@ def _finish_terminal(
     *,
     route: MissionOptionRoute | None = None,
     option: MissionOption | None = None,
+    beat_outcome: BeatOutcome | None = None,
 ) -> None:
     """Mark the run complete (terminal route reached).
 
@@ -529,6 +562,9 @@ def _finish_terminal(
     ENCOUNTER outcome). JOINT terminals call ``_finish_terminal`` exactly
     once (Phase 4
     invariant), so the seam fires exactly once per instance termination.
+    ``beat_outcome`` (#3568) overrides the beat completion's derived outcome
+    (a track node's authored terminal outcome) - passed straight through to
+    ``on_mission_complete_for_beat``.
     """
     # #1753 — a mission with an NPC to report to pauses at RESOLVED until the player
     # reports the outcome (which delivers money + style-modulated fame/prestige). A run
@@ -547,7 +583,7 @@ def _finish_terminal(
         instance.current_node = None
         instance.save()
     _teardown_spawned_room(instance)
-    on_mission_complete_for_beat(instance, route=route, option=option)
+    on_mission_complete_for_beat(instance, route=route, option=option, beat_outcome=beat_outcome)
     # Crisis seam (#2238): a run minted from a DomainCrisis resolves it on
     # terminal completion. Cheap no-op for every run without a source crisis.
     from world.societies.houses.crisis_services import (  # noqa: PLC0415
@@ -639,10 +675,13 @@ def resolve_option(  # noqa: PLR0913
         )
     else:
         check_type = _resolve_check_type(option)
+        target_difficulty = instance.template.risk_tier
+        if option.option_kind == OptionKind.CONTEST:
+            target_difficulty += _contest_opposition(option)
         result = perform_check(
             character,
             check_type,
-            target_difficulty=instance.template.risk_tier,
+            target_difficulty=target_difficulty,
             extra_modifiers=extra_modifiers,
             situation_ctx=mission_situation_ctx(character, instance),
         )
@@ -684,6 +723,11 @@ def _route_graded_outcome(  # noqa: PLR0913
     exactly as before the extraction) or the ENCOUNTER path's pending deed
     (``outcome=None``, created at the pick), passed in to be graded in place
     rather than duplicated.
+
+    On a track node (#3568) a CHECK/CONTEST deed never routes or terminates
+    itself - ``node.is_track`` hands the graded deed to ``_advance_track``
+    instead, once the deed exists (the deed carries the tier). No terminal
+    reward lines are emitted for a counted deed (``is_terminal`` stays False).
     """
     route = MissionOptionRoute.objects.filter(
         option=option,
@@ -717,8 +761,11 @@ def _route_graded_outcome(  # noqa: PLR0913
     )
     apply_all_effects(consequence, context)
 
+    counts_on_track = (
+        advance and node.is_track and option.option_kind in (OptionKind.CHECK, OptionKind.CONTEST)
+    )
     is_terminal = False
-    if advance:
+    if advance and not counts_on_track:
         if next_node is None:
             _finish_terminal(instance, route=route, option=option)
             is_terminal = True
@@ -739,6 +786,10 @@ def _route_graded_outcome(  # noqa: PLR0913
         deed.outcome = outcome
         deed.route_candidate = candidate
         deed.save(update_fields=["outcome", "route_candidate"])
+
+    if counts_on_track:
+        _advance_track(instance, node, deed)
+
     # #941: a fired random-set candidate's own reward bundle emits on selection
     # (it always advances, so it is never the terminal route).
     if candidate is not None:
@@ -753,6 +804,40 @@ def _route_graded_outcome(  # noqa: PLR0913
         # #735: fire any MissionRenownAward rows attached to the route.
         emit_terminal_renown_awards(instance, route, deed)
     return deed
+
+
+def _advance_track(instance: MissionInstance, node: MissionNode, deed: MissionDeedRecord) -> None:
+    """Count a CHECK/CONTEST deed on a track node and route at a threshold (#3568)."""
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+
+    progress, _ = MissionTrackProgress.objects.get_or_create(instance=instance, node=node)
+    if tier_is_success(deed.outcome):
+        progress.successes += 1
+    else:
+        progress.failures += 1
+    progress.save(update_fields=["successes", "failures", "updated_at"])
+    if progress.successes >= node.track_successes:
+        _end_track(
+            instance,
+            node.track_success_target,
+            node.track_success_beat_outcome or BeatOutcome.SUCCESS,
+        )
+    elif progress.failures >= node.track_failures:
+        _end_track(
+            instance,
+            node.track_failure_target,
+            node.track_failure_beat_outcome or BeatOutcome.FAILURE,
+        )
+
+
+def _end_track(instance: MissionInstance, target: MissionNode | None, beat_outcome: str) -> None:
+    """Route a track's threshold hit: null target terminates, else enter it (#3568)."""
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+
+    if target is None:
+        _finish_terminal(instance, beat_outcome=BeatOutcome(beat_outcome))
+        return
+    enter_node(instance, target)
 
 
 def _resolve_branch(

@@ -138,6 +138,24 @@ class MissionBeatCompletionTests(TestCase):
         completion = BeatCompletion.objects.get(beat=beat)
         self.assertEqual(completion.outcome_tier, tier)
 
+    def test_explicit_beat_outcome_overrides_route(self) -> None:
+        """An explicit beat_outcome wins over the route's derived tier (#3568)."""
+        tier = CheckOutcomeFactory(name="OverriddenVictory", success_level=4)
+        beat = BeatFactory(
+            episode=self.episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+        )
+        self._make_progress()
+        instance = MissionInstanceFactory(template=self.template, source_beat=beat)
+        route = MissionOptionRouteFactory(outcome_tier=tier, target_node=None)
+
+        on_mission_complete_for_beat(instance, route=route, beat_outcome=BeatOutcome.FAILURE)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.FAILURE)
+        completion = BeatCompletion.objects.get(beat=beat)
+        self.assertEqual(completion.outcome_tier, tier)
+
     def test_branch_terminal_completes_gm_marked_beat_as_success(self) -> None:
         """A no-tier route (BRANCH) completes a GM_MARKED beat as SUCCESS."""
         beat = BeatFactory(
