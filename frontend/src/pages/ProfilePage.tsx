@@ -6,6 +6,7 @@ export function ProfilePage() {
 
   const getCurrentTab = () => {
     if (pathname.includes('/media')) return 'media';
+    if (pathname.includes('/account')) return 'account';
     if (pathname.includes('/settings')) return 'settings';
     if (pathname.includes('/privacy')) return 'privacy';
     if (pathname.includes('/boundaries')) return 'boundaries';
@@ -27,6 +28,9 @@ export function ProfilePage() {
           </TabsTrigger>
           <TabsTrigger value="settings" asChild>
             <Link to="/profile/settings">Settings</Link>
+          </TabsTrigger>
+          <TabsTrigger value="account" asChild>
+            <Link to="/profile/account">Account</Link>
           </TabsTrigger>
           <TabsTrigger value="privacy" asChild>
             <Link to="/profile/privacy">Privacy</Link>

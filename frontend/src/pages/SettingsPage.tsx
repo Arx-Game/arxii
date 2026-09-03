@@ -1,4 +1,3 @@
-import { ConnectedAccounts } from '@/components/ConnectedAccounts';
 import { useRealmTheme } from '@/components/realm-theme-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -72,7 +71,6 @@ export function SettingsPage() {
     <div className="mt-4 space-y-6">
       <VisibilityPreferences />
       <ThemePreferences />
-      <ConnectedAccounts />
     </div>
   );
 }
