@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar
 
 from actions.definitions.currency import WithdrawCoinsAction
@@ -16,6 +15,7 @@ from actions.definitions.items import (
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.argsplit import strip_leading_word
 from world.currency.constants import parse_coppers
 from world.items.models import Outfit
 
@@ -36,9 +36,9 @@ class CmdWear(ArxCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Wear what?")
-        outfit_match = re.match(r"^outfit\s+(.+)$", args, flags=re.IGNORECASE)
-        if outfit_match:
-            outfit_name = outfit_match.group(1).strip()
+        outfit_rest = strip_leading_word(args, "outfit")
+        if outfit_rest:
+            outfit_name = outfit_rest
             sheet = self.caller.sheet_data
             outfit = Outfit.objects.filter(
                 character_sheet=sheet,
@@ -119,9 +119,9 @@ class CmdWithdraw(ArxCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Withdraw what?")
-        coins_match = re.match(r"^coins\s+(.+)$", args, flags=re.IGNORECASE)
-        if coins_match:
-            amount = parse_coppers(coins_match.group(1).strip())
+        coins_rest = strip_leading_word(args, "coins")
+        if coins_rest:
+            amount = parse_coppers(coins_rest)
             if amount is None:
                 msg = "Usage: withdraw coins <amount> (e.g. 'withdraw coins 3s 5c')"
                 raise CommandError(msg)

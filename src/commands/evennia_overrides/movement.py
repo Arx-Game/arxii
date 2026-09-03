@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar
 
 from actions.definitions.currency import GiveCoinsAction
 from actions.definitions.items import TakeOutAction
 from actions.definitions.movement import DropAction, GetAction, GiveAction, HomeAction
 from commands.command import ArxCommand
+from commands.utils.argsplit import split_on_keyword
 from world.currency.constants import parse_coppers
 
 
@@ -30,10 +30,9 @@ class CmdGet(ArxCommand):
         args = self.require_args("Get what?")
         # ``from <container>`` form switches to TakeOutAction. Try the
         # connector form first; if it doesn't match, fall back to single-target.
-        match = re.match(r"^(.+?)\s+from\s+(.+)$", args, flags=re.IGNORECASE)
-        if match:
-            item_name = match.group(1).strip()
-            container_name = match.group(2).strip()
+        split = split_on_keyword(args, "from")
+        if split:
+            item_name, container_name = split
             container = self.search_or_raise(container_name)
             target = self.search_or_raise(
                 item_name,

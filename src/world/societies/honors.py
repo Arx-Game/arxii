@@ -192,7 +192,109 @@ def _honors_source_type() -> LegendSourceType:
     return source_type
 
 
-def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
+def _resolve_anchor(
+    deed: LegendEntry | None, event: LegendEvent | None
+) -> tuple[LegendEntry | None, LegendEvent]:
+    """Lock and return the deed being amplified (if any) and the event it hangs from.
+
+    Raises when the anchor cannot be established at all: a deed with no event, a
+    call with neither, or an event that minted nothing.
+    """
+    # --- Step 1: resolve the anchor -----------------------------------
+    if deed is not None:
+        deed = LegendEntry.objects.select_for_update().select_related("persona").get(pk=deed.pk)
+        anchor_event = deed.event
+        if anchor_event is None:
+            raise NoAnchorEventError
+    else:
+        if event is None:
+            msg = "honor_deed requires either an existing deed or an event to establish under."
+            raise ValueError(msg)
+        # Lock the event row so two concurrent establishes against the SAME
+        # event serialize behind this transaction's commit (whole-branch-review
+        # C3) — without this, two honorers can both read "no anchored deed yet"
+        # and both create one. The amplify branch above gets equivalent
+        # serialization for free via the deed's own select_for_update(); the
+        # establish branch creates no row to lock ahead of time, so the event
+        # itself is what has to be locked.
+        anchor_event = LegendEvent.objects.select_for_update().get(pk=event.pk)
+
+    if not anchor_event.deeds.filter(is_active=True).exists():
+        raise EventMintedNothingRefusal
+
+    return deed, anchor_event
+
+
+def _check_establish_eligibility(
+    *,
+    character_sheet: CharacterSheet,
+    honoree_persona: Persona,
+    honorer_persona: Persona,
+    anchor_event: LegendEvent,
+    deed_title: str | None,
+) -> None:
+    """Refusals specific to minting a NEW deed under an event."""
+    if honoree_persona.character_sheet_id == character_sheet.pk:
+        raise CannotHonorOwnDeedError
+    if anchor_event.deeds.filter(persona=honoree_persona, is_active=True).exists():
+        raise HonoreeAlreadyAnchoredError
+    if not deed_title:
+        msg = "honor_deed requires deed_title when establishing a new deed."
+        raise ValueError(msg)
+    witnesses = scene_witness_personas(anchor_event.scene) if anchor_event.scene is not None else []
+    if honorer_persona not in witnesses:
+        raise NotPresentToEstablishError
+    # The HONOREE must also have witnessed the event (whole-branch-review
+    # C2) — gating only the honorer let a witness mint a full-ceiling deed
+    # for someone who was never there, inventing peril they never faced.
+    # Deliberately checked against the same witness list, never widened to
+    # a sheet-wide "already has a deed here" scope (that would become a
+    # mask-identity oracle — see `HonoreeAlreadyAnchoredError`'s docstring).
+    if honoree_persona not in witnesses:
+        raise HonoreeNotPresentToEstablishError
+
+
+def _check_amplify_eligibility(
+    *, character_sheet: CharacterSheet, honorer_persona: Persona, deed: LegendEntry
+) -> None:
+    """Refusals specific to adding to an EXISTING deed."""
+    if deed.persona.character_sheet_id == character_sheet.pk:
+        raise CannotHonorOwnDeedError
+    if not deed.is_active:
+        raise DeedNotActiveError
+    if not knows_deed(persona=honorer_persona, deed=deed):
+        raise UnknownDeedError
+    if LegendHonor.objects.filter(deed=deed, honorer=honorer_persona).exists():
+        raise AlreadyHonoredError
+
+
+def _check_honor_eligibility(  # noqa: PLR0913 - mirrors honor_deed's inputs
+    *,
+    character_sheet: CharacterSheet,
+    honoree_persona: Persona,
+    honorer_persona: Persona,
+    deed: LegendEntry | None,
+    anchor_event: LegendEvent,
+    deed_title: str | None,
+    establishing: bool,
+) -> None:
+    """Every refusal that must land before a Hare is spent or a row is written."""
+    # --- Step 2: eligibility -------------------------------------------
+    if establishing:
+        _check_establish_eligibility(
+            character_sheet=character_sheet,
+            honoree_persona=honoree_persona,
+            honorer_persona=honorer_persona,
+            anchor_event=anchor_event,
+            deed_title=deed_title,
+        )
+        return
+    _check_amplify_eligibility(
+        character_sheet=character_sheet, honorer_persona=honorer_persona, deed=deed
+    )
+
+
+def honor_deed(  # noqa: PLR0913
     *,
     character_sheet: CharacterSheet,
     ritual: Ritual,  # noqa: ARG001 — forwarded per the SERVICE dispatch convention; unused here
@@ -216,29 +318,8 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
     by design (Decision 7).
     """
     with transaction.atomic():
-        # --- Step 1: resolve the anchor -----------------------------------
-        if deed is not None:
-            deed = LegendEntry.objects.select_for_update().select_related("persona").get(pk=deed.pk)
-            anchor_event = deed.event
-            if anchor_event is None:
-                raise NoAnchorEventError
-        else:
-            if event is None:
-                msg = "honor_deed requires either an existing deed or an event to establish under."
-                raise ValueError(msg)
-            # Lock the event row so two concurrent establishes against the SAME
-            # event serialize behind this transaction's commit (whole-branch-review
-            # C3) — without this, two honorers can both read "no anchored deed yet"
-            # and both create one. The amplify branch above gets equivalent
-            # serialization for free via the deed's own select_for_update(); the
-            # establish branch creates no row to lock ahead of time, so the event
-            # itself is what has to be locked.
-            anchor_event = LegendEvent.objects.select_for_update().get(pk=event.pk)
-
-        if not anchor_event.deeds.filter(is_active=True).exists():
-            raise EventMintedNothingRefusal
-
-        # --- Step 2: eligibility -------------------------------------------
+        # --- Steps 1-2: resolve the anchor, then every eligibility refusal ---
+        deed, anchor_event = _resolve_anchor(deed, event)
         # Always resolved as the PRIMARY persona (whole-branch-review C1) — never
         # the active/masked one. `_grant_title` (world.achievements.services) makes
         # the identical argument: an honor is a named public act (a public journal
@@ -248,37 +329,15 @@ def honor_deed(  # noqa: C901, PLR0912, PLR0913, PLR0915
         # rite is always performed as yourself.
         honorer_persona = character_sheet.primary_persona
         establishing = deed is None
-
-        if establishing:
-            if honoree_persona.character_sheet_id == character_sheet.pk:
-                raise CannotHonorOwnDeedError
-            if anchor_event.deeds.filter(persona=honoree_persona, is_active=True).exists():
-                raise HonoreeAlreadyAnchoredError
-            if not deed_title:
-                msg = "honor_deed requires deed_title when establishing a new deed."
-                raise ValueError(msg)
-            witnesses = (
-                scene_witness_personas(anchor_event.scene) if anchor_event.scene is not None else []
-            )
-            if honorer_persona not in witnesses:
-                raise NotPresentToEstablishError
-            # The HONOREE must also have witnessed the event (whole-branch-review
-            # C2) — gating only the honorer let a witness mint a full-ceiling deed
-            # for someone who was never there, inventing peril they never faced.
-            # Deliberately checked against the same witness list, never widened to
-            # a sheet-wide "already has a deed here" scope (that would become a
-            # mask-identity oracle — see `HonoreeAlreadyAnchoredError`'s docstring).
-            if honoree_persona not in witnesses:
-                raise HonoreeNotPresentToEstablishError
-        else:
-            if deed.persona.character_sheet_id == character_sheet.pk:
-                raise CannotHonorOwnDeedError
-            if not deed.is_active:
-                raise DeedNotActiveError
-            if not knows_deed(persona=honorer_persona, deed=deed):
-                raise UnknownDeedError
-            if LegendHonor.objects.filter(deed=deed, honorer=honorer_persona).exists():
-                raise AlreadyHonoredError
+        _check_honor_eligibility(
+            character_sheet=character_sheet,
+            honoree_persona=honoree_persona,
+            honorer_persona=honorer_persona,
+            deed=deed,
+            anchor_event=anchor_event,
+            deed_title=deed_title,
+            establishing=establishing,
+        )
 
         # --- Step 3: price (also serves step 4's calibration lookup) -------
         calibration = LegendLevelCalibration.objects.get(level=character_sheet.current_level)

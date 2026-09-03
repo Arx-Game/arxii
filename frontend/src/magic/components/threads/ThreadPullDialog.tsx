@@ -199,10 +199,10 @@ export function ThreadPullDialog({
 
         <div className="space-y-4 py-2">
           {/* Resonance selector */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <fieldset className="space-y-1">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Resonance
-            </label>
+            </legend>
             <div className="flex flex-wrap gap-2" data-testid="resonance-selector">
               {selectableResonances.length === 0 && (
                 <p className="text-sm text-muted-foreground">
@@ -230,14 +230,17 @@ export function ThreadPullDialog({
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           {/* Tier selector */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span
+              id="pull-tier-label"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
               Tier
-            </label>
-            <div className="flex gap-2" role="group" aria-label="Tier selector">
+            </span>
+            <div className="flex gap-2" role="radiogroup" aria-labelledby="pull-tier-label">
               {([1, 2, 3] as const).map((t) => (
                 <button
                   key={t}
@@ -260,10 +263,10 @@ export function ThreadPullDialog({
 
           {/* Thread checkboxes */}
           {selectedResonanceId !== null && (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <fieldset className="space-y-1">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Threads
-              </label>
+              </legend>
               <div className="space-y-1.5" data-testid="thread-checklist">
                 {threadsForResonance.length === 0 && (
                   <p className="text-sm text-muted-foreground">
@@ -292,7 +295,7 @@ export function ThreadPullDialog({
                   );
                 })}
               </div>
-            </div>
+            </fieldset>
           )}
 
           {/* Live preview */}

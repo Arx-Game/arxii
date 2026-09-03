@@ -248,7 +248,6 @@ class CmdRitual(ArxCommand):
             RitualExecutionKind,
         )
         from world.magic.exceptions import (  # noqa: PLC0415
-            ParticipantCountError,
             RitualSessionError,
         )
         from world.magic.models import Ritual  # noqa: PLC0415
@@ -308,7 +307,7 @@ class CmdRitual(ArxCommand):
                 initiator_references=parse.initiator_references,
                 expires_at=timezone.now() + timedelta(hours=24),
             )
-        except (ParticipantCountError, RitualSessionError) as exc:
+        except RitualSessionError as exc:
             raise CommandError(exc.user_message) from exc
 
         invite_list = ", ".join(inv.character.db_key for inv in invitees)
