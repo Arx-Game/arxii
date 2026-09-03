@@ -1617,39 +1617,51 @@ class OutcomeInputSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg)
         return beat
 
+    def _validate_stake_row(
+        self, *, stake, beat, required_outcome: str, required_outcome_key: str, column: str
+    ) -> None:
+        """A stake row routes on that stake's own column, never on a beat outcome."""
+        if not column:
+            raise serializers.ValidationError(
+                {"required_stake_column": "Required when stake is set."}
+            )
+        if required_outcome:
+            msg = "Must be blank when stake is set (stake rows route on the stake column)."
+            raise serializers.ValidationError({"required_outcome": msg})
+        if required_outcome_key:
+            msg = "Only beat-level routing rows may require an option key."
+            raise serializers.ValidationError({"required_outcome_key": msg})
+        if stake.beat_id != beat.pk:
+            raise serializers.ValidationError(
+                {"stake": "The stake must belong to this requirement's beat."}
+            )
+
+    def _validate_beat_row(self, *, required_outcome: str, column: str) -> None:
+        """A beat-level row routes on the beat's own outcome and carries no stake column."""
+        if not required_outcome:
+            raise serializers.ValidationError(
+                {"required_outcome": "Required when stake is not set."}
+            )
+        if column:
+            raise serializers.ValidationError(
+                {"required_stake_column": "Only allowed when stake is set."}
+            )
+
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
         """Exactly one predicate shape, mirroring TransitionRequiredOutcome.clean()."""
         stake = attrs.get("stake")
         required_outcome = attrs.get("required_outcome") or ""
-        required_outcome_key = attrs.get("required_outcome_key") or ""
-        required_stake_column = attrs.get("required_stake_column") or ""
-        beat = attrs["beat"]
-
-        if stake is not None:
-            if not required_stake_column:
-                raise serializers.ValidationError(
-                    {"required_stake_column": "Required when stake is set."}
-                )
-            if required_outcome:
-                msg = "Must be blank when stake is set (stake rows route on the stake column)."
-                raise serializers.ValidationError({"required_outcome": msg})
-            if required_outcome_key:
-                msg = "Only beat-level routing rows may require an option key."
-                raise serializers.ValidationError({"required_outcome_key": msg})
-            if stake.beat_id != beat.pk:
-                raise serializers.ValidationError(
-                    {"stake": "The stake must belong to this requirement's beat."}
-                )
-        else:
-            if not required_outcome:
-                raise serializers.ValidationError(
-                    {"required_outcome": "Required when stake is not set."}
-                )
-            if required_stake_column:
-                raise serializers.ValidationError(
-                    {"required_stake_column": "Only allowed when stake is set."}
-                )
-
+        column = attrs.get("required_stake_column") or ""
+        if stake is None:
+            self._validate_beat_row(required_outcome=required_outcome, column=column)
+            return attrs
+        self._validate_stake_row(
+            stake=stake,
+            beat=attrs["beat"],
+            required_outcome=required_outcome,
+            required_outcome_key=attrs.get("required_outcome_key") or "",
+            column=column,
+        )
         return attrs
 
 
