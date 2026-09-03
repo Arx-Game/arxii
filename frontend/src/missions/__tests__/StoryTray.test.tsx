@@ -60,6 +60,7 @@ const LIVE_BEAT: BeatView = {
     },
   ],
   is_paused: false,
+  track: null,
 };
 
 const RESOLVED: ResolvedBeat = {

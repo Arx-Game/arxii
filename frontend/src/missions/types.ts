@@ -33,6 +33,7 @@ export type BeatView = components['schemas']['BeatView'];
 export type BeatOption = components['schemas']['BeatOption'];
 export type ResolvedBeat = components['schemas']['ResolvedBeat'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
+export type TrackView = components['schemas']['TrackView'];
 
 // #1753/#3040 mission after-action report surface.
 export type ReportStyle = components['schemas']['StyleEnum'];

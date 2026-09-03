@@ -48,6 +48,7 @@ from world.missions.services.resolution import (
     option_is_locally_live,
     present_options_for_character,
     resolve_option,
+    tier_is_success,
 )
 from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
 from world.narrative.constants import NarrativeCategory
@@ -301,13 +302,12 @@ def _approach_for_pick(
 def _is_success_tier(deed: MissionDeedRecord) -> bool:
     """True iff the deed's resolved outcome is at the success tier.
 
-    Reuses the codebase's ``CheckOutcome.success_level`` classification
-    (the same notion ``conditions``/``vitals``/``combat`` use). A BRANCH
-    deed has ``outcome is None`` (no dice) and is not a dice success.
+    Delegates to ``resolution.tier_is_success`` (#3568) - the same
+    ``CheckOutcome.success_level`` classification ``conditions``/``vitals``/
+    ``combat`` use. A BRANCH deed has ``outcome is None`` (no dice) and is
+    not a dice success.
     """
-    if deed.outcome is None:
-        return False
-    return int(deed.outcome.success_level) >= _SUCCESS_LEVEL
+    return tier_is_success(deed.outcome)
 
 
 def _joint_combined_success(

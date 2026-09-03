@@ -164,6 +164,23 @@ class JournalEntry:
 
 
 @dataclass(frozen=True)
+class TrackView:
+    """A track node's progress as the party sees it (#3568): counts only.
+
+    Built by ``services.play._track_view`` off ``MissionNode.track_successes``/
+    ``track_failures`` (the thresholds) and ``MissionTrackProgress`` (the
+    per-run counter, 0/0 when the run hasn't logged a deed here yet). The
+    leak boundary is deliberate: no opposition sheet, no check type, no
+    difficulty number - the party sees pips, not the math behind them.
+    """
+
+    successes: int
+    needed: int
+    failures: int
+    allowed: int
+
+
+@dataclass(frozen=True)
 class BeatOption:
     """One actionable option on the current beat, as the player sees it (#885).
 
@@ -198,6 +215,7 @@ class BeatView:
     flavor_text: str
     options: tuple[BeatOption, ...]
     is_paused: bool
+    track: TrackView | None = None
 
 
 @dataclass(frozen=True)
@@ -249,6 +267,7 @@ class GroupBeatView:
     is_paused: bool
     support_moves: tuple[SupportMove, ...] = ()
     declared_supports: tuple[SupportDeclarationView, ...] = ()
+    track: TrackView | None = None
 
 
 @dataclass(frozen=True)

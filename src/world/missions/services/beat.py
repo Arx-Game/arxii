@@ -77,6 +77,7 @@ def on_mission_complete_for_beat(
     *,
     route: MissionOptionRoute | None = None,
     option: MissionOption | None = None,
+    beat_outcome: BeatOutcome | None = None,
 ) -> MissionBeatTriggerRecord | None:
     """Record a Mission → Beat terminal trigger and complete the linked Beat.
 
@@ -91,6 +92,10 @@ def on_mission_complete_for_beat(
             authored ``required_outcome_key`` transition downstream can route
             on which ending fired. ``None`` when no single option resolved
             the terminal (defensive only - every real terminal has one).
+        beat_outcome: When given (#3568, a track node's authored terminal
+            outcome), overrides the outcome ``beat_outcome_for_route`` would
+            otherwise derive from ``route`` - the route's graded tier (when
+            any) still records as ``outcome_tier``.
 
     Returns:
         The recorded ``MissionBeatTriggerRecord``, or ``None`` when the
@@ -104,7 +109,7 @@ def on_mission_complete_for_beat(
         triggered_at=timezone.now(),
     )
     _MISSION_BEAT_TRIGGERS.append(record)
-    _complete_linked_beat(instance, route, option)
+    _complete_linked_beat(instance, route, option, beat_outcome=beat_outcome)
     return record
 
 
@@ -120,6 +125,8 @@ def _complete_linked_beat(
     instance: MissionInstance,
     route: MissionOptionRoute | None,
     option: MissionOption | None,
+    *,
+    beat_outcome: BeatOutcome | None = None,
 ) -> None:
     """Complete the instance's linked Beat via the stories service.
 
@@ -131,6 +138,9 @@ def _complete_linked_beat(
       * any other predicate type → ``record_gm_marked_outcome`` (also carries
         ``outcome_key``; GM_MARKED beats still resolve through the GM's own
         manual call otherwise).
+
+    ``beat_outcome`` (#3568), when given, replaces the outcome derived from
+    ``route``; the route's tier (if any) still records as ``outcome_tier``.
 
     Predicate-type mismatches and missing progress are logged and skipped —
     a beat-completion failure must never roll back the mission completion
@@ -177,6 +187,8 @@ def _complete_linked_beat(
         return
 
     outcome, tier = beat_outcome_for_route(route)
+    if beat_outcome is not None:
+        outcome = beat_outcome
     key = option.key if option is not None else ""
     participants = _run_personas(instance)
 

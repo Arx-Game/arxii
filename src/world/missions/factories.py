@@ -38,6 +38,7 @@ from world.missions.models import (
     MissionRewardQueue,
     MissionSupportDeclaration,
     MissionTemplate,
+    MissionTrackProgress,
 )
 
 # SubFactory import path, extracted to satisfy S1192.
@@ -212,6 +213,18 @@ class MissionNodeSnapshotFactory(DjangoModelFactory):
     instance = factory.SubFactory(MissionInstanceFactory)
     node = factory.SubFactory(MissionNodeFactory)
     participant = factory.SubFactory(MissionParticipantFactory)
+
+
+class MissionTrackProgressFactory(DjangoModelFactory):
+    """Factory for MissionTrackProgress (#3568)."""
+
+    class Meta:
+        model = MissionTrackProgress
+
+    instance = factory.SubFactory(MissionInstanceFactory)
+    node = factory.SubFactory(MissionNodeFactory)
+    successes = 0
+    failures = 0
 
 
 class MissionDeedRecordFactory(DjangoModelFactory):

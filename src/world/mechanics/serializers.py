@@ -284,7 +284,6 @@ class SituationChallengeLinkSerializer(serializers.ModelSerializer):
             "challenge_template",
             "challenge_template_name",
             "display_order",
-            "depends_on",
         ]
 
 

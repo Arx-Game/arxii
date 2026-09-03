@@ -137,12 +137,17 @@ class OptionKind(models.TextChoices):
     option's opponent lines; its routes key on the CheckOutcome tier that
     EncounterOutcomeMapping assigns to (encounter outcome, encounter_risk_level)
     (#3565).
+
+    CONTEST (#3568): a CHECK whose difficulty adds the opposition's passive
+    level term (`level_opposition`) for `opposition_sheet` at
+    `effective_combat_level`; tiers and routes are a CHECK's.
     """
 
     BRANCH = "branch", "Branch"
     CHECK = "check", "Check"
     EXTERNAL_ACT = "external_act", "External Act"
     ENCOUNTER = "encounter", "Encounter"
+    CONTEST = "contest", "Contest"
 
 
 class ExternalAct(models.TextChoices):

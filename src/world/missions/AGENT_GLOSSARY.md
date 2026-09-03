@@ -66,6 +66,42 @@ on the admin sentinel (#3444) alongside #3559's beat-level rows.
 _Avoid_: encounter beat (that's `Beat.kind=ENCOUNTER`, a different mechanism at a different
 layer - one grades a beat directly, the other grades one option inside a scenario run).
 
+**CONTEST Option**:
+A `MissionOption` with `option_kind=OptionKind.CONTEST` (#3568, ADR-0265). The party rolls
+`authored_check_type` against `instance.template.risk_tier` plus `_contest_opposition(option)`
+- `level_opposition(opposition_check_type, level=effective_combat_level(opposition_sheet),
+character=opposition_sheet.character)`, the same passive-level-term function every other
+`level_opposition` caller uses. `opposition_sheet` is an authored `CharacterSheet` (usually an
+NPC's) whose combat level sets the difficulty add-on; that sheet never rolls, never acts, and
+carries no state of its own - it is authored data, exactly like an ENCOUNTER option's opponent
+lines. `clean()`'s `_contest_errors` requires AUTHORED source, both `authored_check_type` and
+`opposition_check_type`, and `opposition_sheet`, and forbids `branch_target` - a CONTEST always
+resolves by dice, tiers and routes exactly like a CHECK's.
+_Avoid_: opposed roll (the opposition never rolls - only its passive level term enters the
+difficulty; an actual two-roll opposed contest was rejected, ADR-0265), resistance check
+(that's `compute_resist_increment`, a different mechanism), skill duel.
+
+**Track Node**:
+A `MissionNode` with both `track_successes` and `track_failures` set above zero (`is_track`,
+#3568, ADR-0265). Its CHECK/CONTEST options' routes may not set a destination
+(`MissionOptionRoute.clean()` forbids `target_node`/`is_random_set` there - "the track
+decides"); instead `_route_graded_outcome` hands each graded deed to `_advance_track`, which
+counts it (`tier_is_success`) on a per-run `MissionTrackProgress` row and, at a threshold,
+calls `_end_track` to route to the node's authored `track_success_target`/
+`track_failure_target` (null = terminal, with an authored `track_success_beat_outcome`/
+`track_failure_beat_outcome`) via `enter_node`/`_finish_terminal(beat_outcome=)`. `enter_node`
+resets the counter to 0/0 on every entry - a re-entered track is a fresh attempt, not a
+carried-over one. `clean()` forbids a track node on `ConflictMode.JOINT` (one party attempt
+would count as N per-participant attempts) and forbids ENCOUNTER/EXTERNAL_ACT options on a
+track (a track's tier comes only from a rolled CHECK or CONTEST deed). The party sees only
+`TrackView` (successes/needed/failures/allowed) rendered as pips on `BeatCard`/`GroupBeatCard`
+- no opposition sheet, check type, or difficulty number leaks through.
+_Avoid_: progress clock, countdown (both name a different mechanism - a story `Beat.clock_size`
+(#3567) is a tick count filled by combat rounds/the GM's advance gesture, resolving the beat
+EXPIRED when full: beat-scoped and time-driven; a track node counts graded CHECK/CONTEST deeds
+at one mission node, run-scoped and roll-driven), stage gate (that's the retired
+`SituationChallengeLink.depends_on`, which this replaces).
+
 **Tutorial Chain**:
 The seven-`MissionTemplate` new-player arc (`world.seeds.game_content.tutorial.seed_tutorial_dev`, the `"tutorial"` seed cluster) walking a level-1 character through room-trigger and examine-driven grants, an NPC-offered External-Act Beat, a Notice Board pickup, a Directed Summons follow-on, a covenant vow, and a Legend-Risk Floor job. Each template gates the next via the ordinary `has_completed_mission` predicate leaf on `availability_rule` — chain progress is nothing but `MissionInstance` rows; there is no dedicated tutorial-progress model or status. See ADR-0112.
 _Avoid_: quest chain, onboarding engine, tutorial system.
