@@ -270,9 +270,13 @@ class RunBeatAction(Action):
         staging a second one. Otherwise stages a ``Battle`` from
         ``staged.blueprint`` at the beat's mapped risk, routes it to this beat
         (``Battle.story_beat``, so ``activate_stakes_for_battle`` and
-        ``resolve_battle_beats`` scope to it), links the battle's Scene to the
-        beat's episode (``EpisodeScene``), grants the running GM ``is_gm`` on
-        that Scene (mirroring ``CreateBattleAction``), spawns every authored
+        ``resolve_battle_beats`` scope to it), sets ``battle.scene.running_beat``
+        so the battle's own scene (where the web navigates and where
+        ``stakes-summary`` reads from) shows this beat's declared-risk badge --
+        not just the GM's original scene, which ``execute()`` already stamps --
+        links the battle's Scene to the beat's episode (``EpisodeScene``), grants
+        the running GM ``is_gm`` on that Scene (mirroring ``CreateBattleAction``),
+        spawns every authored
         unit line, and enlists every active non-GM participant of the running
         scene on ``staged.party_side_role``.
         """
@@ -308,6 +312,8 @@ class RunBeatAction(Action):
             )
             battle.story_beat = beat
             battle.save(update_fields=["story_beat"])
+            battle.scene.running_beat = beat
+            battle.scene.save(update_fields=["running_beat"])
             EpisodeScene.objects.get_or_create(
                 episode=beat.episode,
                 scene=battle.scene,

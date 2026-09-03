@@ -20,6 +20,7 @@ from world.battles.factories import (
 from world.battles.models import Battle
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterTenureFactory
+from world.scenes.beat_selectors import running_beat_for_scene
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind
 from world.stories.factories import (
@@ -28,6 +29,7 @@ from world.stories.factories import (
     BeatStagedBattleUnitFactory,
 )
 from world.stories.models import EpisodeScene
+from world.stories.serializers import stakes_summary_for_beat
 
 
 class RunBeatActionBattleJourneyTests(RunBeatActionTestBase):
@@ -74,6 +76,18 @@ class RunBeatActionBattleJourneyTests(RunBeatActionTestBase):
         self.scene.refresh_from_db()
         self.assertEqual(self.scene.running_beat_id, self.beat.pk)
         self.assertEqual(result.data["battle_scene_id"], battle.scene_id)
+        self.assertEqual(battle.scene.running_beat_id, self.beat.pk)
+
+    def test_battle_scene_reports_the_beats_declared_risk(self) -> None:
+        """The battle's OWN scene (where the web navigates) shows the beat's
+        badge and stakes summary, not just the GM's original scene (#3569)."""
+        result = self._run()
+        battle = Battle.objects.get(pk=result.data["battle_id"])
+
+        self.assertEqual(running_beat_for_scene(battle.scene), self.beat)
+
+        summary = stakes_summary_for_beat(battle.scene.running_beat)
+        self.assertEqual(summary["declared_risk"], self.beat.risk)
 
     def test_units_spawn_on_their_side_at_their_place(self) -> None:
         result = self._run()
