@@ -95,9 +95,23 @@ AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
 
-# Ensure the Evennia log directory exists for all environments (including CI).
-LOG_DIR = os.path.join(GAME_DIR, "server", "logs")
+# Where Evennia writes server.log / portal.log / http_requests.log /
+# lockwarnings.log. Env-driven (#3599): production sets LOG_DIR=/var/log/arxii
+# in the EnvironmentFile (roles/secrets_vault arxii.env.j2) so the read-only
+# ops account can read the files; dev and CI keep Evennia's default under
+# the gamedir. Evennia derived the four file settings from ITS default at
+# import, so they are recomputed here; see log_paths.py. The directory must
+# already exist and be writable by the service user before this import in
+# production (roles/app_deploy creates it before the first Django command).
+from evennia_extensions.observability.log_paths import log_file_paths
+
+LOG_DIR = env("LOG_DIR", default=os.path.join(GAME_DIR, "server", "logs"))
 os.makedirs(LOG_DIR, exist_ok=True)
+_log_files = log_file_paths(LOG_DIR)
+SERVER_LOG_FILE = _log_files.server
+PORTAL_LOG_FILE = _log_files.portal
+HTTP_LOG_FILE = _log_files.http
+LOCKWARNING_LOG_FILE = _log_files.lockwarning
 
 # Required for django-allauth
 SITE_ID = os.environ.get("SITE_ID", 1)
