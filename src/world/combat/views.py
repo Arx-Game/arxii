@@ -356,16 +356,12 @@ class CombatEncounterViewSet(ModelViewSet):
                 .prefetch_related(
                     Prefetch(
                         "edges_as_a",
-                        queryset=PositionEdge.objects.filter(is_passable=True).only(
-                            "position_a_id", "position_b_id"
-                        ),
+                        queryset=PositionEdge.objects.filter(is_passable=True),
                         to_attr="passable_edges_as_a",
                     ),
                     Prefetch(
                         "edges_as_b",
-                        queryset=PositionEdge.objects.filter(is_passable=True).only(
-                            "position_a_id", "position_b_id"
-                        ),
+                        queryset=PositionEdge.objects.filter(is_passable=True),
                         to_attr="passable_edges_as_b",
                     ),
                     Prefetch(

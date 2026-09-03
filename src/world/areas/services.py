@@ -205,7 +205,7 @@ def area_subtree_pks(area: Area) -> list[int]:
     while frontier:
         parent_ids = frontier
         frontier = []
-        for child in Area.objects.filter(parent_id__in=parent_ids).only("pk", "parent_id"):
+        for child in Area.objects.filter(parent_id__in=parent_ids):
             if child.pk not in subtree:
                 subtree.add(child.pk)
                 frontier.append(child.pk)

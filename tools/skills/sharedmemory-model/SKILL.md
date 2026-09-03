@@ -44,6 +44,7 @@ Once a model instance is loaded, it is a persistent Python object in the identit
 - Pass raw field values through serializer context to avoid attribute traversal
 - Build parallel `{id: tuple}` lookups to "pre-resolve" related objects
 - Call `.values()` or `.values_list()` to avoid instantiating model objects you think are "too expensive"
+- Narrow a queryset with `.only(...)` or `.defer(...)`. The identity map answers every later load of that pk with the resident instance and never copies the fresh columns onto it, so a row first loaded narrowed stays narrowed for the whole process, and the next read of a missing column raises `KeyError` from Django's deferred-attribute getter (Sentry ARX2-9: the CG beginnings list narrowed codex grants, the Beginnings admin 500'd on `is_perspective` until restart). Narrowing saves nothing on a row that is loaded once and served from memory. If you genuinely want a projection rather than instances, that is the one place `.values_list()` belongs. Enforced by `lint_only_defer.py`; see ADR-0261.
 
 **Signs you are fighting SharedMemoryModel instead of using it:**
 - You wrote a function that fetches related data already reachable via FK walks
