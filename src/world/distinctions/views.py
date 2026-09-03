@@ -94,12 +94,12 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
                 Prefetch(
                     "mutually_exclusive_with",
-                    queryset=Distinction.objects.only("id", "name"),
+                    queryset=Distinction.objects.all(),
                     to_attr="prefetched_exclusive",
                 ),
                 Prefetch(
                     "codex_grants",
-                    queryset=DistinctionCodexGrant.objects.only("distinction_id", "entry_id"),
+                    queryset=DistinctionCodexGrant.objects.all(),
                     to_attr="cached_codex_grants",
                 ),
             )
@@ -484,12 +484,12 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             .prefetch_related(
                 Prefetch(
                     "mutually_exclusive_with",
-                    queryset=Distinction.objects.only("id", "name"),
+                    queryset=Distinction.objects.all(),
                     to_attr="cached_mutually_exclusive_with",
                 ),
                 Prefetch(
                     "parent_distinction__variants",
-                    queryset=Distinction.objects.only("id", "name"),
+                    queryset=Distinction.objects.all(),
                     to_attr="cached_variants",
                 ),
             )

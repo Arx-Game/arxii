@@ -105,7 +105,7 @@ def _build_scene_prefetches() -> list[Prefetch]:
         ),
         Prefetch(
             "dramatic_moment_tags",
-            queryset=DramaticMomentTag.objects.only("character_sheet_id", "scene_id"),
+            queryset=DramaticMomentTag.objects.all(),
             to_attr="cached_scene_drama_tags",
         ),
     ]
