@@ -6304,9 +6304,6 @@
 **Foreign Keys:**
   - situation_template -> mechanics.SituationTemplate [FK]
   - challenge_template -> mechanics.ChallengeTemplate [FK]
-  - depends_on -> mechanics.SituationChallengeLink [FK] (nullable)
-**Pointed to by:**
-  - dependents <- mechanics.SituationChallengeLink
 
 ### SituationInstance
 **Foreign Keys:**
@@ -6504,6 +6501,7 @@
   - participants <- missions.MissionParticipant
   - invites <- missions.MissionInvite
   - snapshots <- missions.MissionNodeSnapshot
+  - track_progress <- missions.MissionTrackProgress
   - group_ballots <- missions.MissionGroupBallot
   - deeds <- missions.MissionDeedRecord
   - support_declarations <- missions.MissionSupportDeclaration
@@ -6522,6 +6520,8 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - template -> missions.MissionTemplate [FK]
   - target_area -> areas.Area [FK] (nullable)
+  - track_success_target -> missions.MissionNode [FK] (nullable)
+  - track_failure_target -> missions.MissionNode [FK] (nullable)
   - allowed_riders -> checks.Consequence [M2M]
   - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
@@ -6551,6 +6551,8 @@
   - authored_check_type -> checks.CheckType [FK] (nullable)
   - branch_target -> missions.MissionNode [FK] (nullable)
   - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - opposition_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - opposition_check_type -> checks.CheckType [FK] (nullable)
   - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
   - opponent_lines <- missions.MissionOptionOpponentLine
@@ -6650,6 +6652,11 @@
   - story_scenario <- stories.StoryScenario
   - task_templates <- tasking.TaskTemplate
 
+### MissionTrackProgress
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - node -> missions.MissionNode [FK]
+
 ### Service Functions
 - `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False, room: 'ObjectDB | None' = None, skip_criminal: 'bool' = False) -> 'ApplyDeedRewardsResult' - Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' - Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
@@ -6662,7 +6669,7 @@
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' - Record entry into ``node`` and advance the run's position.`
 - `invite_to_mission(instance: 'MissionInstance', holder_persona: 'Persona', invitee_persona: 'Persona') -> 'MissionInvite' - Create a PENDING invite for ``invitee_persona`` to join ``instance``.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' - Return one :class:`JournalEntry` per mission this character is in.`
-- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None, option: 'MissionOption | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
+- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None, option: 'MissionOption | None' = None, beat_outcome: 'BeatOutcome | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' - Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' - Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0) -> 'MissionDeedRecord' - Resolve ``actor`` taking ``option`` at ``node``; return its deed.`

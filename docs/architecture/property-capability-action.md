@@ -1216,17 +1216,17 @@ The underlying check infrastructure (`perform_check()` in `world/checks`,
 **`SituationTemplate`** (SharedMemoryModel):
 - `name` (CharField, unique) — "Rising Cursed Flood", "Collapsing Mine"
 - `description_template` (TextField) — narrative framing
-- `challenges` M2M to `ChallengeTemplate` (with through model for
-  ordering and dependencies)
+- `challenges` M2M to `ChallengeTemplate` (with through model for ordering)
 - `category` FK to `ChallengeCategory`
 
 **`SituationChallengeLink`** — through model for Situation → Challenge M2M:
 - `situation_template` FK
 - `challenge_template` FK
 - `display_order` (PositiveIntegerField)
-- `depends_on` FK to self (nullable) — this Challenge is hidden until
-  the linked Challenge is resolved (e.g., curse anchor hidden until
-  flood is drained)
+- (a `depends_on` FK to self was authored here for stage-gating one Challenge behind another,
+  but never had a runtime reader; removed in #3568/ADR-0265 - multi-stage sequencing is
+  authored on the missions scenario graph instead, see `docs/systems/INDEX.md`'s "CONTEST
+  option and track nodes" entry)
 
 **`SituationInstance`** — a Situation placed in the world:
 - `template` FK to `SituationTemplate`

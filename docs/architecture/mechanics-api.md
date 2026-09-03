@@ -181,7 +181,8 @@ serializer), `location` (id + name), `target_object` (id + name), `is_active`,
 **SituationTemplateListSerializer**: `id`, `name`, `category` (name via source)
 
 **SituationTemplateDetailSerializer**: adds `description_template`, challenge
-links (nested with challenge template name, display_order, depends_on)
+links (nested with challenge template name, display_order - `depends_on` was removed in
+#3568/ADR-0265; multi-stage sequencing moved to the missions scenario graph)
 
 **SituationInstanceSerializer**: `id`, `template` (nested list-level serializer),
 `location` (id + name), `is_active`, `created_by` (id, nullable), `scene` (id,
