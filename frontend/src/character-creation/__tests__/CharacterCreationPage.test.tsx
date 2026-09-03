@@ -8,7 +8,7 @@
  * - Permission checks
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { distinctionKeys } from '@/hooks/useDistinctions';
 import { CharacterCreationPage } from '../CharacterCreationPage';
@@ -169,8 +169,10 @@ describe('CharacterCreationPage', () => {
         ).toBeInTheDocument();
       });
 
-      // The contents rail lists every chapter
-      expect(screen.getByText('Origin')).toBeInTheDocument();
+      // The contents rail lists every chapter. Origin's own record rail
+      // (Task 4) also has a row labeled "Origin", so scope to the nav.
+      const nav = screen.getByRole('navigation', { name: /chapters of your character/i });
+      expect(within(nav).getByText('Origin')).toBeInTheDocument();
     });
 
     it('renders the current stage component', async () => {
@@ -220,12 +222,15 @@ describe('CharacterCreationPage', () => {
     // generic PageTurn for either (each owns its own door, per the brief -
     // Origin/Review get theirs in Task 2). This replaces the old
     // disabled-button-at-the-edges behavior from the stepper/footer design.
+    // Origin's own door (Task 4) has no back door (nothing precedes it) and
+    // a forward door disabled until a realm is chosen.
     it('renders no page-turn back door on the first chapter (Origin)', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
         draft: mockEmptyDraft, // Stage.ORIGIN
         startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
       });
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {
@@ -240,7 +245,8 @@ describe('CharacterCreationPage', () => {
       });
 
       expect(screen.queryByRole('button', { name: /^‹ back/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /turn the page/i })).not.toBeInTheDocument();
+      const forwardDoor = screen.getByRole('button', { name: /turn the page/i });
+      expect(forwardDoor).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('renders no page-turn forward door on the last chapter (Review)', async () => {

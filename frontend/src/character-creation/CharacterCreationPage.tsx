@@ -186,7 +186,7 @@ export function CharacterCreationPage() {
   const renderStage = () => {
     switch (draft.current_stage) {
       case Stage.ORIGIN:
-        return <OriginStage draft={draft} />;
+        return <OriginStage draft={draft} onStageSelect={handleStageSelect} />;
       case Stage.HERITAGE:
         return <HeritageStage draft={draft} onStageSelect={handleStageSelect} />;
       case Stage.LINEAGE:
@@ -214,7 +214,7 @@ export function CharacterCreationPage() {
       case Stage.REVIEW:
         return <ReviewStage draft={draft} isStaff={isStaff} onStageSelect={handleStageSelect} />;
       default:
-        return <OriginStage draft={draft} />;
+        return <OriginStage draft={draft} onStageSelect={handleStageSelect} />;
     }
   };
 

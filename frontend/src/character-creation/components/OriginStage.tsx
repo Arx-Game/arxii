@@ -1,56 +1,71 @@
 /**
- * Stage 1: Origin Selection
+ * Chapter the First: Origin (#3540).
  *
- * Starting area selection with master-detail layout.
- * Left side shows condensed area cards, right side shows
- * an animated detail panel with the area's full description.
+ * One question, then the starting realms as index entries (each the capital
+ * of its realm, prose verbatim from the StartingArea row). Reading is free;
+ * the realm enters when the player chooses (never on hover, Decision 6), and
+ * choosing a different realm asks first because it clears the chapters that
+ * depended on it. The record rail lists the choice; it says nothing else
+ * (Decision 8).
  */
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
-import { Card, CardContent } from '@/components/ui/card';
-import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
+import {
+  ChapterLeaf,
+  ConfirmDialog,
+  Entry,
+  EntryDoors,
+  EntryList,
+  Marginalia,
+  Note,
+  PageTurn,
+  RecordRail,
+} from '../folio';
 import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries';
+import { Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, StartingArea } from '../types';
 import { getRealmTheme } from '../utils';
-import { getGradientColors, StartingAreaCard } from './StartingAreaCard';
+
+// PLACEHOLDER: a serializer field is the right home later; realm_theme is
+// currently a theme key, not a display name.
+const REALM_NAMES: Record<string, string> = {
+  arx: 'Arx',
+  umbros: 'The Umbral Empire',
+  luxen: 'The Holy Republic of Luxen',
+  inferna: 'The Grand Principality of Inferna',
+  ariwn: 'The Kingdoms of Ariwn',
+  aythirmok: 'The Northlands',
+  default: '',
+};
 
 interface OriginStageProps {
   draft: CharacterDraft;
+  onStageSelect: (stage: Stage) => void;
 }
 
-export function OriginStage({ draft }: OriginStageProps) {
+export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
   const { data: areas, isLoading, error } = useStartingAreas();
   const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
   const { setRealmTheme } = useRealmTheme();
-  const [hoveredArea, setHoveredArea] = useState<StartingArea | null>(null);
+  const [pending, setPending] = useState<StartingArea | null>(null);
 
-  const detailArea = hoveredArea ?? draft.selected_area ?? areas?.[0] ?? null;
+  const chosen = draft.selected_area;
 
-  // Set theme based on currently selected area when component mounts
   useEffect(() => {
-    if (draft.selected_area) {
-      setRealmTheme(getRealmTheme(draft.selected_area));
-    }
-  }, [draft.selected_area, setRealmTheme]);
+    if (chosen) setRealmTheme(getRealmTheme(chosen));
+  }, [chosen, setRealmTheme]);
 
-  const handleSelectArea = (area: StartingArea) => {
-    setRealmTheme(getRealmTheme(area));
-    // If changing area, clear heritage and species since they depend on area
-    const shouldClearDependents = draft.selected_area?.id !== area.id;
-
+  const apply = (area: StartingArea | null) => {
+    if (area) setRealmTheme(getRealmTheme(area));
+    const changing = chosen?.id !== area?.id;
     updateDraft.mutate({
       draftId: draft.id,
       data: {
-        selected_area_id: area.id,
-        ...(shouldClearDependents && {
+        selected_area_id: area?.id ?? null,
+        ...(changing && {
           selected_beginnings_id: null,
-          // 2026-07 audit: this was `species: ''` — a field that doesn't
-          // exist on the serializer, so the stale species silently survived
-          // an area switch and rode along to review/submit.
           selected_species_id: null,
           family_id: null,
         }),
@@ -58,125 +73,99 @@ export function OriginStage({ draft }: OriginStageProps) {
     });
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
+  const choose = (area: StartingArea) => {
+    if (chosen && chosen.id !== area.id) {
+      setPending(area);
+      return;
+    }
+    apply(area);
+  };
 
-  if (error) {
+  if (isLoading)
     return (
-      <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
-        Failed to load starting areas. Please try again.
-      </div>
+      <p className="ledger-line" aria-busy="true">
+        Opening the record.
+      </p>
     );
-  }
+  if (error)
+    return <p className="ledger-line">The starting realms could not be read. Try again.</p>;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-    >
-      <div className="mb-6">
-        <h2 className="theme-heading text-2xl font-bold">{copy?.origin_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.origin_intro ?? ''}</p>
-        {copy?.origin_lore_intro && (
-          <p className="mt-2 text-sm text-muted-foreground">{copy.origin_lore_intro}</p>
-        )}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        {/* Left: Area cards */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {areas?.map((area) => (
-            <StartingAreaCard
-              key={area.id}
-              area={area}
-              isSelected={draft.selected_area?.id === area.id}
-              isHighlighted={detailArea?.id === area.id}
-              onSelect={handleSelectArea}
-              onHover={setHoveredArea}
+    <>
+      <ChapterLeaf
+        stage={Stage.ORIGIN}
+        title={copy?.origin_heading ?? 'Where does the story begin?'}
+        aside={
+          <>
+            <RecordRail
+              rows={[{ label: 'Origin', value: chosen?.name }]}
+              ledger="One of eleven chapters begun."
             />
-          ))}
-        </div>
-
-        {/* Right: Detail panel (desktop only) */}
-        {detailArea && (
-          <div className="hidden lg:block">
-            <AreaDetailPanel
-              area={detailArea}
-              isSelected={draft.selected_area?.id === detailArea.id}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Mobile: Detail panel below cards */}
-      {detailArea && (
-        <div className="mt-6 lg:hidden">
-          <AreaDetailPanel
-            area={detailArea}
-            isSelected={draft.selected_area?.id === detailArea.id}
-          />
-        </div>
-      )}
-
-      {areas?.length === 0 && (
-        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-          No starting areas are currently available.
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-function AreaDetailPanel({ area, isSelected }: { area: StartingArea; isSelected: boolean }) {
-  const [color1, color2] = getGradientColors(area.name);
-
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={area.id}
-        initial={{ opacity: 0, x: 10 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -10 }}
-        transition={{ duration: 0.25 }}
-        className="sticky top-4"
+            <Marginalia id="note-change">
+              {/* PLACEHOLDER: Apostate rewrite */}
+              <Note lead="Choosing a different origin">
+                clears the chapters that depended on it. The record asks first.
+              </Note>
+            </Marginalia>
+          </>
+        }
       >
-        <Card className="overflow-hidden">
-          {/* Gradient header */}
-          <div
-            className="relative flex h-32 items-end p-6"
-            style={{
-              background: area.crest_image
-                ? `url(${area.crest_image}) center/cover`
-                : `linear-gradient(135deg, ${color1}, ${color2})`,
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            <h3 className="theme-heading relative text-2xl font-bold text-white drop-shadow-lg">
-              {area.name}
-            </h3>
-            {isSelected && (
-              <CheckCircle2 className="relative ml-auto h-6 w-6 text-white drop-shadow-lg" />
-            )}
-          </div>
-          <CardContent className="p-6">
-            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
-              {area.description}
-            </p>
-            {!area.is_accessible && (
-              <p className="mt-4 text-sm text-destructive">
-                This area is not currently accessible to your account.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
-    </AnimatePresence>
+        <EntryList label="Starting realms">
+          {areas?.map((area) => {
+            const isChosen = chosen?.id === area.id;
+            const closed = !area.is_accessible;
+            const realmName = REALM_NAMES[area.realm_theme] ?? REALM_NAMES.default;
+            return (
+              <Entry
+                key={area.id}
+                name={area.name}
+                tag={closed ? `${realmName} · closed to you` : realmName}
+                chosen={isChosen}
+                closed={closed}
+                open={isChosen}
+              >
+                {area.description.split(/\n\s*\n/).map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
+                {closed ? (
+                  // PLACEHOLDER: Apostate rewrite; the trust threshold is not on the serializer yet
+                  <p className="ledger-line">This door is closed to your account.</p>
+                ) : (
+                  <EntryDoors
+                    chooseLabel={`Begin in ${area.name}`}
+                    onChoose={() => choose(area)}
+                    chosen={isChosen}
+                    onSetAside={() => apply(null)}
+                  />
+                )}
+              </Entry>
+            );
+          })}
+        </EntryList>
+        <PageTurn
+          next={{
+            label: `Turn the page: ${STAGE_LABELS[Stage.HERITAGE]}`,
+            onClick: () => onStageSelect(Stage.HERITAGE),
+            disabled: !chosen,
+            reason: 'Choose a realm to turn the page.',
+          }}
+        />
+      </ChapterLeaf>
+      <ConfirmDialog
+        open={pending !== null}
+        title="Begin somewhere else"
+        confirmLabel="Begin again there"
+        cancelLabel="Keep what is written"
+        onConfirm={() => {
+          if (pending) apply(pending);
+          setPending(null);
+        }}
+        onCancel={() => setPending(null)}
+      >
+        {/* PLACEHOLDER: Apostate rewrite */}
+        The record has the story beginning in {chosen?.name}. Nothing written after Origin survives
+        a new beginning.
+      </ConfirmDialog>
+    </>
   );
 }
