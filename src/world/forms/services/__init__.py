@@ -608,6 +608,56 @@ def _append_blend_component(value: CharacterFormValue, new_option: FormTraitOpti
         FormValueComponent.objects.create(value=value, option=new_option, sort_order=next_order)
 
 
+def _apply_option(
+    form: CharacterForm, trait: FormTrait, new_option: FormTraitOption, *, blend: bool
+) -> tuple[CharacterFormValue, FormTraitOption | None]:
+    """Move the trait to `new_option`, returning the value and what it was before.
+
+    Blending onto an existing value mixes the two into the trait's composite option;
+    blending onto a brand-new value has nothing to mix with, so the "blend" is just
+    the colour itself and components stay empty. A non-blend change replaces the
+    whole look, so stale components go.
+    """
+    value, created = CharacterFormValue.objects.get_or_create(
+        form=form,
+        trait=trait,
+        defaults={"option": new_option, "natural_option": new_option},
+    )
+    if created:
+        return value, None
+    from_option = value.option
+    if blend:
+        _blend_component(value, trait, new_option)
+        return value, from_option
+    if value.option_id != new_option.id:
+        value.option = new_option
+        value.save(update_fields=["option"])
+    value.components.all().delete()
+    return value, from_option
+
+
+def _apply_descriptor(
+    persona: Persona, trait: FormTrait, descriptor: str | None
+) -> tuple[str, str]:
+    """Update the persona's free-text descriptor, returning (before, after).
+
+    `descriptor=None` leaves it untouched; `descriptor=""` clears it, so the render
+    falls back to the normalized value.
+    """
+    existing = PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).first()
+    from_text = existing.text if existing else ""
+    if descriptor is None:
+        return from_text, from_text
+    cleaned = descriptor.strip()
+    if not cleaned:
+        PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).delete()
+        return from_text, ""
+    PersonaTraitDescriptor.objects.update_or_create(
+        persona=persona, trait=trait, defaults={"text": cleaned}
+    )
+    return from_text, cleaned
+
+
 def change_appearance(  # noqa: PLR0913
     character: Any,
     trait: FormTrait,
@@ -643,41 +693,8 @@ def change_appearance(  # noqa: PLR0913
         raise TraitNotBlendableError
 
     form = _true_form(character)
-    value, created = CharacterFormValue.objects.get_or_create(
-        form=form,
-        trait=trait,
-        defaults={"option": new_option, "natural_option": new_option},
-    )
-    if blend and not created:
-        from_option = value.option
-        _blend_component(value, trait, new_option)
-    elif created:
-        from_option = None
-        if blend:
-            # Blending onto a bare value: nothing to mix with — the "blend" is
-            # just the color itself; components stay empty.
-            pass
-    else:
-        from_option = value.option
-        if value.option_id != new_option.id:
-            value.option = new_option
-            value.save(update_fields=["option"])
-        # Full application replaces the whole look — stale components go.
-        value.components.all().delete()
-
-    existing = PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).first()
-    from_text = existing.text if existing else ""
-    to_text = from_text
-    if descriptor is not None:
-        cleaned = descriptor.strip()
-        if cleaned:
-            PersonaTraitDescriptor.objects.update_or_create(
-                persona=persona, trait=trait, defaults={"text": cleaned}
-            )
-            to_text = cleaned
-        else:
-            PersonaTraitDescriptor.objects.filter(persona=persona, trait=trait).delete()
-            to_text = ""
+    value, from_option = _apply_option(form, trait, new_option, blend=blend)
+    from_text, to_text = _apply_descriptor(persona, trait, descriptor)
 
     AppearanceChangeLog.objects.create(
         form=form,
