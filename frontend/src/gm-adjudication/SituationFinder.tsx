@@ -19,7 +19,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useDiscovery } from './queries';
-import type { DiscoveryChallenge, DiscoveryKind, DiscoveryTemplate } from './types';
+import type {
+  DiscoveryChallenge,
+  DiscoveryDifficultyGuide,
+  DiscoveryKind,
+  DiscoveryTemplate,
+} from './types';
 import { CatalogSuggestionDialog } from './CatalogSuggestionDialog';
 
 export interface FinderActions {
@@ -46,6 +51,34 @@ interface KindCardProps {
   risk: string | null;
   actions: FinderActions;
   characterId: number | null;
+}
+
+interface DifficultyGuideBlockProps {
+  risk: string | null;
+  guide: DiscoveryDifficultyGuide | null;
+  allGuides: DiscoveryDifficultyGuide[];
+}
+
+function DifficultyGuideBlock({ risk, guide, allGuides }: DifficultyGuideBlockProps) {
+  if (guide) {
+    return (
+      <p>
+        At {risk} risk: {guide.recommended_difficulty}. {guide.guidance_text}
+      </p>
+    );
+  }
+  if (allGuides.length > 0) {
+    return (
+      <ul className="space-y-0.5">
+        {allGuides.map((g) => (
+          <li key={g.risk}>
+            {g.risk}: {g.recommended_difficulty}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <p className="text-muted-foreground">No difficulty guide yet</p>;
 }
 
 function KindCard({ kind, risk, actions, characterId }: KindCardProps) {
@@ -98,22 +131,11 @@ function KindCard({ kind, risk, actions, characterId }: KindCardProps) {
       )}
 
       <div data-testid="finder-guide" className="text-sm">
-        {kind.difficulty_guide ? (
-          <p>
-            At {risk} risk: {kind.difficulty_guide.recommended_difficulty}.{' '}
-            {kind.difficulty_guide.guidance_text}
-          </p>
-        ) : kind.all_guides.length > 0 ? (
-          <ul className="space-y-0.5">
-            {kind.all_guides.map((guide) => (
-              <li key={guide.risk}>
-                {guide.risk}: {guide.recommended_difficulty}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">No difficulty guide yet</p>
-        )}
+        <DifficultyGuideBlock
+          risk={risk}
+          guide={kind.difficulty_guide}
+          allGuides={kind.all_guides}
+        />
       </div>
 
       {kind.pool_guides.map((poolGuide) => (
