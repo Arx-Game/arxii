@@ -494,34 +494,41 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        # Re-emits every record into Twisted's log so it lands in server.log
+        # (#3599). In production twistd has no stdout, so without this the
+        # console handler's output is discarded.
+        "twisted_bridge": {
+            "class": "evennia_extensions.observability.log_bridge.TwistedLogHandler",
+            "formatter": "simple",
+        },
     },
     "root": {
-        "handlers": ["console"],
+        "handlers": ["console", "twisted_bridge"],
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
             "propagate": False,
         },
         "django.request": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "ERROR",
             "propagate": False,
         },
         "django.db.backends": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "WARNING",
             "propagate": False,
         },
         "world": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
             "propagate": False,
         },
         "evennia": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
             "propagate": False,
         },

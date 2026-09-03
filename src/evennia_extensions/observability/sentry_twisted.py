@@ -22,7 +22,8 @@ from typing import Any
 import sentry_sdk
 from twisted.logger import LogLevel, formatEvent, globalLogPublisher
 
-BRIDGE_MARKER = "arxii_bridged"
+from evennia_extensions.observability.log_bridge import BRIDGE_MARKER
+
 SENTRY_LOGGER_TAG = "evennia.twisted"
 
 _FORWARDED_LEVELS = frozenset({LogLevel.error, LogLevel.critical})
