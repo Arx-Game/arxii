@@ -2,11 +2,11 @@
 Tests for Codex API views.
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import (
     CharacterCodexKnowledgeFactory,
@@ -23,8 +23,7 @@ class CodexAPITestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        User = get_user_model()
-        cls.account = User.objects.create_user(username="testuser", password="testpass")
+        cls.account = AccountFactory(username="testuser")
 
         # Create category and subjects
         cls.category = CodexCategoryFactory(name="Test Category", description="Test description")
@@ -467,8 +466,7 @@ class TestCodexTreeQueryCount(TestCase):
 
     def test_authenticated_tree_query_count_constant_with_subjects(self):
         """Authenticated tree fetch is O(1) in subject count, not O(N)."""
-        User = get_user_model()
-        account = User.objects.create_user(username="qcuser", password="qcpass")
+        account = AccountFactory(username="qcuser")
         tenure = RosterTenureFactory(player_data__account=account)
         # Mark one restricted entry as known so the visibility set differs
         # from the public-only set (exercises the union path).
@@ -483,18 +481,22 @@ class TestCodexTreeQueryCount(TestCase):
         warmup = self.client.get("/api/codex/categories/tree/")
         assert warmup.status_code == status.HTTP_200_OK
 
-        # Steady-state queries for the authenticated tree endpoint:
+        # Steady-state queries for the authenticated tree endpoint (#3597: the
+        # account's roster entries and codex knowledge are cache hits after the
+        # warm-up above, so neither RosterEntry nor CharacterCodexKnowledge is
+        # queried here):
         #   1. SELECT django_session
-        #   2. SELECT the account's RosterEntries (character union scope)
-        #   3. SELECT CharacterCodexKnowledge rows for those entries
-        #   4. SELECT public CodexEntry ids
-        #   5. SELECT all CodexSubjects (subtree-visibility ancestor walk)
-        #   6. SELECT subject ids of the visible entries
-        #   7. SELECT top-level CodexSubjects (with has_children + entry_count)
-        #   8. SELECT CodexCategory list
+        #   2. SELECT public CodexEntry ids
+        #   3. SELECT PlayerData for the account (Account.player_data is a plain
+        #      property that get_or_creates on every access, so this one query
+        #      still fires even with the tenure cache warm)
+        #   4. SELECT all CodexSubjects (subtree-visibility ancestor walk)
+        #   5. SELECT subject ids of the visible entries
+        #   6. SELECT top-level CodexSubjects (with has_children + entry_count)
+        #   7. SELECT CodexCategory list
         # Prior to the N+1 fix this also fired one COUNT per subject; the
         # count must stay constant in the number of subjects and characters.
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(7):
             response = self.client.get("/api/codex/categories/tree/")
         assert response.status_code == status.HTTP_200_OK
 
@@ -504,6 +506,22 @@ class TestCodexTreeQueryCount(TestCase):
         assert relevant[self.subjects[0].name] == 3
         for subject in self.subjects[1:]:
             assert relevant[subject.name] == 2
+
+    def test_knowledge_granted_after_a_request_is_visible_on_the_next(self):
+        """The Account cache clears on a knowledge write, never on a request boundary."""
+        account = AccountFactory(username="qclate")
+        tenure = RosterTenureFactory(player_data__account=account)
+        restricted = self.subjects[1].entries.filter(is_public=False).first()
+        self.client.force_authenticate(user=account)
+        before = self.client.get("/api/codex/categories/tree/")
+        assert self._count_relevant(before.data)[self.subjects[1].name] == 2
+
+        CharacterCodexKnowledgeFactory(
+            roster_entry=tenure.roster_entry, entry=restricted, status=CodexKnowledgeStatus.KNOWN
+        )
+
+        after = self.client.get("/api/codex/categories/tree/")
+        assert self._count_relevant(after.data)[self.subjects[1].name] == 3
 
 
 class PerspectiveOfFieldTests(TestCase):

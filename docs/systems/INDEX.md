@@ -1564,7 +1564,8 @@ Lore storage and character knowledge tracking.
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`
   per-character breakdown in entry payloads) — `CodexVisibilityMixin` in
-  `world/codex/views.py`
+  `world/codex/views.py`; the account's knowledge map is `Account.cached_codex_knowledge`
+  (#3597), cleared on every knowledge write, so the mixin holds no per-request state
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
