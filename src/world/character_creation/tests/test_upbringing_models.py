@@ -65,33 +65,58 @@ class UpbringingFieldsTest(TestCase):
 
 
 class BackfillUpbringingsTest(TestCase):
-    """world.migrations.0220_upbringings.backfill_upbringings"""
+    """world.migrations.0220_upbringings.apply_family_known"""
 
-    def _run(self):
-        module = importlib.import_module("world.migrations.0220_upbringings")
-        module.backfill_upbringings(django_apps, None)
+    def setUp(self):
+        self.module = importlib.import_module("world.migrations.0220_upbringings")
+        self.OriginTemplate = django_apps.get_model("arxii", "OriginTemplate")
+        self.commoner = FamilyKindFactory(name=COMMONER_KIND_NAME)
 
-    def test_beginning_without_templates_gets_a_starter(self):
+    def test_no_templates_and_unknown_family_creates_an_unknown_starter(self):
         beginning = BeginningsFactory()
-        # Simulate the pre-migration flag via the module's own resolver hook.
-        module = importlib.import_module("world.migrations.0220_upbringings")
-        module.create_starter_for(
-            django_apps.get_model("arxii", "OriginTemplate"),
-            FamilyKindFactory(name=COMMONER_KIND_NAME),
-            beginning,
-            family_known=False,
+        self.module.apply_family_known(
+            self.OriginTemplate, self.commoner, beginning, family_known=False
         )
         starter = OriginTemplate.objects.get(beginning=beginning)
         assert starter.name == "Unknown"
         assert starter.allows_no_family
         assert not starter.allows_claim_family
-        module.create_starter_for(
-            django_apps.get_model("arxii", "OriginTemplate"),
-            FamilyKindFactory(name=COMMONER_KIND_NAME),
-            BeginningsFactory(),
-            family_known=True,
+        assert not starter.allows_name_family
+
+    def test_no_templates_and_known_family_creates_a_known_family_starter(self):
+        beginning = BeginningsFactory()
+        self.module.apply_family_known(
+            self.OriginTemplate, self.commoner, beginning, family_known=True
         )
-        known = OriginTemplate.objects.get(name="Known family")
-        assert known.allows_claim_family
-        assert known.allows_name_family
-        assert known.named_family_kind.name == COMMONER_KIND_NAME
+        starter = OriginTemplate.objects.get(beginning=beginning)
+        assert starter.name == "Known family"
+        assert starter.allows_claim_family
+        assert starter.allows_name_family
+        assert starter.named_family_kind.name == COMMONER_KIND_NAME
+
+    def test_existing_template_is_widened_not_duplicated_when_family_known(self):
+        beginning = BeginningsFactory()
+        template = OriginTemplateFactory(
+            beginning=beginning,
+            allows_name_family=False,
+            named_family_kind=None,
+            allows_no_family=True,
+        )
+        self.module.apply_family_known(
+            self.OriginTemplate, self.commoner, beginning, family_known=True
+        )
+        template.refresh_from_db()
+        assert template.allows_claim_family
+        assert template.allows_name_family
+        assert template.named_family_kind.name == COMMONER_KIND_NAME
+        assert OriginTemplate.objects.filter(beginning=beginning).count() == 1
+
+    def test_existing_template_is_widened_not_duplicated_when_family_unknown(self):
+        beginning = BeginningsFactory()
+        template = OriginTemplateFactory(beginning=beginning)  # factory default: name path
+        self.module.apply_family_known(
+            self.OriginTemplate, self.commoner, beginning, family_known=False
+        )
+        template.refresh_from_db()
+        assert template.allows_no_family
+        assert OriginTemplate.objects.filter(beginning=beginning).count() == 1

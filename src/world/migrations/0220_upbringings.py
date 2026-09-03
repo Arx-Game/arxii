@@ -30,6 +30,28 @@ def create_starter_for(origin_template_model, commoner, beginning, *, family_kno
     )
 
 
+def apply_family_known(OriginTemplate, commoner, beginning, *, family_known):  # noqa: N803
+    """Carry one Beginning's retired flag onto its Upbringings (#3617).
+
+    No existing OriginTemplate rows: create a single starter Upbringing.
+    Otherwise widen every existing row with the family path the flag implies,
+    rather than adding a new one, so a beginning already carrying authored
+    Upbringings keeps its row count.
+    """
+    templates = list(OriginTemplate.objects.filter(beginning=beginning))
+    if not templates:
+        create_starter_for(OriginTemplate, commoner, beginning, family_known=family_known)
+        return
+    for template in templates:
+        if family_known:
+            template.allows_claim_family = True
+            template.allows_name_family = True
+            template.named_family_kind = commoner
+        else:
+            template.allows_no_family = True
+        template.save()
+
+
 def backfill_upbringings(apps, schema_editor):
     """Carry ``Beginnings.family_known`` into starter/existing Upbringings (#3617).
 
@@ -45,19 +67,7 @@ def backfill_upbringings(apps, schema_editor):
         name="Commoner", defaults={"styles_as_house": False, "sort_order": 0}
     )[0]
     for beginning in Beginnings.objects.all():
-        known = beginning.family_known
-        templates = list(OriginTemplate.objects.filter(beginning=beginning))
-        if not templates:
-            create_starter_for(OriginTemplate, commoner, beginning, family_known=known)
-            continue
-        for template in templates:
-            if known:
-                template.allows_claim_family = True
-                template.allows_name_family = True
-                template.named_family_kind = commoner
-            else:
-                template.allows_no_family = True
-            template.save()
+        apply_family_known(OriginTemplate, commoner, beginning, family_known=beginning.family_known)
 
 
 def unbackfill_upbringings(apps, schema_editor):
