@@ -66,6 +66,17 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: template-comment
+        name: Reject multi-line {# #} comments in Django templates
+        entry: uv run python tools/lint_template_comment.py
+        language: system
+        pass_filenames: true
+        types: [html]
+        # Django's `{# #}` is single-line only — the lexer never joins lines, so
+        # an opening `{#` whose `#}` is on a later line is not a comment and every
+        # character of it renders to the page. Three of these shipped visible
+        # comment prose into the production admin index, the FormTraitOption
+        # change list and the tuning economy panel. `{% comment %}` spans lines.
       - id: identifier-dashes
         name: Reject em-dashes in names, keys and slugs (lookup bug)
         entry: uv run python tools/lint_identifier_dashes.py
