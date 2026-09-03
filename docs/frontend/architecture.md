@@ -36,3 +36,12 @@ this hook to display a **Log in** link for anonymous visitors or a dropdown with
 profile and logout actions for authenticated users. `useLogin` and `useLogout`
 mutations likewise update the slice automatically and attach the CSRF token from
 cookies so session authentication works without extra boilerplate.
+
+Both mutations also write through to the React Query `['account']` entry, which
+is what the route guards (`ProtectedRoute`, `StaffRoute`, `GMRoute`,
+`GuestOnlyRoute`) read via `useAuthStatus`. `useLogout` navigates to `/` itself
+after clearing the cache and writing `null` into `['account']` (#3592): clearing
+the cache alone never re-renders a mounted guard, so the guarded page stayed on
+screen, and a guard's own redirect goes to `/login`, which is the wrong
+destination for a deliberate logout. Logging out from any page lands on the
+logged-out home view.
