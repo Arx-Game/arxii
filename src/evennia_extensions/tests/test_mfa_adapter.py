@@ -1,4 +1,4 @@
-"""TOTP secrets and recovery seeds are encrypted at rest under MFA_SECRETS_KEY (#3591, ADR-0265)."""
+"""TOTP secrets and recovery seeds are encrypted at rest under MFA_SECRETS_KEY (#3591, ADR-0267)."""
 
 from cryptography.fernet import Fernet
 from django.core.checks import Error

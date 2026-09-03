@@ -30,7 +30,7 @@ Extends Evennia's functionality with additional models and data handlers while p
 - Integration utilities for data conversion
 
 ### `mfa_adapter.py`
-- **`ArxMFAAdapter`**: `MFA_ADAPTER` (#3591, ADR-0265) - encrypts what allauth
+- **`ArxMFAAdapter`**: `MFA_ADAPTER` (#3591, ADR-0267) - encrypts what allauth
   stores in `Authenticator.data` (TOTP secret, recovery-code seed) under
   `MFA_SECRETS_KEY` via `cryptography.fernet.MultiFernet`
 - `fernet_from_setting`, `split_keys` - parse the comma-separated key list,

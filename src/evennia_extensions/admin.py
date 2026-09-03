@@ -273,7 +273,7 @@ class EmailAddressAdmin(admin.ModelAdmin):
 
 
 # allauth's stock AuthenticatorAdmin shows Authenticator.data on the change form:
-# the TOTP secret and recovery-code seed (ciphertext since ADR-0265, but still
+# the TOTP secret and recovery-code seed (ciphertext since ADR-0267, but still
 # nothing staff should ever see). Re-registered read-only: the only staff action
 # is delete, which is the lockout reset (#3591, decision 12).
 with contextlib.suppress(admin.sites.NotRegistered):

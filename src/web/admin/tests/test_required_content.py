@@ -252,7 +252,7 @@ class TestRealDeclarations(TestCase):
         self.assertIn("rc_base_root", result.detail)
 
     def test_mfa_secrets_key_probe_reports_a_key_that_cannot_decrypt(self) -> None:
-        """A rotated-without-re-encrypt key locks every 2FA user out (#3591, ADR-0265)."""
+        """A rotated-without-re-encrypt key locks every 2FA user out (#3591, ADR-0267)."""
         from allauth.mfa.models import Authenticator
         from cryptography.fernet import Fernet
         from django.test import override_settings

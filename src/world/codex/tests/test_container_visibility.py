@@ -10,11 +10,11 @@ Knowledge is account-wide: a player sees the union of what all their
 characters know, optionally narrowed with ``?character=<roster_entry_id>``.
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import (
     CharacterCodexKnowledgeFactory,
@@ -30,8 +30,7 @@ class ContainerVisibilityTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        User = get_user_model()
-        cls.account = User.objects.create_user(username="viewer", password="testpass")
+        cls.account = AccountFactory(username="viewer")
         cls.tenure = RosterTenureFactory(player_data__account=cls.account)
         cls.roster_entry = cls.tenure.roster_entry
 
@@ -211,7 +210,7 @@ class TestAccountKnowledgeUnion(ContainerVisibilityTestCase):
         assert [row["roster_entry_id"] for row in known_by] == [self.roster_entry.id]
 
     def test_foreign_character_param_yields_public_only(self):
-        other_account = get_user_model().objects.create_user(username="other", password="testpass")
+        other_account = AccountFactory(username="other")
         other_tenure = RosterTenureFactory(player_data__account=other_account)
         CharacterCodexKnowledgeFactory(
             roster_entry=other_tenure.roster_entry,

@@ -1071,8 +1071,8 @@ of silently recording under the wrong scene. A scene with no location (`location
 is `None`) skips the check. `PlaceSerializer.viewer_is_present`
 (`place_views.py`) is a `SerializerMethodField` reporting whether one of the
 requesting account's owned personas has a `PlacePresence` row at that place;
-memoized per serializer instance so a places-list response shares one owned-persona
-lookup across all rows instead of re-querying per row. Scene poses submitted from
+reading the account's `cached_persona_ids` (one query per account per process, #3597)
+so a places-list response never re-queries per row. Scene poses submitted from
 `/game` take the REST `submit-pose` path, keyed by `scene_id` — a pose belongs to
 a scene, not a room, so this is unrelated to room id.
 

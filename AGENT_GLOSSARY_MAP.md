@@ -176,7 +176,7 @@ and approval data; `end_date` null means current. _Avoid_: ownership record.
 
 **Two-factor authentication (2FA)**:
 The player-facing name for an account's second sign-in factor (TOTP plus recovery
-codes), opt-in and never required (#3591, ADR-0264). `MFA` is allauth's code-level
+codes), opt-in and never required (#3591, ADR-0266). `MFA` is allauth's code-level
 name for the same feature and stays in code (`MFA_ADAPTER`, `MFA_SECRETS_KEY`,
 `allauth.mfa`); player-facing copy always says 2FA. _Avoid_: "MFA" in copy.
 

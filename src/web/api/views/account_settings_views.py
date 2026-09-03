@@ -1,4 +1,4 @@
-"""Account-level security settings (#3591, ADR-0264).
+"""Account-level security settings (#3591, ADR-0266).
 
 The single web-writable switch on ``PlayerData`` today: the opt-in telnet
 block that rides on opt-in 2FA. Modelled on ``VisibilitySettingsView``

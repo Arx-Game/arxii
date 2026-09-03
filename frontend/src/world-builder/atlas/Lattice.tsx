@@ -116,9 +116,11 @@ function slugify(value: string): string {
   const slug = value
     .trim()
     .toLowerCase()
+    // The collapse above leaves at most one dash at each end, so these match a
+    // single character rather than a run - no quantifier left to backtrack.
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '');
+    .replace(/^-/, '')
+    .replace(/-$/, '');
   return slug || 'area';
 }
 

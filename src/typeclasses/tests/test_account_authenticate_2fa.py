@@ -1,4 +1,4 @@
-"""Telnet password sign-in vs. opt-in 2FA (#3591, ADR-0264).
+"""Telnet password sign-in vs. opt-in 2FA (#3591, ADR-0266).
 
 Evennia's ``CmdUnconnectedConnect`` calls ``Account.authenticate`` on
 ``settings.BASE_ACCOUNT_TYPECLASS`` (``evennia/commands/default/unloggedin.py:75,149``),

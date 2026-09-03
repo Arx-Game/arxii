@@ -1,4 +1,4 @@
-# ADR-0264: Two-factor authentication is opt-in and telnet blocking is a second opt-in
+# ADR-0266: Two-factor authentication is opt-in and telnet blocking is a second opt-in
 
 **Date:** 2026-09-03
 **Status:** Accepted

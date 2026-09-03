@@ -124,3 +124,15 @@ app_premigrate_keep: 5
 # under Postgres on the box that has no standby) is far worse than a deploy
 # that stops and asks for attention.
 app_premigrate_free_space_ratio_percent: 50
+
+# Game log files (#3599). Evennia writes server.log / portal.log /
+# http_requests.log / lockwarnings.log under settings.LOG_DIR, which
+# settings.py reads from the environment; secrets_vault's arxii.env.j2
+# renders LOG_DIR from this value. Outside the release tree so the
+# read-only ops account (roles/ops_access, in the stock `adm` group) can
+# read them with plain tail/grep and no sudo. Owned arxii:adm 0750.
+app_log_dir: /var/log/arxii
+# Evennia rotates server.log/portal.log itself (daily or 1 MB) but never
+# deletes rotated copies, so a systemd-tmpfiles age rule prunes the dir;
+# logrotate on top of Evennia's own rotation would rotate the files twice.
+app_log_retention_days: 30

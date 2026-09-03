@@ -1,4 +1,4 @@
-"""allauth MFA adapter: TOTP secrets and recovery seeds encrypted at rest (#3591, ADR-0265).
+"""allauth MFA adapter: TOTP secrets and recovery seeds encrypted at rest (#3591, ADR-0267).
 
 allauth's default ``encrypt``/``decrypt`` are the identity, so ``Authenticator.data``
 would hold every player's TOTP secret in the clear, and so would every ``pg_dump``

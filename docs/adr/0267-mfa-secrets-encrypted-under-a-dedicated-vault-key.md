@@ -1,4 +1,4 @@
-# ADR-0265: MFA secrets are encrypted at rest under a dedicated vault key
+# ADR-0267: MFA secrets are encrypted at rest under a dedicated vault key
 
 **Date:** 2026-09-03
 **Status:** Accepted

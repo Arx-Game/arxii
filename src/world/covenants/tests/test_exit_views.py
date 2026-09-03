@@ -28,14 +28,12 @@ from world.roster.factories import (
 
 
 def _make_user(username: str, *, is_staff: bool = False) -> object:
-    from evennia.accounts.models import AccountDB
+    # Must be the typeclassed Account (evennia.utils.create.create_account), not a
+    # raw AccountDB row: request.user.cached_covenant_memberships (#3597) lives on
+    # the Account typeclass, and every view in this suite reads it.
+    from evennia_extensions.factories import AccountFactory
 
-    return AccountDB.objects.create_user(
-        username=username,
-        email=f"{username}@test.com",
-        password="testpass",
-        is_staff=is_staff,
-    )
+    return AccountFactory(username=username, email=f"{username}@test.com", is_staff=is_staff)
 
 
 def _setup_user_with_sheet(user: object) -> object:

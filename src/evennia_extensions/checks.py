@@ -9,7 +9,7 @@ from evennia_extensions.mfa_adapter import split_keys
 
 @register()
 def check_mfa_secrets_key(app_configs, **kwargs):  # noqa: ARG001
-    """Every key in ``MFA_SECRETS_KEY`` must be a valid Fernet key (#3591, ADR-0265).
+    """Every key in ``MFA_SECRETS_KEY`` must be a valid Fernet key (#3591, ADR-0267).
 
     Runs on ``migrate``/``check`` during the converge, before the release flips
     live, so a truncated or mis-pasted secret fails the deploy with a clear

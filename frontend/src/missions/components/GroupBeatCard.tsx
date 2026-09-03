@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useCastGroupVote, useGroupBeat, useSubmitGroupPick } from '../queries';
 import type { GroupBeatView, ResolvedBeat } from '../types';
+import { BeatTrack } from './BeatTrack';
 import { InvitePicker } from './InvitePicker';
 
 interface GroupBeatCardProps {
@@ -126,6 +127,8 @@ function GroupBeatView({
       </div>
 
       {beat.flavor_text ? <p className="whitespace-pre-wrap text-sm">{beat.flavor_text}</p> : null}
+
+      <BeatTrack track={beat.track} />
 
       <ParticipantRow beat={beat} />
 

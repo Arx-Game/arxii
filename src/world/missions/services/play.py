@@ -39,6 +39,7 @@ from world.missions.models import (
     MissionGroupBallot,
     MissionOptionRoute,
     MissionParticipant,
+    MissionTrackProgress,
 )
 from world.missions.services.multiplayer import build_group_option_list, resolve_group_node
 from world.missions.services.resolution import build_option_list, resolve_option
@@ -52,6 +53,7 @@ from world.missions.types import (
     ResolvedBeat,
     SupportDeclarationView,
     SupportMove,
+    TrackView,
 )
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import emit_ambient_room_stir, send_narrative_message
@@ -266,6 +268,27 @@ def beat_for(instance: MissionInstance, character: ObjectDB) -> BeatView | None:
         flavor_text=node.flavor_text,
         options=tuple(_beat_option(p) for p in presented),
         is_paused=instance.is_paused,
+        track=_track_view(instance, node),
+    )
+
+
+def _track_view(instance: MissionInstance, node: MissionNode) -> TrackView | None:
+    """The party's-eye view of a track node's progress (#3568); None off a track node.
+
+    Reads ``MissionTrackProgress`` (0/0 when the run hasn't logged a deed on
+    this node yet - matching ``enter_node``'s reset default). Counts only:
+    the opposition sheet and its rating never reach this payload.
+    """
+    if not node.is_track:
+        return None
+    progress = MissionTrackProgress.objects.filter(instance=instance, node=node).first()
+    successes = progress.successes if progress is not None else 0
+    failures = progress.failures if progress is not None else 0
+    return TrackView(
+        successes=successes,
+        needed=node.track_successes,
+        failures=failures,
+        allowed=node.track_failures,
     )
 
 
@@ -574,6 +597,7 @@ def _group_beat_view(
         is_paused=instance.is_paused,
         support_moves=support_moves,
         declared_supports=declared_supports,
+        track=_track_view(instance, node),
     )
 
 

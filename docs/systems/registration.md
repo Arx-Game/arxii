@@ -233,7 +233,7 @@ A signed-in player manages email, password, and two-factor authentication (2FA) 
 `/profile/account`. Every state change goes through `allauth.headless` endpoints
 already mounted at `/api/auth/` (`path("auth/", include("allauth.headless.urls"))`
 in `src/web/api/urls.py`); there are no home-grown
-credential views. See ADR-0264 (telnet's opt-in 2FA block) and ADR-0265 (secrets
+credential views. See ADR-0266 (telnet's opt-in 2FA block) and ADR-0267 (secrets
 encrypted at rest).
 
 ### Endpoints
@@ -402,14 +402,14 @@ Researched 2026-09-03 against allauth 65.14.1 and the prod infra in
 | 2 | Server clock drift fails every stored TOTP code at once (zero default tolerance). | `MFA_TOTP_TOLERANCE = 1`; a base-role task asserting `systemd-timesyncd` is enabled and active; runbook (d) above. |
 | 3 | allauth's stock interlock blocks email changes and 2FA enrolment from each other, meant to stop an attacker signing up, never verifying, and locking out the real owner. | `MFA_ALLOW_UNVERIFIED_EMAIL = True` lifts it; mandatory verification before login and the reauthentication gate on email changes preserve the property it protected. The 2FA card also hides "Set up" until the email is verified. |
 | 4 | allauth's per-IP rate limits read the first `X-Forwarded-For` entry, which a client can forge. | `ArxAccountAdapter.get_client_ip` prefers `X-Real-IP`, which Caddy sets from Cloudflare's `CF-Connecting-IP` and a client cannot forge. |
-| 5 | allauth's default `Authenticator.data` storage is plaintext; backups (`pg_dump` piped to gzip and shipped to object storage) carry no client-side encryption. | `ArxMFAAdapter` encrypts under `MFA_SECRETS_KEY` (ADR-0265); losing that key is the new failure mode, mitigated by the vault placement, the system check, and the `mfa-secrets-key` sentinel probe. |
+| 5 | allauth's default `Authenticator.data` storage is plaintext; backups (`pg_dump` piped to gzip and shipped to object storage) carry no client-side encryption. | `ArxMFAAdapter` encrypts under `MFA_SECRETS_KEY` (ADR-0267); losing that key is the new failure mode, mitigated by the vault placement, the system check, and the `mfa-secrets-key` sentinel probe. |
 | 6 | A player, or an administrator, loses their phone and recovery codes. | Runbooks (a) and (b) above. |
 | 7 | Used-code replay protection lives in Django's in-process cache, correct only for a single server process. | Noted; not acted on, since Evennia runs as one process. Revisit if Django is ever split across processes. |
 | 8 | The pending TOTP secret between setup and confirmation lives in the session. | Sessions are database-backed, so a reload mid-enrolment is safe; a player who logs out mid-enrolment simply starts over. |
 | 9 | An account with no usable password and no 2FA gets no reauthentication challenge (allauth's own documented gap). | Accepted; such an account can still enrol 2FA, after which the 2FA reauth challenge applies. |
 | 10 | The migration is additive (three `allauth.mfa` migrations creating one table, `Authenticator`, whose `type` column holds TOTP, recovery-codes, and WebAuthn rows alike, plus one first-party boolean with a default). | `migrate --noinput` on converge cannot lose or block anything; ADR-0237's data-disposition rule does not apply. |
 | 11 | Django's stock `AdminSite.login` never runs allauth's MFA stage, so a 2FA-enrolled staff account could sign into `/admin/login/` on its password alone. | `ArxAdminSite.login` wrapped with `secure_admin_login` (Admin, above). |
-| 12 | allauth's stock admin shows `Authenticator.data` (the secret, in the clear) to any staff member with admin access. | Read-only `AuthenticatorAdmin` with `data` excluded (Admin, above); with ADR-0265 the column is ciphertext regardless. |
+| 12 | allauth's stock admin shows `Authenticator.data` (the secret, in the clear) to any staff member with admin access. | Read-only `AuthenticatorAdmin` with `data` excluded (Admin, above); with ADR-0267 the column is ciphertext regardless. |
 | 13 | `pull-prod` copies encrypted secrets into a dev database, which cannot decrypt them without the prod key. | Harmless: the sentinel probe reports the mismatch. Never copy the prod `ARXII_MFA_SECRETS_KEY` into a dev `.env`. |
 
 ---

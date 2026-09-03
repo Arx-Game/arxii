@@ -122,11 +122,7 @@ export function PetitionPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 {CATEGORIES.map((option) => (
-                  <label
-                    key={option.value}
-                    htmlFor={`petition-category-${option.value}`}
-                    className="flex cursor-pointer items-start gap-2"
-                  >
+                  <div key={option.value} className="flex items-start gap-2">
                     <input
                       type="radio"
                       id={`petition-category-${option.value}`}
@@ -135,11 +131,18 @@ export function PetitionPage() {
                       checked={category.value === option.value}
                       onChange={() => setCategory(option)}
                     />
-                    <span>
-                      <span className="font-medium">{option.label}</span>
-                      <span className="block text-xs text-muted-foreground">{option.hint}</span>
-                    </span>
-                  </label>
+                    <div className="flex flex-col">
+                      {/* The label carries its text directly: nested inside a wrapper
+                          span it was too deep for the accessible-name check to see. */}
+                      <label
+                        htmlFor={`petition-category-${option.value}`}
+                        className="cursor-pointer font-medium"
+                      >
+                        {option.label}
+                      </label>
+                      <span className="text-xs text-muted-foreground">{option.hint}</span>
+                    </div>
+                  </div>
                 ))}
               </div>
               {category.requires === 'character' && characters.length > 1 && (
