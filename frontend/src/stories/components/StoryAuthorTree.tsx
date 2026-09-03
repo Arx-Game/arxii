@@ -32,6 +32,7 @@ import {
   useDeleteTransition,
 } from '../queries';
 import type { ChapterList, EpisodeList, Beat, Transition, Story } from '../types';
+import { formatRoutingRules } from '../routingRules';
 import { ChapterFormDialog } from './ChapterFormDialog';
 import { EpisodeFormDialog } from './EpisodeFormDialog';
 import { BeatFormDialog } from './BeatFormDialog';
@@ -106,15 +107,25 @@ function TransitionRow({ transition, sourceEpisodeId, storyId }: TransitionRowPr
   }
 
   const targetLabel = transition.target_episode_title ?? '(frontier)';
+  const ruleText = formatRoutingRules(transition.required_outcomes);
 
   return (
     <li
       className="flex items-center justify-between py-1 pl-6 text-xs"
       data-testid="transition-row"
     >
-      <span className="text-muted-foreground">
-        → <span className="font-medium text-foreground">{targetLabel}</span>
-      </span>
+      <div className="min-w-0 text-muted-foreground">
+        <span>
+          → <span className="font-medium text-foreground">{targetLabel}</span>
+        </span>
+        <p
+          className="truncate text-[11px]"
+          title={ruleText || undefined}
+          data-testid="transition-rule-text"
+        >
+          {ruleText || 'Always eligible'}
+        </p>
+      </div>
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
@@ -256,6 +267,7 @@ function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
 
   const beats = beatsData?.results ?? [];
   const transitions = transitionsData?.results ?? [];
+  const problems = episode.routing_problems ?? [];
 
   function handleDelete() {
     deleteMutation.mutate(episode.id, {
@@ -281,6 +293,16 @@ function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
           <span>{episode.title}</span>
           {episode.order !== undefined && (
             <span className="ml-1 text-xs text-muted-foreground">#{episode.order}</span>
+          )}
+          {problems.length > 0 && (
+            <Badge
+              variant="destructive"
+              className="ml-2"
+              title={problems.join('\n')}
+              data-testid="episode-routing-warning"
+            >
+              {problems.length} routing {problems.length === 1 ? 'problem' : 'problems'}
+            </Badge>
           )}
         </button>
         <div className="flex items-center gap-1 pr-1">
