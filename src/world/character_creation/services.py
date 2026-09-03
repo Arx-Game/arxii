@@ -133,6 +133,10 @@ def finalize_character(
 
     require_draft_complete(draft)
 
+    # NAMED-path family must exist before the name is built (#3617): the surname
+    # comes from the family name.
+    _ensure_named_family(draft)
+
     # Build character name
     full_name = _build_character_full_name(draft)
 
@@ -611,14 +615,25 @@ def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         sheet.birthday_day = draft.birthday_day
     if draft.selected_species:
         sheet.species = draft.selected_species
-    path = draft.resolve_family_path()
-    if path == FamilyPath.NAMED:
-        family = _create_named_family(draft)
-        draft.family = family  # downstream kinship binding reads draft.family
-        draft.save(update_fields=["family"])
-        sheet.family = family
-    elif draft.family:
+    if draft.family:
         sheet.family = draft.family
+
+
+def _ensure_named_family(draft: CharacterDraft) -> None:
+    """Create and bind the NAMED-path family before the character name is built (#3617).
+
+    Must run before ``_build_character_full_name`` (which reads ``draft.family``
+    to compose the surname) in both ``finalize_character`` and
+    ``finalize_gm_character`` — a NAMED-path draft otherwise finalizes with no
+    family yet on record and the surname silently falls back to the tarot ritual.
+    """
+    if draft.family_id is not None:
+        return
+    if draft.resolve_family_path() != FamilyPath.NAMED:
+        return
+    family = _create_named_family(draft)
+    draft.family = family  # downstream kinship binding also reads draft.family
+    draft.save(update_fields=["family"])
 
 
 def _create_named_family(draft: CharacterDraft) -> Family:
@@ -2449,6 +2464,10 @@ def finalize_gm_character(
             check_story_npc_cap(draft.account)
         except StaffMintError as exc:
             raise ValidationError(exc.user_message) from exc
+
+    # NAMED-path family must exist before the name is built (#3617): the surname
+    # comes from the family name.
+    _ensure_named_family(draft)
 
     # Build name — reuse helper (handles tarot surname for orphans, plain
     # first_name otherwise).

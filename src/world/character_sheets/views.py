@@ -103,7 +103,7 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
     def set_origin_slot_action(self, request: Request, pk: int | None = None) -> Response:
         """Set a character's origin-story slot answer (#2478, #3617).
 
-        A costed pick-list choice is set at character creation only — a non-staff
+        A costed pick-list choice is set at character creation only; a non-staff
         caller sending ``choice_id`` here is refused. A text-only write on a slot
         that already carries a choice keeps that choice (write-ins never clear it).
         """

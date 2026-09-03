@@ -47,6 +47,25 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         assert row.choice is None
         assert "We kept the cisterns." in sheet.background
 
+    def test_named_family_surname_used_in_character_name(self) -> None:
+        """The family is created (and its name used) before the character name (#3617).
+
+        ``_build_character_full_name`` composes ``f"{first_name} {family_name}"`` —
+        the NAMED-path family must therefore exist before that call, not just by
+        the time ``_apply_sheet_demographics`` runs afterward.
+        """
+        template = OriginTemplateFactory(beginning=self.beginnings)
+        draft = self._create_base_draft(first_name="Cara", new_family_name="The Cisternwrights")
+        draft.selected_origin_template = template
+        draft.draft_data.pop("tarot_card_name", None)
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        assert character.db_key == "Cara The Cisternwrights"
+        assert sheet.family.name == "The Cisternwrights"
+
 
 class ClaimedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
     def setUp(self) -> None:
