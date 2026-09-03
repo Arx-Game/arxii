@@ -1197,6 +1197,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "required_society",
             "required_organization",
             "required_standing",
+            "required_npc_sheet",
             # AGM / scheduling
             "agm_eligible",
             "deadline",
@@ -1328,6 +1329,7 @@ class BeatSerializer(serializers.ModelSerializer):
                 "required_society",
                 "required_organization",
                 "required_standing",
+                "required_npc_sheet",
                 "kind",
                 "advances",
                 "risk",

@@ -4,6 +4,25 @@
 The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically - the lowest authored `(order, pk)` eligible edge, never a runtime GM pick (#3565, ADR-0258; the retired mode was called GM Choice). Episodes are nodes and Transitions are edges - a Story progresses by satisfying Beats to make Transitions eligible.
 _Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition), GM choice (routing is never a runtime pick, #3565).
 
+**Beat predicate**:
+`Beat.predicate_type` (`BeatPredicateType`) - what an auto-evaluated Beat is
+actually gated on: `GM_MARKED` (no auto-evaluation), `CHARACTER_LEVEL_AT_LEAST`,
+`ACHIEVEMENT_HELD`, `CONDITION_HELD`, `CODEX_ENTRY_UNLOCKED`,
+`STORY_AT_MILESTONE`, `AGGREGATE_THRESHOLD` (write-path triggered, not
+`evaluate_auto_beats`), `OUTCOME_TIER` (the default; graded by a scenario run,
+encounter, battle, or decisive check), `FACTION_STANDING_AT_LEAST` (reads
+`SocietyReputation`/`OrganizationReputation.value`), and `NPC_REGARD_AT_LEAST`
+(#3570; reads `NpcRegard`, the NPC's signed opinion of the character's
+persona). Three memories can each hold "how an NPC feels about a character"
+and only one backs this last predicate type: `NpcRegard` (the notable-NPC
+opinion axis, `world.npc_services`, read by `NPC_REGARD_AT_LEAST`) is distinct
+from `NPCStanding.affection` (the functionary disposition track,
+`adjust_npc_affection`, ADR-0085) and from the relationships affection track
+(`CharacterRelationship`/`RelationshipTrackProgress`, `SHIFT_AFFECTION`) - a
+beat authored against the wrong memory silently never flips.
+_Avoid_: predicate (name the specific type), regard/standing used
+interchangeably (they are different memories with different writers).
+
 **Session prep**:
 What a GM authors on a Beat, ahead of the table, so `RunBeatAction` can
 instantiate it into the live scene in one press: an **opponent line**

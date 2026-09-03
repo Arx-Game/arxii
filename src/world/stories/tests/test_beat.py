@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.achievements.factories import AchievementFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.codex.factories import CodexEntryFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.societies.factories import OrganizationFactory, SocietyFactory
@@ -320,6 +321,41 @@ class BeatTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             beat.full_clean()
+
+    # --- NPC_REGARD_AT_LEAST invariants ---
+
+    def test_npc_regard_requires_sheet_and_standing(self) -> None:
+        beat = BeatFactory.build(
+            predicate_type=BeatPredicateType.NPC_REGARD_AT_LEAST, episode=EpisodeFactory()
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            beat.full_clean()
+        self.assertIn("required_npc_sheet", ctx.exception.message_dict)
+        self.assertIn("required_standing", ctx.exception.message_dict)
+
+    def test_faction_beat_rejects_required_npc_sheet(self) -> None:
+        beat = BeatFactory.build(
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            episode=EpisodeFactory(),
+            required_society=SocietyFactory(),
+            required_standing=5,
+            required_npc_sheet=CharacterSheetFactory(),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            beat.full_clean()
+        self.assertIn("required_npc_sheet", ctx.exception.message_dict)
+
+    def test_regard_beat_rejects_a_society(self) -> None:
+        beat = BeatFactory.build(
+            predicate_type=BeatPredicateType.NPC_REGARD_AT_LEAST,
+            episode=EpisodeFactory(),
+            required_npc_sheet=CharacterSheetFactory(),
+            required_standing=5,
+            required_society=SocietyFactory(),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            beat.full_clean()
+        self.assertIn("required_society", ctx.exception.message_dict)
 
 
 class BeatSetNullOnDeleteTests(TestCase):
