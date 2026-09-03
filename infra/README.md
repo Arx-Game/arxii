@@ -677,7 +677,7 @@ site.yml converge, not a bare Postgres install.
 
 ## Pull prod data down (dev/local)
 
-`just pull-prod confirm=yes` fetches the LATEST prod DB dump and restores it
+`just pull-prod yes` fetches the LATEST prod DB dump and restores it
 into your LOCAL dev Postgres (drop/recreate + `arx manage migrate`) — one
 command instead of the previous manual multi-step (#2236 Phase 4). It runs
 `infra/scripts/pull_prod_db.sh`, which:
