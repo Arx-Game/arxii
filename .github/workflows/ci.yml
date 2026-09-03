@@ -263,7 +263,7 @@ jobs:
     env:
       DEBUG: False
       SECRET_KEY: test-secret-key-for-ci-only
-      MFA_SECRETS_KEY: 8dKb0J3W9rG7yQ2mN5tX1cV4pL6sA8fH0jU2eR4wT6Y=
+      MFA_SECRETS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero bytes: valid Fernet shape, not a secret
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key
@@ -415,7 +415,7 @@ jobs:
         env:
           DEBUG: False
           SECRET_KEY: test-secret-key-for-ci-only
-          MFA_SECRETS_KEY: 8dKb0J3W9rG7yQ2mN5tX1cV4pL6sA8fH0jU2eR4wT6Y=
+          MFA_SECRETS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero bytes: valid Fernet shape, not a secret
           DATABASE_URL: postgresql://postgres@localhost:5432/unused
           CLOUDINARY_CLOUD_NAME: test-cloud
           CLOUDINARY_API_KEY: test-key
@@ -502,7 +502,7 @@ jobs:
     env:
       DEBUG: False
       SECRET_KEY: test-secret-key-for-ci-only
-      MFA_SECRETS_KEY: 8dKb0J3W9rG7yQ2mN5tX1cV4pL6sA8fH0jU2eR4wT6Y=
+      MFA_SECRETS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero bytes: valid Fernet shape, not a secret
       DATABASE_URL: postgresql://postgres@localhost:5432/arxii_test
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key

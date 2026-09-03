@@ -171,7 +171,7 @@
       ansible.builtin.command: /tmp/aws/install --update
       changed_when: true
 
-- name: Keep the host clock disciplined (TOTP codes fail site-wide past 30s of drift, #3591)
+- name: Keep the host clock disciplined (TOTP codes fail site-wide past 30s of drift, issue 3591)
   ansible.builtin.systemd:
     name: systemd-timesyncd
     enabled: true

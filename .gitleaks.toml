@@ -39,3 +39,9 @@ paths = [
   # still scans them.
   '''(^|/)migrations/[^/]*\.py$''',
 ]
+
+[[rules.allowlists]]
+description = "The CI-only MFA_SECRETS_KEY value committed to .github/workflows/ci.yml on the #3591 branch (2026-09-03) and replaced the same day by an all-zero key. Never used outside CI; the real key lives only in the prod Environment. Value-scoped (not path-scoped) so a rebase cannot invalidate it the way a commit fingerprint would."
+regexes = [
+  '''8dKb0J3W9rG7yQ2mN5tX1cV4pL6sA8fH0jU2eR4wT6Y=''',
+]
