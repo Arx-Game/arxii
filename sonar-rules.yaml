@@ -370,6 +370,19 @@ false_positives:
       satisfies the rule without breaking its purpose. The rule stays active and does
       catch real cases at call sites - PetitionPage's radios were one, fixed in #3608.
 
+  - rule: typescript:S6478
+    path: "frontend/src/character-creation/components/StageErrorBoundary.tsx"
+    why: >
+      "Move this component definition out of the parent component and pass data as
+      props", raised on react-error-boundary's `fallbackRender` prop. That prop IS a
+      render function - it is the library's supported channel for a fallback that needs
+      values from the enclosing scope (here currentStage and onNavigateToStage), and
+      `FallbackComponent` has no way to receive them. Hoisting would mean either a
+      factory that still defines a component per call or a context added solely to
+      appease the rule. Switching from FallbackComponent to fallbackRender in #3609 was
+      the right change for remount behaviour and did not clear this; the rule does not
+      distinguish a render prop from a component defined in render.
+
   - rule: typescript:S6767
     path: "frontend/src/combat/components/CombatRail.tsx"
     why: >

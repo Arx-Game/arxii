@@ -18,6 +18,24 @@ is the read side.
    Close the digest when every row is handled; the next run opens a fresh one if
    anything is still unresolved.
 
+## What reaches Sentry
+
+Two paths feed the project:
+
+- **Python `logging` at ERROR and above** (the SDK's stdlib integration): the
+  `web.api.exceptions` handler's "Unhandled API exception" traceback for every API
+  500, plus anything else that logs at ERROR. These carry the request context.
+- **Evennia's own log** (`log_err`, `log_trace`; #3599): everything Evennia writes
+  at error level to `server.log`, forwarded by a Twisted log observer. These are
+  tagged `logger: evennia.twisted` and carry no request context, because they
+  come from the game loop, not a view. A traceback that precedes an API 500 (the
+  ARX2-8 shape) shows up here.
+
+Request bodies are never sent (`max_request_body_size="never"`); cookies, the
+logged-in user and client IPs are withheld (`send_default_pii=False`); local
+variables in tracebacks are sent, with password/token/cookie/IP-named values
+blanked by the SDK's scrubber.
+
 ## Closing an issue with rigor
 
 Bugs here get fixed without anyone touching Sentry, so unresolved issues accumulate

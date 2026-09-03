@@ -217,7 +217,9 @@ restored_ap = offer.cancel()
 - Anonymous users see only `is_public=True` entries
 - Authenticated users see public entries plus the **union** of entries any of their
   playable characters has `CharacterCodexKnowledge` for (`CodexVisibilityMixin` in
-  `views.py`); `?character=<roster_entry_id>` narrows the scope to one character, and a
+  `views.py`); the account's knowledge map is `Account.cached_codex_knowledge` (#3597),
+  cleared on every knowledge write, so the mixin holds no per-request state;
+  `?character=<roster_entry_id>` narrows the scope to one character, and a
   foreign/unknown id yields public-only (never another player's knowledge)
 - Entry serializers expose `known_by` (per-character name/status/progress) alongside
   best-of-union `knowledge_status` and max `research_progress`

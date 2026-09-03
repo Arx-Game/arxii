@@ -1130,12 +1130,21 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(53):  # 49 + #1278 block/mute-gate loads + #2183 (below)
+        with self.assertNumQueries(51):  # 47 + #1278 block/mute-gate loads + #2183 (below)
             # #2183 adds exactly 2 flat (not per-row) queries: the
             # dramatic_moment_suggestions Prefetch itself, and the one
             # SceneParticipation.exists() query that resolves viewer_can_gm for
             # the ?scene= filter (see InteractionViewSet.get_serializer_context).
             # Both are bounded by "one query per request", never by row count.
+            # #3597 dropped this from 53 to 51: get_account_roster_entries and
+            # get_account_personas now read Account.cached_roster_entries /
+            # cached_persona_ids (cached_property on the Account instance) instead
+            # of running their own PlayerData lookup and a fresh Persona query per
+            # call. get_queryset() and get_serializer_context() each call both
+            # helpers, so the old request-scoped memo still paid for one roster
+            # query plus one persona query per call; the process-lifetime Account
+            # cache pays for one of each, total, no matter how many call sites hit
+            # it in this request.
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1215,12 +1224,17 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(53):  # 49 + #1278 block/mute-gate loads + #2183 (below)
+        with self.assertNumQueries(51):  # 47 + #1278 block/mute-gate loads + #2183 (below)
             # #2183 adds exactly 2 flat (not per-row) queries: the
             # dramatic_moment_suggestions Prefetch itself, and the one
             # SceneParticipation.exists() query that resolves viewer_can_gm for
             # the ?scene= filter (see InteractionViewSet.get_serializer_context).
             # Both are bounded by "one query per request", never by row count.
+            # #3597 dropped this from 53 to 51 (see the sibling test above for the
+            # full explanation): Account.cached_roster_entries / cached_persona_ids
+            # replace the old request-scoped memo, so get_queryset() and
+            # get_serializer_context() share one roster query and one persona
+            # query for the whole request instead of paying for each call site.
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

@@ -5,12 +5,15 @@ Lore storage and character knowledge tracking. Characters can learn entries
 from starting choices (Beginnings, Path, Distinctions) or through teaching.
 """
 
+from typing import ClassVar
+
 from django.core.exceptions import ValidationError
 from django.db import connection, models, transaction
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
 from world.action_points.models import ActionPointPool
 from world.codex.constants import CodexKnowledgeStatus
@@ -310,7 +313,7 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
             raise ValidationError({"subject_item_instance": msg})
 
 
-class CharacterCodexKnowledge(SharedMemoryModel):
+class CharacterCodexKnowledge(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Tracks what a character knows or is learning.
 
@@ -321,6 +324,11 @@ class CharacterCodexKnowledge(SharedMemoryModel):
     Learning progress tracks accumulated progress toward threshold,
     not ticks remaining (allows for variable/chance-based advancement).
     """
+
+    # A knowledge write must clear the playing account's ``cached_codex_knowledge``
+    # (#3597). The walk stops (getattr default None) when the character has no
+    # current tenure; the next tenure save clears the account anyway.
+    related_cache_fields: ClassVar[list[str]] = ["roster_entry.current_tenure.player_data.account"]
 
     roster_entry = models.ForeignKey(
         RosterEntry,

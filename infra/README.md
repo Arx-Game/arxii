@@ -433,6 +433,10 @@ server: the `ARXII_OPS_SSH_PUBKEY` Environment Variable) and both gates
 fail closed. Full setup + session workflow:
 `docs/operations/ops-access.md`.
 
+The game's log files live in `/var/log/arxii` (owned `arxii:adm`, pruned after
+30 days by systemd-tmpfiles), so `arxops` reads them with plain `tail`/`grep`;
+see "Reading the game logs" in that doc.
+
 ## Generating the SSH admin key (one-time)
 
 The button creates a brand-new Linode instance and Ansible needs to SSH into it

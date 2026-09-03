@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -354,13 +354,19 @@ class SceneUnseenObserver(SharedMemoryModel):
         return f"unseen observer on {self.scene_id} ({self.source_label})"
 
 
-class Persona(CachedPropertiesMixin, SharedMemoryModel):
+class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
     """A face the character shows the world.
 
     Every character has at least one primary persona (their 'real' identity).
     Established personas are persistent alter egos with their own reputation
     and relationships. Temporary personas are throwaway disguises.
     """
+
+    # A new mask or established persona must show up in the playing account's
+    # ``cached_persona_ids`` on the next request (#3597).
+    related_cache_fields: ClassVar[list[str]] = [
+        "character_sheet.roster_entry.current_tenure.player_data.account"
+    ]
 
     character_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,

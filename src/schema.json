@@ -40965,6 +40965,10 @@ components:
             $ref: '#/components/schemas/BeatOption'
         is_paused:
           type: boolean
+        track:
+          allOf:
+          - $ref: '#/components/schemas/TrackView'
+          nullable: true
       required:
       - flavor_text
       - instance_id
@@ -40972,6 +40976,7 @@ components:
       - node_key
       - options
       - template_name
+      - track
     BeatVisibilityEnum:
       enum:
       - hinted
@@ -52659,6 +52664,10 @@ components:
           nullable: true
         is_paused:
           type: boolean
+        track:
+          allOf:
+          - $ref: '#/components/schemas/TrackView'
+          nullable: true
       required:
       - ballots
       - conflict_mode
@@ -52669,6 +52678,7 @@ components:
       - node_key
       - options
       - phase
+      - track
     GroupPickRequestRequest:
       type: object
       description: 'POST body for the #1036 group-pick endpoint.'
@@ -56220,7 +56230,10 @@ components:
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
         sibling are both editable. ``location_mode``/``locations``/``target_area``
-        round-trip the node's location gate (#885, #888).
+        round-trip the node's location gate (#885, #888). ``track_successes``/
+        ``track_failures``/``track_success_target``/``track_failure_target``/
+        ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+        progress track (#3568): 0/0 = not a track.
       properties:
         id:
           type: integer
@@ -56320,6 +56333,28 @@ components:
           nullable: true
           description: Target area for AREA location_mode. A room matches when its
             RoomProfile.area is this area or any descendant via AreaClosure.
+        track_successes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_failures:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_success_target:
+          type: integer
+          nullable: true
+        track_failure_target:
+          type: integer
+          nullable: true
+        track_success_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        track_failure_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - conflict_mode
       - id
@@ -56334,7 +56369,10 @@ components:
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
         sibling are both editable. ``location_mode``/``locations``/``target_area``
-        round-trip the node's location gate (#885, #888).
+        round-trip the node's location gate (#885, #888). ``track_successes``/
+        ``track_failures``/``track_success_target``/``track_failure_target``/
+        ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+        progress track (#3568): 0/0 = not a track.
       properties:
         template:
           type: integer
@@ -56432,6 +56470,28 @@ components:
           nullable: true
           description: Target area for AREA location_mode. A room matches when its
             RoomProfile.area is this area or any descendant via AreaClosure.
+        track_successes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_failures:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_success_target:
+          type: integer
+          nullable: true
+        track_failure_target:
+          type: integer
+          nullable: true
+        track_success_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        track_failure_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - conflict_mode
       - key
@@ -56573,6 +56633,8 @@ components:
         child list -- create()/update() diff-sync it against the option's
         existing rows by id (add/edit/delete), same pattern as
         ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+        ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+        the authored opposition whose passive level term adds to the difficulty.
       properties:
         id:
           type: integer
@@ -56646,6 +56708,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionOptionOpponentLine'
+        opposition_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          nullable: true
+        opposition_check_type:
+          type: integer
+          nullable: true
       required:
       - id
       - node
@@ -56719,6 +56788,8 @@ components:
         child list -- create()/update() diff-sync it against the option's
         existing rows by id (add/edit/delete), same pattern as
         ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+        ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+        the authored opposition whose passive level term adds to the difficulty.
       properties:
         node:
           type: integer
@@ -56790,6 +56861,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionOptionOpponentLineRequest'
+        opposition_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          nullable: true
+        opposition_check_type:
+          type: integer
+          nullable: true
       required:
       - node
       - option_kind
@@ -59156,12 +59234,14 @@ components:
       - check
       - external_act
       - encounter
+      - contest
       type: string
       description: |-
         * `branch` - Branch
         * `check` - Check
         * `external_act` - External Act
         * `encounter` - Encounter
+        * `contest` - Contest
     OrgAppeal:
       type: object
       description: |-
@@ -66147,7 +66227,10 @@ components:
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
         sibling are both editable. ``location_mode``/``locations``/``target_area``
-        round-trip the node's location gate (#885, #888).
+        round-trip the node's location gate (#885, #888). ``track_successes``/
+        ``track_failures``/``track_success_target``/``track_failure_target``/
+        ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+        progress track (#3568): 0/0 = not a track.
       properties:
         template:
           type: integer
@@ -66245,6 +66328,28 @@ components:
           nullable: true
           description: Target area for AREA location_mode. A room matches when its
             RoomProfile.area is this area or any descendant via AreaClosure.
+        track_successes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_failures:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_success_target:
+          type: integer
+          nullable: true
+        track_failure_target:
+          type: integer
+          nullable: true
+        track_success_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        track_failure_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
     PatchedMissionOfferDetailsRequest:
       type: object
       description: |-
@@ -66313,6 +66418,8 @@ components:
         child list -- create()/update() diff-sync it against the option's
         existing rows by id (add/edit/delete), same pattern as
         ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+        ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+        the authored opposition whose passive level term adds to the difficulty.
       properties:
         node:
           type: integer
@@ -66384,6 +66491,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MissionOptionOpponentLineRequest'
+        opposition_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          nullable: true
+        opposition_check_type:
+          type: integer
+          nullable: true
     PatchedMissionOptionRouteCandidateRequest:
       type: object
       description: Editor CRUD for MissionOptionRouteCandidate (random-set rolls).
@@ -74527,9 +74641,6 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-        depends_on:
-          type: integer
-          nullable: true
       required:
       - challenge_template
       - challenge_template_name
@@ -79427,6 +79538,28 @@ components:
         * `none` - No Titles
         * `primary` - Primary Title
         * `all` - All Titles
+    TrackView:
+      type: object
+      description: |-
+        Read-only mirror of :class:`world.missions.types.TrackView` (#3568).
+
+        Counts only - no opposition sheet, no check type, no difficulty number
+        reaches the player payload (the leak boundary is enforced upstream in
+        ``services.play._track_view``, not here).
+      properties:
+        successes:
+          type: integer
+        needed:
+          type: integer
+        failures:
+          type: integer
+        allowed:
+          type: integer
+      required:
+      - allowed
+      - failures
+      - needed
+      - successes
     TradeItemStake:
       type: object
       properties:

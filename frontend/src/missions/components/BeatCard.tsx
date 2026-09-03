@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useBeat, useResolveBeat } from '../queries';
 import type { BeatOption, ResolvedBeat } from '../types';
+import { BeatTrack } from './BeatTrack';
 
 interface BeatCardProps {
   instanceId: number;
@@ -61,6 +62,7 @@ export function BeatCard({ instanceId, roomKey }: BeatCardProps) {
   return (
     <div className="space-y-2 rounded border bg-card p-3" data-testid="beat-card">
       {beat.flavor_text ? <p className="whitespace-pre-wrap text-sm">{beat.flavor_text}</p> : null}
+      <BeatTrack track={beat.track} />
       {beat.options.length === 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="beat-not-here">
           Nothing presents itself here: this story waits somewhere else.

@@ -228,15 +228,6 @@ class SituationChallengeLinkTests(TestCase):
     def test_challenges_through_m2m(self) -> None:
         self.assertIn(self.challenge, self.situation.challenges.all())
 
-    def test_dependency(self) -> None:
-        challenge2 = ChallengeTemplateFactory(name="Boss")
-        link2 = SituationChallengeLinkFactory(
-            situation_template=self.situation,
-            challenge_template=challenge2,
-            depends_on=self.link,
-        )
-        self.assertEqual(link2.depends_on, self.link)
-
     def test_unique_situation_challenge(self) -> None:
         with self.assertRaises(IntegrityError):
             SituationChallengeLinkFactory(

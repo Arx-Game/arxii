@@ -30,7 +30,8 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **ChallengeApproach** — links an Application to a Challenge with check type and optional effect property constraint
 - **ApproachConsequence** — approach-specific consequence overrides
 - **SituationTemplate** — composed groups of Challenges with narrative framing
-- **SituationChallengeLink** — ordering and dependencies between Challenges in a Situation
+- **SituationChallengeLink** - ordering between Challenges in a Situation (`display_order` only;
+  the `depends_on` column was removed in #3568/ADR-0265 - see Phase 5.7)
 - **SituationInstance, ChallengeInstance** — runtime instances tied to locations
 - **CharacterChallengeRecord** — tracks character attempts and outcomes
 - **ConsequenceEffect** — structured effects on consequences (condition, property, damage, flow, codex)
@@ -350,9 +351,14 @@ The Situation and Challenge models exist but there is no runtime lifecycle.
 `ChallengeInstance` rows. The GM trigger mechanism is also solved (#1895):
 `SetSituationAction` + `CmdSetSituation`, mirroring `SetTheStageAction`.
 
+**Ruled (#3568, ADR-0265):** multi-stage scenes are authored on the missions scenario graph,
+not on Situation/Challenge dependencies - the scenario graph (`MissionNode`/`MissionOption`/
+routes) already sequences and routes, and `SituationChallengeLink.depends_on` never had a
+runtime reader. `depends_on` is removed (deliberate discard, no reader ever existed); Situations
+stay flat obstacle sets that a scenario node can pull in. See `docs/systems/INDEX.md`'s
+"CONTEST option and track nodes" entry in Missions & Living Grid for what replaced it.
+
 **Still needs design:**
-- How SituationChallengeLink dependencies work at runtime (completing one
-  Challenge unlocks the next)
 - Instance lifecycle and cleanup (when do they deactivate/disappear?)
 - How scene FK works (Situation tied to active scene recording?)
 
@@ -518,8 +524,13 @@ section for the full design.
 - **Battle Scenes** — large-scale battles could model each round's decision as a Situation with Challenges representing strategic objectives
 
 ### Missions (world/missions — not yet built)
-- **Mission stages map to SituationInstances** — each decision point in a branching mission is a Situation containing Challenges
-- **SituationChallengeLink dependencies** model branching: completing one Challenge unlocks the next, with optional paths based on which approach was used
+- **Superseded (#3568, ADR-0265):** the two bullets below described branching missions as
+  SituationInstances chained by SituationChallengeLink dependencies. Missions shipped on a
+  different primitive instead - the `world.missions` scenario graph (`MissionNode`/
+  `MissionOption`/routes) - and `SituationChallengeLink.depends_on` was removed as a dead
+  column (never had a runtime reader). Kept for history, not as a live design:
+  - ~~Mission stages map to SituationInstances~~ - each decision point in a branching mission is a Situation containing Challenges
+  - ~~SituationChallengeLink dependencies~~ model branching: completing one Challenge unlocks the next, with optional paths based on which approach was used
 - **Mission generation** — randomly generated missions compose from ChallengeTemplate and SituationTemplate libraries
 - **World consequences** — ChallengeConsequence outcomes feed into world state changes (territory shifts, alerts, reputation)
 

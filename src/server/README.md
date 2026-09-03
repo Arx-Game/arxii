@@ -33,6 +33,10 @@ server to apply changes done here. The most important file is the file
 
 ## server/logs/
 
-This subdirectory holds various log files created by the running
-Evennia server. It is also the default location for storing any custom
-log files you might want to output using Evennia's logging mechanisms.
+The default location of the log files the running Evennia server creates
+(`server.log`, `portal.log`, `http_requests.log`, `lockwarnings.log`) and of any
+custom log files written through Evennia's logging helpers. The location is
+`settings.LOG_DIR`, read from the `LOG_DIR` environment variable; production
+sets it to `/var/log/arxii` (see `docs/operations/ops-access.md`), dev and CI
+leave it here. `settings.py` recomputes the four file settings from `LOG_DIR`,
+because Evennia derives them from its own default at import time.

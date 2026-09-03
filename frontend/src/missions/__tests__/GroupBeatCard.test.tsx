@@ -36,6 +36,7 @@ const PICK_BEAT: GroupBeatResult = {
     ],
     expires_at: null,
     is_paused: false,
+    track: null,
   },
   resolved: null,
 };

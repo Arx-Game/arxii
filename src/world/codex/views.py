@@ -18,13 +18,13 @@ from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from world.codex.filters import CodexEntryFilter
 from world.codex.models import (
     BeginningsCodexGrant,
-    CharacterCodexKnowledge,
     CodexCategory,
     CodexEntry,
     CodexSubject,
@@ -68,40 +68,25 @@ def _subjects_with_visible_entries(visible_entry_ids: set[int]) -> set[int]:
 class CodexVisibilityMixin:
     """Account-scoped visibility and knowledge resolution for codex viewsets.
 
-    Replaces the old implicit first-roster-entry selection: knowledge is the
-    union across every character the account can currently play, optionally
-    narrowed by ``?character=<roster_entry_id>``. A ``character`` id that is
-    not one of the account's own yields public-only visibility -- it can
+    Knowledge is the union across every character the account can currently
+    play, optionally narrowed by ``?character=<roster_entry_id>``. A ``character``
+    id that is not one of the account's own yields public-only visibility; it can
     never widen into another player's knowledge.
-    """
 
-    _knowledge_map: dict[int, list[CharacterKnowledge]] | None = None
-    _selected_entries: list[RosterEntry] | None = None
-    _visible_entry_id_set: set[int] | None = None
+    Nothing is memoized here (#3597, ADR-0260): roster entries and knowledge come
+    from the Account typeclass's caches (``cached_roster_entries`` /
+    ``cached_codex_knowledge``, zero queries after the first per process), so
+    reading them more than once per request costs nothing extra. The public-entry
+    set is not cached anywhere - it is fetched once per request by whichever
+    action needs it and passed down.
+    """
 
     def _selected_roster_entries(self) -> list[RosterEntry]:
         """The account's playable roster entries, narrowed by ``?character=``."""
-        if self._selected_entries is not None:
-            return self._selected_entries
-        self._selected_entries = self._resolve_selected_roster_entries()
-        return self._selected_entries
-
-    def _resolve_selected_roster_entries(self) -> list[RosterEntry]:
         request = self.request
         if not request.user.is_authenticated:
             return []
-        try:
-            player_data = request.user.player_data
-        except AttributeError:
-            return []
-        characters = player_data.get_available_characters()
-        if not characters:
-            return []
-        entries = list(
-            RosterEntry.objects.filter(character_sheet__character__in=characters).select_related(
-                "character_sheet__character"
-            )
-        )
+        entries = request.user.get_available_roster_entries()
         raw = request.query_params.get("character")  # noqa: USE_FILTERSET - knowledge scope, not a queryset filter
         if raw is None:
             return entries
@@ -112,39 +97,27 @@ class CodexVisibilityMixin:
         return [entry for entry in entries if entry.pk == wanted]
 
     def _knowledge_by_entry(self) -> dict[int, list[CharacterKnowledge]]:
-        """Map entry id -> selected characters' knowledge rows, one query."""
-        if self._knowledge_map is not None:
-            return self._knowledge_map
-        knowledge: dict[int, list[CharacterKnowledge]] = {}
+        """Map entry id -> selected characters' knowledge rows, from the Account cache."""
         roster_entries = self._selected_roster_entries()
-        if roster_entries:
-            rows = CharacterCodexKnowledge.objects.filter(
-                roster_entry__in=roster_entries
-            ).select_related("roster_entry__character_sheet__character")
-            for row in rows:
-                knowledge.setdefault(row.entry_id, []).append(
-                    CharacterKnowledge(
-                        roster_entry_id=row.roster_entry_id,
-                        character_name=row.roster_entry.character_sheet.character.name,
-                        status=row.status,
-                        learning_progress=row.learning_progress,
-                    )
-                )
+        if not roster_entries:
+            return {}
+        by_roster_entry = self.request.user.cached_codex_knowledge
+        knowledge: dict[int, list[CharacterKnowledge]] = {}
+        for roster_entry in roster_entries:
+            for entry_id, item in by_roster_entry.get(roster_entry.pk, {}).items():
+                knowledge.setdefault(entry_id, []).append(item)
         for rows_for_entry in knowledge.values():
             rows_for_entry.sort(key=lambda item: item.character_name)
-        self._knowledge_map = knowledge
         return knowledge
 
     def _visible_entry_ids(self) -> set[int]:
-        """Public entries plus every entry a selected character has a row for."""
-        if self._visible_entry_id_set is not None:
-            return self._visible_entry_id_set
-        public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
-        self._visible_entry_id_set = public_ids | set(self._knowledge_by_entry())
-        return self._visible_entry_id_set
+        """Public entries plus every entry a selected character has a row for.
 
-    def _visible_subject_ids(self) -> set[int]:
-        return _subjects_with_visible_entries(self._visible_entry_ids())
+        One query (the public set). Call it once per action and pass the result
+        to ``_subjects_with_visible_entries``; never call it twice in one request.
+        """
+        public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
+        return public_ids | set(self._knowledge_by_entry())
 
 
 class CodexCategoryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
@@ -156,10 +129,11 @@ class CodexCategoryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Only categories with at least one visible subject."""
+        visible_subject_ids = _subjects_with_visible_entries(self._visible_entry_ids())
         visible_category_ids = set(
-            CodexSubject.objects.filter(
-                parent=None, id__in=self._visible_subject_ids()
-            ).values_list("category_id", flat=True)
+            CodexSubject.objects.filter(parent=None, id__in=visible_subject_ids).values_list(
+                "category_id", flat=True
+            )
         )
         return CodexCategory.objects.filter(id__in=visible_category_ids).order_by(
             "display_order", "name"
@@ -173,7 +147,7 @@ class CodexCategoryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
         action. This avoids deep nested prefetches that perform poorly.
         """
         visible_entry_ids = self._visible_entry_ids()
-        visible_subject_ids = self._visible_subject_ids()
+        visible_subject_ids = _subjects_with_visible_entries(visible_entry_ids)
 
         # Two flat queries (categories + top-level subjects with annotation),
         # grouped in Python via the serializer context.
@@ -229,8 +203,9 @@ class CodexSubjectViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
+        visible_subject_ids = _subjects_with_visible_entries(self._visible_entry_ids())
         return CodexSubject.objects.select_related("category", "parent", "breadcrumb_cache").filter(
-            id__in=self._visible_subject_ids()
+            id__in=visible_subject_ids
         )
 
     @action(detail=True, methods=["get"])
@@ -239,9 +214,13 @@ class CodexSubjectViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 
         Used for lazy-loading tree expansion in the UI.
         """
-        subject = self.get_object()
         visible_entry_ids = self._visible_entry_ids()
-        visible_subject_ids = self._visible_subject_ids()
+        visible_subject_ids = _subjects_with_visible_entries(visible_entry_ids)
+        # Resolved against the set already in hand rather than through
+        # ``get_object()``, which would run ``get_queryset`` and pay the public-entry
+        # query a second time. The list filterset (category/parent) is deliberately
+        # not applied on this detail route.
+        subject = get_object_or_404(CodexSubject, pk=pk, id__in=visible_subject_ids)
 
         children = (
             CodexSubject.objects.filter(parent=subject, id__in=visible_subject_ids)
