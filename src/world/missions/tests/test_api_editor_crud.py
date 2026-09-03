@@ -16,6 +16,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.missions.constants import (
     ConflictMode,
@@ -32,6 +33,7 @@ from world.missions.factories import (
     MissionOptionRouteRewardFactory,
     MissionTemplateFactory,
 )
+from world.stories.constants import BeatOutcome
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -181,6 +183,42 @@ class OptionViewSetCRUDTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
+    def test_create_contest_missing_opposition_sheet_rejected(self) -> None:
+        """#3568 ruling 12: MissionOption.clean()'s CONTEST invariant reaches the API."""
+        response = self.client.post(
+            self.URL,
+            {
+                "node": self.node.pk,
+                "order": 3,
+                "option_kind": OptionKind.CONTEST,
+                "source_kind": OptionSource.AUTHORED,
+                "authored_check_type": self.check_type.pk,
+                "opposition_check_type": self.check_type.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("opposition_sheet", response.data)
+
+    def test_create_contest_round_trips(self) -> None:
+        sheet = CharacterSheetFactory()
+        response = self.client.post(
+            self.URL,
+            {
+                "node": self.node.pk,
+                "order": 4,
+                "option_kind": OptionKind.CONTEST,
+                "source_kind": OptionSource.AUTHORED,
+                "authored_check_type": self.check_type.pk,
+                "opposition_sheet": sheet.pk,
+                "opposition_check_type": self.check_type.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["opposition_sheet"], sheet.pk)
+        self.assertEqual(response.data["opposition_check_type"], self.check_type.pk)
+
     def test_list_filters_by_needs_rewrite(self) -> None:
         """E6 follow-up: option-level ``?needs_rewrite=true`` round-trip."""
         flagged = MissionOptionFactory(
@@ -250,6 +288,47 @@ class RouteViewSetCRUDTests(TestCase):
             self.URL, {"template": self.template.pk, "needs_rewrite": "true"}
         )
         self.assertEqual({row["id"] for row in response.data["results"]}, {flagged.pk})
+
+    def test_check_route_on_track_node_forbids_target_node(self) -> None:
+        """#3568 ruling 12: MissionOptionRoute.clean()'s track-route rule reaches the API
+        (MissionOptionRoute.save() never calls clean() -- see MissionOptionRouteSerializer)."""
+        track_node = MissionNodeFactory(
+            template=self.template, key="rt-track", track_successes=2, track_failures=2
+        )
+        track_option = MissionOptionFactory(
+            node=track_node,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.check_type,
+        )
+        other = MissionNodeFactory(template=self.template, key="rt-track-tgt")
+        response = self.client.post(
+            self.URL,
+            {
+                "option": track_option.pk,
+                "outcome_tier": self.outcome_tier.pk,
+                "target_node": other.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("target_node", response.data)
+
+    def test_beat_outcome_on_non_terminal_route_rejected(self) -> None:
+        """Pre-existing rule (#3560/#3565), now reachable via
+        MissionOptionRouteSerializer.validate() (#3568 ruling 12)."""
+        response = self.client.post(
+            self.URL,
+            {
+                "option": self.option.pk,
+                "outcome_tier": CheckOutcomeFactory().pk,
+                "target_node": MissionNodeFactory(template=self.template, key="rt-nonterm").pk,
+                "beat_outcome": BeatOutcome.FAILURE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("beat_outcome", response.data)
 
 
 class CandidateViewSetCRUDTests(TestCase):

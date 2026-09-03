@@ -24863,6 +24863,7 @@ export interface components {
       flavor_text: string;
       options: components['schemas']['BeatOption'][];
       is_paused: boolean;
+      track: components['schemas']['TrackView'] | null;
     };
     /**
      * @description * `hinted` - Hinted
@@ -30331,6 +30332,7 @@ export interface components {
       ballots: components['schemas']['GroupBallotState'][];
       expires_at: string | null;
       is_paused: boolean;
+      track: components['schemas']['TrackView'] | null;
     };
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
@@ -32067,7 +32069,10 @@ export interface components {
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
      *     sibling are both editable. ``location_mode``/``locations``/``target_area``
-     *     round-trip the node's location gate (#885, #888).
+     *     round-trip the node's location gate (#885, #888). ``track_successes``/
+     *     ``track_failures``/``track_success_target``/``track_failure_target``/
+     *     ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+     *     progress track (#3568): 0/0 = not a track.
      */
     MissionNode: {
       readonly id: number;
@@ -32124,6 +32129,16 @@ export interface components {
       locations?: number[];
       /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
       target_area?: number | null;
+      track_successes?: number;
+      track_failures?: number;
+      track_success_target?: number | null;
+      track_failure_target?: number | null;
+      track_success_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      track_failure_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for MissionNode rows.
@@ -32132,7 +32147,10 @@ export interface components {
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
      *     sibling are both editable. ``location_mode``/``locations``/``target_area``
-     *     round-trip the node's location gate (#885, #888).
+     *     round-trip the node's location gate (#885, #888). ``track_successes``/
+     *     ``track_failures``/``track_success_target``/``track_failure_target``/
+     *     ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+     *     progress track (#3568): 0/0 = not a track.
      */
     MissionNodeRequest: {
       template: number;
@@ -32188,6 +32206,16 @@ export interface components {
       locations?: number[];
       /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
       target_area?: number | null;
+      track_successes?: number;
+      track_failures?: number;
+      track_success_target?: number | null;
+      track_failure_target?: number | null;
+      track_success_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      track_failure_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -32253,6 +32281,8 @@ export interface components {
      *     child list -- create()/update() diff-sync it against the option's
      *     existing rows by id (add/edit/delete), same pattern as
      *     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+     *     ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+     *     the authored opposition whose passive level term adds to the difficulty.
      */
     MissionOption: {
       readonly id: number;
@@ -32292,6 +32322,9 @@ export interface components {
       /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
       challenge?: number | null;
       opponent_lines?: components['schemas']['MissionOptionOpponentLine'][];
+      /** @description The character this sheet belongs to */
+      opposition_sheet?: number | null;
+      opposition_check_type?: number | null;
     };
     /**
      * @description One authored opponent line on an ENCOUNTER option (#3565).
@@ -32334,6 +32367,8 @@ export interface components {
      *     child list -- create()/update() diff-sync it against the option's
      *     existing rows by id (add/edit/delete), same pattern as
      *     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+     *     ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+     *     the authored opposition whose passive level term adds to the difficulty.
      */
     MissionOptionRequest: {
       node: number;
@@ -32372,6 +32407,9 @@ export interface components {
       /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
       challenge?: number | null;
       opponent_lines?: components['schemas']['MissionOptionOpponentLineRequest'][];
+      /** @description The character this sheet belongs to */
+      opposition_sheet?: number | null;
+      opposition_check_type?: number | null;
     };
     /**
      * @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
@@ -33671,9 +33709,10 @@ export interface components {
      *     * `check` - Check
      *     * `external_act` - External Act
      *     * `encounter` - Encounter
+     *     * `contest` - Contest
      * @enum {string}
      */
-    OptionKindEnum: 'branch' | 'check' | 'external_act' | 'encounter';
+    OptionKindEnum: 'branch' | 'check' | 'external_act' | 'encounter' | 'contest';
     /**
      * @description Read serializer for an appeal to an organization (#3293).
      *
@@ -37910,7 +37949,10 @@ export interface components {
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
      *     sibling are both editable. ``location_mode``/``locations``/``target_area``
-     *     round-trip the node's location gate (#885, #888).
+     *     round-trip the node's location gate (#885, #888). ``track_successes``/
+     *     ``track_failures``/``track_success_target``/``track_failure_target``/
+     *     ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+     *     progress track (#3568): 0/0 = not a track.
      */
     PatchedMissionNodeRequest: {
       template?: number;
@@ -37966,6 +38008,16 @@ export interface components {
       locations?: number[];
       /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
       target_area?: number | null;
+      track_successes?: number;
+      track_failures?: number;
+      track_success_target?: number | null;
+      track_failure_target?: number | null;
+      track_success_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      track_failure_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -38004,6 +38056,8 @@ export interface components {
      *     child list -- create()/update() diff-sync it against the option's
      *     existing rows by id (add/edit/delete), same pattern as
      *     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+     *     ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+     *     the authored opposition whose passive level term adds to the difficulty.
      */
     PatchedMissionOptionRequest: {
       node?: number;
@@ -38042,6 +38096,9 @@ export interface components {
       /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
       challenge?: number | null;
       opponent_lines?: components['schemas']['MissionOptionOpponentLineRequest'][];
+      /** @description The character this sheet belongs to */
+      opposition_sheet?: number | null;
+      opposition_check_type?: number | null;
     };
     /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
     PatchedMissionOptionRouteCandidateRequest: {
@@ -42215,7 +42272,6 @@ export interface components {
       challenge_template: number;
       readonly challenge_template_name: string;
       display_order?: number;
-      depends_on?: number | null;
     };
     /** @description Serializer for situation instances. */
     SituationInstance: {
@@ -44625,6 +44681,19 @@ export interface components {
      * @enum {string}
      */
     TitleSuffixEnum: 'none' | 'primary' | 'all';
+    /**
+     * @description Read-only mirror of :class:`world.missions.types.TrackView` (#3568).
+     *
+     *     Counts only - no opposition sheet, no check type, no difficulty number
+     *     reaches the player payload (the leak boundary is enforced upstream in
+     *     ``services.play._track_view``, not here).
+     */
+    TrackView: {
+      successes: number;
+      needed: number;
+      failures: number;
+      allowed: number;
+    };
     TradeItemStake: {
       readonly id: number;
       readonly item_instance: number;
