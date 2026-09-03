@@ -3,19 +3,21 @@
  *
  * Extracted from PathStage (#2426 Task 9 stage restructure) — skills now live
  * alongside primary attributes rather than under Path. Consumes `draft` only.
+ *
+ * Presentation rebuilt for the Folio (#3540): the skill/specialization rows
+ * are `StatRow` instruments inside an `InstrumentFrame`, with the purse in
+ * the frame's ledger head. State and the debounced save are unchanged.
  */
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { ChevronRight, Loader2, Minus, Plus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { InstrumentFrame, StatRow } from '../folio';
 import {
   useCGExplanations,
   usePathSkillSuggestions,
@@ -23,148 +25,7 @@ import {
   useSkills,
   useUpdateDraft,
 } from '../queries';
-import type {
-  CharacterDraft,
-  PathSkillSuggestion,
-  Skill,
-  SkillPointBudget,
-  Specialization,
-} from '../types';
-
-/** Skill points header showing total, spent, and remaining */
-function SkillPointsHeader({ budget, spent }: { budget: SkillPointBudget; spent: number }) {
-  const remaining = budget.total_points - spent;
-  const isOverBudget = remaining < 0;
-  const isFullyAllocated = remaining === 0;
-
-  return (
-    <Card className="bg-muted/50">
-      <CardContent className="pt-4">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold">{budget.total_points}</div>
-            <div className="text-xs text-muted-foreground">Skill Points</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold">{spent}</div>
-            <div className="text-xs text-muted-foreground">Spent</div>
-          </div>
-          <div>
-            <div
-              className={cn(
-                'text-2xl font-bold',
-                isOverBudget && 'text-destructive',
-                isFullyAllocated && 'text-green-600'
-              )}
-            >
-              {remaining}
-            </div>
-            <div className="text-xs text-muted-foreground">Remaining</div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Single skill row with +/- controls */
-function SkillRow({
-  skill,
-  value,
-  onChange,
-  maxValue,
-  canIncrease,
-}: {
-  skill: Skill;
-  value: number;
-  onChange: (newValue: number) => void;
-  maxValue: number;
-  canIncrease: boolean;
-}) {
-  const canDecrease = value > 0;
-  const canIncreaseValue = canIncrease && value < maxValue;
-
-  return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
-      <div className="flex-1">
-        <div className="font-medium">{skill.name}</div>
-        {skill.tooltip && <div className="text-xs text-muted-foreground">{skill.tooltip}</div>}
-      </div>
-      <div className="ml-4 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          disabled={!canDecrease}
-          onClick={() => onChange(value - 10)}
-        >
-          <Minus className="h-4 w-4" />
-        </Button>
-        <span className="w-8 text-center font-mono text-lg font-semibold">{value}</span>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          disabled={!canIncreaseValue}
-          onClick={() => onChange(value + 10)}
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Specialization row with +/- controls (indented under parent skill) */
-function SpecializationRow({
-  spec,
-  value,
-  onChange,
-  maxValue,
-  canIncrease,
-}: {
-  spec: Specialization;
-  value: number;
-  onChange: (newValue: number) => void;
-  maxValue: number;
-  canIncrease: boolean;
-}) {
-  const canDecrease = value > 0;
-  const canIncreaseValue = canIncrease && value < maxValue;
-
-  return (
-    <div className="ml-6 flex items-center justify-between rounded-lg border border-dashed bg-muted/30 p-3">
-      <div className="flex flex-1 items-center gap-2">
-        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        <div>
-          <div className="text-sm font-medium">{spec.name}</div>
-          {spec.tooltip && <div className="text-xs text-muted-foreground">{spec.tooltip}</div>}
-        </div>
-      </div>
-      <div className="ml-4 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          disabled={!canDecrease}
-          onClick={() => onChange(value - 10)}
-        >
-          <Minus className="h-3 w-3" />
-        </Button>
-        <span className="w-8 text-center font-mono font-semibold">{value}</span>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          disabled={!canIncreaseValue}
-          onClick={() => onChange(value + 10)}
-        >
-          <Plus className="h-3 w-3" />
-        </Button>
-      </div>
-    </div>
-  );
-}
+import type { CharacterDraft, PathSkillSuggestion, Skill, Specialization } from '../types';
 
 /**
  * Build a skill-value map from a path's suggested starting values.
@@ -193,7 +54,7 @@ function toNumericMap(values: Record<string, number> | undefined): Record<number
 /**
  * Accordion panel listing a skill's specializations, gated by the
  * specialization-unlock threshold. Extracted as its own component so the
- * `onChange` callback passed to each SpecializationRow lives at the top
+ * `onChange` callback passed to each spec's StatRow lives at the top
  * nesting level rather than 5 functions deep (SonarCloud S2004).
  */
 function SkillSpecializations({
@@ -215,25 +76,32 @@ function SkillSpecializations({
 }) {
   return (
     <AccordionItem value={`skill-${skill.id}`} className="border-b-0">
-      <AccordionTrigger className="ml-6 py-2 text-xs text-muted-foreground hover:no-underline">
+      <AccordionTrigger className="quiet-link">
         Specializations ({skill.specializations.length})
       </AccordionTrigger>
-      <AccordionContent className="ml-6">
+      <AccordionContent>
         {skillValue >= threshold ? (
-          <div className="space-y-2">
-            {skill.specializations.map((spec) => (
-              <SpecializationRow
+          skill.specializations.map((spec: Specialization) => {
+            const value = specValues[spec.id] || 0;
+            const canIncreaseValue = canIncrease && value < maxValue;
+            return (
+              <StatRow
                 key={spec.id}
-                spec={spec}
-                value={specValues[spec.id] || 0}
+                id={`lbl-skill-spec-${spec.id}`}
+                name={spec.name}
+                sub={spec.tooltip}
+                value={value}
+                max={maxValue}
+                step={10}
                 onChange={(newValue) => onSpecChange(spec.id, newValue)}
-                maxValue={maxValue}
-                canIncrease={canIncrease}
+                canDecrease={value > 0}
+                canIncrease={canIncreaseValue}
+                spec
               />
-            ))}
-          </div>
+            );
+          })
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p className="ledger-line">
             Requires {threshold}+ points in {skill.name}
           </p>
         )}
@@ -396,11 +264,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
   }
 
   if (skillsError || budgetError) {
-    return (
-      <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
-        Failed to load skills data. Please try again.
-      </div>
-    );
+    return <p className="ledger-line">Failed to load skills data. Please try again.</p>;
   }
 
   if (!skills || !budget) {
@@ -420,101 +284,77 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
 
   const remaining = budget.total_points - totalSpent;
   const canIncrease = remaining >= 10;
+  const visibleSkills = skills;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="theme-heading text-xl font-semibold">{copy?.path_skills_heading ?? ''}</h3>
-        <p className="mt-1 text-muted-foreground">{copy?.path_skills_desc ?? ''}</p>
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
-        {/* Main content */}
-        <div className="space-y-6">
-          {/* Skill Points Header (inline) */}
-          <SkillPointsHeader budget={budget} spent={totalSpent} />
-
-          {/* Path Suggestions Reference */}
-          {suggestions && suggestions.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {draft.selected_path?.name} Suggested Skills
-                </CardTitle>
-                <CardDescription>
-                  Your path suggests these skills. You can freely redistribute all points.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {suggestions.map((s) => (
-                    <span
-                      key={s.id}
-                      className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
-                    >
-                      {s.skill_name}: {s.suggested_value}
-                    </span>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Skills by Category */}
-          <div className="space-y-4">
-            {Object.entries(skillsByCategory).map(([category, categorySkills]) => (
-              <Card key={category}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">{category}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Accordion type="multiple">
-                    <div className="space-y-2">
-                      {categorySkills.map((skill) => {
-                        const skillValue = skillValues[skill.id] || 0;
-                        const hasSpecs = skill.specializations.length > 0;
-
-                        return (
-                          <div key={skill.id}>
-                            <SkillRow
-                              skill={skill}
-                              value={skillValue}
-                              onChange={(newValue) => handleSkillChange(skill.id, newValue, skill)}
-                              maxValue={budget.max_skill_value}
-                              canIncrease={canIncrease}
-                            />
-                            {hasSpecs && (
-                              <SkillSpecializations
-                                skill={skill}
-                                skillValue={skillValue}
-                                specValues={specValues}
-                                threshold={budget.specialization_unlock_threshold}
-                                maxValue={budget.max_specialization_value}
-                                canIncrease={canIncrease}
-                                onSpecChange={handleSpecChange}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Accordion>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+    <div>
+      {copy?.path_skills_desc && (
+        <div className="leaf-body">
+          <p>{copy.path_skills_desc}</p>
         </div>
+      )}
 
-        {/* Sticky sidebar (desktop only) */}
-        <div className="hidden lg:block">
-          <div className="sticky top-4 space-y-4">
-            <SkillPointsHeader budget={budget} spent={totalSpent} />
-            <p className="text-xs text-muted-foreground">
-              Skills with {budget.specialization_unlock_threshold}+ points unlock specializations.
-            </p>
+      {suggestions && suggestions.length > 0 && (
+        // PLACEHOLDER: Apostate rewrite
+        <p className="ledger-line">
+          {draft.selected_path?.name} suggested skills:{' '}
+          {suggestions.map((s) => `${s.skill_name} ${s.suggested_value}`).join(', ')}. You can
+          freely redistribute all points.
+        </p>
+      )}
+
+      <InstrumentFrame
+        label="Skills"
+        ledger={{
+          left: `${visibleSkills.length} of ${skills.length} skills shown`,
+          right: (
+            <>
+              Skill points remaining: <b>{remaining}</b> of <b>{budget.total_points}</b>
+            </>
+          ),
+          over: remaining < 0,
+        }}
+      >
+        {Object.entries(skillsByCategory).map(([category, categorySkills]) => (
+          <div key={category} className="instr-group">
+            <div className="instr-group-h">{category}</div>
+            <Accordion type="multiple">
+              {categorySkills.map((skill: Skill) => {
+                const skillValue = skillValues[skill.id] || 0;
+                const hasSpecs = skill.specializations.length > 0;
+                const canIncreaseValue = canIncrease && skillValue < budget.max_skill_value;
+
+                return (
+                  <div key={skill.id}>
+                    <StatRow
+                      id={`lbl-skill-${skill.id}`}
+                      name={skill.name}
+                      sub={skill.tooltip}
+                      value={skillValue}
+                      max={budget.max_skill_value}
+                      step={10}
+                      onChange={(newValue) => handleSkillChange(skill.id, newValue, skill)}
+                      canDecrease={skillValue > 0}
+                      canIncrease={canIncreaseValue}
+                    />
+                    {hasSpecs && (
+                      <SkillSpecializations
+                        skill={skill}
+                        skillValue={skillValue}
+                        specValues={specValues}
+                        threshold={budget.specialization_unlock_threshold}
+                        maxValue={budget.max_specialization_value}
+                        canIncrease={canIncrease}
+                        onSpecChange={handleSpecChange}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </Accordion>
           </div>
-        </div>
-      </div>
+        ))}
+      </InstrumentFrame>
     </div>
   );
 }
