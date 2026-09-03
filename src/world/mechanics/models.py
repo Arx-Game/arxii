@@ -1162,7 +1162,7 @@ class SituationTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
 
 class SituationChallengeLink(NaturalKeyMixin, SharedMemoryModel):
-    """Through-table linking Challenges to Situations with ordering and dependencies.
+    """Through-table linking Challenges to Situations with ordering.
 
     NK is (situation_template, challenge_template) — the pre-existing
     ``situation_challenge_unique`` constraint already enforces exactly that, so
@@ -1188,13 +1188,6 @@ class SituationChallengeLink(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     display_order = models.PositiveIntegerField(default=0)
-    depends_on = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="dependents",
-    )
 
     objects = NaturalKeyManager()
 
@@ -1221,9 +1214,8 @@ class SituationTrapLink(NaturalKeyMixin, SharedMemoryModel):
     Instantiated into a real ``room_features.Trap`` row by
     ``instantiate_situation``. Carries only authorable fields — no
     ``is_armed``/``detected_by`` (always fresh per instantiated Trap), no
-    ``position`` (traps minted from a link are always room-wide), no
-    ``depends_on`` (traps are independent hazards, not a sequenced chain
-    like SituationChallengeLink).
+    ``position`` (traps minted from a link are always room-wide): traps are
+    independent hazards, not a sequenced chain.
 
     NK is (situation_template, name). Unlike its challenge sibling this link had
     no uniqueness of its own, so registering it in ``CONTENT_MODELS`` (#2865)

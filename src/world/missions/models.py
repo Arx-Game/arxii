@@ -79,6 +79,13 @@ NPC_SERVICE_OFFER_MODEL = "arxii.NPCServiceOffer"
 # re-checks durable state, so a non-entry durable-act option can never fire).
 _DURABLE_EXTERNAL_ACTS = frozenset({ExternalAct.THREAD_WOVEN, ExternalAct.COVENANT_SWORN})
 
+# Shared choices for a terminal beat outcome (#3568): MissionOptionRoute.beat_outcome
+# and MissionNode's two track_*_beat_outcome fields all record the same two values.
+_TERMINAL_BEAT_OUTCOME_CHOICES = [
+    (BeatOutcome.SUCCESS.value, "Success"),
+    (BeatOutcome.FAILURE.value, "Failure"),
+]
+
 
 # ---------------------------------------------------------------------------
 # Mission graph data model
@@ -397,6 +404,28 @@ class MissionNode(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "A support declaration takes the place of the helper's pick/vote."
         ),
     )
+    # #3568 progress track: 0/0 = not a track. Every CHECK or CONTEST option's
+    # tier counts as a success or a failure; reaching a threshold routes to the
+    # target (null = terminal, reported with the authored beat outcome).
+    track_successes = models.PositiveSmallIntegerField(default=0)
+    track_failures = models.PositiveSmallIntegerField(default=0)
+    track_success_target = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    track_failure_target = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    track_success_beat_outcome = models.CharField(
+        max_length=20, choices=_TERMINAL_BEAT_OUTCOME_CHOICES, blank=True, default=""
+    )
+    track_failure_beat_outcome = models.CharField(
+        max_length=20, choices=_TERMINAL_BEAT_OUTCOME_CHOICES, blank=True, default=""
+    )
+
+    @property
+    def is_track(self) -> bool:
+        """A track node has both thresholds set above zero (#3568)."""
+        return self.track_successes > 0
 
     objects = NaturalKeyManager()
 
@@ -428,6 +457,7 @@ class MissionNode(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         self._validate_single_entry_node(errors)
         self._validate_joint_mode_coupling(errors)
         self._validate_target_area(errors)
+        self._validate_track(errors)
 
         if errors:
             raise ValidationError(errors)
@@ -465,6 +495,23 @@ class MissionNode(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["target_area"] = "AREA location mode requires a target area."
         if self.location_mode != NodeLocationMode.AREA and self.target_area_id is not None:
             errors["target_area"] = "target_area is only valid when location_mode is AREA."
+
+    def _validate_track(self, errors: dict[str, str]) -> None:
+        """#3568: thresholds travel together; targets and outcomes need a track; never JOINT."""
+        if (self.track_successes > 0) != (self.track_failures > 0):
+            field = "track_failures" if self.track_successes > 0 else "track_successes"
+            errors[field] = "A track needs both thresholds above zero (or both zero)."
+        if self.is_track and self.conflict_mode == ConflictMode.JOINT:
+            errors["conflict_mode"] = (
+                "A track node cannot be JOINT: each attempt would count once per participant."
+            )
+        if not self.is_track:
+            for field in ("track_success_target", "track_failure_target"):
+                if getattr(self, f"{field}_id"):
+                    errors[field] = "Only a track node may set this."
+            for field in ("track_success_beat_outcome", "track_failure_beat_outcome"):
+                if getattr(self, field):
+                    errors[field] = "Only a track node may set this."
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -630,6 +677,14 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="ENCOUNTER options only: the spawned encounter's risk level (#3565).",
     )
+    # #3568 CONTEST: the party rolls authored_check_type against the template's
+    # difficulty plus level_opposition(opposition_check_type, ...) for this sheet.
+    opposition_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    opposition_check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
 
     def _challenge_source_errors(self) -> dict[str, str]:
         """CHALLENGE-sourced options carry a challenge and forbid authored_* fields.
@@ -723,6 +778,47 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             )
         return errors
 
+    def _contest_errors(self) -> dict[str, str]:
+        """CONTEST: requires AUTHORED source, both check types, and opposition_sheet.
+
+        The party rolls ``authored_check_type`` against a difficulty that adds
+        the opposition's passive level term (#3568); a CONTEST is always a
+        dice resolution, so ``branch_target`` is forbidden like a CHECK's.
+        """
+        errors: dict[str, str] = {}
+        if self.source_kind != OptionSource.AUTHORED:
+            errors["source_kind"] = "CONTEST options must be AUTHORED."
+        if self.authored_check_type_id is None:
+            errors["authored_check_type"] = "Required for CONTEST options."
+        if self.opposition_sheet_id is None:
+            errors["opposition_sheet"] = "Required for CONTEST options."
+        if self.opposition_check_type_id is None:
+            errors["opposition_check_type"] = "Required for CONTEST options."
+        if self.branch_target_id is not None:
+            errors["branch_target"] = "Must be null for CONTEST options."
+        return errors
+
+    def _opposition_field_errors(self) -> dict[str, str]:
+        """Only CONTEST options may set the opposition_* fields (#3568)."""
+        errors: dict[str, str] = {}
+        if self.option_kind != OptionKind.CONTEST:
+            if self.opposition_sheet_id is not None:
+                errors["opposition_sheet"] = "Only CONTEST options may set this."
+            if self.opposition_check_type_id is not None:
+                errors["opposition_check_type"] = "Only CONTEST options may set this."
+        return errors
+
+    def _track_node_kind_errors(self) -> dict[str, str]:
+        """A track's tier comes from CHECK/CONTEST; ENCOUNTER/EXTERNAL_ACT don't fit (#3568)."""
+        errors: dict[str, str] = {}
+        if (
+            self.node_id is not None
+            and self.node.is_track
+            and self.option_kind in (OptionKind.ENCOUNTER, OptionKind.EXTERNAL_ACT)
+        ):
+            errors["option_kind"] = "A track node accepts only CHECK, CONTEST and BRANCH options."
+        return errors
+
     def _kind_errors(self) -> dict[str, str]:
         """BRANCH/EXTERNAL_ACT forbid check fields; AUTHORED+CHECK requires a check type."""
         errors: dict[str, str] = {}
@@ -741,10 +837,14 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors.update(self._external_act_errors())
         elif self.option_kind == OptionKind.ENCOUNTER:
             errors.update(self._encounter_errors())
+        elif self.option_kind == OptionKind.CONTEST:
+            errors.update(self._contest_errors())
         if self.option_kind != OptionKind.EXTERNAL_ACT and self.required_act:
             errors["required_act"] = "Only EXTERNAL_ACT options may set required_act."
         if self.option_kind != OptionKind.ENCOUNTER and self.encounter_risk_level:
             errors["encounter_risk_level"] = "Only ENCOUNTER options may set encounter_risk_level."
+        errors.update(self._opposition_field_errors())
+        errors.update(self._track_node_kind_errors())
         return errors
 
     def clean(self) -> None:
@@ -898,10 +998,7 @@ class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     beat_outcome = models.CharField(
         max_length=20,
-        choices=[
-            (BeatOutcome.SUCCESS.value, "Success"),
-            (BeatOutcome.FAILURE.value, "Failure"),
-        ],
+        choices=_TERMINAL_BEAT_OUTCOME_CHOICES,
         blank=True,
         default="",
         help_text=(
@@ -938,6 +1035,21 @@ class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     )
                 }
             )
+        if self.option_id is not None:
+            option = self.option
+            if (
+                option.node.is_track
+                and option.option_kind in (OptionKind.CHECK, OptionKind.CONTEST)
+                and (self.target_node_id is not None or self.is_random_set)
+            ):
+                raise ValidationError(
+                    {
+                        "target_node": (
+                            "On a track node a CHECK or CONTEST route may not route; "
+                            "the track decides."
+                        )
+                    }
+                )
 
     def __str__(self) -> str:
         tier = self.outcome_tier.name if self.outcome_tier_id else "branch"
@@ -1750,6 +1862,34 @@ class MissionNodeSnapshot(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"snapshot {self.node} / {self.participant}"
+
+
+class MissionTrackProgress(SharedMemoryModel):
+    """Per-run counter for a track node (#3568): successes and failures so far.
+
+    Reset to 0/0 by ``enter_node`` (a re-entry is a fresh track, matching
+    ``MissionNodeSnapshot``'s per-visit semantics); advanced by
+    ``resolution._advance_track``. Play state, resettable.
+    """
+
+    instance = models.ForeignKey(
+        MissionInstance, on_delete=models.CASCADE, related_name="track_progress"
+    )
+    node = models.ForeignKey(MissionNode, on_delete=models.CASCADE, related_name="+")
+    successes = models.PositiveSmallIntegerField(default=0)
+    failures = models.PositiveSmallIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "node"], name="unique_track_progress_per_node"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"track {self.successes}/{self.failures} at {self.node_id} in run {self.instance_id}"
 
 
 class MissionGroupBallot(SharedMemoryModel):
