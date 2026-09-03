@@ -430,6 +430,8 @@ test('Run Beat tab lists runnable beats on open, and Run dispatches run_beat (#3
             risk: 'high',
             opponent_line_count: 2,
             staged_template_count: 0,
+            has_scenario: false,
+            staged_battle_name: null,
           },
         ],
       },

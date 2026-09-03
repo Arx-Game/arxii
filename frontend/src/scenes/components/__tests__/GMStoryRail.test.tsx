@@ -100,6 +100,7 @@ function buildPayload(overrides: Partial<GMStoryRailPayload> = {}): GMStoryRailP
       internal_description: 'The ambush springs here.',
       opponent_lines: [],
       staged_templates: [],
+      staged_battle: null,
     },
     protected_subjects: [],
     clue_placements: [],

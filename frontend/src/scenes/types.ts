@@ -162,12 +162,20 @@ export interface GMStoryRailStagedTemplate {
   order: number;
 }
 
+/** #3569 GM story rail - the running beat's staged battle; story-privileged viewers only. */
+export interface GMStoryRailStagedBattle {
+  blueprint_name: string;
+  name: string;
+  party_side_role: 'attacker' | 'defender';
+  unit_line_count: number;
+}
+
 /**
  * #3434 GM story rail - the running beat's authored state.
  *
- * `internal_description`/`opponent_lines`/`staged_templates` are null unless
- * the viewer has standing on the running story (owner/lead-GM/staff) - every
- * other field is refereeing metadata any qualifying scene GM sees.
+ * `internal_description`/`opponent_lines`/`staged_templates`/`staged_battle` are
+ * null unless the viewer has standing on the running story (owner/lead-GM/staff) -
+ * every other field is refereeing metadata any qualifying scene GM sees.
  */
 export interface GMStoryRailBeat {
   id: number;
@@ -181,6 +189,7 @@ export interface GMStoryRailBeat {
   internal_description: string | null;
   opponent_lines: GMStoryRailOpponentLine[] | null;
   staged_templates: GMStoryRailStagedTemplate[] | null;
+  staged_battle: GMStoryRailStagedBattle | null;
 }
 
 /** #3434 GM story rail - one active StoryProtectedSubject; story-privileged viewers only. */

@@ -59,18 +59,23 @@ export interface RoomTrapEntry {
 
 /**
  * One row of `gm_list_runnable_beats`'s result data (#3425) — an
- * ENCOUNTER/SITUATION beat on the acting GM's currently-active episode, ready
- * to run into the scene. Same non-ViewSet shape as `RoomTrapEntry` — see
- * `GMListRunnableBeatsAction`, `actions/definitions/gm_story.py`.
+ * ENCOUNTER/SITUATION beat, or a TASK beat carrying a scenario
+ * (`has_scenario`, #3565), on the acting GM's currently-active episode, ready
+ * to run into the scene. `staged_battle_name` (#3569) names the blueprint an
+ * ENCOUNTER beat will stage a battle from, or null when it stages none. Same
+ * non-ViewSet shape as `RoomTrapEntry` — see `GMListRunnableBeatsAction`,
+ * `actions/definitions/gm_story.py`.
  */
 export interface RunnableBeatEntry {
   id: number;
   story_title: string;
   episode_title: string;
-  kind: 'encounter' | 'situation';
+  kind: 'encounter' | 'situation' | 'task';
   risk: string;
   opponent_line_count: number;
   staged_template_count: number;
+  has_scenario: boolean;
+  staged_battle_name: string | null;
 }
 
 /** Mirrors `world.scenes.action_constants.DifficultyChoice` — the only bands
