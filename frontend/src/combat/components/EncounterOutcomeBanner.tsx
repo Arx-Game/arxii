@@ -35,15 +35,15 @@ export function EncounterOutcomeBanner({ outcome }: EncounterOutcomeBannerProps)
   const style = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.abandoned;
   return (
     <div className="flex flex-col items-center gap-3">
-      <div
-        role="status"
+      <output
         className={cn(
+          'block',
           'w-full rounded-md border px-4 py-3 text-center text-lg font-semibold tracking-wide',
           style.className
         )}
       >
         {style.label}
-      </div>
+      </output>
     </div>
   );
 }

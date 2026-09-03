@@ -6,15 +6,12 @@ from rest_framework import serializers
 class PlannedDowntimeSerializer(serializers.Serializer):
     """Read shape for ``PlannedDowntime`` — public, display-safe fields only."""
 
+    # Read-only: never saved. DRF's own create()/update() already raise
+    # NotImplementedError, so this class does not restate them. Kept out of the
+    # docstring deliberately: drf-spectacular publishes that as the schema's
+    # public description, and this is our implementation detail, not the API's.
+
     source = serializers.CharField(read_only=True)
     starts_at = serializers.DateTimeField(read_only=True)
     expected_duration_minutes = serializers.IntegerField(read_only=True)
     message = serializers.CharField(read_only=True)
-
-    def create(self, validated_data):
-        msg = "PlannedDowntimeSerializer is read-only."
-        raise NotImplementedError(msg)
-
-    def update(self, instance, validated_data):
-        msg = "PlannedDowntimeSerializer is read-only."
-        raise NotImplementedError(msg)

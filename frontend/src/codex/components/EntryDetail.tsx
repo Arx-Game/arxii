@@ -61,7 +61,7 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
             ))}
           </div>
         )}
-        {isUncovered && entry.research_progress !== null && entry.learn_threshold && (
+        {isUncovered && entry.research_progress !== null && (entry.learn_threshold ?? 0) > 0 && (
           <div className="rounded-lg bg-muted p-3">
             <div className="mb-1 text-sm font-medium">Research Progress</div>
             <div className="flex items-center gap-2">

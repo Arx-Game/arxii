@@ -696,7 +696,13 @@ class EntranceAction(_SocialTemplateAction):
         main = cast.result.action_resolution.main_result if cast.result is not None else None  # type: ignore[attr-defined]
         success_level = main.check_result.success_level if main is not None else 0
 
-        if not is_technique_hostile(technique) and target_persona_id is not None:
+        # `cast.result` is guarded above for `main`; this call dereferenced it
+        # unguarded on the next statement, so a resultless cast raised here.
+        if (
+            cast.result is not None
+            and not is_technique_hostile(technique)
+            and target_persona_id is not None
+        ):
             apply_social_disposition_delta(
                 actor,
                 target_persona_id,

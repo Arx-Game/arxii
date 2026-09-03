@@ -26,6 +26,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 import type { ClientStep, DslCatalog, ParamSpec, StepActionSpec } from '../types';
+import { toDisplayString } from '@/lib/displayValue';
 
 /** Params named `result_variable` always get this friendlier label. */
 const RESULT_VARIABLE_LABEL = 'Store result as';
@@ -93,7 +94,7 @@ function ParamField({
   inputId: string;
   onChange: (value: unknown) => void;
 }) {
-  const display = value === undefined || value === null ? '' : String(value);
+  const display = toDisplayString(value);
   const label = param.name === 'result_variable' ? RESULT_VARIABLE_LABEL : param.name;
 
   if (EMIT_ACTIONS.has(action) && param.name === 'event_type') {
@@ -274,7 +275,7 @@ function DictEditor({ value, onChange }: { value: unknown; onChange: (next: unkn
           <Input
             aria-label="Value"
             className="h-7"
-            value={val === undefined || val === null ? '' : String(val)}
+            value={toDisplayString(val)}
             onChange={(e) => setValue(index, e.target.value)}
           />
           <Button
@@ -335,7 +336,7 @@ function ExtraParamsEditor({
           <Input
             aria-label="Parameter value"
             className="h-7"
-            value={value === undefined || value === null ? '' : String(value)}
+            value={toDisplayString(value)}
             onChange={(e) => onSet(key, e.target.value)}
           />
           <Button

@@ -53,9 +53,7 @@ export function TeachingOfferCard({ offer, onAccept }: TeachingOfferCardProps) {
               {isAmbiguous ? (
                 <span className="text-muted-foreground">Select character to see XP cost</span>
               ) : (
-                <>
-                  <span className="font-semibold">{xpCost} XP</span>
-                </>
+                <span className="font-semibold">{xpCost} XP</span>
               )}
             </span>
             {offer.gold_cost > 0 && (

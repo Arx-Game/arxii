@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toDisplayString } from '@/lib/displayValue';
 import {
   Select,
   SelectContent,
@@ -279,8 +280,7 @@ function inferValueKind(value: unknown): ValueKind {
 
 function displayValue(value: unknown, kind: ValueKind): string {
   if (kind === 'json') return JSON.stringify(value ?? null);
-  if (value === undefined || value === null) return '';
-  return String(value);
+  return toDisplayString(value);
 }
 
 /** `value` may be "self" or "self.<dotted>" (evaluator.py's `_resolve_value`) — both are plain strings here. */

@@ -190,7 +190,11 @@ function checkParamValue(
       );
     }
   }
-  if (paramSpec.choices.length > 0 && !paramSpec.choices.some((choice) => choice === value)) {
+  // Widened rather than cast: `value` is unknown by design, and a non-string can
+  // never be in a string[] of choices, so this reads exactly as the old
+  // some(choice => choice === value) did.
+  const choices: readonly unknown[] = paramSpec.choices;
+  if (choices.length > 0 && !choices.includes(value)) {
     errors.push(
       `Step '${clientId}': parameter '${paramSpec.name}' must be one of ${JSON.stringify(paramSpec.choices)}.`
     );

@@ -10,7 +10,7 @@ from evennia import Command
 
 # Minimal sanity check — full validation (deliverability, MX, etc.) is out of scope;
 # allauth's own EmailAddress field validation runs on save.
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$")
 
 _SUBVERB_STATUS = "status"
 _SUBVERB_EMAIL = "email"

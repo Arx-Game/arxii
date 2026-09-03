@@ -56,9 +56,17 @@ function EpisodeNodeComponent({ data }: NodeProps<EpisodeNodeType>) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className="cursor-pointer rounded-md border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/60 hover:bg-accent"
       style={{ minWidth: 120, maxWidth: 200 }}
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       data-testid="dag-episode-node"
       data-episode-id={data.episode?.id}
     >

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 # Matches comma-separated @name tokens at the start of text, e.g. "@bob,@carol waves"
 _TARGET_PREFIX_RE = re.compile(
-    r"^((?:@[\w-]+(?:\s*,\s*@[\w-]+)*))\s+(.*)",
+    r"^(@[\w-]+(?:\s*,\s*@[\w-]+)*)\s+(.*)",
     re.DOTALL,
 )
 

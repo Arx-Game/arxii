@@ -58,6 +58,12 @@ export function StatCard({
     }
   };
 
+  const bonusSign = effectiveBonus > 0 ? '+' : '';
+  const bonusTitle =
+    effectiveBonus !== 0
+      ? `Base: ${value} | Bonus: ${bonusSign}${effectiveBonus} | Total: ${total}`
+      : undefined;
+
   return (
     <Card
       className="cursor-pointer p-3 transition-all hover:bg-accent/50 hover:ring-1 hover:ring-primary/50"
@@ -73,11 +79,7 @@ export function StatCard({
           </Button>
           <span
             className="flex w-12 items-center justify-center gap-0.5 text-center font-mono text-xl font-semibold"
-            title={
-              effectiveBonus !== 0
-                ? `Base: ${value} | Bonus: ${effectiveBonus > 0 ? '+' : ''}${effectiveBonus} | Total: ${total}`
-                : undefined
-            }
+            title={bonusTitle}
           >
             {total}
             {effectiveBonus > 0 && (

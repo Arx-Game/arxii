@@ -146,12 +146,10 @@ function renderContent(
       // Combo has no dedicated detail endpoint — render a thin labelled
       // fallback rather than over-engineering a new fetch path.
       return (
-        <>
-          <DialogHeader>
-            <DialogTitle>{`Combo #${id}`}</DialogTitle>
-            <DialogDescription>Combo details are unavailable here.</DialogDescription>
-          </DialogHeader>
-        </>
+        <DialogHeader>
+          <DialogTitle>{`Combo #${id}`}</DialogTitle>
+          <DialogDescription>Combo details are unavailable here.</DialogDescription>
+        </DialogHeader>
       );
   }
 }

@@ -96,6 +96,8 @@ function MyCaseCard({ viewerEntryId }: { viewerEntryId: number }) {
 
   if (!myCase) return null;
 
+  const sentenceAmount = trial.data?.sentence_amount ? ` (${trial.data.sentence_amount})` : '';
+
   return (
     <div className="rounded-lg border border-destructive/40 bg-card p-4" data-testid="my-case-card">
       <div className="flex items-baseline justify-between gap-3">
@@ -115,8 +117,7 @@ function MyCaseCard({ viewerEntryId }: { viewerEntryId: number }) {
       {trial.data ? (
         <p className="mt-2 text-sm font-medium" data-testid="trial-verdict">
           Verdict: {trial.data.verdict}
-          {trial.data.sentence_kind &&
-            `: ${trial.data.sentence_kind}${trial.data.sentence_amount ? ` (${trial.data.sentence_amount})` : ''}`}
+          {trial.data.sentence_kind && `: ${trial.data.sentence_kind}${sentenceAmount}`}
         </p>
       ) : (
         !myCase.sentence_kind && (

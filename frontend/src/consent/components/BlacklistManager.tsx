@@ -43,7 +43,7 @@ function BlacklistManagerInner({ tenureId, categoryId }: Props) {
               {entry.blocked_tenure_name ?? entry.blocked_tenure}
               <button
                 type="button"
-                aria-label={`Remove ${entry.blocked_tenure_name ?? `tenure ${entry.blocked_tenure}`} from blacklist`}
+                aria-label={`Remove ${tenureLabel(entry.blocked_tenure_name, entry.blocked_tenure)} from blacklist`}
                 className="ml-1 text-muted-foreground hover:text-foreground"
                 onClick={() =>
                   removeBlacklist.mutate({
@@ -96,6 +96,11 @@ function BlacklistManagerInner({ tenureId, categoryId }: Props) {
       </div>
     </div>
   );
+}
+
+/** A tenure's display name, falling back to its id when unnamed. */
+function tenureLabel(name: string | null | undefined, id: string | number): string {
+  return name ?? `tenure ${id}`;
 }
 
 export function BlacklistManager(props: Props) {

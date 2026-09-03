@@ -8,6 +8,8 @@ Three check-based contribution methods, each reusing an existing CheckType:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 
 def seed_war_funding_contribution_methods() -> None:
     """Seed three ContributionMethod rows for WAR_FUNDING (#2382).
@@ -30,7 +32,7 @@ def seed_war_funding_contribution_methods() -> None:
     from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
     from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
 
-    def _get_check_type(name: str, seeder: object) -> CheckType | None:
+    def _get_check_type(name: str, seeder: Callable[[], object]) -> CheckType | None:
         ct = CheckType.objects.filter(name=name).first()
         if ct is None:
             seeder()

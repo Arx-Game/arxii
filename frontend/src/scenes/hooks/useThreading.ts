@@ -126,7 +126,7 @@ export function countUnread(
   sceneBaselineId: number | null | undefined
 ): number {
   const lastSeen = lastSeenByThread?.[threadKey];
-  const threshold = lastSeen !== undefined ? lastSeen : sceneBaselineId;
+  const threshold = lastSeen ?? sceneBaselineId;
   if (threshold === undefined || threshold === null) return 0;
   return threadInteractions.filter((i) => {
     if (viewerPersonaId != null && i.persona.id === viewerPersonaId) return false;

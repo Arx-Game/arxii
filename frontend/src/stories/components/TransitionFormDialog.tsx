@@ -87,6 +87,15 @@ interface RoutingRow {
   stakeColumn?: string;
 }
 
+/** One-line summary of a routing predicate: a stake column, or a beat outcome. */
+function routingRowLabel(row: RoutingRow): string {
+  if (row.stakeId != null) {
+    return `${row.beatLabel}: stake #${row.stakeId} ${row.stakeColumn ?? ''}`;
+  }
+  const optionSuffix = row.optionKey ? ` (${row.optionKey})` : '';
+  return `${row.beatLabel}: ${row.outcome}${optionSuffix}`;
+}
+
 let rowCounter = 0;
 function nextKey(): string {
   rowCounter += 1;
@@ -588,11 +597,7 @@ export function TransitionFormDialog({
                       className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                       data-testid="routing-predicate-row"
                     >
-                      <span>
-                        {row.stakeId != null
-                          ? `${row.beatLabel}: stake #${row.stakeId} ${row.stakeColumn ?? ''}`
-                          : `${row.beatLabel}: ${row.outcome}${row.optionKey ? ` (${row.optionKey})` : ''}`}
-                      </span>
+                      <span>{routingRowLabel(row)}</span>
                       <Button
                         type="button"
                         variant="ghost"
