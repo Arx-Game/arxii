@@ -188,6 +188,14 @@ resolve_and_add "pypi.org"
 # polytoken's custom Anthropic-compatible provider. Two stable AWS EIPs
 # (eu-west-3); dig-resolved like the other small/stable hosts above.
 resolve_and_add "api.code.umans.ai"
+# Linode Object Storage, us-east — the prod backups bucket that
+# `just pull-prod` (infra/scripts/pull_prod_db.sh) reads the nightly DB dump
+# from via the read-only dev_reader key. Without this the pull fails instantly
+# with a connect timeout. Fronted by Akamai GTM (CNAME -> *.akadns.net), but
+# unlike the Azure Front Door case below a single dig returns the FULL pool
+# (17 unique Linode-owned A records, stable across repeated queries), so the
+# plain resolve_and_add treatment is sufficient here.
+resolve_and_add "us-east-1.linodeobjects.com"
 
 # Playwright downloads Chromium binaries from its own CDN (cdn.playwright.dev),
 # which is fronted by Azure Front Door. Azure Front Door rotates IPs across a
