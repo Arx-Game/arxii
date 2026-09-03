@@ -34,7 +34,8 @@ function increaseTitleFor(atCap: boolean, out: boolean): string | undefined {
   return undefined;
 }
 
-/** Stat categories; the gloss is the category's plain reading. PLACEHOLDER glosses. */
+/** Stat categories; the gloss is the category's plain reading. */
+// PLACEHOLDER: Apostate rewrite
 const STAT_CATEGORIES: { label: string; gloss: string; stats: (keyof Stats)[] }[] = [
   { label: 'Physical', gloss: 'the body', stats: ['strength', 'agility', 'stamina'] },
   { label: 'Social', gloss: 'the company', stats: ['charm', 'presence', 'composure'] },
