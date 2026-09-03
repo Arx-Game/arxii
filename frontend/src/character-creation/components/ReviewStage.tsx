@@ -93,8 +93,10 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
   const canSubmit = incompleteStages.length === 0;
   const draftData = draft.draft_data;
-  const familyName =
-    draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
+  // Both arms of the old ternary here returned '', so family_known never affected
+  // the result. Reduced to what it actually evaluated to; if an unknown family was
+  // meant to read differently, that behaviour was never present to preserve.
+  const familyName = draft.family?.name ?? '';
   const fullName = composeFullName(draftData.first_name, familyName, 'Unnamed Character');
 
   const appStatus = application.data?.status ?? null;

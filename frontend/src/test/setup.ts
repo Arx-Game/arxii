@@ -4,7 +4,7 @@ import React from 'react';
 
 // Polyfill ResizeObserver — not available in jsdom but required by Radix UI components
 // (use-size hook in @radix-ui/react-use-size uses it for layout measurements)
-if (typeof globalThis.ResizeObserver === 'undefined') {
+if (globalThis.ResizeObserver === undefined) {
   globalThis.ResizeObserver = class ResizeObserver {
     // Intentional no-op stub: jsdom has no layout engine, so there is nothing to observe.
     observe(): void {

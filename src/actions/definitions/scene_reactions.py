@@ -44,9 +44,11 @@ class ToggleFavoriteAction(Action):
         )
 
         interaction = kwargs.get("interaction")
+        # The sheet check has to precede the attribute access it guards: reading
+        # roster_entry_or_none first made `sheet is None` unreachable.
         sheet = actor.character_sheet
-        roster_entry = sheet.roster_entry_or_none
-        if sheet is None or roster_entry is None:
+        roster_entry = sheet.roster_entry_or_none if sheet is not None else None
+        if roster_entry is None:
             return ActionResult(success=False, message="You have no roster entry to favorite with.")
         created, _favorite = toggle_interaction_favorite(
             interaction=interaction, roster_entry=roster_entry

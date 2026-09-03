@@ -12,7 +12,7 @@ const COPPERS_PER_SILVER = 10;
 const COPPERS_PER_GOLD = 100;
 
 const UNIT_COPPERS: Record<string, number> = { g: COPPERS_PER_GOLD, s: COPPERS_PER_SILVER, c: 1 };
-const COIN_TOKEN = /^(\d+)\s*(g|s|c)$/i;
+const COIN_TOKEN = /^(\d+)\s*([gsc])$/i;
 
 /**
  * Parse a "1g 2s 3c"-style amount into integer coppers; ``null`` when it
