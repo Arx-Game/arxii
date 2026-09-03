@@ -299,6 +299,7 @@ NEW_ACCOUNT_REGISTRATION_ENABLED = False
 # Allauth settings
 ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "evennia_extensions.social_adapters.ArxSocialAccountAdapter"
+MFA_ADAPTER = "evennia_extensions.mfa_adapter.ArxMFAAdapter"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 # Without a prefix allauth falls back to "[<Site.name>] ", and the only row in
 # Django's sites table is the framework default "example.com". The stock body
