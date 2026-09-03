@@ -1,17 +1,32 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useLogin } from './queries';
+import { useCompleteMfaLogin, useLogin } from './queries';
 import { SITE_NAME } from '@/config';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Button } from '@/components/ui/button';
 import { fetchSocialProviders, initiateSocialLogin } from './api';
 
+/** Only a same-origin, absolute path is a safe post-login redirect target —
+ * anything else (a `//host` scheme-relative URL, an absolute URL with a
+ * scheme, a relative path) falls back to '/'. */
+function safeNext(value: string | null): string {
+  if (value && value.startsWith('/') && !value.startsWith('//')) {
+    return value;
+  }
+  return '/';
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = safeNext(searchParams.get('next'));
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaStep, setMfaStep] = useState(false);
+  const [code, setCode] = useState('');
 
   // Fetch available social auth providers
   const { data: providers = [] } = useQuery({
@@ -23,14 +38,56 @@ export function LoginPage() {
     initiateSocialLogin(providerId, 'login');
   };
 
-  const mutation = useLogin((accountData) => {
-    // Check if email is verified
+  const goToDestination = (accountData: { email_verified: boolean }) => {
     if (!accountData.email_verified) {
       navigate('/account/unverified');
     } else {
-      navigate('/');
+      navigate(next);
     }
+  };
+
+  const mutation = useLogin((result) => {
+    if (result.kind === 'mfa_required') {
+      setMfaStep(true);
+      return;
+    }
+    goToDestination(result.account);
   });
+
+  const mfa = useCompleteMfaLogin((account) => {
+    goToDestination(account);
+  });
+
+  if (mfaStep) {
+    return (
+      <div className="mx-auto max-w-sm">
+        <h1 className="mb-6 text-2xl font-bold">Login to {SITE_NAME}</h1>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            mfa.mutate(code);
+          }}
+          className="space-y-4"
+        >
+          <p className="text-sm text-muted-foreground">
+            Enter the 6-digit code from your authenticator app, or one of your recovery codes.
+          </p>
+          <Label htmlFor="mfa-code">Authenticator code or recovery code</Label>
+          <Input
+            id="mfa-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+          <SubmitButton className="w-full" isLoading={mfa.isPending} disabled={!code}>
+            Continue
+          </SubmitButton>
+          {mfa.isError && <p className="text-red-600">{mfa.error.message}</p>}
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-sm">

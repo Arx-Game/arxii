@@ -1,6 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchAccount, fetchRegistrationStatus, postLogin, postLogout, postRegister } from './api';
-import { AccountData } from './types';
+import {
+  completeMfaLogin,
+  fetchAccount,
+  fetchRegistrationStatus,
+  postLogin,
+  postLogout,
+  postRegister,
+} from './api';
+import { AccountData, LoginResult } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
 import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
@@ -80,20 +87,37 @@ export function useAuthStatus(): { isLoading: boolean; account: AccountData | nu
   return { isLoading: isPending, account: data ?? null };
 }
 
-export function useLogin(onSuccess?: (data: AccountData) => void) {
+export function useLogin(onSuccess?: (data: LoginResult) => void) {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: postLogin,
     onSuccess: (data) => {
-      // Keep React Query cache in sync with Redux so guards reading the
-      // cache (via useAuthStatus) see the authenticated state on the
-      // next render — without this, post-login navigation to a guarded
-      // route would bounce back through /login because the cache still
-      // showed `data: null` from the pre-login fetch.
-      queryClient.setQueryData(['account'], data);
-      dispatch(setAccount(data));
+      if (data.kind === 'ok') {
+        // Keep React Query cache in sync with Redux so guards reading the
+        // cache (via useAuthStatus) see the authenticated state on the
+        // next render — without this, post-login navigation to a guarded
+        // route would bounce back through /login because the cache still
+        // showed `data: null` from the pre-login fetch.
+        queryClient.setQueryData(['account'], data.account);
+        dispatch(setAccount(data.account));
+      }
       onSuccess?.(data);
+    },
+  });
+}
+
+/** Completes a login that stopped at the 2FA step (#3591). Same cache/Redux
+ * write-through as the `useLogin` ok branch, once the code is accepted. */
+export function useCompleteMfaLogin(onSuccess?: (account: AccountData) => void) {
+  const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: completeMfaLogin,
+    onSuccess: (account) => {
+      queryClient.setQueryData(['account'], account);
+      dispatch(setAccount(account));
+      onSuccess?.(account);
     },
   });
 }
