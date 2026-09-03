@@ -309,4 +309,5 @@ treat those names as hints to confirm, not gospel.
 - [0099 — Custody clearance requests are identity-based, not protected_subject-pk-based](0099-custody-clearance-requests-are-identity-based.md) (supersedes the pk-only Task 6 first pass)
 - [0259 - Stake branches are chosen by authored key, never by a GM pick](0259-stake-branches-are-chosen-by-authored-key.md) (#3561; supersedes the PR2 constrained-pick decision recorded in stakes.md; extends ADR-0067, ADR-0078; related ADR-0257)
 - [0260 - request.user is the Account typeclass; account data caches on the Account, request data goes through middleware](0260-request-user-is-the-account-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
+- [0262 - No to_attr prefetch onto identity-mapped instances](0262-no-to-attr-prefetch-onto-identity-mapped-instances.md) (#3564, found in #3563; extends ADR-0008)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
