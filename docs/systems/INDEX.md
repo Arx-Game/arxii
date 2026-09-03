@@ -7573,11 +7573,11 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     `create_fortification` (snapshots `max_integrity` from `Building.fortification_level`
     if a `building` is given, #1713)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`;
- the first round open also calls `activate_stakes_for_battle` - scoped to
+    the first round open also calls `activate_stakes_for_battle` - scoped to
     `battle.story_beat` alone when it is set and itself a staked, still-UNSATISFIED
     beat, else falling back to every staked beat sharing `battle.scene`, #3569, so a
     battle pre-staged onto one beat via session prep never also locks a sibling
- staked beat that merely shares its scene - see battles.md's "Stakes / Beat Wiring"),
+    staked beat that merely shares its scene - see battles.md's "Stakes / Beat Wiring"),
     `declare_battle_action` (requires `technique`; update_or_create; now dispatches 11
     `BattleActionKind` values; scope/command-tier validated for PLACE/SIDE, #1710;
     REPEL/HOLD require scope=PLACE, #1712; BREACH/FORTIFY validate `target_fortification`
