@@ -29,6 +29,9 @@ def setup_environment() -> None:
 
     os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
     os.environ.setdefault("SECRET_KEY", "arxii-placeholder-secret-key")
+    # 32 zero bytes, URL-safe base64: a valid Fernet key shape for settings.MFA_SECRETS_KEY
+    # (#3591), which settings.py requires like SECRET_KEY. Not a secret.
+    os.environ.setdefault("MFA_SECRETS_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
     if "DJANGO_SETTINGS_MODULE" not in os.environ:
         os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
 

@@ -82,6 +82,9 @@ def _setup_django() -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
     os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
     os.environ.setdefault("SECRET_KEY", "arxii-placeholder-secret-key")
+    # 32 zero bytes, URL-safe base64: a valid Fernet key shape for settings.MFA_SECRETS_KEY
+    # (#3591), which settings.py requires like SECRET_KEY. Not a secret.
+    os.environ.setdefault("MFA_SECRETS_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
     django.setup()
 
 
