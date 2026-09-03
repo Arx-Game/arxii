@@ -488,6 +488,14 @@ LOGGING = {
             "format": "[{levelname}] {name}: {message}",
             "style": "{",
         },
+        # Evennia's Twisted file observer already writes its own level marker
+        # on every server.log line, so the bridge formatter must not duplicate
+        # it; the logger name stays because Evennia overwrites the namespace
+        # slot (#3599).
+        "bridge": {
+            "format": "{name}: {message}",
+            "style": "{",
+        },
     },
     "handlers": {
         "console": {
@@ -499,7 +507,7 @@ LOGGING = {
         # console handler's output is discarded.
         "twisted_bridge": {
             "class": "evennia_extensions.observability.log_bridge.TwistedLogHandler",
-            "formatter": "simple",
+            "formatter": "bridge",
         },
     },
     "root": {
@@ -530,6 +538,13 @@ LOGGING = {
         "evennia": {
             "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
+            "propagate": False,
+        },
+        # sentry_sdk's own logger (dedupe "dropped duplicated event" INFO lines,
+        # one per traceback line) must not be bridged into server.log (#3599).
+        "sentry_sdk": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },

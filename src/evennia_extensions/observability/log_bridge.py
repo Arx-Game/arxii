@@ -17,14 +17,6 @@ from twisted.logger import Logger, LogLevel
 
 BRIDGE_MARKER = "arxii_bridged"
 
-_LEVELS: dict[int, LogLevel] = {
-    logging.DEBUG: LogLevel.debug,
-    logging.INFO: LogLevel.info,
-    logging.WARNING: LogLevel.warn,
-    logging.ERROR: LogLevel.error,
-    logging.CRITICAL: LogLevel.critical,
-}
-
 
 def _twisted_level(levelno: int) -> LogLevel:
     if levelno >= logging.CRITICAL:
@@ -58,7 +50,7 @@ class TwistedLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             text = self.format(record)
-            level = _LEVELS.get(record.levelno) or _twisted_level(record.levelno)
+            level = _twisted_level(record.levelno)
             self._logger_for(record.name).emit(level, "{text}", text=text, **{BRIDGE_MARKER: True})
         except Exception:  # noqa: BLE001
             self.handleError(record)

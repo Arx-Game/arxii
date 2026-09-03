@@ -30,6 +30,14 @@ _FORWARDED_LEVELS = frozenset({LogLevel.error, LogLevel.critical})
 _installed = False
 
 
+def _stamp_logger(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]:
+    """Event processor: set the top-level ``logger`` field Sentry's search/tag
+    promotion actually reads (the ``set_tag`` call below only adds a searchable
+    tag, not this field)."""
+    event["logger"] = SENTRY_LOGGER_TAG
+    return event
+
+
 def sentry_log_observer(event: dict[str, Any]) -> None:
     """Twisted log observer: send error-level events to Sentry."""
     if event.get(BRIDGE_MARKER):
@@ -38,15 +46,22 @@ def sentry_log_observer(event: dict[str, Any]) -> None:
         return
     with sentry_sdk.new_scope() as scope:
         scope.set_tag("logger", SENTRY_LOGGER_TAG)
+        scope.add_event_processor(_stamp_logger)
         failure = event.get("log_failure")
         if failure is not None:
+            scope.set_extra("evennia_log_line", formatEvent(event))
             sentry_sdk.capture_exception(
                 (failure.type, failure.value, failure.getTracebackObject())
             )
             return
         if sys.exc_info()[1] is not None:
+            scope.set_extra("evennia_log_line", formatEvent(event))
             sentry_sdk.capture_exception()
             return
+        # Do not fingerprint on event["log_format"]: Evennia's _log() emits
+        # every plain log_err with the literal format "{line}", so grouping
+        # on the template would merge every unrelated Evennia error into one
+        # Sentry issue. Leave Sentry's default message-based grouping.
         sentry_sdk.capture_message(formatEvent(event), level="error")
 
 

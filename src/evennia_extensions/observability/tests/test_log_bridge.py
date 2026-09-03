@@ -69,6 +69,14 @@ class TwistedLogHandlerTests(SimpleTestCase):
             handlers["twisted_bridge"]["class"],
             "evennia_extensions.observability.log_bridge.TwistedLogHandler",
         )
+        self.assertEqual(handlers["twisted_bridge"]["formatter"], "bridge")
         self.assertIn("twisted_bridge", settings.LOGGING["root"]["handlers"])
         for name in ("django", "django.request", "django.db.backends", "world", "evennia"):
             self.assertIn("twisted_bridge", settings.LOGGING["loggers"][name]["handlers"], name)
+
+    def test_sentry_sdk_logger_is_not_bridged(self) -> None:
+        from django.conf import settings
+
+        sentry_logger = settings.LOGGING["loggers"]["sentry_sdk"]
+        self.assertEqual(sentry_logger["level"], "WARNING")
+        self.assertNotIn("twisted_bridge", sentry_logger["handlers"])
