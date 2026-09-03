@@ -78,12 +78,18 @@ class ClueSearchView(APIView):
         # queryset filter, so a FilterSet class would still need this same
         # request.query_params reach-in; one ad hoc `q` param isn't worth the split.
         q = request.query_params.get("q", "")  # noqa: USE_FILTERSET
-        queryset = Clue.objects.filter(target_kind__in=RESOLVABLE_CLUE_TARGET_KINDS)
+        # Apply the per-account target-kind policy to the queryset itself, before the
+        # top-25 slice, so an alphabetically-early run of disallowed clues (e.g.
+        # SECRET targets a non-staff GM can't see) can't starve out allowed matches
+        # further down the sort (#3566 fix-round finding).
+        allowed_kinds = [
+            kind
+            for kind in RESOLVABLE_CLUE_TARGET_KINDS
+            if clue_target_kind_allowed(request.user, kind)
+        ]
+        queryset = Clue.objects.filter(target_kind__in=allowed_kinds)
         if q:
             queryset = queryset.filter(name__icontains=q)
-        candidates = queryset.order_by("name")[:25]
-        rows = [
-            clue for clue in candidates if clue_target_kind_allowed(request.user, clue.target_kind)
-        ]
+        rows = queryset.order_by("name")[:25]
         serializer = ClueSearchResultSerializer(rows, many=True)
         return Response(serializer.data)

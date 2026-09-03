@@ -92,6 +92,33 @@ class ClueSearchViewTests(APITestCase):
         names = [row["name"] for row in response.data]
         assert names == ["Torn Ledger Page"]
 
+    def test_disallowed_rows_do_not_starve_an_allowed_row_off_the_page(self):
+        """The target-kind policy filters before the top-25 slice, not after (#3566).
+
+        A non-staff SENIOR GM cannot see SECRET-target clues. If the queryset were
+        sliced to 25 rows first and filtered after, 26 alphabetically-early SECRET
+        clues would fill the whole page and push an allowed, later-sorting clue off
+        the result entirely.
+        """
+        account = AccountFactory()
+        GMProfileFactory(account=account, level=GMLevel.SENIOR)
+        for i in range(26):
+            ClueFactory(
+                name=f"Aardvark Secret Clue {i:02d}",
+                target_kind=ClueTargetKind.SECRET,
+                target_codex_entry=None,
+                target_secret=SecretFactory(),
+            )
+        allowed_clue = ClueFactory(name="Zzyzx Allowed Clue")
+
+        self.client.force_authenticate(user=account)
+        response = self.client.get(URL, {"q": "clue"})
+
+        assert response.status_code == status.HTTP_200_OK
+        names = [row["name"] for row in response.data]
+        assert allowed_clue.name in names
+        assert all("Secret Clue" not in name for name in names)
+
     def test_result_rows_carry_exactly_id_name_target_kind(self):
         staff = AccountFactory(is_staff=True)
         clue = ClueFactory(name="Torn Ledger Page")

@@ -1731,14 +1731,14 @@ export async function searchNpcAssets(query: string): Promise<EntitySearchResult
 }
 
 /**
- * GET /api/items/templates/?name=&page_size=25 (#3566) - name search over the
+ * GET /api/items/templates/?name= (#3566) - name search over the
  * item-template catalog for the ITEM reward-line picker. Mirrors
  * gm-adjudication/api.ts's getItemTemplateCatalog, adapted to
  * EntitySearchResult (hint = the template's gold value, the amount the
  * server pins an ITEM reward line's payout to).
  */
 export async function searchItemTemplates(query: string): Promise<EntitySearchResult[]> {
-  const params = new URLSearchParams({ name: query, page_size: '25' });
+  const params = new URLSearchParams({ name: query });
   const res = await apiFetch(`/api/items/templates/?${params.toString()}`);
   if (!res.ok) await throwApiError(res, 'Failed to search item templates');
   const data = (await res.json()) as PaginatedResponse<components['schemas']['ItemTemplateList']>;

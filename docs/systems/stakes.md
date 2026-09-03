@@ -508,16 +508,20 @@ equivalent (ITEM, CLUE, CODEX), all called directly:
   (default `False`; seeded `True` for EXPERIENCED and SENIOR - minting an item
   is world state, so the trust bar sits above the JUNIOR-tier authoring most GM
   verbs use); staff bypass the gate.
-- `CLUE` (#3566) → `world.clues.services.grant_clue_target(clue, roster_entry)`
-  via `acquire_clue` - AUTOMATIC resolution, same as the search/trigger
-  acquisition surfaces (`docs/systems/investigation_and_discovery.md`). Only a
-  clue whose `target_kind` is in `RESOLVABLE_CLUE_TARGET_KINDS` (codex, rescue,
-  secret, persona link) may be a reward line's target - an ITEM-target clue is
-  a bare pointer, not a coherent reward, and is rejected in `clean()` and the
-  serializer. Further gated by `world.clues.services.clue_target_kind_allowed`
-  (the same policy `AuthorClueAction` uses to mint clues, #3432/#3566 shared
-  helper): staff may target anything, a GM needs a `GMProfile` at SENIOR or
-  above, and SECRET targets stay staff-only regardless of level.
+- `CLUE` (#3566) → `world.clues.services.grant_clue_target(clue, roster_entry)`,
+  called directly - AUTOMATIC resolution of the clue's target (codex entry,
+  rescue, secret, or persona link), the same grant `acquire_clue`'s callers
+  trigger once a clue is found. The reward line skips straight to the grant: it
+  never calls `acquire_clue` and never creates or marks a `CharacterClue` row,
+  so the participant gains the clue's target knowledge without the clue itself
+  ever showing up as held or found. Only a clue whose `target_kind` is in
+  `RESOLVABLE_CLUE_TARGET_KINDS` (codex, rescue, secret, persona link) may be a
+  reward line's target - an ITEM-target clue is a bare pointer, not a coherent
+  reward, and is rejected in `clean()` and the serializer. Further gated by
+  `world.clues.services.clue_target_kind_allowed` (the same policy
+  `AuthorClueAction` uses to mint clues, #3432/#3566 shared helper): staff may
+  target anything, a GM needs a `GMProfile` at SENIOR or above, and SECRET
+  targets stay staff-only regardless of level.
 - `CODEX` (#3566) → `world.codex.services.grant_codex_entry(roster_entry,
   codex_entry)` - idempotent; a repeat grant (e.g. two reward lines naming the
   same entry, or a re-fired delivery) is a no-op rather than a duplicate row.
