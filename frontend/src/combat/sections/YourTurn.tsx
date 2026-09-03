@@ -886,6 +886,183 @@ function MountedManeuvers({
   );
 }
 
+interface GuardControlProps {
+  declaredManeuver: string | null;
+  encounter: EncounterDetail | null | undefined;
+  guardControlRef: React.RefObject<HTMLDivElement>;
+  coverableAllies: Participant[];
+  protectiveTechniques: PlayerAction[];
+  selectedGuardTechnique: PlayerAction | undefined;
+  isRedirectGuardTechnique: boolean;
+  guardAllyId: string;
+  guardTechniqueId: string;
+  guardDestination: string;
+  guardSoulfrayAccepted: boolean;
+  animaCurrent: number | null;
+  guardPending: boolean;
+  isLocked: boolean;
+  isDeclaringPhase: boolean;
+  setGuardAllyId: (value: string) => void;
+  setGuardTechniqueId: (value: string) => void;
+  setGuardDestination: (value: string) => void;
+  setGuardSoulfrayAccepted: (value: boolean) => void;
+  handleGuard: () => void;
+}
+
+/**
+ * Guard an ally with your body or a protective technique (#2207).
+ *
+ * Hidden once a guard is already declared this round; the declared state shows
+ * in the cluster's badge instead.
+ */
+function GuardControl({
+  declaredManeuver,
+  encounter,
+  guardControlRef,
+  coverableAllies,
+  protectiveTechniques,
+  selectedGuardTechnique,
+  isRedirectGuardTechnique,
+  guardAllyId,
+  guardTechniqueId,
+  guardDestination,
+  guardSoulfrayAccepted,
+  animaCurrent,
+  guardPending,
+  isLocked,
+  isDeclaringPhase,
+  setGuardAllyId,
+  setGuardTechniqueId,
+  setGuardDestination,
+  setGuardSoulfrayAccepted,
+  handleGuard,
+}: GuardControlProps) {
+  if (declaredManeuver === 'interpose') return null;
+  return (
+    <div className="space-y-1.5" data-testid="guard-control" ref={guardControlRef}>
+      <Select
+        value={guardAllyId}
+        onValueChange={setGuardAllyId}
+        disabled={isLocked || !isDeclaringPhase || guardPending}
+      >
+        <SelectTrigger data-testid="guard-ally-select" className="h-8 text-xs">
+          <SelectValue placeholder="Guard anyone…" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={GUARD_ANYONE_VALUE}>Anyone (guard whoever is hit)</SelectItem>
+          {coverableAllies.map((ally) => (
+            <SelectItem key={ally.id} value={String(ally.id)}>
+              {ally.character_name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {protectiveTechniques.length > 0 && (
+        <Select
+          value={guardTechniqueId}
+          onValueChange={(value) => {
+            setGuardTechniqueId(value);
+            // Switching back to mundane clears any prior Soulfray
+            // consent - there's no protective ward left to hold (#3573).
+            if (value === GUARD_NO_TECHNIQUE_VALUE) setGuardSoulfrayAccepted(false);
+          }}
+          disabled={isLocked || !isDeclaringPhase || guardPending}
+        >
+          <SelectTrigger data-testid="guard-technique-select" className="h-8 text-xs">
+            <SelectValue placeholder="No protective technique" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={GUARD_NO_TECHNIQUE_VALUE}>
+              No protective technique (mundane)
+            </SelectItem>
+            {protectiveTechniques.map((action) => (
+              <SelectItem
+                key={action.ref.technique_id ?? action.display_name}
+                value={String(action.ref.technique_id)}
+              >
+                {action.display_name}
+                {action.protective_flavor != null
+                  ? ` (${PROTECTIVE_FLAVOR_LABELS[action.protective_flavor] ?? action.protective_flavor})`
+                  : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {selectedGuardTechnique != null && (
+        <label
+          className="flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs"
+          data-testid="guard-soulfray-gate"
+        >
+          <input
+            type="checkbox"
+            data-testid="guard-soulfray-toggle"
+            checked={guardSoulfrayAccepted}
+            onChange={(e) => setGuardSoulfrayAccepted(e.target.checked)}
+            disabled={isLocked || !isDeclaringPhase || guardPending}
+          />
+          <span>
+            Hold the line into Soulfray
+            {animaCurrent != null && selectedGuardTechnique.reactive_anima_cost != null
+              ? ` (anima ${animaCurrent} / fee ${selectedGuardTechnique.reactive_anima_cost})`
+              : ''}
+          </span>
+        </label>
+      )}
+
+      {isRedirectGuardTechnique && (
+        <Select
+          value={guardDestination}
+          onValueChange={setGuardDestination}
+          disabled={isLocked || !isDeclaringPhase || guardPending}
+        >
+          <SelectTrigger data-testid="guard-redirect-destination-select" className="h-8 text-xs">
+            <SelectValue placeholder="Redirect destination" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={GUARD_DESTINATION_AWAY}>Away (default)</SelectItem>
+            {(encounter?.opponents ?? []).map((opponent) => (
+              <SelectItem
+                key={`opp-${opponent.id}`}
+                value={`${GUARD_DESTINATION_OPPONENT_PREFIX}${opponent.id}`}
+              >
+                {opponent.name}
+              </SelectItem>
+            ))}
+            {(encounter?.volatile_objects ?? []).map((volatileObject) => (
+              <SelectItem
+                key={`obj-${volatileObject.id}`}
+                value={`${GUARD_DESTINATION_OBJECT_PREFIX}${volatileObject.id}`}
+              >
+                {volatileObject.name}
+                {volatileObject.position_name != null ? ` (${volatileObject.position_name})` : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      <button
+        type="button"
+        disabled={isLocked || !isDeclaringPhase || guardPending}
+        onClick={handleGuard}
+        data-testid="guard-confirm-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          isLocked || !isDeclaringPhase
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-violet-500/60 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+        )}
+      >
+        {guardPending ? 'Declaring guard…' : 'Guard'}
+      </button>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // YourTurn
 // ---------------------------------------------------------------------------
@@ -2005,134 +2182,28 @@ export function YourTurn({
           )}
 
           {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
-          {declaredManeuver !== 'interpose' && (
-            <div className="space-y-1.5" data-testid="guard-control" ref={guardControlRef}>
-              <Select
-                value={guardAllyId}
-                onValueChange={setGuardAllyId}
-                disabled={isLocked || !isDeclaringPhase || guardPending}
-              >
-                <SelectTrigger data-testid="guard-ally-select" className="h-8 text-xs">
-                  <SelectValue placeholder="Guard anyone…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GUARD_ANYONE_VALUE}>Anyone (guard whoever is hit)</SelectItem>
-                  {coverableAllies.map((ally) => (
-                    <SelectItem key={ally.id} value={String(ally.id)}>
-                      {ally.character_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {protectiveTechniques.length > 0 && (
-                <Select
-                  value={guardTechniqueId}
-                  onValueChange={(value) => {
-                    setGuardTechniqueId(value);
-                    // Switching back to mundane clears any prior Soulfray
-                    // consent - there's no protective ward left to hold (#3573).
-                    if (value === GUARD_NO_TECHNIQUE_VALUE) setGuardSoulfrayAccepted(false);
-                  }}
-                  disabled={isLocked || !isDeclaringPhase || guardPending}
-                >
-                  <SelectTrigger data-testid="guard-technique-select" className="h-8 text-xs">
-                    <SelectValue placeholder="No protective technique" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GUARD_NO_TECHNIQUE_VALUE}>
-                      No protective technique (mundane)
-                    </SelectItem>
-                    {protectiveTechniques.map((action) => (
-                      <SelectItem
-                        key={action.ref.technique_id ?? action.display_name}
-                        value={String(action.ref.technique_id)}
-                      >
-                        {action.display_name}
-                        {action.protective_flavor != null
-                          ? ` (${PROTECTIVE_FLAVOR_LABELS[action.protective_flavor] ?? action.protective_flavor})`
-                          : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {selectedGuardTechnique != null && (
-                <label
-                  className="flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs"
-                  data-testid="guard-soulfray-gate"
-                >
-                  <input
-                    type="checkbox"
-                    data-testid="guard-soulfray-toggle"
-                    checked={guardSoulfrayAccepted}
-                    onChange={(e) => setGuardSoulfrayAccepted(e.target.checked)}
-                    disabled={isLocked || !isDeclaringPhase || guardPending}
-                  />
-                  <span>
-                    Hold the line into Soulfray
-                    {animaCurrent != null && selectedGuardTechnique.reactive_anima_cost != null
-                      ? ` (anima ${animaCurrent} / fee ${selectedGuardTechnique.reactive_anima_cost})`
-                      : ''}
-                  </span>
-                </label>
-              )}
-
-              {isRedirectGuardTechnique && (
-                <Select
-                  value={guardDestination}
-                  onValueChange={setGuardDestination}
-                  disabled={isLocked || !isDeclaringPhase || guardPending}
-                >
-                  <SelectTrigger
-                    data-testid="guard-redirect-destination-select"
-                    className="h-8 text-xs"
-                  >
-                    <SelectValue placeholder="Redirect destination" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GUARD_DESTINATION_AWAY}>Away (default)</SelectItem>
-                    {(encounter?.opponents ?? []).map((opponent) => (
-                      <SelectItem
-                        key={`opp-${opponent.id}`}
-                        value={`${GUARD_DESTINATION_OPPONENT_PREFIX}${opponent.id}`}
-                      >
-                        {opponent.name}
-                      </SelectItem>
-                    ))}
-                    {(encounter?.volatile_objects ?? []).map((volatileObject) => (
-                      <SelectItem
-                        key={`obj-${volatileObject.id}`}
-                        value={`${GUARD_DESTINATION_OBJECT_PREFIX}${volatileObject.id}`}
-                      >
-                        {volatileObject.name}
-                        {volatileObject.position_name != null
-                          ? ` (${volatileObject.position_name})`
-                          : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              <button
-                type="button"
-                disabled={isLocked || !isDeclaringPhase || guardPending}
-                onClick={handleGuard}
-                data-testid="guard-confirm-btn"
-                className={cn(
-                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked || !isDeclaringPhase
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-violet-500/60 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-                )}
-              >
-                {guardPending ? 'Declaring guard…' : 'Guard'}
-              </button>
-            </div>
-          )}
+          <GuardControl
+            declaredManeuver={declaredManeuver}
+            encounter={encounter}
+            guardControlRef={guardControlRef}
+            coverableAllies={coverableAllies}
+            protectiveTechniques={protectiveTechniques}
+            selectedGuardTechnique={selectedGuardTechnique}
+            isRedirectGuardTechnique={isRedirectGuardTechnique}
+            guardAllyId={guardAllyId}
+            guardTechniqueId={guardTechniqueId}
+            guardDestination={guardDestination}
+            guardSoulfrayAccepted={guardSoulfrayAccepted}
+            animaCurrent={animaCurrent}
+            guardPending={guardPending}
+            isLocked={isLocked}
+            isDeclaringPhase={isDeclaringPhase}
+            setGuardAllyId={setGuardAllyId}
+            setGuardTechniqueId={setGuardTechniqueId}
+            setGuardDestination={setGuardDestination}
+            setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
+            handleGuard={handleGuard}
+          />
 
           {/* Rally control — ally picker + confirm button (#3381) */}
           <div className="space-y-1.5" data-testid="rally-control">
