@@ -116,18 +116,12 @@ class BeatOutcome(models.TextChoices):
     SUCCESS = "success", "Success"
     FAILURE = "failure", "Failure"
     EXPIRED = "expired", "Expired"
-    PENDING_GM_REVIEW = "pending_gm_review", "Pending GM review"
 
 
 class BeatVisibility(models.TextChoices):
     HINTED = "hinted", "Hinted"
     SECRET = "secret", "Secret"
     VISIBLE = "visible", "Visible"
-
-
-class TransitionMode(models.TextChoices):
-    AUTO = "auto", "Auto"
-    GM_CHOICE = "gm_choice", "GM Choice"
 
 
 class StoryGMOfferStatus(models.TextChoices):
@@ -226,14 +220,14 @@ class StakeRewardSink(models.TextChoices):
 class StakeOutcomeMethod(models.TextChoices):
     """How a StakeOutcome was decided (#1770 PR2).
 
-    MACHINE: graded automatically by the completion tail (beat outcome column,
-    with data-where-it-exists overrides such as NPC vitals DEAD -> LOSS).
-    GM_PICK: a GM chose among the stake's authored columns (constrained pick —
-    never free composition).
+    MACHINE is the only method: every outcome is graded automatically by the
+    completion tail (beat outcome column, with data-where-it-exists overrides
+    such as NPC vitals DEAD -> LOSS). #3561 retired the GM constrained pick;
+    StakeOutcome.resolved_by / gm_notes remain as audit fields from before
+    that removal (see their help_text).
     """
 
     MACHINE = "machine", "Machine"
-    GM_PICK = "gm_pick", "GM pick"
 
 
 # Risk ladder for effective-risk shifts (index order matters).

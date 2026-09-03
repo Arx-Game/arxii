@@ -2,9 +2,11 @@
 
 Wires a concluded war-scale Battle into the same record_outcome_tier_completion
 seam #1746 already proved out for CombatEncounter's ENCOUNTER_COMPLETED wiring:
+beat_for_scene_conclusion (#3559) picks the single beat a concluded battle may
+grade - the battle's own explicitly routed story_beat, or the battle scene's
+running beat when it is itself the objective (kind ENCOUNTER) -
 classify_battle_conclusion_outcome maps Battle.outcome to a designer-tunable
-CheckOutcome via BattleOutcomeMapping, and resolve_battle_beats resolves any
-linked OUTCOME_TIER beat.
+CheckOutcome via BattleOutcomeMapping, and resolve_battle_beats resolves it.
 
 Unlike combat's wiring, this is a direct function call from conclude_battle,
 not a flow event/TriggerDefinition — Battle has no location (#1733), so the
@@ -26,23 +28,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def classify_battle_conclusion_outcome(battle: Battle) -> CheckOutcome | None:
+def classify_battle_conclusion_outcome(battle: Battle) -> CheckOutcome:
     """Map a concluded battle's outcome to a CheckOutcome tier.
-
-    Returns the designer-authored CheckOutcome for battle.outcome, or None
-    when no mapping row exists or the row's check_outcome is null. None
-    signals the caller to resolve the beat to PENDING_GM_REVIEW rather than
-    firing a consequence pool.
 
     Args:
         battle: A concluded Battle. Its ``outcome`` drives the mapping lookup.
 
     Returns:
-        The mapped CheckOutcome, or None.
+        The designer-authored CheckOutcome for battle.outcome.
 
     Raises:
-        ValueError: if the battle has no outcome set (programmer error — only
+        ValueError: if the battle has no outcome set (programmer error - only
             called post-conclusion, from resolve_battle_beats).
+        BattleOutcomeMapping.DoesNotExist: no row is authored for this
+            outcome. Missing content, not a data flag the caller branches on
+            - see resolve_battle_beats.
     """
     from world.battles.constants import BattleOutcome  # noqa: PLC0415
     from world.battles.models import BattleOutcomeMapping  # noqa: PLC0415
@@ -54,8 +54,8 @@ def classify_battle_conclusion_outcome(battle: Battle) -> CheckOutcome | None:
         )
         raise ValueError(msg)
 
-    mapping = BattleOutcomeMapping.objects.filter(outcome=battle.outcome).first()
-    return mapping.check_outcome if mapping is not None else None
+    mapping = BattleOutcomeMapping.objects.get(outcome=battle.outcome)
+    return mapping.check_outcome
 
 
 def activate_stakes_for_battle(battle: Battle) -> None:
@@ -93,56 +93,52 @@ def activate_stakes_for_battle(battle: Battle) -> None:
 
 
 def resolve_battle_beats(battle: Battle) -> None:
-    """Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.
+    """Resolve the one beat linked to a concluded battle (#3559).
 
-    Called directly from conclude_battle (#1785 spec Decision 1 — no event or
+    Called directly from conclude_battle (#1785 spec Decision 1 - no event or
     trigger; Battle has no location, so flows.emit_event doesn't apply, and
-    conclude_battle is already the single call-site choke point). One Battle
-    grades as one outcome tier, applied to every linked beat (#1785 spec
-    Decision 2) — per-front independent grading is #1760's job.
+    conclude_battle is already the single call-site choke point).
+    beat_for_scene_conclusion picks at most one beat - the battle's own
+    explicitly routed story_beat, or the battle scene's running beat when it
+    is itself the objective (kind ENCOUNTER); per-front independent grading
+    stays #1760's job, not this wiring's.
 
-    No withdrawal path: BattleOutcome has no FLED/ABANDONED-equivalent value —
+    No withdrawal path: BattleOutcome has no FLED/ABANDONED-equivalent value -
     a timed-out battle still grades a decisive/marginal winner via
-    maybe_conclude_on_timer.
+    maybe_conclude_on_timer. A missing BattleOutcomeMapping row is content,
+    not a pause - it is logged as an error (surfaced on the admin sentinel,
+    #3444) and the beat is left open.
     """
-    from world.stories.constants import BeatOutcome, BeatPredicateType  # noqa: PLC0415
-    from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
-    from world.stories.services.beats import record_outcome_tier_completion  # noqa: PLC0415
+    from world.battles.models import BattleOutcomeMapping  # noqa: PLC0415
+    from world.stories.services.beats import (  # noqa: PLC0415
+        beat_for_scene_conclusion,
+        record_outcome_tier_completion,
+    )
     from world.stories.services.progress import (  # noqa: PLC0415
         get_active_progress_for_story,
     )
 
-    scene = battle.scene
-    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
-    beats = list(
-        Beat.objects.filter(
-            episode_id__in=episode_ids,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-    )
-    if not beats:
+    beat = beat_for_scene_conclusion(battle.scene, battle.story_beat)
+    if beat is None:
         return
 
-    outcome_tier = classify_battle_conclusion_outcome(battle)
+    progress = get_active_progress_for_story(beat.episode.chapter.story)
+    if progress is None:
+        logger.debug(
+            "Battle conclusion: beat %s - no active progress for story; skipping.",
+            beat.pk,
+        )
+        return
 
-    for beat in beats:
-        progress = get_active_progress_for_story(beat.episode.chapter.story)
-        if progress is None:
-            logger.debug(
-                "Battle conclusion: beat %s — no active progress for story; skipping.",
-                beat.pk,
-            )
-            continue
-        if outcome_tier is None:
-            record_outcome_tier_completion(
-                progress=progress,
-                beat=beat,
-                force_outcome=BeatOutcome.PENDING_GM_REVIEW,
-            )
-        else:
-            record_outcome_tier_completion(
-                progress=progress,
-                beat=beat,
-                outcome_tier=outcome_tier,
-            )
+    try:
+        tier = classify_battle_conclusion_outcome(battle)
+    except BattleOutcomeMapping.DoesNotExist:
+        logger.exception(
+            "No BattleOutcomeMapping for outcome=%s; beat %s left open "
+            "(required content, see the admin sentinel).",
+            battle.outcome,
+            beat.pk,
+        )
+        return
+
+    record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=tier)

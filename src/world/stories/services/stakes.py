@@ -39,6 +39,7 @@ from world.stories.types import StakesReadinessReport
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from actions.models.consequence_pools import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Scene
 
@@ -190,6 +191,47 @@ def _stake_column_problems(stakes: list[Stake]) -> list[str]:
     return problems
 
 
+def _named_branch_problems(beat: Beat, stakes: list[Stake]) -> list[str]:
+    """Every column with a named branch (non-blank outcome_key) needs a default
+    (blank outcome_key) branch for the machine-grading fallback (#3561); when
+    the beat requires a mission, a named outcome_key must also match an option
+    key its scenario actually declares.
+
+    Scenario keys are fetched once (not per stake) via a single query keyed
+    off ``beat.required_mission_id`` - a beat with no required mission skips
+    the declared-key check entirely (there is no scenario to check against).
+    """
+    problems: list[str] = []
+    scenario_keys: set[str] | None = None
+    if beat.required_mission_id is not None:
+        from world.missions.models import MissionOption  # noqa: PLC0415
+
+        scenario_keys = set(
+            MissionOption.objects.filter(node__template_id=beat.required_mission_id).values_list(
+                "key", flat=True
+            )
+        )
+
+    for stake in stakes:
+        outcome_keys_by_column: dict[str, set[str]] = {}
+        for resolution in stake.prefetched_resolutions:
+            outcome_keys_by_column.setdefault(resolution.column, set()).add(resolution.outcome_key)
+        for column, outcome_keys in outcome_keys_by_column.items():
+            named_keys = outcome_keys - {""}
+            if named_keys and "" not in outcome_keys:
+                problems.append(
+                    f"{column} on stake #{stake.pk} has a named branch but no default branch"
+                )
+            if scenario_keys is not None:
+                problems.extend(
+                    f"stake #{stake.pk} names branch '{key}' that no option of "
+                    "the beat's scenario declares"
+                    for key in sorted(named_keys)
+                    if key not in scenario_keys
+                )
+    return problems
+
+
 def _calibration_band_problems(
     beat: Beat, calibration: RiskCalibration, stakes: list[Stake]
 ) -> list[str]:
@@ -274,11 +316,14 @@ def reward_band_problems_for_beat(beat: Beat) -> list[str]:
 
     Used by ``validate_stakes_readiness`` (via ``_calibration_band_problems``,
     which passes its own prefetch) AND re-run at pay time by
-    ``stake_resolution._apply_stake_rewards`` — the readiness verdict frozen
-    on the activation can go stale if reward lines change after the beat
-    completes (the GM-pick window), so the payout re-verifies the band
-    against live data. Missing calibration / no stakes / risk NONE return []
-    here (those are readiness problems, not band problems).
+    ``stake_resolution._apply_stake_rewards`` - the readiness verdict frozen
+    on the activation can go stale if reward lines changed earlier in the
+    activation's life; every stake now resolves synchronously inside the
+    same atomic completion tail that closes the activation, so there is no
+    post-completion pending-decision window, and this re-check exists for
+    staleness from before that tail ran. Missing calibration / no stakes /
+    risk NONE return [] here (those are readiness problems, not band
+    problems).
     """
     if beat.risk == RenownRisk.NONE:
         return []
@@ -291,16 +336,60 @@ def reward_band_problems_for_beat(beat: Beat) -> list[str]:
     return _reward_band_problems(beat, calibration, stakes)
 
 
+def _pool_polarities(pool: ConsequencePool) -> tuple[bool, bool]:
+    """(has_success_row, has_failure_row) among the pool's resolved consequences.
+
+    Used to flag an advisory (#3559) when clamp_tier_to_pool would find nothing
+    to fire on one side of an outcome, not to block readiness - a pool can be
+    one-sided by design (e.g. a success-only reward pool).
+    """
+    from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+
+    consequences = resolve_pool_consequences(pool)
+    has_success = any(c.outcome_tier.success_level > 0 for c in consequences)
+    has_failure = any(c.outcome_tier.success_level <= 0 for c in consequences)
+    return has_success, has_failure
+
+
+def _readiness_advisories(beat: Beat) -> tuple[str, ...]:
+    """Informational (non-blocking) readiness notes for a beat's pools (#3559).
+
+    A roll clamps to the best authored tier of matching polarity; when a pool
+    has no row of the rolled polarity at all, nothing fires for that side.
+    This never flips is_ready - it's a heads-up for the author, not a gate.
+    """
+    advisories: list[str] = []
+    success_pool = beat.success_consequences
+    if success_pool is not None:
+        has_success, _ = _pool_polarities(success_pool)
+        if not has_success:
+            advisories.append("success pool has no success-polarity row")
+    failure_pool = beat.failure_consequences
+    if failure_pool is not None:
+        _, has_failure = _pool_polarities(failure_pool)
+        if not has_failure:
+            advisories.append("failure pool has no failure-polarity row")
+    return tuple(advisories)
+
+
 def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     """Is this beat's contract complete enough to run at its declared risk?
 
-    Unready never blocks play (#1770 pillar 7) — activation downgrades
+    Unready never blocks play (#1770 pillar 7) - activation downgrades
     effective risk to NONE instead. Rules: target_level declared; >=1 stake;
     every stake authored for WIN and LOSS; severity within the tier's
     calibration bands; removal-from-play reachable within max_fuse_hops.
+
+    Also carries non-blocking ``advisories`` (#3559) about a beat's pools
+    regardless of staked status - a pool missing a row of one polarity never
+    flips ``is_ready``.
     """
     if beat.risk == RenownRisk.NONE:
-        return StakesReadinessReport(is_staked=False, is_ready=True)
+        has_pool = (
+            beat.success_consequences_id is not None or beat.failure_consequences_id is not None
+        )
+        advisories = _readiness_advisories(beat) if has_pool else ()
+        return StakesReadinessReport(is_staked=False, is_ready=True, advisories=advisories)
 
     problems: list[str] = []
     if not beat.target_level:
@@ -314,6 +403,7 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     if not stakes:
         problems.append("no stakes declared")
     problems.extend(_stake_column_problems(stakes))
+    problems.extend(_named_branch_problems(beat, stakes))
 
     if calibration is not None and stakes:
         problems.extend(_calibration_band_problems(beat, calibration, stakes))
@@ -324,7 +414,12 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     # hard-block: the beat still activates (effective NONE) and the scene runs.
     problems.extend(_canon_review_problems(beat))
 
-    return StakesReadinessReport(is_staked=True, is_ready=not problems, problems=tuple(problems))
+    return StakesReadinessReport(
+        is_staked=True,
+        is_ready=not problems,
+        problems=tuple(problems),
+        advisories=_readiness_advisories(beat),
+    )
 
 
 def _canon_review_problems(beat: Beat) -> list[str]:
@@ -363,6 +458,30 @@ def _canon_review_problems(beat: Beat) -> list[str]:
 def get_open_activation(beat: Beat) -> StakeContractActivation | None:
     """The single open (unresolved) activation for this beat, if any."""
     return beat.stake_activations.filter(resolved_at__isnull=True).first()
+
+
+def beat_readiness_payload(beat: Beat) -> dict:
+    """Build the GM readiness payload for a beat (#3562).
+
+    Combines ``validate_stakes_readiness`` (is the contract complete),
+    ``effective_risk_for_beat`` (locked-vs-declared risk), and
+    ``get_open_activation`` (lock state) into the single read the readiness
+    endpoint and ``BeatReadinessSerializer`` share. Unlike
+    ``stakes_summary_for_beat`` (player-safe, pillar 9), ``problems`` here is
+    GM planning detail and is never surfaced to players.
+    """
+    report = validate_stakes_readiness(beat)
+    activation = get_open_activation(beat)
+    return {
+        "is_staked": report.is_staked,
+        "is_ready": report.is_ready,
+        "problems": list(report.problems),
+        "advisories": list(report.advisories),
+        "declared_risk": beat.risk,
+        "effective_risk": effective_risk_for_beat(beat),
+        "locked": activation is not None,
+        "locked_at": activation.locked_at if activation is not None else None,
+    }
 
 
 def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:

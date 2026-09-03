@@ -74,8 +74,6 @@ function ReviewRow({ entry }: { entry: PendingCanonReviewEntry }) {
             submitLabel="Clear"
             pendingLabel="Clearing…"
             isPending={clearMutation.isPending}
-            successToast="Canon review cleared"
-            errorFallback="Failed to clear canon review."
             triggerTestId="clear-canon-review-btn"
             triggerLabel="Clear"
             onSubmit={(notes, { setError, close }) => {
@@ -99,8 +97,6 @@ function ReviewRow({ entry }: { entry: PendingCanonReviewEntry }) {
             submitLabel="Request Changes"
             pendingLabel="Sending…"
             isPending={changesMutation.isPending}
-            successToast="Changes requested"
-            errorFallback="Failed to request changes."
             submitVariant="destructive"
             triggerTestId="request-canon-review-changes-btn"
             triggerLabel="Request Changes"

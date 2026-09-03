@@ -28,7 +28,12 @@ from django.db import transaction
 from django.db.models import Min
 from django.utils import timezone
 
-from world.missions.constants import GROUP_VOTE_TIMEOUT_SECONDS, ConflictMode, MissionStatus
+from world.missions.constants import (
+    GROUP_VOTE_TIMEOUT_SECONDS,
+    ConflictMode,
+    MissionStatus,
+    OptionKind,
+)
 from world.missions.models import (
     MissionDeedRecord,
     MissionGroupBallot,
@@ -93,6 +98,7 @@ _ERR_OPTION_NOT_LIVE = (
     "That option isn't available to you here — it may have moved on, or "
     "you may need to be somewhere else."
 )
+_ERR_PAUSED_FOR_ENCOUNTER = "A fight is in progress; the scenario continues when it ends."
 _ERR_RUN_NOT_TERMINAL = (
     "This mission hasn't ended yet — you can only tell the tale of a completed or abandoned run."
 )
@@ -259,6 +265,7 @@ def beat_for(instance: MissionInstance, character: ObjectDB) -> BeatView | None:
         node_key=node.key,
         flavor_text=node.flavor_text,
         options=tuple(_beat_option(p) for p in presented),
+        is_paused=instance.is_paused,
     )
 
 
@@ -287,7 +294,14 @@ def resolve_beat_option(
     delegates to the Phase-3 engine, emits the actor's STORY message and
     the room's ambient stir, and returns the typed result with the next
     beat (or the epilogue on terminal).
+
+    Refused outright while ``instance.is_paused`` (#3565): a scenario
+    ENCOUNTER option pick pauses the run for the duration of the fight -
+    the party has nothing to pick until the ENCOUNTER_COMPLETED handler
+    unpauses it.
     """
+    if instance.is_paused:
+        raise BeatActionError(_ERR_PAUSED_FOR_ENCOUNTER)
     participant = participant_for(instance, character)
     node = instance.current_node
     if node is None or instance.status != MissionStatus.ACTIVE:
@@ -356,7 +370,17 @@ def _story_text_for(presented: PresentedOption, deed: MissionDeedRecord, templat
     recorded which candidate fired on the deed); else the route's text,
     re-derived the same way the engine matched it (option + rolled tier).
     BRANCH deeds with neither fall through to the PLACEHOLDER template.
+
+    A pending ENCOUNTER deed (``outcome`` still null - the fight hasn't
+    resolved yet, #3565) returns the option's own framing text instead: the
+    pick reads as "the fight begins," not as a branch already taken. The
+    fight's real outcome text narrates later, from
+    ``encounter_option._narrate_encounter_resolution``, once the deed is
+    graded.
     """
+    if deed.outcome_id is None and deed.option.option_kind == OptionKind.ENCOUNTER:
+        return presented.ic_framing
+
     candidate = deed.route_candidate
     if candidate is not None and candidate.outcome_text:
         return candidate.outcome_text
@@ -551,6 +575,7 @@ def _group_beat_view(
         options=tuple(_beat_option(presented_option) for presented_option in presented),
         ballots=ballot_states,
         expires_at=deadline.isoformat() if deadline is not None else None,
+        is_paused=instance.is_paused,
         support_moves=support_moves,
         declared_supports=declared_supports,
     )

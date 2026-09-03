@@ -34,6 +34,7 @@ import { useCombatEncounter, useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { GMStoryRail } from '../components/GMStoryRail';
+import { ScenarioCard } from '../components/ScenarioCard';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
 import { SelfCheckPanel } from '../components/SelfCheckPanel';
@@ -270,6 +271,10 @@ export function SceneDetailPage() {
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col" data-testid="scene-detail-left">
+          {/* #3565 - the mission scenario a scene's beats run on; self-hides
+              for non-participants, so it's mounted for every viewer. */}
+          {scene && <ScenarioCard scene={scene} />}
+
           {/* Main interaction area with threading */}
           <SceneInteractionPanel
             sceneId={id}

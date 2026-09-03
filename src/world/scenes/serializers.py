@@ -12,6 +12,7 @@ from world.areas.positioning.serializers import (
 )
 from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
+from world.missions.serializers import GroupBallotStateSerializer, GroupBeatResultSerializer
 from world.scenes.constants import (
     ScenePrivacyMode,
     SceneRoundMode,
@@ -691,3 +692,57 @@ class TruncatePrecaptureRequestSerializer(serializers.Serializer):
     """
 
     interaction_id = serializers.IntegerField()
+
+
+class SceneScenarioLastDeedSerializer(serializers.Serializer):
+    """The GM scenario view's most recent deed - ``{option_key, outcome_name}`` (#3565)."""
+
+    option_key = serializers.CharField()
+    outcome_name = serializers.CharField(allow_null=True)
+
+
+class SceneScenarioGMSerializer(serializers.Serializer):
+    """The GM-only scenario view: current node, every ballot, the last deed (#3565).
+
+    Mirror of ``world.scenes.scenario_services._gm_payload``'s dict shape - staff or
+    viewers with standing on the running story only (see
+    ``world.scenes.scenario_services.build_scene_scenario_payload``).
+    """
+
+    node_key = serializers.CharField(allow_blank=True)
+    flavor_text = serializers.CharField(allow_blank=True)
+    conflict_mode = serializers.CharField(allow_blank=True)
+    phase = serializers.CharField()
+    is_paused = serializers.BooleanField()
+    ballots = GroupBallotStateSerializer(many=True)
+    last_deed = serializers.SerializerMethodField()
+    beat_outcome = serializers.CharField()
+    beat_outcome_key = serializers.CharField(allow_blank=True)
+
+    @extend_schema_field(SceneScenarioLastDeedSerializer(allow_null=True))
+    def get_last_deed(self, obj: dict) -> dict | None:
+        return obj["last_deed"] if isinstance(obj, dict) else obj.last_deed
+
+
+class SceneScenarioSerializer(serializers.Serializer):
+    """Mirror of ``world.scenes.scenario_services.build_scene_scenario_payload`` (#3565).
+
+    ``group_beat``/``gm`` use ``SerializerMethodField`` because DRF nested
+    ``to_representation`` rejects None (see ``GroupBeatResultSerializer``).
+    """
+
+    instance_id = serializers.IntegerField(allow_null=True)
+    is_paused = serializers.BooleanField()
+    viewer_is_participant = serializers.BooleanField()
+    group_beat = serializers.SerializerMethodField()
+    gm = serializers.SerializerMethodField()
+
+    @extend_schema_field(GroupBeatResultSerializer(allow_null=True))
+    def get_group_beat(self, obj: dict) -> dict | None:
+        result = obj["group_beat"] if isinstance(obj, dict) else obj.group_beat
+        return GroupBeatResultSerializer(result).data if result is not None else None
+
+    @extend_schema_field(SceneScenarioGMSerializer(allow_null=True))
+    def get_gm(self, obj: dict) -> dict | None:
+        gm = obj["gm"] if isinstance(obj, dict) else obj.gm
+        return SceneScenarioGMSerializer(gm).data if gm is not None else None

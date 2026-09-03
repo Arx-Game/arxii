@@ -26,6 +26,7 @@ import type { Episode, Maturity } from '../types';
 import { ApiError } from '@/lib/errors';
 import { ProgressionRequirementsEditor } from './ProgressionRequirementsEditor';
 import { PromoteMaturityButton } from './PromoteMaturityButton';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -351,13 +352,7 @@ export function EpisodeFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || detailLoading}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Episode'
-                  : 'Create Episode'}
+              {formSubmitLabel(isPending, isEdit, 'Episode')}
             </Button>
           </DialogFooter>
         </form>

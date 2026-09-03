@@ -20,31 +20,37 @@ export function RankingBoardCard({ objectId }: RankingBoardCardProps) {
   const { data: board } = useRankingBoard(objectId);
   if (!board) return null; // not a board (or still loading) — stay silent
 
+  const renderBoard = () => {
+    if (board.cloaked) {
+      return (
+        <p className="text-sm italic text-muted-foreground" data-testid="ranking-cloaked">
+          The names recorded here are not meant for you.
+        </p>
+      );
+    }
+    if (board.rows.length === 0) {
+      return <p className="text-sm text-muted-foreground">No names worth recording.</p>;
+    }
+    return (
+      <ol className="space-y-1 text-sm" data-testid="ranking-rows">
+        {board.rows.map((row) => (
+          <li key={row.persona_name} className="flex items-baseline justify-between gap-2">
+            <span className="font-medium">{row.persona_name}</span>
+            {row.band_label ? (
+              <span className="text-muted-foreground">{row.band_label}</span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    );
+  };
+
   return (
     <Card data-testid="ranking-board">
       <CardHeader>
         <CardTitle className="text-base">{board.title}</CardTitle>
       </CardHeader>
-      <CardContent>
-        {board.cloaked ? (
-          <p className="text-sm italic text-muted-foreground" data-testid="ranking-cloaked">
-            The names recorded here are not meant for you.
-          </p>
-        ) : board.rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No names worth recording.</p>
-        ) : (
-          <ol className="space-y-1 text-sm" data-testid="ranking-rows">
-            {board.rows.map((row) => (
-              <li key={row.persona_name} className="flex items-baseline justify-between gap-2">
-                <span className="font-medium">{row.persona_name}</span>
-                {row.band_label ? (
-                  <span className="text-muted-foreground">{row.band_label}</span>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        )}
-      </CardContent>
+      <CardContent>{renderBoard()}</CardContent>
     </Card>
   );
 }

@@ -744,6 +744,27 @@ class CanMarkBeat(permissions.BasePermission):
         )
 
 
+def account_may_route_beat(account: AbstractBaseUser | AnonymousUser | None, beat: Beat) -> bool:
+    """True when *account* may route a new encounter/battle/mission onto *beat* (#3559).
+
+    Staff, or the beat's story's Lead GM (walks beat -> episode -> chapter ->
+    story). Shared by CanAssignMissionToBeat's object-level check and the
+    CreateEncounterAction/CreateBattleAction beat_id routing gate
+    (actions.definitions.gm_combat / .battles), which call it directly with
+    an AccountDB rather than through a permission class.
+    """
+    if account is None or not account.is_authenticated:
+        return False
+    if account.is_staff:
+        return True
+    story = beat.episode.chapter.story
+    try:
+        gm_profile = account.gm_profile
+    except GMProfile.DoesNotExist:
+        return False
+    return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
+
+
 class CanAssignMissionToBeat(permissions.BasePermission):
     """Who can POST /api/beats/{id}/assign-mission/: Lead GM or staff (#2048).
 
@@ -758,34 +779,7 @@ class CanAssignMissionToBeat(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
     def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
-        if not request.user.is_authenticated:
-            return False
-        if request.user.is_staff:
-            return True
-        story = obj.episode.chapter.story
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            return False
-        return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
-
-
-class CanResolveStake(permissions.BasePermission):
-    """Who can POST /api/stakes/{id}/resolve/ (#1770 PR2 — GM constrained pick).
-
-    Same gate as CanMarkBeat (Lead GM, staff, or an AGM with an APPROVED
-    claim on the stake's beat), delegated through obj.beat.
-    """
-
-    message = "Only the Lead GM, staff, or an AGM with an approved claim may resolve this stake."
-
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        """Basic authentication check."""
-        return bool(request.user and request.user.is_authenticated)
-
-    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
-        """Delegate the CanMarkBeat gate through the stake's beat."""
-        return CanMarkBeat().has_object_permission(request, view, obj.beat)
+        return account_may_route_beat(request.user, cast(Beat, obj))
 
 
 class IsClaimOwnerOrStaff(permissions.BasePermission):

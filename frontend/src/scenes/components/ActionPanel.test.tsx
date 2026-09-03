@@ -816,6 +816,75 @@ describe('ActionPanel', () => {
     });
   });
 
+  // #3573: the standalone cast panel is the real ward-consent integration point
+  // (unlike the enhancement path, which never applies conditions) - a selected
+  // technique's reactive_anima_cost drives a Soulfray consent toggle here.
+  it('does not show the ward Soulfray toggle for a mundane technique', async () => {
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('cast-ward-soulfray-toggle')).not.toBeInTheDocument();
+  });
+
+  it('shows the ward Soulfray toggle for a ward-bearing technique and sends soulfray_consented when checked', async () => {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Aegis Field',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+          description: 'A test warding technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
+          reactive_anima_cost: 3,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('button'));
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cast'));
+    await waitFor(() => {
+      expect(screen.getByText('Aegis Field')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Aegis Field'));
+
+    const toggle = await screen.findByTestId('cast-ward-soulfray-toggle');
+    expect(toggle.closest('label')).toHaveTextContent(/fee 3/i);
+    await user.click(toggle);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast aegis field/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /cast aegis field/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({
+          technique_id: 10,
+          soulfray_consented: true,
+        })
+      );
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Immediate cast (#859): power ledger takeover
   // -------------------------------------------------------------------------

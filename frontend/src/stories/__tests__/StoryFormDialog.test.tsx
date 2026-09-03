@@ -81,7 +81,7 @@ const existingStory: Story = {
   maturity: 'plot',
   scope: 'character',
   status: 'active',
-  privacy: 'public',
+  privacy: 'invite_only',
   owners: ['player1'],
   active_gms: [],
   trust_requirements: '',
@@ -160,6 +160,35 @@ describe('StoryFormDialog — Task E2 GM/player text split', () => {
     });
   });
 
+  it('defaults privacy to public and sends the chosen value in the create body', async () => {
+    const user = userEvent.setup();
+    const { createMock } = setupMocks();
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 11 });
+    });
+
+    renderWithProviders(<StoryFormDialog {...defaultProps} />);
+
+    expect((screen.getByLabelText(/privacy/i) as HTMLSelectElement).value).toBe('public');
+
+    await user.type(screen.getByLabelText(/title/i), 'New Story');
+    await user.type(screen.getByLabelText(/internal gm description/i), 'Secret GM notes');
+    await user.selectOptions(screen.getByLabelText(/privacy/i), 'invite_only');
+
+    await user.click(screen.getByRole('button', { name: /create story/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'New Story',
+          privacy: 'invite_only',
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
   it('prefills description and summary on edit and shows a read-only maturity indicator', () => {
     setupMocks();
     renderWithProviders(<StoryFormDialog {...defaultProps} story={existingStory} />);
@@ -199,6 +228,34 @@ describe('StoryFormDialog — Task E2 GM/player text split', () => {
           data: expect.objectContaining({
             description: 'GM-only spoilers about the twist.',
             summary: 'Updated recap',
+          }),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('prefills privacy from the story on edit and sends the changed value', async () => {
+    const user = userEvent.setup();
+    const { updateMock } = setupMocks();
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 7 });
+    });
+
+    renderWithProviders(<StoryFormDialog {...defaultProps} story={existingStory} />);
+
+    expect((screen.getByLabelText(/privacy/i) as HTMLSelectElement).value).toBe('invite_only');
+
+    await user.selectOptions(screen.getByLabelText(/privacy/i), 'private');
+    await user.click(screen.getByRole('button', { name: /save story/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 7,
+          data: expect.objectContaining({
+            privacy: 'private',
           }),
         }),
         expect.any(Object)

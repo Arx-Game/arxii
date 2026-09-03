@@ -22,8 +22,6 @@ export function GrantClearanceDialog({ clearanceId }: Props) {
       submitLabel="Grant"
       pendingLabel="Granting…"
       isPending={grantMutation.isPending}
-      successToast="Clearance granted"
-      errorFallback="Failed to grant clearance."
       triggerTestId="grant-clearance-btn"
       triggerLabel="Grant"
       onSubmit={(note, { setError, close }) => {

@@ -662,6 +662,7 @@
   - campaign_story -> stories.Story [FK] (nullable)
   - region -> areas.Area [FK] (nullable)
   - weather_override -> weather.WeatherType [FK] (nullable)
+  - story_beat -> stories.Beat [FK] (nullable)
 **Pointed to by:**
   - sides <- battles.BattleSide
   - places <- battles.BattlePlace
@@ -689,7 +690,7 @@
 
 ### BattleOutcomeMapping
 **Foreign Keys:**
-  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
 
 ### BattleParticipant
 **Foreign Keys:**
@@ -850,7 +851,7 @@
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' - Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' - Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' - Check whether any side has reached its victory threshold.`
-- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' - Set the battle's outcome, end the backing scene, and resolve any linked`
+- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' - Set the battle's outcome, end the backing scene, and resolve the one`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10, risk_level: 'str' = RiskLevel.LOW) -> 'Battle' - Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' - Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
 - `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None, max_integrity: 'int | None' = None) -> 'Fortification' - Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
@@ -864,7 +865,7 @@
 - `open_place_encounter(*, battle_place: 'BattlePlace') -> 'CombatEncounter' - Bind *battle_place* to a new general party-scale combat encounter (#2008).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' - Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' - Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
-- `resolve_battle_beats(battle: 'Battle') -> 'None' - Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
+- `resolve_battle_beats(battle: 'Battle') -> 'None' - Resolve the one beat linked to a concluded battle (#3559).`
 - `run_battle_conclusion_hooks(battle: 'Battle') -> 'None' - Invoke every registered conclusion hook with ``battle``.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' - Set a battle side's tactical posture (#1711).`
 
@@ -2144,6 +2145,7 @@
   - escalation_curve -> combat.EscalationCurve [FK] (nullable)
   - duel_winner -> character_sheets.CharacterSheet [FK] (nullable)
   - story_beat -> stories.Beat [FK] (nullable)
+  - scenario_deed -> missions.MissionDeedRecord [FK] (nullable)
 **Pointed to by:**
   - battle_places <- battles.BattlePlace
   - covenant_rite_instances <- covenants.CovenantRiteInstance
@@ -2325,6 +2327,7 @@
   - bossphase_set <- combat.BossPhase
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
   - phase_templates <- combat.CreaturePhaseTemplate
+  - mission_option_opponent_lines <- missions.MissionOptionOpponentLine
   - beat_opponent_lines <- stories.BeatOpponentLine
 
 ### DramaticSurgeRecord
@@ -2349,7 +2352,7 @@
 
 ### EncounterOutcomeMapping
 **Foreign Keys:**
-  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+  - check_outcome -> traits.CheckOutcome [FK]
 
 ### EncounterRiskAcknowledgement
 **Foreign Keys:**
@@ -2458,8 +2461,10 @@
   - participant -> combat.CombatParticipant [FK]
 
 ### Service Functions
+- `accumulate_soulfray(*, character: 'ObjectDB', anima: 'CharacterAnima', deficit: 'int', soulfray_config: 'SoulfrayConfig | None', check_result: 'CheckResult | None', lethal: 'bool' = True) -> 'SoulfrayResult | None' - Accumulate Soulfray severity from the pool state and apply stage consequences.`
 - `accumulate_threat(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant', amount: 'int') -> 'None' - Increment the threat value for an (opponent, participant) pairing (#2020).`
 - `acknowledge_encounter_risk(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet') -> 'EncounterRiskAcknowledgement' - Idempotently record that a character acknowledged the encounter's risk (#777).`
+- `active_combat_engagement_for(character: 'ObjectDB') -> 'CharacterEngagement | None' - The character's live COMBAT ``CharacterEngagement`` (``source`` is the encounter), or None.`
 - `add_opponent(encounter: 'CombatEncounter', *, name: 'str', tier: 'str', threat_pool: 'ThreatPool | None', max_health: 'int | None' = None, description: 'str' = '', soak_value: 'int | None' = None, probing_threshold: 'int | None' = None, swarm_count: 'int | None' = None, body_toughness: 'int | None' = None, bodies_per_attack: 'int | None' = None, barrier_strength: 'int | None' = None, auto_phases: 'bool' = True, persona: 'Persona | None' = None, existing_objectdb: 'ObjectDB | None' = None, acting_account: 'AccountDB | None' = None, position: 'Position | None' = None, level: 'int | None' = None) -> 'CombatOpponent' - Create a CombatOpponent. Three sources for the ObjectDB:`
 - `add_participant(encounter: 'CombatEncounter', character_sheet: 'CharacterSheet', *, covenant_role: 'CovenantRole | None' = None) -> 'CombatParticipant' - Create a CombatParticipant linking a PC to an encounter.`
 - `apply_damage_to_opponent(opponent: 'CombatOpponent', raw_damage: 'int', *, bypass_soak: 'bool' = False, bypass_pre_apply: 'bool' = False, damage_type: 'DamageType | None' = None, source_sheet: 'CharacterSheet | None' = None, skip_guardian_shield: 'bool' = False, execute_missing_health_multiplier: 'Decimal' = Decimal('0')) -> 'OpponentDamageResult' - Apply damage to an NPC opponent, accounting for soak, probing,`
@@ -2484,7 +2489,7 @@
 - `declare_cover(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a covering maneuver for an ally -- passives-only, auto-ready.`
 - `declare_demoralize(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).`
 - `declare_flee(participant: 'CombatParticipant') -> 'CombatRoundAction' - Declare intent to flee -- passives-only maneuver, auto-ready.`
-- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None) -> 'CombatRoundAction' - Declare an interposing maneuver — passives-only, auto-ready.`
+- `declare_interpose(participant: 'CombatParticipant', ally: 'CombatParticipant | None' = None, technique: 'Technique | None' = None, redirect_opponent_target: 'CombatOpponent | None' = None, redirect_object_target: 'ObjectDB | None' = None, *, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare an interposing maneuver — passives-only, auto-ready.`
 - `declare_joust(participant: 'CombatParticipant', technique: 'Technique') -> 'CombatRoundAction' - Declare a joust — a mounted, lance-armed opposed pass (#1843).`
 - `declare_mark(participant: 'CombatParticipant', opponent: 'CombatOpponent', *, technique: 'Technique | None' = None) -> 'CombatMark' - Declare a mark — a directed, round-scoped combatant reference (#2664).`
 - `declare_parley(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).`
@@ -2492,6 +2497,7 @@
 - `declare_succor(participant: 'CombatParticipant', ally: 'CombatParticipant') -> 'CombatRoundAction' - Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.`
 - `declare_taunt(participant: 'CombatParticipant', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).`
 - `declare_use_item(participant: 'CombatParticipant', item_instance: 'ItemInstance', *, target: 'CombatParticipant | CombatOpponent | None' = None) -> 'CombatRoundAction' - Declare using a held on-use item as this round's action (#2023, #2120).`
+- `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' - Deduct anima from character, returning the overburn deficit.`
 - `detect_available_combos(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' - Scan declared actions to find combos whose slots are all satisfied.`
 - `dispatch_interpose(interposer: 'ObjectDB', protected: 'ObjectDB', pre_payload: 'DamagePreApplyPayload', *, approach: 'str | None', extra_modifiers: 'int' = 0, select_best_check_rating: 'bool' = False) -> 'ChallengeResolutionResult | None' - Resolve *interposer*'s interpose attempt and apply the graded outcome.`
 - `dispatch_succor(succorer: 'ObjectDB', protected: 'ObjectDB', *, approach: 'str | None', extra_modifiers: 'int' = 0) -> 'float' - Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.`
@@ -2540,6 +2546,7 @@
 - `update_encounter_settings(encounter: 'CombatEncounter', *, stakes_level: 'str | None' = None, risk_level: 'str | None' = None, pace_mode: 'str | None' = None, pace_timer_minutes: 'int | None' = None) -> 'CombatEncounter' - GM-driven mid-encounter settings change (#3383).`
 - `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' - Mark a PC's round action as upgraded to a combo.`
 - `wind_penalty(felt: int) -> int - The missile check penalty for a room's felt WIND exposure (#1555).`
+- `windup_damage_scale(downgrades: 'int') -> 'float' - The downgrade ladder: x(1 - 0.25*downgrades), floored at x0.25 (#2637 design 3).`
 
 
 ## world.companions
@@ -2870,7 +2877,7 @@
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None - On ascending stage changes, apply the stage's on_entry_conditions.`
 - `attempt_break_free(instance: world.conditions.models.ConditionInstance, *, extra_modifiers: int = 0, helper_bonus: int = 0, in_combat_tick: bool = False, level_override: int | None = None) -> world.conditions.types.BreakFreeResult - Resolve a single break-free attempt against an applied condition.`
 - `batch_chronic_effect_tick() -> world.conditions.types.ChronicTickSummary - Scheduler entry point. Advance long-term (chronic) DoT by one tick.`
-- `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
+- `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', soulfray_consented: bool = False) -> list[world.conditions.types.ApplyConditionResult] - Apply multiple conditions in a single transaction with batched queries.`
 - `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool - Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
@@ -3363,6 +3370,7 @@
 - `collect_and_distribute(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' - One active collection of a personal asset's accumulated income (#2294).`
 - `collect_org_income(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `count_unredeemed_favor_tokens(*, sheet: 'CharacterSheet', org: 'Organization') -> 'int' - How many of ``org``'s unredeemed Golden Hares ``sheet`` holds (#3466).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' - Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' - Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
 - `distribute_material_allowance(*, organization: 'Organization', landed_by_category: 'list[tuple[MaterialCategory, int]]') -> 'MaterialAllowanceResult' - Auto-split a share of newly landed materials among active piloted members (#2540 slice 2).`
@@ -4064,6 +4072,7 @@
 - `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' - Approve a roster application on behalf of the overseeing GM.`
 - `archive_table(table: 'GMTable') -> 'None' - Mark a table archived. Sets archived_at timestamp.`
 - `award_gm_story_reward(*, gm_profile: 'GMProfile', players_served: 'int', per_player_xp: 'int', event_cap: 'int', description: 'str') -> 'XPTransaction | None' - Award GM Story Reward XP to ``gm_profile.account`` (#2123).`
+- `cap_for_profile(profile: 'GMProfile') -> 'GMLevelCap | None' - The ``GMLevelCap`` row for ``profile.level``, or None when unseeded.`
 - `claim_invite(invite: 'GMRosterInvite', account: 'AccountDB') -> 'RosterApplication' - Mark an invite claimed and create (or reuse) a RosterApplication.`
 - `create_invite(gm: 'GMProfile', roster_entry: 'RosterEntry', is_public: 'bool' = False, invited_email: 'str' = '', expires_at: 'datetime | None' = None) -> 'GMRosterInvite' - Create a GMRosterInvite. Callers must validate GM oversight.`
 - `create_table(gm: 'GMProfile', name: 'str', description: 'str' = '') -> 'GMTable' - Create a new GM table owned by the given GM.`
@@ -4071,8 +4080,10 @@
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' - Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' - Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
+- `gm_max_risk(user) -> 'str' - RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.`
 - `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' - The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `has_build_warrant(account: 'AccountDB | None', *, area: 'Area', level: 'int') -> 'bool' - Whether ``account`` may build-author at ``level`` within ``area``'s subtree.`
+- `has_room_budget_capacity(account: 'AccountDB | None', *, area: 'Area', rooms_needed: 'int' = 1) -> 'bool' - Whether digging ``rooms_needed`` more room(s) under ``area`` fits some`
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' - ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' - Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' - Soft-leave a membership. No-op if already left.`
@@ -4916,7 +4927,7 @@
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' - Default a persona's character home to this room when it has none yet (#1514, #2036).`
 - `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' - Return the LocationOwnership row that gives this persona standing`
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' - Return ALL LocationOwnership rows (active and ended) for a`
-- `resolve_area_art(room_profile: 'RoomProfile | None') -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
+- `resolve_area_art(room_profile: 'RoomProfile | None', *, thumbnail_url: 'object' = <object object>) -> 'str | None' - The room's effective art URL (#3477): thumbnail-first, then area cascade.`
 - `room_discomfort(room: 'DefaultObject') -> 'int' - Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' - The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
 - `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' - Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
@@ -6431,6 +6442,7 @@
   - route_candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - legend_entries -> societies.LegendEntry [M2M]
 **Pointed to by:**
+  - encounters <- combat.CombatEncounter
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
   - explaining_secrets <- secrets.Secret
@@ -6533,7 +6545,13 @@
   - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
   - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
+  - opponent_lines <- missions.MissionOptionOpponentLine
   - routes <- missions.MissionOptionRoute
+
+### MissionOptionOpponentLine
+**Foreign Keys:**
+  - option -> missions.MissionOption [FK]
+  - creature_template -> combat.CreatureTemplate [FK]
 
 ### MissionOptionRoute
 **Foreign Keys:**
@@ -6621,6 +6639,7 @@
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
   - givers <- missions.MissionGiver
+  - story_scenario <- stories.StoryScenario
   - task_templates <- tasking.TaskTemplate
 
 ### Service Functions
@@ -6635,7 +6654,7 @@
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' - Record entry into ``node`` and advance the run's position.`
 - `invite_to_mission(instance: 'MissionInstance', holder_persona: 'Persona', invitee_persona: 'Persona') -> 'MissionInvite' - Create a PENDING invite for ``invitee_persona`` to join ``instance``.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' - Return one :class:`JournalEntry` per mission this character is in.`
-- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
+- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None, option: 'MissionOption | None' = None) -> 'MissionBeatTriggerRecord | None' - Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' - Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' - Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0) -> 'MissionDeedRecord' - Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
@@ -9244,7 +9263,7 @@
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a legend deed not tied to a shared event.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a solo legend deed, optionally anchored to a shared event's ceiling.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' - Sum the legend this character earned that was credited to covenants where they held ``role``.`
@@ -9366,6 +9385,7 @@
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)
   - expired_consequences -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
+  - resolving_battles <- battles.Battle
   - resolving_encounters <- combat.CombatEncounter
   - running_scenes <- scenes.Scene
   - decisive_markers <- scenes.DecisiveCheckMarker
@@ -9592,6 +9612,7 @@
   - chapters <- stories.Chapter
   - feedback <- stories.StoryFeedback
   - referenced_by_beats <- stories.Beat
+  - scenarios <- stories.StoryScenario
   - group_progress_records <- stories.GroupStoryProgress
   - global_progress <- stories.GlobalStoryProgress
   - progress_records <- stories.StoryProgress
@@ -9645,6 +9666,11 @@
   - beat -> stories.Beat [FK] (nullable)
 **Pointed to by:**
   - clearances <- stories.CustodyClearance
+
+### StoryScenario
+**Foreign Keys:**
+  - story -> stories.Story [FK]
+  - template -> missions.MissionTemplate [OneToOne]
 
 ### StoryTrustRequirement
 **Foreign Keys:**

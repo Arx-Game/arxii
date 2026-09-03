@@ -20,6 +20,10 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // Flat is better than nested (#3548). All 130 pre-existing sites were
+      // flattened into guard-clause helpers before this was turned on, so it
+      // starts clean and stays that way.
+      'no-nested-ternary': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {

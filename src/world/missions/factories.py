@@ -30,6 +30,7 @@ from world.missions.models import (
     MissionNodeSnapshot,
     MissionNodeSupportOption,
     MissionOption,
+    MissionOptionOpponentLine,
     MissionOptionRoute,
     MissionOptionRouteCandidate,
     MissionOptionRouteReward,
@@ -134,6 +135,18 @@ class MissionOptionFactory(DjangoModelFactory):
     authored_ic_framing = ""
     branch_target = None
     required_act = ""
+
+
+class MissionOptionOpponentLineFactory(DjangoModelFactory):
+    """Factory for MissionOptionOpponentLine, an ENCOUNTER option's opponent roster (#3565)."""
+
+    class Meta:
+        model = MissionOptionOpponentLine
+
+    option = factory.SubFactory(MissionOptionFactory)
+    creature_template = factory.SubFactory("world.combat.factories.CreatureTemplateFactory")
+    count = 1
+    order = 0
 
 
 class MissionOptionRouteFactory(DjangoModelFactory):

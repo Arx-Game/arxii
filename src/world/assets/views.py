@@ -8,12 +8,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from world.assets.filters import NPCAssetFilter
 from world.assets.models import NPCAsset
 from world.assets.serializers import NPCAssetSerializer
 
@@ -41,17 +44,55 @@ def _active_persona_for_request(request: Request) -> Persona | None:
 
 
 class NPCAssetViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read endpoints for the player's own promoted assets + introduce action."""
+    """Read endpoints for the player's own promoted assets + introduce action.
+
+    Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+    search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+    per-player private content (name, role_context, status, created_at), so
+    that widening is scoped narrowly: a non-staff GM only sees assets
+    promoted by a character who participates in a story that GM LEADS, never
+    every asset in the game (#3561 review fix - the first cut let any
+    GMProfile holder, unrelated to the asset's owner, list every player's
+    private assets, which was a privacy leak).
+    """
 
     serializer_class = NPCAssetSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = NPCAssetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = NPCAssetFilter
 
     def get_queryset(self):
-        persona = _active_persona_for_request(self.request)
-        if persona is None:
+        base = NPCAsset.objects.select_related("asset_persona")
+        user = self.request.user
+        if not user.is_authenticated:
             return NPCAsset.objects.none()
-        return NPCAsset.objects.filter(promoter_persona=persona).select_related("asset_persona")
+        if user.is_staff:
+            return base
+
+        persona = _active_persona_for_request(self.request)
+        own_q = Q(promoter_persona=persona) if persona is not None else Q(pk__in=[])
+
+        gm_profile = user.gm_profile_or_none
+        if gm_profile is None:
+            # Not a GM at all: the original "my own assets" dashboard scope.
+            return base.filter(own_q)
+
+        # #3561: a non-staff GM's search scope is every NPCAsset promoted by
+        # a persona whose character sheet participates in a story this GM
+        # LEADS - Lead GM = Story.primary_table.gm == this GM's profile, the
+        # same rule every authoring gate in this PR uses
+        # (world.stories.permissions.account_may_route_beat /
+        # user_owns_or_leads_story) - union'd with their own assets so a
+        # junior GM who leads no story still sees their own assets, not
+        # nothing. `.distinct()` guards the join fanning out one row per
+        # matching StoryParticipation.
+        led_q = Q(
+            promoter_persona__character_sheet__story_participations__story__primary_table__gm=(
+                gm_profile
+            )
+        )
+        return base.filter(led_q | own_q).distinct()
 
     @action(detail=True, methods=["post"])
     def extract(self, request: Request, pk: str | None = None) -> Response:

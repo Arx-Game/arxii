@@ -74,6 +74,44 @@ function FlowsTab() {
   const { data, isLoading } = useFlows(search || undefined);
   const flows = data?.results ?? [];
 
+  const renderFlows = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (flows.length === 0) {
+      return <p className="py-6 text-center text-sm text-muted-foreground">No flows found.</p>;
+    }
+    return (
+      <ul className="space-y-2">
+        {flows.map((flow) => (
+          <li key={flow.id}>
+            <Link to={`/staff/flows-builder/flows/${flow.id}`}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium">{flow.name}</div>
+                    <span className="text-xs text-muted-foreground">
+                      {flow.step_count} step{flow.step_count === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  {flow.description ? (
+                    <div className="line-clamp-1 text-sm text-muted-foreground">
+                      {flow.description}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <div className="space-y-4 pt-4">
       <CreateFlowCard />
@@ -83,37 +121,7 @@ function FlowsTab() {
         onChange={(e) => setSearch(e.target.value)}
         aria-label="Search flows"
       />
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : flows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No flows found.</p>
-      ) : (
-        <ul className="space-y-2">
-          {flows.map((flow) => (
-            <li key={flow.id}>
-              <Link to={`/staff/flows-builder/flows/${flow.id}`}>
-                <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                  <CardContent className="py-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium">{flow.name}</div>
-                      <span className="text-xs text-muted-foreground">
-                        {flow.step_count} step{flow.step_count === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                    {flow.description ? (
-                      <div className="line-clamp-1 text-sm text-muted-foreground">
-                        {flow.description}
-                      </div>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      {renderFlows()}
     </div>
   );
 }
@@ -182,6 +190,73 @@ function TriggerDefinitionsTab() {
   const deleteTd = useDeleteTriggerDefinition();
   const navigate = useNavigate();
 
+  const renderRows = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (rows.length === 0) {
+      return (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          No trigger definitions found.
+        </p>
+      );
+    }
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Event</TableHead>
+            <TableHead>Flow</TableHead>
+            <TableHead>Priority</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((trigger) => (
+            <TableRow key={trigger.id}>
+              <TableCell className="font-medium">
+                <Link
+                  to={`/staff/flows-builder/trigger-definitions/${trigger.id}`}
+                  className="underline underline-offset-2"
+                >
+                  {trigger.name}
+                </Link>
+              </TableCell>
+              <TableCell>{trigger.event_name}</TableCell>
+              <TableCell>
+                <Link
+                  to={`/staff/flows-builder/flows/${trigger.flow_definition}`}
+                  className="underline underline-offset-2"
+                >
+                  Flow #{trigger.flow_definition}
+                </Link>
+              </TableCell>
+              <TableCell>{trigger.priority}</TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (window.confirm(`Delete trigger definition "${trigger.name}"?`)) {
+                      deleteTd.mutate(trigger.id);
+                    }
+                  }}
+                >
+                  Delete
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
   return (
     <div className="space-y-4 pt-4">
       <div className="flex items-center justify-between gap-2">
@@ -199,64 +274,7 @@ function TriggerDefinitionsTab() {
           New trigger definition
         </Button>
       </div>
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          No trigger definitions found.
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Event</TableHead>
-              <TableHead>Flow</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((trigger) => (
-              <TableRow key={trigger.id}>
-                <TableCell className="font-medium">
-                  <Link
-                    to={`/staff/flows-builder/trigger-definitions/${trigger.id}`}
-                    className="underline underline-offset-2"
-                  >
-                    {trigger.name}
-                  </Link>
-                </TableCell>
-                <TableCell>{trigger.event_name}</TableCell>
-                <TableCell>
-                  <Link
-                    to={`/staff/flows-builder/flows/${trigger.flow_definition}`}
-                    className="underline underline-offset-2"
-                  >
-                    Flow #{trigger.flow_definition}
-                  </Link>
-                </TableCell>
-                <TableCell>{trigger.priority}</TableCell>
-                <TableCell>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (window.confirm(`Delete trigger definition "${trigger.name}"?`)) {
-                        deleteTd.mutate(trigger.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      {renderRows()}
     </div>
   );
 }
@@ -267,6 +285,66 @@ function InstalledTriggersTab() {
   const { data, isLoading } = useTriggers({ search: search || undefined });
   const rows = data?.results ?? [];
   const deleteTrigger = useDeleteTrigger();
+
+  const renderRows2 = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (rows.length === 0) {
+      return (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          No installed triggers found.
+        </p>
+      );
+    }
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Trigger definition</TableHead>
+            <TableHead>Object</TableHead>
+            <TableHead>Source condition</TableHead>
+            <TableHead>Source stage</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.id}>
+              <TableCell>
+                <Link
+                  to={`/staff/flows-builder/trigger-definitions/${row.trigger_definition}`}
+                  className="underline underline-offset-2"
+                >
+                  #{row.trigger_definition}
+                </Link>
+              </TableCell>
+              <TableCell>#{row.obj}</TableCell>
+              <TableCell>{row.source_condition ?? '—'}</TableCell>
+              <TableCell>{row.source_stage ?? '—'}</TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (window.confirm('Delete this installed trigger?')) {
+                      deleteTrigger.mutate(row.id);
+                    }
+                  }}
+                >
+                  Delete
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
 
   return (
     <div className="space-y-4 pt-4">
@@ -282,57 +360,7 @@ function InstalledTriggersTab() {
         </Button>
       </div>
       <TriggerInstallDialog open={installOpen} onOpenChange={setInstallOpen} />
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          No installed triggers found.
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Trigger definition</TableHead>
-              <TableHead>Object</TableHead>
-              <TableHead>Source condition</TableHead>
-              <TableHead>Source stage</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>
-                  <Link
-                    to={`/staff/flows-builder/trigger-definitions/${row.trigger_definition}`}
-                    className="underline underline-offset-2"
-                  >
-                    #{row.trigger_definition}
-                  </Link>
-                </TableCell>
-                <TableCell>#{row.obj}</TableCell>
-                <TableCell>{row.source_condition ?? '—'}</TableCell>
-                <TableCell>{row.source_stage ?? '—'}</TableCell>
-                <TableCell>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (window.confirm('Delete this installed trigger?')) {
-                        deleteTrigger.mutate(row.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      {renderRows2()}
     </div>
   );
 }

@@ -80,6 +80,36 @@ export function EventsListPage() {
     queryFn: () => fetchEvents(params),
   });
 
+  const renderResults = () => {
+    if (isError) {
+      return <p className="py-8 text-center text-muted-foreground">Failed to load events.</p>;
+    }
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (!data?.results?.length) {
+      return (
+        <p className="py-8 text-center text-muted-foreground">
+          {emptyMessage(debouncedSearch, status)}
+        </p>
+      );
+    }
+    return (
+      <>
+        <div className="space-y-3">
+          {data.results.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+        <Pager page={page} numPages={data.num_pages} current={data.current_page} onPage={setPage} />
+      </>
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
@@ -122,31 +152,7 @@ export function EventsListPage() {
         </div>
       </div>
 
-      {isError ? (
-        <p className="py-8 text-center text-muted-foreground">Failed to load events.</p>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : !data?.results?.length ? (
-        <p className="py-8 text-center text-muted-foreground">
-          {emptyMessage(debouncedSearch, status)}
-        </p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {data.results.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </div>
-          <Pager
-            page={page}
-            numPages={data.num_pages}
-            current={data.current_page}
-            onPage={setPage}
-          />
-        </>
-      )}
+      {renderResults()}
     </div>
   );
 }

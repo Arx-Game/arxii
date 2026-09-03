@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateChapter, useUpdateChapter } from '../queries';
 import type { Chapter, Maturity } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -259,13 +260,7 @@ export function ChapterFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Chapter'
-                  : 'Create Chapter'}
+              {formSubmitLabel(isPending, isEdit, 'Chapter')}
             </Button>
           </DialogFooter>
         </form>

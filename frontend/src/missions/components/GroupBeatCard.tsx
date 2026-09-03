@@ -26,6 +26,13 @@ interface GroupBeatCardProps {
   isContractHolder?: boolean;
 }
 
+/** Where a group beat is in its lifecycle, for the badge. */
+function beatPhaseLabel(expired: boolean, phase: string): string {
+  if (expired) return 'expired';
+  if (phase === 'vote') return 'voting';
+  return 'picking';
+}
+
 export function GroupBeatCard({
   instanceId,
   roomKey,
@@ -103,7 +110,7 @@ function GroupBeatView({
   const castVote = useCastGroupVote();
   const { expired, secondsLeft } = useCountdown(beat.expires_at);
 
-  const phaseLabel = expired ? 'expired' : beat.phase === 'vote' ? 'voting' : 'picking';
+  const phaseLabel = beatPhaseLabel(expired, beat.phase);
 
   return (
     <div className="space-y-2 rounded border bg-card p-3" data-testid="group-beat-card">

@@ -202,12 +202,34 @@ class MissionBeatCompletionTests(TestCase):
         # No new BeatCompletion created (beat was already SUCCESS).
         self.assertEqual(BeatCompletion.objects.filter(beat=beat).count(), 0)
 
-    def test_predicate_mismatch_logged_not_raised(self) -> None:
-        """GM_MARKED beat + graded route → ValueError caught, no crash."""
+    def test_gm_marked_beat_with_graded_route_now_completes(self) -> None:
+        """GM_MARKED beat + graded route (#3560, #3565): dispatch keys off the
+        beat's own predicate_type, not the route's tier presence, so this is no
+        longer a mismatch - the beat completes with the tier-derived outcome
+        (no outcome_tier stored; only OUTCOME_TIER beats carry that)."""
         tier = CheckOutcomeFactory(success_level=4)
         beat = BeatFactory(
             episode=self.episode,
             predicate_type=BeatPredicateType.GM_MARKED,
+        )
+        self._make_progress()
+        instance = MissionInstanceFactory(template=self.template, source_beat=beat)
+        route = MissionOptionRouteFactory(outcome_tier=tier, target_node=None)
+
+        on_mission_complete_for_beat(instance, route=route)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        completion = BeatCompletion.objects.get(beat=beat)
+        self.assertIsNone(completion.outcome_tier)
+
+    def test_predicate_mismatch_logged_not_raised(self) -> None:
+        """A predicate type neither OUTCOME_TIER nor GM_MARKED → ValueError
+        caught by record_gm_marked_outcome's own guard, no crash."""
+        tier = CheckOutcomeFactory(success_level=4)
+        beat = BeatFactory(
+            episode=self.episode,
+            predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
         )
         self._make_progress()
         instance = MissionInstanceFactory(template=self.template, source_beat=beat)

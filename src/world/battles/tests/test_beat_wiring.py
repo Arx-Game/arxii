@@ -1,4 +1,4 @@
-"""Tests for Battle conclusion -> story beat auto-wiring (#1785)."""
+"""Tests for Battle conclusion -> story beat auto-wiring (#1785, #3559)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from world.classes.factories import CharacterClassFactory, CharacterClassLevelFa
 from world.scenes.constants import RoundStatus
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
+    BeatKind,
     BeatOutcome,
     BeatPredicateType,
     StakeResolutionColumn,
@@ -57,12 +58,14 @@ class BattleOutcomeMappingModelTests(TestCase):
                     check_outcome=outcome,
                 )
 
-    def test_mapping_allows_null_check_outcome(self) -> None:
-        mapping = BattleOutcomeMapping.objects.create(
-            outcome=BattleOutcome.DEFENDER_MARGINAL,
-            check_outcome=None,
-        )
-        self.assertIsNone(mapping.check_outcome)
+    def test_check_outcome_is_required(self) -> None:
+        """check_outcome is required content now (#3559) - no more null 'pend' row."""
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                BattleOutcomeMapping.objects.create(
+                    outcome=BattleOutcome.DEFENDER_MARGINAL,
+                    check_outcome=None,
+                )
 
     def test_str_representation(self) -> None:
         outcome = CheckOutcome.objects.create(name="Decisive Defeat", success_level=-6)
@@ -74,7 +77,7 @@ class BattleOutcomeMappingModelTests(TestCase):
 
 
 class ClassifyBattleConclusionOutcomeTests(TestCase):
-    """classify_battle_conclusion_outcome: BattleOutcome -> CheckOutcome | None."""
+    """classify_battle_conclusion_outcome: BattleOutcome -> CheckOutcome."""
 
     def test_mapped_outcome_returns_check_outcome(self) -> None:
         from world.battles.beat_wiring import classify_battle_conclusion_outcome
@@ -87,21 +90,13 @@ class ClassifyBattleConclusionOutcomeTests(TestCase):
         battle = BattleFactory(outcome=BattleOutcome.ATTACKER_DECISIVE)
         self.assertEqual(classify_battle_conclusion_outcome(battle), tier)
 
-    def test_unmapped_outcome_returns_none(self) -> None:
+    def test_unmapped_outcome_raises(self) -> None:
+        """An outcome with no mapping row raises - missing content, not a runtime branch."""
         from world.battles.beat_wiring import classify_battle_conclusion_outcome
 
         battle = BattleFactory(outcome=BattleOutcome.DEFENDER_MARGINAL)
-        self.assertIsNone(classify_battle_conclusion_outcome(battle))
-
-    def test_null_check_outcome_mapping_returns_none(self) -> None:
-        from world.battles.beat_wiring import classify_battle_conclusion_outcome
-
-        BattleOutcomeMapping.objects.create(
-            outcome=BattleOutcome.DEFENDER_DECISIVE,
-            check_outcome=None,
-        )
-        battle = BattleFactory(outcome=BattleOutcome.DEFENDER_DECISIVE)
-        self.assertIsNone(classify_battle_conclusion_outcome(battle))
+        with self.assertRaises(BattleOutcomeMapping.DoesNotExist):
+            classify_battle_conclusion_outcome(battle)
 
     def test_unresolved_outcome_raises_value_error(self) -> None:
         from world.battles.beat_wiring import classify_battle_conclusion_outcome
@@ -240,9 +235,10 @@ class BeginBattleRoundActivatesStakesTests(TestCase):
 
 
 class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
-    """Integration: conclude_battle resolves any linked OUTCOME_TIER beat (#1785)."""
+    """Integration: conclude_battle resolves at most one linked beat (#1785, #3559)."""
 
-    def test_decisive_victory_resolves_linked_beat(self) -> None:
+    def test_linked_battle_grades_its_beat(self) -> None:
+        """A battle with an explicitly routed story_beat grades only that beat."""
         tier = CheckOutcome.objects.create(name="Battle Victory Wire", success_level=5)
         BattleOutcomeMapping.objects.create(
             outcome=BattleOutcome.ATTACKER_DECISIVE,
@@ -258,15 +254,51 @@ class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
             outcome=BeatOutcome.UNSATISFIED,
         )
         StoryProgressFactory(story=story, character_sheet=sheet)
-        battle = BattleFactory()
-        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+        battle = BattleFactory(story_beat=beat)
 
         conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
 
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
 
-    def test_no_mapping_row_resolves_pending_gm_review(self) -> None:
+    def test_battle_grades_the_scenes_running_encounter_beat(self) -> None:
+        """No explicit story_beat: the battle scene's running beat grades instead,
+        but only when it is itself the objective (kind ENCOUNTER, #3559).
+        """
+        tier = CheckOutcome.objects.create(name="Battle Running Victory", success_level=5)
+        BattleOutcomeMapping.objects.create(
+            outcome=BattleOutcome.ATTACKER_DECISIVE,
+            check_outcome=tier,
+        )
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            kind=BeatKind.ENCOUNTER,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        battle = BattleFactory()
+        battle.scene.running_beat = beat
+        battle.scene.save(update_fields=["running_beat"])
+
+        conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_unlinked_battle_grades_nothing(self) -> None:
+        """No story_beat and no running ENCOUNTER beat: an EpisodeScene link alone
+        is no longer enough (#3559 replaces the legacy find-all-on-scene scan).
+        """
+        tier = CheckOutcome.objects.create(name="Battle Unlinked Victory", success_level=5)
+        BattleOutcomeMapping.objects.create(
+            outcome=BattleOutcome.ATTACKER_DECISIVE,
+            check_outcome=tier,
+        )
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
         chapter = ChapterFactory(story=story)
@@ -280,60 +312,37 @@ class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
         battle = BattleFactory()
         EpisodeSceneFactory(episode=episode, scene=battle.scene)
 
-        conclude_battle(battle=battle, outcome=BattleOutcome.DEFENDER_MARGINAL)
-
-        beat.refresh_from_db()
-        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
-
-    def test_one_battle_applies_same_tier_to_every_linked_beat(self) -> None:
-        """One Battle grades as one outcome tier, applied uniformly (#1785 Decision 2).
-
-        Two distinct beats on two different episodes/stories, both linked to
-        the same battle's scene, both resolve to the SAME BeatOutcome from a
-        single conclude_battle call — per-front independent grading is #1760's
-        job, not this wiring's.
-        """
-        tier = CheckOutcome.objects.create(name="Battle Victory Uniform Tier", success_level=5)
-        BattleOutcomeMapping.objects.create(
-            outcome=BattleOutcome.ATTACKER_DECISIVE,
-            check_outcome=tier,
-        )
-        battle = BattleFactory()
-
-        sheet_a = CharacterSheetFactory()
-        story_a = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet_a)
-        chapter_a = ChapterFactory(story=story_a)
-        episode_a = EpisodeFactory(chapter=chapter_a)
-        beat_a = BeatFactory(
-            episode=episode_a,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        StoryProgressFactory(story=story_a, character_sheet=sheet_a)
-        EpisodeSceneFactory(episode=episode_a, scene=battle.scene)
-
-        sheet_b = CharacterSheetFactory()
-        story_b = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet_b)
-        chapter_b = ChapterFactory(story=story_b)
-        episode_b = EpisodeFactory(chapter=chapter_b)
-        beat_b = BeatFactory(
-            episode=episode_b,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        StoryProgressFactory(story=story_b, character_sheet=sheet_b)
-        EpisodeSceneFactory(episode=episode_b, scene=battle.scene)
-
         conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
 
-        beat_a.refresh_from_db()
-        beat_b.refresh_from_db()
-        self.assertEqual(beat_a.outcome, BeatOutcome.SUCCESS)
-        self.assertEqual(beat_b.outcome, BeatOutcome.SUCCESS)
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_missing_mapping_logs_and_leaves_beat_open(self) -> None:
+        """A missing BattleOutcomeMapping row is content, not a pause (#3559): it's
+        logged as an error and the beat is left open.
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        battle = BattleFactory(story_beat=beat)
+        # No BattleOutcomeMapping row for DEFENDER_MARGINAL.
+
+        with self.assertLogs("world.battles.beat_wiring", level="ERROR"):
+            conclude_battle(battle=battle, outcome=BattleOutcome.DEFENDER_MARGINAL)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
 
     def test_no_linked_beat_noops(self) -> None:
         battle = BattleFactory()
-        # No EpisodeScene linking battle.scene to any beat — must not raise.
+        # No story_beat, no running beat - must not raise.
         conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_MARGINAL)
         battle.refresh_from_db()
         self.assertTrue(battle.is_concluded)
@@ -357,8 +366,7 @@ class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
         win_branch = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
         StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
         StoryProgressFactory(story=story, character_sheet=sheet)
-        battle = BattleFactory()
-        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+        battle = BattleFactory(story_beat=beat)
 
         conclude_battle(battle=battle, outcome=BattleOutcome.DEFENDER_DECISIVE)
 

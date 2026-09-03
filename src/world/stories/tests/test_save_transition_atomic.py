@@ -21,7 +21,7 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
-from world.stories.constants import BeatOutcome, TransitionMode
+from world.stories.constants import BeatOutcome
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -71,7 +71,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "connection_type": "therefore",
             "connection_summary": "Success leads here.",
             "order": 0,
@@ -86,7 +85,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         assert data["target_episode"] == self.ep2.pk
         # Transition was persisted
         t = Transition.objects.get(pk=data["id"])
-        assert t.mode == TransitionMode.AUTO
         # Routing predicates were created
         outcomes = list(t.required_outcomes.all())
         assert len(outcomes) == 1
@@ -99,7 +97,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep3.pk,
-            "mode": TransitionMode.GM_CHOICE,
             "outcomes": [],
             "order": 1,
         }
@@ -114,7 +111,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": None,
-            "mode": TransitionMode.AUTO,
             "outcomes": [],
             "order": 0,
         }
@@ -129,7 +125,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "outcomes": [],
             "order": 0,
         }
@@ -147,7 +142,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         transition = TransitionFactory(
             source_episode=self.ep1,
             target_episode=self.ep2,
-            mode=TransitionMode.AUTO,
         )
         TransitionRequiredOutcomeFactory(
             transition=transition,
@@ -156,12 +150,11 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         )
         assert transition.required_outcomes.count() == 1
 
-        # Update: change mode and replace routing predicates.
+        # Update: replace routing predicates.
         payload = {
             "existing_id": transition.pk,
             "source_episode": self.ep1.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.GM_CHOICE,
             "connection_summary": "Updated.",
             "order": 0,
             "outcomes": [
@@ -171,7 +164,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         response = self.client.post(self.url, json.dumps(payload), content_type="application/json")
         assert response.status_code == status.HTTP_200_OK
         transition.refresh_from_db()
-        assert transition.mode == TransitionMode.GM_CHOICE
         # Old outcome gone, new one present.
         outcomes = list(transition.required_outcomes.all())
         assert len(outcomes) == 1
@@ -189,7 +181,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
             "existing_id": transition.pk,
             "source_episode": self.ep1.pk,  # mismatch
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "outcomes": [],
             "order": 0,
         }
@@ -219,7 +210,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
             payload = {
                 "source_episode": self.ep1.pk,
                 "target_episode": self.ep2.pk,
-                "mode": TransitionMode.AUTO,
                 "outcomes": [
                     {"beat": self.beat1.pk, "required_outcome": BeatOutcome.SUCCESS},
                 ],
@@ -245,7 +235,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "outcomes": [],
             "order": 0,
         }
@@ -270,7 +259,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep1.pk,  # same!
-            "mode": TransitionMode.AUTO,
             "outcomes": [],
             "order": 0,
         }
@@ -281,7 +269,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         """Missing required source_episode is a validation error."""
         self.client.force_authenticate(user=self.lead_gm_account)
         payload = {
-            "mode": TransitionMode.AUTO,
             "outcomes": [],
         }
         response = self.client.post(self.url, json.dumps(payload), content_type="application/json")
@@ -293,7 +280,6 @@ class SaveTransitionWithOutcomesViewTest(APITestCase):
         payload = {
             "source_episode": self.ep1.pk,
             "target_episode": self.ep2.pk,
-            "mode": TransitionMode.AUTO,
             "outcomes": [
                 {"beat": self.beat1.pk, "required_outcome": BeatOutcome.SUCCESS},
                 {"beat": self.beat2.pk, "required_outcome": BeatOutcome.FAILURE},

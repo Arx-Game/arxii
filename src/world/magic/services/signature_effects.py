@@ -124,6 +124,7 @@ def apply_signature_bonus_conditions(  # noqa: PLR0913 - cohesive condition-appl
     eff_intensity: int,
     targets_by_kind: dict[str, list[ObjectDB]],  # noqa: OBJECTDB_PARAM
     source_character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    soulfray_consented: bool = False,
 ) -> list[AppliedConditionResult]:
     """Apply the signed technique's bonus conditions to the pre-resolved targets.
 
@@ -141,6 +142,9 @@ def apply_signature_bonus_conditions(  # noqa: PLR0913 - cohesive condition-appl
         targets_by_kind: Pre-resolved ``{ConditionTargetKind: [ObjectDB, ...]}``
             map the caller already built for the technique's own conditions.
         source_character: The caster's ``ObjectDB``.
+        soulfray_consented: The caster's consent, at cast time, to keep the resulting
+            conditions' reactive cost and upkeep firing past zero anima at the price
+            of Soulfray (#3573). Forwarded to ``apply_technique_conditions``.
 
     Returns:
         The list of ``AppliedConditionResult`` from the shared seam (empty on no-op).
@@ -158,4 +162,5 @@ def apply_signature_bonus_conditions(  # noqa: PLR0913 - cohesive condition-appl
         targets_by_kind=targets_by_kind,
         source_character=source_character,
         applied_condition_rows=rows,
+        soulfray_consented=soulfray_consented,
     )

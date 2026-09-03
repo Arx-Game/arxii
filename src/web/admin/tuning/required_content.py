@@ -403,6 +403,44 @@ def _probe_capability_bridges() -> ProbeResult:
     return ProbeResult(present=unbridged == 0, detail=detail)
 
 
+def _probe_encounter_outcome_mappings() -> ProbeResult:
+    """`EncounterOutcomeMapping` rows exist for every `EncounterOutcome` x `RiskLevel` pair.
+
+    Consumer: `world/combat/beat_wiring.py classify_battle_outcome()`. VICTORY/DEFEAT
+    grade a story beat; FLED/ABANDONED grade a scenario ENCOUNTER option's route
+    instead (#3565) - either way a missing pair means the outcome never resolves
+    (a fight linked to a story beat, or a scenario run's ENCOUNTER pick); the error
+    log names the pair (#3559, #3565).
+    """
+    from world.combat.constants import EncounterOutcome, RiskLevel  # noqa: PLC0415
+    from world.combat.models import EncounterOutcomeMapping  # noqa: PLC0415
+
+    expected = {(outcome, risk) for outcome in EncounterOutcome.values for risk in RiskLevel.values}
+    existing = set(EncounterOutcomeMapping.objects.values_list("outcome", "risk_level"))
+    missing = tuple(f"{o}/{r}" for (o, r) in sorted(expected - existing))
+    detail = f"Missing EncounterOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_battle_outcome_mappings() -> ProbeResult:
+    """`BattleOutcomeMapping` rows exist for every `BattleOutcome` except UNRESOLVED.
+
+    Consumer: `world/battles/beat_wiring.py classify_battle_conclusion_outcome()`. A
+    missing outcome means a battle linked to a story beat concludes and the beat
+    never resolves; the error log names the outcome (#3559). UNRESOLVED is not a
+    graded conclusion (`resolve_battle_beats` is only reached once a battle has
+    concluded to one of the other four), so it is excluded from the expected set.
+    """
+    from world.battles.constants import BattleOutcome  # noqa: PLC0415
+    from world.battles.models import BattleOutcomeMapping  # noqa: PLC0415
+
+    expected = {outcome for outcome in BattleOutcome.values if outcome != BattleOutcome.UNRESOLVED}
+    existing = set(BattleOutcomeMapping.objects.values_list("outcome", flat=True))
+    missing = tuple(sorted(expected - existing))
+    detail = f"Missing BattleOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _declarations() -> tuple[ContentDependency, ...]:
     """Every hard-coded row dependency the sentinel tracks.
 
@@ -1072,6 +1110,37 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_escalation_curves),
         ),
         ContentDependency(
+            key="encounter-outcome-mappings",
+            label="Encounter outcome-tier mappings",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/beat_wiring.py:69 classify_battle_outcome()",
+            consequence=(
+                "An EncounterOutcome x RiskLevel pair with no authored "
+                "EncounterOutcomeMapping row means the fight's outcome never "
+                "resolves what it's grading: VICTORY/DEFEAT grade a story "
+                "beat (concludes with the beat never resolved), FLED/ABANDONED "
+                "grade a scenario ENCOUNTER option's route instead (#3565, "
+                "concludes with the run left paused) - the error log names "
+                "the pair, but nothing grades until a GM authors the missing "
+                "row."
+            ),
+            probe=CustomProbe(fn=_probe_encounter_outcome_mappings),
+        ),
+        ContentDependency(
+            key="battle-outcome-mappings",
+            label="Battle outcome-tier mappings",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/battles/beat_wiring.py:31 classify_battle_conclusion_outcome()",
+            consequence=(
+                "A resolved BattleOutcome (any value except UNRESOLVED) with no "
+                "authored BattleOutcomeMapping row means a battle linked to a "
+                "story beat concludes and the beat never resolves - the error "
+                "log names the outcome, but nothing grades the beat until a GM "
+                "authors the missing row."
+            ),
+            probe=CustomProbe(fn=_probe_battle_outcome_mappings),
+        ),
+        ContentDependency(
             key="capability-power-bridges",
             label="Capability combat-power bridges",
             tier=DependencyTier.REQUIRED,
@@ -1147,6 +1216,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "error, so players believe the offer failed for no reason."
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
+        ),
+        ContentDependency(
+            key="game-clock",
+            label="Game clock (IC time anchor)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/game_clock/views.py:55 ClockViewSet.list(); "
+                "world/events/services.py:46 derive_ic_time_from_real(); "
+                "world/conditions/services.py:698 _compute_ingame_time_expires()"
+            ),
+            consequence=(
+                "GET /api/clock/ answers 503 NOT_CONFIGURED, the Hall's Time plate "
+                "reads 'Time is currently frozen', and every IC-date reader (event "
+                "scheduling, in-game-time condition expiry, journals) gets None and "
+                "skips. Seed it once through Django admin (add is allowed only while "
+                "no row exists) or POST /api/clock/adjust/ as staff."
+            ),
+            probe=AnyRowProbe(label="GameClock"),
         ),
     )
 

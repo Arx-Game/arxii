@@ -1,8 +1,8 @@
 # Missions glossary
 
 **Mission**:
-An authored branching graph of decision nodes a character undertakes, drawn from a `MissionTemplate` and run as a `MissionInstance` (the live run, whose state is just its current node plus durable snapshots and recorded deeds — no state blob). The umbrella term for the system; "Mission" names the concept, with template-vs-instance distinguishing the static graph from a play-through.
-_Avoid_: quest, job, task.
+An authored branching graph of decision nodes a character undertakes, drawn from a `MissionTemplate` and run as a `MissionInstance` (the live run, whose state is just its current node plus durable snapshots and recorded deeds - no state blob). The umbrella term for the system; "Mission" names the concept, with template-vs-instance distinguishing the static graph from a play-through. As of #3565 (ADR-0258) the underlying node/option/route graph is a shared primitive - the **scenario graph** (see the stories glossary's Scenario / Scenario Graph entry) - and "Mission" names one wrapper around it: the giver economy (`MissionTemplate`'s cooldown, draw weight, era replacement, visibility) and contract bookkeeping (`MissionInstance`'s report style, ransom target). A story beat's body is the same graph in a different wrapper (`StoryScenario`), never a second engine.
+_Avoid_: quest, job, task, scenario (reserve "scenario" for the graph wrapped in a story beat rather than a giver - see StoryScenario in the stories glossary).
 
 **MissionTemplate**:
 An authored mission: the static node graph (entered at its single entry node) plus its availability metadata — level band, risk tier, draw weight, arc scope, and visibility. The reusable definition that `MissionInstance` runs.
@@ -52,6 +52,20 @@ _Avoid_: assist bonus, donated stat, flat buff (it's banked on a helper's own ro
 A `MissionOption` with `option_kind=OptionKind.EXTERNAL_ACT` and `required_act` set to an `ExternalAct` (`TECHNIQUE_CAST`, `THREAD_WOVEN`, `COVENANT_SWORN`, `world.missions.constants`). Presented like any option (its authored framing shows) but never pickable — it resolves only when the player performs the real, non-mission act it names. `notify_external_act(character_sheet, act)` (`world.missions.services.external_acts`) is the entry point called directly from `weave_thread`, `create_covenant`/`induct_member_via_session`, and `use_technique` after each succeeds: a cheap `has_waiting_external_act` EXISTS guard first (so a cast with nothing waiting pays exactly one indexed query, no savepoint), then a savepoint-guarded, log-and-continue `satisfy_external_act` per ADR-0112; durable acts (`THREAD_WOVEN`/`COVENANT_SWORN`) also fast-forward at `enter_node` when already true, but `TECHNIQUE_CAST` is transient and never fast-forwards. See ADR-0112.
 _Avoid_: quest chain, onboarding engine, tutorial system.
 
+**ENCOUNTER Option**:
+A `MissionOption` with `option_kind=OptionKind.ENCOUNTER` and `encounter_risk_level` set
+(#3565, ADR-0258). Picking it (or a group vote landing on it) creates a `CombatEncounter` and
+spawns the option's authored `MissionOptionOpponentLine` roster, pausing the run
+(`MissionInstance.is_paused`) until the fight ends. Objective-first: the fight grades its
+option's route through `EncounterOutcomeMapping` (`start_encounter_for_option`/
+`complete_encounter_for_option`, `world.missions.services.encounter_option`), stamped on
+`CombatEncounter.scenario_deed` - never a story beat directly, and never the older
+`story_beat`/`BeatOpponentLine` path a beat's own ENCOUNTER *kind* still uses for a
+beat-level fight. FLED and ABANDONED are authored tiers here like any other, required content
+on the admin sentinel (#3444) alongside #3559's beat-level rows.
+_Avoid_: encounter beat (that's `Beat.kind=ENCOUNTER`, a different mechanism at a different
+layer - one grades a beat directly, the other grades one option inside a scenario run).
+
 **Tutorial Chain**:
 The seven-`MissionTemplate` new-player arc (`world.seeds.game_content.tutorial.seed_tutorial_dev`, the `"tutorial"` seed cluster) walking a level-1 character through room-trigger and examine-driven grants, an NPC-offered External-Act Beat, a Notice Board pickup, a Directed Summons follow-on, a covenant vow, and a Legend-Risk Floor job. Each template gates the next via the ordinary `has_completed_mission` predicate leaf on `availability_rule` — chain progress is nothing but `MissionInstance` rows; there is no dedicated tutorial-progress model or status. See ADR-0112.
 _Avoid_: quest chain, onboarding engine, tutorial system.
@@ -71,3 +85,15 @@ _Avoid_: legend gate, high-risk requirement, legend minimum (it's a hard floor, 
 **Co-Presence (Solo-Darkness) Guard**:
 The structural warning-not-lockout stance for legend-tier content (ADR-0107): a solo character can always attempt legend-risk work, but the system is honest that it is "warned-lethal solo" — no party-size gate blocks the attempt, but covenant vow power stays continuously co-presence-enforced (`revalidate_engagements`/`can_engage_membership` dim a vow the instant a covenant-mate leaves the room or the scene ends, `world.covenants`) and the mission surface's `Legend-Risk Floor` keeps the highest payouts tied to the tier where the game is upfront about the danger. Not a mission-specific mechanism — the missions system is one of its consumers via the risk-tier floor.
 _Avoid_: solo lockout, party-size gate, solo penalty (there is no penalty or lockout — only honest lethality and a lit-vow requirement).
+
+**GM-Owned Scenario**:
+A `MissionTemplate` a story's own Lead GM authored, rather than staff catalog content -
+identified by its `StoryScenario` link (`world.stories`, see that app's glossary). Mission
+Studio's authoring viewsets are no longer staff-only: `IsStaffOrScenarioOwner`
+(`world.missions.permissions`) opens reads/writes to a GM over their own `StoryScenario`-owned
+rows, scoped by `scenario_scope_q` and capped at `max_risk_tier_for(user)`, while staff stay
+unrestricted (#3565, ADR-0258). A GM cannot create a bare template directly - only through
+`POST /api/beats/{id}/scenario/` (stories app), and cannot take ownership of an existing
+catalog template. `MissionGiverViewSet`/`MissionInstanceViewSet` stay staff-only.
+_Avoid_: staff template, catalog scenario (a GM-owned scenario is deliberately outside the
+catalog - it never appears on boards or in `opportunities_for_character`).

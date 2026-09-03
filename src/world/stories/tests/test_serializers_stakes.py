@@ -11,6 +11,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.assets.constants import AssetStatus
+from world.assets.factories import NPCAssetFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
@@ -362,6 +364,126 @@ class StakeResolutionFieldExposureTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["machine_match_lifecycle_state"], LifecycleState.DEAD)
+
+
+class StakeAssetFieldExposureTests(APITestCase):
+    """subject_asset must round-trip via the API (#3561 Task 3).
+
+    subject_asset was added to Stake (SubjectMixin) but never added to
+    StakeSerializer.Meta.fields (nor _candidate_stake's field_names), so
+    authoring it via the API was silently a no-op.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.story = StoryFactory(owners=[cls.staff])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(episode=cls.episode, risk=RenownRisk.LOW, target_level=2)
+        cls.asset = NPCAssetFactory()
+
+    def test_subject_asset_round_trips_through_create(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stake-list"),
+            {
+                "beat": self.beat.pk,
+                "subject_kind": StakeSubjectKind.ASSET,
+                "severity": StakeSeverity.GRAVE,
+                "subject_asset": self.asset.pk,
+                "player_summary": "Your informant is in danger.",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["subject_asset"], self.asset.pk)
+
+    def test_subject_asset_round_trips_through_patch(self):
+        self.client.force_authenticate(user=self.staff)
+        stake = StakeFactory(
+            beat=self.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.ASSET,
+            subject_asset=self.asset,
+            severity=StakeSeverity.GRAVE,
+            subject_label="",
+        )
+        other_asset = NPCAssetFactory()
+        resp = self.client.patch(
+            reverse("stake-detail", kwargs={"pk": stake.pk}),
+            {"subject_asset": other_asset.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["subject_asset"], other_asset.pk)
+        stake.refresh_from_db()
+        self.assertEqual(stake.subject_asset_id, other_asset.pk)
+
+
+class StakeResolutionAssetAndRegardFieldExposureTests(APITestCase):
+    """npc_regard_delta and transitions_subject_asset must round-trip (#3561 Task 3).
+
+    Both fields exist on StakeResolution but were never added to
+    StakeResolutionSerializer.Meta.fields, so authoring them via the API was
+    silently a no-op.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.story = StoryFactory(owners=[cls.staff])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(episode=cls.episode, risk=RenownRisk.LOW, target_level=2)
+        cls.npc_sheet = CharacterSheetFactory()
+        cls.npc_stake = StakeFactory(
+            beat=cls.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            subject_sheet=cls.npc_sheet,
+            severity=StakeSeverity.GRAVE,
+            subject_label="The NPC's fate",
+        )
+        cls.asset = NPCAssetFactory()
+        cls.asset_stake = StakeFactory(
+            beat=cls.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.ASSET,
+            subject_asset=cls.asset,
+            severity=StakeSeverity.GRAVE,
+            subject_label="",
+        )
+
+    def test_npc_regard_delta_round_trips_through_create(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stakeresolution-list"),
+            {
+                "stake": self.npc_stake.pk,
+                "column": "loss",
+                "npc_regard_delta": -2,
+                "narrative_summary": "The NPC's regard sours.",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["npc_regard_delta"], -2)
+
+    def test_transitions_subject_asset_round_trips_through_create(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stakeresolution-list"),
+            {
+                "stake": self.asset_stake.pk,
+                "column": "loss",
+                "transitions_subject_asset": AssetStatus.COMPROMISED,
+                "narrative_summary": "Your informant is compromised.",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["transitions_subject_asset"], AssetStatus.COMPROMISED)
 
 
 # ---------------------------------------------------------------------------

@@ -20,13 +20,15 @@ from world.stories.models import Transition, TransitionRequiredOutcome
 class OutcomeInput:
     """Validated routing predicate row passed to the service.
 
-    Beat-level rows set ``required_outcome``; stake-level rows (#1770 PR2)
-    set ``stake_id`` + ``required_stake_column`` and leave ``required_outcome``
+    Beat-level rows set ``required_outcome`` (and optionally
+    ``required_outcome_key``, #3565); stake-level rows (#1770 PR2) set
+    ``stake_id`` + ``required_stake_column`` and leave ``required_outcome``
     blank. OutcomeInputSerializer validates the shape.
     """
 
     beat_id: int
     required_outcome: BeatOutcome | str = ""
+    required_outcome_key: str = ""
     stake_id: int | None = None
     required_stake_column: str = ""
 
@@ -85,6 +87,7 @@ def save_transition_with_outcomes(
                 transition=transition,
                 beat_id=outcome.beat_id,
                 required_outcome=outcome.required_outcome,
+                required_outcome_key=outcome.required_outcome_key,
                 stake_id=outcome.stake_id,
                 required_stake_column=outcome.required_stake_column,
             )

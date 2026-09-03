@@ -31,7 +31,6 @@ from world.stories.models import (
     Episode,
     GroupStoryRequest,
     Story,
-    Transition,
 )
 from world.stories.services.beats import record_gm_marked_outcome
 from world.stories.services.completion import complete_story
@@ -195,18 +194,6 @@ def _beat_or_error(beat_id: Any) -> tuple[Beat | None, ActionResult | None]:
     )
 
 
-def _chosen_transition_or_error(
-    chosen_transition_id: Any,
-) -> tuple[Transition | None, ActionResult | None]:
-    """Return the requested transition, or an error if the id doesn't exist."""
-    if chosen_transition_id is None:
-        return None, None
-    try:
-        return Transition.objects.get(pk=chosen_transition_id), None
-    except Transition.DoesNotExist:
-        return None, ActionResult(success=False, message="No transition with that ID exists.")
-
-
 def _target_maturity_or_error(target: Any) -> tuple[StoryMaturity | None, ActionResult | None]:
     """Parse a target maturity value, returning ``(maturity, error_result)``."""
     return _enum_or_error(
@@ -263,7 +250,11 @@ class CompleteStoryAction(Action):
 
 @dataclass
 class ResolveEpisodeAction(Action):
-    """Advance a story's active progress through an episode transition."""
+    """Advance a story's active progress through its episode transition.
+
+    Routing is automatic (#3565): the transition fires by authored order,
+    so this never accepts a caller-chosen transition.
+    """
 
     key: str = "resolve_episode"
     name: str = "Resolve Episode"
@@ -292,10 +283,6 @@ class ResolveEpisodeAction(Action):
         if progress is None:
             return ActionResult(success=False, message=_NO_PROGRESS)
 
-        chosen_transition, error = _chosen_transition_or_error(kwargs.get("chosen_transition_id"))
-        if error:
-            return error
-
         try:
             gm_profile = account.gm_profile
         except (GMProfile.DoesNotExist, AttributeError):
@@ -304,7 +291,6 @@ class ResolveEpisodeAction(Action):
         try:
             resolve_episode(
                 progress=progress,
-                chosen_transition=chosen_transition,
                 gm_notes=kwargs.get("gm_notes", ""),
                 resolved_by=gm_profile,
             )

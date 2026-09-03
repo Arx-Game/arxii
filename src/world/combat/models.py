@@ -209,11 +209,24 @@ class CombatEncounter(AbstractRound):
         blank=True,
         related_name="resolving_encounters",
         help_text=(
-            "The one Beat this specific encounter resolves (#1760). When set, "
-            "the ENCOUNTER_COMPLETED beat-wiring handler resolves only this "
-            "beat with this encounter's own graded outcome — never every beat "
-            "reachable from the scene. When unset, legacy find-all-on-scene "
-            "behavior applies unchanged."
+            "The one Beat this specific encounter resolves (#1760; #3559 "
+            "beat_for_scene_conclusion). When set (and still UNSATISFIED "
+            "OUTCOME_TIER), the ENCOUNTER_COMPLETED beat-wiring handler grades "
+            "only this beat with this encounter's own outcome. When unset, the "
+            "encounter's scene's running beat grades instead if it is itself "
+            "the objective (kind ENCOUNTER); otherwise nothing grades."
+        ),
+    )
+    scenario_deed = models.ForeignKey(
+        "arxii.MissionDeedRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="encounters",
+        help_text=(
+            "The pending scenario deed this fight resolves (#3565): an ENCOUNTER "
+            "option picked inside a story scenario. The ENCOUNTER_COMPLETED "
+            "handler grades the deed's option route, never a beat."
         ),
     )
 
@@ -2468,20 +2481,24 @@ class EncounterOutcomeMapping(SharedMemoryModel):
     Used by ``classify_battle_outcome`` to select the CheckOutcome tier for beat
     completion when an encounter resolves. VICTORY/DEFEAT rows map to
     success/failure CheckOutcomes (``success_level`` sign drives the derived
-    BeatOutcome); a null ``check_outcome`` (or a missing row) signals the caller
-    to resolve the beat to ``PENDING_GM_REVIEW`` rather than firing a consequence
-    pool. Seeded with canonical tiers; GMs retune by editing rows.
+    BeatOutcome). FLED/ABANDONED never consult this table - the withdrawal path
+    (resolve_stakes_for_withdrawal) handles them structurally, regardless of any
+    row authored here. A missing row for any other outcome x risk pair is
+    required content, not an alternate resolution path (#3559): the handler logs
+    an error and leaves the beat open, surfaced on the admin sentinel (#3444).
+    Seeded with canonical tiers; GMs retune by editing rows.
     """
 
     outcome = models.CharField(max_length=20, choices=EncounterOutcome.choices)
     risk_level = models.CharField(max_length=20, choices=RiskLevel.choices)
     check_outcome = models.ForeignKey(
         CHECK_OUTCOME_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="encounter_outcome_mappings",
-        help_text="CheckOutcome tier for this outcome×risk. Null = resolve to PENDING_GM_REVIEW.",
+        help_text=(
+            "CheckOutcome tier for this outcome×risk (required content: a missing "
+            "row is reported on the admin sentinel)."
+        ),
     )
 
     class Meta:

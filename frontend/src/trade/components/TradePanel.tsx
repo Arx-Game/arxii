@@ -135,6 +135,16 @@ export function TradePanel({ sessionId, actorCharacterId }: TradePanelProps) {
     fn().catch((err) => setError(err instanceof Error ? err.message : 'Trade action failed.'));
   }
 
+  const renderConfirm = () => {
+    if (confirm.isPending) {
+      return 'Confirming…';
+    }
+    if (myConfirmed) {
+      return 'Confirmed';
+    }
+    return 'Confirm';
+  };
+
   return (
     <Card data-testid="trade-panel">
       <CardHeader className="pb-3">
@@ -239,7 +249,7 @@ export function TradePanel({ sessionId, actorCharacterId }: TradePanelProps) {
                 onClick={() => runMutation(() => confirm.mutateAsync())}
                 data-testid="confirm-trade-button"
               >
-                {confirm.isPending ? 'Confirming…' : myConfirmed ? 'Confirmed' : 'Confirm'}
+                {renderConfirm()}
               </Button>
               <Button
                 size="sm"

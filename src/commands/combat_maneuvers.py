@@ -63,6 +63,11 @@ _INTO_SEPARATOR = " into "
 # omitting the "into" clause entirely.
 _REDIRECT_AWAY_KEYWORD = "away"
 
+# Trailing consent token (#3573): ``interpose ... soulfray`` records the
+# guardian's consent to keep the reaction firing past zero anima at the cost
+# of Soulfray. Stripped off the raw text before the ally/with/into parsing.
+_SOULFRAY_TOKEN = "soulfray"  # noqa: S105 - a maneuver keyword, not a credential
+
 _NOT_IN_ACTIVE_ROUND = "You are not in an active combat round."
 
 # ``_require_rest`` argument-description literal, shared by cover/succor/rally.
@@ -76,11 +81,13 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat                      - show your combat status + available actions
         combat flee                 - declare a desperate flee this round
         combat cover <ally>         - cover an ally's escape
-        combat interpose [ally] [with <technique>] [into <destination>] - guard an
-                                     ally (or any ally) from harm, optionally carrying a
+        combat interpose [ally] [with <technique>] [into <destination>] [soulfray] - guard
+                                     an ally (or any ally) from harm, optionally carrying a
                                      known protective technique; a REDIRECT technique's
                                      saved damage destination (enemy name, object name,
                                      or "away", the default) is declared with "into"
+                                     - add "soulfray" to keep guarding past zero anima at
+                                     the cost of Soulfray
         combat succor <ally>        - shelter an ally from environmental hazards
         combat use <item> [on <target>] - use a held on-use item this round
         combat rally <ally>         - inspire an ally, bolstering their next action
@@ -176,7 +183,17 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         string way: ``into away`` (or omitting the clause entirely) is the
         default fallback; any other name resolves first against an active
         opponent, then a room object, in `_resolve_redirect_destination`.
+
+        A trailing ``soulfray`` token (#3573) records the guardian's consent
+        to keep the reaction firing past zero anima at the cost of Soulfray;
+        stripped off the raw text before any of the above parsing runs.
         """
+        text = text.strip()
+        consent = False
+        if text.lower() == _SOULFRAY_TOKEN or text.lower().endswith(f" {_SOULFRAY_TOKEN}"):
+            consent = True
+            text = text[: -len(_SOULFRAY_TOKEN)].strip()
+
         # Pad with spaces so a bare "with <technique>" (no ally clause) still
         # matches the " with " separator at position 0; both slices come off the
         # SAME padded string so the indexes stay consistent.
@@ -211,6 +228,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             kwargs["technique_id"] = self._find_technique_id(technique_text)
         if destination_text:
             kwargs.update(self._resolve_redirect_destination(destination_text))
+        if consent:
+            kwargs["confirm_soulfray_risk"] = True
         return kwargs
 
     def _resolve_redirect_destination(self, name: str) -> dict[str, Any]:
@@ -502,7 +521,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally] [with <technique>] [into <dest>], "
+            "flee, cover <ally>, "
+            "interpose [ally] [with <technique>] [into <dest>] [soulfray], "
             "succor <ally>, "
             "use <item> [on <target>], "
             "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, "

@@ -32,7 +32,6 @@ from world.stories.constants import (
     StoryMaturity,
     StoryMilestoneType,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.types import (
     ConnectionType,
@@ -760,7 +759,12 @@ class Era(SharedMemoryModel):
 
 
 class Transition(SharedMemoryModel):
-    """A guarded edge from one Episode to another."""
+    """A guarded edge from one Episode to another.
+
+    Every transition is automatic: it fires when its routing requirements
+    are met. When several are eligible the lowest (order, pk) fires (#3565);
+    authoring warns about that case through validate_routing_readiness.
+    """
 
     source_episode = models.ForeignKey(
         EPISODE_MODEL,
@@ -774,15 +778,6 @@ class Transition(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="inbound_transitions",
         help_text="May be null when next episode is unauthored (frontier pause).",
-    )
-    mode = models.CharField(
-        max_length=20,
-        choices=TransitionMode.choices,
-        default=TransitionMode.AUTO,
-        help_text=(
-            "AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead "
-            "GM to pick from the eligible set."
-        ),
     )
     connection_type = models.CharField(
         max_length=20,
@@ -844,7 +839,7 @@ class Beat(SharedMemoryModel):
     predicate_type = models.CharField(
         max_length=40,
         choices=BeatPredicateType.choices,
-        default=BeatPredicateType.GM_MARKED,
+        default=BeatPredicateType.OUTCOME_TIER,
     )
     outcome = models.CharField(
         max_length=20,
@@ -857,6 +852,16 @@ class Beat(SharedMemoryModel):
             "one progression trail, so this field represents the whole story's state, "
             "not per-character state. Historical per-character contributions live in "
             "BeatCompletion."
+        ),
+    )
+    outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "MissionOption.key of the scenario option that ended the run which "
+            "resolved this beat (#3565); denormalised from the BeatCompletion. "
+            "Blank for combat, battle, decisive-check and GM-marked completions."
         ),
     )
     visibility = models.CharField(
@@ -978,9 +983,10 @@ class Beat(SharedMemoryModel):
     # to flip the Beat when a launched instance terminates SHIPPED in #1757:
     # ``world.missions.services.beat.on_mission_complete_for_beat`` resolves
     # ``instance.source_beat``, guards already-resolved beats, resolves
-    # scope-aware progress, and completes the beat via
-    # ``record_outcome_tier_completion`` (graded routes) or
-    # ``record_gm_marked_outcome(SUCCESS)`` (BRANCH terminals) — called from
+    # scope-aware progress, decides the ending with ``beat_outcome_for_route``
+    # (authored ``beat_outcome``, tier sign, else SUCCESS) and completes the
+    # beat via ``record_scenario_outcome`` / ``record_gm_marked_outcome`` with
+    # the terminal option's key as ``outcome_key`` (#3560) - called from
     # ``_finish_terminal`` (``services/resolution.py``) and covered by
     # ``test_services_beat.py``/``test_services_resolution_beat.py``. The FK
     # is independent of ``predicate_type``; predicate-type-vs-required_mission
@@ -1032,11 +1038,13 @@ class Beat(SharedMemoryModel):
         help_text="Lead GM may flag this beat to be claimable by Assistant GMs.",
     )
 
-    # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Optional wall-clock deadline. Expiry handling deferred to Phase 3+.",
+        help_text=(
+            "Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: "
+            "the expired consequence pool fires and stakes grade LOSS."
+        ),
     )
 
     order = models.PositiveIntegerField(default=0)
@@ -1166,6 +1174,30 @@ class Beat(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Beat({self.predicate_type}) on {self.episode.title}"
+
+
+class StoryScenario(SharedMemoryModel):
+    """A scenario graph owned by a story (#3565).
+
+    The story's Lead GM authors the linked MissionTemplate as the body of one of
+    their beats. The link lives on the stories side so missions never imports
+    Story (ADR-0010): ownership is read through ``template.story_scenario``.
+    A story-owned template is created RESTRICTED with an empty availability
+    rule and zero draw weight, and the board / opportunity querysets exclude
+    it, so it never appears as a quest.
+    """
+
+    story = models.ForeignKey("arxii.Story", on_delete=models.CASCADE, related_name="scenarios")
+    template = models.OneToOneField(
+        "arxii.MissionTemplate", on_delete=models.CASCADE, related_name="story_scenario"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["story", "pk"]
+
+    def __str__(self) -> str:
+        return f"Scenario {self.template_id} of Story {self.story_id}"
 
 
 class BeatOpponentLine(SharedMemoryModel):
@@ -1351,6 +1383,15 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         default="",
         help_text="Required StakeOutcome column; only with stake set.",
     )
+    required_outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "Beat-level rows only: also require Beat.outcome_key to equal this "
+            "MissionOption.key (#3565). Blank = any key."
+        ),
+    )
 
     class Meta:
         constraints = [
@@ -1378,6 +1419,9 @@ class TransitionRequiredOutcome(SharedMemoryModel):
                 raise ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
                 )
+            if self.required_outcome_key:
+                msg = "Only beat-level routing rows may require an option key."
+                raise ValidationError({"required_outcome_key": msg})
         else:
             if not self.required_outcome:
                 raise ValidationError({"required_outcome": "Required when stake is not set."})
@@ -1525,6 +1569,12 @@ class BeatCompletion(SharedMemoryModel):
     outcome = models.CharField(
         max_length=20,
         choices=BeatOutcome.choices,
+    )
+    outcome_key = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="The scenario option key that resolved the beat, if any (#3565).",
     )
     outcome_tier = models.ForeignKey(
         "arxii.CheckOutcome",
@@ -2623,11 +2673,12 @@ class StakeResolution(SharedMemoryModel):
         help_text=(
             "On automatic (machine) grading, if the stake's subject_sheet's "
             "actual lifecycle_state equals this value, THIS branch is "
-            "selected over the column's plain default (#1760 — generalizes "
+            "selected over the column's plain default (#1760, generalizing "
             "the old is-dead-only override to the full LifecycleState "
-            "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only "
-            "— blank means no machine-match, resolve via the plain column "
-            "default or a GM's Constrained Pick."
+            "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; "
+            "blank means no machine-match, so the branch keyed to the "
+            "completion's outcome_key resolves, else the plain column default "
+            "(#3561: never a GM pick)."
         ),
     )
     transitions_subject_asset = models.CharField(
@@ -2670,6 +2721,7 @@ class StakeResolution(SharedMemoryModel):
             sets_subject_lifecycle=self.sets_subject_lifecycle,
             machine_match_lifecycle_state=self.machine_match_lifecycle_state,
             npc_regard_delta=self.npc_regard_delta,
+            transitions_subject_asset=self.transitions_subject_asset,
         ):
             raise ValidationError({problem.field: problem.message})
 
@@ -2779,9 +2831,10 @@ class StakeOutcome(SharedMemoryModel):
     Mirrors EpisodeResolution (a GM narrative-decision audit) and
     BeatCompletion (an append-only ledger): **exactly one row per resolved
     stake** (unique constraint) — a stake's resolution fires once from the
-    locked contract, whether by machine grading or a GM's constrained pick.
-    ``resolution`` is null when no branch was authored for the chosen column
-    (audit honesty: an unready contract that ran anyway). Transition routing
+    locked contract, always machine-graded (#3561 retired the GM constrained
+    pick; every ``method`` is now MACHINE). ``resolution`` is null when no
+    branch was authored for the chosen column (audit honesty: an unready
+    contract that ran anyway). Transition routing
     (TransitionRequiredOutcome.required_stake_column) reads this row.
     """
 
@@ -2807,16 +2860,32 @@ class StakeOutcome(SharedMemoryModel):
         help_text="The authored branch that fired; null = no branch authored for the column.",
     )
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
-    method = models.CharField(max_length=12, choices=StakeOutcomeMethod.choices)
+    method = models.CharField(
+        max_length=12,
+        choices=StakeOutcomeMethod.choices,
+        help_text="Always MACHINE (#3561 retired the GM constrained pick).",
+    )
     resolved_by = models.ForeignKey(
         GM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="stake_outcomes",
-        help_text="The GM who picked the column (GM_PICK only; null for MACHINE).",
+        help_text=(
+            "Historical audit field from before #3561 retired the GM constrained "
+            "pick: the GM who picked the column, on rows resolved that way. "
+            "Always null on rows resolved since."
+        ),
     )
-    gm_notes = models.TextField(blank=True, default="")
+    gm_notes = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Historical audit field from before #3561 retired the GM constrained "
+            "pick: the deciding GM's notes, on rows resolved that way. Always blank "
+            "on rows resolved since."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

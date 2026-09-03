@@ -4,9 +4,8 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
-from world.stories.constants import BeatOutcome, EraStatus, TransitionMode
+from world.stories.constants import BeatOutcome, EraStatus
 from world.stories.exceptions import (
-    AmbiguousTransitionError,
     NoEligibleTransitionError,
     ProgressionRequirementNotMetError,
 )
@@ -44,14 +43,13 @@ class ResolveEpisodeTests(EvenniaTestCase):
     # Happy paths
     # ------------------------------------------------------------------
 
-    def test_auto_transition_fires_and_advances_progress(self):
-        """Single AUTO eligible transition advances progress to target."""
+    def test_single_eligible_transition_fires_and_advances_progress(self):
+        """A single eligible transition advances progress to its target."""
         source, target = self._make_story_structure()
         progress = self._make_progress(source)
         transition = TransitionFactory(
             source_episode=source,
             target_episode=target,
-            mode=TransitionMode.AUTO,
         )
 
         resolution = resolve_episode(progress=progress)
@@ -63,30 +61,6 @@ class ResolveEpisodeTests(EvenniaTestCase):
         progress.refresh_from_db()
         self.assertEqual(progress.current_episode, target)
 
-    def test_explicit_chosen_transition_fires_correctly(self):
-        """Passing chosen_transition explicitly advances to the right target."""
-        source, target = self._make_story_structure()
-        progress = self._make_progress(source)
-        t1 = TransitionFactory(
-            source_episode=source,
-            target_episode=target,
-            mode=TransitionMode.GM_CHOICE,
-            order=0,
-        )
-        other_target = EpisodeFactory(chapter=source.chapter)
-        TransitionFactory(
-            source_episode=source,
-            target_episode=other_target,
-            mode=TransitionMode.GM_CHOICE,
-            order=1,
-        )
-
-        resolution = resolve_episode(progress=progress, chosen_transition=t1)
-
-        progress.refresh_from_db()
-        self.assertEqual(progress.current_episode, target)
-        self.assertEqual(resolution.chosen_transition, t1)
-
     def test_null_target_parks_progress_at_frontier(self):
         """Transition with target_episode=None advances to None (frontier)."""
         source, _unused = self._make_story_structure()
@@ -94,7 +68,6 @@ class ResolveEpisodeTests(EvenniaTestCase):
         frontier_transition = TransitionFactory(
             source_episode=source,
             target_episode=None,
-            mode=TransitionMode.AUTO,
         )
 
         resolution = resolve_episode(progress=progress)
@@ -137,46 +110,37 @@ class ResolveEpisodeTests(EvenniaTestCase):
         self.assertEqual(resolution.gm_notes, "GM override.")
 
     # ------------------------------------------------------------------
-    # Ambiguous / GM_CHOICE paths
+    # Several eligible: lowest (order, pk) fires (#3565)
     # ------------------------------------------------------------------
 
-    def test_gm_choice_required_when_multiple_eligible(self):
-        """Two eligible transitions with no chosen_transition → AmbiguousTransitionError."""
+    def test_lowest_order_transition_fires_when_multiple_eligible(self):
+        """Two eligible transitions: the lowest-order one fires automatically."""
         source, target = self._make_story_structure()
         progress = self._make_progress(source)
-        TransitionFactory(source_episode=source, target_episode=target, order=0)
+        first = TransitionFactory(source_episode=source, target_episode=target, order=0)
         other_target = EpisodeFactory(chapter=source.chapter)
         TransitionFactory(source_episode=source, target_episode=other_target, order=1)
 
-        with self.assertRaises(AmbiguousTransitionError):
-            resolve_episode(progress=progress)
-
-    def test_gm_choice_with_explicit_chosen_advances_correctly(self):
-        """With multiple eligible, explicit chosen_transition resolves normally."""
-        source, target = self._make_story_structure()
-        progress = self._make_progress(source)
-        t1 = TransitionFactory(source_episode=source, target_episode=target, order=0)
-        other_target = EpisodeFactory(chapter=source.chapter)
-        TransitionFactory(source_episode=source, target_episode=other_target, order=1)
-
-        resolution = resolve_episode(progress=progress, chosen_transition=t1)
+        resolution = resolve_episode(progress=progress)
 
         progress.refresh_from_db()
         self.assertEqual(progress.current_episode, target)
-        self.assertEqual(resolution.chosen_transition, t1)
+        self.assertEqual(resolution.chosen_transition, first)
 
-    def test_gm_choice_mode_without_chosen_raises_ambiguous(self):
-        """Single eligible transition with mode=GM_CHOICE raises AmbiguousTransitionError."""
+    def test_lowest_pk_tiebreaks_when_order_equal(self):
+        """Two eligible transitions with equal order: the lower-pk one fires."""
         source, target = self._make_story_structure()
         progress = self._make_progress(source)
-        TransitionFactory(
-            source_episode=source,
-            target_episode=target,
-            mode=TransitionMode.GM_CHOICE,
-        )
+        first = TransitionFactory(source_episode=source, target_episode=target, order=0)
+        other_target = EpisodeFactory(chapter=source.chapter)
+        second = TransitionFactory(source_episode=source, target_episode=other_target, order=0)
+        self.assertLess(first.pk, second.pk)
 
-        with self.assertRaises(AmbiguousTransitionError):
-            resolve_episode(progress=progress)
+        resolution = resolve_episode(progress=progress)
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.current_episode, target)
+        self.assertEqual(resolution.chosen_transition, first)
 
     # ------------------------------------------------------------------
     # No eligible transitions
@@ -204,24 +168,6 @@ class ResolveEpisodeTests(EvenniaTestCase):
 
         with self.assertRaises(ProgressionRequirementNotMetError):
             resolve_episode(progress=progress)
-
-    def test_chosen_transition_not_in_eligible_set_raises(self):
-        """Passing a transition from a different episode raises NoEligibleTransitionError."""
-        source, target = self._make_story_structure()
-        progress = self._make_progress(source)
-
-        # The episode has one valid AUTO transition.
-        TransitionFactory(source_episode=source, target_episode=target)
-
-        # An unrelated transition from a different episode.
-        other_episode = EpisodeFactory(chapter=source.chapter)
-        unrelated_transition = TransitionFactory(
-            source_episode=other_episode,
-            target_episode=target,
-        )
-
-        with self.assertRaises(NoEligibleTransitionError):
-            resolve_episode(progress=progress, chosen_transition=unrelated_transition)
 
     # ------------------------------------------------------------------
     # Branching: routing requirements filter which transitions are eligible
@@ -253,86 +199,6 @@ class ResolveEpisodeTests(EvenniaTestCase):
         self.assertEqual(progress.current_episode, target_success)
         self.assertEqual(resolution.chosen_transition, success_t)
 
-    # ------------------------------------------------------------------
-    # Mixed AUTO / GM_CHOICE eligibility
-    # ------------------------------------------------------------------
-
-    def test_mixed_auto_and_gm_choice_eligible_raises_ambiguous(self):
-        """Two eligible transitions — one AUTO, one GM_CHOICE — raise AmbiguousTransitionError
-        when no chosen_transition is passed, because multiple eligible always requires explicit
-        selection regardless of mode."""
-        source, target = self._make_story_structure()
-        other_target = EpisodeFactory(chapter=source.chapter)
-        progress = self._make_progress(source)
-
-        TransitionFactory(
-            source_episode=source,
-            target_episode=target,
-            mode=TransitionMode.AUTO,
-            order=0,
-        )
-        TransitionFactory(
-            source_episode=source,
-            target_episode=other_target,
-            mode=TransitionMode.GM_CHOICE,
-            order=1,
-        )
-
-        with self.assertRaises(AmbiguousTransitionError):
-            resolve_episode(progress=progress)
-
-    def test_mixed_eligible_set_respects_chosen_auto_transition(self):
-        """With a mixed AUTO/GM_CHOICE eligible set, passing the AUTO transition advances
-        correctly."""
-        source, target = self._make_story_structure()
-        other_target = EpisodeFactory(chapter=source.chapter)
-        progress = self._make_progress(source)
-
-        auto_t = TransitionFactory(
-            source_episode=source,
-            target_episode=target,
-            mode=TransitionMode.AUTO,
-            order=0,
-        )
-        TransitionFactory(
-            source_episode=source,
-            target_episode=other_target,
-            mode=TransitionMode.GM_CHOICE,
-            order=1,
-        )
-
-        resolution = resolve_episode(progress=progress, chosen_transition=auto_t)
-
-        progress.refresh_from_db()
-        self.assertEqual(progress.current_episode, target)
-        self.assertEqual(resolution.chosen_transition, auto_t)
-
-    def test_mixed_eligible_set_respects_chosen_gm_choice_transition(self):
-        """With a mixed AUTO/GM_CHOICE eligible set, passing the GM_CHOICE transition advances
-        correctly."""
-        source, target = self._make_story_structure()
-        other_target = EpisodeFactory(chapter=source.chapter)
-        progress = self._make_progress(source)
-
-        TransitionFactory(
-            source_episode=source,
-            target_episode=target,
-            mode=TransitionMode.AUTO,
-            order=0,
-        )
-        gm_t = TransitionFactory(
-            source_episode=source,
-            target_episode=other_target,
-            mode=TransitionMode.GM_CHOICE,
-            order=1,
-        )
-
-        resolution = resolve_episode(progress=progress, chosen_transition=gm_t)
-
-        progress.refresh_from_db()
-        self.assertEqual(progress.current_episode, other_target)
-        self.assertEqual(resolution.chosen_transition, gm_t)
-
 
 class ResolveEpisodeStoryCascadeTests(EvenniaTestCase):
     """resolve_episode cascades to STORY_AT_MILESTONE beats referencing the advanced story."""
@@ -354,7 +220,6 @@ class ResolveEpisodeStoryCascadeTests(EvenniaTestCase):
         TransitionFactory(
             source_episode=ref_ep1,
             target_episode=ref_ep2,
-            mode=TransitionMode.AUTO,
         )
         ref_progress = StoryProgressFactory(
             story=ref_story,

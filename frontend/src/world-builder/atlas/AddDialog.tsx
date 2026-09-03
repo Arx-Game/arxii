@@ -77,6 +77,33 @@ export type AddDialogRealizePayload =
       exitBack: string;
     };
 
+/**
+ * The per-mode copy. Three separate ternary chains used to spell this out one
+ * string at a time; keeping the variants together means you can read all of a
+ * mode's wording in one place, and adding a mode is one entry rather than three
+ * edits scattered through the JSX.
+ */
+const MODE_COPY: Record<
+  AddDialogProps['mode'],
+  { title: string; nameLabel: string; placeholder: string }
+> = {
+  areas: {
+    title: 'New area',
+    nameLabel: 'Area name',
+    placeholder: 'The Grand Foyer',
+  },
+  exit: {
+    title: 'New exit',
+    nameLabel: 'Leads to',
+    placeholder: 'name the room — existing rooms match as you type',
+  },
+  rooms: {
+    title: 'New room',
+    nameLabel: 'Room name',
+    placeholder: 'The Wine Cellar',
+  },
+};
+
 export interface AddDialogProps {
   mode: 'areas' | 'rooms' | 'exit';
   open: boolean;
@@ -88,6 +115,19 @@ export interface AddDialogProps {
   defaultNeighbor?: AddDialogNeighbor | null;
   /** Exit mode only — fires as "Leads to" changes, so the caller can live-search room names. */
   onDestinationInput?: (value: string) => void;
+}
+
+/** What the exit field is about to do, in the player's terms. */
+function exitNote(trimmedDestination: string, matched: AddDialogRoomOption | null): string {
+  if (trimmedDestination === '') return 'name the room this exit leads to';
+  if (matched) return 'joins two rooms that already exist — nothing new is made';
+  return 'dug as a placeholder for the writing pass — you stay here';
+}
+
+/** Exit mode forks on whether the destination already exists; every other mode just adds. */
+function submitLabel(mode: AddDialogProps['mode'], matched: AddDialogRoomOption | null): string {
+  if (mode !== 'exit') return 'Add';
+  return matched ? 'Link it' : 'Dig it';
 }
 
 interface RowState {
@@ -187,17 +227,15 @@ export function AddDialog({
     onOpenChange(false);
   };
 
-  const dialogTitle = mode === 'areas' ? 'New area' : mode === 'exit' ? 'New exit' : 'New room';
+  const copy = MODE_COPY[mode];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+        <DialogTitle className="sr-only">{copy.title}</DialogTitle>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="add-dialog-name">
-              {mode === 'areas' ? 'Area name' : mode === 'exit' ? 'Leads to' : 'Room name'}
-            </Label>
+            <Label htmlFor="add-dialog-name">{copy.nameLabel}</Label>
             <Input
               id="add-dialog-name"
               autoFocus
@@ -206,13 +244,7 @@ export function AddDialog({
                 setName(event.target.value);
                 if (mode === 'exit') onDestinationInput?.(event.target.value);
               }}
-              placeholder={
-                mode === 'areas'
-                  ? 'The Grand Foyer'
-                  : mode === 'exit'
-                    ? 'name the room — existing rooms match as you type'
-                    : 'The Wine Cellar'
-              }
+              placeholder={copy.placeholder}
               autoComplete="off"
               data-testid="add-dialog-name"
             />
@@ -260,11 +292,7 @@ export function AddDialog({
                 className="font-body text-xs italic text-muted-foreground"
                 data-testid="add-dialog-exit-note"
               >
-                {trimmedDestination === ''
-                  ? 'name the room this exit leads to'
-                  : matched
-                    ? 'joins two rooms that already exist — nothing new is made'
-                    : 'dug as a placeholder for the writing pass — you stay here'}
+                {exitNote(trimmedDestination, matched)}
               </p>
             </>
           )}
@@ -302,7 +330,7 @@ export function AddDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSubmit} data-testid="add-dialog-submit">
-            {mode === 'exit' ? (matched ? 'Link it' : 'Dig it') : 'Add'}
+            {submitLabel(mode, matched)}
           </Button>
         </DialogFooter>
       </DialogContent>

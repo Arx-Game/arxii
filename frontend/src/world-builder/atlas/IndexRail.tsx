@@ -47,6 +47,16 @@ export function IndexRail({ current, onSelect, pinned, recents }: IndexRailProps
   const { data: rootsPage, isLoading } = useWorldBuilderAreasQuery({ hasParent: false });
   const roots = rootsPage?.results ?? [];
 
+  const renderAccount = () => {
+    if (account?.is_staff) {
+      return 'Staff warrant: every area.';
+    }
+    if (account?.is_gm) {
+      return "Your GM warrant roots at the areas you've been granted.";
+    }
+    return 'Read-only.';
+  };
+
   return (
     <aside className="h-full" aria-label="Your territory" data-testid="index-rail">
       <Plate className="flex h-full flex-col overflow-y-auto rounded-none">
@@ -58,11 +68,7 @@ export function IndexRail({ current, onSelect, pinned, recents }: IndexRailProps
             className="mt-1 font-body text-xs italic text-muted-foreground"
             data-testid="index-scope"
           >
-            {account?.is_staff
-              ? 'Staff warrant: every area.'
-              : account?.is_gm
-                ? "Your GM warrant roots at the areas you've been granted."
-                : 'Read-only.'}
+            {renderAccount()}
           </p>
         </div>
 

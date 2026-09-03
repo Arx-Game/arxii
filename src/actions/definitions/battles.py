@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.definitions.beat_routing import resolve_routed_beat
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.utils.gm_resolution import resolve_account_or_none
@@ -19,12 +20,14 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.battles.models import Battle
+    from world.stories.models import Beat
 
 
 _NO_ACTIVE_BATTLE = "There is no active battle here."
 _NO_GM_PERMISSION = "Only the battle's GM or staff can do that."
 _NO_CHARACTER_SHEET = "You have no character sheet."
 _NOT_IN_BATTLE = "You are not an active participant in a battle."
+_NO_BEAT_PERMISSION = "Only that beat's story Lead GM or staff may route a battle onto it."
 
 
 def _active_battle_in_room(actor: ObjectDB) -> Battle | None:
@@ -45,6 +48,23 @@ def _active_battle_in_room(actor: ObjectDB) -> Battle | None:
         .order_by("-created_at")
         .first()
     )
+
+
+def _resolve_optional_routed_beat(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[Beat | None, ActionResult | None]:
+    """Adapt ``resolve_routed_beat`` to the optional-``beat_id``-kwarg convention (#3559).
+
+    Returns ``(beat, None)`` when no ``beat_id`` was given or it resolved and
+    the actor may route onto it; returns ``(None, error_result)`` otherwise.
+    """
+    beat_id = kwargs.get("beat_id")
+    if beat_id is None:
+        return None, None
+    resolved = resolve_routed_beat(actor, beat_id, permission_denied_message=_NO_BEAT_PERMISSION)
+    if isinstance(resolved, str):
+        return None, ActionResult(success=False, message=resolved)
+    return resolved, None
 
 
 def _actor_may_gm_battle(actor: ObjectDB, battle: Battle) -> bool:
@@ -602,6 +622,10 @@ class CreateBattleAction(Action):
             except (Area.DoesNotExist, TypeError, ValueError):
                 return ActionResult(success=False, message="No such region.")
 
+        beat, beat_error = _resolve_optional_routed_beat(actor, kwargs)
+        if beat_error is not None:
+            return beat_error
+
         try:
             with transaction.atomic():
                 battle = stage_battle(
@@ -612,6 +636,9 @@ class CreateBattleAction(Action):
                     region=region,
                     location=actor.location,
                 )
+                if beat is not None:
+                    battle.story_beat = beat
+                    battle.save(update_fields=["story_beat"])
 
                 account = resolve_account_or_none(actor)
                 if account is not None:

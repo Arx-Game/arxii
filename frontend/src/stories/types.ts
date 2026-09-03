@@ -45,12 +45,37 @@ export type Episode = EpisodeDetail;
 export type BeatOpponentLine = components['schemas']['BeatOpponentLine'];
 export type BeatStagedTemplate = components['schemas']['BeatStagedTemplate'];
 
+// #3562: the beat-authoring GM readiness dashboard
+// (`GET /api/beats/{id}/readiness/`) and the stakes-contract lock it
+// surfaces (`GET /api/stake-activations/?beat=&resolved_at_isnull=true`).
+export type BeatReadiness = components['schemas']['BeatReadiness'];
+export type StakeContractActivation = components['schemas']['StakeContractActivation'];
+
+// #3562: the beat-authoring consequence pool picker's catalog (list) and
+// detail (resolved entries, for the picker's preview) shapes.
+export type ConsequencePoolCatalog = components['schemas']['ConsequencePoolCatalog'];
+export type ConsequencePoolDetail = components['schemas']['ConsequencePoolDetail'];
+export type ConsequencePoolEntry = components['schemas']['ConsequencePoolEntry'];
+
+// #3565: the beat's scenario graph, GM-view only. spectacular cannot
+// introspect this SerializerMethodField's shape (it types as a bare
+// Record<string, unknown>), so we hand-type it here from the actual
+// BeatSerializer.get_scenario() payload.
+export interface BeatScenarioSummary {
+  template_id: number;
+  name: string;
+  option_keys: string[];
+}
+
 // Beat — single shape with all Phase 2 predicate config fields plus the
 // Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
 // story_id, story_title), the Wave 12 server-computed can_mark, and the
 // #3425 session-prep child row lists. All of these are in the generated
-// schema now, so no hand-written extension is needed.
-export type Beat = components['schemas']['Beat'];
+// schema now, so no hand-written extension is needed except `scenario`
+// (see BeatScenarioSummary above).
+export type Beat = Omit<components['schemas']['Beat'], 'scenario'> & {
+  readonly scenario: BeatScenarioSummary | null;
+};
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
@@ -181,7 +206,7 @@ export interface GMQueueEpisodeEntry {
   episode_title: string;
   progress_type: StoryScope;
   progress_id: number;
-  eligible_transitions: Array<{ transition_id: number; mode: TransitionMode }>;
+  eligible_transitions: Array<{ transition_id: number }>;
   open_session_request_id: number | null;
 }
 
@@ -279,7 +304,6 @@ export interface CanonReviewChangesBody {
 
 export interface ResolveEpisodeBody {
   progress_id?: number | null;
-  chosen_transition?: number | null;
   gm_notes?: string;
 }
 
@@ -350,7 +374,6 @@ export type EpisodeProgressionRequirement = components['schemas']['EpisodeProgre
 export type TransitionRequiredOutcome = components['schemas']['TransitionRequiredOutcome'];
 
 // Enum aliases for Wave 9
-export type TransitionMode = NonNullable<Transition['mode']>;
 export type StoryConnectionType = NonNullable<components['schemas']['ConnectionTypeEnum']>;
 export type ReferencedMilestoneType = NonNullable<
   components['schemas']['ReferencedMilestoneTypeEnum']
@@ -422,6 +445,19 @@ export interface BeatCreateBody {
   referenced_chapter?: number | null; // STORY_AT_MILESTONE/chapter_reached
   referenced_episode?: number | null; // STORY_AT_MILESTONE/episode_reached
   required_points?: number | null; // AGGREGATE_THRESHOLD
+  required_society?: number | null; // FACTION_STANDING_AT_LEAST (society-level)
+  required_organization?: number | null; // FACTION_STANDING_AT_LEAST (organization-level)
+  required_standing?: number | null; // FACTION_STANDING_AT_LEAST minimum raw reputation
+
+  // #3562 stakes/consequences - the character level this beat's stakes are
+  // declared against, the ConsequencePools that fire on each outcome, and
+  // an optional MissionTemplate this beat requires (completion engine
+  // flips the beat when a launched instance terminates).
+  target_level?: number | null;
+  success_consequences?: number | null;
+  failure_consequences?: number | null;
+  expired_consequences?: number | null;
+  required_mission?: number | null;
 
   // #3425 session prep — repeatable child rows. omit to leave untouched on a
   // PATCH; an explicit [] clears every existing row (see BeatSerializer.update()).
@@ -612,3 +648,61 @@ export interface ClearanceResolveBody {
   grant: boolean;
   response_note?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Stakes (#1770 pillars 1/2/3/5/7/8; ASSET subject + npc_regard_delta +
+// transitions_subject_asset widened #3561) - the stakes-contract editor's
+// read/write shapes. StakeContractActivation is aliased above (#3562).
+// ---------------------------------------------------------------------------
+
+export type Stake = components['schemas']['Stake'];
+export type StakeRequestBody = components['schemas']['StakeRequest'];
+export type StakeUpdateBody = Partial<StakeRequestBody>;
+export type PaginatedStakeList = components['schemas']['PaginatedStakeList'];
+
+export type StakeResolution = components['schemas']['StakeResolution'];
+export type StakeResolutionRequestBody = components['schemas']['StakeResolutionRequest'];
+export type StakeResolutionUpdateBody = Partial<StakeResolutionRequestBody>;
+export type PaginatedStakeResolutionList = components['schemas']['PaginatedStakeResolutionList'];
+
+export type StakeRewardLine = components['schemas']['StakeRewardLine'];
+export type StakeRewardLineRequestBody = components['schemas']['StakeRewardLineRequest'];
+export type StakeRewardLineUpdateBody = Partial<StakeRewardLineRequestBody>;
+export type PaginatedStakeRewardLineList = components['schemas']['PaginatedStakeRewardLineList'];
+
+export type StakeTemplate = components['schemas']['StakeTemplate'];
+export type PaginatedStakeTemplateList = components['schemas']['PaginatedStakeTemplateList'];
+
+export type PaginatedStakeContractActivationList =
+  components['schemas']['PaginatedStakeContractActivationList'];
+
+/** Per-stake resolution audit row - always MACHINE-resolved since #3561 retired the GM pick. */
+export type StakeOutcome = components['schemas']['StakeOutcome'];
+
+/** Player-facing beat-level stakes summary (`GET /api/beats/{id}/stakes-summary/`). */
+export type StakesSummary = components['schemas']['StakesSummary'];
+export type StakeSummary = components['schemas']['StakeSummary'];
+
+// Enum aliases
+export type StakeResolutionColumn = NonNullable<components['schemas']['ColumnEnum']>;
+export type StakeRewardSink = NonNullable<components['schemas']['StakeRewardLineSinkEnum']>;
+export type StakeSeverity = NonNullable<components['schemas']['SeverityEnum']>;
+export type StakeOutcomeMethod = NonNullable<components['schemas']['MethodEnum']>;
+export type StakeEscalatesToRisk =
+  | components['schemas']['EscalatesToRiskEnum']
+  | components['schemas']['BlankEnum'];
+export type StakeSetsSubjectLifecycle =
+  | components['schemas']['SetsSubjectLifecycleEnum']
+  | components['schemas']['BlankEnum'];
+export type StakeMachineMatchLifecycleState =
+  | components['schemas']['MachineMatchLifecycleStateEnum']
+  | components['schemas']['BlankEnum'];
+
+/**
+ * `StakeResolution.transitions_subject_asset` (ASSET stakes only). Not a
+ * generated enum - the model field is a plain blank-default CharField (no
+ * `choices=`), so spectacular types it as a bare `string`; hand-aliased here
+ * from `world.assets.constants.AssetStatus`'s recoverable/terminal values
+ * (ACTIVE is not a valid transition target, only the three degraded states).
+ */
+export type AssetTransition = 'compromised' | 'lost' | 'dismissed';

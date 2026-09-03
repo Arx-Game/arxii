@@ -48,6 +48,25 @@ interface LineageStageProps {
   onStageSelect: (stage: Stage) => void;
 }
 
+/**
+ * A nobiliary particle joins its family name with a space unless it ends in an
+ * apostrophe, which elides ("d'Ancien", not "d' Ancien").
+ */
+function joinParticle(particle: string | null | undefined, familyName: string): string {
+  if (!particle) return familyName;
+  return particle.endsWith("'") ? `${particle}${familyName}` : `${particle} ${familyName}`;
+}
+
+/** A lineage card shows its reversed face only while selected and flipped. */
+function surnameFace(
+  card: { surname_upright: string; surname_reversed: string },
+  isSelected: boolean,
+  isReversed: boolean
+): string {
+  if (isSelected && isReversed) return card.surname_reversed;
+  return card.surname_upright;
+}
+
 export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
@@ -688,11 +707,7 @@ function composeParticledName(
   particle: string,
   familyName: string
 ): string {
-  const surname = particle
-    ? particle.endsWith("'")
-      ? `${particle}${familyName}`
-      : `${particle} ${familyName}`
-    : familyName;
+  const surname = joinParticle(particle, familyName);
   return firstName ? `${firstName} ${surname}` : surname;
 }
 
@@ -1089,11 +1104,7 @@ interface TarotCardItemProps {
 }
 
 function TarotCardItem({ card, isSelected, isReversed, onSelect }: TarotCardItemProps) {
-  const surname = isSelected
-    ? isReversed
-      ? card.surname_reversed
-      : card.surname_upright
-    : card.surname_upright;
+  const surname = surnameFace(card, isSelected, isReversed);
 
   const description =
     isSelected && isReversed && card.description_reversed

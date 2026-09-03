@@ -360,3 +360,14 @@ export async function disconnectSocialAccount(accountId: number): Promise<void> 
     throw new Error(errorData.detail || 'Failed to disconnect account');
   }
 }
+
+/**
+ * Append a querystring to a URL, or nothing when there is none.
+ *
+ * Every list endpoint spelled this out as a nested template literal, which is
+ * the nesting the flatness ruling rejects, repeated across a dozen files (#3548).
+ */
+export function withQuery(base: string, search: URLSearchParams | string): string {
+  const qs = typeof search === 'string' ? search : search.toString();
+  return qs ? `${base}?${qs}` : base;
+}

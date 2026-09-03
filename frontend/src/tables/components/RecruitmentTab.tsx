@@ -174,6 +174,29 @@ function InvitesSection({ isGM }: { isGM: boolean }) {
 
   const invites = data?.results ?? [];
 
+  const renderInvites = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      );
+    }
+    if (invites.length === 0) {
+      return (
+        <p className="py-4 text-center text-sm text-muted-foreground">No invites minted yet.</p>
+      );
+    }
+    return (
+      <div className="divide-y">
+        {invites.map((invite) => (
+          <InviteRow key={invite.id} invite={invite} onRevoke={setRevokeTarget} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -187,22 +210,7 @@ function InvitesSection({ isGM }: { isGM: boolean }) {
           </MintInviteDialog>
         )}
       </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : invites.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">No invites minted yet.</p>
-        ) : (
-          <div className="divide-y">
-            {invites.map((invite) => (
-              <InviteRow key={invite.id} invite={invite} onRevoke={setRevokeTarget} />
-            ))}
-          </div>
-        )}
-      </CardContent>
+      <CardContent>{renderInvites()}</CardContent>
 
       <RevokeInviteDialog
         invite={revokeTarget}
@@ -341,6 +349,29 @@ function QueueSection({ isGM }: { isGM: boolean }) {
   const { data, isLoading } = useGMQueue();
   const applications = data?.results ?? [];
 
+  const renderApplications = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      );
+    }
+    if (applications.length === 0) {
+      return (
+        <p className="py-4 text-center text-sm text-muted-foreground">No pending applications.</p>
+      );
+    }
+    return (
+      <div className="divide-y">
+        {applications.map((application) => (
+          <QueueRow key={application.id} application={application} isGM={isGM} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -357,20 +388,7 @@ function QueueSection({ isGM }: { isGM: boolean }) {
             .
           </p>
         )}
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ) : applications.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">No pending applications.</p>
-        ) : (
-          <div className="divide-y">
-            {applications.map((application) => (
-              <QueueRow key={application.id} application={application} isGM={isGM} />
-            ))}
-          </div>
-        )}
+        {renderApplications()}
       </CardContent>
     </Card>
   );

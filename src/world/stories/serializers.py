@@ -8,10 +8,11 @@ from rest_framework.exceptions import ErrorDetail
 from world.character_sheets.models import CharacterSheet
 from world.events.models import Event
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMLevelCap, GMProfile, GMTable
+from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
+from world.gm.services import cap_for_profile, gm_max_risk
 from world.items.models import ItemInstance
-from world.missions.models import MissionTemplate
+from world.missions.models import MissionOption, MissionTemplate
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 from world.societies.models import Organization, Society
@@ -30,7 +31,6 @@ from world.stories.constants import (
     StoryGMOfferStatus,
     StoryMaturity,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.exceptions import MaturityPromotionError
 from world.stories.models import (
@@ -475,6 +475,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     """Full serializer for episode details"""
 
     chapter = serializers.StringRelatedField(read_only=True)
+    routing_ambiguous = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -493,7 +494,14 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "completed_at",
             "created_at",
             "updated_at",
+            "routing_ambiguous",
         ]
+
+    def get_routing_ambiguous(self, obj: Episode) -> bool:
+        """Whether any pair of this episode's outbound transitions is ambiguous (#3565)."""
+        from world.stories.services.transitions import validate_routing_readiness  # noqa: PLC0415
+
+        return validate_routing_readiness(obj).is_ambiguous
 
     def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
@@ -967,32 +975,16 @@ class SessionRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "story_id"]
 
 
-def _gm_max_risk(user) -> str:
-    """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
-
-    No GMProfile or no cap row → RenownRisk.NONE.
-    """
-    try:
-        gm_profile = user.gm_profile
-    except GMProfile.DoesNotExist:
-        return RenownRisk.NONE
-    try:
-        cap = GMLevelCap.objects.get(level=gm_profile.level)
-    except GMLevelCap.DoesNotExist:
-        return RenownRisk.NONE
-    return cap.max_beat_risk
-
-
 def _gm_allows_custom_stakes(user) -> bool:
     """Whether a non-staff author's GMLevelCap permits custom (template=null) stakes.
 
     No GMProfile or no cap row → False.
     """
     try:
-        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
-    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
         return False
-    return cap.allow_custom_stakes
+    return bool(cap and cap.allow_custom_stakes)
 
 
 def _gm_allows_global_scope(user) -> bool:
@@ -1002,10 +994,10 @@ def _gm_allows_global_scope(user) -> bool:
     ``_gm_allows_custom_stakes``).
     """
     try:
-        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
-    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
         return False
-    return cap.allow_global_scope_authoring
+    return bool(cap and cap.allow_global_scope_authoring)
 
 
 class BeatOpponentLineSerializer(serializers.ModelSerializer):
@@ -1065,6 +1057,12 @@ class BeatSerializer(serializers.ModelSerializer):
     # button instead of rendering it optimistically and hitting a 403.
     can_mark = serializers.SerializerMethodField(read_only=True)
 
+    # GM-only view of this beat's scenario graph, when required_mission is a
+    # story-owned StoryScenario (#3565). Gated by the same privilege check as
+    # internal_description (see get_scenario) -- a scenario's option keys are
+    # GM planning detail, not player-visible.
+    scenario = serializers.SerializerMethodField(read_only=True)
+
     # #3425 session prep: repeatable child rows. Both are nested read-write,
     # including the update path (see update() / _sync_children below) --
     # required=False so a Beat with no prep authored yet omits them entirely.
@@ -1117,6 +1115,8 @@ class BeatSerializer(serializers.ModelSerializer):
             "updated_at",
             # Client-side permission gating
             "can_mark",
+            # GM-only scenario-graph summary (#3565)
+            "scenario",
             # #3425 session prep child rows
             "opponent_lines",
             "staged_templates",
@@ -1130,6 +1130,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "can_mark",
+            "scenario",
         ]
 
     def get_can_mark(self, obj: Beat) -> bool:
@@ -1148,6 +1149,39 @@ class BeatSerializer(serializers.ModelSerializer):
         if request is None:
             return False
         return CanMarkBeat().has_object_permission(request, None, obj)  # type: ignore[arg-type]
+
+    def get_scenario(self, obj: Beat) -> dict[str, Any] | None:
+        """Read-only GM view of this beat's scenario graph (#3565).
+
+        None when the beat has no ``required_mission``, when that template
+        isn't a story-owned scenario (a catalog mission the GM merely
+        assigned), or when the viewer lacks ``can_view_story_gm_text`` (same
+        gate as ``internal_description`` above) -- node/option keys are GM
+        planning detail, not player-visible.
+        """
+        from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
+
+        template = obj.required_mission
+        if template is None:
+            return None
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        story = obj.episode.chapter.story
+        if user is None or not can_view_story_gm_text(user, story):
+            return None
+        if not hasattr(template, "story_scenario"):
+            return None
+        option_keys = list(
+            MissionOption.objects.filter(node__template=template)
+            .exclude(key="")
+            .order_by("key")
+            .values_list("key", flat=True)
+        )
+        return {
+            "template_id": template.pk,
+            "name": template.name,
+            "option_keys": option_keys,
+        }
 
     def to_representation(self, instance: Beat) -> dict[str, Any]:
         """Gate ``internal_description`` for non-privileged viewers (#1923).
@@ -1230,7 +1264,7 @@ class BeatSerializer(serializers.ModelSerializer):
         if merged_risk != RenownRisk.NONE and not is_staff:
             from world.stories.services.stakes import risk_index  # noqa: PLC0415
 
-            if risk_index(merged_risk) > risk_index(_gm_max_risk(user)):
+            if risk_index(merged_risk) > risk_index(gm_max_risk(user)):
                 raise serializers.ValidationError(
                     {
                         "risk": (
@@ -1239,7 +1273,70 @@ class BeatSerializer(serializers.ModelSerializer):
                         )
                     }
                 )
+
+        if not is_staff:
+            self._check_required_mission_cap(user, merged, existing)
+
+        self._check_stakes_lock(attrs)
         return attrs
+
+    @staticmethod
+    def _check_required_mission_cap(
+        user: Any, merged: dict[str, Any], existing: dict[str, Any]
+    ) -> None:
+        """Non-staff ``required_mission`` is capped to the caller's ``scenario_scope_q`` (#3562).
+
+        Without this, a non-staff GM could assign any catalog mission --
+        including one restricted well above their GM level -- as a beat's
+        required_mission, sidestepping the same scope the missions Studio API
+        already enforces on that GM's authoring surface (#3565). Only checked
+        when the value is set and actually changing -- an untouched
+        required_mission on an existing beat (e.g. authored by staff) is left
+        alone, matching the risk gate's snapshot-merge posture above.
+        """
+        from world.missions.models import MissionTemplate  # noqa: PLC0415
+        from world.missions.permissions import scenario_scope_q  # noqa: PLC0415
+
+        template = merged.get("required_mission")
+        if template is None or template == existing.get("required_mission"):
+            return
+        in_scope = (
+            MissionTemplate.objects.filter(scenario_scope_q(user)).filter(pk=template.pk).exists()
+        )
+        if not in_scope:
+            raise serializers.ValidationError(
+                {"required_mission": "Your GM level does not permit assigning this mission."}
+            )
+
+    def _check_stakes_lock(self, attrs: dict[str, Any]) -> None:
+        """Reject a write that touches a priced field while a contract is locked (#3562).
+
+        Mirrors ``_check_stake_beat_lock``'s posture (no staff bypass -- a
+        locked contract is locked for everyone until resolved) but is
+        beat-shaped rather than stake-shaped: it looks at *this* beat's own
+        open activation and the fields on the incoming ``attrs``, reusing
+        ``_STAKES_LOCKED_MESSAGE`` rather than calling that stake-shaped
+        helper. Only fires on an actual value change -- a PATCH that repeats
+        the stored value, or touches an unrelated field, passes through.
+        """
+        if self.instance is None:
+            return
+        from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+        if get_open_activation(self.instance) is None:
+            return
+        locked_fields = (
+            "risk",
+            "target_level",
+            "success_consequences",
+            "failure_consequences",
+            "expired_consequences",
+        )
+        for field_name in locked_fields:
+            if field_name not in attrs:
+                continue
+            if attrs[field_name] != getattr(self.instance, field_name):
+                raise serializers.ValidationError({field_name: _STAKES_LOCKED_MESSAGE})
 
     def _check_beat_ownership(self, user: Any, is_staff: bool, merged: dict[str, Any]) -> None:
         """Reject the write unless staff or the requesting user owns the episode's story.
@@ -1357,7 +1454,6 @@ class TransitionSerializer(serializers.ModelSerializer):
             "source_episode_title",
             "target_episode",
             "target_episode_title",
-            "mode",
             "connection_type",
             "connection_summary",
             "order",
@@ -1413,6 +1509,7 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
             "transition",
             "beat",
             "required_outcome",
+            "required_outcome_key",
             "stake",
             "required_stake_column",
         ]
@@ -1422,24 +1519,38 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
         """Mirror the model clean(): exactly one predicate shape per row."""
         existing: dict[str, Any] = {}
         if self.instance is not None:
-            for field_name in ("beat", "stake", "required_outcome", "required_stake_column"):
+            for field_name in (
+                "beat",
+                "stake",
+                "required_outcome",
+                "required_outcome_key",
+                "required_stake_column",
+            ):
                 existing[field_name] = getattr(self.instance, field_name)
         merged = {**existing, **attrs}
 
         stake = merged.get("stake")
         required_outcome = merged.get("required_outcome") or ""
+        required_outcome_key = merged.get("required_outcome_key") or ""
         required_stake_column = merged.get("required_stake_column") or ""
         beat = merged.get("beat")
 
         if stake is not None:
-            self._validate_stake_row(stake, required_stake_column, required_outcome, beat)
+            self._validate_stake_row(
+                stake, required_stake_column, required_outcome, required_outcome_key, beat
+            )
         else:
             self._validate_outcome_row(required_outcome, required_stake_column)
 
         return attrs
 
     def _validate_stake_row(
-        self, stake: Any, required_stake_column: str, required_outcome: str, beat: Any
+        self,
+        stake: Any,
+        required_stake_column: str,
+        required_outcome: str,
+        required_outcome_key: str,
+        beat: Any,
     ) -> None:
         """Validate a stake-level predicate row (stake set, outcome blank)."""
         if not required_stake_column:
@@ -1449,6 +1560,9 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
         if required_outcome:
             msg = "Must be blank when stake is set (stake rows route on the stake column)."
             raise serializers.ValidationError({"required_outcome": msg})
+        if required_outcome_key:
+            msg = "Only beat-level routing rows may require an option key."
+            raise serializers.ValidationError({"required_outcome_key": msg})
         if beat is not None and stake.beat_id != beat.pk:
             raise serializers.ValidationError(
                 {"stake": "The stake must belong to this requirement's beat."}
@@ -1485,6 +1599,9 @@ class OutcomeInputSerializer(serializers.Serializer):
     required_outcome = serializers.ChoiceField(
         choices=BeatOutcome.choices, required=False, allow_blank=True, default=""
     )
+    required_outcome_key = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=100
+    )
     stake = serializers.PrimaryKeyRelatedField(
         queryset=Stake.objects.all(), required=False, allow_null=True, default=None
     )
@@ -1504,6 +1621,7 @@ class OutcomeInputSerializer(serializers.Serializer):
         """Exactly one predicate shape, mirroring TransitionRequiredOutcome.clean()."""
         stake = attrs.get("stake")
         required_outcome = attrs.get("required_outcome") or ""
+        required_outcome_key = attrs.get("required_outcome_key") or ""
         required_stake_column = attrs.get("required_stake_column") or ""
         beat = attrs["beat"]
 
@@ -1515,6 +1633,9 @@ class OutcomeInputSerializer(serializers.Serializer):
             if required_outcome:
                 msg = "Must be blank when stake is set (stake rows route on the stake column)."
                 raise serializers.ValidationError({"required_outcome": msg})
+            if required_outcome_key:
+                msg = "Only beat-level routing rows may require an option key."
+                raise serializers.ValidationError({"required_outcome_key": msg})
             if stake.beat_id != beat.pk:
                 raise serializers.ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
@@ -1554,7 +1675,6 @@ class SaveTransitionWithOutcomesInputSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
     )
-    mode = serializers.ChoiceField(choices=TransitionMode.choices)
     connection_type = serializers.ChoiceField(
         choices=ConnectionType.choices,
         required=False,
@@ -1686,29 +1806,17 @@ class ResolveEpisodeInputSerializer(serializers.Serializer):
         episode (Episode): the episode being resolved.
 
     Validates:
-        - chosen_transition belongs to this episode (if provided).
         - An active progress record exists for the episode's story.
 
-    Stores resolved ``progress`` and ``chosen_transition`` in validated_data.
+    Routing is automatic (#3565): the transition fires by authored order, so
+    this only ever resolves ``progress`` into validated_data.
     """
 
     progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    chosen_transition = serializers.PrimaryKeyRelatedField(
-        queryset=Transition.objects.all(),
-        required=False,
-        allow_null=True,
-        default=None,
-    )
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
         episode: Episode = self.context["episode"]
-
-        transition: Transition | None = attrs.get("chosen_transition")
-        if transition is not None and transition.source_episode_id != episode.pk:
-            raise serializers.ValidationError(
-                {"chosen_transition": "Transition does not belong to this episode."}
-            )
 
         progress = _resolve_progress(episode, attrs.get("progress_id"))
         if progress is None:
@@ -2928,86 +3036,6 @@ class ResolveForeclosureInputSerializer(serializers.Serializer):
         return story.global_progress if hasattr(story, "global_progress") else None
 
 
-class ResolveStakeInputSerializer(serializers.Serializer):
-    """Input for POST /api/stakes/{id}/resolve/ — the GM constrained pick.
-
-    Context required:
-        stake (Stake): the stake being resolved.
-
-    Validates:
-        - The stake has no StakeOutcome yet (a pick is final; idempotent API).
-        - The chosen column is among the stake's AUTHORED resolutions — the
-          pick is constrained, never free composition.
-        - The stake's beat has completed (outcome != UNSATISFIED).
-
-    ``participants`` / ``extra_participants`` — same semantics as
-    MarkBeatInputSerializer: GROUP-scope LEGEND_AWARD branch pools need an
-    explicit participant list; CHARACTER scope may credit extras alongside
-    the progress's primary persona.
-    """
-
-    column = serializers.ChoiceField(choices=StakeResolutionColumn.choices)
-    outcome_key = serializers.CharField(required=False, allow_blank=True, default="")
-    gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
-    participants = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Persona.objects.all(),
-        required=False,
-        default=list,
-        help_text=(
-            "GROUP scope: explicit Persona PKs credited by the branch's pool "
-            "(required for LEGEND_AWARD pools) and affection writer."
-        ),
-    )
-    extra_participants = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Persona.objects.all(),
-        required=False,
-        default=list,
-        help_text=(
-            "CHARACTER scope only: additional personas to credit alongside the "
-            "progress's primary persona."
-        ),
-    )
-
-    def validate(self, attrs: Any) -> Any:
-        stake = self.context["stake"]
-
-        # Query the table directly — the view's prefetched `stake.outcomes`
-        # cache on the idmapper-shared instance can be stale within a request
-        # cycle, and this check must be point-in-time correct.
-        if StakeOutcome.objects.filter(stake=stake).exists():
-            raise serializers.ValidationError(
-                {"non_field_errors": "This stake has already been resolved."}
-            )
-
-        authored = set(stake.resolutions.values_list("column", "outcome_key"))
-        pick = (attrs["column"], attrs.get("outcome_key", ""))
-        if pick not in authored:
-            branches = sorted(authored) or "none authored"
-            raise serializers.ValidationError(
-                {
-                    "column": (
-                        "A GM pick is constrained to the stake's authored "
-                        f"(column, outcome_key) branches ({branches}) — never free "
-                        "composition. Author the branch first."
-                    )
-                }
-            )
-
-        if stake.beat.outcome == BeatOutcome.UNSATISFIED:
-            raise serializers.ValidationError(
-                {
-                    "non_field_errors": (
-                        "The stake's beat has not completed; stakes resolve at or "
-                        "after beat completion."
-                    )
-                }
-            )
-
-        return attrs
-
-
 class StakeSerializer(serializers.ModelSerializer):
     """Full serializer for Stake (#1770 pillar 1).
 
@@ -3036,6 +3064,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_item",
             "subject_society",
             "subject_organization",
+            "subject_asset",
             "subject_label",
             "player_summary",
             "outcomes",
@@ -3139,6 +3168,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_item",
             "subject_society",
             "subject_organization",
+            "subject_asset",
             "subject_label",
             "player_summary",
         )
@@ -3318,9 +3348,10 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
         """Reject the write if any involved resolution's beat is locked or completed.
 
         #1770 PR3 review: re-pointing to/from a resolution whose beat is locked
-        is rejected either way. Once the completion tail closes the activation
-        (with stakes possibly pending a GM pick), the open-activation lock no
-        longer bites — without the completed-beat check reward lines could be
+        is rejected either way. Once the completion tail closes the activation,
+        the open-activation lock no longer bites - every stake already resolved
+        synchronously inside that same atomic tail (there is no pending-decision
+        window) - without the completed-beat check reward lines could be
         re-authored after the contract ran and pay out on the stale activation's
         readiness verdict.
         """
@@ -3381,8 +3412,10 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "narrative_summary",
             "forfeits_subject_item",
             "subject_standing_delta",
+            "npc_regard_delta",
             "sets_subject_lifecycle",
             "machine_match_lifecycle_state",
+            "transitions_subject_asset",
             "reward_lines",
         ]
         read_only_fields = ["id"]
@@ -3433,11 +3466,14 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
     def _enforce_lock_state(self, stake: Any, old_stake: Any, is_repoint: bool) -> None:
         """Lock check (#1770 PR1 review) + completed-beat check (#1770 PR3 review).
 
-        Re-pointing to/from a stake whose beat is locked is rejected either way —
-        check both sides when re-pointing. The open-activation lock alone leaves a
-        hole — the completion tail closes the activation while stakes can still
-        pend for a GM pick, which would reopen editing on a contract that already
-        ran. Contract editing ends when the beat completes (pillar 8's spirit).
+        Re-pointing to/from a stake whose beat is locked is rejected either way,
+        so check both sides when re-pointing. The open-activation lock alone
+        leaves a hole - every stake resolves synchronously inside the same
+        atomic completion tail that closes the activation (there is no
+        pending-decision window), but without this check reward lines could
+        still be re-authored right after that tail runs, reopening editing on
+        a contract that already ran. Contract editing ends when the beat
+        completes (pillar 8's spirit).
         """
         from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
@@ -3477,6 +3513,8 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             subject_standing_delta=merged("subject_standing_delta", default=0),
             sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
             machine_match_lifecycle_state=merged("machine_match_lifecycle_state", default=""),
+            npc_regard_delta=merged("npc_regard_delta", default=0),
+            transitions_subject_asset=merged("transitions_subject_asset", default=""),
         )
         if problems:
             raise serializers.ValidationError({p.field: p.message for p in problems})
@@ -3566,6 +3604,27 @@ class StakeSummarySerializer(serializers.ModelSerializer):
         model = Stake
         fields = ["id", "player_summary", "severity", "severity_label"]
         read_only_fields = fields
+
+
+class BeatReadinessSerializer(serializers.Serializer):
+    """GM readiness dashboard payload for a beat (#3562).
+
+    Read-only wire shape; build the payload via
+    ``world.stories.services.stakes.beat_readiness_payload``. Unlike
+    ``StakesSummarySerializer`` below, ``problems`` is GM planning detail
+    (readiness reasons) rather than a player-safe summary, so the readiness
+    endpoint gates on ``CanAssignMissionToBeat`` (Lead GM or staff), not the
+    broader stakes-summary audience.
+    """
+
+    is_staked = serializers.BooleanField(read_only=True)
+    is_ready = serializers.BooleanField(read_only=True)
+    problems = serializers.ListField(child=serializers.CharField(), read_only=True)
+    advisories = serializers.ListField(child=serializers.CharField(), read_only=True)
+    declared_risk = serializers.CharField(read_only=True)
+    effective_risk = serializers.CharField(read_only=True)
+    locked = serializers.BooleanField(read_only=True)
+    locked_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
 
 class StakesSummarySerializer(serializers.Serializer):
@@ -4129,4 +4188,38 @@ class AssignMissionInputSerializer(serializers.Serializer):
             if template is None:
                 raise serializers.ValidationError({"template": self._ERR_NO_TEMPLATE})
             attrs["template"] = template
+        return attrs
+
+
+class CreateBeatScenarioInputSerializer(serializers.Serializer):
+    """POST /api/beats/{id}/scenario/ body (#3565).
+
+    Authors the MissionTemplate a beat's scenario graph runs on --
+    ``create_scenario_for_beat`` does the actual create/idempotent-return
+    work; this serializer only validates shape and the non-staff risk gate
+    (mirrors the ``risk`` gate ``BeatSerializer.validate()`` applies to
+    ``beat.risk``, using the beat's own author-risk ceiling).
+    """
+
+    name = serializers.CharField(max_length=200)
+    summary = serializers.CharField()
+    risk_tier = serializers.IntegerField(min_value=1, max_value=5)
+
+    _ERR_RISK_TIER = (
+        "Your GM level does not permit authoring scenarios at this risk tier. "
+        "Higher tiers unlock as staff promote your GM level."
+    )
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is not None and user.is_authenticated and not user.is_staff:
+            from world.missions.constants import risk_tier_to_renown_risk  # noqa: PLC0415
+            from world.stories.services.stakes import risk_index  # noqa: PLC0415
+
+            if risk_index(risk_tier_to_renown_risk(attrs["risk_tier"])) > risk_index(
+                gm_max_risk(user)
+            ):
+                raise serializers.ValidationError({"risk_tier": self._ERR_RISK_TIER})
         return attrs

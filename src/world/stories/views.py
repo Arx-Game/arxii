@@ -95,6 +95,7 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryProtectedSubject,
+    StoryScenario,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -115,7 +116,6 @@ from world.stories.permissions import (
     CanMarkBeat,
     CanParticipateInStory,
     CanReplyToBulletinPost,
-    CanResolveStake,
     CanViewBeatStakesSummary,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
@@ -168,6 +168,7 @@ from world.stories.serializers import (
     AssignStoryToTableInputSerializer,
     AssistantGMClaimSerializer,
     BeatCompletionSerializer,
+    BeatReadinessSerializer,
     BeatSerializer,
     CancelClaimInputSerializer,
     CancelSessionRequestInputSerializer,
@@ -179,6 +180,7 @@ from world.stories.serializers import (
     ChapterListSerializer,
     CompleteClaimInputSerializer,
     ContributeBeatInputSerializer,
+    CreateBeatScenarioInputSerializer,
     CreateBulletinPostInputSerializer,
     CreateBulletinReplyInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
@@ -214,13 +216,11 @@ from world.stories.serializers import (
     ResolveEpisodeInputSerializer,
     ResolveForeclosureInputSerializer,
     ResolveSessionRequestInputSerializer,
-    ResolveStakeInputSerializer,
     RiskCalibrationSerializer,
     SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
     StakeAvailabilitySerializer,
     StakeContractActivationSerializer,
-    StakeOutcomeSerializer,
     StakeResolutionSerializer,
     StakeRewardLineSerializer,
     StakeSerializer,
@@ -261,6 +261,7 @@ from world.stories.services.participation import create_story_participation
 from world.stories.services.progress import get_active_progress_for_story
 from world.stories.services.save_transition import OutcomeInput, save_transition_with_outcomes
 from world.stories.services.story_log import serialize_story_log
+from world.stories.services.transitions import routing_requirement_met
 from world.stories.types import (
     AnyStoryProgress,
     AssignedRequestEntry,
@@ -887,14 +888,14 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     def resolve(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/episodes/{id}/resolve/ — resolve the current progress for an episode.
 
-        Lead GM or staff posts {progress_id?, chosen_transition?, gm_notes?} to
-        advance the story's progress record past the current episode. Returns 201 on success.
+        Lead GM or staff posts {progress_id?, gm_notes?} to advance the story's
+        progress record past the current episode. Returns 201 on success.
+        Routing is automatic (#3565): the transition fires by authored order.
 
-        Note: NoEligibleTransitionError and AmbiguousTransitionError can fire from
-        resolve_episode() for cases the serializer cannot pre-validate without
-        duplicating get_eligible_transitions() logic. These are caught here and
-        surfaced as 400 responses. They are genuine runtime errors, not
-        user-input-validation errors.
+        Note: NoEligibleTransitionError can fire from resolve_episode() for cases
+        the serializer cannot pre-validate without duplicating
+        get_eligible_transitions() logic. It is caught here and surfaced as a 400
+        response. This is a genuine runtime error, not a user-input-validation error.
         """
         from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.exceptions import StoryError  # noqa: PLC0415
@@ -913,15 +914,13 @@ class EpisodeViewSet(viewsets.ModelViewSet):
         try:
             resolution = resolve_episode(
                 progress=data["progress"],
-                chosen_transition=data.get("chosen_transition"),
                 gm_notes=data["gm_notes"],
                 resolved_by=gm_profile,
             )
         except StoryError as exc:
-            # Race condition / service-layer runtime errors:
+            # Race condition / service-layer runtime error:
             # NoEligibleTransitionError — no transitions are eligible (episode frontier).
-            # AmbiguousTransitionError — multiple eligible transitions, GM must pick one.
-            # These cannot be pre-validated by the serializer without duplicating
+            # Cannot be pre-validated by the serializer without duplicating
             # get_eligible_transitions() logic.
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1614,6 +1613,28 @@ class BeatViewSet(viewsets.ModelViewSet):
         beat = self.get_object()
         return Response(stakes_summary_for_beat(beat))
 
+    @extend_schema(responses=BeatReadinessSerializer)
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="readiness",
+        permission_classes=[CanAssignMissionToBeat],
+    )
+    def readiness(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/beats/{id}/readiness/ - GM readiness dashboard for this beat (#3562).
+
+        Unlike ``stakes-summary`` (player-safe, pillar 9), this surfaces the
+        raw ``problems`` list - GM planning detail, like
+        ``internal_description`` - so it is gated to the Lead GM or staff via
+        ``CanAssignMissionToBeat`` rather than the broader stakes-summary
+        audience.
+        """
+        from world.stories.services.stakes import beat_readiness_payload  # noqa: PLC0415
+
+        beat = self.get_object()
+        payload = beat_readiness_payload(beat)
+        return Response(BeatReadinessSerializer(payload).data)
+
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
@@ -1677,6 +1698,61 @@ class BeatViewSet(viewsets.ModelViewSet):
         )
         output = MissionInstanceSerializer(instance, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="scenario",
+        permission_classes=[CanAssignMissionToBeat],
+    )
+    def scenario(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/beats/{id}/scenario/ - GM authors a scenario graph as this beat's body.
+
+        #3565. Reuses ``CanAssignMissionToBeat`` (Lead GM or staff - the same gate
+        ``assign_mission`` above uses) since authoring a beat's mission body
+        is the same GM-tier gesture as assigning one. POST body:
+        ``{"name", "summary", "risk_tier"}``. 201 + the new
+        MissionTemplateSerializer payload on first call; 200 with the same
+        payload on a repeat call (idempotent - ``create_scenario_for_beat``
+        returns the existing template rather than erroring or duplicating).
+        400 ``{"required_mission": [...]}`` when the beat already uses a
+        catalog (non-scenario) template; 400 ``{"name": [...]}`` on a name
+        collision.
+        """
+        from django.core.exceptions import (  # noqa: PLC0415
+            ValidationError as DjangoValidationError,
+        )
+
+        from world.missions.serializers import MissionTemplateSerializer  # noqa: PLC0415
+        from world.stories.services.scenarios import create_scenario_for_beat  # noqa: PLC0415
+
+        beat = self.get_object()
+        already_linked = (
+            beat.required_mission_id is not None
+            and StoryScenario.objects.filter(
+                template_id=beat.required_mission_id,
+                story=beat.episode.chapter.story,
+            ).exists()
+        )
+
+        input_serializer = CreateBeatScenarioInputSerializer(
+            data=request.data, context={"request": request}
+        )
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+        try:
+            template = create_scenario_for_beat(
+                beat,
+                name=data["name"],
+                summary=data["summary"],
+                risk_tier=data["risk_tier"],
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+
+        output = MissionTemplateSerializer(template, context={"request": request})
+        response_status = status.HTTP_200_OK if already_linked else status.HTTP_201_CREATED
+        return Response(output.data, status=response_status)
 
 
 # ---------------------------------------------------------------------------
@@ -2042,11 +2118,11 @@ class TransitionViewSet(viewsets.ModelViewSet):
             {
                 "source_episode": <int>,
                 "target_episode": <int | null>,
-                "mode": "auto" | "gm_choice",
                 "connection_type": "" | "therefore" | "but",
                 "connection_summary": "<str>",
                 "order": <int>,
-                "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+                "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired",
+                              "required_outcome_key": "<str>"},
                              {"beat": <int>, "stake": <int>,
                               "required_stake_column": "win" | "loss" | "withdrawal"},
                              ...],
@@ -2078,7 +2154,6 @@ class TransitionViewSet(viewsets.ModelViewSet):
         transition_data: dict[str, Any] = {
             "source_episode": source_episode,
             "target_episode": vd.get("target_episode"),
-            "mode": vd["mode"],
             "connection_type": vd.get("connection_type", ""),
             "connection_summary": vd.get("connection_summary", ""),
             "order": vd.get("order", 0),
@@ -2087,6 +2162,7 @@ class TransitionViewSet(viewsets.ModelViewSet):
             OutcomeInput(
                 beat_id=row["beat"].pk,
                 required_outcome=row.get("required_outcome", ""),
+                required_outcome_key=row.get("required_outcome_key", ""),
                 stake_id=row["stake"].pk if row.get("stake") is not None else None,
                 required_stake_column=row.get("required_stake_column", ""),
             )
@@ -2175,7 +2251,7 @@ def _serialize_eligible_transitions(
     transitions: list[Transition],
 ) -> list[EligibleTransitionEntry]:
     """Serialise eligible Transition objects for GM queue response."""
-    return [EligibleTransitionEntry(transition_id=t.pk, mode=t.mode) for t in transitions]
+    return [EligibleTransitionEntry(transition_id=t.pk) for t in transitions]
 
 
 @dataclass
@@ -2226,26 +2302,27 @@ def _eligible_transitions_from_prefetched(
     eligible: list[Transition] = []
     for transition in transitions_by_episode.get(episode.pk, []):
         routing = transition.cached_required_outcomes
-        if all(r.beat.outcome == r.required_outcome for r in routing):
+        if all(routing_requirement_met(r) for r in routing):
             eligible.append(transition)
     return eligible
 
 
 def _expire_overdue_beats_for_episodes(episode_ids: list[int]) -> None:
-    """Bulk-detect and expire overdue UNSATISFIED beats across all episodes.
+    """Bulk-detect and expire overdue UNSATISFIED beats across all episodes (#3558).
 
     One query for the whole candidate set (replaces the per-episode SELECT
     that ``get_eligible_transitions`` issued in a loop). Each overdue beat is
-    saved individually so the SharedMemoryModel identity-map cache is updated
-    in place — a bulk .update() would leave stale Python objects and break the
-    subsequent FK walks. The number of saves is bounded by the count of
-    actually-overdue beats (data-dependent, typically zero), not by story
-    count, so the query bound is preserved.
+    completed through ``expire_beat`` individually, in its own savepoint, so
+    the SharedMemoryModel identity-map cache is updated in place and one
+    beat's failure never aborts the batch. The number of completions is
+    bounded by the count of actually-overdue beats (data-dependent, typically
+    zero), not by story count, so the query bound is preserved.
     """
     if not episode_ids:
         return
 
     from world.stories.constants import BeatOutcome  # noqa: PLC0415
+    from world.stories.services.beats import _expire_each  # noqa: PLC0415
 
     now = timezone.now()
     overdue = Beat.objects.filter(
@@ -2254,9 +2331,7 @@ def _expire_overdue_beats_for_episodes(episode_ids: list[int]) -> None:
         deadline__isnull=False,
         deadline__lt=now,
     )
-    for beat in overdue:
-        beat.outcome = BeatOutcome.EXPIRED
-        beat.save(update_fields=["outcome", "updated_at"])
+    _expire_each(list(overdue), now=now)
 
 
 def _group_progress_by_story(
@@ -2613,9 +2688,13 @@ class GMQueueView(APIView):
 class ExpireOverdueBeatsView(APIView):
     """POST /api/stories/expire-overdue-beats/
 
-    Staff-only trigger that flips all UNSATISFIED beats with past deadlines
-    to EXPIRED. Designed for manual triggering and cron hooks.
-    Returns {"expired_count": N}.
+    Staff-only trigger that completes every UNSATISFIED beat with a past
+    deadline as EXPIRED through the shared completion tail (#3558): fires the
+    beat's expired consequence pool (no legend), grades its open stakes LOSS,
+    closes its stake contract, and notifies - one savepoint per beat, so one
+    beat's failure never stops the sweep. Designed for manual triggering and
+    cron hooks. Returns {"expired_count": N}, the count of beats whose
+    outcome changed.
     """
 
     permission_classes = [permissions.IsAdminUser]
@@ -3393,6 +3472,7 @@ class StakeViewSet(viewsets.ModelViewSet):
         "subject_item",
         "subject_society",
         "subject_organization",
+        "subject_asset",
         # DRF's nested StakeOutcomeSerializer reads the related manager, so the
         # prefetch must populate the default cache (to_attr would be unused).
     ).prefetch_related("outcomes")  # noqa: PREFETCH_STRING
@@ -3403,60 +3483,6 @@ class StakeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["severity", "created_at", "updated_at"]
     ordering = ["beat", "-severity", "pk"]
-
-    @action(
-        detail=True,
-        methods=[HTTPMethod.POST],
-        url_path="resolve",
-        permission_classes=[CanResolveStake],
-    )
-    def resolve(self, request: Request, pk: int | None = None) -> Response:
-        """POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
-
-        Lead GM, staff, or an AGM with an approved claim on the stake's beat
-        picks one of the stake's AUTHORED resolution columns; the branch fires
-        exactly like the machine path (pool + writers) and the StakeOutcome
-        audit row records method=GM_PICK with the GM and notes. Optional
-        ``participants`` / ``extra_participants`` carry the personas the
-        branch's pool and affection writer credit (MarkBeat semantics).
-        Returns 201 with the StakeOutcome.
-
-        The LEGEND_AWARD participant guards fire inside the service's pool
-        walk — pre-validating them in the serializer would duplicate
-        resolve_pool_consequences; they are surfaced as 400 here (same
-        exception-block carve-out as EpisodeViewSet.resolve).
-        """
-        from world.gm.models import GMProfile  # noqa: PLC0415
-        from world.societies.exceptions import (  # noqa: PLC0415
-            LegendAwardParticipantMissingError,
-            LegendAwardScopeError,
-        )
-        from world.stories.services.stake_resolution import (  # noqa: PLC0415
-            resolve_stake_by_gm_pick,
-        )
-
-        stake = self.get_object()
-        ser = ResolveStakeInputSerializer(data=request.data, context={"stake": stake})
-        ser.is_valid(raise_exception=True)
-
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            gm_profile = None
-
-        try:
-            outcome = resolve_stake_by_gm_pick(
-                stake,
-                column=ser.validated_data["column"],
-                outcome_key=ser.validated_data.get("outcome_key", ""),
-                gm_profile=gm_profile,
-                gm_notes=ser.validated_data["gm_notes"],
-                participants=ser.validated_data.get("participants") or None,
-                extra_participants=ser.validated_data.get("extra_participants") or None,
-            )
-        except (LegendAwardParticipantMissingError, LegendAwardScopeError) as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(StakeOutcomeSerializer(outcome).data, status=status.HTTP_201_CREATED)
 
 
 class StakeResolutionViewSet(viewsets.ModelViewSet):

@@ -8,6 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
+  CreateBeatScenarioBody,
   ListBeatsParams,
   ListChaptersParams,
   ListClaimsParams,
@@ -20,6 +21,7 @@ import type {
   ListProgressionRequirementsParams,
   ListProtectedSubjectsParams,
   ListSessionRequestsParams,
+  ListStakeTemplatesParams,
   ListStoryGMOffersParams,
   ListStoriesParams,
   ListTransitionRequiredOutcomesParams,
@@ -53,6 +55,12 @@ import type {
   RequestClearanceBody,
   RespondToOfferBody,
   ResolveEpisodeBody,
+  StakeRequestBody,
+  StakeUpdateBody,
+  StakeResolutionRequestBody,
+  StakeResolutionUpdateBody,
+  StakeRewardLineRequestBody,
+  StakeRewardLineUpdateBody,
   StoryCreateBody,
   StoryNoteRequest,
   TransitionRequiredOutcome,
@@ -104,6 +112,13 @@ export const storiesKeys = {
   // Beats
   beatList: listKey<ListBeatsParams>('beats'),
   beat: (id: number) => [...storiesKeys.all, 'beat', id] as const,
+  // #3562 readiness dashboard + open stakes-contract-activation lock
+  beatReadiness: (id: number) => [...storiesKeys.all, 'beat', id, 'readiness'] as const,
+  beatActivations: (beatId: number) => [...storiesKeys.all, 'beat', beatId, 'activations'] as const,
+
+  // #3562 beat-scoped consequence pool catalog + detail
+  consequencePools: () => [...storiesKeys.all, 'consequence-pools', 'beat'] as const,
+  consequencePoolDetail: (id: number) => [...storiesKeys.all, 'consequence-pool', id] as const,
 
   // Progress
   groupProgress: listKey<ListGroupProgressParams>('group-progress'),
@@ -156,6 +171,19 @@ export const storiesKeys = {
 
   // CustodyClearance (#2001 Task 8)
   custodyClearances: listKey<ListCustodyClearancesParams>('custody-clearances'),
+
+  // Stakes (#1770, ASSET subject + npc_regard_delta widened #3561). Reuses
+  // beatReadiness/beatActivations above (#3562) for the readiness/lock keys -
+  // stakes only add the beat-scoped list, the per-stake/per-resolution child
+  // lists, the staff-authored template catalog, and the player-safe summary.
+  stakes: (beatId: number) => [...storiesKeys.all, 'stakes', beatId] as const,
+  stakeResolutions: (stakeId: number) =>
+    [...storiesKeys.all, 'stake-resolutions', stakeId] as const,
+  stakeRewardLines: (resolutionId: number) =>
+    [...storiesKeys.all, 'stake-reward-lines', resolutionId] as const,
+  stakeTemplates: listKey<ListStakeTemplatesParams>('stake-templates'),
+  stakesSummary: (beatId: number) =>
+    [...storiesKeys.all, 'beat', beatId, 'stakes-summary'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -428,7 +456,32 @@ export function useUpdateBeat() {
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: storiesKeys.beat(id) }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
+      // A risk/target_level/consequence-pool edit can flip readiness
+      // (e.g. clearing a "missing target_level" problem).
+      qc.invalidateQueries({ queryKey: storiesKeys.beatReadiness(id) }).catch(() => {});
     },
+  });
+}
+
+/** #3562 - the beat's GM readiness dashboard, edit mode only. */
+export function useBeatReadiness(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.beatReadiness(id),
+    queryFn: () => api.getBeatReadiness(id),
+    enabled: enabled && id > 0,
+  });
+}
+
+/**
+ * #3562 - the beat's open stakes-contract activation, if any (the lock).
+ * Returns the raw list (0 or 1 entries in practice - a beat has at most one
+ * open activation); callers read `data?.[0]` for the lock state.
+ */
+export function useOpenBeatActivation(beatId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.beatActivations(beatId),
+    queryFn: () => api.listOpenBeatActivations(beatId),
+    enabled: enabled && beatId > 0,
   });
 }
 
@@ -575,6 +628,35 @@ export function useMarkBeat() {
       qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) }).catch(() => {});
     },
+  });
+}
+
+export function useCreateBeatScenario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ beatId, ...body }: { beatId: number } & CreateBeatScenarioBody) =>
+      api.createBeatScenario(beatId, body),
+    onSuccess: (_, { beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: storiesKeys.beatList() }).catch(() => {});
+    },
+  });
+}
+
+/** #3562 - the beat-scoped consequence pool catalog for `ConsequencePoolPicker`'s `<select>`. */
+export function useBeatConsequencePools() {
+  return useQuery({
+    queryKey: storiesKeys.consequencePools(),
+    queryFn: () => api.listBeatConsequencePools(),
+  });
+}
+
+/** #3562 - a single pool's resolved entries for `ConsequencePoolPicker`'s preview. */
+export function useConsequencePoolDetail(id: number) {
+  return useQuery({
+    queryKey: storiesKeys.consequencePoolDetail(id),
+    queryFn: () => api.getConsequencePoolDetail(id),
+    enabled: id > 0,
   });
 }
 
@@ -1161,5 +1243,189 @@ export function useRevokeClearance() {
   });
 }
 
-// Suppress unused-import lint — Beat is re-exported for consumers
+// ---------------------------------------------------------------------------
+// Stakes (#1770 pillars 1/2/3/5/7/8; ASSET subject + npc_regard_delta +
+// transitions_subject_asset widened #3561). Every mutation's variables carry
+// an explicit beatId - StakeResolution keys off `stake`, not `beat`, and
+// StakeRewardLine keys off `resolution`, so beatId can't always be read back
+// from the write body/response; requiring it uniformly gives Task 7/8 one
+// invalidation contract for every stakes mutation, not two.
+// ---------------------------------------------------------------------------
+
+/** The beat's authored Stake rows. */
+export function useStakes(beatId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.stakes(beatId),
+    queryFn: () => api.listStakes({ beat: beatId }),
+    enabled: enabled && beatId > 0,
+  });
+}
+
+function invalidateStakeSurfaces(qc: ReturnType<typeof useQueryClient>, beatId: number) {
+  qc.invalidateQueries({ queryKey: storiesKeys.stakes(beatId) }).catch(() => {});
+  qc.invalidateQueries({ queryKey: storiesKeys.beatReadiness(beatId) }).catch(() => {});
+  qc.invalidateQueries({ queryKey: storiesKeys.stakesSummary(beatId) }).catch(() => {});
+}
+
+export function useCreateStake() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ beatId: _beatId, ...body }: { beatId: number } & StakeRequestBody) =>
+      api.createStake(body),
+    onSuccess: (_, { beatId }) => invalidateStakeSurfaces(qc, beatId),
+  });
+}
+
+export function useUpdateStake() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      beatId: _beatId,
+      ...body
+    }: { id: number; beatId: number } & StakeUpdateBody) => api.updateStake(id, body),
+    onSuccess: (_, { beatId }) => invalidateStakeSurfaces(qc, beatId),
+  });
+}
+
+export function useDeleteStake() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number; beatId: number }) => api.deleteStake(id),
+    onSuccess: (_, { beatId }) => invalidateStakeSurfaces(qc, beatId),
+  });
+}
+
+/** One stake's authored resolution branches. */
+export function useStakeResolutions(stakeId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.stakeResolutions(stakeId),
+    queryFn: () => api.listStakeResolutions({ stake: stakeId }),
+    enabled: enabled && stakeId > 0,
+  });
+}
+
+export function useCreateStakeResolution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ beatId: _beatId, ...body }: { beatId: number } & StakeResolutionRequestBody) =>
+      api.createStakeResolution(body),
+    onSuccess: (created, { beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.stakeResolutions(created.stake) }).catch(
+        () => {}
+      );
+      invalidateStakeSurfaces(qc, beatId);
+    },
+  });
+}
+
+export function useUpdateStakeResolution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      stakeId: _stakeId,
+      beatId: _beatId,
+      ...body
+    }: {
+      id: number;
+      stakeId: number;
+      beatId: number;
+    } & StakeResolutionUpdateBody) => api.updateStakeResolution(id, body),
+    onSuccess: (_, { stakeId, beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.stakeResolutions(stakeId) }).catch(() => {});
+      invalidateStakeSurfaces(qc, beatId);
+    },
+  });
+}
+
+export function useDeleteStakeResolution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number; stakeId: number; beatId: number }) =>
+      api.deleteStakeResolution(id),
+    onSuccess: (_, { stakeId, beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.stakeResolutions(stakeId) }).catch(() => {});
+      invalidateStakeSurfaces(qc, beatId);
+    },
+  });
+}
+
+/** One resolution branch's authored win-side reward payouts. */
+export function useStakeRewardLines(resolutionId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.stakeRewardLines(resolutionId),
+    queryFn: () => api.listStakeRewardLines({ resolution: resolutionId }),
+    enabled: enabled && resolutionId > 0,
+  });
+}
+
+export function useCreateStakeRewardLine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ beatId: _beatId, ...body }: { beatId: number } & StakeRewardLineRequestBody) =>
+      api.createStakeRewardLine(body),
+    onSuccess: (created, { beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.stakeRewardLines(created.resolution) }).catch(
+        () => {}
+      );
+      invalidateStakeSurfaces(qc, beatId);
+    },
+  });
+}
+
+export function useUpdateStakeRewardLine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      resolutionId: _resolutionId,
+      beatId: _beatId,
+      ...body
+    }: {
+      id: number;
+      resolutionId: number;
+      beatId: number;
+    } & StakeRewardLineUpdateBody) => api.updateStakeRewardLine(id, body),
+    onSuccess: (_, { resolutionId, beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.stakeRewardLines(resolutionId) }).catch(
+        () => {}
+      );
+      invalidateStakeSurfaces(qc, beatId);
+    },
+  });
+}
+
+export function useDeleteStakeRewardLine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number; resolutionId: number; beatId: number }) =>
+      api.deleteStakeRewardLine(id),
+    onSuccess: (_, { resolutionId, beatId }) => {
+      qc.invalidateQueries({ queryKey: storiesKeys.stakeRewardLines(resolutionId) }).catch(
+        () => {}
+      );
+      invalidateStakeSurfaces(qc, beatId);
+    },
+  });
+}
+
+/** The staff-authored stake catalog (read-only here; templates aren't written from this editor). */
+export function useStakeTemplates(params?: ListStakeTemplatesParams) {
+  return useQuery({
+    queryKey: storiesKeys.stakeTemplates(params),
+    queryFn: () => api.listStakeTemplates(params),
+  });
+}
+
+/** The beat's player-safe stakes summary (`GET /api/beats/{id}/stakes-summary/`). */
+export function useStakesSummary(beatId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: storiesKeys.stakesSummary(beatId),
+    queryFn: () => api.getStakesSummary(beatId),
+    enabled: enabled && beatId > 0,
+  });
+}
+
+// Suppress unused-import lint - Beat is re-exported for consumers
 export type { Beat, Era };

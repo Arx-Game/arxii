@@ -319,6 +319,42 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         # The combat-usable technique from setUpTestData still appears
         self.assertIn(self.technique.pk, technique_ids)
 
+    def test_protective_technique_carries_reactive_anima_cost(self) -> None:
+        """COMBAT PlayerAction.reactive_anima_cost mirrors the protective
+        condition's flat fee (#3573) - populated alongside protective_flavor
+        from the same ``protective_condition_and_flavor`` resolution."""
+        from actions.player_interface import get_player_actions
+        from world.magic.effect_palette_content import (
+            FORCE_FIELD_TECHNIQUE_NAME,
+            ensure_force_field_content,
+        )
+        from world.magic.factories import CharacterTechniqueFactory
+        from world.magic.models import Technique
+
+        ensure_force_field_content()
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        CharacterTechniqueFactory(character=self.sheet, technique=aegis_field)
+
+        expected = aegis_field.condition_applications.get().condition.reactive_anima_cost
+        self.assertGreater(
+            expected, 0, "Aegis Field's reactive_anima_cost must be positive to prove the fee"
+        )
+
+        actions = get_player_actions(self.character)
+        combat_actions = [a for a in actions if a.ref.technique_id == aegis_field.pk]
+        self.assertEqual(len(combat_actions), 1)
+        self.assertEqual(combat_actions[0].reactive_anima_cost, expected)
+        self.assertEqual(combat_actions[0].protective_flavor, "barrier")
+
+    def test_mundane_technique_has_no_reactive_anima_cost(self) -> None:
+        """A technique with no protective handler carries reactive_anima_cost=None."""
+        from actions.player_interface import get_player_actions
+
+        actions = get_player_actions(self.character)
+        combat_actions = [a for a in actions if a.ref.technique_id == self.technique.pk]
+        self.assertEqual(len(combat_actions), 1)
+        self.assertIsNone(combat_actions[0].reactive_anima_cost)
+
 
 # ---------------------------------------------------------------------------
 # Test: COMBAT backend — declaration window closed (RESOLVING / BETWEEN_ROUNDS)

@@ -132,11 +132,17 @@ class OptionKind(models.TextChoices):
     An authored option declares its kind explicitly; a CHALLENGE-sourced
     option is always CHECK (every ``ChallengeApproach`` resolves a check or
     auto-succeeds).
+
+    ENCOUNTER: the node resolves by a combat encounter spawned from the
+    option's opponent lines; its routes key on the CheckOutcome tier that
+    EncounterOutcomeMapping assigns to (encounter outcome, encounter_risk_level)
+    (#3565).
     """
 
     BRANCH = "branch", "Branch"
     CHECK = "check", "Check"
     EXTERNAL_ACT = "external_act", "External Act"
+    ENCOUNTER = "encounter", "Encounter"
 
 
 class ExternalAct(models.TextChoices):

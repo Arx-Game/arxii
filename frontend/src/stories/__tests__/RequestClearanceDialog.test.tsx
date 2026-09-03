@@ -3,7 +3,7 @@
  * request dialog reachable from ClearanceInbox.
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -81,6 +81,17 @@ describe('RequestClearanceDialog', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Request custody clearance')).toBeInTheDocument();
+  });
+
+  it('does not offer the asset kind (CustodyClearance has no subject_asset column)', async () => {
+    const user = userEvent.setup();
+    makeMocks();
+    renderWithProviders(<RequestClearanceDialog />);
+
+    await user.click(screen.getByTestId('request-clearance-btn'));
+
+    const kindSelect = screen.getAllByTestId('mock-select')[0];
+    expect(within(kindSelect).queryByRole('option', { name: /asset/i })).not.toBeInTheDocument();
   });
 
   it('submits the identity-path body with a custom label subject', async () => {

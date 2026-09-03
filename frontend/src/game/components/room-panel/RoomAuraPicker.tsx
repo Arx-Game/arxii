@@ -66,53 +66,61 @@ export function RoomAuraPicker({ characterId, roomId }: RoomAuraPickerProps) {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  return (
-    <div className="space-y-2 border-b p-2" data-testid="room-aura-picker">
-      <Label htmlFor="room-aura-select">Room Aura</Label>
-      {resonancesLoading ? (
-        <p className="text-sm text-muted-foreground">Loading claimed resonances…</p>
-      ) : resonances.length === 0 ? (
+  const renderResonances = () => {
+    if (resonancesLoading) {
+      return <p className="text-sm text-muted-foreground">Loading claimed resonances…</p>;
+    }
+    if (resonances.length === 0) {
+      return (
         <p className="text-sm text-muted-foreground" data-testid="room-aura-no-resonances">
           Claim a resonance first to tag this room's aura.
         </p>
-      ) : (
-        <div className="flex flex-wrap items-end gap-2">
-          <select
-            id="room-aura-select"
-            data-testid="room-aura-select"
-            className={`${SELECT_CLASS} min-w-40 flex-1`}
-            value={resonanceId}
-            onChange={(e) => setResonanceId(e.target.value === '' ? '' : Number(e.target.value))}
-          >
-            <option value="">Select a resonance…</option>
-            {resonances.map((cr) => (
-              <option key={cr.resonance} value={cr.resonance}>
-                {cr.resonance_name}
-              </option>
-            ))}
-          </select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={resonanceId === '' || tag.isPending}
-            onClick={() => tag.mutate()}
-            data-testid="room-aura-tag"
-          >
-            Tag Aura
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={resonanceId === '' || untag.isPending}
-            onClick={() => untag.mutate()}
-            data-testid="room-aura-clear"
-          >
-            Clear Aura
-          </Button>
-        </div>
-      )}
+      );
+    }
+    return (
+      <div className="flex flex-wrap items-end gap-2">
+        <select
+          id="room-aura-select"
+          data-testid="room-aura-select"
+          className={`${SELECT_CLASS} min-w-40 flex-1`}
+          value={resonanceId}
+          onChange={(e) => setResonanceId(e.target.value === '' ? '' : Number(e.target.value))}
+        >
+          <option value="">Select a resonance…</option>
+          {resonances.map((cr) => (
+            <option key={cr.resonance} value={cr.resonance}>
+              {cr.resonance_name}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={resonanceId === '' || tag.isPending}
+          onClick={() => tag.mutate()}
+          data-testid="room-aura-tag"
+        >
+          Tag Aura
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={resonanceId === '' || untag.isPending}
+          onClick={() => untag.mutate()}
+          data-testid="room-aura-clear"
+        >
+          Clear Aura
+        </Button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-2 border-b p-2" data-testid="room-aura-picker">
+      <Label htmlFor="room-aura-select">Room Aura</Label>
+      {renderResonances()}
     </div>
   );
 }

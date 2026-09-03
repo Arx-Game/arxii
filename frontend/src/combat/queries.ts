@@ -380,6 +380,12 @@ export interface GuardMutationArgs {
   techniqueId: number | null;
   redirectOpponentTargetId?: number | null;
   redirectObjectTargetId?: number | null;
+  /**
+   * The guardian's consent (#3573) to keep a technique-guardian's protective
+   * ward alive past zero anima by drawing on Soulfray. Only meaningful when
+   * techniqueId names a protective technique; false/omitted declines.
+   */
+  confirmSoulfrayRisk?: boolean;
 }
 
 /**
@@ -397,7 +403,13 @@ export interface GuardMutationArgs {
 export function useGuardMutation(encounterId: number, characterId: number) {
   return useEncounterMutation<DispatchResult, GuardMutationArgs>(
     encounterId,
-    ({ allyParticipantId, techniqueId, redirectOpponentTargetId, redirectObjectTargetId }) =>
+    ({
+      allyParticipantId,
+      techniqueId,
+      redirectOpponentTargetId,
+      redirectObjectTargetId,
+      confirmSoulfrayRisk,
+    }) =>
       api.postDispatchAction(characterId, {
         ref: { backend: 'registry', registry_key: 'combat_interpose' },
         kwargs: {
@@ -405,6 +417,7 @@ export function useGuardMutation(encounterId: number, characterId: number) {
           technique_id: techniqueId,
           redirect_opponent_target_id: redirectOpponentTargetId ?? null,
           redirect_object_target_id: redirectObjectTargetId ?? null,
+          ...(confirmSoulfrayRisk ? { confirm_soulfray_risk: true } : {}),
         },
       })
   );

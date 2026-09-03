@@ -122,6 +122,14 @@ class CoverInterposeActionTest(CombatManeuverActionTestBase):
         result = InterposeAction().run(self.character, redirect_opponent_target_id=999999)
         self.assertFalse(result.success)
 
+    def test_interpose_forwards_soulfray_consent(self) -> None:
+        from unittest.mock import patch
+
+        with patch("world.combat.services.declare_interpose") as declare:
+            result = InterposeAction().run(self.character, confirm_soulfray_risk=True)
+        self.assertTrue(result.success)
+        self.assertTrue(declare.call_args.kwargs["confirm_soulfray_risk"])
+
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeRedirectDispatchSeamTest(CombatManeuverActionTestBase):

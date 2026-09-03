@@ -3,9 +3,12 @@
 This module is the runtime that walks a :class:`MissionInstance` through its
 authored graph. It owns NO new check/consequence math: it reuses
 ``world.checks.perform_check`` for the dice and
-``world.checks.consequence_resolution.apply_resolution`` for the effects,
-mirroring ``world.mechanics.challenge_resolution`` (notably its
-``_select_consequence`` synthetic-fallback pattern).
+``world.mechanics.effect_handlers.apply_all_effects`` for the effects (route
+consequences are plain ``Consequence`` rows, never ``WeightedConsequence`` -
+the one thing ``world.checks.consequence_resolution.apply_resolution``
+unwraps, so this module calls ``apply_all_effects`` directly), mirroring
+``world.mechanics.challenge_resolution`` (notably its ``_select_consequence``
+synthetic-fallback pattern).
 
 Phase 3 is SINGLE-participant: ``viewer``/``actor`` is the one acting
 participant. Multi-participant union/arbitration is Phase 4.
@@ -44,7 +47,7 @@ Design invariants honored here:
     (design §8.4 Q4). ``base_risk`` is the surfaced "Risk" axis, never the DC.
   * a route's authored ``consequence`` is applied when set; otherwise a
     synthetic UNSAVED fallback ``Consequence`` is built so
-    ``apply_resolution`` is still called uniformly (and returns [] for the
+    ``apply_all_effects`` is still called uniformly (and returns [] for the
     unsaved row — mirrors ``challenge_resolution._select_consequence``).
   * M1: never trust a possibly-stale cached ``instance.current_node``; engine
     functions operate on the ``node`` argument and write (not read) the FK.
@@ -64,12 +67,12 @@ from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
 from world.areas.services import area_subtree_pks
-from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import select_weighted
 from world.checks.services import perform_check
 from world.checks.theater import maybe_emit_resolution_theater
-from world.checks.types import CheckResult, PendingResolution, ResolutionContext
+from world.checks.types import CheckResult, ResolutionContext
+from world.mechanics.effect_handlers import apply_all_effects
 from world.missions.constants import MissionStatus, NodeLocationMode, OptionKind, OptionSource
 from world.missions.models import (
     MissionDeedRecord,
@@ -383,7 +386,7 @@ def _resolve_challenge_check(
 
 def _select_route_consequence(
     route: MissionOptionRoute,
-    result: CheckResult,
+    outcome: CheckOutcome | None,
     candidate: MissionOptionRouteCandidate | None = None,
 ) -> Consequence:
     """Authored consequence if set, else a synthetic UNSAVED fallback.
@@ -391,14 +394,16 @@ def _select_route_consequence(
     A fired random-set ``candidate`` overrides with its own consequence when
     it carries one (#941); otherwise the route's consequence applies. Mirrors
     ``world.mechanics.challenge_resolution._select_consequence``: an unsaved
-    Consequence makes ``apply_resolution`` a uniform no-op (returns []), so
-    callers never special-case "this route has no effect".
+    Consequence makes ``apply_all_effects`` a uniform no-op (returns []), so
+    callers never special-case "this route has no effect". ``outcome`` is the
+    graded tier (a rolled ``CheckResult.outcome`` or a mapped ENCOUNTER tier,
+    #3565) - this function only ever read the tier off its caller's result,
+    never the rest of it.
     """
     if candidate is not None and candidate.consequence_id is not None:
         return candidate.consequence
     if route.consequence_id is not None:
         return route.consequence
-    outcome = result.outcome
     return Consequence(
         outcome_tier=outcome,
         label=str(outcome.name) if outcome else "Unknown",
@@ -507,6 +512,7 @@ def _finish_terminal(
     instance: MissionInstance,
     *,
     route: MissionOptionRoute | None = None,
+    option: MissionOption | None = None,
 ) -> None:
     """Mark the run complete (terminal route reached).
 
@@ -514,9 +520,15 @@ def _finish_terminal(
     no-op when ``instance.source_beat_id is None`` (a free run); when set, it
     completes the linked ``Beat`` via ``on_mission_complete_for_beat``.
     ``route`` is the terminal :class:`MissionOptionRoute` (or ``None`` for a
-    BRANCH terminal with no route object). JOINT terminals call
-    ``_finish_terminal`` exactly once (Phase 4 invariant), so the seam fires
-    exactly once per instance termination.
+    BRANCH terminal with no route object). ``option`` is the
+    :class:`MissionOption` whose pick ended the run - its ``key`` becomes the
+    beat completion's ``outcome_key`` (#3560) - threaded through so it's
+    obvious at every call site which option resolved the terminal (called
+    from both ``resolve_option``'s BRANCH path and ``_route_graded_outcome``,
+    #3565's extraction of the post-roll routing shared with a classified
+    ENCOUNTER outcome). JOINT terminals call ``_finish_terminal`` exactly
+    once (Phase 4
+    invariant), so the seam fires exactly once per instance termination.
     """
     # #1753 — a mission with an NPC to report to pauses at RESOLVED until the player
     # reports the outcome (which delivers money + style-modulated fame/prestige). A run
@@ -535,7 +547,7 @@ def _finish_terminal(
         instance.current_node = None
         instance.save()
     _teardown_spawned_room(instance)
-    on_mission_complete_for_beat(instance, route=route)
+    on_mission_complete_for_beat(instance, route=route, option=option)
     # Crisis seam (#2238): a run minted from a DomainCrisis resolves it on
     # terminal completion. Cheap no-op for every run without a source crisis.
     from world.societies.houses.crisis_services import (  # noqa: PLC0415
@@ -577,7 +589,7 @@ def resolve_option(  # noqa: PLR0913
 
     Either CHECK then matches the route for the rolled outcome tier, applies
     that route's consequence (authored or synthetic fallback) via
-    ``apply_resolution``, and advances ``current_node`` or completes the run
+    ``apply_all_effects``, and advances ``current_node`` or completes the run
     (terminal route). Emits and returns the :class:`MissionDeedRecord`
     (moral consequence follows the actor).
 
@@ -595,6 +607,24 @@ def resolve_option(  # noqa: PLR0913
 
     if option.spawns_instance:
         _spawn_mission_instance_room(instance, option, character)
+
+    if option.option_kind == OptionKind.ENCOUNTER:
+        # advance=False is the JOINT-orchestrator's routing-free primitive;
+        # clean() forbids ENCOUNTER on a JOINT node (one fight resolves the
+        # whole node - there is no per-participant tier to combine), so this
+        # combination should be unreachable outside a graph-authoring bug.
+        if not advance:
+            msg = (
+                f"ENCOUNTER option {option.pk} resolved with advance=False - "
+                "clean() should forbid ENCOUNTER on a JOINT node; the graph "
+                "is corrupt."
+            )
+            raise ValueError(msg)
+        from world.missions.services.encounter_option import (  # noqa: PLC0415
+            start_encounter_for_option,
+        )
+
+        return start_encounter_for_option(instance, node, option, actor)
 
     if option.option_kind in (OptionKind.BRANCH, OptionKind.EXTERNAL_ACT):
         return _resolve_branch(instance, node, option, character, advance=advance)
@@ -617,52 +647,98 @@ def resolve_option(  # noqa: PLR0913
             situation_ctx=mission_situation_ctx(character, instance),
         )
 
+    return _route_graded_outcome(
+        instance,
+        node,
+        option,
+        character,
+        result.outcome,
+        chosen_approach=chosen_approach,
+        advance=advance,
+    )
+
+
+def _route_graded_outcome(  # noqa: PLR0913
+    instance: MissionInstance,
+    node: MissionNode,
+    option: MissionOption,
+    character: ObjectDB,
+    outcome: CheckOutcome | None,
+    *,
+    chosen_approach: ChallengeApproach | None = None,
+    advance: bool = True,
+    deed: MissionDeedRecord | None = None,
+) -> MissionDeedRecord:
+    """Route a graded ``outcome`` tier through ``option``'s route table.
+
+    Everything ``resolve_option`` does after it has a tier: route lookup,
+    random-set candidate selection, consequence application, advance/terminal,
+    the deed, and reward emission. Shared by the roll path (``resolve_option``,
+    ``outcome`` = the just-rolled ``CheckResult.outcome``) and the ENCOUNTER
+    completion path (``world.missions.services.encounter_option.
+    complete_encounter_for_option``, ``outcome`` = the classified battle tier,
+    #3565) - a fight's mapped outcome routes exactly like a rolled CHECK once
+    it has a ``CheckOutcome`` tier.
+
+    ``deed`` is ``None`` for the roll path (a fresh deed is created here,
+    exactly as before the extraction) or the ENCOUNTER path's pending deed
+    (``outcome=None``, created at the pick), passed in to be graded in place
+    rather than duplicated.
+    """
     route = MissionOptionRoute.objects.filter(
         option=option,
-        outcome_tier=result.outcome,
+        outcome_tier=outcome,
     ).first()
     if route is None:
         msg = (
             f"CHECK option {option.pk} has no route for outcome "
-            f"{result.outcome!r} — route-set incompleteness (graph-level "
+            f"{outcome!r} - route-set incompleteness (graph-level "
             f"authoring error)."
         )
         raise ValueError(msg)
 
     # Pick the random-set destination (and its candidate) up front so the
     # candidate's per-candidate consequence/text/rewards drive this resolution
-    # (#941). advance=False is the routing-free mode — no candidate is chosen,
+    # (#941). advance=False is the routing-free mode - no candidate is chosen,
     # so the route-level consequence applies.
     next_node: MissionNode | None = None
     candidate: MissionOptionRouteCandidate | None = None
     if advance:
         next_node, candidate = _route_next_node(route)
 
-    consequence = _select_route_consequence(route, result, candidate)
+    consequence = _select_route_consequence(route, outcome, candidate)
     # Carry the run so mission-aware effects (e.g. a rescue route's
-    # RESCUE_CAPTIVE) can reach run state like ``rescue_target``.
+    # RESCUE_CAPTIVE) can reach run state like ``rescue_target``. Route
+    # consequences are plain Consequence rows, never WeightedConsequence (the
+    # one thing apply_resolution unwraps), so apply_all_effects directly - no
+    # CheckResult/PendingResolution wrapper is needed here.
     context = ResolutionContext(
         character=character, mission_instance=instance, chosen_approach=chosen_approach
     )
-    apply_resolution(PendingResolution(result, consequence), context)
+    apply_all_effects(consequence, context)
 
     is_terminal = False
     if advance:
         if next_node is None:
-            _finish_terminal(instance, route=route)
+            _finish_terminal(instance, route=route, option=option)
             is_terminal = True
         else:
             instance.current_node = next_node
             instance.save()
 
-    deed = MissionDeedRecord.objects.create(
-        instance=instance,
-        actor=character.sheet_data,
-        node=node,
-        option=option,
-        outcome=result.outcome,
-        route_candidate=candidate,
-    )
+    if deed is None:
+        deed = MissionDeedRecord.objects.create(
+            instance=instance,
+            actor=character.sheet_data,
+            node=node,
+            option=option,
+            outcome=outcome,
+            route_candidate=candidate,
+        )
+    else:
+        deed.outcome = outcome
+        deed.route_candidate = candidate
+        deed.save(update_fields=["outcome", "route_candidate"])
     # #941: a fired random-set candidate's own reward bundle emits on selection
     # (it always advances, so it is never the terminal route).
     if candidate is not None:
@@ -712,7 +788,7 @@ def _resolve_branch(
                 next_node = None
 
         if next_node is None:
-            _finish_terminal(instance, route=route)
+            _finish_terminal(instance, route=route, option=option)
             is_terminal = True
             terminal_route = route  # may be None when branch is terminal via
             # an option with neither branch_target nor a null-tier route.

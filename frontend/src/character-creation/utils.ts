@@ -51,3 +51,19 @@ export function statusVariant(
       return 'destructive';
   }
 }
+
+/**
+ * A character's display name from its parts.
+ *
+ * Shared by the identity stage and the review stage, which differ only in what
+ * they show when no first name has been entered yet.
+ */
+export function composeFullName(
+  firstName: string | null | undefined,
+  familyName: string | null | undefined,
+  fallback: string
+): string {
+  if (!firstName) return fallback;
+  if (!familyName) return firstName;
+  return `${firstName} ${familyName}`;
+}

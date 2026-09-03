@@ -713,6 +713,16 @@ function SituationTab({ characterId }: { characterId: number }) {
       .catch(() => toast.error('Could not place the challenge.'));
   }
 
+  const renderDispatch = () => {
+    if (dispatch.isPending) {
+      return 'Placing…';
+    }
+    if (placementKind === 'situation') {
+      return 'Place Situation';
+    }
+    return 'Place Challenge';
+  };
+
   return (
     <div className="space-y-3" data-testid="gm-adjudication-situation-tab">
       <div className="space-y-1">
@@ -796,11 +806,7 @@ function SituationTab({ characterId }: { characterId: number }) {
         </>
       )}
       <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-situation-submit">
-        {dispatch.isPending
-          ? 'Placing…'
-          : placementKind === 'situation'
-            ? 'Place Situation'
-            : 'Place Challenge'}
+        {renderDispatch()}
       </Button>
     </div>
   );
@@ -998,6 +1004,16 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
       .catch(() => toast.error('Could not stage the property.'));
   }
 
+  const renderDispatch2 = () => {
+    if (dispatch.isPending) {
+      return 'Staging…';
+    }
+    if (mode === 'prop') {
+      return 'Stage Prop';
+    }
+    return 'Stage Property';
+  };
+
   return (
     <div className="space-y-3" data-testid="gm-adjudication-stage-tab">
       <div className="space-y-1">
@@ -1064,7 +1080,7 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
         </>
       )}
       <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-stage-submit">
-        {dispatch.isPending ? 'Staging…' : mode === 'prop' ? 'Stage Prop' : 'Stage Property'}
+        {renderDispatch2()}
       </Button>
     </div>
   );

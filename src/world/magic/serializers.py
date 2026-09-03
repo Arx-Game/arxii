@@ -7,6 +7,7 @@ and character-specific magic data.
 Affinities and Resonances are proper domain models in the magic app.
 """
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
@@ -161,6 +162,83 @@ class ConsequencePoolCatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConsequencePool
         fields = ["id", "name", "description"]
+
+
+class ConsequencePoolEntryOutcomeTierSerializer(serializers.Serializer):
+    """The outcome-tier triple embedded in a ConsequencePoolDetailSerializer entry
+    (#3562); schema typing only. ConsequencePoolDetailSerializer builds the dict
+    directly rather than instantiating this serializer."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    success_level = serializers.IntegerField()
+
+
+class ConsequencePoolEntrySerializer(serializers.Serializer):
+    """One resolved Consequence row in a ConsequencePoolDetailSerializer's ``entries``
+    list (#3562); schema typing only. See ``get_entries`` below for the builder."""
+
+    consequence_id = serializers.IntegerField()
+    name = serializers.CharField()
+    outcome_tier = ConsequencePoolEntryOutcomeTierSerializer(allow_null=True)
+    effect_types = serializers.ListField(child=serializers.CharField())
+    character_loss = serializers.BooleanField()
+
+
+class ConsequencePoolDetailSerializer(serializers.ModelSerializer):
+    """Detail view of any ``ConsequencePool``'s resolved consequences (#3562), the
+    beat-authoring picker's pool preview. ``entries`` is built from
+    ``resolve_pool_consequences`` (parent inheritance plus the pool's own entries,
+    minus anything excluded), not straight from ``ConsequencePoolEntry`` rows, so
+    it matches what actually fires when the pool is applied."""
+
+    entries = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConsequencePool
+        fields = ["id", "name", "description", "entries"]
+
+    @extend_schema_field(ConsequencePoolEntrySerializer(many=True))
+    def get_entries(self, pool: ConsequencePool) -> list[dict]:
+        """Two bulk queries replace one per-entry lookup each (#3562 review):
+        ``resolve_pool_consequences`` returns bare ``Consequence`` rows that
+        carry no prefetched ``outcome_tier``/``effects``, so reading
+        ``consequence.outcome_tier`` or ``consequence.effects.all()`` per
+        entry in a loop is O(entries) queries. Load both maps once instead."""
+        from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+        from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+        from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+        consequences = resolve_pool_consequences(pool)
+        consequence_ids = [c.id for c in consequences]
+        tier_ids = {c.outcome_tier_id for c in consequences if c.outcome_tier_id is not None}
+
+        tiers_by_id = {tier.id: tier for tier in CheckOutcome.objects.filter(id__in=tier_ids)}
+
+        effect_types_by_consequence: dict[int, list[str]] = defaultdict(list)
+        effects = ConsequenceEffect.objects.filter(consequence_id__in=consequence_ids).order_by(
+            "execution_order"
+        )
+        for effect in effects:
+            effect_types_by_consequence[effect.consequence_id].append(effect.effect_type)
+
+        entries = []
+        for consequence in consequences:
+            tier = tiers_by_id.get(consequence.outcome_tier_id)
+            entries.append(
+                {
+                    "consequence_id": consequence.id,
+                    "name": consequence.label,
+                    "outcome_tier": (
+                        None
+                        if tier is None
+                        else {"id": tier.id, "name": tier.name, "success_level": tier.success_level}
+                    ),
+                    "effect_types": effect_types_by_consequence.get(consequence.id, []),
+                    "character_loss": consequence.character_loss,
+                }
+            )
+        return entries
 
 
 class EffectTypeSerializer(serializers.ModelSerializer):

@@ -16,10 +16,6 @@ class NoEligibleTransitionError(StoryError):
     _SAFE_MESSAGE = "There is no transition available to advance this episode."
 
 
-class AmbiguousTransitionError(StoryError):
-    _SAFE_MESSAGE = "Multiple transitions are eligible — please pick one."
-
-
 class ProgressionRequirementNotMetError(StoryError):
     _SAFE_MESSAGE = "Progression requirements for this episode are not yet met."
 

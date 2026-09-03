@@ -43,7 +43,6 @@ from world.stories.constants import (
     EraStatus,
     StoryMilestoneType,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.factories import (
@@ -181,13 +180,11 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         t_to_2a = TransitionFactory(
             source_episode=ep_1,
             target_episode=ep_2a,
-            mode=TransitionMode.AUTO,
             connection_type=ConnectionType.THEREFORE,
         )
         t_to_2b = TransitionFactory(
             source_episode=ep_1,
             target_episode=ep_2b,
-            mode=TransitionMode.AUTO,
             connection_type=ConnectionType.BUT,
         )
         TransitionRequiredOutcomeFactory(
@@ -430,12 +427,13 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         # At this point, t_to_2a becomes eligible AND mission_beat is          #
         # GM_MARKED (still the beat being marked, now SUCCESS), so the        #
         # episode has no remaining UNSATISFIED GM_MARKED beats after marking. #
-        # However, t_to_2a is AUTO, so no GM_CHOICE transition exists.        #
-        # The episode previously had an UNSATISFIED GM_MARKED beat (mission), #
-        # so a SessionRequest would have been created if eligible transitions  #
-        # existed. After marking, eligible = [t_to_2a], and if any previously #
-        # UNSATISFIED GM_MARKED beat just got resolved, the session was needed.#
-        # The service creates the request idempotently on this call.           #
+        # Routing is automatic (#3565): t_to_2a fires by authored order, no  #
+        # GM pick is needed. The episode previously had an UNSATISFIED         #
+        # GM_MARKED beat (mission), so a SessionRequest would have been        #
+        # created if eligible transitions existed. After marking, eligible =  #
+        # [t_to_2a], and if any previously UNSATISFIED GM_MARKED beat just    #
+        # got resolved, the session was needed. The service creates the       #
+        # request idempotently on this call.                                  #
         # ------------------------------------------------------------------ #
         completion = record_gm_marked_outcome(
             progress=group_progress,
@@ -460,16 +458,16 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         )
 
         # Verify SessionRequest behaviour: after marking mission_beat SUCCESS, all GM_MARKED
-        # beats on ep_1 are resolved, and t_to_2a is AUTO (not GM_CHOICE). So
+        # beats on ep_1 are resolved and no SITUATION/ENCOUNTER beat is UNSATISFIED, so
         # maybe_create_session_request finds needs_gm=False and does NOT create a request.
         # This is correct: the episode can auto-advance without a GM scheduling a session.
         self.assertFalse(
             SessionRequest.objects.filter(episode=ep_1).exists(),
             "No SessionRequest should exist after all beats resolved and no GM involvement "
-            "is required (t_to_2a is AUTO, no remaining UNSATISFIED GM_MARKED beats).",
+            "is required (routing is automatic, no remaining UNSATISFIED GM_MARKED beat).",
         )
 
-        # Resolve the episode — auto-fires t_to_2a (single AUTO transition).
+        # Resolve the episode - the single eligible transition (t_to_2a) fires.
         resolution = resolve_episode(progress=group_progress)
         group_progress.refresh_from_db()
         self.assertEqual(
@@ -539,7 +537,6 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         t_to_2c = TransitionFactory(
             source_episode=ep_2a,
             target_episode=ep_2c,
-            mode=TransitionMode.AUTO,
             connection_type=ConnectionType.BUT,
         )
         TransitionRequiredOutcomeFactory(

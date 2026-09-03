@@ -1583,6 +1583,12 @@ class OrgPact(SharedMemoryModel):
         return self.ratified_at is not None and self.dissolved_at is None
 
 
+# How a betrothal ended up, as shown in ``Betrothal.__str__``.
+_BETROTHAL_WED = "wed"
+_BETROTHAL_BROKEN = "broken"
+_BETROTHAL_PROMISED = "promised"
+
+
 class Betrothal(SharedMemoryModel):
     """A promised union (#2999): negotiated terms held in draft until the wedding.
 
@@ -1624,8 +1630,16 @@ class Betrothal(SharedMemoryModel):
         ordering = ["-created_at"]
         verbose_name_plural = "Betrothals"
 
+    def _state_label(self) -> str:
+        """Where a betrothal ended up: married, called off, or still standing."""
+        if self.wed_at:
+            return _BETROTHAL_WED
+        if self.broken_at:
+            return _BETROTHAL_BROKEN
+        return _BETROTHAL_PROMISED
+
     def __str__(self) -> str:
-        state = "wed" if self.wed_at else "broken" if self.broken_at else "promised"
+        state = self._state_label()
         return f"{self.kinsperson_a} & {self.kinsperson_b} ({state})"
 
     @property

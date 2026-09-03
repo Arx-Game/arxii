@@ -180,9 +180,9 @@ class EpisodeResolveRewardTests(EvenniaTestCase):
         episode = EpisodeFactory(chapter=chapter)
         BeatFactory(episode=episode, predicate_type=BeatPredicateType.GM_MARKED)
         progress = StoryProgressFactory(story=story, current_episode=episode)
-        transition = TransitionFactory(source_episode=episode)
+        TransitionFactory(source_episode=episode)
 
-        resolve_episode(progress=progress, chosen_transition=transition, resolved_by=gm)
+        resolve_episode(progress=progress, resolved_by=gm)
 
         config = GMRewardConfig.load()
         txn = XPTransaction.objects.get(
@@ -196,9 +196,9 @@ class EpisodeResolveRewardTests(EvenniaTestCase):
         episode = EpisodeFactory(chapter=chapter)
         BeatFactory(episode=episode, predicate_type=BeatPredicateType.GM_MARKED)
         progress = StoryProgressFactory(story=story, current_episode=episode)
-        transition = TransitionFactory(source_episode=episode)
+        TransitionFactory(source_episode=episode)
 
-        resolve_episode(progress=progress, chosen_transition=transition, resolved_by=None)
+        resolve_episode(progress=progress, resolved_by=None)
 
         self.assertFalse(
             XPTransaction.objects.filter(reason=ProgressionReason.GM_STORY_REWARD).exists()
