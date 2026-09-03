@@ -16,9 +16,9 @@ transition payload all read stale routing rules after a GM edited them.
 
 1. A loader that needs fresh related rows for many identity-mapped parents assigns the attribute
    itself from one grouped query (`filter(parent_id__in=ids)`, bucketed by parent id), never a
-   `to_attr` prefetch. Same query count, never skipped. `services/routing.py`
-   (`routing_reports_for_episodes`) and `world/gm/services.py::find_situations` are the
-   patterns.
+   `to_attr` prefetch. Same query count, never skipped. `world/gm/services.py::find_situations`
+   is the pattern here; #3563 (PR #3600) adds a second one,
+   `world/stories/services/routing.py::routing_reports_for_episodes`.
 2. Every writer of rows that a cached attribute mirrors pops that attribute from the parent's
    `__dict__` after writing (`save_transition_with_outcomes`, the raw rules viewset,
    `TransitionAdmin.save_related`), with a regression test that reads, writes, reads.
@@ -29,4 +29,7 @@ readers (the resolve path, flows) stale within a request. Deleting `cached_prope
 favour of plain attributes does not help either; the skip keys on presence, not on the property.
 
 **How to apply.** `grep -rn "to_attr=" src/` is the audit: each hit needs either a writer-side
-pop or a rewrite to a grouped query. New code does not add hits.
+pop or a rewrite to a grouped query. New code does not add hits. The hits that exist today on
+`Transition.cached_required_outcomes` (`get_eligible_transitions`, the GM queue, the transition
+payload) are covered by #3563's writer-side pops; they are not yet fixed on the branch that
+records this ADR.
