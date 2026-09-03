@@ -4218,6 +4218,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/clues/search/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM-only clue search for the stake reward picker (#3566).
+     *
+     *     Only clues whose target kind ``AUTOMATIC`` resolution can actually deliver on its
+     *     own (``RESOLVABLE_CLUE_TARGET_KINDS``) are searchable: an ITEM-target clue is a
+     *     bare pointer, not a coherent reward payload. Rows are further filtered through
+     *     ``clue_target_kind_allowed`` so a GM never sees a clue whose target they aren't
+     *     permitted to author (SECRET targets stay staff-only).
+     */
+    get: operations['clues_search_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/codex/categories/': {
     parameters: {
       query?: never;
@@ -26537,6 +26562,17 @@ export interface components {
       /** @description Stable content-pipeline identifier (#2451). NULL for ad hoc/test clues. */
       clue: string | null;
     };
+    /**
+     * @description One row of the GM clue search picker (#3566): id, name, and target_kind only.
+     *
+     *     No description or target FK: the picker is for choosing which clue a stake reward
+     *     line grants, not for browsing clue content.
+     */
+    ClueSearchResult: {
+      readonly id: number;
+      readonly name: string;
+      readonly target_kind: string;
+    };
     CodexCategory: {
       readonly id: number;
       /** @description Name of this category. */
@@ -38639,8 +38675,14 @@ export interface components {
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
      *     open-activation lock, the completed-beat refusal, the WIN-column-only
-     *     rule, and the sink/resonance shape rule (resonance required iff
-     *     sink=RESONANCE; amount >= 1 rides the model validator).
+     *     rule, and the per-sink FK shape rule generalised over
+     *     ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+     *     every other sink field must stay null, mirroring the model's ``clean()``).
+     *     Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+     *     the template's value (never author-supplied) and is refused for a
+     *     non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+     *     refused for a non-resolvable target kind or a target kind the author's
+     *     clue-authoring policy (``clue_target_kind_allowed``) does not permit.
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
      *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -38648,10 +38690,15 @@ export interface components {
     PatchedStakeRewardLineRequest: {
       resolution?: number;
       sink?: components['schemas']['StakeRewardLineSinkEnum'];
-      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
       amount?: number;
       /** @description Required when sink=RESONANCE; must be null otherwise. */
       resonance?: number | null;
+      /** @description Required when sink=ITEM; must be null otherwise. */
+      item_template?: number | null;
+      /** @description Required when sink=CLUE; must be null otherwise. */
+      clue?: number | null;
+      /** @description Required when sink=CODEX; must be null otherwise. */
+      codex_entry?: number | null;
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -42902,8 +42949,14 @@ export interface components {
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
      *     open-activation lock, the completed-beat refusal, the WIN-column-only
-     *     rule, and the sink/resonance shape rule (resonance required iff
-     *     sink=RESONANCE; amount >= 1 rides the model validator).
+     *     rule, and the per-sink FK shape rule generalised over
+     *     ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+     *     every other sink field must stay null, mirroring the model's ``clean()``).
+     *     Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+     *     the template's value (never author-supplied) and is refused for a
+     *     non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+     *     refused for a non-resolvable target kind or a target kind the author's
+     *     clue-authoring policy (``clue_target_kind_allowed``) does not permit.
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
      *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -42912,10 +42965,18 @@ export interface components {
       readonly id: number;
       resolution: number;
       sink: components['schemas']['StakeRewardLineSinkEnum'];
-      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
-      amount: number;
+      amount?: number;
       /** @description Required when sink=RESONANCE; must be null otherwise. */
       resonance?: number | null;
+      /** @description Required when sink=ITEM; must be null otherwise. */
+      item_template?: number | null;
+      /** @description Required when sink=CLUE; must be null otherwise. */
+      clue?: number | null;
+      /** @description Required when sink=CODEX; must be null otherwise. */
+      codex_entry?: number | null;
+      readonly item_template_name: string;
+      readonly clue_name: string;
+      readonly codex_entry_name: string;
     };
     /**
      * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
@@ -42923,8 +42984,14 @@ export interface components {
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
      *     open-activation lock, the completed-beat refusal, the WIN-column-only
-     *     rule, and the sink/resonance shape rule (resonance required iff
-     *     sink=RESONANCE; amount >= 1 rides the model validator).
+     *     rule, and the per-sink FK shape rule generalised over
+     *     ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+     *     every other sink field must stay null, mirroring the model's ``clean()``).
+     *     Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+     *     the template's value (never author-supplied) and is refused for a
+     *     non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+     *     refused for a non-resolvable target kind or a target kind the author's
+     *     clue-authoring policy (``clue_target_kind_allowed``) does not permit.
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
      *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -42932,23 +42999,35 @@ export interface components {
     StakeRewardLineRequest: {
       resolution: number;
       sink: components['schemas']['StakeRewardLineSinkEnum'];
-      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
-      amount: number;
+      amount?: number;
       /** @description Required when sink=RESONANCE; must be null otherwise. */
       resonance?: number | null;
+      /** @description Required when sink=ITEM; must be null otherwise. */
+      item_template?: number | null;
+      /** @description Required when sink=CLUE; must be null otherwise. */
+      clue?: number | null;
+      /** @description Required when sink=CODEX; must be null otherwise. */
+      codex_entry?: number | null;
     };
     /**
      * @description * `money` - Money
      *     * `resonance` - Resonance
+     *     * `item` - Item
+     *     * `clue` - Clue
+     *     * `codex` - Codex Entry
      * @enum {string}
      */
-    StakeRewardLineSinkEnum: 'money' | 'resonance';
+    StakeRewardLineSinkEnum: 'money' | 'resonance' | 'item' | 'clue' | 'codex';
     /**
      * @description Player-visible summary of one Stake (#1770 pillar 9).
      *
      *     What is wagered is visible; branch contents stay hidden — resolutions
      *     (consequence pools, escalations, narrative) are deliberately NOT fields
-     *     here and must never be added.
+     *     here and must never be added. ``reward_kinds`` is the one exception in
+     *     spirit only: it names the WIN branch's payout *categories*
+     *     (money/resonance/item/knowledge), never an amount, template, clue or
+     *     codex entry, so it carries none of the branch content the rule above
+     *     forbids (#3566).
      */
     StakeSummary: {
       readonly id: number;
@@ -42956,6 +43035,8 @@ export interface components {
       readonly player_summary: string;
       readonly severity: components['schemas']['SeverityEnum'];
       readonly severity_label: string;
+      /** @description Sorted, deduped reward-kind labels across the stake's WIN branch(es). */
+      readonly reward_kinds: string[];
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -51205,6 +51286,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedHeldClueList'];
+        };
+      };
+    };
+  };
+  clues_search_list: {
+    parameters: {
+      query?: {
+        q?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueSearchResult'][];
         };
       };
     };
