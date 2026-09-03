@@ -61,7 +61,8 @@ export function useCancelEmailChange() {
   return useMutation({ mutationFn: cancelEmailChange, onSuccess: invalidate });
 }
 export function useChangePassword() {
-  return useMutation({ mutationFn: changePassword });
+  const invalidate = useInvalidate([['account']]);
+  return useMutation({ mutationFn: changePassword, onSuccess: invalidate });
 }
 export function useActivateTotp() {
   const invalidate = useInvalidate([authenticatorsKey]);
@@ -90,24 +91,34 @@ export interface ReauthDialogProps {
   onCancel: () => void;
 }
 
+interface Waiter {
+  resolve: () => void;
+  reject: (e: unknown) => void;
+}
+
 /**
  * Wrap a sensitive call: on a reauthentication challenge, open the dialog, and once the
  * player has confirmed, retry the original call exactly once.
+ *
+ * Multiple calls can overlap while the dialog is open (a second `run()` arrives before the
+ * first one's confirmation): every overlapping caller registers its own waiter, and a single
+ * `onSuccess()` resolves (or `onCancel()` rejects) all of them, each then retrying its own
+ * call once.
  */
 export function useReauthGuard() {
   const [open, setOpen] = useState(false);
   const [flows, setFlows] = useState<string[]>([]);
-  const pending = useRef<{ resolve: () => void; reject: (e: unknown) => void } | null>(null);
+  const waiters = useRef<Waiter[]>([]);
 
   async function attempt<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (error) {
       if (!(error instanceof ReauthenticationRequiredError)) throw error;
-      setFlows(error.flows);
+      setFlows((prev) => Array.from(new Set([...prev, ...error.flows])));
       setOpen(true);
       await new Promise<void>((resolve, reject) => {
-        pending.current = { resolve, reject };
+        waiters.current.push({ resolve, reject });
       });
       return await fn();
     }
@@ -115,19 +126,18 @@ export function useReauthGuard() {
 
   const run = useCallback(<T>(fn: () => Promise<T>): Promise<T> => attempt(fn), []);
 
+  function settleAll(fn: (waiter: Waiter) => void) {
+    setOpen(false);
+    const toSettle = waiters.current;
+    waiters.current = [];
+    toSettle.forEach(fn);
+  }
+
   const dialogProps: ReauthDialogProps = {
     open,
     flows,
-    onSuccess: () => {
-      setOpen(false);
-      pending.current?.resolve();
-      pending.current = null;
-    },
-    onCancel: () => {
-      setOpen(false);
-      pending.current?.reject(new Error('Cancelled.'));
-      pending.current = null;
-    },
+    onSuccess: () => settleAll((waiter) => waiter.resolve()),
+    onCancel: () => settleAll((waiter) => waiter.reject(new Error('Cancelled.'))),
   };
 
   return { run, dialogProps };
