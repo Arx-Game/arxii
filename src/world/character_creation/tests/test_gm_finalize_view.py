@@ -57,7 +57,7 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
     def test_named_family_surname_used_in_gm_finalized_character(self) -> None:
         """The NAMED-path family is created before the name is built here too (#3617).
 
-        Mirrors ``finalize_character``'s equivalent test — ``finalize_gm_character``
+        Mirrors ``finalize_character``'s equivalent test: ``finalize_gm_character``
         must call ``_ensure_named_family`` before ``_build_character_full_name`` too.
         """
         from evennia.objects.models import ObjectDB

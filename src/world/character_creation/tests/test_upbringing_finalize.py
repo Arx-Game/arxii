@@ -50,7 +50,7 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
     def test_named_family_surname_used_in_character_name(self) -> None:
         """The family is created (and its name used) before the character name (#3617).
 
-        ``_build_character_full_name`` composes ``f"{first_name} {family_name}"`` —
+        ``_build_character_full_name`` composes ``f"{first_name} {family_name}"``;
         the NAMED-path family must therefore exist before that call, not just by
         the time ``_apply_sheet_demographics`` runs afterward.
         """

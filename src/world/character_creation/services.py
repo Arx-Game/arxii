@@ -624,7 +624,7 @@ def _ensure_named_family(draft: CharacterDraft) -> None:
 
     Must run before ``_build_character_full_name`` (which reads ``draft.family``
     to compose the surname) in both ``finalize_character`` and
-    ``finalize_gm_character`` — a NAMED-path draft otherwise finalizes with no
+    ``finalize_gm_character``: a NAMED-path draft otherwise finalizes with no
     family yet on record and the surname silently falls back to the tarot ritual.
     """
     if draft.family_id is not None:
