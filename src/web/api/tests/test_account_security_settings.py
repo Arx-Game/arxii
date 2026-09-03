@@ -19,15 +19,10 @@ class AccountSecuritySettingsTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
-    def test_anonymous_is_401(self):
-        # SessionAuthentication-only config: DRF returns 403 for an anonymous
-        # request that never carried an Authorization header (no WWW-Authenticate
-        # challenge to issue), so every other view test in this repo accepts
-        # either status here.
-        self.assertIn(
-            self.client.get(URL).status_code,
-            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
-        )
+    def test_anonymous_is_403(self):
+        # SessionAuthentication has no authenticate header, so DRF answers 403
+        # for anonymous, not 401.
+        self.assertEqual(self.client.get(URL).status_code, status.HTTP_403_FORBIDDEN)
 
     def test_get_defaults_to_false(self):
         self.client.force_authenticate(self.account)
