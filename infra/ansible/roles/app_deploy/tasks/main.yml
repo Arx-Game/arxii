@@ -1,4 +1,36 @@
 ---
+# Game log dir (#3599) FIRST: settings.py runs os.makedirs(LOG_DIR) on
+# import as the service user, and every Django command below (migrate
+# --check, collectstatic, ...) imports settings with LOG_DIR=/var/log/arxii
+# from the EnvironmentFile. The service user cannot create a dir under
+# /var/log, so it must exist, arxii-writable, before the first of them.
+# Group adm (stock Ubuntu) is what lets roles/ops_access's arxops read it.
+- name: Ensure the game log dir exists (arxii:adm, so arxops can read it)
+  ansible.builtin.file:
+    path: "{{ app_log_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: adm
+    mode: "0750"
+
+# Age-based pruning. `d` also (re)creates the dir at boot with these perms.
+- name: Install the tmpfiles.d rule that prunes old game logs
+  ansible.builtin.copy:
+    dest: /etc/tmpfiles.d/arxii-logs.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (app_deploy). Evennia rotates its own logs but never
+      # prunes; delete anything older than app_log_retention_days.
+      d {{ app_log_dir }} 0750 {{ app_user }} adm {{ app_log_retention_days }}d
+  register: app_log_tmpfiles
+
+- name: Apply the tmpfiles.d rule now (do not wait for a boot)  # noqa: no-handler
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/arxii-logs.conf
+  when: app_log_tmpfiles.changed
+  changed_when: true
+
 # 0751 for the same reason as the app root in roles/base: Caddy serves
 # /static/* from <releases>/<ref>/src/server/.static and must traverse to reach
 # it. Execute-for-other permits traversal only — no listing, and file modes are
