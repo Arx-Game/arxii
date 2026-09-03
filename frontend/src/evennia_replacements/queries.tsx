@@ -6,6 +6,7 @@ import { setAccount } from '@/store/authSlice';
 import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
@@ -123,9 +124,23 @@ export function useRegister(
   });
 }
 
+/**
+ * Log out and land on the logged-out home page, whatever page is open (#3592).
+ *
+ * Clearing the cache alone does NOT leave the current page. Most routes
+ * (e.g. /characters/create) have no guard at all, so nothing would ever
+ * move them. On a guarded route the guard keeps its last observer result
+ * until something re-renders it, and nothing it subscribes to changes when
+ * the `['account']` entry is removed, so it stayed put too; and even when
+ * a guard did re-evaluate, its destination (`/login`) is wrong for a
+ * deliberate logout. Hence this hook navigates to `/` itself, and writes
+ * `null` into `['account']` so every reader (guards, GatefoldPage) sees a
+ * settled logged-out account instead of a pending refetch.
+ */
 export function useLogout(onSuccess?: () => void) {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { disconnectAll } = useGameSocket();
   return useMutation({
     mutationFn: postLogout,
@@ -133,11 +148,11 @@ export function useLogout(onSuccess?: () => void) {
       disconnectAll();
       dispatch(resetGame());
       dispatch(setAccount(null));
-      // clear() wipes every cache entry including ['account']; that's
-      // what guards observe as `isPending` flipping back true on the
-      // next route — render `null`, then redirect to /login once the
-      // cleared cache settles with `data: null`.
+      // clear() drops every per-account cache entry (mail, roster, ...)
+      // so the next login never sees the previous account's data.
       queryClient.clear();
+      queryClient.setQueryData(['account'], null);
+      navigate('/');
       onSuccess?.();
     },
   });
