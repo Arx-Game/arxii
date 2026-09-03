@@ -140,6 +140,46 @@ interface PendingLink {
   exit: AddDialogConnection | null;
 }
 
+/**
+ * Wire a freshly-dug room to whatever the add dialog asked for.
+ *
+ * When both ends name the same room the pair collapses into one two-way link,
+ * so the entrance and exit names land on opposite sides of a single exit rather
+ * than producing two links between the same two rooms.
+ */
+function linkPendingRoom(
+  newRoomId: number,
+  pending: PendingLink,
+  runAction: (key: string, params: Record<string, unknown>) => void
+): void {
+  const { entrance, exit } = pending;
+  if (entrance && exit && entrance.roomId === exit.roomId) {
+    runAction('staff_link_rooms', {
+      room_a_id: newRoomId,
+      room_b_id: entrance.roomId,
+      name_ab: exit.exitName,
+      name_ba: entrance.exitName,
+    });
+    return;
+  }
+  if (entrance) {
+    runAction('staff_link_rooms', {
+      room_a_id: entrance.roomId,
+      room_b_id: newRoomId,
+      name_ab: entrance.exitName,
+      name_ba: entrance.exitName,
+    });
+  }
+  if (exit) {
+    runAction('staff_link_rooms', {
+      room_a_id: newRoomId,
+      room_b_id: exit.roomId,
+      name_ab: exit.exitName,
+      name_ba: exit.exitName,
+    });
+  }
+}
+
 function pendingLinkKey(x: number, y: number, floor: number): string {
   return `${x},${y}@${floor}`;
 }
@@ -340,32 +380,7 @@ export function Lattice({
           t.floor === pending.floor
       );
       if (!newRoom) continue;
-      const { entrance, exit } = pending;
-      if (entrance && exit && entrance.roomId === exit.roomId) {
-        runAction('staff_link_rooms', {
-          room_a_id: newRoom.id,
-          room_b_id: entrance.roomId,
-          name_ab: exit.exitName,
-          name_ba: entrance.exitName,
-        });
-      } else {
-        if (entrance) {
-          runAction('staff_link_rooms', {
-            room_a_id: entrance.roomId,
-            room_b_id: newRoom.id,
-            name_ab: entrance.exitName,
-            name_ba: entrance.exitName,
-          });
-        }
-        if (exit) {
-          runAction('staff_link_rooms', {
-            room_a_id: newRoom.id,
-            room_b_id: exit.roomId,
-            name_ab: exit.exitName,
-            name_ba: exit.exitName,
-          });
-        }
-      }
+      linkPendingRoom(newRoom.id, pending, runAction);
       pendingLinksRef.current.delete(key);
     }
     for (const [name, pending] of pendingAreaPlacementsRef.current) {

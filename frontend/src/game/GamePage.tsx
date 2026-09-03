@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
@@ -147,6 +148,102 @@ function useThreadTabPersistence(
       activeThreadTab: activeThreadTabRaw,
     });
   }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor]);
+}
+
+/** The feed props GameWindow takes, present only when we are inside a scene. */
+function sceneFeedProps(
+  sceneId: string | undefined,
+  interactions: ComponentProps<typeof GameWindow>['sceneFeed'] extends infer T
+    ? T extends { interactions: infer I }
+      ? I
+      : never
+    : never,
+  hasNextPage: boolean,
+  fetchNextPage: () => void
+): ComponentProps<typeof GameWindow>['sceneFeed'] {
+  if (!sceneId) return undefined;
+  return { sceneId, interactions, hasNextPage, fetchNextPage };
+}
+
+/** How the composer labels the speaker, when a character is assumed. */
+function speakingAsProps(
+  entry: { name: string; profile_picture_url?: string | null } | null
+): ComponentProps<typeof GameWindow>['speakingAs'] {
+  if (!entry) return undefined;
+  return { name: entry.name, thumbnailUrl: entry.profile_picture_url ?? null };
+}
+
+/** The three widgets that only exist while standing in a place. */
+function placeWidgets(placesRoomId: string | null | undefined) {
+  if (!placesRoomId) return {};
+  return {
+    placeBar: <PlaceBar sceneId={placesRoomId} />,
+    tavernGameWidget: <TavernGameWidget roomId={placesRoomId} />,
+    speakerQueueBar: <SpeakerQueueBar roomId={placesRoomId} />,
+  };
+}
+
+interface GameRightSidebarProps {
+  roomTabLabel: string;
+  isDreaming: boolean;
+  activeCharacterId: number | null;
+  active: string | null;
+  focus: ComponentProps<typeof FocusPanel>['focus'];
+  roomData: ComponentProps<typeof FocusPanel>['roomData'];
+  sceneData: ComponentProps<typeof FocusPanel>['sceneData'];
+  hasActiveEncounter: boolean;
+  hasActiveBattle: boolean;
+}
+
+/** The right-hand tab rail: room/focus, stories, events, presence, sheet panels. */
+function GameRightSidebar({
+  roomTabLabel,
+  isDreaming,
+  activeCharacterId,
+  active,
+  focus,
+  roomData,
+  sceneData,
+  hasActiveEncounter,
+  hasActiveBattle,
+}: GameRightSidebarProps) {
+  return (
+    <SidebarTabPanel
+      roomTabLabel={roomTabLabel}
+      roomPanel={
+        isDreaming && activeCharacterId && active ? (
+          <DreamspacePanel characterId={activeCharacterId} characterName={active} />
+        ) : (
+          <FocusPanel
+            focus={focus}
+            roomCharacter={active}
+            roomData={roomData}
+            sceneData={sceneData}
+            hasActiveEncounter={hasActiveEncounter}
+            hasActiveBattle={hasActiveBattle}
+          />
+        )
+      }
+      storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
+      eventsPanel={
+        <>
+          <CeremonyRoomCard roomId={roomData ? String(roomData.id) : undefined} />
+          <EventsSidebarPanel />
+        </>
+      }
+      presencePanel={<PresencePanel />}
+      statusPanel={
+        activeCharacterId ? (
+          <StatusPanel characterId={activeCharacterId} characterName={active ?? undefined} />
+        ) : undefined
+      }
+      inventoryPanel={
+        activeCharacterId ? <InventorySidebarPanel characterId={activeCharacterId} /> : undefined
+      }
+      journalPanel={<JournalTab />}
+      travelPanel={activeCharacterId ? <VoyagePanel characterId={activeCharacterId} /> : undefined}
+    />
+  );
 }
 
 export function GamePage() {
@@ -577,16 +674,7 @@ export function GamePage() {
             {sceneId && <ConsentPrompt sceneId={sceneId} />}
             <GameWindow
               characters={characters}
-              sceneFeed={
-                sceneId
-                  ? {
-                      sceneId,
-                      interactions: tabInteractions,
-                      hasNextPage,
-                      fetchNextPage,
-                    }
-                  : undefined
-              }
+              sceneFeed={sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage)}
               composerMode={effectiveComposerMode}
               onModeChange={setComposerMode}
               personaId={personaId}
@@ -604,16 +692,8 @@ export function GamePage() {
               onPoseSubmitted={handlePoseSubmitted}
               isAtPlace={isAtPlace}
               conversationTabs={conversationTabs}
-              speakingAs={
-                activeEntry
-                  ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
-                  : undefined
-              }
-              placeBar={placesRoomId ? <PlaceBar sceneId={placesRoomId} /> : undefined}
-              tavernGameWidget={
-                placesRoomId ? <TavernGameWidget roomId={placesRoomId} /> : undefined
-              }
-              speakerQueueBar={placesRoomId ? <SpeakerQueueBar roomId={placesRoomId} /> : undefined}
+              speakingAs={speakingAsProps(activeEntry)}
+              {...placeWidgets(placesRoomId)}
               pendingAttachments={
                 sceneId ? (
                   <PendingActionAttachments
@@ -630,44 +710,16 @@ export function GamePage() {
           </>
         }
         rightSidebar={
-          <SidebarTabPanel
+          <GameRightSidebar
             roomTabLabel={roomTabLabel}
-            roomPanel={
-              isDreaming && activeCharacterId && active ? (
-                <DreamspacePanel characterId={activeCharacterId} characterName={active} />
-              ) : (
-                <FocusPanel
-                  focus={focus}
-                  roomCharacter={active}
-                  roomData={roomData}
-                  sceneData={sceneData}
-                  hasActiveEncounter={hasActiveEncounter}
-                  hasActiveBattle={hasActiveBattle}
-                />
-              )
-            }
-            storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
-            eventsPanel={
-              <>
-                <CeremonyRoomCard roomId={roomData ? String(roomData.id) : undefined} />
-                <EventsSidebarPanel />
-              </>
-            }
-            presencePanel={<PresencePanel />}
-            statusPanel={
-              activeCharacterId ? (
-                <StatusPanel characterId={activeCharacterId} characterName={active ?? undefined} />
-              ) : undefined
-            }
-            inventoryPanel={
-              activeCharacterId ? (
-                <InventorySidebarPanel characterId={activeCharacterId} />
-              ) : undefined
-            }
-            journalPanel={<JournalTab />}
-            travelPanel={
-              activeCharacterId ? <VoyagePanel characterId={activeCharacterId} /> : undefined
-            }
+            isDreaming={isDreaming}
+            activeCharacterId={activeCharacterId}
+            active={active}
+            focus={focus}
+            roomData={roomData}
+            sceneData={sceneData}
+            hasActiveEncounter={hasActiveEncounter}
+            hasActiveBattle={hasActiveBattle}
           />
         }
       />
