@@ -3604,6 +3604,9 @@ class StakeRewardLineViewSet(viewsets.ModelViewSet):
     queryset = StakeRewardLine.objects.select_related(
         "resolution__stake__beat",
         "resonance",
+        "item_template",
+        "clue",
+        "codex_entry",
     )
     serializer_class = StakeRewardLineSerializer
     permission_classes = [IsStakeRewardLineBeatStoryOwnerOrStaff]

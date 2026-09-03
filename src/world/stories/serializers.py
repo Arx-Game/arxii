@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Prefetch
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
@@ -1048,6 +1049,19 @@ def _gm_allows_global_scope(user) -> bool:
     except GMProfile.DoesNotExist:
         return False
     return bool(cap and cap.allow_global_scope_authoring)
+
+
+def _gm_allows_item_rewards(user) -> bool:
+    """Whether a non-staff author's GMLevelCap permits ITEM-sink stake rewards (#3566).
+
+    No GMProfile or no cap row → False (most-restrictive fallback, mirrors
+    ``_gm_allows_custom_stakes``).
+    """
+    try:
+        cap = cap_for_profile(user.gm_profile)
+    except GMProfile.DoesNotExist:
+        return False
+    return bool(cap and cap.allow_item_rewards)
 
 
 class BeatOpponentLineSerializer(serializers.ModelSerializer):
@@ -3524,12 +3538,23 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
     walk via resolution.stake.beat (create-path enforcement), the two-sided
     open-activation lock, the completed-beat refusal, the WIN-column-only
-    rule, and the sink/resonance shape rule (resonance required iff
-    sink=RESONANCE; amount >= 1 rides the model validator).
+    rule, and the per-sink FK shape rule generalised over
+    ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+    every other sink field must stay null, mirroring the model's ``clean()``).
+    Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+    the template's value (never author-supplied) and is refused for a
+    non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+    refused for a non-resolvable target kind or a target kind the author's
+    clue-authoring policy (``clue_target_kind_allowed``) does not permit.
     Banding against the tier's reward floor/ceiling is deliberately NOT
     rejected here — out-of-band rewards make the contract UNREADY instead
     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
     """
+
+    amount = serializers.IntegerField(required=False, min_value=1)
+    item_template_name = serializers.SerializerMethodField()
+    clue_name = serializers.SerializerMethodField()
+    codex_entry_name = serializers.SerializerMethodField()
 
     class Meta:
         model = StakeRewardLine
@@ -3539,8 +3564,23 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
             "sink",
             "amount",
             "resonance",
+            "item_template",
+            "clue",
+            "codex_entry",
+            "item_template_name",
+            "clue_name",
+            "codex_entry_name",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "item_template_name", "clue_name", "codex_entry_name"]
+
+    def get_item_template_name(self, obj: StakeRewardLine) -> str:
+        return obj.item_template.name if obj.item_template_id else ""
+
+    def get_clue_name(self, obj: StakeRewardLine) -> str:
+        return obj.clue.name if obj.clue_id else ""
+
+    def get_codex_entry_name(self, obj: StakeRewardLine) -> str:
+        return obj.codex_entry.name if obj.codex_entry_id else ""
 
     def validate(self, attrs: Any) -> Any:
         """Ownership gate + two-sided lock check via the (possibly re-pointed) resolution."""
@@ -3568,9 +3608,86 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
                 {"resolution": "Reward lines only attach to WIN-column resolutions."}
             )
 
+        sink = attrs.get("sink")
+        if sink is None and self.instance is not None:
+            sink = self.instance.sink
+
+        # ITEM pins amount to the template's value BEFORE the generalised shape
+        # check below (which mirrors the model's clean()) so that check sees the
+        # pinned amount rather than a client-supplied or missing one (#3566).
+        if sink == StakeRewardSink.ITEM:
+            self._validate_item_reward(attrs, user, is_staff)
+        elif sink == StakeRewardSink.CLUE:
+            self._validate_clue_reward(attrs, user)
+
+        self._validate_amount_required(attrs, sink)
         self._validate_sink_shape(attrs)
 
         return attrs
+
+    def _validate_item_reward(self, attrs: Any, user: Any, is_staff: bool) -> None:
+        """ITEM sink: cap-gate the author, then pin amount to the template's value.
+
+        An ItemTemplate's ``value`` IS the reward's money-equivalent scalar
+        (#3566): the author never sets amount directly, and a differing
+        client-supplied amount is rejected rather than silently overridden.
+        """
+        template = attrs.get("item_template")
+        if template is None and self.instance is not None:
+            template = self.instance.item_template
+        if template is None:
+            return  # _validate_sink_shape below raises "Required when sink is item."
+        if template.value < 1:
+            raise serializers.ValidationError(
+                {"item_template": "Item template must have a positive value to be a reward."}
+            )
+        if not is_staff and not _gm_allows_item_rewards(user):
+            raise serializers.ValidationError(
+                {"item_template": "Your GM level may not author item rewards."}
+            )
+        supplied_amount = attrs.get("amount")
+        if supplied_amount is not None and supplied_amount != template.value:
+            raise serializers.ValidationError(
+                {"amount": "Amount must equal the item template's value; leave it unset."}
+            )
+        attrs["amount"] = template.value
+
+    def _validate_clue_reward(self, attrs: Any, user: Any) -> None:
+        """CLUE sink: only a resolvable target kind, gated by the clue-authoring policy.
+
+        ``clue_target_kind_allowed`` already returns True for staff, so no
+        separate staff bypass is needed here (#3566).
+        """
+        from world.clues.services import (  # noqa: PLC0415
+            RESOLVABLE_CLUE_TARGET_KINDS,
+            clue_target_kind_allowed,
+        )
+
+        clue = attrs.get("clue")
+        if clue is None and self.instance is not None:
+            clue = self.instance.clue
+        if clue is None:
+            return  # _validate_sink_shape below raises "Required when sink is clue."
+        if clue.target_kind not in RESOLVABLE_CLUE_TARGET_KINDS:
+            raise serializers.ValidationError(
+                {
+                    "clue": (
+                        "Reward clues must point at a codex entry, rescue, secret or persona link."
+                    )
+                }
+            )
+        if not clue_target_kind_allowed(user, clue.target_kind):
+            raise serializers.ValidationError(
+                {"clue": "Your GM level may not aim a clue at this target."}
+            )
+
+    def _validate_amount_required(self, attrs: Any, sink: Any) -> None:
+        """``amount`` is required on create for every sink but ITEM (pinned above)."""
+        if sink == StakeRewardSink.ITEM:
+            return
+        has_amount = attrs.get("amount") is not None or self.instance is not None
+        if not has_amount:
+            raise serializers.ValidationError({"amount": "Required for this sink."})
 
     def _check_reward_line_ownership(
         self, user: Any, is_staff: bool, resolution: Any, old_resolution: Any, is_repoint: bool
@@ -3625,7 +3742,12 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(msg)
 
     def _validate_sink_shape(self, attrs: Any) -> None:
-        """Resonance required iff sink=RESONANCE (mirrors StakeRewardLine.clean)."""
+        """Exactly the sink's FK is required; every other sink's FK stays null.
+
+        Generalised over ``StakeRewardLine.SINK_FIELDS`` (#3566), mirroring the
+        model's ``clean()``, one field per sink (resonance/item_template/
+        clue/codex_entry).
+        """
 
         def merged(field_name: str, default: Any) -> Any:
             if field_name in attrs:
@@ -3635,11 +3757,16 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
             return default
 
         sink = merged("sink", default="")
-        resonance = merged("resonance", default=None)
-        if sink == StakeRewardSink.RESONANCE and resonance is None:
-            raise serializers.ValidationError({"resonance": "Required when sink is RESONANCE."})
-        if sink != StakeRewardSink.RESONANCE and resonance is not None:
-            raise serializers.ValidationError({"resonance": "Only allowed when sink is RESONANCE."})
+        for candidate_sink, field_name in StakeRewardLine.SINK_FIELDS.items():
+            value = merged(field_name, default=None)
+            if sink == candidate_sink and value is None:
+                raise serializers.ValidationError(
+                    {field_name: f"Required when sink is {candidate_sink}."}
+                )
+            if sink != candidate_sink and value is not None:
+                raise serializers.ValidationError(
+                    {field_name: f"Only allowed when sink is {candidate_sink}."}
+                )
 
 
 class StakeResolutionSerializer(serializers.ModelSerializer):
@@ -3846,20 +3973,47 @@ class StakeContractActivationSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+# Which player-visible reward *kind* label a sink surfaces on the stakes
+# summary (#3566). CLUE and CODEX both read as "knowledge": the summary
+# names the category a win unlocks, not which delivery mechanism carries it.
+REWARD_KIND_BY_SINK = {
+    StakeRewardSink.MONEY: "money",
+    StakeRewardSink.RESONANCE: "resonance",
+    StakeRewardSink.ITEM: "item",
+    StakeRewardSink.CLUE: "knowledge",
+    StakeRewardSink.CODEX: "knowledge",
+}
+
+
 class StakeSummarySerializer(serializers.ModelSerializer):
     """Player-visible summary of one Stake (#1770 pillar 9).
 
     What is wagered is visible; branch contents stay hidden — resolutions
     (consequence pools, escalations, narrative) are deliberately NOT fields
-    here and must never be added.
+    here and must never be added. ``reward_kinds`` is the one exception in
+    spirit only: it names the WIN branch's payout *categories*
+    (money/resonance/item/knowledge), never an amount, template, clue or
+    codex entry, so it carries none of the branch content the rule above
+    forbids (#3566).
     """
 
     severity_label = serializers.CharField(source="get_severity_display", read_only=True)
+    reward_kinds = serializers.SerializerMethodField()
 
     class Meta:
         model = Stake
-        fields = ["id", "player_summary", "severity", "severity_label"]
+        fields = ["id", "player_summary", "severity", "severity_label", "reward_kinds"]
         read_only_fields = fields
+
+    def get_reward_kinds(self, stake: Stake) -> list[str]:
+        """Sorted, deduped reward-kind labels across the stake's WIN branch(es)."""
+        kinds = {
+            REWARD_KIND_BY_SINK[line.sink]
+            for resolution in stake.prefetched_resolutions
+            if resolution.column == StakeResolutionColumn.WIN
+            for line in resolution.prefetched_reward_lines
+        }
+        return sorted(kinds)
 
 
 class BeatReadinessSerializer(serializers.Serializer):
@@ -3902,19 +4056,36 @@ def stakes_summary_for_beat(beat: Beat) -> dict:
 
     Shared by the BeatViewSet ``stakes-summary`` endpoint and the combat
     consent-prompt surface (``combat_stakes``) so the shape stays single-
-    sourced. Leaks only player_summary/severity by design (#1770 pillar 9).
+    sourced. Leaks only player_summary/severity/reward_kinds by design
+    (#1770 pillar 9). ``resolutions__reward_lines`` is prefetched onto
+    ``prefetched_resolutions``/``prefetched_reward_lines`` (mirrors
+    ``stakes.py::_stakes_with_authored_branches``) so ``StakeSummarySerializer
+    .get_reward_kinds`` never queries per stake (#3566).
     """
     from world.stories.services.stakes import (  # noqa: PLC0415
         effective_risk_for_beat,
         validate_stakes_readiness,
     )
 
+    stakes = beat.stakes.prefetch_related(
+        Prefetch(
+            "resolutions",
+            queryset=StakeResolution.objects.prefetch_related(
+                Prefetch(
+                    "reward_lines",
+                    queryset=StakeRewardLine.objects.all(),
+                    to_attr="prefetched_reward_lines",
+                )
+            ),
+            to_attr="prefetched_resolutions",
+        )
+    )
     return StakesSummarySerializer(
         {
             "declared_risk": beat.risk,
             "effective_risk": effective_risk_for_beat(beat),
             "is_ready": validate_stakes_readiness(beat).is_ready,
-            "stakes": beat.stakes.all(),
+            "stakes": stakes,
         }
     ).data
 
