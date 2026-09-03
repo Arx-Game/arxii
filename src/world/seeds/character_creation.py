@@ -956,7 +956,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "trust_required": 0,
             "is_active": True,
             "sort_order": 0,
-            "family_known": False,
         },
     )
     beginnings_noble, _ = Beginnings.objects.get_or_create(
@@ -967,7 +966,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "trust_required": 0,
             "is_active": True,
             "sort_order": 1,
-            "family_known": True,
         },
     )
     beginnings_luxen, _ = Beginnings.objects.get_or_create(
@@ -978,7 +976,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "trust_required": 0,
             "is_active": True,
             "sort_order": 2,
-            "family_known": False,
         },
     )
     # Arx beginnings: Human only. Luxen beginnings: Human + Khati.

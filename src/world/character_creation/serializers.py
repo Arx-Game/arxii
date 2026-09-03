@@ -88,7 +88,6 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "art_image",
-            "family_known",
             "allowed_species_ids",
             "grants_species_languages",
             "cg_point_cost",

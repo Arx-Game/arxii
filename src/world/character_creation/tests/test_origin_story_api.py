@@ -27,6 +27,7 @@ class CGOriginTemplateAPITest(TestCase):
             beginning=self.beginning,
             name="Escape",
             frame_narrative="Your story begins with escape.",
+            allows_no_family=True,
         )
         self.slot = OriginTemplateSlot.objects.create(
             template=self.template,
@@ -39,6 +40,7 @@ class CGOriginTemplateAPITest(TestCase):
             name="Inactive",
             frame_narrative="...",
             is_active=False,
+            allows_no_family=True,
         )
 
     def test_list_templates_for_beginning(self) -> None:
@@ -79,7 +81,7 @@ class PostCGOriginSlotAPITest(TestCase):
         cls.area = StartingArea.objects.create(name="PostCG Area")
         cls.beginning = Beginnings.objects.create(name="PostCG Beginning", starting_area=cls.area)
         cls.template = OriginTemplate.objects.create(
-            beginning=cls.beginning, name="Escape", frame_narrative="..."
+            beginning=cls.beginning, name="Escape", frame_narrative="...", allows_no_family=True
         )
         cls.slot = OriginTemplateSlot.objects.create(
             template=cls.template, name="Who helped?", prompt="..."
