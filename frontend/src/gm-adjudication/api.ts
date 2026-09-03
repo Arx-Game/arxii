@@ -88,7 +88,8 @@ export async function getDiscovery(q: string, risk: string | null): Promise<Disc
   if (q) params.set('q', q);
   if (risk) params.set('risk', risk);
   const qs = params.toString();
-  const res = await apiFetch(`/api/gm/discovery/${qs ? `?${qs}` : ''}`);
+  const query = qs ? `?${qs}` : '';
+  const res = await apiFetch(`/api/gm/discovery/${query}`);
   await throwOnBadResponse(res, 'Failed to load discovery catalog');
   return (await res.json()) as DiscoveryResult;
 }

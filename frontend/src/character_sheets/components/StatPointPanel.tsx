@@ -61,12 +61,14 @@ export function StatPointPanel({ sheetId }: StatPointPanelProps) {
 
   if (!data) return null;
 
+  const pointNoun = data.available_points === 1 ? 'point' : 'points';
+
   return (
     <section>
       <h3 className="text-xl font-semibold">Stat Points</h3>
       <p className="text-sm text-muted-foreground">
         {data.available_points > 0
-          ? `${data.available_points} point${data.available_points === 1 ? '' : 's'} earned by your levels; spend them below.`
+          ? `${data.available_points} ${pointNoun} earned by your levels; spend them below.`
           : 'No stat points waiting. Each new level grants one.'}
       </p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}

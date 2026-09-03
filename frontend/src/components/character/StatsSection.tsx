@@ -25,6 +25,8 @@ export function StatsSection({
   vocation,
   socialRank,
 }: StatsSectionProps) {
+  const subraceSuffix = race?.subrace ? ` (${race.subrace.name})` : '';
+
   return (
     <section>
       <h3 className="text-xl font-semibold">Stats</h3>
@@ -40,11 +42,7 @@ export function StatsSection({
         <dt>Gender</dt>
         <dd>{gender ?? 'TBD'}</dd>
         <dt>Race</dt>
-        <dd>
-          {race?.race?.name
-            ? `${race.race.name}${race.subrace ? ` (${race.subrace.name})` : ''}`
-            : 'TBD'}
-        </dd>
+        <dd>{race?.race?.name ? `${race.race.name}${subraceSuffix}` : 'TBD'}</dd>
         <dt>Class</dt>
         <dd>{charClass ?? 'TBD'}</dd>
         <dt>Level</dt>

@@ -76,6 +76,9 @@ function ConsentCard({
   onAccept,
   isPending,
 }: ConsentCardProps) {
+  const sumTierPrefix = boon?.sum_tier ? `a ${boon.sum_tier} sum; ` : '';
+  const vaultSuffix = boon?.kind === 'vault_item' ? ' from your vault' : '';
+
   return (
     <div className="flex items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
       <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
@@ -90,11 +93,10 @@ function ConsentCard({
         </p>
         {boon && (
           <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
-            {boon.kind === 'money' &&
-              `They ask for ${boon.sum_tier ? `a ${boon.sum_tier} sum; ` : ''}${boon.amount} coppers.`}
+            {boon.kind === 'money' && `They ask for ${sumTierPrefix}${boon.amount} coppers.`}
             {boon.kind === 'deed' && `They ask a deed of you: "${boon.deed_text}"`}
             {(boon.kind === 'held_item' || boon.kind === 'vault_item') &&
-              `They ask for ${boon.item_name ?? 'an item'}${boon.kind === 'vault_item' ? ' from your vault' : ''}.`}
+              `They ask for ${boon.item_name ?? 'an item'}${vaultSuffix}.`}
             {boon.kind === 'material' &&
               `They ask for ${boon.sum_tier ? `a ${boon.sum_tier} amount of ` : ''}${boon.material_category_name ?? 'a crafting material'}.`}
           </p>

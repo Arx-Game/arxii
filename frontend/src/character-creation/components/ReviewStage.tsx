@@ -97,6 +97,12 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   // the result. Reduced to what it actually evaluated to; if an unknown family was
   // meant to read differently, that behaviour was never present to preserve.
   const familyName = draft.family?.name ?? '';
+  // Unlike familyName above (which feeds composeFullName and must stay blank),
+  // the review row spells out a deliberately-unknown family.
+  const unknownFamily = draft.selected_beginnings?.family_known === false ? 'Unknown' : '';
+  const familyDisplay = draft.draft_data.lineage_is_orphan
+    ? 'Orphan / No Family'
+    : (draft.family?.name ?? unknownFamily);
   const fullName = composeFullName(draftData.first_name, familyName, 'Unnamed Character');
 
   const appStatus = application.data?.status ?? null;
@@ -306,15 +312,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
             <div>
               <h4 className="mb-2 font-semibold">Lineage</h4>
-              <InfoRow
-                label="Family"
-                value={
-                  draft.draft_data.lineage_is_orphan
-                    ? 'Orphan / No Family'
-                    : (draft.family?.name ??
-                      (draft.selected_beginnings?.family_known === false ? 'Unknown' : ''))
-                }
-              />
+              <InfoRow label="Family" value={familyDisplay} />
             </div>
           </section>
         </CardContent>
