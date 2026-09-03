@@ -33,7 +33,8 @@ from world.roster.models import (
 
 
 class FamilyKindFactory(factory_django.DjangoModelFactory):
-    """Family kinds (#3617). get_or_create on name so tests share the migration rows.
+    """Family kinds (#3617). get_or_creates the canonical row by name, so every test
+    that asks for the same name shares one row (migrations never run in test DBs).
 
     ``styles_as_house`` tracks the canonical ``NOBLE_KIND_NAME`` row (test tiers build
     schema straight from model state and never replay migration 0219's backfill, so

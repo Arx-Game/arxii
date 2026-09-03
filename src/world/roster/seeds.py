@@ -105,7 +105,7 @@ def ensure_rosters() -> dict[str, Roster]:
     return rosters
 
 
-# (name, styles_as_house, sort_order) — mirrors migration 0219's KINDS tuple
+# (name, styles_as_house, sort_order): mirrors migration 0219's KINDS tuple
 # (world/migrations/0219_familykind_family_kind_influence.py), which backfills
 # these onto a real deploy. Test tiers build schema straight from model state
 # and never replay migration RunPython (server/conf/sqlite_test_settings.py's

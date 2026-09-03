@@ -80,7 +80,7 @@ export interface CGPointsBreakdown {
 export interface Family {
   id: number;
   name: string;
-  // #3617 — authored kind row (was a 'commoner' | 'noble' | 'crime' code).
+  // #3617: authored kind row (was a 'commoner' | 'noble' | 'crime' code).
   kind: { id: number; name: string; styles_as_house: boolean };
   influence: number;
   description: string;
