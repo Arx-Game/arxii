@@ -441,8 +441,7 @@ Researched 2026-09-03 against allauth 65.14.1 and the prod infra in
 - `web/api/tests/test_account_security_settings.py` - `GET`/`PATCH`
   `/api/account/security-settings/`, default value, anonymous 403.
 - `web/api/tests/test_mfa_wiring.py` - the `fido2` dependency-guard import
-  smoke test, and the encryption system check against a truncated and a valid
-  `MFA_SECRETS_KEY`.
+  smoke test, the headless MFA routes resolving, and the settings block.
 - `evennia_extensions/tests/test_mfa_adapter.py` - `ArxMFAAdapter` encrypt and
   decrypt round-trip, a second key prepended to `MFA_SECRETS_KEY` still
   decrypting rows written under the first, a wrong key raising instead of
