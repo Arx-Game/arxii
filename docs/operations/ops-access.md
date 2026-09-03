@@ -83,3 +83,27 @@ pair before the next session.
 Inside the container: `ssh -o BatchMode=yes -o ConnectTimeout=5 arxii-prod true`
 — exits 0 when open; "Connection refused"/"No route to host" when closed.
 The postStart output also prints the gate state on every container start.
+
+## Reading the game logs
+
+Since #3599 the game writes its log files to `/var/log/arxii` on the box
+(`LOG_DIR` in the EnvironmentFile; `roles/app_deploy` creates the directory
+as `arxii:adm` 0750 and a systemd-tmpfiles rule deletes files older than 30
+days). `arxops` is in `adm`, so with the gate open it reads them with no sudo:
+
+```bash
+ssh arxii-prod tail -n 200 /var/log/arxii/server.log
+ssh arxii-prod grep -n 'AccountDB' /var/log/arxii/server.log
+ssh arxii-prod ls -la /var/log/arxii            # rotated copies: server.log.YYYY_MM_DD
+ssh arxii-prod journalctl -u arxii --since '1 hour ago' --no-pager
+```
+
+`server.log` is the game process (Evennia's own lines plus, since #3599,
+Django's `logging` output, which used to be discarded in daemon mode);
+`portal.log` is the network process; `http_requests.log` is one line per
+web request, including client IPs. Every error-level line in `server.log`
+is also a Sentry event (tag `logger: evennia.twisted`), so check Sentry
+before opening the gate for a traceback.
+
+A production traceback never goes into a public issue or PR
+([ADR-0254](../adr/0254-sentry-digest-is-a-pointer-not-a-reproduction.md)).
