@@ -4,7 +4,7 @@ Same fixture style as ``test_services_resolution_resolve.py``: a track node
 (``track_successes=2, track_failures=2``) with ``track_success_target=win_node``,
 ``track_failure_target=None``, ``track_failure_beat_outcome=FAILURE``, and one
 CHECK option whose per-tier routes have ``target_node=None`` (a track's CHECK
-routes never route themselves — the track decides).
+routes never route themselves - the track decides).
 """
 
 from __future__ import annotations
