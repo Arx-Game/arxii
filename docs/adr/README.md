@@ -311,4 +311,5 @@ treat those names as hints to confirm, not gospel.
 - [0260 - request.user is the Account typeclass; account data caches on the Account, request data goes through middleware](0260-request-user-is-the-account-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
 - [0261 - No .only() or .defer() on identity-mapped models](0261-no-only-or-defer-on-identity-mapped-models.md) (Sentry ARX2-9; extends ADR-0008; `lint-only-defer` hook)
 - [0262 - The routing report is advisory and open-world](0262-routing-report-is-advisory-and-open-world.md) (#3563; extends ADR-0258; related ADR-0259)
+- [0263 - No to_attr prefetch onto identity-mapped instances](0263-no-to-attr-prefetch-onto-identity-mapped-instances.md) (#3564, found in #3563; extends ADR-0008, ADR-0261)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

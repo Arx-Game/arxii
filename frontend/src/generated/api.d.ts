@@ -8794,6 +8794,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/discovery/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/gm/discovery/?q=&risk=: the catalog browse the web GM panel
+     *     and the beat form use (#3564). Same search as telnet ``setsituation find``;
+     *     kinds above the caller's tier never appear. Read-only, never writes a pool.
+     */
+    get: operations['gm_discovery_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/invites/': {
     parameters: {
       query?: never;
@@ -26797,7 +26818,7 @@ export interface components {
     ConsentResponseRequest: {
       decision: components['schemas']['DecisionEnum'];
       target_persona_id?: number;
-      difficulty?: components['schemas']['DifficultyEnum'];
+      difficulty?: components['schemas']['DifficultyChoiceEnum'];
       /** @default  */
       resist_effort: components['schemas']['ResistEffortEnum'] | components['schemas']['BlankEnum'];
       /** @default false */
@@ -27607,16 +27628,6 @@ export interface components {
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
     /**
-     * @description * `trivial` - Trivial
-     *     * `easy` - Easy
-     *     * `normal` - Normal
-     *     * `hard` - Hard
-     *     * `daunting` - Daunting
-     *     * `harrowing` - Harrowing
-     * @enum {string}
-     */
-    DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
-    /**
      * @description * `favor` - Favor
      *     * `disfavor` - Disfavor
      * @enum {string}
@@ -27648,6 +27659,67 @@ export interface components {
        *     ``discovered_by_tenure`` here.
        */
       readonly shared: boolean;
+    };
+    /** @description Lightweight serializer for challenge template list views. */
+    DiscoveryChallenge: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
+      severity?: number;
+      challenge_type?: components['schemas']['ChallengeTypeEnum'];
+      discovery_type?: components['schemas']['DiscoveryTypeEnum'];
+      /** @description Template string with {variables} for instance-specific text. */
+      description_template?: string;
+      goal?: string;
+    };
+    DiscoveryCheckFit: {
+      check_type: components['schemas']['DiscoveryCheckType'];
+      fit_notes: string;
+    };
+    DiscoveryCheckType: {
+      id: number;
+      name: string;
+    };
+    DiscoveryDifficultyGuide: {
+      risk: components['schemas']['RiskEnum'];
+      recommended_difficulty: components['schemas']['DifficultyChoiceEnum'];
+      guidance_text: string;
+    };
+    /** @description One KindResult on the wire (#3564). */
+    DiscoveryKind: {
+      id: number;
+      name: string;
+      description: string;
+      minimum_gm_level: components['schemas']['MinimumGmLevelEnum'];
+      check_fits: components['schemas']['DiscoveryCheckFit'][];
+      difficulty_guide: components['schemas']['DiscoveryDifficultyGuide'] | null;
+      all_guides: components['schemas']['DiscoveryDifficultyGuide'][];
+      pool_guides: components['schemas']['DiscoveryPoolGuide'][];
+    };
+    DiscoveryPool: {
+      id: number;
+      name: string;
+    };
+    DiscoveryPoolGuide: {
+      pool: components['schemas']['DiscoveryPool'];
+      selection_criteria: string;
+      is_default: boolean;
+    };
+    /** @description DiscoveryResult on the wire (#3564); the GMEvidenceSummary pattern. */
+    DiscoveryResult: {
+      templates: components['schemas']['DiscoveryTemplate'][];
+      challenges: components['schemas']['DiscoveryChallenge'][];
+      kinds: components['schemas']['DiscoveryKind'][];
+    };
+    /** @description Lightweight serializer for situation template list views. */
+    DiscoveryTemplate: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      description_template?: string;
     };
     /**
      * @description * `obvious` - Obvious (visible if capability met)
@@ -29511,7 +29583,7 @@ export interface components {
     /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
     GMEvidenceSummary: {
       profile_id: number;
-      level: components['schemas']['NewLevelEnum'];
+      level: components['schemas']['LevelE58Enum'];
       /** Format: date-time */
       approved_at: string;
       /** Format: date-time */
@@ -29527,7 +29599,7 @@ export interface components {
     GMLevelChange: {
       readonly id: number;
       readonly profile: number;
-      readonly old_level: components['schemas']['NewLevelEnum'];
+      readonly old_level: components['schemas']['OldLevelEnum'];
       readonly old_level_display: string;
       readonly new_level: components['schemas']['NewLevelEnum'];
       readonly new_level_display: string;
@@ -29544,7 +29616,7 @@ export interface components {
       readonly id: number;
       readonly account: number;
       readonly account_username: string;
-      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level: components['schemas']['LevelE58Enum'];
       readonly level_display: string;
       /**
        * Format: date-time
@@ -29562,7 +29634,7 @@ export interface components {
      */
     GMProfileMine: {
       readonly id: number;
-      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level: components['schemas']['LevelE58Enum'];
       readonly level_display: string;
       /** @description When players can reach this GM (freeform, shown on their GM card). */
       contact_times?: string;
@@ -31449,6 +31521,15 @@ export interface components {
      * @enum {integer}
      */
     LevelC97Enum: 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90;
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    LevelE58Enum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
       readonly id: number;
@@ -31709,6 +31790,15 @@ export interface components {
      * @enum {string}
      */
     MinRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    MinimumGmLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description POST body for the #3478 GM-character mint (moved from world-builder, #3283). */
     MintGMCharacterRequestRequest: {
       name: string;
@@ -33342,6 +33432,15 @@ export interface components {
      * @enum {string}
      */
     OfferSummonsStatusEnum: 'pending' | 'accepted' | 'declined' | 'expired';
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    OldLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /**
      * @description Read serializer for combat opponents.
      *
@@ -57665,6 +57764,35 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  gm_discovery_retrieve: {
+    parameters: {
+      query?: {
+        q?: string;
+        /**
+         * @description * `none` - None
+         *     * `low` - Low
+         *     * `moderate` - Moderate
+         *     * `high` - High
+         *     * `extreme` - Extreme
+         */
+        risk?: 'none' | 'low' | 'moderate' | 'high' | 'extreme' | '';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DiscoveryResult'];
+        };
       };
     };
   };

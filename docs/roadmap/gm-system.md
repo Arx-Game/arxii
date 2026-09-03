@@ -383,6 +383,21 @@ Delivered this increment:
   a `SituationDifficultyGuide` row per `RenownRisk` tier, seeded idempotently
   by `world.gm.factories.seed_catalog_starter_content`, composed into the
   existing `"gm"` cluster seeder.
+- **Web face (#3564)**: the browse logic moved into one service,
+  `find_situations` (`world/gm/services.py`), behind two faces: telnet's
+  `FindSituationAction` now formats its result instead of searching itself,
+  and a new `GET /api/gm/discovery/?q=&risk=` (`DiscoveryView`,
+  `IsAuthenticated` + `IsGMOrStaff`) serves the web GM panel and the beat
+  form. An empty query is a kind-first cold open (every kind within the
+  caller's breadth, no templates or challenges); telnet's own empty-query
+  listing changed to match, so seeing kinds only at the console is the new
+  behaviour, not a regression. Web: `SituationFinder.tsx`
+  (`frontend/src/gm-adjudication/`) renders kind cards with fits, difficulty
+  guides and advisory pool guidance, plus templates and challenges, behind a
+  "Browse the catalog" toggle in beat prep's staged-templates editor, the
+  scene panel's Situation tab (one-click Stage/Place), and its Call Check tab
+  (band pre-fill from the running beat's risk); `CatalogSuggestionDialog.tsx`
+  dispatches `gm_submit_catalog_suggestion` from the finder.
 
 Deferred (premises verified in the #2127 spec's anti-reinvention pass):
 - Encounter- and mission-type find/browse (separate PR per Decision 1).

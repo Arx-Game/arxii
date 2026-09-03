@@ -51,10 +51,9 @@
  * setting `Scene.running_beat` (`actions/definitions/gm_story.py`).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import type { DispatchResult } from '@/combat/types';
@@ -63,6 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { SituationFinder } from '@/gm-adjudication/SituationFinder';
 import type { SceneDetail, ScenePersona } from '../types';
 import {
   useCheckTypeCatalog,
@@ -133,12 +133,38 @@ interface TabProps {
   targetCharacterId: number | null;
 }
 
-function CallCheckTab({ characterId, targetCharacterId }: TabProps) {
+/**
+ * Toggle button for the collapsible catalog browser (#3564) - each host
+ * keeps its own open/closed state so the tab doesn't grow by default.
+ */
+function FinderToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      data-testid="finder-toggle"
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      {open ? 'Hide the catalog' : 'Browse the catalog'}
+    </Button>
+  );
+}
+
+function CallCheckTab({
+  characterId,
+  targetCharacterId,
+  runningRisk,
+}: TabProps & {
+  runningRisk: string | null;
+}) {
   const [search, setSearch] = useState('');
   const [checkTypeId, setCheckTypeId] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<DifficultyBand>('normal');
   const [shiftKind, setShiftKind] = useState<'' | 'edge' | 'setback'>('');
   const [shiftReason, setShiftReason] = useState('');
+  const [finderOpen, setFinderOpen] = useState(false);
   const { data: checkTypes = [] } = useCheckTypeCatalog(search, true);
   const dispatch = useDispatchPlayerAction(characterId);
 
@@ -161,6 +187,25 @@ function CallCheckTab({ characterId, targetCharacterId }: TabProps) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-check-tab">
+      <FinderToggle open={finderOpen} onToggle={() => setFinderOpen((v) => !v)} />
+      {finderOpen && (
+        <SituationFinder
+          risk={runningRisk}
+          characterId={characterId}
+          actions={{
+            check: {
+              label: 'Use this check',
+              onSelect: (check, band) => {
+                setCheckTypeId(check.id);
+                setSearch(check.name);
+                if (band && DIFFICULTY_BANDS.some((b) => b.value === band)) {
+                  setDifficulty(band as DifficultyBand);
+                }
+              },
+            },
+          }}
+        />
+      )}
       <div className="space-y-1">
         <Label htmlFor="gm-check-search">Check</Label>
         <Input
@@ -672,13 +717,20 @@ function ConditionTab({ characterId, targetCharacterId }: TabProps) {
 // Situation / Challenge placement tab — acts on the GM's own room, no target
 // ---------------------------------------------------------------------------
 
-function SituationTab({ characterId }: { characterId: number }) {
+function SituationTab({
+  characterId,
+  runningRisk,
+}: {
+  characterId: number;
+  runningRisk: string | null;
+}) {
   const [placementKind, setPlacementKind] = useState<'situation' | 'challenge'>('situation');
   const [situationId, setSituationId] = useState<number | null>(null);
   const [challengeId, setChallengeId] = useState<number | null>(null);
   const [targetObjectName, setTargetObjectName] = useState('');
   const [shiftKind, setShiftKind] = useState<'' | 'edge' | 'setback'>('');
   const [shiftReason, setShiftReason] = useState('');
+  const [finderOpen, setFinderOpen] = useState(false);
   const { data: situations = [] } = useSituationTemplateCatalog(placementKind === 'situation');
   const { data: challenges = [] } = useChallengeTemplateCatalog(placementKind === 'challenge');
   const dispatch = useDispatchPlayerAction(characterId);
@@ -689,20 +741,21 @@ function SituationTab({ characterId }: { characterId: number }) {
       ? situationId !== null
       : challengeId !== null && targetObjectName.trim() !== '');
 
-  function handleSubmit() {
-    if (!canSubmit) return;
-    if (placementKind === 'situation') {
-      dispatch
-        .mutateAsync({
-          ref: { backend: 'registry', registry_key: 'set_situation' },
-          kwargs: { situation_template_id: situationId },
-        })
-        .then((result) => reportResult(result, 'Situation placed.'))
-        .catch(() => toast.error('Could not place the situation.'));
-      return;
-    }
+  function placeSituation(id: number | null) {
+    if (id === null || dispatch.isPending) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'set_situation' },
+        kwargs: { situation_template_id: id },
+      })
+      .then((result) => reportResult(result, 'Situation placed.'))
+      .catch(() => toast.error('Could not place the situation.'));
+  }
+
+  function placeChallenge(id: number | null) {
+    if (id === null || dispatch.isPending) return;
     const kwargs: Record<string, unknown> = {
-      challenge_template_id: challengeId,
+      challenge_template_id: id,
       target_object_name: targetObjectName.trim(),
     };
     if (shiftKind === 'edge') kwargs.edge_reason = shiftReason;
@@ -711,6 +764,15 @@ function SituationTab({ characterId }: { characterId: number }) {
       .mutateAsync({ ref: { backend: 'registry', registry_key: 'place_challenge' }, kwargs })
       .then((result) => reportResult(result, 'Challenge placed.'))
       .catch(() => toast.error('Could not place the challenge.'));
+  }
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    if (placementKind === 'situation') {
+      placeSituation(situationId);
+      return;
+    }
+    placeChallenge(challengeId);
   }
 
   const renderDispatch = () => {
@@ -725,6 +787,31 @@ function SituationTab({ characterId }: { characterId: number }) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-situation-tab">
+      <FinderToggle open={finderOpen} onToggle={() => setFinderOpen((v) => !v)} />
+      {finderOpen && (
+        <SituationFinder
+          risk={runningRisk}
+          characterId={characterId}
+          actions={{
+            template: {
+              label: 'Place',
+              onSelect: (t) => {
+                setPlacementKind('situation');
+                setSituationId(t.id);
+                placeSituation(t.id);
+              },
+            },
+            challenge: {
+              label: 'Place',
+              onSelect: (c) => {
+                setPlacementKind('challenge');
+                setChallengeId(c.id);
+                placeChallenge(c.id);
+              },
+            },
+          }}
+        />
+      )}
       <div className="space-y-1">
         <Label htmlFor="gm-placement-kind">Placement kind</Label>
         <select
@@ -1292,12 +1379,7 @@ interface GMAdjudicationPanelProps {
 }
 
 export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const characterId = useActiveCharacterId();
   const [targetCharacterId, setTargetCharacterId] = useState<number | null>(null);
 
   if (!scene?.viewer_can_gm || characterId === null) {
@@ -1305,6 +1387,7 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
   }
 
   const personas = scene.personas ?? [];
+  const runningRisk = scene.running_beat?.risk ?? null;
 
   return (
     <Card data-testid="gm-adjudication-panel">
@@ -1354,7 +1437,11 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="check">
-            <CallCheckTab characterId={characterId} targetCharacterId={targetCharacterId} />
+            <CallCheckTab
+              characterId={characterId}
+              targetCharacterId={targetCharacterId}
+              runningRisk={runningRisk}
+            />
           </TabsContent>
           <TabsContent value="callforcheck">
             <CallForCheckTab characterId={characterId} personas={personas} />
@@ -1366,7 +1453,7 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <ConditionTab characterId={characterId} targetCharacterId={targetCharacterId} />
           </TabsContent>
           <TabsContent value="situation">
-            <SituationTab characterId={characterId} />
+            <SituationTab characterId={characterId} runningRisk={runningRisk} />
           </TabsContent>
           <TabsContent value="dramaticbeat">
             <DramaticBeatTab characterId={characterId} targetCharacterId={targetCharacterId} />
