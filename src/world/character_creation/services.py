@@ -18,6 +18,7 @@ from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
+from rest_framework import serializers
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
@@ -2561,3 +2562,51 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
         lines.append(row.value)
         lines.append("")
     return "\n".join(lines).strip()
+
+
+# =============================================================================
+# Upbringing / family-path selection services (#3617)
+# =============================================================================
+
+_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
+
+
+def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> None:
+    """Choose the draft's Upbringing; a change resets everything downstream of it (#3617)."""
+    wrong_beginning = (
+        draft.selected_beginnings_id is None
+        or template.beginning_id != draft.selected_beginnings_id
+    )
+    if wrong_beginning:
+        msg = "Your upbringing does not belong to your beginning"
+        raise serializers.ValidationError(msg)
+    if not template.is_accessible_by(draft.account):
+        msg = "That upbringing is not available to you"
+        raise serializers.ValidationError(msg)
+    if draft.selected_origin_template_id == template.pk:
+        return
+    draft.selected_origin_template = template
+    draft.family_path = ""
+    draft.family = None
+    draft.claimed_kin_slot = None
+    draft.claimed_kin_pool = None
+    for key in _UPBRINGING_DRAFT_KEYS:
+        draft.draft_data.pop(key, None)
+    draft.save()
+
+
+def set_family_path(draft: CharacterDraft, path: str) -> None:
+    """Pick the family path when the Upbringing allows more than one (#3617)."""
+    template = draft.selected_origin_template
+    if template is None or path not in template.allowed_family_paths():
+        msg = "Choose how your family fits your upbringing"
+        raise serializers.ValidationError(msg)
+    draft.family_path = path
+    draft.save(update_fields=["family_path"])
+
+
+def family_name_is_taken(name: str) -> bool:
+    """Case-insensitive collision with any family or organisation name (#3617)."""
+    from world.societies.houses.creator import family_name_is_taken as _taken  # noqa: PLC0415
+
+    return _taken(name)

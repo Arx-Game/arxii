@@ -1093,6 +1093,23 @@ class CharacterDraft(SharedMemoryModel):
             return allowed[0]
         return self.family_path if self.family_path in allowed else ""
 
+    def calculate_upbringing_cost(self) -> int:
+        """Upbringing flat cost + each picked choice priced against the claimed family (#3617)."""
+        template = self.selected_origin_template
+        if template is None:
+            return 0
+        path = self.resolve_family_path()
+        influence = self.family.influence if (path == FamilyPath.CLAIMED and self.family) else 0
+        picks = self.draft_data.get("origin_choices") or {}
+        ids = [int(v) for v in picks.values() if v is not None]
+        total = template.cg_point_cost
+        if ids:
+            for choice in OriginTemplateSlotChoice.objects.filter(
+                pk__in=ids, slot__template=template, is_active=True
+            ):
+                total += choice.cost_for(influence)
+        return total
+
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """
         Determine the starting room for this character.
@@ -1249,6 +1266,16 @@ class CharacterDraft(SharedMemoryModel):
                     "cost": self.selected_beginnings.cg_point_cost,
                 }
             )
+        if self.selected_origin_template_id is not None:
+            upbringing_cost = self.calculate_upbringing_cost()
+            if upbringing_cost:
+                breakdown.append(
+                    {
+                        "category": "upbringing",
+                        "item": self.selected_origin_template.name,
+                        "cost": upbringing_cost,
+                    }
+                )
         for d in self.draft_data.get("distinctions", []):
             cost = d.get("cost", 0)
             if cost:

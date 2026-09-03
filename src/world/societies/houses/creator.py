@@ -63,6 +63,15 @@ def templates_for_title(title: Title) -> list[HouseTemplate]:
     return list(HouseTemplate.objects.filter(realm=title.realm))
 
 
+def family_name_is_taken(name: str) -> bool:
+    """A family or house org already wears this name (case-insensitive) (#3617)."""
+    return (
+        Family.objects.filter(name__iexact=name).exists()
+        or Organization.objects.filter(name__iexact=f"House {name}").exists()
+        or Organization.objects.filter(name__iexact=name).exists()
+    )
+
+
 def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     *,
     draft: CharacterDraft,
@@ -98,10 +107,7 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
             msg,
             user_message="That name does not fit the realm's naming conventions.",
         )
-    if (
-        Family.objects.filter(name__iexact=house_name).exists()
-        or Organization.objects.filter(name__iexact=f"House {house_name}").exists()
-    ):
+    if family_name_is_taken(house_name):
         msg = f"house name {house_name!r} collides with an existing family/org"
         raise HousesServiceError(msg, user_message="A house by that name already exists.")
     if not backstory.strip():
