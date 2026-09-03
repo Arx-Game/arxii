@@ -677,7 +677,7 @@ site.yml converge, not a bare Postgres install.
 
 ## Pull prod data down (dev/local)
 
-`just pull-prod confirm=yes` fetches the LATEST prod DB dump and restores it
+`just pull-prod yes` fetches the LATEST prod DB dump and restores it
 into your LOCAL dev Postgres (drop/recreate + `arx manage migrate`) — one
 command instead of the previous manual multi-step (#2236 Phase 4). It runs
 `infra/scripts/pull_prod_db.sh`, which:
@@ -693,6 +693,19 @@ command instead of the previous manual multi-step (#2236 Phase 4). It runs
   `--i-understand-this-overwrites-local` flag (mirrors `restore.sh`'s gate
   style); `just pull-prod` with no `confirm=yes` refuses and changes
   nothing.
+- Can only ever drop a LOCAL database. `DATABASE_URL`'s host must resolve
+  entirely to loopback/RFC1918/link-local addresses (every A record is
+  checked, not just the first); a public address or an unresolvable host
+  refuses before anything is dropped. So a hand-re-pointed `DATABASE_URL`
+  cannot turn this into a remote drop — `restore.sh` is the remote-target
+  tool, with its own operator-supplied `RESTORE_*` gating.
+
+**Firewall note (devcontainer):** the egress allowlist in
+`.devcontainer/init-firewall.sh` must include the bucket's endpoint host
+(`us-east-1.linodeobjects.com` for the `us-east` region) or the first S3 call
+dies on a connect timeout. It is allowlisted there already; a different
+region needs the matching entry added and
+`sudo /usr/local/bin/arxii-firewall.sh` re-run.
 
 **One-time setup** — after a successful stand-up, get the dev_reader
 credentials and bucket config from Terraform outputs and add them to

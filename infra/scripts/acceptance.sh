@@ -738,7 +738,7 @@ ACCOUNT-TIME checklist (run once real creds exist — cannot be static):
       converge, smoke.sh all-PASS, backup object lands in the stage bucket,
       restore rehearsal verifies — run this BEFORE the first real
       standup.sh/"Stand up infra" button press
-  [ ] `just pull-prod confirm=yes` (#2236 Phase 4) pulls a real dev_reader-
+  [ ] `just pull-prod yes` (#2236 Phase 4) pulls a real dev_reader-
       keyed dump and restores it into a scratch local DB
   [ ] arxii-media-mirror.service (#2236 Phase 4) completes with 0 failed on
       a real box and lands objects under media/ in the real R2 bucket

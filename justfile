@@ -292,18 +292,27 @@ migrate:
 # Storage key) and OVERWRITE the local dev DB with it (drop/recreate, then
 # migrate) — see infra/README.md "Pull prod data down" for the one-time
 # ARXII_DEV_READER_*/ARXII_BACKUPS_* config in src/.env. Explicit
-# `confirm=yes` required — mirrors the confirmation-flag gate
+# explicit confirmation required — mirrors the confirmation-flag gate
 # infra/scripts/restore.sh already uses for the same class of destructive
 # operation; a bare `just pull-prod` refuses and changes nothing.
-#   just pull-prod confirm=yes
+#   just pull-prod yes
+#
+# It is `just pull-prod yes`, NOT `just pull-prod confirm=yes`. A `name=value`
+# token AFTER the recipe name is passed to just as the positional argument's
+# literal VALUE, so the old spelling bound confirm="confirm=yes", fell into the
+# else branch and refused every time — the documented invocation could never
+# have worked. Hence the explicit third case below: a stale copy-paste of the
+# old form now says what to type instead of bottoming out in the script's
+# generic "flag required" refusal.
 pull-prod confirm="no":
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ "{{confirm}}" = "yes" ]; then
-        bash infra/scripts/pull_prod_db.sh --i-understand-this-overwrites-local
-    else
-        bash infra/scripts/pull_prod_db.sh
-    fi
+    case "{{confirm}}" in
+        yes) bash infra/scripts/pull_prod_db.sh --i-understand-this-overwrites-local ;;
+        no)  bash infra/scripts/pull_prod_db.sh ;;
+        *)   echo "pull-prod: unrecognized confirmation '{{confirm}}' — use 'just pull-prod yes'" >&2
+             exit 2 ;;
+    esac
 
 # --- Server ------------------------------------------------------------------
 

@@ -188,6 +188,47 @@ resolve_and_add "pypi.org"
 # polytoken's custom Anthropic-compatible provider. Two stable AWS EIPs
 # (eu-west-3); dig-resolved like the other small/stable hosts above.
 resolve_and_add "api.code.umans.ai"
+# ---- a2) Rotating-pool hosts: union of repeated digs, widened to /24 ----
+# Some endpoints sit behind a GTM that answers with a ROTATING SUBSET of a
+# larger backing pool, so a one-shot resolve_and_add allowlists only whichever
+# subset answered at boot and a later connection to a rotated-in address is
+# silently blocked — the same failure the Azure Front Door note below
+# describes. Resolving repeatedly and widening each answer to its /24 absorbs
+# the rotation, because these pools are packed into a handful of provider
+# /24s. Deliberately NOT the whole provider's range.
+resolve_pool_and_add() {
+    local domain="$1" attempts="${2:-8}"
+    echo "Resolving pool ${domain} (${attempts} queries, widened to /24)..."
+    local answers="" i
+    for ((i = 0; i < attempts; i++)); do
+        answers+="$(dig +noall +answer +time=5 +tries=2 A "$domain" | awk '$4 == "A" {print $5}')"$'\n'
+    done
+    local nets
+    nets=$(printf '%s' "$answers" | awk -F. 'NF == 4 && $1 ~ /^[0-9]+$/ {print $1"."$2"."$3".0/24"}' | sort -u)
+    if [ -z "$nets" ]; then
+        echo "ERROR: Failed to resolve ${domain}"
+        exit 1
+    fi
+    local count=0
+    while read -r net; do
+        if ! is_valid_ipv4_cidr "$net"; then
+            echo "ERROR: Invalid CIDR for ${domain}: ${net}"
+            exit 1
+        fi
+        echo "  Adding ${net} for ${domain}"
+        ipset add allowed-domains "${net}" -exist
+        count=$((count + 1))
+    done <<< "$nets"
+    echo "  Added ${count} /24(s) for ${domain}"
+}
+
+# Linode Object Storage, us-east — the prod backups bucket that
+# `just pull-prod` (infra/scripts/pull_prod_db.sh) reads the nightly DB dump
+# from via the read-only dev_reader key. Without this the pull fails instantly
+# with a connect timeout. Fronted by Akamai GTM (CNAME -> *.akadns.net) with a
+# rotating pool: two dig runs minutes apart returned 17 and 15 addresses whose
+# membership differed, so this needs the pool treatment, not a single dig.
+resolve_pool_and_add "us-east-1.linodeobjects.com"
 
 # Playwright downloads Chromium binaries from its own CDN (cdn.playwright.dev),
 # which is fronted by Azure Front Door. Azure Front Door rotates IPs across a
