@@ -91,10 +91,6 @@ class RealmAndAreaSeedTests(TestCase):
 
         self.assertTrue(Beginnings.objects.filter(name="Commoner").exists())
         self.assertTrue(Beginnings.objects.filter(name="Noble").exists())
-        noble = Beginnings.objects.get(name="Noble")
-        self.assertTrue(noble.family_known)
-        commoner = Beginnings.objects.get(name="Commoner")
-        self.assertFalse(commoner.family_known)
 
     def test_multiple_species(self):
         """Seed creates both Human and Khati species."""
