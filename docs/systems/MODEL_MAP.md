@@ -1974,6 +1974,7 @@
 ### Service Functions
 - `acquire_clue(roster_entry: 'RosterEntry', clue: 'Clue') -> 'CharacterClue' - Record that a character has found a clue (idempotent).`
 - `clear_rescue_clues(captivity: 'Captivity') -> 'None' - Delete a captivity's rescue clues (and their placements) when it resolves (#931).`
+- `clue_target_kind_allowed(account: 'object', target_kind: 'str') -> 'bool' - The clue authoring policy (#3432) as one callable (#3566).`
 - `create_accusation_counter_clue(secret: 'Secret', *, region: 'Area', difficulty: 'int') -> 'Clue' - Plant the investigable trail an accusation leaves behind (#1825). Idempotent.`
 - `grant_clue_target(clue: 'Clue', roster_entry: 'RosterEntry') -> 'None' - AUTOMATIC resolution — grant a clue's target to the character on the spot.`
 - `maybe_grant_clue_triggers(character: 'ObjectDB', room: 'ObjectDB') -> 'list[Clue]' - Grant clues triggered passively by entering ``room`` (#1160).`
@@ -9605,6 +9606,9 @@
 **Foreign Keys:**
   - resolution -> stories.StakeResolution [FK]
   - resonance -> magic.Resonance [FK] (nullable)
+  - item_template -> items.ItemTemplate [FK] (nullable)
+  - clue -> clues.Clue [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 
 ### StakeTemplate
 **Foreign Keys:**

@@ -169,9 +169,12 @@ mission reward distribution).
 | Field | Type | Notes |
 |---|---|---|
 | `resolution` | FK → `stories.StakeResolution` (`related_name="reward_lines"`, CASCADE) | Must be a WIN-column resolution |
-| `sink` | CharField (`StakeRewardSink` choices) | `MONEY` / `RESONANCE` |
-| `amount` | PositiveIntegerField (`MinValueValidator(1)`) | Money-equivalent scalar paid to EACH participant; banded by `RiskCalibration.reward_floor/reward_ceiling` |
+| `sink` | CharField (`StakeRewardSink` choices) | `MONEY` / `RESONANCE` / `ITEM` / `CLUE` / `CODEX` (#3566) |
+| `amount` | PositiveIntegerField (`MinValueValidator(1)`) | Money-equivalent scalar paid to EACH participant; banded by `RiskCalibration.reward_floor/reward_ceiling`. For `sink=ITEM`, pinned to `item_template.value` (never author-supplied; `clean()` + serializer reject a differing amount) |
 | `resonance` | FK → `magic.Resonance` (null, SET_NULL) | Required iff `sink=RESONANCE` (enforced in `clean()` + serializer); must be null otherwise |
+| `item_template` | FK → `items.ItemTemplate` (null, PROTECT) | Required iff `sink=ITEM`; must be null otherwise. `value` must be at least 1 (#3566) |
+| `clue` | FK → `clues.Clue` (null, PROTECT) | Required iff `sink=CLUE`; must be null otherwise. `target_kind` must be in `RESOLVABLE_CLUE_TARGET_KINDS` (codex, rescue, secret or persona link - an ITEM-target clue is a bare pointer, not a coherent reward, #3566) |
+| `codex_entry` | FK → `codex.CodexEntry` (null, PROTECT) | Required iff `sink=CODEX`; must be null otherwise (#3566) |
 
 ### `StakeOutcome` (PR2)
 
@@ -241,8 +244,9 @@ open activation per beat**. This is the actual lock backstop (see
 - **`StakeResolutionColumn`**: `WIN`, `LOSS`, `WITHDRAWAL`.
 - **`StakeOutcomeMethod`**: `MACHINE` only - the sole remaining choice since #3561
   retired `GM_PICK` (the constrained pick); every `StakeOutcome` is machine-graded.
-- **`StakeRewardSink`** (PR3): `MONEY`, `RESONANCE` — only sinks with a real,
-  coherent delivery service. Legend is deliberately **not** a sink (it stays
+- **`StakeRewardSink`** (PR3; `ITEM`/`CLUE`/`CODEX` added #3566): `MONEY`,
+  `RESONANCE`, `ITEM`, `CLUE`, `CODEX` - only sinks with a real, coherent
+  delivery service. Legend is deliberately **not** a sink (it stays
   automatic on top via effective risk, pillar 6).
 - **`RISK_LADDER`**: `["none", "low", "moderate", "high", "extreme"]` — index order
   matters; `services.stakes.risk_index` positions a `RenownRisk` value on it.
@@ -477,23 +481,79 @@ wired it into mission reporting (`_apply_style_payout`,
 deed router is hard-anchored to `MissionDeedRecord` (it reads
 `deed.reward_lines` and enqueues `MissionRewardQueue(deed=...)`), stakes have
 no deed, and missions already FKs *into* stories — stories depending back on
-missions would invert the dependency direction (ADR-0010). So stakes reuse the
-SAME SINK SERVICES the router dispatches to, called directly:
+missions would invert the dependency direction (ADR-0010). #3566 extended the
+same pattern to three more sinks, again through bespoke services rather than
+the deed router. So stakes reuse the SAME SINK SERVICES the router dispatches
+to (MONEY, RESONANCE) plus three more real-world services with no deed-router
+equivalent (ITEM, CLUE, CODEX), all called directly:
 
 - `MONEY` → `world.currency.services.deliver_mission_money(recipient_sheet,
-  amount, ref=f"stake:{pk}", reason_label="stake reward")` — the audited mint
+  amount, ref=f"stake:{pk}", reason_label="stake reward")` - the audited mint
   faucet; the optional `reason_label` kwarg (default `"mission reward"`) keeps
   the ledger honest for non-mission callers.
 - `RESONANCE` → `world.magic.services.resonance.grant_resonance(sheet,
-  resonance, amount, source=GainSource.STAKE_REWARD)` — the same grant service
+  resonance, amount, source=GainSource.STAKE_REWARD)` - the same grant service
   the missions cron's `_grant_resonance` calls. `STAKE_REWARD` is a
   discriminator-only `GainSource` (the `MISSION_REPORT` shape: no typed source
   FK on `ResonanceGrant`; provenance lives on the stories side in
   `StakeOutcome` + `StakeRewardLine`).
+- `ITEM` (#3566) → `world.items.services.narrative_grants
+  .grant_touchstone_item_to_character(character_sheet, template)` - mints one
+  new `ItemInstance` of `item_template` per participant per completion. Pricing
+  is pinned, not authored: `amount` always equals `item_template.value` (the
+  model's `clean()` and `StakeRewardLineSerializer._validate_item_reward` both
+  reject a differing client-supplied amount, and the serializer refuses a
+  template with `value < 1`), so a GM cannot under- or over-price an item
+  reward relative to the catalog. Gated on `GMLevelCap.allow_item_rewards`
+  (default `False`; seeded `True` for EXPERIENCED and SENIOR - minting an item
+  is world state, so the trust bar sits above the JUNIOR-tier authoring most GM
+  verbs use); staff bypass the gate.
+- `CLUE` (#3566) → `world.clues.services.grant_clue_target(clue, roster_entry)`
+  via `acquire_clue` - AUTOMATIC resolution, same as the search/trigger
+  acquisition surfaces (`docs/systems/investigation_and_discovery.md`). Only a
+  clue whose `target_kind` is in `RESOLVABLE_CLUE_TARGET_KINDS` (codex, rescue,
+  secret, persona link) may be a reward line's target - an ITEM-target clue is
+  a bare pointer, not a coherent reward, and is rejected in `clean()` and the
+  serializer. Further gated by `world.clues.services.clue_target_kind_allowed`
+  (the same policy `AuthorClueAction` uses to mint clues, #3432/#3566 shared
+  helper): staff may target anything, a GM needs a `GMProfile` at SENIOR or
+  above, and SECRET targets stay staff-only regardless of level.
+- `CODEX` (#3566) → `world.codex.services.grant_codex_entry(roster_entry,
+  codex_entry)` - idempotent; a repeat grant (e.g. two reward lines naming the
+  same entry, or a re-fired delivery) is a no-op rather than a duplicate row.
 
 No `LEGEND_POINTS` sink (Legend is automatic; the missions LP path is also
 stub-sealed), no `BEAT` (circular from inside beat resolution), no
 `RUMOR`/`CRIME_WATCH` (unbuilt, loss-flavored).
+
+**CLUE and CODEX need a roster entry; ITEM does not (#3566).** ITEM mints
+directly onto the participant's `CharacterSheet` (a held `ItemInstance` is a
+sheet fact with no roster dependency). CLUE and CODEX both grant *knowledge*,
+which `world.clues.services.grant_clue_target`/`world.codex.services
+.grant_codex_entry` write against a `RosterEntry`, not a sheet - so an NPC
+participant whose sheet carries no roster entry (`sheet.roster_entry_or_none`
+is `None`) is skipped for those two sinks (logged, not raised) while
+MONEY/RESONANCE/ITEM still pay that same participant on the beat's other
+lines. `_deliver_knowledge_reward_line` (`services/stake_resolution.py`)
+carries this check.
+
+**Delivery no longer fails closed on one line's error (#3566).** Each
+line × participant delivery in `_apply_stake_rewards` is individually
+try/excepted (`logger.exception`, continue) so one line's unexpected failure
+(a downstream service error, a deleted FK target) never stops the beat's
+other reward lines or other participants from being paid.
+
+**Authoring the FK sinks (#3566).** `RewardLinesEditor`
+(`frontend/src/stories/components/stakes/`) shows a name-search
+`EntitySearchField` picker per FK sink: item templates and codex entries
+search their existing catalog endpoints; clues search the GM-only
+`GET /api/clues/search/?q=` (`ClueSearchView`, `IsAuthenticated` +
+`IsGMOrStaff`), which pre-filters to `RESOLVABLE_CLUE_TARGET_KINDS` and then
+runs each candidate row through `clue_target_kind_allowed` for the requesting
+account (never returning a clue the caller isn't permitted to aim), returning
+at most 25 `{id, name, target_kind}` rows. The ITEM sink's amount input is
+read-only in the editor (the server pins it); the other four sinks keep a
+plain numeric amount field.
 
 Reward lines attach to **WIN-column resolutions only** (enforced in `clean()`
 and the serializer) — a "consolation" line on LOSS/WITHDRAWAL would be
@@ -528,6 +588,16 @@ consequences and pools keep firing regardless — reality doesn't care; only
 the payout math does. Delivery is per line × participant (Persona →
 `CharacterSheet` bridge), matching the PR2 writer contract: skip-and-log,
 never raise.
+
+**Player visibility of the reward kinds (#3566).** `StakeSummarySerializer
+.reward_kinds` (a `SerializerMethodField` on the opt-in stakes summary, both
+beat- and scene-scoped) surfaces which payout *categories* a stake's WIN
+branch(es) carry: `REWARD_KIND_BY_SINK` maps `MONEY`/`RESONANCE`/`ITEM` to
+themselves and both `CLUE`/`CODEX` to `"knowledge"` (the summary names the
+category a win unlocks, not which delivery mechanism carries it), sorted and
+deduplicated across every WIN-column resolution's reward lines. Never an
+amount, a template, a clue, or a codex entry - the WIN branch's payout
+*content* stays hidden per pillar 9; only the kind leaks.
 
 **Claim-before-pay.** `_fire_branch_and_record` creates the `StakeOutcome`
 row FIRST — winning the `unique_outcome_per_stake` constraint *is* the claim —

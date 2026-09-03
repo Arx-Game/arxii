@@ -1615,7 +1615,10 @@ resolve them automatically or through a collaborative **research project**.
   (`frontend/src/clues/components/`), reached from `PlaceClueDialog`'s "New clue…" and
   `StaffSecretsPanel`'s "Author a clue to this secret".
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
-  `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
+  `target_already_known`, `clue_target_kind_allowed(account, target_kind)`
+  (#3566 - the clue-authoring policy as one callable: staff → anything,
+  SENIOR+ GM required otherwise, SECRET staff-only; shared by `author_clue`
+  and the stake reward-line CLUE-sink gate), `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
   `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
   `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
@@ -1636,6 +1639,12 @@ resolve them automatically or through a collaborative **research project**.
   `HeldClueSerializer`) — the held-clue *journal*, scoped to characters the requester plays
   (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
   only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
+- **GM search surface (#3566):** `GET /api/clues/search/?q=` (`ClueSearchView`,
+  `IsAuthenticated` + `IsGMOrStaff`) - a small picker endpoint for the stake
+  reward-line editor's CLUE sink, not a general clue browser. Filters to
+  `RESOLVABLE_CLUE_TARGET_KINDS`, then policy-filters each row through
+  `clue_target_kind_allowed` for the requester; returns at most 25
+  `{id, name, target_kind}` rows (`ClueSearchResultSerializer`).
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
   (`grant_rescue_mission` for RESCUE's AUTOMATIC mission target; `staff_assign_mission`
   for a RESEARCH-resolved MISSION target, #3429), projects (RESEARCH kind), captivity
@@ -2360,8 +2369,11 @@ GM at a given level may author (#2000, ADR-0097).
   `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
   (single-use recruitment code, public or private-with-email-match, 30-day default
   expiry), `GMLevelCap` (one row per `GMLevel`, staff-tunable: `max_beat_risk`
-  (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
-  `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
+  (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`,
+  `auto_clear_regional`, `max_story_areas`, `max_story_rooms_per_area`,
+  `max_story_npcs`, `allow_item_rewards` (#3566 - gates ITEM-sink
+  `StakeRewardLine` authoring, seeded `True` for EXPERIENCED/SENIOR only);
+  seeded via `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
   `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
   `promote_gm`, never edited by hand), **`GMRewardConfig`** (#2123 — pk=1 singleton,
   `load()` classmethod; every GM Story Reward award value as a proper column:
@@ -2457,7 +2469,9 @@ GM at a given level may author (#2000, ADR-0097).
   gate (`gm_max_risk`, `world.gm.services`) and `stories.StakeSerializer`'s custom-stakes/
   global-scope gates (`_gm_allows_custom_stakes`/`_gm_allows_global_scope`,
   `world.stories.serializers`) all delegate to it instead of re-deriving the query (staff
-  bypass unchanged, handled by each caller); `combat.StakesLevelRequirement.minimum_gm_level`
+  bypass unchanged, handled by each caller); `stories.StakeRewardLineSerializer`'s
+  ITEM-sink gate (`_gm_allows_item_rewards`, #3566) does the same;
+  `combat.StakesLevelRequirement.minimum_gm_level`
   gates on `gm_account.gm_profile.level` directly (no profile → STARTING). `GMProfileMineSerializer`
   (below) also reads it to surface the caller's own cap on the wire.
 - **API Endpoints:** `GMApplicationViewSet` (`/api/gm/applications/`; create for
@@ -3269,9 +3283,12 @@ retirement" entry below.
   crossing WIN/LOSS polarity); `npc_regard_delta` (#2039 writer, exposed on the
   serializer #3561) and `transitions_subject_asset` (#3561 writer, `ASSET`-only,
   transitions `subject_asset` to COMPROMISED/LOST/DISMISSED)), `StakeRewardLine`
-  (PR3; resolution FK `related_name="reward_lines"`; `sink` MONEY/RESONANCE; `amount`
-  per-participant money-equivalent scalar; `resonance` required iff
-  sink=RESONANCE), `StakeContractActivation`
+  (PR3; ITEM/CLUE/CODEX sinks added #3566; resolution FK
+  `related_name="reward_lines"`; `sink` MONEY/RESONANCE/ITEM/CLUE/CODEX;
+  `amount` per-participant money-equivalent scalar (pinned to
+  `item_template.value` for ITEM); `resonance`/`item_template` (PROTECT)/
+  `clue` (PROTECT)/`codex_entry` (PROTECT) each required iff `sink` matches),
+  `StakeContractActivation`
   (lock + audit row; partial-unique open-per-beat; `effective_risk`),
   `StakeOutcome` (PR2 per-stake resolution audit/routing row; exactly one per
   stake; `method` is always MACHINE since #3561 retired `GM_PICK`);
@@ -3280,8 +3297,9 @@ retirement" entry below.
   `TransitionFormDialog`'s stake-column routing mode, #3561).
 - **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind` (incl.
   `ASSET`, #3561), `StakeResolutionColumn`, `StakeOutcomeMethod` (`MACHINE` only
-  since #3561 retired `GM_PICK`), `StakeRewardSink` (MONEY/RESONANCE - no Legend
-  sink; Legend stays automatic), `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`.
+  since #3561 retired `GM_PICK`), `StakeRewardSink` (MONEY/RESONANCE/ITEM/CLUE/
+  CODEX, #3566 added the last three - no Legend sink; Legend stays automatic),
+  `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`.
 - **Key Services (`world.stories.services.stakes`):** `compute_effective_risk`
   (party-level-vs-target-level curve, `LEVELS_PER_TIER=2`, bounded +1 under-level
   upgrade), `validate_stakes_readiness` (severity bands + WIN reward band (PR3)
@@ -3300,9 +3318,16 @@ retirement" entry below.
   `stake_resolution_payload_problems` + `sheet_is_player_held` (pillar-12
   no-fiat validation; #3561 added the `transitions_subject_asset`-requires-ASSET
   check), `_apply_stake_rewards` (PR3 - WIN payout per line x
-  participant, gated on a ready effective-risk-bearing activation; sinks:
-  `currency.deliver_mission_money`, `magic.grant_resonance` with
-  `GainSource.STAKE_REWARD`; deliberately NOT the missions deed router).
+  participant, gated on a ready effective-risk-bearing activation; each
+  line x participant delivery individually try/excepted since #3566 so one
+  failure doesn't stop the rest; sinks: `currency.deliver_mission_money`,
+  `magic.grant_resonance` with `GainSource.STAKE_REWARD`,
+  `items.narrative_grants.grant_touchstone_item_to_character` (#3566),
+  `clues.grant_clue_target` (#3566), `codex.grant_codex_entry` (#3566);
+  deliberately NOT the missions deed router). CLUE/CODEX delivery
+  (`_deliver_knowledge_reward_line`) skips an NPC participant with no
+  `roster_entry_or_none` while MONEY/RESONANCE/ITEM still pay that
+  participant (#3566).
   `resolve_stake_by_gm_pick` and `POST /api/stakes/{id}/resolve/` are removed
   (#3561, ADR-0259). Cross-app writers: `items.forfeit_item_instance`
   (soft-forfeit), `npc_services.adjust_npc_affection`,
@@ -3315,7 +3340,11 @@ retirement" entry below.
   `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
   staff-only, ADR-0033); `stakes_summary_for_beat` +
   `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
-  never serialized); `GET /api/beats/{id}/stakes-summary/`; `GET
+  never serialized; `StakeSummarySerializer.reward_kinds`, #3566, is the one
+  exception in spirit only - sorted/deduped payout *category* labels
+  (`REWARD_KIND_BY_SINK`: money/resonance/item/knowledge, CLUE and CODEX both
+  read as "knowledge"), never an amount or a target); `GET
+  /api/beats/{id}/stakes-summary/`; `GET
   /api/scenes/{id}/stakes-summary/` (#3561 - the scene-scoped sibling, since a
   player never receives the running beat's id from any scene payload; delegates
   to the same builder); `combat_stakes` on
