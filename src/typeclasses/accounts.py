@@ -163,9 +163,7 @@ class Account(DefaultAccount):
         sheet that already has an active tenure, that path needs to clear
         this cache explicitly via ``account.clear_cached_properties()``.
         """
-        from world.scenes.constants import (
-            PersonaType,
-        )
+        from world.scenes.constants import PersonaType
         from world.scenes.models import Persona
 
         return list(

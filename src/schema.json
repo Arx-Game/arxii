@@ -24844,7 +24844,7 @@ paths:
                 $ref: '#/components/schemas/InteractionState'
           description: ''
         '400':
-          description: No puppeted character or no role was provided.
+          description: No selected character or no role was provided.
         '404':
           description: NPC role or persona was not found.
         '409':

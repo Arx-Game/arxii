@@ -66840,7 +66840,7 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
-      /** @description No puppeted character or no role was provided. */
+      /** @description No selected character or no role was provided. */
       400: {
         headers: {
           [name: string]: unknown;

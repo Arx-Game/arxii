@@ -250,11 +250,14 @@ class MissionReportApiTests(TestCase):
         FunctionaryFactory(role=role, room=room)
         player_data = PlayerDataFactory()
         client = APIClient()
-        user = SimpleNamespace(
-            is_authenticated=True, is_staff=False, player_data=player_data, puppet=reporter
-        )
+        user = SimpleNamespace(is_authenticated=True, is_staff=False, player_data=player_data)
         client.force_authenticate(user=user)
-        with patch(_DELIVER):
+        # The acting character comes from the durable selection (ADR-0260); this
+        # test is about the report endpoint, so stub the resolver like its siblings.
+        with (
+            patch(_DELIVER),
+            patch("world.missions.views._acting_character", return_value=reporter),
+        ):
             response = client.post(
                 f"/api/missions/journal/{instance.pk}/report/", {"style": "accurate"}, format="json"
             )
