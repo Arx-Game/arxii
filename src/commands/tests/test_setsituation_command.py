@@ -102,10 +102,13 @@ class SetSituationFindTests(TestCase):
         messages = _run_cmd(self.gm_actor, "find Chase")
         self.assertTrue(any("Kind: Chase" in m for m in messages))
 
-    def test_bare_find_lists_catalog(self) -> None:
+    def test_bare_find_lists_kinds_not_templates(self) -> None:
+        """The cold open is the kind list (#3564): templates need a search term."""
         template = SituationTemplateFactory(name="Bare Find Template")
+        SituationKindFactory(name="Bare Find Kind", minimum_gm_level=GMLevel.STARTING)
         messages = _run_cmd(self.gm_actor, "find")
-        self.assertTrue(any(template.name in m for m in messages))
+        self.assertTrue(any("Bare Find Kind" in m for m in messages))
+        self.assertFalse(any(template.name in m for m in messages))
 
     def test_find_never_instantiates_a_situation(self) -> None:
         from world.mechanics.models import SituationInstance
