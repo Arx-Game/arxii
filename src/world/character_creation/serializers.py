@@ -1115,7 +1115,7 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
-            "family_type",
+            "kind",
             "name_pattern",
             "mercy_min",
             "mercy_max",

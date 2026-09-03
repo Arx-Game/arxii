@@ -744,9 +744,9 @@ from world.societies.houses.models import (  # noqa: E402
 class HouseTemplateAdmin(admin.ModelAdmin):
     """#1884 Phase D — realm recipes for CG-defined houses."""
 
-    list_display = ("name", "realm", "family_type", "liege", "starting_kin_slots")
+    list_display = ("name", "realm", "kind", "liege", "starting_kin_slots")
     list_select_related = ("realm", "liege")
-    list_filter = ("realm", "family_type")
+    list_filter = ("realm", "kind")
     search_fields = ("name",)
     filter_horizontal = ("holdings", "aspect_definitions", "features")
 

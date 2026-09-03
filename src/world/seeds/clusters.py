@@ -477,6 +477,7 @@ def _seed_project_resonance() -> None:
 
 def _seed_roster() -> None:
     from world.roster.seeds import (  # noqa: PLC0415
+        ensure_family_kinds,
         ensure_rosters,
         ensure_starter_npc_presets,
         seed_invite_trust_category,
@@ -486,6 +487,9 @@ def _seed_roster() -> None:
     # creates the seven shelves on its own instead of depending on character_creation's
     # cluster having run first.
     ensure_rosters()
+    # Canonical FamilyKind rows (#3617): idempotent get_or_create, matching
+    # migration 0219's backfill data, so a clone-bootstrap/E2E DB gets them too.
+    ensure_family_kinds()
     seed_invite_trust_category()
     # Starter Story-NPC statline presets (#3427). Runs last in this cluster,
     # after "character_creation" (stat Traits) and the check-family clusters

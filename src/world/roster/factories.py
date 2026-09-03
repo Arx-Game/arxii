@@ -14,8 +14,10 @@ from evennia_extensions.factories import (  # noqa: F401  (CharacterFactory re-e
 from evennia_extensions.models import Artist, PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
+from world.roster.constants import COMMONER_KIND_NAME, NOBLE_KIND_NAME
 from world.roster.models import (
     Family,
+    FamilyKind,
     GameInvite,
     InviteStatus,
     PlayerMail,
@@ -30,6 +32,23 @@ from world.roster.models import (
 )
 
 
+class FamilyKindFactory(factory_django.DjangoModelFactory):
+    """Family kinds (#3617). get_or_create on name so tests share the migration rows.
+
+    ``styles_as_house`` tracks the canonical ``NOBLE_KIND_NAME`` row (test tiers build
+    schema straight from model state and never replay migration 0219's backfill, so
+    a factory call is often what actually creates the canonical row in a test DB;
+    see ``server/conf/sqlite_test_settings.py``'s data-seeding caveat).
+    """
+
+    class Meta:
+        model = FamilyKind
+        django_get_or_create = ("name",)
+
+    name = COMMONER_KIND_NAME
+    styles_as_house = factory.LazyAttribute(lambda o: o.name == NOBLE_KIND_NAME)
+
+
 class FamilyFactory(factory_django.DjangoModelFactory):
     """Factory for Family instances."""
 
@@ -38,7 +57,7 @@ class FamilyFactory(factory_django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"House TestFamily{n}")
-    family_type = Family.FamilyType.COMMONER
+    kind = factory.SubFactory(FamilyKindFactory)
     description = factory.LazyAttribute(lambda obj: f"Description for {obj.name}")
     is_playable = True
 

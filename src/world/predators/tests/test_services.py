@@ -23,8 +23,9 @@ from world.predators.services import (
     weekly_affliction_tick,
     weekly_menace_tick,
 )
-from world.roster.factories import FamilyFactory, KinspersonFactory, UnionFactory
-from world.roster.models import Family, FamilyMembership, UnionKind
+from world.roster.constants import NOBLE_KIND_NAME
+from world.roster.factories import FamilyFactory, FamilyKindFactory, KinspersonFactory, UnionFactory
+from world.roster.models import FamilyMembership, UnionKind
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.constants import (
     CrisisOrigin,
@@ -43,7 +44,7 @@ class _NoSpawnRandom(random.Random):
 
 
 def _make_landed(name: str, perceived: int, realm=None):
-    family = FamilyFactory(name=name, family_type=Family.FamilyType.NOBLE)
+    family = FamilyFactory(name=name, kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
     org = OrganizationFactory(name=f"House {name}", family=family)
     area = AreaFactory(realm=realm)
     create_domain(area=area, name=f"{name} Vale", owner_org=org)

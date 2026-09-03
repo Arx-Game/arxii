@@ -278,15 +278,11 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
     template = claim.template
     family = Family.objects.create(
         name=claim.house_name,
-        family_type=template.family_type,
+        kind=template.kind,
         description=claim.backstory,
         is_playable=True,
     )
-    org_name = (
-        f"House {claim.house_name}"
-        if template.family_type == Family.FamilyType.NOBLE
-        else claim.house_name
-    )
+    org_name = f"House {claim.house_name}" if template.kind.styles_as_house else claim.house_name
     org = Organization.objects.create(
         name=org_name,
         description=claim.backstory,

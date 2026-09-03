@@ -234,16 +234,18 @@ class FamilySerializerParticleTests(APITestCase):
     """#3261 — the family payload carries its resolved particle pair for CG preview."""
 
     def test_particles_serialize_for_housed_family(self) -> None:
-        from world.roster.models import Family
+        from world.roster.constants import NOBLE_KIND_NAME
+        from world.roster.factories import FamilyKindFactory
         from world.roster.serializers.families import FamilySerializer
         from world.societies.factories import OrganizationFactory
         from world.societies.houses.models import NobiliaryParticle
 
-        family = FamilyFactory(name="Volante", family_type=Family.FamilyType.NOBLE)
+        noble_kind = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        family = FamilyFactory(name="Volante", kind=noble_kind)
         org = OrganizationFactory(name="House Volante", family=family)
         NobiliaryParticle.objects.create(
             realm=org.society.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=noble_kind,
             particle="za",
             taken_in_particle="zas",
         )

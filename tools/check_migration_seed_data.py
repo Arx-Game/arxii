@@ -23,6 +23,14 @@ ALLOWED_MIGRATIONS: set[str] = {
     # archetype field and re-keys ArchetypeActionScaling rows onto the new
     # CovenantRoleActionScaling model. No-op on empty databases.
     "world/covenants/migrations/0029_covenantroleactionscaling_and_more.py",
+    # #3617: ADR-0237 mandatory restructure backfill — re-keys existing
+    # Family/NobiliaryParticle/HouseTemplate.family_type values onto the new
+    # authored FamilyKind FK. The three canonical rows it get_or_creates are
+    # schema-transition targets for that backfill, not authored content; a
+    # fresh test DB (schema built from model state, no migration replay —
+    # see server/conf/sqlite_test_settings.py) instead seeds them via
+    # world.roster.seeds.ensure_family_kinds().
+    "world/migrations/0219_familykind_family_kind_influence.py",
 }
 
 # Patterns that suggest seed data in migrations

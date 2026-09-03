@@ -136,7 +136,8 @@ export const mockSpeciesList: Species[] = [mockSpeciesHuman, mockSpeciesElf, moc
 export const mockNobleFamily: Family = {
   id: 1,
   name: 'Valardin',
-  family_type: 'noble',
+  kind: { id: 2, name: 'Noble', styles_as_house: true },
+  influence: 0,
   description: 'An honorable noble house known for martial prowess.',
   born_particle: 'du',
   taken_in_particle: 'dau',
@@ -145,7 +146,8 @@ export const mockNobleFamily: Family = {
 export const mockNobleFamily2: Family = {
   id: 2,
   name: 'Velenosa',
-  family_type: 'noble',
+  kind: { id: 2, name: 'Noble', styles_as_house: true },
+  influence: 0,
   description: 'A cunning noble house with southern roots.',
   born_particle: 'za',
   taken_in_particle: 'zas',
@@ -154,7 +156,8 @@ export const mockNobleFamily2: Family = {
 export const mockCommonerFamily: Family = {
   id: 3,
   name: 'Smith',
-  family_type: 'commoner',
+  kind: { id: 1, name: 'Commoner', styles_as_house: false },
+  influence: 0,
   description: 'A common family of craftspeople.',
   born_particle: '',
   taken_in_particle: '',

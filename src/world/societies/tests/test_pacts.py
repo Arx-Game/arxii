@@ -2,9 +2,9 @@
 
 from django.test import TestCase
 
-from world.roster.constants import MembershipBasis
-from world.roster.factories import FamilyFactory, KinspersonFactory
-from world.roster.models import Family, FamilyMembership, Union, UnionKind
+from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
+from world.roster.factories import FamilyFactory, FamilyKindFactory, KinspersonFactory
+from world.roster.models import FamilyMembership, Union, UnionKind
 from world.scenes.factories import PersonaFactory
 from world.societies.dossier_services import build_dossier
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
@@ -41,7 +41,7 @@ NO_LEGEND = {"legend_reader": lambda _persona: 0}
 
 
 def _house(name: str, *, with_leader: bool = True):
-    family = FamilyFactory(name=name, family_type=Family.FamilyType.NOBLE)
+    family = FamilyFactory(name=name, kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
     org = OrganizationFactory(name=f"House {name}", family=family)
     leader = None
     if with_leader:

@@ -63,8 +63,9 @@ from world.missions.models import (
     MissionTemplate,
 )
 from world.realms.models import Realm
+from world.roster.constants import COMMONER_KIND_NAME
 from world.roster.models.families import Family
-from world.roster.seeds import ensure_rosters
+from world.roster.seeds import ensure_family_kinds, ensure_rosters
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -2022,11 +2023,12 @@ def _seed_commoner_families(realm: Realm) -> None:
     These are placeholder commoner families — staff can rename or add
     noble houses via the admin.
     """
+    commoner_kind = ensure_family_kinds()[COMMONER_KIND_NAME]
     for name in _COMMONER_FAMILIES:
         Family.objects.get_or_create(
             name=name,
             defaults={
-                "family_type": Family.FamilyType.COMMONER,
+                "kind": commoner_kind,
                 "description": f"A commoner family of {realm.name}.",
                 "is_playable": True,
                 "origin_realm": realm,

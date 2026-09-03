@@ -4,6 +4,7 @@ from django.test import TestCase, override_settings
 
 from world.character_sheets.models import Gender, Heritage, Pronouns
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
+from world.roster.constants import COMMONER_KIND_NAME
 from world.roster.models.families import Family
 from world.seeds.character_creation import seed_character_creation_dev
 from world.species.models import Species
@@ -213,13 +214,13 @@ class CommonerFamilySeedTests(TestCase):
     def test_families_created(self):
         """Seed creates at least one commoner family."""
         seed_character_creation_dev()
-        families = Family.objects.filter(family_type=Family.FamilyType.COMMONER)
+        families = Family.objects.filter(kind__name=COMMONER_KIND_NAME)
         self.assertGreaterEqual(families.count(), 1)
 
     def test_families_linked_to_realm(self):
         """Seeded families have origin_realm set."""
         seed_character_creation_dev()
-        families = Family.objects.filter(family_type=Family.FamilyType.COMMONER)
+        families = Family.objects.filter(kind__name=COMMONER_KIND_NAME)
         for family in families:
             self.assertIsNotNone(family.origin_realm)
             self.assertEqual(family.origin_realm.name, "Arx")
@@ -227,7 +228,7 @@ class CommonerFamilySeedTests(TestCase):
     def test_families_are_playable(self):
         """Seeded families are playable in CG."""
         seed_character_creation_dev()
-        families = Family.objects.filter(family_type=Family.FamilyType.COMMONER)
+        families = Family.objects.filter(kind__name=COMMONER_KIND_NAME)
         for family in families:
             self.assertTrue(family.is_playable)
 

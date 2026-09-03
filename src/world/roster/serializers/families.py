@@ -8,12 +8,22 @@ know) — never raw graph rows.
 from rest_framework import serializers
 
 from world.roster.constants import RelationshipType
-from world.roster.models import Family, KinSlotPool, Kinsperson
+from world.roster.models import Family, FamilyKind, KinSlotPool, Kinsperson
+
+
+class FamilyKindSerializer(serializers.ModelSerializer):
+    """Serializer for a family's authored kind (#3617)."""
+
+    class Meta:
+        model = FamilyKind
+        fields = ["id", "name", "styles_as_house"]
+        read_only_fields = fields
 
 
 class FamilySerializer(serializers.ModelSerializer):
     """Serializer for family selection and display."""
 
+    kind = FamilyKindSerializer(read_only=True)
     born_particle = serializers.SerializerMethodField(
         help_text="Nobiliary particle a born member wears (#3261); '' when none."
     )
@@ -26,7 +36,8 @@ class FamilySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "family_type",
+            "kind",
+            "influence",
             "description",
             "is_playable",
             "origin_realm",

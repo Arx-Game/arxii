@@ -80,7 +80,9 @@ export interface CGPointsBreakdown {
 export interface Family {
   id: number;
   name: string;
-  family_type: 'commoner' | 'noble' | 'crime';
+  // #3617 — authored kind row (was a 'commoner' | 'noble' | 'crime' code).
+  kind: { id: number; name: string; styles_as_house: boolean };
+  influence: number;
   description: string;
   origin_realm?: number;
   // #3261 — resolved nobiliary particles ('' when the family has none).

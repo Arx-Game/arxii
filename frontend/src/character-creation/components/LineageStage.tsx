@@ -155,8 +155,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     }
   };
 
-  const noblesFamilies = families?.filter((f) => f.family_type === 'noble') ?? [];
-  const commonerFamilies = families?.filter((f) => f.family_type === 'commoner') ?? [];
+  const noblesFamilies = families?.filter((f) => f.kind.styles_as_house) ?? [];
+  const commonerFamilies = families?.filter((f) => !f.kind.styles_as_house) ?? [];
 
   return (
     <motion.div

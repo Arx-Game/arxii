@@ -6,6 +6,8 @@ from evennia_extensions.factories import AccountFactory
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.constants import NOBLE_KIND_NAME
+from world.roster.factories import FamilyKindFactory
 from world.roster.models import Family, FamilyMembership, KinSlotPool, Kinsperson
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.constants import HouseClaimStatus, TitleTier
@@ -42,7 +44,7 @@ class HouseCreatorTestData(TestCase):
         cls.template = HouseTemplate.objects.create(
             name="Barony Charter",
             realm=cls.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             society=cls.crown.society,
             liege=cls.crown,
             default_succession_law=cls.law,
@@ -89,7 +91,7 @@ class GateTests(HouseCreatorTestData):
             self._submit(house_name="thornwood of the fens")
 
     def test_name_collision_gate(self):
-        Family.objects.create(name="Thornwood", family_type=Family.FamilyType.NOBLE)
+        Family.objects.create(name="Thornwood", kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
         with self.assertRaises(HousesServiceError):
             self._submit()
 
@@ -123,7 +125,7 @@ class GateTests(HouseCreatorTestData):
         alien_template = HouseTemplate.objects.create(
             name="Foreign Charter",
             realm=foreign.society.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             society=foreign.society,
             liege=foreign,
             default_succession_law=self.law,
