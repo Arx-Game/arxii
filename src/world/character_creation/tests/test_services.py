@@ -159,6 +159,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             age=25,
@@ -169,7 +170,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             build=self.build,
             draft_data={
                 "first_name": "Incomplete",
-                "lineage_is_orphan": True,  # Complete heritage/lineage
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
@@ -221,6 +221,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             beginning=self.beginnings,
             name="Escape",
             frame_narrative="Your story begins with escape from Salvation.",
+            allows_no_family=True,
         )
         slot = OriginTemplateSlot.objects.create(
             template=template, name="Who helped?", prompt="Who aided your flight?"
@@ -321,6 +322,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -335,7 +337,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
                 "first_name": "Physical",
                 "description": "A test character with physical stats",
                 "stats": DEFAULT_STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
@@ -1434,6 +1435,7 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -1447,7 +1449,6 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
                 "first_name": "Solitary",
                 "description": "A test character",
                 "stats": DEFAULT_STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,

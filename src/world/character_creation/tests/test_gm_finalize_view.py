@@ -93,6 +93,7 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
             account=self.gm.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             age=25,
@@ -103,7 +104,6 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
             build=self.build,
             draft_data={
                 "first_name": "Half Finished",
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
