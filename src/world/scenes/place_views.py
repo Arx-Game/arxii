@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from http import HTTPMethod
-from typing import Any
 
 from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
@@ -39,28 +38,15 @@ class PlaceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at"]
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        # Memoized per serializer instance so a list page's N rows share one
-        # owned-persona lookup instead of re-running it per row (#2156 review fold-in).
-        self._owned_persona_ids_cache: set[int] | None = None
-
-    def _owned_persona_ids(self) -> set[int]:
-        """Return (and cache) the requesting account's owned persona ids."""
-        if self._owned_persona_ids_cache is None:
-            request = self.context.get("request")
-            if not (request and request.user and request.user.is_authenticated):
-                self._owned_persona_ids_cache = set()
-            else:
-                self._owned_persona_ids_cache = set(get_account_personas(request))
-        return self._owned_persona_ids_cache
-
     def get_presence_count(self, obj: Place) -> int:
         return PlacePresence.objects.filter(place=obj).count()
 
     def get_viewer_is_present(self, obj: Place) -> bool:
         """Whether one of the requesting account's personas is present at this place (#2156)."""
-        owned = self._owned_persona_ids()
+        request = self.context.get("request")
+        if request is None:
+            return False
+        owned = get_account_personas(request)
         return (
             bool(owned) and PlacePresence.objects.filter(place=obj, persona_id__in=owned).exists()
         )

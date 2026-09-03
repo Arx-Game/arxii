@@ -2087,61 +2087,65 @@ class TestCharacterSheetQueryCount(TestCase):
          1-4.  Session management (check, savepoint, insert, release)
          5.    CharacterSheet + select_related (character, identity FKs,
                build, aura, roster_entry, profile_picture__media)
-         6.    tenures + player_data + account (via Prefetch select_related)
-         7.    path_history
-         8.    character forms (TRUE filter)
-         9.    character form values (traits + options)
-        10.    character trait_values (stats)
-        11.    character skill_values
-        12.    character specialization_values
-        13.    character distinctions
-        14.    authored_rituals (SCENE_ACTION kind, prefetched via db_account)
-        15.    character_gifts (via CharacterSheet)
-        16.    gift resonances (nested Prefetch)
-        17.    character_techniques (via CharacterSheet)
-        18.    motif resonances (nested Prefetch via CharacterSheet)
-        19.    motif resonance facet_assignments (nested Prefetch)
-        20.    motif resonance style_assignments (nested Prefetch, #2030)
-        21.    goals
-        22.    personas + thumbnails (via Prefetch select_related)
-        23.    persona trait_descriptors (nested Prefetch — appearance overlay)
-        24.    HeightBand range lookup for the coarse band label (#1325; one constant
+               (The tenures + player_data + account Prefetch is elided: the
+               persona save in setUpTestData walks Persona.related_cache_fields
+               through roster_entry.current_tenure (#3597), which fills the
+               identity-mapped RosterEntry's cached_tenures, and Django skips a
+               to_attr prefetch whose attribute already exists.)
+         6.    path_history
+         7.    character forms (TRUE filter)
+         8.    character form values (traits + options)
+        9.    character trait_values (stats)
+        10.    character skill_values
+        11.    character specialization_values
+        12.    character distinctions
+        13.    authored_rituals (SCENE_ACTION kind, prefetched via db_account)
+        14.    character_gifts (via CharacterSheet)
+        15.    gift resonances (nested Prefetch)
+        16.    character_techniques (via CharacterSheet)
+        17.    motif resonances (nested Prefetch via CharacterSheet)
+        18.    motif resonance facet_assignments (nested Prefetch)
+        19.    motif resonance style_assignments (nested Prefetch, #2030)
+        20.    goals
+        21.    personas + thumbnails (via Prefetch select_related)
+        22.    persona trait_descriptors (nested Prefetch — appearance overlay)
+        23.    HeightBand range lookup for the coarse band label (#1325; one constant
                query — the band is derived from inches, not stored on the sheet)
-        25-27. Session management (savepoint, update, release)
-        28.    block gate — one indexed exists() check (#1278, get_object)
-        29.    character resonances (CharacterResonanceHandler._by_resonance —
+        24-26. Session management (savepoint, update, release)
+        27.    block gate — one indexed exists() check (#1278, get_object)
+        28.    character resonances (CharacterResonanceHandler._by_resonance —
                _build_magic_resonances reads character.resonances for the sheet's
                new resonance-balance sub-section, #2032; the handler's one cached
                query, not a fresh SELECT per resonance)
-         30.   form_state + active_fake_overlay (#1272 — the disguise concealment
+         29.   form_state + active_fake_overlay (#1272 — the disguise concealment
                 prefetch; one select_related join, no extra round-trip when no
                 overlay is set)
-         31.   character condition_instances prefetch (#2196 — dynamic thumbnail
+         30.   character condition_instances prefetch (#2196 — dynamic thumbnail
                 resolution; prefetched so resolve_thumbnail() doesn't fire
                 per-persona queries in _build_personas)
-         32.   aura glimpse_tags prefetch (#2427 — chosen glimpse tags for the
+         31.   aura glimpse_tags prefetch (#2427 — chosen glimpse tags for the
                 guided-flow "finish your glimpse" affordance; one join query,
                 select_related onto the catalog tag)
-         33.   origin_slots prefetch (#2478 — origin-story slot answers for
+         32.   origin_slots prefetch (#2478 — origin-story slot answers for
                 the guided-flow "finish your origin story" affordance)
-        34-37. technique payload prefetches (#2898 — applied conditions, removed
+        33-36. technique payload prefetches (#2898 — applied conditions, removed
                 conditions, damage profiles, capability grants, each landing on the
                 cached_property name the effect summary reads). Four fixed queries
                 for the whole spellbook, not four per technique: the alternative
                 was showing the player a technique list that says nothing about
                 what any of the techniques do.
-        38.    technique variants prefetch (#2901 — the resonance-specialized forms
+        37.    technique variants prefetch (#2901 — the resonance-specialized forms
                 each known technique offers, select_related onto the resonance that
                 labels them). One fixed query, and it carries no payload prefetch of
                 its own: each form's effect summary is cached on its TechniqueVariant
                 row, so it is built once per variant for the process rather than once
                 per sheet read.
-        39.    character.threads (CharacterThreadHandler._all, #2901) — which of
+        38.    character.threads (CharacterThreadHandler._all, #2901) — which of
                 those variants this caster has actually unlocked. A per-Character
                 cached handler, so one query however many techniques are known.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(39):
+        with self.assertNumQueries(38):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
