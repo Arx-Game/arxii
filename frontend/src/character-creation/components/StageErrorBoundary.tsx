@@ -109,7 +109,7 @@ export function StageErrorBoundary({ children, currentStage, onNavigateToStage }
     <QueryErrorResetBoundary>
       {({ reset }) => (
         <ReactErrorBoundary
-          FallbackComponent={(props) => (
+          fallbackRender={(props) => (
             <StageErrorFallback
               {...props}
               currentStage={currentStage}

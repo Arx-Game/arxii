@@ -5,7 +5,7 @@
  * properties. Works alongside next-themes (which handles light/dark mode).
  */
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export const REALM_THEMES = [
   'default',
@@ -176,13 +176,15 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
     };
   }, [plainMode]);
 
-  return (
-    <RealmThemeContext.Provider
-      value={{ realmTheme, setRealmTheme, setForcedRealm, plainMode, setPlainMode }}
-    >
-      {children}
-    </RealmThemeContext.Provider>
+  // Every consumer re-renders when this object's identity changes, and a fresh
+  // literal here changed it on every provider render. All five members are
+  // already stable (useState setters and useCallback), so the memo holds.
+  const value = useMemo(
+    () => ({ realmTheme, setRealmTheme, setForcedRealm, plainMode, setPlainMode }),
+    [realmTheme, setRealmTheme, setForcedRealm, plainMode, setPlainMode]
   );
+
+  return <RealmThemeContext.Provider value={value}>{children}</RealmThemeContext.Provider>;
 }
 
 export function useRealmTheme() {

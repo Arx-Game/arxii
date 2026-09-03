@@ -72,3 +72,28 @@ def split_possessive(args: str) -> tuple[str, str] | None:
     if not owner or not item:
         return None
     return owner, item
+
+
+def split_bracketed_prefix(
+    text: str, opener: str, closer: str, *, max_len: int = 50
+) -> tuple[str, str] | None:
+    """Split ``"(tongue) rest"`` into ``("tongue", "rest")``.
+
+    Scans for the closing delimiter rather than matching a pattern, so there is no
+    backtracking to bound. Returns ``None`` when the text does not open with
+    ``opener``, when the delimiter is unclosed or longer than ``max_len``, when the
+    closer is not followed by whitespace, or when either side is empty.
+    """
+    if not text.startswith(opener):
+        return None
+    close = text.find(closer, len(opener))
+    if close == -1 or close - len(opener) > max_len:
+        return None
+    inner = text[len(opener) : close].strip()
+    rest = text[close + len(closer) :]
+    if not rest[:1].isspace():
+        return None
+    rest = rest.strip()
+    if not inner or not rest:
+        return None
+    return inner, rest
