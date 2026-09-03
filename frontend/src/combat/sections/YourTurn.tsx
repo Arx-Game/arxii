@@ -886,6 +886,114 @@ function MountedManeuvers({
   );
 }
 
+/** What this round's already-declared maneuver is, when there is one. */
+function DeclaredManeuverBadge({
+  declaredManeuver,
+  coveredAllyName,
+  guardedAllyName,
+}: {
+  declaredManeuver: string | null;
+  coveredAllyName: string | null | undefined;
+  guardedAllyName: string | null | undefined;
+}) {
+  if (declaredManeuver === 'flee') {
+    return (
+      <div
+        className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+        data-testid="flee-declared-badge"
+      >
+        Fleeing: resolves at end of round
+      </div>
+    );
+  }
+  if (declaredManeuver === 'cover') {
+    return (
+      <div
+        className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-300"
+        data-testid="cover-declared-badge"
+      >
+        Covering {coveredAllyName ?? 'ally'}
+      </div>
+    );
+  }
+  if (declaredManeuver === 'interpose') {
+    return (
+      <div
+        className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
+        data-testid="guard-declared-badge"
+      >
+        Guarding {guardedAllyName ?? 'any ally hit this round'}
+      </div>
+    );
+  }
+  return null;
+}
+
+interface CoverControlProps {
+  declaredManeuver: string | null;
+  coverableAllies: Participant[];
+  coverAllyId: string;
+  coverPending: boolean;
+  isLocked: boolean;
+  isDeclaringPhase: boolean;
+  setCoverAllyId: (value: string) => void;
+  handleCover: () => void;
+}
+
+/** Cover an ally, taking hits aimed at them. Hidden once cover is declared. */
+function CoverControl({
+  declaredManeuver,
+  coverableAllies,
+  coverAllyId,
+  coverPending,
+  isLocked,
+  isDeclaringPhase,
+  setCoverAllyId,
+  handleCover,
+}: CoverControlProps) {
+  if (declaredManeuver === 'cover') return null;
+  return (
+    <div className="space-y-1.5" data-testid="cover-control">
+      <Select
+        value={coverAllyId}
+        onValueChange={setCoverAllyId}
+        disabled={isLocked || !isDeclaringPhase || coverPending}
+      >
+        <SelectTrigger data-testid="cover-ally-select" className="h-8 text-xs">
+          <SelectValue placeholder="Cover an ally…" />
+        </SelectTrigger>
+        <SelectContent>
+          {coverableAllies.map((ally) => (
+            <SelectItem key={ally.id} value={String(ally.id)}>
+              {ally.character_name}
+            </SelectItem>
+          ))}
+          {coverableAllies.length === 0 && (
+            <SelectItem value="__none__" disabled>
+              No allies available
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      <button
+        type="button"
+        disabled={isLocked || !isDeclaringPhase || coverPending || coverAllyId === ''}
+        onClick={handleCover}
+        data-testid="cover-confirm-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          isLocked || !isDeclaringPhase || coverAllyId === ''
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
+        )}
+      >
+        {coverPending ? 'Declaring cover…' : 'Confirm Cover'}
+      </button>
+    </div>
+  );
+}
+
 interface GuardControlProps {
   declaredManeuver: string | null;
   encounter: EncounterDetail | null | undefined;
@@ -2094,31 +2202,11 @@ export function YourTurn({
             Maneuvers
           </p>
 
-          {/* Declared-state display */}
-          {declaredManeuver === 'flee' && (
-            <div
-              className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
-              data-testid="flee-declared-badge"
-            >
-              Fleeing: resolves at end of round
-            </div>
-          )}
-          {declaredManeuver === 'cover' && (
-            <div
-              className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-300"
-              data-testid="cover-declared-badge"
-            >
-              Covering {coveredAllyName ?? 'ally'}
-            </div>
-          )}
-          {declaredManeuver === 'interpose' && (
-            <div
-              className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
-              data-testid="guard-declared-badge"
-            >
-              Guarding {guardedAllyName ?? 'any ally hit this round'}
-            </div>
-          )}
+          <DeclaredManeuverBadge
+            declaredManeuver={declaredManeuver}
+            coveredAllyName={coveredAllyName}
+            guardedAllyName={guardedAllyName}
+          />
 
           {/* Flee button — only when not already declared a flee maneuver */}
           {declaredManeuver !== 'flee' && (
@@ -2139,47 +2227,16 @@ export function YourTurn({
             </button>
           )}
 
-          {/* Cover control — ally picker + confirm button */}
-          {declaredManeuver !== 'cover' && (
-            <div className="space-y-1.5" data-testid="cover-control">
-              <Select
-                value={coverAllyId}
-                onValueChange={setCoverAllyId}
-                disabled={isLocked || !isDeclaringPhase || coverPending}
-              >
-                <SelectTrigger data-testid="cover-ally-select" className="h-8 text-xs">
-                  <SelectValue placeholder="Cover an ally…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {coverableAllies.map((ally) => (
-                    <SelectItem key={ally.id} value={String(ally.id)}>
-                      {ally.character_name}
-                    </SelectItem>
-                  ))}
-                  {coverableAllies.length === 0 && (
-                    <SelectItem value="__none__" disabled>
-                      No allies available
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                disabled={isLocked || !isDeclaringPhase || coverPending || coverAllyId === ''}
-                onClick={handleCover}
-                data-testid="cover-confirm-btn"
-                className={cn(
-                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked || !isDeclaringPhase || coverAllyId === ''
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
-                )}
-              >
-                {coverPending ? 'Declaring cover…' : 'Confirm Cover'}
-              </button>
-            </div>
-          )}
+          <CoverControl
+            declaredManeuver={declaredManeuver}
+            coverableAllies={coverableAllies}
+            coverAllyId={coverAllyId}
+            coverPending={coverPending}
+            isLocked={isLocked}
+            isDeclaringPhase={isDeclaringPhase}
+            setCoverAllyId={setCoverAllyId}
+            handleCover={handleCover}
+          />
 
           {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
           <GuardControl
