@@ -1474,12 +1474,6 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
 
         # Complete the Gift stage against the (now-selected) Unbound tradition.
         self._create_complete_magic(draft)
-        # CharacterDraft is a SharedMemoryModel: the select-tradition response
-        # serializer already computed stage errors on this same idmapper-shared
-        # instance, BEFORE the Gift keys above existed. Drop the per-instance memo
-        # so finalize re-validates the now-complete draft.
-        if hasattr(draft, "_cached_stage_errors"):
-            del draft._cached_stage_errors
 
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
