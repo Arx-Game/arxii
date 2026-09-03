@@ -149,11 +149,13 @@ class CloseTests(TestCase):
         self.assertEqual(clock.closed_reason, SceneClockClosedReason.FILLED)
 
 
-class CompleteSuccessHookTests(EvenniaTestCase):
-    """The completion tail closes the clock, using the same fixture helper
+class CompletionTailClosesClockTests(EvenniaTestCase):
+    """Any completion routed through ``_create_completion_and_fire_pool`` closes
+    an open clock COMPLETED, regardless of outcome. Driven here via
+    ``complete_beat_expired`` (EXPIRED), using the same fixture helper
     ``test_services_expiry.py`` uses to build a beat with an active progress."""
 
-    def test_success_completion_closes_the_clock_completed(self) -> None:
+    def test_completion_tail_closes_the_clock_completed(self) -> None:
         from world.stories.services.beats import complete_beat_expired
         from world.stories.tests.test_services_expiry import _character_beat
 
