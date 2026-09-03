@@ -141,20 +141,19 @@ function RequestRow({ request }: { request: TableUpdateRequest }) {
   const withdraw = useWithdrawMutation();
 
   const details = request.distinction_details;
+  const distinctionName = details?.distinction_name ?? details?.held_distinction_name ?? '';
+  const distinctionVerb = details?.action === DISTINCTION_ACTIONS.REMOVE ? 'shed' : 'gain';
+  const xpSuffix = details?.xp_cost ? `, ${details.xp_cost} XP` : '';
+  const summary =
+    request.kind === REQUEST_KINDS.PROFILE_TEXT
+      ? `Profile: ${request.profile_text_details?.field ?? ''}`
+      : `Distinction: ${distinctionName} (${distinctionVerb}${xpSuffix})`;
 
   return (
     <Card data-testid="update-request-row">
       <CardContent className="space-y-2 py-4">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-medium">
-            {request.kind === REQUEST_KINDS.PROFILE_TEXT
-              ? `Profile: ${request.profile_text_details?.field ?? ''}`
-              : `Distinction: ${
-                  details?.distinction_name ?? details?.held_distinction_name ?? ''
-                } (${details?.action === DISTINCTION_ACTIONS.REMOVE ? 'shed' : 'gain'}${
-                  details?.xp_cost ? `, ${details.xp_cost} XP` : ''
-                })`}
-          </span>
+          <span className="font-medium">{summary}</span>
           <Badge variant={STATUS_VARIANTS[request.status ?? ''] ?? 'outline'}>
             {request.status}
           </Badge>

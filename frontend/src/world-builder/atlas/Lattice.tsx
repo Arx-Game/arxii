@@ -508,12 +508,11 @@ export function Lattice({
   return (
     <div data-testid="lattice" data-mode={mode}>
       {mode === 'rooms' && (
-        <div
+        <fieldset
           className="mb-2 flex flex-wrap items-center gap-1"
-          role="group"
-          aria-label="Floors of this build"
           data-testid="lattice-floor-rail"
         >
+          <legend className="sr-only">Floors of this build</legend>
           <button
             type="button"
             className="px-1 font-body text-xs italic text-muted-foreground hover:text-primary"
@@ -547,7 +546,7 @@ export function Lattice({
           >
             ⊕
           </button>
-        </div>
+        </fieldset>
       )}
 
       <div className="flex justify-center">

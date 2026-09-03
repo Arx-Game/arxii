@@ -26,6 +26,8 @@ as argument.
 
 """
 
+from typing import cast
+
 from evennia.server.inputfuncs import text as _evennia_text
 
 from server.conf.mush_markup import normalize_mush_markup
@@ -142,7 +144,7 @@ def _resolve_registry_kwargs(ref: object, raw_kwargs: dict, actor: object) -> "d
     from actions.registry import get_action  # noqa: PLC0415
     from actions.types import ActionRef  # noqa: PLC0415
 
-    typed_ref: ActionRef = ref  # type: ignore[assignment]
+    typed_ref = cast("ActionRef", ref)
     if typed_ref.backend != ActionBackend.REGISTRY:
         return dict(raw_kwargs)
 
@@ -177,7 +179,7 @@ def _result_from_dispatch(dispatch_result: object) -> "tuple[str | None, dict | 
     from actions.result_extraction import extract_dispatch_message_data  # noqa: PLC0415
     from actions.types import DispatchResult  # noqa: PLC0415
 
-    typed_result: DispatchResult = dispatch_result  # type: ignore[assignment]
+    typed_result = cast("DispatchResult", dispatch_result)
     return extract_dispatch_message_data(typed_result.detail)
 
 

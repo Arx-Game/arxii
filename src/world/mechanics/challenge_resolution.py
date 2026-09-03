@@ -320,11 +320,12 @@ def _outcome_of_pending(
     main = pending.main_result
     if main and main.consequence_id:
         return Consequence.objects.get(pk=main.consequence_id), main.check_result
-    check_result = (
-        main.check_result
-        if main
-        else (pending.gate_results[-1].check_result if pending.gate_results else None)
-    )
+    if main:
+        check_result = main.check_result
+    elif pending.gate_results:
+        check_result = pending.gate_results[-1].check_result
+    else:
+        check_result = None
     outcome = check_result.outcome if check_result else None
     consequence = Consequence(
         outcome_tier=outcome,

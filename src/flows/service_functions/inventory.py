@@ -311,7 +311,7 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     taker_sheet = character.obj.character_sheet
     denial = _take_denial(taker_sheet, item.instance)
     if denial is not None:
-        raise denial
+        raise denial()
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
@@ -548,7 +548,7 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     taker_sheet = character.obj.character_sheet
     denial = _take_denial(taker_sheet, item.instance)
     if denial is not None:
-        raise denial
+        raise denial()
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):

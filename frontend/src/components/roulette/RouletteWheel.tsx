@@ -42,7 +42,7 @@ export function RouletteWheel({
   // Find which index is selected
   const selectedIndex = useMemo(() => {
     const idx = consequences.findIndex((c) => c.is_selected);
-    return idx >= 0 ? idx : 0;
+    return Math.max(idx, 0);
   }, [consequences]);
 
   // Target rotation: land so the selected face is at front (rotateY = 0 equivalent)

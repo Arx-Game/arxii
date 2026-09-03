@@ -104,7 +104,7 @@ export function PullEffectPreview({ thread }: PullEffectPreviewProps) {
       <h3 className="text-sm font-semibold">Pull Preview</h3>
 
       {/* Tier selector */}
-      <div className="flex gap-2" role="group" aria-label="Tier selector">
+      <div className="flex gap-2" role="radiogroup" aria-label="Tier selector">
         {([1, 2, 3] as const).map((t) => (
           <button
             key={t}

@@ -66,7 +66,7 @@ def format_coppers(amount: int) -> str:
     return sign + " ".join(parts)
 
 
-_COIN_TOKEN = re.compile(r"^(\d+)\s*(g|s|c)$", re.IGNORECASE)
+_COIN_TOKEN = re.compile(r"^(\d+)\s*([gsc])$", re.IGNORECASE)
 
 _UNIT_COPPERS = {"g": COPPERS_PER_GOLD, "s": COPPERS_PER_SILVER, "c": 1}
 

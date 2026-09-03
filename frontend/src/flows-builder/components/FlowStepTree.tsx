@@ -32,6 +32,7 @@ import { useDslCatalog } from '../queries';
 import { addStep, childrenOf, conditionalOpSymbol, moveStep, removeStep } from '../stepTree';
 import type { ClientStep, DslCatalog, StepActionSpec } from '../types';
 import { ServiceFunctionField, StepParamInputs } from './StepParamInputs';
+import { toDisplayString } from '@/lib/displayValue';
 
 const VARIABLE_NAME_LABELS: Record<string, string> = {
   flow_variable: 'Variable name',
@@ -275,7 +276,7 @@ function StepNode({
 }
 
 function formatConditionValue(value: unknown): string {
-  return value === undefined || value === null || value === '' ? '…' : String(value);
+  return value === '' ? '…' : toDisplayString(value, '…');
 }
 
 function ActionOptions({ actions }: { actions: StepActionSpec[] }) {
