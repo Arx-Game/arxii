@@ -3480,7 +3480,14 @@ paths:
   /api/chapters/{id}/episodes/:
     get:
       operationId: chapters_episodes_retrieve
-      description: Get all episodes for a chapter
+      description: |-
+        Get all episodes for a chapter.
+
+        Carries the request in the serializer context (#3563) so
+        EpisodeListSerializer's GM-only routing_problems field can resolve
+        the viewer instead of default-denying every caller, and preloads one
+        routing report per episode on the page the way EpisodeViewSet.list
+        does, so this action does not pay four queries per episode.
       parameters:
       - in: path
         name: id
@@ -10982,9 +10989,7 @@ paths:
   /api/episodes/:
     get:
       operationId: episodes_list
-      description: |-
-        ViewSet for Episode model.
-        Manages story episodes with narrative connection tracking.
+      description: Preload one routing report per episode on the page (#3563).
       parameters:
       - in: query
         name: chapter
@@ -48769,12 +48774,18 @@ components:
           description: Whether any pair of this episode's outbound transitions is
             ambiguous (#3565).
           readOnly: true
+        routing_problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - chapter
       - created_at
       - id
       - order
       - routing_ambiguous
+      - routing_problems
       - title
       - updated_at
     EpisodeDetailRequest:
@@ -48842,10 +48853,16 @@ components:
           type: string
           format: date-time
           nullable: true
+        routing_problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - chapter
       - id
       - order
+      - routing_problems
       - scenes_count
       - title
     EpisodeProgressionRequirement:
@@ -67322,6 +67339,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         source_episode:
           type: integer
@@ -79231,6 +79251,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         id:
           type: integer
@@ -79269,9 +79292,15 @@ components:
           type: string
           format: date-time
           readOnly: true
+        required_outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitionRoutingRule'
+          readOnly: true
       required:
       - created_at
       - id
+      - required_outcomes
       - source_episode
       - source_episode_title
       - target_episode_title
@@ -79283,6 +79312,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         source_episode:
           type: integer
@@ -79412,6 +79444,57 @@ components:
       required:
       - beat
       - transition
+    TransitionRoutingRule:
+      type: object
+      description: |-
+        One routing rule as the graph and the author tree read it (#3563).
+
+        Read-only. Rows are written through ``TransitionRequiredOutcomeSerializer``
+        and ``save_with_outcomes``; this nested view adds the beat title and the
+        stake's player summary so the rule renders without a second fetch.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        beat:
+          type: integer
+          readOnly: true
+        beat_title:
+          type: string
+          readOnly: true
+        required_outcome:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RequiredOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        required_outcome_key:
+          type: string
+          readOnly: true
+          description: 'Beat-level rows only: also require Beat.outcome_key to equal
+            this MissionOption.key (#3565). Blank = any key.'
+        stake:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: When set, this requirement routes on the stake's StakeOutcome
+            column instead of the beat's outcome.
+        stake_summary:
+          type: string
+          readOnly: true
+        required_stake_column:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RequiredStakeColumnEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - beat
+      - beat_title
+      - id
+      - required_outcome
+      - required_outcome_key
+      - required_stake_column
+      - stake
+      - stake_summary
     Trap:
       type: object
       description: |-

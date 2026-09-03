@@ -376,10 +376,23 @@ class StakesReadinessReport:
 
 
 @dataclass(frozen=True)
-class RoutingReadinessReport:
-    """Pairs of outbound transitions that could be eligible at the same time (#3565)."""
+class RoutingReport:
+    """Authoring-time routing report for one episode (#3563). Advisory only.
 
-    ambiguous_pairs: tuple[tuple[int, int], ...]
+    ``dead_ends``: failure-shaped outcomes (FAILURE, EXPIRED with a deadline,
+    a stake's LOSS) that no outbound transition accepts, one line each.
+    ``ambiguities``: pairs of outbound transitions whose rules never
+    contradict, so both could be eligible at once (lowest (order, pk) wins,
+    #3565). ``ambiguous_pairs`` carries the same pairs as ids.
+    """
+
+    dead_ends: tuple[str, ...] = ()
+    ambiguities: tuple[str, ...] = ()
+    ambiguous_pairs: tuple[tuple[int, int], ...] = ()
+
+    @property
+    def problems(self) -> tuple[str, ...]:
+        return self.dead_ends + self.ambiguities
 
     @property
     def is_ambiguous(self) -> bool:

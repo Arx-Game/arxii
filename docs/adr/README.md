@@ -310,4 +310,5 @@ treat those names as hints to confirm, not gospel.
 - [0259 - Stake branches are chosen by authored key, never by a GM pick](0259-stake-branches-are-chosen-by-authored-key.md) (#3561; supersedes the PR2 constrained-pick decision recorded in stakes.md; extends ADR-0067, ADR-0078; related ADR-0257)
 - [0260 - request.user is the Account typeclass; account data caches on the Account, request data goes through middleware](0260-request-user-is-the-account-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
 - [0261 - No .only() or .defer() on identity-mapped models](0261-no-only-or-defer-on-identity-mapped-models.md) (Sentry ARX2-9; extends ADR-0008; `lint-only-defer` hook)
+- [0262 - The routing report is advisory and open-world](0262-routing-report-is-advisory-and-open-world.md) (#3563; extends ADR-0258; related ADR-0259)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
