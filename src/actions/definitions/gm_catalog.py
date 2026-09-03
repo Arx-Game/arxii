@@ -32,10 +32,9 @@ from world.societies.constants import RenownRisk
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.gm.models import SituationKind
+    from world.gm.types import KindResult
     from world.mechanics.models import ChallengeTemplate, SituationTemplate
 
-_FIND_RESULT_LIMIT = 15
 _DESCRIPTION_SNIPPET_LEN = 80
 
 
@@ -61,39 +60,6 @@ def _format_challenge_row(template: ChallengeTemplate) -> str:
     snippet = _description_snippet(template.goal or template.description_template)
     row = f"[{template.pk}] {template.name} ({difficulty_label(template.severity)})"
     return f"{row} -- {snippet}" if snippet else row
-
-
-def _search_situation_templates(query: str, *, limit: int = _FIND_RESULT_LIMIT) -> list:
-    from django.db.models import Q  # noqa: PLC0415
-
-    from world.mechanics.models import SituationTemplate  # noqa: PLC0415
-
-    qs = SituationTemplate.objects.all()
-    query = query.strip()
-    if query:
-        qs = qs.filter(Q(name__icontains=query) | Q(description_template__icontains=query))
-    return list(qs.order_by("name")[:limit])
-
-
-def _search_challenge_templates(query: str, *, limit: int = _FIND_RESULT_LIMIT) -> list:
-    """Search authored ``ChallengeTemplate``s by name, description, or goal (#2865).
-
-    The same browse surface covers both what ``SetSituationAction`` and
-    ``PlaceChallengeAction`` can place -- deliberately not a second browser.
-    """
-    from django.db.models import Q  # noqa: PLC0415
-
-    from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
-
-    qs = ChallengeTemplate.objects.all()
-    query = query.strip()
-    if query:
-        qs = qs.filter(
-            Q(name__icontains=query)
-            | Q(description_template__icontains=query)
-            | Q(goal__icontains=query)
-        )
-    return list(qs.order_by("name")[:limit])
 
 
 def _actor_breadth_index(actor: ObjectDB) -> int:
@@ -124,51 +90,32 @@ def _actor_breadth_index(actor: ObjectDB) -> int:
     return gm_level_index(level)
 
 
-def _search_situation_kinds(query: str, actor_level_index: int) -> list[SituationKind]:
-    """Return SituationKinds matching *query* within the actor's breadth.
-
-    Filtered server-side on ``SituationKind.minimum_gm_level`` (Decision 9) --
-    a kind above the actor's tier never appears in results, even if the name
-    matches exactly (the leak-analysis contract: never a client-side hide).
-    """
-    from world.gm.models import SituationKind  # noqa: PLC0415
-
-    kinds = SituationKind.objects.cached_all()
-    query = query.strip().lower()
-    if query:
-        kinds = [k for k in kinds if query in k.name.lower()]
-    kinds = [k for k in kinds if gm_level_index(k.minimum_gm_level) <= actor_level_index]
-    return sorted(kinds, key=lambda k: k.name)
-
-
-def _format_kind_guidance(kind: SituationKind, risk: str | None) -> list[str]:
+def _format_kind_guidance(result: KindResult, risk: str | None) -> list[str]:
+    kind = result.kind
     lines = [f"Kind: {kind.name} (min tier: {GMLevel(kind.minimum_gm_level).label})"]
     if kind.description:
         lines.append(f"  {kind.description}")
-    lines.extend(_format_check_fits(kind))
-    lines.extend(_format_difficulty_guides(kind, risk))
-    lines.extend(_format_pool_guides(kind))
+    lines.extend(_format_check_fits(result))
+    lines.extend(_format_difficulty_guides(result, risk))
+    lines.extend(_format_pool_guides(result))
     return lines
 
 
-def _format_check_fits(kind: SituationKind) -> list[str]:
+def _format_check_fits(result: KindResult) -> list[str]:
     """Format the ``Checks that fit`` section for a SituationKind."""
-    fits = list(kind.check_fits.select_related("check_type").order_by("check_type__name"))
-    if not fits:
+    if not result.check_fits:
         return []
     lines = ["  Checks that fit:"]
-    for fit in fits:
+    for fit in result.check_fits:
         row = f"    [{fit.check_type.pk}] {fit.check_type.name}"
         lines.append(f"{row} -- {fit.fit_notes}" if fit.fit_notes else row)
     return lines
 
 
-def _format_difficulty_guides(kind: SituationKind, risk: str | None) -> list[str]:
+def _format_difficulty_guides(result: KindResult, risk: str | None) -> list[str]:
     """Format the ``Difficulty guide`` section, optionally filtered by *risk*."""
-    guides = kind.difficulty_guides.all()
-    if risk:
-        guides = guides.filter(risk=risk)
-    guides = list(guides.order_by("risk"))
+    guides = [result.difficulty_guide] if risk else result.all_guides
+    guides = [g for g in guides if g is not None]
     if not guides:
         return []
     lines = ["  Difficulty guide:"]
@@ -180,13 +127,12 @@ def _format_difficulty_guides(kind: SituationKind, risk: str | None) -> list[str
     return lines
 
 
-def _format_pool_guides(kind: SituationKind) -> list[str]:
+def _format_pool_guides(result: KindResult) -> list[str]:
     """Format the advisory consequence-pool guidance section."""
-    pools = list(kind.pool_guides.select_related("pool").order_by("-is_default", "pool__name"))
-    if not pools:
+    if not result.pool_guides:
         return []
     lines = ["  Consequence pool guidance (advisory only -- never auto-applied):"]
-    for pool_guide in pools:
+    for pool_guide in result.pool_guides:
         tag = " [default]" if pool_guide.is_default else ""
         row = f"    {pool_guide.pool.name}{tag}"
         criteria = pool_guide.selection_criteria
@@ -195,7 +141,7 @@ def _format_pool_guides(kind: SituationKind) -> list[str]:
 
 
 def _format_kind_results(
-    kinds: list[SituationKind],
+    kinds: list[KindResult],
     risk: str | None,
     existing_lines: list[str],
     query: str,
@@ -214,10 +160,10 @@ def _format_kind_results(
         # Return only the appended lines (the caller already has existing_lines).
         return lines[len(existing_lines) :]
     lines: list[str] = []
-    for kind in kinds:
+    for kind_result in kinds:
         if lines or existing_lines:
             lines.append("")
-        lines.extend(_format_kind_guidance(kind, risk))
+        lines.extend(_format_kind_guidance(kind_result, risk))
     return lines
 
 
@@ -266,29 +212,30 @@ class FindSituationAction(Action):
                 message="Pick a risk tier: " + ", ".join(RenownRisk.values) + ".",
             )
 
-        actor_level_index = _actor_breadth_index(actor)
-        templates = _search_situation_templates(query)
-        challenges = _search_challenge_templates(query)
-        kinds = _search_situation_kinds(query, actor_level_index)
+        from world.gm.services import find_situations  # noqa: PLC0415
+
+        found = find_situations(
+            query=query, risk=risk, actor_level_index=_actor_breadth_index(actor)
+        )
 
         lines: list[str] = []
-        if templates:
+        if found.templates:
             header = f"Situations matching {query!r}:" if query else "Situation catalog:"
             lines.append(header)
-            lines.extend(_format_template_row(t) for t in templates)
+            lines.extend(_format_template_row(t) for t in found.templates)
         elif query:
             lines.append(f"No situation templates matched {query!r}.")
 
-        if challenges:
+        if found.challenges:
             if lines:
                 lines.append("")
             header = f"Challenges matching {query!r}:" if query else "Challenge catalog:"
             lines.append(header)
-            lines.extend(_format_challenge_row(c) for c in challenges)
+            lines.extend(_format_challenge_row(c) for c in found.challenges)
         elif query:
             lines.append(f"No challenge templates matched {query!r}.")
 
-        lines.extend(_format_kind_results(kinds, risk, lines, query))
+        lines.extend(_format_kind_results(found.kinds, risk, lines, query))
 
         if not lines:
             lines.append("The catalog is empty.")
