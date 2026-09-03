@@ -18,6 +18,7 @@ from world.societies.constants import RenownRisk
 from world.societies.models import Organization, Society
 from world.stories.constants import (
     AssistantClaimStatus,
+    BeatKind,
     BeatOutcome,
     BeatPredicateType,
     CrossoverInviteStatus,
@@ -39,6 +40,8 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     BeatOpponentLine,
+    BeatStagedBattle,
+    BeatStagedBattleUnit,
     BeatStagedTemplate,
     CanonReview,
     Chapter,
@@ -88,6 +91,11 @@ from world.stories.types import (
 
 _STAKES_LOCKED_MESSAGE = "This beat's stakes contract is locked by an open activation."
 _REQUEST_CONTEXT_REQUIRED_MESSAGE = "Request context is required."
+
+# Sentinel distinguishing "the client omitted this field" from an explicit
+# ``None`` -- used for BeatSerializer's ``staged_battle`` where ``None`` is a
+# legal value (delete the staged battle) so it cannot double as "omitted".
+_UNSET = object()
 
 
 def _custody_blocked_message(verdict: Any) -> str:
@@ -1041,6 +1049,45 @@ class BeatStagedTemplateSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class BeatStagedBattleUnitSerializer(serializers.ModelSerializer):
+    """One unit line of a staged battle (#3569).
+
+    ``id`` is writable-but-optional, the same diff-by-id convention as
+    ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+    """
+
+    id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = BeatStagedBattleUnit
+        fields = ["id", "template", "side_role", "place_name", "count", "order"]
+
+
+class BeatStagedBattleSerializer(serializers.ModelSerializer):
+    """Nested battle prep on a beat (#3569); written through BeatSerializer only.
+
+    Not registered as a standalone router endpoint -- a staged battle only
+    exists attached to its beat, so it is read/written exclusively via
+    ``BeatSerializer.staged_battle``.
+    """
+
+    blueprint_name = serializers.CharField(source="blueprint.name", read_only=True)
+    unit_lines = BeatStagedBattleUnitSerializer(many=True, required=False)
+
+    class Meta:
+        model = BeatStagedBattle
+        fields = [
+            "id",
+            "blueprint",
+            "blueprint_name",
+            "name",
+            "region",
+            "party_side_role",
+            "unit_lines",
+        ]
+        read_only_fields = ["id", "blueprint_name"]
+
+
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
@@ -1068,6 +1115,12 @@ class BeatSerializer(serializers.ModelSerializer):
     # required=False so a Beat with no prep authored yet omits them entirely.
     opponent_lines = BeatOpponentLineSerializer(many=True, required=False)
     staged_templates = BeatStagedTemplateSerializer(many=True, required=False)
+
+    # #3569 session prep: a single nested battle, mutually exclusive with
+    # opponent_lines (see validate() below). allow_null=True so a PATCH can
+    # send {"staged_battle": null} to delete it -- required=False so a PATCH
+    # that omits the key entirely leaves it untouched (see create()/update()).
+    staged_battle = BeatStagedBattleSerializer(required=False, allow_null=True)
 
     class Meta:
         model = Beat
@@ -1120,6 +1173,8 @@ class BeatSerializer(serializers.ModelSerializer):
             # #3425 session prep child rows
             "opponent_lines",
             "staged_templates",
+            # #3569 session prep: nested staged battle
+            "staged_battle",
         ]
         read_only_fields = [
             "id",
@@ -1240,11 +1295,14 @@ class BeatSerializer(serializers.ModelSerializer):
                 "required_mission",
             ]:
                 existing[field_name] = getattr(self.instance, field_name)
-        # opponent_lines/staged_templates (#3425) are reverse-FK child rows, not
-        # Beat model fields -- exclude them before building the temp instance
-        # Beat.clean() validates against; sync_children handles them separately.
+        # opponent_lines/staged_templates (#3425) and staged_battle (#3569) are
+        # reverse-FK/O2O child rows, not Beat model fields -- exclude them
+        # before building the temp instance Beat.clean() validates against;
+        # sync_children/_sync_staged_battle handle them separately.
         scalar_attrs = {
-            k: v for k, v in attrs.items() if k not in ("opponent_lines", "staged_templates")
+            k: v
+            for k, v in attrs.items()
+            if k not in ("opponent_lines", "staged_templates", "staged_battle")
         }
         merged = {**existing, **scalar_attrs}
         temp = Beat(**merged)
@@ -1252,6 +1310,8 @@ class BeatSerializer(serializers.ModelSerializer):
             temp.clean()
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
+
+        self._check_staged_battle_invariants(attrs, merged)
 
         request = self.context.get("request")
         merged_risk = merged.get("risk") or RenownRisk.NONE
@@ -1279,6 +1339,41 @@ class BeatSerializer(serializers.ModelSerializer):
 
         self._check_stakes_lock(attrs)
         return attrs
+
+    def _check_staged_battle_invariants(
+        self, attrs: dict[str, Any], merged: dict[str, Any]
+    ) -> None:
+        """Mirror ``BeatStagedBattle.clean()`` as a 400 (#3569).
+
+        Only an ENCOUNTER beat may stage a battle, and a beat carries either
+        opponent_lines or a staged battle, never both. ``attrs`` only carries
+        ``staged_battle``/``opponent_lines`` when the client actually sent
+        them (DRF omits absent optional fields entirely) -- that's what makes
+        "omitted means untouched" work: an omitted field falls back to the
+        instance's existing state instead of being treated as cleared.
+        """
+        incoming_battle = attrs.get("staged_battle", _UNSET)
+        incoming_lines = attrs.get("opponent_lines", _UNSET)
+        has_battle = (
+            incoming_battle is not None
+            if incoming_battle is not _UNSET
+            else self.instance is not None
+            and BeatStagedBattle.objects.filter(beat=self.instance).exists()
+        )
+        has_lines = (
+            bool(incoming_lines)
+            if incoming_lines is not _UNSET
+            else self.instance is not None and self.instance.opponent_lines.exists()
+        )
+        kind = merged.get("kind", BeatKind.TASK)
+        if has_battle and kind != BeatKind.ENCOUNTER:
+            raise serializers.ValidationError(
+                {"staged_battle": "Only an ENCOUNTER beat can stage a battle."}
+            )
+        if has_battle and has_lines:
+            raise serializers.ValidationError(
+                {"staged_battle": "A beat stages either opponent lines or a battle, not both."}
+            )
 
     @staticmethod
     def _check_required_mission_cap(
@@ -1366,44 +1461,97 @@ class BeatSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(msg)
 
     def create(self, validated_data: dict[str, Any]) -> Beat:
-        """Create the Beat, then its opponent/staged-template child rows (#3425)."""
+        """Create the Beat, then its opponent/staged-template/staged-battle rows (#3425, #3569)."""
         opponent_lines_data = validated_data.pop("opponent_lines", [])
         staged_templates_data = validated_data.pop("staged_templates", [])
+        staged_battle_data = validated_data.pop("staged_battle", _UNSET)
         beat = super().create(validated_data)
         self._sync_children(beat, "opponent_lines", opponent_lines_data, BeatOpponentLine)
         self._sync_children(beat, "staged_templates", staged_templates_data, BeatStagedTemplate)
+        self._sync_staged_battle(beat, staged_battle_data)
         return beat
 
     def update(self, instance: Beat, validated_data: dict[str, Any]) -> Beat:
-        """Update the Beat, then diff-sync any child rows supplied (#3425).
+        """Update the Beat, then diff-sync any child rows supplied (#3425, #3569).
 
         A field omitted entirely from the payload (``None`` from ``.pop``, as
         opposed to an empty list) is left untouched -- a PATCH that doesn't
         mention ``opponent_lines`` doesn't wipe out the beat's authored roster.
+        ``staged_battle`` uses the ``_UNSET`` sentinel rather than ``None`` for
+        "omitted" because ``None`` is itself a legal value there (delete the
+        staged battle) -- see ``_sync_staged_battle``.
         """
         opponent_lines_data = validated_data.pop("opponent_lines", None)
         staged_templates_data = validated_data.pop("staged_templates", None)
+        staged_battle_data = validated_data.pop("staged_battle", _UNSET)
         beat = super().update(instance, validated_data)
         if opponent_lines_data is not None:
             self._sync_children(beat, "opponent_lines", opponent_lines_data, BeatOpponentLine)
         if staged_templates_data is not None:
             self._sync_children(beat, "staged_templates", staged_templates_data, BeatStagedTemplate)
+        self._sync_staged_battle(beat, staged_battle_data)
         return beat
 
     @staticmethod
+    def _sync_staged_battle(beat: Beat, data: dict[str, Any] | None | object) -> None:
+        """Create/update/delete ``beat``'s staged battle from nested data (#3569).
+
+        *data* is ``_UNSET`` when the client omitted ``staged_battle`` entirely
+        (left untouched), ``None`` when the client explicitly asked to delete
+        it, or the nested serializer's validated dict otherwise. ``full_clean()``
+        after ``update_or_create`` fires ``BeatStagedBattle.clean()`` too, so the
+        model's own invariant (ENCOUNTER-only, mutually exclusive with
+        opponent_lines) also guards any caller that bypasses this serializer's
+        ``validate()`` -- belt and braces, one extra query.
+
+        Beat is a SharedMemoryModel, so the same Python ``beat`` instance can
+        be resident across requests (e.g. two PATCHes in one test). Django's
+        reverse-O2O descriptor caches whatever it first finds (including a
+        "does not exist" ``None``) on ``beat._state.fields_cache``; left
+        alone, that cache would still hold the pre-write answer when
+        ``to_representation`` reads ``beat.staged_battle`` right after this
+        method returns -- serializing a just-deleted instance raises (its pk
+        was nulled by the delete), and a just-created one would misreport as
+        absent. Popping the cache here forces a fresh query either way.
+        """
+        if data is _UNSET:
+            return
+        # Django's own field-cache API (FieldCacheMixin.delete_cached_value)
+        # does exactly this pop under the hood; there's no public accessor
+        # that isn't itself private, so noqa rather than reach for the
+        # heavier beat.refresh_from_db() (reloads every field from the DB).
+        beat._state.fields_cache.pop("staged_battle", None)  # noqa: SLF001
+        if data is None:
+            BeatStagedBattle.objects.filter(beat=beat).delete()
+            return
+        defaults = dict(data)
+        lines = defaults.pop("unit_lines", None)
+        staged, _created = BeatStagedBattle.objects.update_or_create(beat=beat, defaults=defaults)
+        staged.full_clean()
+        if lines is not None:
+            BeatSerializer._sync_children(
+                staged, "unit_lines", lines, BeatStagedBattleUnit, parent_field="staged_battle"
+            )
+
+    @staticmethod
     def _sync_children(
-        beat: Beat,
+        parent: Beat | BeatStagedBattle,
         related_name: str,
         rows: list[dict[str, Any]],
-        model: type[BeatOpponentLine] | type[BeatStagedTemplate],
+        model: type[BeatOpponentLine] | type[BeatStagedTemplate] | type[BeatStagedBattleUnit],
+        *,
+        parent_field: str = "beat",
     ) -> None:
-        """Diff *rows* against ``beat``'s existing children by id (#3425).
+        """Diff *rows* against *parent*'s existing children by id (#3425, #3569).
 
         A row carrying an id matching an existing child updates it in place; a
-        row with no id (or an id not found among this beat's children) creates
+        row with no id (or an id not found among this parent's children) creates
         a new row; any existing child whose id is absent from *rows* is
         deleted. Order is preserved because each row's own ``order`` field
         rides through untouched -- this helper doesn't renumber anything.
+        *parent_field* names the FK new rows are created against -- ``"beat"``
+        for opponent_lines/staged_templates, ``"staged_battle"`` for a staged
+        battle's unit_lines.
 
         Shape (FK existence, the XOR invariant on staged templates, count's
         min-value) is already validated by the nested serializer's own field
@@ -1412,7 +1560,7 @@ class BeatSerializer(serializers.ModelSerializer):
         DB ``CheckConstraint``/FK error it actually is, not a silently
         swallowed one.
         """
-        existing = {obj.pk: obj for obj in getattr(beat, related_name).all()}
+        existing = {obj.pk: obj for obj in getattr(parent, related_name).all()}
         seen_ids: set[int] = set()
         for raw_row in rows:
             row = dict(raw_row)
@@ -1424,7 +1572,7 @@ class BeatSerializer(serializers.ModelSerializer):
                 child.save()
                 seen_ids.add(row_id)
             else:
-                model.objects.create(beat=beat, **row)
+                model.objects.create(**{parent_field: parent}, **row)
         stale_ids = set(existing) - seen_ids
         if stale_ids:
             model.objects.filter(pk__in=stale_ids).delete()
