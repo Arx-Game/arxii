@@ -31,6 +31,11 @@ from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
 from web.webclient.message_types import WebsocketMessageType
 
+TELNET_BLOCKED_BY_2FA_MESSAGE = (
+    "This account refuses telnet sign-in while two-factor authentication is on. "
+    "Sign in through the web client."
+)
+
 
 class CharacterList:
     """
@@ -99,6 +104,37 @@ class Account(DefaultAccount):
     - All data stored in PlayerData model (no self.db usage)
     - Player anonymity maintained across characters
     """
+
+    @classmethod
+    def authenticate(cls, username, password, ip="", **kwargs):
+        """Telnet password sign-in, with the opt-in 2FA block (#3591, ADR-0264).
+
+        2FA is opt-in and never required, and enrolling changes nothing here on
+        its own. Only when the player has ALSO switched on
+        ``PlayerData.block_telnet_login_with_2fa`` does a correct password get
+        refused, because telnet cannot ask for a second factor. The refusal
+        happens after the parent has matched the password, so a wrong password
+        gets the same answer as today and the switch is never an oracle. The
+        React client signs in through allauth headless and the game socket
+        authenticates by Django session; neither passes through this method.
+
+        ``account.player_data`` (below) get-or-creates the row for any typeclassed
+        ``Account``, so it is never ``None`` here; the guard below only matters if
+        ``account`` is a bare ``AccountDB`` without the typeclass property.
+        """
+        from allauth.mfa.utils import is_mfa_enabled
+
+        account, errors = super().authenticate(username, password, ip=ip, **kwargs)
+        if account is None:
+            return account, errors
+        player_data = account.player_data if isinstance(account, Account) else None
+        blocked = player_data is not None and player_data.block_telnet_login_with_2fa
+        if blocked and is_mfa_enabled(account):
+            session = kwargs.get("session")
+            if session:
+                account.at_failed_login(session)
+            return None, [TELNET_BLOCKED_BY_2FA_MESSAGE]
+        return account, errors
 
     @property
     def player_data(self):
