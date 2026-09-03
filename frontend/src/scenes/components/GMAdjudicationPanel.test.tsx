@@ -3,6 +3,16 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import type { SceneDetail } from '../types';
 
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 // Roster + active-character resolution (mirrors PersonaContextMenu.test.tsx)
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({
@@ -158,6 +168,7 @@ function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
 
 beforeEach(() => {
   mutateAsync.mockClear();
+  mockNavigate.mockClear();
   (toast.success as ReturnType<typeof vi.fn>).mockClear();
   (toast.error as ReturnType<typeof vi.fn>).mockClear();
 });
@@ -596,6 +607,108 @@ test('Run Beat tab lists runnable beats on open, and Run dispatches run_beat (#3
       kwargs: { beat_id: 12 },
     })
   );
+  expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+test('Run Beat tab labels a staged battle "Start siege" and opens the battle on success (#3569)', async () => {
+  mutateAsync
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: {
+        beats: [
+          {
+            id: 12,
+            story_title: 'The Long Watch',
+            episode_title: 'Ambush at Dusk',
+            kind: 'encounter',
+            risk: 'high',
+            opponent_line_count: 0,
+            staged_template_count: 0,
+            has_scenario: false,
+            staged_battle_name: 'Siege of the Gate',
+          },
+        ],
+      },
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'Beat #12 is now running in this scene.',
+      data: { beat_id: 12, battle_id: 5, battle_scene_id: 77 },
+    });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  await waitFor(() => expect(screen.getByTestId('gm-runbeat-row-12')).toBeInTheDocument());
+  expect(
+    within(screen.getByTestId('gm-runbeat-row-12')).getByText(/Siege of the Gate/)
+  ).toBeInTheDocument();
+  expect(screen.getByTestId('gm-runbeat-run-12')).toHaveTextContent('Start siege');
+
+  await user.click(screen.getByTestId('gm-runbeat-run-12'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      ref: { backend: 'registry', registry_key: 'run_beat' },
+      kwargs: { beat_id: 12 },
+    })
+  );
+  await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/scenes/77/battle'));
+});
+
+test('Run Beat tab keeps "Run" for a plain encounter beat and does not navigate (#3569)', async () => {
+  mutateAsync
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: {
+        beats: [
+          {
+            id: 13,
+            story_title: 'The Long Watch',
+            episode_title: 'Ambush at Dusk',
+            kind: 'encounter',
+            risk: 'high',
+            opponent_line_count: 2,
+            staged_template_count: 0,
+            has_scenario: false,
+            staged_battle_name: null,
+          },
+        ],
+      },
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'Beat #13 is now running in this scene.',
+      data: { beat_id: 13 },
+    });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  await waitFor(() => expect(screen.getByTestId('gm-runbeat-row-13')).toBeInTheDocument());
+  expect(screen.getByTestId('gm-runbeat-run-13')).toHaveTextContent('Run');
+
+  await user.click(screen.getByTestId('gm-runbeat-run-13'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      ref: { backend: 'registry', registry_key: 'run_beat' },
+      kwargs: { beat_id: 13 },
+    })
+  );
+  expect(mockNavigate).not.toHaveBeenCalled();
 });
 
 test('Condition tab Remove mode lists active instances then dispatches gm_remove_condition (#3431)', async () => {
