@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+  '/api/account/security-settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the signed-in account. */
+    get: operations['account_security_settings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description ``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the signed-in account. */
+    patch: operations['account_security_settings_partial_update'];
+    trace?: never;
+  };
   '/api/achievements/achievements/': {
     parameters: {
       query?: never;
@@ -23780,6 +23798,10 @@ export interface components {
        */
       expires_at: string;
     };
+    /** @description The account's own security switches (#3591). One field for now. */
+    AccountSecuritySettings: {
+      block_telnet_login_with_2fa: boolean;
+    };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
       readonly id: number;
@@ -37398,6 +37420,10 @@ export interface components {
      * @enum {string}
      */
     PartySideRoleEnum: 'attacker' | 'defender';
+    /** @description The account's own security switches (#3591). One field for now. */
+    PatchedAccountSecuritySettingsRequest: {
+      block_telnet_login_with_2fa?: boolean;
+    };
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     PatchedAuthoredSecretRequest: {
       /** @description The character this secret is about — and its sole owner. */
@@ -46225,6 +46251,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  account_security_settings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountSecuritySettings'];
+        };
+      };
+    };
+  };
+  account_security_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedAccountSecuritySettingsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountSecuritySettings'];
+        };
+      };
+    };
+  };
   achievements_achievements_list: {
     parameters: {
       query?: {
