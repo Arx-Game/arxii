@@ -2642,6 +2642,26 @@ def _process_round_tick(
     return result
 
 
+def _advance_stage(instance: ConditionInstance, result: RoundTickResult) -> None:
+    """Count the instance's current stage down a round, advancing it when it runs out.
+
+    A progressive condition with no stage left to reach simply stops counting and
+    stays at its final stage.
+    """
+    if instance.stage_rounds_remaining is None:
+        return
+    instance.stage_rounds_remaining -= 1
+    if instance.stage_rounds_remaining > 0:
+        return
+    next_stage = _get_next_stage(instance)
+    if next_stage is None:
+        instance.stage_rounds_remaining = None
+        return
+    instance.current_stage = next_stage
+    instance.stage_rounds_remaining = next_stage.rounds_to_next
+    result.progressed_conditions.append(instance)
+
+
 def _process_duration_and_progression(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     result: RoundTickResult,
@@ -2662,20 +2682,7 @@ def _process_duration_and_progression(
                 _clear_unseen_observer_if_concealing(target, expired_condition)
                 continue
 
-        # Stage progression
-        if instance.stage_rounds_remaining is not None:
-            instance.stage_rounds_remaining -= 1
-            if instance.stage_rounds_remaining <= 0:
-                # Progress to next stage
-                next_stage = _get_next_stage(instance)
-                if next_stage:
-                    instance.current_stage = next_stage
-                    instance.stage_rounds_remaining = next_stage.rounds_to_next
-                    result.progressed_conditions.append(instance)
-                else:
-                    # No next stage - condition may end or stay at final stage
-                    instance.stage_rounds_remaining = None
-
+        _advance_stage(instance, result)
         instance.save()
 
 

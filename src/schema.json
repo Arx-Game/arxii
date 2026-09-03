@@ -3480,7 +3480,14 @@ paths:
   /api/chapters/{id}/episodes/:
     get:
       operationId: chapters_episodes_retrieve
-      description: Get all episodes for a chapter
+      description: |-
+        Get all episodes for a chapter.
+
+        Carries the request in the serializer context (#3563) so
+        EpisodeListSerializer's GM-only routing_problems field can resolve
+        the viewer instead of default-denying every caller, and preloads one
+        routing report per episode on the page the way EpisodeViewSet.list
+        does, so this action does not pay four queries per episode.
       parameters:
       - in: path
         name: id
@@ -10982,9 +10989,7 @@ paths:
   /api/episodes/:
     get:
       operationId: episodes_list
-      description: |-
-        ViewSet for Episode model.
-        Manages story episodes with narrative connection tracking.
+      description: Preload one routing report per episode on the page (#3563).
       parameters:
       - in: query
         name: chapter
@@ -14023,6 +14028,47 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/gm/discovery/:
+    get:
+      operationId: gm_discovery_retrieve
+      description: |-
+        GET /api/gm/discovery/?q=&risk=: the catalog browse the web GM panel
+        and the beat form use (#3564). Same search as telnet ``setsituation find``;
+        kinds above the caller's tier never appear. Read-only, never writes a pool.
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+          default: ''
+      - in: query
+        name: risk
+        schema:
+          enum:
+          - none
+          - low
+          - moderate
+          - high
+          - extreme
+          - ''
+          type: string
+        description: |-
+          * `none` - None
+          * `low` - Low
+          * `moderate` - Moderate
+          * `high` - High
+          * `extreme` - Extreme
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResult'
+          description: ''
   /api/gm/invites/:
     get:
       operationId: gm_invites_list
@@ -45391,7 +45437,7 @@ components:
         target_persona_id:
           type: integer
         difficulty:
-          $ref: '#/components/schemas/DifficultyEnum'
+          $ref: '#/components/schemas/DifficultyChoiceEnum'
         resist_effort:
           default: ''
           oneOf:
@@ -47050,22 +47096,6 @@ components:
         * `hard` - Hard
         * `daunting` - Daunting
         * `harrowing` - Harrowing
-    DifficultyEnum:
-      enum:
-      - trivial
-      - easy
-      - normal
-      - hard
-      - daunting
-      - harrowing
-      type: string
-      description: |-
-        * `trivial` - Trivial
-        * `easy` - Easy
-        * `normal` - Normal
-        * `hard` - Hard
-        * `daunting` - Daunting
-        * `harrowing` - Harrowing
     DirectionEnum:
       enum:
       - favor
@@ -47110,6 +47140,178 @@ components:
       - discovered_at
       - discoverer_names
       - shared
+    DiscoveryChallenge:
+      type: object
+      description: Lightweight serializer for challenge template list views.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        category:
+          type: integer
+        category_name:
+          type: string
+          readOnly: true
+        severity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: 'Authored difficulty in DIFFICULTY_VALUES points (15 Trivial
+            .. 90 Harrowing), passed straight to perform_check''s target_difficulty.
+            NOT a 1-5 rating: the old default of 1 resolved every authored challenge
+            at the bottom rank (#2865).'
+        challenge_type:
+          $ref: '#/components/schemas/ChallengeTypeEnum'
+        discovery_type:
+          $ref: '#/components/schemas/DiscoveryTypeEnum'
+        description_template:
+          type: string
+          description: Template string with {variables} for instance-specific text.
+        goal:
+          type: string
+      required:
+      - category
+      - category_name
+      - id
+      - name
+    DiscoveryCheckFit:
+      type: object
+      properties:
+        check_type:
+          $ref: '#/components/schemas/DiscoveryCheckType'
+        fit_notes:
+          type: string
+      required:
+      - check_type
+      - fit_notes
+    DiscoveryCheckType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DiscoveryDifficultyGuide:
+      type: object
+      properties:
+        risk:
+          $ref: '#/components/schemas/RiskEnum'
+        recommended_difficulty:
+          $ref: '#/components/schemas/DifficultyChoiceEnum'
+        guidance_text:
+          type: string
+      required:
+      - guidance_text
+      - recommended_difficulty
+      - risk
+    DiscoveryKind:
+      type: object
+      description: One KindResult on the wire (#3564).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        minimum_gm_level:
+          $ref: '#/components/schemas/MinimumGmLevelEnum'
+        check_fits:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryCheckFit'
+        difficulty_guide:
+          allOf:
+          - $ref: '#/components/schemas/DiscoveryDifficultyGuide'
+          nullable: true
+        all_guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryDifficultyGuide'
+        pool_guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryPoolGuide'
+      required:
+      - all_guides
+      - check_fits
+      - description
+      - difficulty_guide
+      - id
+      - minimum_gm_level
+      - name
+      - pool_guides
+    DiscoveryPool:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DiscoveryPoolGuide:
+      type: object
+      properties:
+        pool:
+          $ref: '#/components/schemas/DiscoveryPool'
+        selection_criteria:
+          type: string
+        is_default:
+          type: boolean
+      required:
+      - is_default
+      - pool
+      - selection_criteria
+    DiscoveryResult:
+      type: object
+      description: DiscoveryResult on the wire (#3564); the GMEvidenceSummary pattern.
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryTemplate'
+        challenges:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryChallenge'
+        kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryKind'
+      required:
+      - challenges
+      - kinds
+      - templates
+    DiscoveryTemplate:
+      type: object
+      description: Lightweight serializer for situation template list views.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        category:
+          type: integer
+        category_name:
+          type: string
+          readOnly: true
+        description_template:
+          type: string
+      required:
+      - category
+      - category_name
+      - id
+      - name
     DiscoveryTypeEnum:
       enum:
       - obvious
@@ -48911,12 +49113,18 @@ components:
           description: Whether any pair of this episode's outbound transitions is
             ambiguous (#3565).
           readOnly: true
+        routing_problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - chapter
       - created_at
       - id
       - order
       - routing_ambiguous
+      - routing_problems
       - title
       - updated_at
     EpisodeDetailRequest:
@@ -48984,10 +49192,16 @@ components:
           type: string
           format: date-time
           nullable: true
+        routing_problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - chapter
       - id
       - order
+      - routing_problems
       - scenes_count
       - title
     EpisodeProgressionRequirement:
@@ -50977,7 +51191,7 @@ components:
         profile_id:
           type: integer
         level:
-          $ref: '#/components/schemas/NewLevelEnum'
+          $ref: '#/components/schemas/LevelE58Enum'
         approved_at:
           type: string
           format: date-time
@@ -51020,7 +51234,7 @@ components:
           readOnly: true
         old_level:
           allOf:
-          - $ref: '#/components/schemas/NewLevelEnum'
+          - $ref: '#/components/schemas/OldLevelEnum'
           readOnly: true
         old_level_display:
           type: string
@@ -51073,7 +51287,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/NewLevelEnum'
+          - $ref: '#/components/schemas/LevelE58Enum'
           readOnly: true
         level_display:
           type: string
@@ -51105,7 +51319,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/NewLevelEnum'
+          - $ref: '#/components/schemas/LevelE58Enum'
           readOnly: true
         level_display:
           type: string
@@ -55048,6 +55262,20 @@ components:
         * `70` - Continent
         * `80` - World
         * `90` - Plane
+    LevelE58Enum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -55599,6 +55827,20 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    MinimumGmLevelEnum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     MintGMCharacterRequestRequest:
       type: object
       description: 'POST body for the #3478 GM-character mint (moved from world-builder,
@@ -58564,6 +58806,20 @@ components:
         * `accepted` - Accepted
         * `declined` - Declined
         * `expired` - Expired
+    OldLevelEnum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     Opponent:
       type: object
       description: |-
@@ -67498,6 +67754,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         source_episode:
           type: integer
@@ -79415,6 +79674,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         id:
           type: integer
@@ -79453,9 +79715,15 @@ components:
           type: string
           format: date-time
           readOnly: true
+        required_outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitionRoutingRule'
+          readOnly: true
       required:
       - created_at
       - id
+      - required_outcomes
       - source_episode
       - source_episode_title
       - target_episode_title
@@ -79467,6 +79735,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         source_episode:
           type: integer
@@ -79596,6 +79867,57 @@ components:
       required:
       - beat
       - transition
+    TransitionRoutingRule:
+      type: object
+      description: |-
+        One routing rule as the graph and the author tree read it (#3563).
+
+        Read-only. Rows are written through ``TransitionRequiredOutcomeSerializer``
+        and ``save_with_outcomes``; this nested view adds the beat title and the
+        stake's player summary so the rule renders without a second fetch.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        beat:
+          type: integer
+          readOnly: true
+        beat_title:
+          type: string
+          readOnly: true
+        required_outcome:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RequiredOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        required_outcome_key:
+          type: string
+          readOnly: true
+          description: 'Beat-level rows only: also require Beat.outcome_key to equal
+            this MissionOption.key (#3565). Blank = any key.'
+        stake:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: When set, this requirement routes on the stake's StakeOutcome
+            column instead of the beat's outcome.
+        stake_summary:
+          type: string
+          readOnly: true
+        required_stake_column:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RequiredStakeColumnEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - beat
+      - beat_title
+      - id
+      - required_outcome
+      - required_outcome_key
+      - required_stake_column
+      - stake
+      - stake_summary
     Trap:
       type: object
       description: |-

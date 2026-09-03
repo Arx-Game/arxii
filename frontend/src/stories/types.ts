@@ -33,8 +33,16 @@ export type ChapterCreate = components['schemas']['ChapterCreate'];
 export type Chapter = ChapterDetail;
 
 // Episodes have three shapes: EpisodeList, EpisodeDetail, EpisodeCreate.
-export type EpisodeList = components['schemas']['EpisodeList'];
-export type EpisodeDetail = components['schemas']['EpisodeDetail'];
+/** Routing rule as nested on a Transition (#3563). GM-only on the wire. */
+export type TransitionRoutingRule = components['schemas']['TransitionRoutingRule'];
+
+/** Gated fields are optional on the client: the server strips them for viewers without GM text access. */
+export type EpisodeList = Omit<components['schemas']['EpisodeList'], 'routing_problems'> & {
+  readonly routing_problems?: string[];
+};
+export type EpisodeDetail = Omit<components['schemas']['EpisodeDetail'], 'routing_problems'> & {
+  readonly routing_problems?: string[];
+};
 export type EpisodeCreate = components['schemas']['EpisodeCreate'];
 export type Episode = EpisodeDetail;
 
@@ -374,7 +382,9 @@ export interface CreateEventBody {
 }
 
 // Transition, EpisodeProgressionRequirement, TransitionRequiredOutcome — Wave 9 author editor
-export type Transition = components['schemas']['Transition'];
+export type Transition = Omit<components['schemas']['Transition'], 'required_outcomes'> & {
+  readonly required_outcomes?: TransitionRoutingRule[];
+};
 export type EpisodeProgressionRequirement = components['schemas']['EpisodeProgressionRequirement'];
 export type TransitionRequiredOutcome = components['schemas']['TransitionRequiredOutcome'];
 

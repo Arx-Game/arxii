@@ -276,6 +276,17 @@ class TransitionAdmin(admin.ModelAdmin):
     ordering = ("source_episode", "order")
     inlines = [TransitionRequiredOutcomeInline]
 
+    def save_related(self, request, form, formsets, change):
+        """Invalidate the cached_required_outcomes prefetch cache (#3563).
+
+        Django skips a to_attr prefetch once the identity-mapped instance
+        already carries the attribute in __dict__, so an admin inline edit
+        to the routing rules would otherwise leave a stale rule set behind
+        for the rest of the process.
+        """
+        super().save_related(request, form, formsets, change)
+        form.instance.__dict__.pop("cached_required_outcomes", None)
+
 
 class BeatOpponentLineInline(admin.TabularInline):
     model = BeatOpponentLine

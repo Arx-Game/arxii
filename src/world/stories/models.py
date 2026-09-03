@@ -764,7 +764,7 @@ class Transition(SharedMemoryModel):
 
     Every transition is automatic: it fires when its routing requirements
     are met. When several are eligible the lowest (order, pk) fires (#3565);
-    authoring warns about that case through validate_routing_readiness.
+    authoring warns about that case through services.routing.routing_report.
     """
 
     source_episode = models.ForeignKey(

@@ -27,6 +27,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { flattenErrorMessage } from '@/missions/api';
@@ -114,6 +115,68 @@ function collectErrors(
   return errors;
 }
 
+interface SaveArgs {
+  state: EditorState;
+  isCreate: boolean;
+  tdId: number | undefined;
+  catalog: ReturnType<typeof useDslCatalog>['data'];
+  createTd: ReturnType<typeof useCreateTriggerDefinition>;
+  updateTd: ReturnType<typeof useUpdateTriggerDefinition>;
+  navigate: ReturnType<typeof useNavigate>;
+  setState: Dispatch<SetStateAction<EditorState>>;
+  setSavedSnapshot: Dispatch<SetStateAction<string>>;
+  setValidationErrors: Dispatch<SetStateAction<string[]>>;
+}
+
+/** Validate the editor state and send it, as a create or an update. */
+function runSave({
+  state,
+  isCreate,
+  tdId,
+  catalog,
+  createTd,
+  updateTd,
+  navigate,
+  setState,
+  setSavedSnapshot,
+  setValidationErrors,
+}: SaveArgs) {
+  if (!catalog) return;
+  const priority = parseInt(state.priority, 10);
+  const errors = collectErrors(state, priority, catalog.filter_ops);
+  setValidationErrors(errors);
+  if (errors.length > 0) return;
+
+  const nextState: EditorState = { ...state, priority: String(priority) };
+  const payload: TriggerDefinitionWritePayload = {
+    name: nextState.name.trim(),
+    event_name: nextState.eventName,
+    flow_definition: nextState.flowDefinition as number,
+    priority,
+    description: nextState.description,
+    base_filter_condition: nextState.baseFilterCondition,
+  };
+  if (isCreate) {
+    createTd.mutate(payload, {
+      onSuccess: (result) => navigate(`/staff/flows-builder/trigger-definitions/${result.id}`),
+    });
+    return;
+  }
+  if (tdId === undefined) return;
+  updateTd.mutate(
+    { id: tdId, payload },
+    {
+      // Mark clean with the exact payload just sent — mirrors FlowEditorPage's
+      // save() so the resync effect accepts the invalidation-triggered refetch
+      // that follows.
+      onSuccess: () => {
+        setState(nextState);
+        setSavedSnapshot(serialize(nextState));
+      },
+    }
+  );
+}
+
 export function TriggerDefinitionEditorPage() {
   const { tdId: tdIdParam } = useParams<{ tdId: string }>();
   const navigate = useNavigate();
@@ -180,41 +243,19 @@ export function TriggerDefinitionEditorPage() {
     navigate('/staff/flows-builder');
   };
 
-  const save = () => {
-    if (!catalog) return;
-    const priority = parseInt(state.priority, 10);
-    const errors = collectErrors(state, priority, catalog.filter_ops);
-    setValidationErrors(errors);
-    if (errors.length > 0) return;
-
-    const nextState: EditorState = { ...state, priority: String(priority) };
-    const payload: TriggerDefinitionWritePayload = {
-      name: nextState.name.trim(),
-      event_name: nextState.eventName,
-      flow_definition: nextState.flowDefinition as number,
-      priority,
-      description: nextState.description,
-      base_filter_condition: nextState.baseFilterCondition,
-    };
-    if (isCreate) {
-      createTd.mutate(payload, {
-        onSuccess: (result) => navigate(`/staff/flows-builder/trigger-definitions/${result.id}`),
-      });
-    } else if (tdId !== undefined) {
-      updateTd.mutate(
-        { id: tdId, payload },
-        {
-          // Mark clean with the exact payload just sent — mirrors
-          // FlowEditorPage's save() so the resync effect above accepts the
-          // invalidation-triggered refetch that follows.
-          onSuccess: () => {
-            setState(nextState);
-            setSavedSnapshot(serialize(nextState));
-          },
-        }
-      );
-    }
-  };
+  const save = () =>
+    runSave({
+      state,
+      isCreate,
+      tdId,
+      catalog,
+      createTd,
+      updateTd,
+      navigate,
+      setState,
+      setSavedSnapshot,
+      setValidationErrors,
+    });
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-6">

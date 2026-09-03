@@ -2417,7 +2417,11 @@ GM at a given level may author (#2000, ADR-0097).
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
-  `average_rating`, `rating_count`)
+  `average_rating`, `rating_count`), `DiscoveryResult` (#3564: `templates`,
+  `challenges`, `kinds: list[KindResult]`, what `find_situations` returns and
+  both its faces render), `KindResult` (`kind`, `check_fits`,
+  `difficulty_guide` (the guide for the requested risk or `None`),
+  `all_guides` (the full ladder), `pool_guides`)
 - **Key Services (`services.py`):** `create_table`/`archive_table`/`transfer_ownership`,
   `join_table`/`leave_table` (auto-detaches CHARACTER-scope stories on leave),
   `gm_application_queue(gm)`/`approve_application_as_gm`/`deny_application_as_gm`,
@@ -2435,6 +2439,18 @@ GM at a given level may author (#2000, ADR-0097).
   `GameWeek`; awards via `progression.award_xp(reason=ProgressionReason.GM_STORY_REWARD)`.
   Never raises — a bug here logs and returns `None` rather than aborting the beat
   mark/episode resolve/story completion/feedback submission that triggered it.
+  **`find_situations(*, query, risk, actor_level_index) -> DiscoveryResult`**
+  (#3564): the one catalog search behind telnet `setsituation find` and
+  `GET /api/gm/discovery/`; kinds always come from `SituationKind.objects
+  .cached_all()` filtered to `actor_level_index`, templates and challenges only
+  when `query` is non-empty (capped `FIND_RESULT_LIMIT = 15`), fits/guides/pool
+  guidance loaded with three grouped `filter(situation_kind_id__in=...)`
+  queries rather than a `to_attr` prefetch onto the identity-mapped kinds
+  (ADR-0263). **`user_breadth_index(user) -> int`**: the web caller's
+  `find_situations` breadth: staff get the top index, a GM their own level
+  index, an account with no `GMProfile` get `0`; mirrors
+  `FindSituationAction._actor_breadth_index` for a request user rather than an
+  actor object.
 - **Trust-ladder consumers:** `cap_for_profile(profile) -> GMLevelCap | None`
   (`world.gm.services`, #3562) is the single `GMLevelCap.objects.get(level=profile.level)`
   lookup - `None` when the level is unseeded, never raises. `stories.BeatSerializer`'s risk
@@ -2472,7 +2488,11 @@ GM at a given level may author (#2000, ADR-0097).
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
   queue), `GMInviteClaimView`, `DemandRansomView`, `GMSummonOfferViewSet`
-  (`/api/gm/summon-offers/`, read-only, #3071 — see "GM summon" below). **UI-wired
+  (`/api/gm/summon-offers/`, read-only, #3071, see "GM summon" below),
+  `DiscoveryView` (`GET /api/gm/discovery/?q=&risk=`, `IsAuthenticated` +
+  `IsGMOrStaff`, #3564: the web GM panel's and beat form's catalog browse;
+  invalid `risk` 400s, empty `q` returns kinds only, see "Scenario catalog"
+  below). **UI-wired
   (#3268):** the invite/application group (`GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView`) renders in `RecruitmentTab` on
   `frontend/src/tables/pages/TableDetailPage.tsx`; `GMInviteClaimView` renders in
@@ -2667,12 +2687,18 @@ GM at a given level may author (#2000, ADR-0097).
   `GET /api/scenes/{id}/gm-rail/`, see `docs/systems/scenes.md`'s "API Endpoints"
   section) as one of its per-participant sections.
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
-  shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
-  read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
-  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) searches
-  `mechanics.SituationTemplate` by name/description and, independently by the same
-  term, any matching `SituationKind` — returning its `CheckTypeSituationFit`,
-  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows as text.
+  shape from checks to situations. Since #3564 the search itself lives in one
+  service, `find_situations` (`world.gm.services`), behind two faces:
+  `FindSituationAction` (key `gm_find_situation`, read-only, gated
+  `MinimumGMLevelPrerequisite(GMLevel.STARTING)`, lower than
+  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) formats
+  the result for telnet, and `DiscoveryView` (`GET /api/gm/discovery/`) formats
+  it for the web; both search `mechanics.SituationTemplate`/`ChallengeTemplate`
+  by name/description(/goal) and, independently by the same term, any matching
+  `SituationKind`, returning its `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows (text on telnet,
+  structured JSON on the wire). An empty query is a kind-first cold open:
+  every kind in breadth, no templates or challenges, on both faces.
   `SituationKind` results are filtered server-side on `minimum_gm_level` against the
   caller's own `GMLevel` (staff see everything) — a kind above a GM's tier never
   appears, even on an exact name match. `SubmitCatalogSuggestionAction` (key
@@ -2680,12 +2706,24 @@ GM at a given level may author (#2000, ADR-0097).
   via `world.gm.services.submit_catalog_suggestion`, gated additionally on
   `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]` (Decision 9) — refuses a below-tier
   `proposal_kind` with a level-appropriate message; staff bypass every gate. Both
-  live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find <term>`
-  (extends `commands/setsituation.py`, mirroring `gm check find`'s shape) and `gm
-  suggest <kind>=<text>` (`commands/gm_ops.py`'s `CmdGMDashboard`, kind one of
-  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). Web: the
-  same generic `DispatchActionView` seam `set_the_stage`/`gm_invoke_check` already
-  use — no dedicated endpoint. Suggestion inbox: `SubmissionCategory
+  actions live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find
+  <term>` (extends `commands/setsituation.py`, mirroring `gm check find`'s
+  shape) and `gm suggest <kind>=<text>` (`commands/gm_ops.py`'s
+  `CmdGMDashboard`, kind one of
+  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). **Web
+  (#3564):** `DiscoveryView` (`IsAuthenticated` + `IsGMOrStaff`) backs
+  `SituationFinder.tsx` (`frontend/src/gm-adjudication/`), which renders kind
+  cards (fits, difficulty guide, pool guidance always marked advisory) plus
+  templates and challenges, with host-injected Stage/Place/Use-this-check
+  buttons and a "Suggest an entry" dialog (`CatalogSuggestionDialog.tsx`,
+  dispatches `gm_submit_catalog_suggestion`) shown only when a character is
+  active. Three hosts embed it behind a "Browse the catalog" toggle: beat
+  prep's staged-templates editor (`StagedTemplatesEditor` in
+  `stories/components/BeatFormDialog.tsx`, Stage appends a row), the scene
+  panel's Situation tab below (one-click Place), and its Call Check tab
+  (a fitting check selects it and pre-fills the difficulty band from the
+  guide for the running beat's risk, `GMAdjudicationPanel`'s
+  `scene.running_beat?.risk`). Suggestion inbox: `SubmissionCategory
   .CATALOG_SUGGESTION` (`world.player_submissions.constants`) +
   `_catalog_suggestion_to_item` in `world.staff_inbox.services.get_staff_inbox`,
   mirroring `GMApplication`'s exact mapping shape (Decision 8); staff triage via
@@ -2721,7 +2759,11 @@ GM at a given level may author (#2000, ADR-0097).
   (`situation_template_id`) or `place_challenge` (`challenge_template_id` +
   `target_object_name` + optional edge/setback) the same generic REST way as the
   check/award/condition tabs above — both act on the GM's own room
-  (`target_type=SELF`), so this tab has no participant picker. Two fold-ins:
+  (`target_type=SELF`), so this tab has no participant picker. **Since #3564**
+  the same tab embeds `SituationFinder` behind a "Browse the catalog" toggle;
+  choosing a template or challenge card there dispatches the same
+  `set_situation`/`place_challenge` one-click, with an empty challenge target
+  refused server-side rather than client-validated. Two fold-ins:
   `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
   `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
   scale resolved every authored challenge at the bottom rank), and
@@ -3160,7 +3202,7 @@ action consent flow, and a three-mode non-combat round framework.
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
 - **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
-- **The scenario graph is a beat's body, not a second option engine (#3565):** a `Beat` (SITUATION or TASK kind) points at a `missions.MissionTemplate` via `required_mission`; when that template is `StoryScenario`-owned, the story's Lead GM authored it under the trust ladder rather than staff. `Transition.mode`/`TransitionMode`/`AmbiguousTransitionError` are retired: routing is fully automatic, the lowest `(order, pk)` eligible outbound transition fires, and `validate_routing_readiness`/`RoutingReadinessReport` (`EpisodeDetailSerializer.routing_ambiguous`) warns the author tree when two transitions could both be eligible at once. `Beat.predicate_type` defaults to `OUTCOME_TIER` (was `GM_MARKED`) - a beat resolves from its graph, an encounter, a battle, or a decisive check by default; GM-marked is now the exception, authored only for an out-of-band fact a machine grader cannot see. See stories.md's "StoryScenario" section and Missions & Living Grid below.
+- **The scenario graph is a beat's body, not a second option engine (#3565):** a `Beat` (SITUATION or TASK kind) points at a `missions.MissionTemplate` via `required_mission`; when that template is `StoryScenario`-owned, the story's Lead GM authored it under the trust ladder rather than staff. `Transition.mode`/`TransitionMode`/`AmbiguousTransitionError` are retired: routing is fully automatic, the lowest `(order, pk)` eligible outbound transition fires, and `services/routing.py`'s `routing_report`/`RoutingReport` (surfaced as `routing_problems` on the episode payloads and `EpisodeDetailSerializer.routing_ambiguous`, #3563) warns the author tree when two transitions could both be eligible at once, or when a beat/stake outcome has no accepting transition. `Beat.predicate_type` defaults to `OUTCOME_TIER` (was `GM_MARKED`) - a beat resolves from its graph, an encounter, a battle, or a decisive check by default; GM-marked is now the exception, authored only for an out-of-band fact a machine grader cannot see. See stories.md's "StoryScenario" section and Missions & Living Grid below.
 - **Session prep + Run Beat (#3425):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat — nested read-write child lists on `BeatSerializer`, including the id-based-diff update path. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: creates a `CombatEncounter`/spawns opponents (ENCOUNTER) or instantiates situations/challenges (SITUATION), and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows + `GMAdjudicationPanel`'s Run Beat tab. See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
 - **Declared-risk badge (#3433):** `SceneDetailSerializer.declared_risk` - the player-visible
   sibling of the GM-gated `running_beat` field, tier string only (`RenownRisk`, never a beat
@@ -3172,7 +3214,7 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **GM↔player visibility contract:** `description`/`consequences` are GM/staff-only; `summary` is player-facing ("The Story So Far"), blanked while node `maturity == PITCH`. Enforced server-side in two places: the three Detail serializers' `to_representation` (via `_gm_text_gate`, default-deny when no request) **and** `serialize_story_log` (per-beat internals gated to privileged roles). No dedicated `pitch` field by design — `description`=GM pitch, `summary`=player recap
 - **Reactivity entry points (Phase 3):** `stories.services.reactivity.on_character_level_changed` / `on_achievement_earned` / `on_condition_applied` / `on_condition_expired` / `on_codex_entry_unlocked` / `on_story_advanced`
-- **Key Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `record_scenario_outcome` (`world.stories.services.beats`; a scenario run's ending on an OUTCOME_TIER beat, #3565, closes #3560), `record_aggregate_contribution`, `get_eligible_transitions`, `validate_routing_readiness` (ambiguous-pair report, #3565), `resolve_episode` (reconciles ProgressStatus on advance; distinguishes routing-block from authoring frontier; routing is now fully automatic, no `chosen_transition` input), `create_character_progress` / `create_group_progress` / `create_global_progress` (reject UNASSIGNED scope), `services.frontier.resolve_frontier` / `set_progress_status`, `services.maturity.promote_episode_maturity`, `services.dashboards.compute_story_status_line`, `catch_up_character_stories` (called from `Character.at_post_puppet`), `services.scenarios.create_scenario_for_beat` (#3565, the write side of `POST /api/beats/{id}/scenario/`)
+- **Key Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `record_scenario_outcome` (`world.stories.services.beats`; a scenario run's ending on an OUTCOME_TIER beat, #3565, closes #3560), `record_aggregate_contribution`, `get_eligible_transitions` (`services/transitions.py`), `routing_report` / `routing_reports_for_episodes` (`services/routing.py`, authoring-time dead-end + ambiguity report, #3563), `resolve_episode` (reconciles ProgressStatus on advance; distinguishes routing-block from authoring frontier; routing is now fully automatic, no `chosen_transition` input), `create_character_progress` / `create_group_progress` / `create_global_progress` (reject UNASSIGNED scope), `services.frontier.resolve_frontier` / `set_progress_status`, `services.maturity.promote_episode_maturity`, `services.dashboards.compute_story_status_line`, `catch_up_character_stories` (called from `Character.at_post_puppet`), `services.scenarios.create_scenario_for_beat` (#3565, the write side of `POST /api/beats/{id}/scenario/`)
 - **API Endpoints:** `POST /api/episodes/{id}/promote/` (set node maturity; PLOT-gate mirrored in `PromoteEpisodeInputSerializer` → 400 on gate violation), `POST /api/episodes/{id}/resolve/` (fire `resolve_episode`; body `{progress_id?, gm_notes?}` - no `chosen_transition`, #3565, routing is automatic), `POST /api/beats/{id}/scenario/` (GM authors a scenario graph as the beat's body, #3565: creates the `MissionTemplate` + `StoryScenario` row, sets `beat.required_mission`; idempotent), `GET /api/scenes/{id}/scenario/` (#3565, `world.scenes` - the running scenario's node/options for the party, ballots + node for the GM, see stories.md), `POST /api/stories/{id}/assign-to-scope/` (lift a story out of UNASSIGNED; sets scope + creates the matching progress record; 400 if already-assigned or scope↔target invariant violated), `GET /api/stories/gm-queue/` + `GET /api/stories/staff-workload/` (now query-bounded with `assertNumQueries` locks; staff-workload per-GM membership is status-agnostic), plus standard ViewSet CRUD and the existing `log/` / `my-active/` / beat-`mark`/`contribute` / AGM-claim / session-request actions, and append-only `/api/story-notes/`
 - **Authoring/run-control UI:** `StoryAuthorPage` carries the run-control surface — `PromoteMaturityButton` (inline PLOT-gate 400), `ScopeAssignDialog`, GM Notes tab (StoryNote), inline `ProgressStateBanner`, Resolve/Mark run-control, nimble +Beat/+Branch quick-add; `BeatFormDialog` exposes kind/advances/risk (risk staff-gated); forms use "Internal GM Description" / "The Story So Far" labels + episode `resting_conclusion`/`is_ending`
 - **Integrates with:** scenes (episode content), roster (participants), achievements / conditions / codex / classes (predicate evaluation + reactivity hooks fire from their services), narrative (beat completions and episode resolutions emit NarrativeMessages)

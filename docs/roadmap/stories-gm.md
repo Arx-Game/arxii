@@ -518,3 +518,26 @@ three consequence pools). `StoryFormDialog` gained the matching `privacy`
 select (public/private/invite_only). See `docs/systems/stories.md`'s
 authoring section and `docs/systems/stakes.md`'s readiness section for the
 full detail.
+
+### Routing rules surfaced on the graph and the tree - DONE (#3563)
+
+Routing had already gone fully automatic in #3565 (the lowest authored
+`(order, pk)` eligible outbound transition fires, never a runtime GM pick), but
+the GM authoring `TransitionRequiredOutcome` rows had no way to see, before a
+session ever runs, whether a beat or stake outcome had no accepting transition
+(a dead end) or whether two transitions could both be eligible at once (an
+ambiguity the lowest-order one would silently win). `services/routing.py`
+answers both questions up front: `routing_report(episode)` /
+`routing_reports_for_episodes(ids)` build a `RoutingReport`, advisory only, that
+never blocks saving or resolving. The report surfaces as `routing_problems` on
+`EpisodeListSerializer` and `EpisodeDetailSerializer` (the list view preloads
+one report per page rather than one query per episode) and as
+`routing_ambiguous` on detail, all GM-only, gated the same way as the rest of
+the authoring text. `TransitionSerializer.required_outcomes` now nests each
+row's routing rule (beat title, stake summary) so a rule renders without a
+second fetch. On the frontend, `EpisodeDAG`'s edges carry the rule text as a
+hover label and nodes with problems carry a marker; `StoryAuthorTree` prints
+the rule text under each transition row and a destructive badge on episode rows
+with problems. No migration - the report reads existing rows. See
+`docs/systems/stories.md`'s Transition section for the dead-end/ambiguity
+mechanics and the Visibility Contract for the gating.

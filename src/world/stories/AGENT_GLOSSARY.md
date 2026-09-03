@@ -4,6 +4,21 @@
 The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically - the lowest authored `(order, pk)` eligible edge, never a runtime GM pick (#3565, ADR-0258; the retired mode was called GM Choice). Episodes are nodes and Transitions are edges - a Story progresses by satisfying Beats to make Transitions eligible.
 _Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition), GM choice (routing is never a runtime pick, #3565).
 
+**Routing report**:
+The authoring-time check on an episode's outbound transitions, before any
+session ever runs them (`services/routing.py::routing_report`/
+`routing_reports_for_episodes`, `RoutingReport`, #3563). A **dead end** is a
+beat's FAILURE, its EXPIRED when it has a deadline, or a stake's LOSS that no
+outbound transition accepts - at runtime that outcome would pause the run at
+the frontier mid-session. An **ambiguity** is a pair of outbound transitions
+whose requirement sets never contradict, so both could be eligible at once and
+the lowest `(order, pk)` one silently wins. The report is **advisory**: it
+never blocks saving, resolving, or running, and an episode with no outbound
+transitions gets an empty report by design. It surfaces as `routing_problems`
+on the episode payloads and `routing_ambiguous` on detail, GM-only.
+_Avoid_: readiness (that is the stakes contract), validation error (the report
+never blocks).
+
 **Scenario / Scenario Graph**:
 A SITUATION or TASK Beat's body is the same authored option -> check -> tier -> consequence
 -> next graph that already runs missions (`MissionTemplate`/`MissionNode`/`MissionOption`/

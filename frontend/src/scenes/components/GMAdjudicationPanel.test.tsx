@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import type { SceneDetail } from '../types';
@@ -66,6 +66,58 @@ vi.mock('@/gm-adjudication/queries', () => ({
   useItemTemplateCatalog: vi.fn((_search: string, _enabled: boolean) => ({
     data: [{ id: 21, name: 'Silver Locket' }],
   })),
+  // The `risk` argument gates `difficulty_guide` the way the real endpoint
+  // does (a guide only comes back for the risk it was authored against);
+  // needed so the "no running beat leaves the band at its default" test
+  // (#3564) actually exercises the null-guide path.
+  useDiscovery: vi.fn((_q: string, risk: string | null, _enabled: boolean) => ({
+    data: {
+      kinds: [
+        {
+          id: 11,
+          name: 'Chase',
+          description: 'A pursuit through the rooftops.',
+          minimum_gm_level: 'junior',
+          check_fits: [{ check_type: { id: 7, name: 'Sprint' }, fit_notes: 'footspeed' }],
+          difficulty_guide:
+            risk === 'high'
+              ? { risk: 'high', recommended_difficulty: 'hard', guidance_text: 'Real stakes' }
+              : null,
+          all_guides: [
+            { risk: 'high', recommended_difficulty: 'hard', guidance_text: 'Real stakes' },
+          ],
+          pool_guides: [
+            {
+              pool: { id: 3, name: 'Chase pool' },
+              selection_criteria: 'when they run',
+              is_default: true,
+            },
+          ],
+        },
+      ],
+      templates: [
+        {
+          id: 5,
+          name: 'Rooftop chase',
+          category: 1,
+          category_name: 'Pursuit',
+          description_template: 'Tiles',
+        },
+      ],
+      challenges: [
+        {
+          id: 9,
+          name: 'Chase the courier',
+          category: 1,
+          category_name: 'Pursuit',
+          severity: 4,
+          description_template: '',
+          goal: 'Catch him',
+        },
+      ],
+    },
+    isLoading: false,
+  })),
 }));
 
 vi.mock('sonner', () => ({
@@ -78,6 +130,7 @@ vi.mock('sonner', () => ({
 import { GMAdjudicationPanel } from './GMAdjudicationPanel';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { toast } from 'sonner';
+import { DIFFICULTY_BANDS } from '@/gm-adjudication/types';
 
 function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
   return {
@@ -268,6 +321,88 @@ test('Situation tab in Challenge mode dispatches place_challenge with target_obj
     ref: { backend: 'registry', registry_key: 'place_challenge' },
     kwargs: { challenge_template_id: 9, target_object_name: 'the barred gate' },
   });
+});
+
+// ---------------------------------------------------------------------------
+// #3564 - SituationFinder mounted in the Call Check and Situation tabs.
+// ---------------------------------------------------------------------------
+
+test('Call Check: picking a fitting check selects it and pre-fills the band from the running risk', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene({ running_beat: { id: 1, risk: 'high' } })} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(screen.getByRole('button', { name: 'Use this check' }));
+
+  expect(screen.getByTestId('gm-check-type-select')).toHaveValue('7');
+  expect(screen.getByLabelText('Difficulty')).toHaveValue('hard');
+
+  await user.click(screen.getByTestId('gm-check-submit'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kwargs: expect.objectContaining({ check_type_ref: 7, difficulty: 'hard' }),
+    })
+  );
+});
+
+test('Call Check: no running beat leaves the band at its default', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene({ running_beat: null })} />);
+
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(screen.getByRole('button', { name: 'Use this check' }));
+
+  expect(screen.getByLabelText('Difficulty')).toHaveValue('normal');
+});
+
+test('Situation: Place on a finder template dispatches set_situation with its id', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.click(screen.getByTestId('gm-tab-situation'));
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(
+    within(screen.getByTestId('finder-template')).getByRole('button', { name: 'Place' })
+  );
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'set_situation' },
+    kwargs: { situation_template_id: 5 },
+  });
+});
+
+test('Situation: Place on a finder challenge dispatches place_challenge with its id', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.click(screen.getByTestId('gm-tab-situation'));
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(
+    within(screen.getByTestId('finder-challenge')).getByRole('button', { name: 'Place' })
+  );
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ref: { backend: 'registry', registry_key: 'place_challenge' },
+      kwargs: expect.objectContaining({ challenge_template_id: 9 }),
+    })
+  );
+});
+
+test('DIFFICULTY_BANDS matches the guide values the server can send', () => {
+  expect(DIFFICULTY_BANDS.map((band) => band.value)).toEqual([
+    'trivial',
+    'easy',
+    'normal',
+    'hard',
+    'daunting',
+    'harrowing',
+  ]);
 });
 
 test('a failed dispatch surfaces the refusal message via toast.error', async () => {

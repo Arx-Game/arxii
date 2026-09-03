@@ -45,8 +45,9 @@ never the objective's grader by default.
 **GM_CHOICE retired; the lowest authored edge fires.** `TransitionMode` and the
 `Transition.mode` field are removed, along with `AmbiguousTransitionError`.
 Zero eligible outbound transitions is the authoring frontier; several eligible
-transitions fire the lowest `(order, pk)` edge; `validate_routing_readiness`
-warns the author tree when two transitions could both be eligible at once,
+transitions fire the lowest `(order, pk)` edge; the routing report
+(`services/routing.py::routing_report`, #3563) warns the author tree when two
+transitions could both be eligible at once,
 since that pair is a silent authoring mistake rather than a runtime choice
 point. The GM's judgment call is authoring the option table and the transition
 order before the session, and pausing at the frontier to write the next node

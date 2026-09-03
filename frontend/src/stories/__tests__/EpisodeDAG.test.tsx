@@ -19,9 +19,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
-import { EpisodeDAG } from '../components/EpisodeDAG';
+import { EpisodeDAG, edgeLabelFor, computeLayout } from '../components/EpisodeDAG';
 import type { EpisodeLike } from '../components/EpisodeFormDialog';
-import type { EpisodeList, Transition } from '../types';
+import type { EpisodeList, Transition, TransitionRoutingRule } from '../types';
 
 // ---------------------------------------------------------------------------
 // ResizeObserver polyfill for jsdom
@@ -264,5 +264,90 @@ describe('EpisodeDAG — edit mode', () => {
       { wrapper: createWrapper() }
     );
     expect(screen.getByTestId('dag-canvas')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Routing rules on the graph (#3563)
+// ---------------------------------------------------------------------------
+
+const failureRule: TransitionRoutingRule = {
+  id: 1,
+  beat: 4,
+  beat_title: 'Hostage exchange',
+  required_outcome: 'failure',
+  required_outcome_key: '',
+  stake: null,
+  stake_summary: '',
+  required_stake_column: '',
+};
+
+describe('EpisodeDAG - routing rules (#3563)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('labels an edge with its rule text when rules exist', () => {
+    const { label, fullLabel } = edgeLabelFor({
+      ...transitionNormal,
+      required_outcomes: [failureRule],
+    });
+    expect(label).toBe('Hostage exchange = FAILURE');
+    expect(fullLabel).toBe('Hostage exchange = FAILURE');
+  });
+
+  it('falls back to the connective and summary without rules', () => {
+    const { fullLabel } = edgeLabelFor({
+      ...transitionNormal,
+      required_outcomes: [],
+      connection_type: 'therefore',
+      connection_summary: 'They flee',
+    });
+    expect(fullLabel).toBe('THEREFORE: They flee');
+  });
+
+  it('truncates the visible label but keeps the full text for hover', () => {
+    const long = { ...failureRule, beat_title: 'A'.repeat(50) };
+    const { label, fullLabel } = edgeLabelFor({ ...transitionNormal, required_outcomes: [long] });
+    expect(label.length).toBe(38);
+    expect(label.endsWith('…')).toBe(true);
+    expect(fullLabel).toBe(`${'A'.repeat(50)} = FAILURE`);
+  });
+
+  it('computeLayout emits routing edges carrying label data', () => {
+    const { edges } = computeLayout(
+      [ep1, ep2],
+      [{ ...transitionNormal, required_outcomes: [failureRule] }],
+      new Map([[String(ep1.chapter), 'Ch1']]),
+      () => undefined
+    );
+    expect(edges).toHaveLength(1);
+    expect(edges[0].type).toBe('routingEdge');
+    expect(edges[0].data).toEqual({
+      label: 'Hostage exchange = FAILURE',
+      fullLabel: 'Hostage exchange = FAILURE',
+    });
+  });
+
+  it('marks an episode node that has routing problems', () => {
+    mockEpisodes([
+      {
+        ...ep1,
+        routing_problems: ['beat #4 (Hostage exchange) = FAILURE: no transition accepts it'],
+      },
+      ep2,
+    ]);
+    mockTransitions([transitionNormal]);
+    render(<EpisodeDAG storyId={42} onEpisodeClick={vi.fn()} />, { wrapper: createWrapper() });
+    const marker = screen.getByTestId('dag-episode-warning');
+    expect(marker).toHaveTextContent('1 routing problem');
+    expect(marker.getAttribute('title')).toContain('no transition accepts it');
+  });
+
+  it('shows no marker when routing_problems is empty or absent', () => {
+    mockEpisodes([{ ...ep1, routing_problems: [] }, ep2]);
+    mockTransitions([transitionNormal]);
+    render(<EpisodeDAG storyId={42} onEpisodeClick={vi.fn()} />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId('dag-episode-warning')).not.toBeInTheDocument();
   });
 });

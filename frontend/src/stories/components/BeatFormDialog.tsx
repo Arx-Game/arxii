@@ -37,6 +37,8 @@ import {
   useSituationTemplateCatalog,
   useChallengeTemplateCatalog,
 } from '@/gm-adjudication/queries';
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
+import { SituationFinder } from '@/gm-adjudication/SituationFinder';
 import { getMissionTemplate, listMissionTemplates } from '@/missions/api';
 import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
 import {
@@ -675,11 +677,14 @@ interface StagedTemplatesEditorProps {
   lines: StagedTemplateDraft[];
   onChange: (lines: StagedTemplateDraft[]) => void;
   rowErrors: Record<string, string[]>[] | undefined;
+  risk: BeatRisk;
 }
 
-function StagedTemplatesEditor({ lines, onChange, rowErrors }: StagedTemplatesEditorProps) {
+function StagedTemplatesEditor({ lines, onChange, rowErrors, risk }: StagedTemplatesEditorProps) {
   const { data: situationTemplates = [] } = useSituationTemplateCatalog(true);
   const { data: challengeTemplates = [] } = useChallengeTemplateCatalog(true);
+  const characterId = useActiveCharacterId();
+  const [finderOpen, setFinderOpen] = useState(false);
 
   function updateRow(index: number, partial: Partial<StagedTemplateDraft>) {
     onChange(lines.map((line, i) => (i === index ? { ...line, ...partial } : line)));
@@ -704,6 +709,48 @@ function StagedTemplatesEditor({ lines, onChange, rowErrors }: StagedTemplatesEd
           Add staged template
         </Button>
       </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        data-testid="finder-toggle"
+        aria-expanded={finderOpen}
+        onClick={() => setFinderOpen((v) => !v)}
+      >
+        {finderOpen ? 'Hide the catalog' : 'Browse the catalog'}
+      </Button>
+      {finderOpen && (
+        <SituationFinder
+          risk={risk === 'none' ? null : risk}
+          characterId={characterId}
+          actions={{
+            template: {
+              label: 'Stage',
+              onSelect: (t) =>
+                onChange([
+                  ...lines,
+                  {
+                    templateKind: 'situation',
+                    situation_template: String(t.id),
+                    challenge_template: '',
+                  },
+                ]),
+            },
+            challenge: {
+              label: 'Stage',
+              onSelect: (c) =>
+                onChange([
+                  ...lines,
+                  {
+                    templateKind: 'challenge',
+                    situation_template: '',
+                    challenge_template: String(c.id),
+                  },
+                ]),
+            },
+          }}
+        />
+      )}
       {lines.length === 0 && (
         <p className="text-xs text-muted-foreground">No staging authored yet.</p>
       )}
@@ -1354,6 +1401,7 @@ export function BeatFormDialog({
                 lines={stagedTemplates}
                 onChange={setStagedTemplates}
                 rowErrors={fieldErrors.staged_templates}
+                risk={risk}
               />
             )}
 

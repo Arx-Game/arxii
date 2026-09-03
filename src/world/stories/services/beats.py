@@ -71,7 +71,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
+    from evennia.objects.models import ObjectDB
+
     from actions.models.consequence_pools import ConsequencePool
+    from world.checks.types import ResolutionContext
     from world.gm.models import GMProfile
     from world.scenes.models import Persona, Scene as SceneModel
     from world.stories.models import Episode, Story
@@ -1343,6 +1346,81 @@ def _maybe_fire_pool_on_completion(  # noqa: PLR0913
     )
 
 
+def _check_legend_award_guards(
+    *, pool: ConsequencePool, scope: str, participants: list[Persona], skipping_legend: bool
+) -> None:
+    """Refuse a pool whose LEGEND_AWARD could not be attributed to anyone.
+
+    Skipped wholesale when LEGEND_AWARD is being skipped anyway: the effect will
+    not fire, so there is nothing for the guards to protect.
+    """
+    from world.societies.exceptions import (  # noqa: PLC0415
+        LegendAwardParticipantMissingError,
+        LegendAwardScopeError,
+    )
+
+    if skipping_legend or not _pool_has_legend_award(pool):
+        return
+    if scope == StoryScope.GLOBAL:
+        raise LegendAwardScopeError
+    if not participants:
+        raise LegendAwardParticipantMissingError
+
+
+def _resolution_character(
+    *, scope: str, progress: AnyStoryProgress | None, participants: list[Persona]
+) -> ObjectDB:
+    """The character a ResolutionContext hangs off.
+
+    CHARACTER scope uses the sheet driving the progress; GROUP and GLOBAL fall
+    back to the first participant's. When neither resolves we hand back an
+    unsaved stub: ResolutionContext requires a non-None character, and this path
+    is only reached for pools with no character-targeted effects (LEGEND_AWARD is
+    participant-targeted), so the stub is never read for identity.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    character = None
+    if scope == StoryScope.CHARACTER and progress is not None:
+        character = progress.character_sheet.character
+    elif participants and participants[0].character_sheet_id:
+        character = participants[0].character_sheet.character
+    return character if character is not None else ObjectDB()
+
+
+def _apply_pool(
+    *,
+    pool: ConsequencePool,
+    context: ResolutionContext,
+    beat: Beat,
+    outcome_tier: CheckOutcome | None,
+    skip_effect_types: frozenset[str],
+) -> None:
+    """Fire the pool: clamped to the rolled tier, or deterministically when untiered."""
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_pool_deterministically,
+        apply_pool_for_tier,
+        clamp_tier_to_pool,
+    )
+
+    if outcome_tier is None:
+        apply_pool_deterministically(
+            pool=pool, context=context, skip_effect_types=skip_effect_types
+        )
+        return
+    fired = clamp_tier_to_pool(pool, outcome_tier)
+    if fired is None:
+        logger.info(
+            "Pool %s has no %s-polarity row for tier %s on beat %s; nothing fires.",
+            pool.pk,
+            "success" if outcome_tier.success_level > 0 else "failure",
+            outcome_tier.pk,
+            beat.pk,
+        )
+        return
+    apply_pool_for_tier(pool=pool, outcome_tier=fired, context=context)
+
+
 def _fire_pool_with_context(  # noqa: PLR0913
     *,
     pool: ConsequencePool,
@@ -1362,76 +1440,28 @@ def _fire_pool_with_context(  # noqa: PLR0913
 
     ``skip_effect_types``: effect types to leave unfired (an expiry completion
     passes ``{EffectType.LEGEND_AWARD}``: expiry earns no legend, ADR-0066).
-    When it contains LEGEND_AWARD, the two LEGEND_AWARD participant guards
-    below are also skipped: the effect will not fire, so the guards have
-    nothing to protect.
     """
-    from world.checks.consequence_resolution import (  # noqa: PLC0415
-        apply_pool_deterministically,
-        apply_pool_for_tier,
-        clamp_tier_to_pool,
-    )
     from world.checks.constants import EffectType  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.societies.exceptions import (  # noqa: PLC0415
-        LegendAwardParticipantMissingError,
-        LegendAwardScopeError,
+
+    _check_legend_award_guards(
+        pool=pool,
+        scope=scope,
+        participants=participants,
+        skipping_legend=EffectType.LEGEND_AWARD in skip_effect_types,
     )
-
-    skipping_legend = EffectType.LEGEND_AWARD in skip_effect_types
-
-    # Guard: GLOBAL scope cannot fire LEGEND_AWARD effects.
-    if not skipping_legend and scope == StoryScope.GLOBAL and _pool_has_legend_award(pool):
-        raise LegendAwardScopeError
-
-    # Guard: non-GLOBAL scopes require at least one participant for LEGEND_AWARD.
-    if not skipping_legend and not participants and _pool_has_legend_award(pool):
-        raise LegendAwardParticipantMissingError
-
-    # Resolve the "resolving character" for the context:
-    # - CHARACTER scope: the character whose sheet drives the progress.
-    # - GROUP/GLOBAL: use the first participant's character_sheet (if any); the
-    #   LEGEND_AWARD handler only reads context.participants, but ResolutionContext
-    #   requires a non-None character for other effect types.
-    character = None
-    if scope == StoryScope.CHARACTER and progress is not None:
-        character = progress.character_sheet.character
-    elif participants:
-        character = (
-            participants[0].character_sheet.character
-            if participants[0].character_sheet_id
-            else None
-        )
-
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
-    if character is None:
-        # Fallback: create a transient stub only when no real character is resolvable.
-        # This path is only reached for pools containing no character-targeted effects
-        # (e.g., LEGEND_AWARD is participant-targeted, not character-targeted).
-        character = ObjectDB()  # unsaved stub — only identity-safe for non-character effects
-
     context = ResolutionContext(
-        character=character,
+        character=_resolution_character(scope=scope, progress=progress, participants=participants),
         beat=beat,
         story=beat.episode.chapter.story,
         scene=None,
         participants=participants,
         outcome_tier=outcome_tier,
     )
-    if outcome_tier is not None:
-        fired = clamp_tier_to_pool(pool, outcome_tier)
-        if fired is None:
-            logger.info(
-                "Pool %s has no %s-polarity row for tier %s on beat %s; nothing fires.",
-                pool.pk,
-                "success" if outcome_tier.success_level > 0 else "failure",
-                outcome_tier.pk,
-                beat.pk,
-            )
-            return
-        apply_pool_for_tier(pool=pool, outcome_tier=fired, context=context)
-    else:
-        apply_pool_deterministically(
-            pool=pool, context=context, skip_effect_types=skip_effect_types
-        )
+    _apply_pool(
+        pool=pool,
+        context=context,
+        beat=beat,
+        outcome_tier=outcome_tier,
+        skip_effect_types=skip_effect_types,
+    )

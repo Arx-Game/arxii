@@ -54,6 +54,12 @@ vi.mock('@/combat/queries', () => ({
   useCreatureTemplates: vi.fn(() => ({
     data: [{ id: 1, name: 'Gorehorn', tier: 'boss', description: '', has_phases: true }],
   })),
+  // #3564 - SituationFinder's CatalogSuggestionDialog calls this unconditionally
+  // (it's mounted, just closed) whenever a non-null characterId is passed in.
+  useDispatchPlayerAction: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
 }));
 
 vi.mock('@/gm-adjudication/queries', () => ({
@@ -63,6 +69,32 @@ vi.mock('@/gm-adjudication/queries', () => ({
   useChallengeTemplateCatalog: vi.fn(() => ({
     data: [{ id: 9, name: 'Locked Gate', category: 1, category_name: 'Exploration' }],
   })),
+  // #3564 - the finder mounted inside StagedTemplatesEditor.
+  useDiscovery: vi.fn((_q: string, _risk: string | null, _enabled: boolean) => ({
+    data: {
+      kinds: [],
+      templates: [
+        { id: 5, name: 'Ambush', category: 1, category_name: 'Combat', description_template: '' },
+      ],
+      challenges: [
+        {
+          id: 9,
+          name: 'Locked Gate',
+          category: 1,
+          category_name: 'Exploration',
+          severity: 2,
+          description_template: '',
+          goal: '',
+        },
+      ],
+    },
+    isLoading: false,
+  })),
+}));
+
+// #3564 - the roster character the finder's "Suggest an entry" dispatches as.
+vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({
+  useActiveCharacterId: vi.fn(() => 42),
 }));
 
 // #3569 - the battle prep editor's blueprint/unit template catalogs. Shaped
@@ -160,6 +192,7 @@ vi.mock('@/store/hooks', () => ({
 }));
 
 import * as queries from '../queries';
+import * as gmAdjudicationQueries from '@/gm-adjudication/queries';
 import * as gmQueries from '@/gm/queries';
 import * as missionsApi from '@/missions/api';
 import { toast } from 'sonner';
@@ -897,6 +930,91 @@ describe('BeatFormDialog', () => {
         expect.any(Object)
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // #3564 - SituationFinder mounted (behind a "Browse the catalog" toggle)
+  // inside the staged-templates editor, threading the beat's own risk.
+  // -------------------------------------------------------------------------
+
+  function makeFinderSituationBeat(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 7,
+      episode: 42,
+      predicate_type: 'gm_marked' as const,
+      kind: 'situation' as const,
+      advances: false,
+      risk: 'high' as const,
+      outcome: 'unsatisfied' as const,
+      visibility: 'hinted' as const,
+      internal_description: 'A staged beat',
+      player_hint: '',
+      player_resolution_text: undefined,
+      order: 2,
+      agm_eligible: false,
+      deadline: null,
+      required_level: null,
+      required_achievement: null,
+      required_condition_template: null,
+      required_codex_entry: null,
+      referenced_story: null,
+      referenced_milestone_type: undefined,
+      referenced_chapter: null,
+      referenced_episode: null,
+      required_points: null,
+      episode_title: 'Test Episode',
+      chapter_title: 'Chapter 1',
+      story_id: 1,
+      story_title: 'Test Story',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      can_mark: false,
+      scenario: null,
+      opponent_lines: [],
+      staged_templates: [],
+      ...overrides,
+    };
+  }
+
+  it('renders the finder inside the Session prep block and threads the beat risk (#3564)', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={makeFinderSituationBeat()} />);
+
+    const stagingBlock = screen.getByTestId('beat-staged-templates');
+    await user.click(within(stagingBlock).getByTestId('finder-toggle'));
+
+    expect(within(stagingBlock).getByTestId('situation-finder')).toBeInTheDocument();
+    expect(vi.mocked(gmAdjudicationQueries.useDiscovery)).toHaveBeenCalledWith('', 'high', true);
+  });
+
+  it('clicking the finder template Stage button appends a staged situation row (#3564)', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={makeFinderSituationBeat()} />);
+
+    const stagingBlock = screen.getByTestId('beat-staged-templates');
+    await user.click(within(stagingBlock).getByTestId('finder-toggle'));
+    await user.click(
+      within(screen.getByTestId('finder-template')).getByRole('button', { name: 'Stage' })
+    );
+
+    expect(screen.getByTestId('beat-staged-template-situation-0')).toHaveValue('5');
+  });
+
+  it('clicking the finder challenge Stage button appends a staged challenge row (#3564)', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={makeFinderSituationBeat()} />);
+
+    const stagingBlock = screen.getByTestId('beat-staged-templates');
+    await user.click(within(stagingBlock).getByTestId('finder-toggle'));
+    await user.click(
+      within(screen.getByTestId('finder-challenge')).getByRole('button', { name: 'Stage' })
+    );
+
+    expect(screen.getByTestId('beat-staged-template-kind-0')).toHaveValue('challenge');
+    expect(screen.getByTestId('beat-staged-template-challenge-0')).toHaveValue('9');
   });
 
   it('submits a situation beat with an authored staged situation template', async () => {

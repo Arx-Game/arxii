@@ -613,6 +613,279 @@ function submitBlockReason(args: {
   return null;
 }
 
+type Opponent = NonNullable<EncounterDetail['opponents']>[number];
+type InventoryItem = NonNullable<ReturnType<typeof useInventory>['data']>[number];
+
+interface UseItemSectionProps {
+  usableItems: InventoryItem[];
+  coverableAllies: Participant[];
+  activeOpponents: Opponent[];
+  instanceId: string;
+  targetValue: string;
+  error: string | null;
+  /** Every control is inert: locked, out of the declaring phase, or mid-dispatch. */
+  disabled: boolean;
+  /** Locked or out of phase, ignoring dispatch — drives the confirm button's styling. */
+  inactive: boolean;
+  pending: boolean;
+  onInstanceChange: (value: string) => void;
+  onTargetChange: (value: string) => void;
+  onConfirm: () => void;
+}
+
+/**
+ * Declare a held on-use item as this round's action (#3381, #2023/#2120).
+ *
+ * A primary maneuver, mutually exclusive with the focused technique slot.
+ */
+function UseItemSection({
+  usableItems,
+  coverableAllies,
+  activeOpponents,
+  instanceId,
+  targetValue,
+  error,
+  disabled,
+  inactive,
+  pending,
+  onInstanceChange,
+  onTargetChange,
+  onConfirm,
+}: UseItemSectionProps) {
+  if (usableItems.length === 0) return null;
+  return (
+    <div
+      className="space-y-1.5 rounded border border-border bg-card/60 p-2"
+      data-testid="use-item-section"
+    >
+      <p
+        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        title="Use a held item as your round action, optionally against an ally or opponent."
+      >
+        Use Item
+      </p>
+      <Select value={instanceId} onValueChange={onInstanceChange} disabled={disabled}>
+        <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
+          <SelectValue placeholder="Choose an item…" />
+        </SelectTrigger>
+        <SelectContent>
+          {usableItems.map((item) => (
+            <SelectItem key={item.id} value={String(item.id)}>
+              {item.display_name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={targetValue} onValueChange={onTargetChange} disabled={disabled}>
+        <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
+          <SelectValue placeholder="Target" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
+          {coverableAllies.map((ally) => (
+            <SelectItem
+              key={`use-item-ally-${ally.id}`}
+              value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
+            >
+              {ally.character_name}
+            </SelectItem>
+          ))}
+          {activeOpponents.map((opponent) => (
+            <SelectItem
+              key={`use-item-opponent-${opponent.id}`}
+              value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
+            >
+              {opponent.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <button
+        type="button"
+        disabled={disabled || instanceId === ''}
+        onClick={onConfirm}
+        data-testid="use-item-confirm-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          inactive || instanceId === ''
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+        )}
+      >
+        {pending ? 'Using item…' : 'Use Item'}
+      </button>
+      {error !== null && (
+        <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface MountedManeuversProps {
+  activeOpponents: Opponent[];
+  physicalTechniques: PlayerAction[];
+  chargeOpponentId: string;
+  chargeTechniqueId: string;
+  chargeError: string | null;
+  joustTechniqueId: string;
+  joustError: string | null;
+  /** Joust is offered only in a duel. */
+  isDuelEncounter: boolean;
+  /** Every control is inert: locked, out of the declaring phase, or mid-dispatch. */
+  disabled: boolean;
+  /** Locked or out of phase, ignoring dispatch — drives the buttons' styling. */
+  inactive: boolean;
+  pending: boolean;
+  onChargeOpponentChange: (value: string) => void;
+  onChargeTechniqueChange: (value: string) => void;
+  onJoustTechniqueChange: (value: string) => void;
+  onCharge: () => void;
+  onJoust: () => void;
+}
+
+/**
+ * Mounted-only declarations: close distance with a Charge, or Joust a duel
+ * opponent (#3381, #1843).
+ *
+ * Backend-trusting per Decision 4: no client-side reach or Lance re-validation.
+ * A rejected declaration surfaces the backend's own message inline.
+ */
+function MountedManeuvers({
+  activeOpponents,
+  physicalTechniques,
+  chargeOpponentId,
+  chargeTechniqueId,
+  chargeError,
+  joustTechniqueId,
+  joustError,
+  isDuelEncounter,
+  disabled,
+  inactive,
+  pending,
+  onChargeOpponentChange,
+  onChargeTechniqueChange,
+  onJoustTechniqueChange,
+  onCharge,
+  onJoust,
+}: MountedManeuversProps) {
+  return (
+    <div
+      className="space-y-2 rounded border border-border bg-card/60 p-2"
+      data-testid="mounted-maneuvers-section"
+    >
+      <p
+        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        title="Mounted-only declarations — close distance with a Charge, or Joust your duel opponent."
+      >
+        Mounted Maneuvers
+      </p>
+
+      {/* Charge — close distance to an opponent, then attack with the chosen technique. */}
+      <div className="space-y-1.5" data-testid="charge-control">
+        <Select value={chargeOpponentId} onValueChange={onChargeOpponentChange} disabled={disabled}>
+          <SelectTrigger data-testid="charge-opponent-select" className="h-8 text-xs">
+            <SelectValue placeholder="Charge which opponent…" />
+          </SelectTrigger>
+          <SelectContent>
+            {activeOpponents.map((opponent) => (
+              <SelectItem key={opponent.id} value={String(opponent.id)}>
+                {opponent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={chargeTechniqueId}
+          onValueChange={onChargeTechniqueChange}
+          disabled={disabled}
+        >
+          <SelectTrigger data-testid="charge-technique-select" className="h-8 text-xs">
+            <SelectValue placeholder="With which technique…" />
+          </SelectTrigger>
+          <SelectContent>
+            {physicalTechniques.map((action) => (
+              <SelectItem
+                key={action.ref.technique_id ?? action.display_name}
+                value={String(action.ref.technique_id)}
+              >
+                {action.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={disabled || chargeOpponentId === '' || chargeTechniqueId === ''}
+          onClick={onCharge}
+          data-testid="charge-confirm-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            inactive || chargeOpponentId === '' || chargeTechniqueId === ''
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+          )}
+        >
+          {pending ? 'Charging…' : 'Charge'}
+        </button>
+        {chargeError !== null && (
+          <p role="alert" className="text-sm text-destructive" data-testid="charge-error">
+            {chargeError}
+          </p>
+        )}
+      </div>
+
+      {/* Joust — duel-only, opponent implied by the 2-participant duel. */}
+      {isDuelEncounter && (
+        <div className="space-y-1.5" data-testid="joust-control">
+          <Select
+            value={joustTechniqueId}
+            onValueChange={onJoustTechniqueChange}
+            disabled={disabled}
+          >
+            <SelectTrigger data-testid="joust-technique-select" className="h-8 text-xs">
+              <SelectValue placeholder="Joust with which technique…" />
+            </SelectTrigger>
+            <SelectContent>
+              {physicalTechniques.map((action) => (
+                <SelectItem
+                  key={action.ref.technique_id ?? action.display_name}
+                  value={String(action.ref.technique_id)}
+                >
+                  {action.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            disabled={disabled || joustTechniqueId === ''}
+            onClick={onJoust}
+            data-testid="joust-confirm-btn"
+            className={cn(
+              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              inactive || joustTechniqueId === ''
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+            )}
+          >
+            {pending ? 'Jousting…' : 'Joust'}
+          </button>
+          {joustError !== null && (
+            <p role="alert" className="text-sm text-destructive" data-testid="joust-error">
+              {joustError}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // YourTurn
 // ---------------------------------------------------------------------------
@@ -1539,226 +1812,46 @@ export function YourTurn({
         </button>
       )}
 
-      {/* Use Item — declare using a held on-use item as this round's action
-          (#3381, #2023/#2120). A primary maneuver, mutually exclusive with the
-          focused technique slot above. */}
-      {usableItems.length > 0 && (
-        <div
-          className="space-y-1.5 rounded border border-border bg-card/60 p-2"
-          data-testid="use-item-section"
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Use a held item as your round action, optionally against an ally or opponent."
-          >
-            Use Item
-          </p>
-          <Select
-            value={useItemInstanceId}
-            onValueChange={setUseItemInstanceId}
-            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-          >
-            <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
-              <SelectValue placeholder="Choose an item…" />
-            </SelectTrigger>
-            <SelectContent>
-              {usableItems.map((item) => (
-                <SelectItem key={item.id} value={String(item.id)}>
-                  {item.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={useItemTargetValue}
-            onValueChange={setUseItemTargetValue}
-            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-          >
-            <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
-              <SelectValue placeholder="Target" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
-              {coverableAllies.map((ally) => (
-                <SelectItem
-                  key={`use-item-ally-${ally.id}`}
-                  value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
-                >
-                  {ally.character_name}
-                </SelectItem>
-              ))}
-              {activeOpponents.map((opponent) => (
-                <SelectItem
-                  key={`use-item-opponent-${opponent.id}`}
-                  value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
-                >
-                  {opponent.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <button
-            type="button"
-            disabled={
-              isLocked || !isDeclaringPhase || maneuverDispatchPending || useItemInstanceId === ''
-            }
-            onClick={() => {
-              handleUseItem().catch(() => {});
-            }}
-            data-testid="use-item-confirm-btn"
-            className={cn(
-              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-              'disabled:cursor-not-allowed disabled:opacity-50',
-              isLocked || !isDeclaringPhase || useItemInstanceId === ''
-                ? 'border-border bg-muted text-muted-foreground'
-                : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
-            )}
-          >
-            {maneuverDispatchPending ? 'Using item…' : 'Use Item'}
-          </button>
-          {useItemError !== null && (
-            <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
-              {useItemError}
-            </p>
-          )}
-        </div>
-      )}
+      <UseItemSection
+        usableItems={usableItems}
+        coverableAllies={coverableAllies}
+        activeOpponents={activeOpponents}
+        instanceId={useItemInstanceId}
+        targetValue={useItemTargetValue}
+        error={useItemError}
+        disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+        inactive={isLocked || !isDeclaringPhase}
+        pending={maneuverDispatchPending}
+        onInstanceChange={setUseItemInstanceId}
+        onTargetChange={setUseItemTargetValue}
+        onConfirm={() => {
+          handleUseItem().catch(() => {});
+        }}
+      />
 
-      {/* Mounted Maneuvers — Charge / Joust, gated on the viewer's own Mounted
-          condition (#3381, #1843). Backend-trusting per Decision 4: no client-
-          side reach/Lance re-validation; a rejected declaration surfaces the
-          backend's own message inline. */}
       {isMounted && (
-        <div
-          className="space-y-2 rounded border border-border bg-card/60 p-2"
-          data-testid="mounted-maneuvers-section"
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Mounted-only declarations — close distance with a Charge, or Joust your duel opponent."
-          >
-            Mounted Maneuvers
-          </p>
-
-          {/* Charge — close distance to an opponent, then attack with the chosen technique. */}
-          <div className="space-y-1.5" data-testid="charge-control">
-            <Select
-              value={chargeOpponentId}
-              onValueChange={setChargeOpponentId}
-              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-            >
-              <SelectTrigger data-testid="charge-opponent-select" className="h-8 text-xs">
-                <SelectValue placeholder="Charge which opponent…" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeOpponents.map((opponent) => (
-                  <SelectItem key={opponent.id} value={String(opponent.id)}>
-                    {opponent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={chargeTechniqueId}
-              onValueChange={setChargeTechniqueId}
-              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-            >
-              <SelectTrigger data-testid="charge-technique-select" className="h-8 text-xs">
-                <SelectValue placeholder="With which technique…" />
-              </SelectTrigger>
-              <SelectContent>
-                {physicalTechniques.map((action) => (
-                  <SelectItem
-                    key={action.ref.technique_id ?? action.display_name}
-                    value={String(action.ref.technique_id)}
-                  >
-                    {action.display_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <button
-              type="button"
-              disabled={
-                isLocked ||
-                !isDeclaringPhase ||
-                maneuverDispatchPending ||
-                chargeOpponentId === '' ||
-                chargeTechniqueId === ''
-              }
-              onClick={() => {
-                handleCharge().catch(() => {});
-              }}
-              data-testid="charge-confirm-btn"
-              className={cn(
-                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-                isLocked || !isDeclaringPhase || chargeOpponentId === '' || chargeTechniqueId === ''
-                  ? 'border-border bg-muted text-muted-foreground'
-                  : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
-              )}
-            >
-              {maneuverDispatchPending ? 'Charging…' : 'Charge'}
-            </button>
-            {chargeError !== null && (
-              <p role="alert" className="text-sm text-destructive" data-testid="charge-error">
-                {chargeError}
-              </p>
-            )}
-          </div>
-
-          {/* Joust — duel-only, opponent implied by the 2-participant duel. */}
-          {isDuelEncounter && (
-            <div className="space-y-1.5" data-testid="joust-control">
-              <Select
-                value={joustTechniqueId}
-                onValueChange={setJoustTechniqueId}
-                disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-              >
-                <SelectTrigger data-testid="joust-technique-select" className="h-8 text-xs">
-                  <SelectValue placeholder="Joust with which technique…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {physicalTechniques.map((action) => (
-                    <SelectItem
-                      key={action.ref.technique_id ?? action.display_name}
-                      value={String(action.ref.technique_id)}
-                    >
-                      {action.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                disabled={
-                  isLocked ||
-                  !isDeclaringPhase ||
-                  maneuverDispatchPending ||
-                  joustTechniqueId === ''
-                }
-                onClick={() => {
-                  handleJoust().catch(() => {});
-                }}
-                data-testid="joust-confirm-btn"
-                className={cn(
-                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked || !isDeclaringPhase || joustTechniqueId === ''
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
-                )}
-              >
-                {maneuverDispatchPending ? 'Jousting…' : 'Joust'}
-              </button>
-              {joustError !== null && (
-                <p role="alert" className="text-sm text-destructive" data-testid="joust-error">
-                  {joustError}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+        <MountedManeuvers
+          activeOpponents={activeOpponents}
+          physicalTechniques={physicalTechniques}
+          chargeOpponentId={chargeOpponentId}
+          chargeTechniqueId={chargeTechniqueId}
+          chargeError={chargeError}
+          joustTechniqueId={joustTechniqueId}
+          joustError={joustError}
+          isDuelEncounter={isDuelEncounter}
+          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+          inactive={isLocked || !isDeclaringPhase}
+          pending={maneuverDispatchPending}
+          onChargeOpponentChange={setChargeOpponentId}
+          onChargeTechniqueChange={setChargeTechniqueId}
+          onJoustTechniqueChange={setJoustTechniqueId}
+          onCharge={() => {
+            handleCharge().catch(() => {});
+          }}
+          onJoust={() => {
+            handleJoust().catch(() => {});
+          }}
+        />
       )}
 
       {/* Thread Pull row — inline pull selection for combat cast/clash dispatch */}

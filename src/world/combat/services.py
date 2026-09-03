@@ -10835,6 +10835,53 @@ def _pay_upkeep(
         )
 
 
+def _drain_participant_upkeep(
+    part: CombatParticipant, anima: CharacterAnima, encounter: CombatEncounter
+) -> None:
+    """Debit one participant's sustained conditions for this round.
+
+    Anima is written at most once (after the loop) so that N self-sustained
+    conditions produce a single UPDATE rather than N; ally-sourced conditions
+    debit their payer's pool immediately, since that payer is not necessarily
+    among the participants being iterated. A consented instance that runs
+    unaffordable (#3573) is the rare exception: it flushes the accumulated
+    ``remaining`` first, then pays into deficit through ``_pay_upkeep`` rather
+    than lapsing.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    char = part.character_sheet.character
+    instances = ConditionInstance.objects.filter(
+        target=char,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+        condition__upkeep_anima_per_round__gt=0,
+    ).select_related("condition")
+    remaining = anima.current
+    for inst in instances:
+        cost = inst.condition.upkeep_anima_per_round
+        if inst.source_character_id and inst.source_character_id != char.id:
+            _debit_ally_paid_upkeep(inst, cost, encounter=encounter)
+            continue
+        if remaining >= cost:
+            remaining -= cost
+        elif inst.soulfray_consented:
+            anima.current = remaining
+            anima.save(update_fields=["current"])
+            _pay_upkeep(char, anima, cost, inst, encounter)
+            # deduct_anima (inside _pay_upkeep) re-fetches CharacterAnima by
+            # pk under select_for_update; SharedMemoryModel identity-maps by
+            # pk so that call returns this same instance and its glut-first
+            # spend already landed on anima.current - carry that forward
+            # instead of clobbering it back to 0 (#3573 review fix).
+            remaining = anima.current
+        else:
+            inst.delete()  # lapse — Trigger rows cascade via source_condition FK
+    if remaining != anima.current:
+        anima.current = remaining
+        anima.save(update_fields=["current"])
+
+
 def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     """Debit per-round upkeep from each active participant's sustained conditions.
 
@@ -10863,45 +10910,14 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     flushes the accumulated ``remaining`` immediately, then pays through
     ``_pay_upkeep`` into deficit rather than lapsing.
     """
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
     parts = CombatParticipant.objects.filter(
         encounter=encounter, status=ParticipantStatus.ACTIVE
     ).select_related("character_sheet__character")
     for part in parts:
-        char = part.character_sheet.character
-        anima = _get_anima(char)
+        anima = _get_anima(part.character_sheet.character)
         if anima is None:
             continue
-        instances = ConditionInstance.objects.filter(
-            target=char,
-            is_suppressed=False,
-            resolved_at__isnull=True,
-            condition__upkeep_anima_per_round__gt=0,
-        ).select_related("condition")
-        remaining = anima.current
-        for inst in instances:
-            cost = inst.condition.upkeep_anima_per_round
-            if inst.source_character_id and inst.source_character_id != char.id:
-                _debit_ally_paid_upkeep(inst, cost, encounter=encounter)
-                continue
-            if remaining >= cost:
-                remaining -= cost
-            elif inst.soulfray_consented:
-                anima.current = remaining
-                anima.save(update_fields=["current"])
-                _pay_upkeep(char, anima, cost, inst, encounter)
-                # deduct_anima (inside _pay_upkeep) re-fetches CharacterAnima by
-                # pk under select_for_update; SharedMemoryModel identity-maps by
-                # pk so that call returns this same instance and its glut-first
-                # spend already landed on anima.current - carry that forward
-                # instead of clobbering it back to 0 (#3573 review fix).
-                remaining = anima.current
-            else:
-                inst.delete()  # lapse — Trigger rows cascade via source_condition FK
-        if remaining != anima.current:
-            anima.current = remaining
-            anima.save(update_fields=["current"])
+        _drain_participant_upkeep(part, anima, encounter)
 
 
 def _block_if_participant_mid_audere_majora_crossing(encounter: CombatEncounter) -> None:
