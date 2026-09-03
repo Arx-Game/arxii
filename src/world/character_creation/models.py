@@ -1223,20 +1223,24 @@ class CharacterDraft(SharedMemoryModel):
     def _check_specialization_parents(
         self, skills: dict, specializations: dict, budget: SkillPointBudget
     ) -> None:
-        """A specialization only unlocks once its parent skill sits at the threshold."""
+        """A specialization only unlocks once its parent skill sits at the threshold.
+
+        The per-row ``get(pk=...)`` is deliberate, not an N+1: Specialization is a
+        SharedMemoryModel over an authored catalog, so a pk lookup is answered from
+        the identity map and costs no query once the catalog is warm (see
+        ``core.managers.CachedAllMixin``, #1846). A ``pk__in`` batch is not a pk
+        lookup, so it would bypass the map and issue a query on every call instead.
+        """
         from world.skills.models import Specialization  # noqa: PLC0415
 
-        wanted = {int(k) for k, v in specializations.items() if v > 0}
-        if not wanted:
-            return
-        by_id = {s.pk: s for s in Specialization.objects.filter(pk__in=wanted)}
         for spec_id, spec_value in specializations.items():
             if spec_value <= 0:
                 continue
-            spec = by_id.get(int(spec_id))
-            if spec is None:
+            try:
+                spec = Specialization.objects.get(pk=int(spec_id))
+            except Specialization.DoesNotExist:
                 msg = f"Invalid specialization ID: {spec_id}."
-                raise serializers.ValidationError(msg)
+                raise serializers.ValidationError(msg) from None
             parent_value = skills.get(str(spec.parent_skill_id), 0)
             if parent_value < budget.specialization_unlock_threshold:
                 msg = (
