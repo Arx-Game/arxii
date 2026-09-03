@@ -151,6 +151,70 @@ class TrackNodeResolutionTests(TestCase):
         progress = MissionTrackProgress.objects.get(instance=self.instance, node=self.track_node)
         self.assertEqual((progress.successes, progress.failures), (1, 0))
 
+    def test_mth_failure_routes_to_failure_target(self) -> None:
+        fallback_node = MissionNodeFactory(template=self.template, key="fallback")
+        node = MissionNodeFactory(
+            template=self.template,
+            key="track-with-failure-target",
+            track_successes=2,
+            track_failures=2,
+            track_success_target=self.win_node,
+            track_failure_target=fallback_node,
+        )
+        option = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.check_type,
+        )
+        MissionOptionRouteFactory(option=option, outcome_tier=self.failure, target_node=None)
+        self.instance.current_node = node
+        self.instance.save()
+
+        for _ in range(2):
+            with force_check_outcome(self.failure), patch(_APPLY):
+                resolve_option(self.instance, node, option, self.actor)
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.current_node, fallback_node)
+        self.assertTrue(
+            MissionNodeSnapshot.objects.filter(instance=self.instance, node=fallback_node).exists()
+        )
+
+    def test_consequence_fires_on_every_step(self) -> None:
+        node = MissionNodeFactory(
+            template=self.template,
+            key="three-step-track",
+            track_successes=3,
+            track_failures=3,
+            track_success_target=self.win_node,
+            track_failure_target=None,
+            track_failure_beat_outcome=BeatOutcome.FAILURE,
+        )
+        option = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.check_type,
+        )
+        consequence = ConsequenceFactory(outcome_tier=self.success)
+        MissionOptionRouteFactory(
+            option=option, outcome_tier=self.success, target_node=None, consequence=consequence
+        )
+        self.instance.current_node = node
+        self.instance.save()
+
+        with patch(_APPLY) as mocked:
+            for _ in range(3):
+                with force_check_outcome(self.success):
+                    resolve_option(self.instance, node, option, self.actor)
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.current_node, self.win_node)
+        self.assertEqual(mocked.call_count, 3)
+        for call in mocked.call_args_list:
+            self.assertEqual(call.args[0], consequence)
+
     def test_branch_option_on_track_node_routes_normally(self) -> None:
         other = MissionNodeFactory(template=self.template, key="other")
         branch = MissionOptionFactory(

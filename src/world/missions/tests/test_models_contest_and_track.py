@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -68,6 +69,12 @@ class ContestOptionCleanTests(TestCase):
                 opposition_sheet=self.sheet,
             )
         self.assertIn("opposition_sheet", ctx.exception.message_dict)
+
+    def test_opposition_sheet_delete_is_protected(self) -> None:
+        option = self._contest()
+        option.save()
+        with self.assertRaises(ProtectedError):
+            self.sheet.delete()
 
 
 class TrackNodeCleanTests(TestCase):

@@ -679,8 +679,11 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     # #3568 CONTEST: the party rolls authored_check_type against the template's
     # difficulty plus level_opposition(opposition_check_type, ...) for this sheet.
+    # PROTECT (not SET_NULL): resolution reads this sheet unconditionally for a
+    # CONTEST option, so a staff hard-delete of the sheet must be blocked at the
+    # database rather than surfacing as a runtime crash during resolution.
     opposition_sheet = models.ForeignKey(
-        CHARACTER_SHEET_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+        CHARACTER_SHEET_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
     opposition_check_type = models.ForeignKey(
         CHECK_TYPE_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
