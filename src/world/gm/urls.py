@@ -7,6 +7,7 @@ from world.gm.story_views import MyStoryGrantsViewSet, StoryBuilderViewSet
 from world.gm.views import (
     CatalogSuggestionViewSet,
     DemandRansomView,
+    DiscoveryView,
     GMApplicationActionView,
     GMApplicationQueueView,
     GMApplicationViewSet,
@@ -42,6 +43,7 @@ router.register("summon-offers", GMSummonOfferViewSet, basename="gm-summon-offer
 # breaking the claim endpoint. Don't reorder without keeping this in mind.
 urlpatterns = [
     path("invites/claim/", GMInviteClaimView.as_view(), name="gm-invite-claim"),
+    path("discovery/", DiscoveryView.as_view(), name="gm-discovery"),
     path("", include(router.urls)),
     path("queue/", GMApplicationQueueView.as_view(), name="gm-application-queue"),
     path(
