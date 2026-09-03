@@ -4,22 +4,20 @@ import React from 'react';
 
 // Polyfill ResizeObserver — not available in jsdom but required by Radix UI components
 // (use-size hook in @radix-ui/react-use-size uses it for layout measurements)
-if (globalThis.ResizeObserver === undefined) {
-  globalThis.ResizeObserver = class ResizeObserver {
-    // Intentional no-op stub: jsdom has no layout engine, so there is nothing to observe.
-    observe(): void {
-      return undefined;
-    }
-    // Intentional no-op stub: nothing was ever observed, so there is nothing to stop observing.
-    unobserve(): void {
-      return undefined;
-    }
-    // Intentional no-op stub: no observation state exists to tear down.
-    disconnect(): void {
-      return undefined;
-    }
-  };
-}
+globalThis.ResizeObserver ??= class ResizeObserver {
+  // Intentional no-op stub: jsdom has no layout engine, so there is nothing to observe.
+  observe(): void {
+    return undefined;
+  }
+  // Intentional no-op stub: nothing was ever observed, so there is nothing to stop observing.
+  unobserve(): void {
+    return undefined;
+  }
+  // Intentional no-op stub: no observation state exists to tear down.
+  disconnect(): void {
+    return undefined;
+  }
+};
 
 // Polyfill hasPointerCapture / setPointerCapture / releasePointerCapture — not available
 // in jsdom but required by Radix UI Select pointer-event handling (select.tsx:323).

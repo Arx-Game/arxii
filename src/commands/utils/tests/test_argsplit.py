@@ -3,6 +3,7 @@
 from django.test import SimpleTestCase
 
 from commands.utils.argsplit import (
+    split_bracketed_prefix,
     split_on_keyword,
     split_possessive,
     strip_leading_word,
@@ -75,3 +76,33 @@ class SplitPossessiveTests(SimpleTestCase):
 
     def test_rejects_a_non_possessive_apostrophe(self):
         self.assertIsNone(split_possessive("rock'n roll"))
+
+
+class SplitBracketedPrefixTests(SimpleTestCase):
+    """``split_bracketed_prefix`` peels a leading "(tag) rest" off a line."""
+
+    def test_splits_a_leading_tag(self):
+        self.assertEqual(
+            split_bracketed_prefix("(elvish) hello there", "(", ")"), ("elvish", "hello there")
+        )
+
+    def test_strips_whitespace_inside_the_tag(self):
+        self.assertEqual(split_bracketed_prefix("(  elvish ) hi", "(", ")"), ("elvish", "hi"))
+
+    def test_rejects_a_line_that_does_not_open_with_the_tag(self):
+        self.assertIsNone(split_bracketed_prefix("hello (elvish)", "(", ")"))
+
+    def test_rejects_an_unclosed_tag(self):
+        self.assertIsNone(split_bracketed_prefix("(elvish hello", "(", ")"))
+
+    def test_rejects_an_empty_tag(self):
+        self.assertIsNone(split_bracketed_prefix("() hello", "(", ")"))
+
+    def test_rejects_a_tag_with_no_speech_after_it(self):
+        self.assertIsNone(split_bracketed_prefix("(elvish)   ", "(", ")"))
+
+    def test_rejects_a_closer_not_followed_by_whitespace(self):
+        self.assertIsNone(split_bracketed_prefix("(elvish)hello", "(", ")"))
+
+    def test_rejects_a_tag_longer_than_the_cap(self):
+        self.assertIsNone(split_bracketed_prefix(f"({'x' * 51}) hi", "(", ")"))

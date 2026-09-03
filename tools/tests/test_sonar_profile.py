@@ -73,3 +73,36 @@ def test_every_policy_rule_has_a_known_language_prefix() -> None:
         f"rule repositories with no entry in LANG_BY_REPO: {unknown}. "
         "Add them so the drift check does not fall back to one API call per rule."
     )
+
+
+def test_no_duplicate_top_level_keys() -> None:
+    """A repeated top-level key silently discards everything under the earlier one.
+
+    yaml.safe_load resolves duplicates by keeping the LAST occurrence and raises
+    nothing, so a policy section can stop existing without any error. That happened:
+    a scripted edit in #3602 left two `false_positives:` keys, and the whole first
+    block - a standing disposition plus its rationale - was dropped by the parser
+    while still reading correctly in the file.
+    """
+    seen = [
+        line.split(":", 1)[0]
+        for line in RULES_FILE.read_text().splitlines()
+        if line
+        and not line[0].isspace()
+        and not line.startswith("#")
+        and line.rstrip().endswith(":")
+    ]
+    duplicates = sorted({key for key in seen if seen.count(key) > 1})
+    assert not duplicates, (
+        f"duplicate top-level keys in sonar-rules.yaml: {duplicates}. "
+        "YAML keeps only the last, so the earlier section is silently ignored."
+    )
+
+
+def test_false_positive_entries_are_scoped_and_explained() -> None:
+    """An instance disposition without a path or a reason cannot be reviewed."""
+    for entry in load_policy().get("false_positives", []):
+        assert entry.get("path"), (
+            f"{entry['rule']} has no path; it would suppress the rule globally"
+        )
+        assert entry.get("why", "").strip(), f"{entry['rule']} has no rationale"

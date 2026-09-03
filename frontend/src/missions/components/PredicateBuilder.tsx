@@ -144,9 +144,11 @@ export function coercePredicate(
 
 function coerceValue(raw: unknown, type: PredicateParamType): unknown {
   if (raw === undefined || raw === null || raw === '') return raw;
-  // Inputs hand us primitives; an object has no sensible coercion here and
+  // Inputs hand us primitives. Anything else has no sensible coercion here, and
   // String() would store the literal "[object Object]" as the parameter value.
-  if (typeof raw === 'object') return raw;
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    return raw;
+  }
   const s = String(raw);
   switch (type) {
     case 'int': {

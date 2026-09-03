@@ -122,9 +122,14 @@ export function PetitionPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 {CATEGORIES.map((option) => (
-                  <label key={option.value} className="flex cursor-pointer items-start gap-2">
+                  <label
+                    key={option.value}
+                    htmlFor={`petition-category-${option.value}`}
+                    className="flex cursor-pointer items-start gap-2"
+                  >
                     <input
                       type="radio"
+                      id={`petition-category-${option.value}`}
                       name="category"
                       className="mt-1"
                       checked={category.value === option.value}

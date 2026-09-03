@@ -12,7 +12,7 @@ specific roller/target pair" sub-panel mirrors production exactly.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from django.db.models import Prefetch
 
@@ -80,13 +80,24 @@ def _tally_outcomes(
 
 
 def _distribution_for_chart(
-    chart: ResultChart, outcome_rows: list[ResultChartOutcome], *, roll_modifier: int
+    chart: ResultChart,
+    outcome_rows: list[ResultChartOutcome],
+    *,
+    roll_modifier: int,
+    rank_difference: int | None = None,
 ) -> ChartDistribution:
+    """Break one chart down into bands.
+
+    ``rank_difference`` defaults to the chart's own field. ``compute_matchup``
+    passes the *derived* roller-minus-target difference instead, because
+    ``get_chart_for_difference`` may have fallen back to a neighbouring chart
+    whose own field would then be wrong.
+    """
     bands = _tally_outcomes(outcome_rows, roll_modifier=roll_modifier)
     success_probability = sum(band.probability for band in bands if band.success_level > 0)
     expected_success_level = sum(band.success_level * band.probability for band in bands)
     return ChartDistribution(
-        rank_difference=chart.rank_difference,
+        rank_difference=chart.rank_difference if rank_difference is None else rank_difference,
         chart_name=chart.name,
         bands=bands,
         success_probability=success_probability,
@@ -138,8 +149,6 @@ def compute_matchup(
         .select_related("outcome")
         .order_by("min_roll")
     )
-    distribution = _distribution_for_chart(chart, outcome_rows, roll_modifier=roll_modifier)
-    # `_distribution_for_chart` stamps the *chart's own* rank_difference field,
-    # which is only correct on an exact match. Override with the derived value
-    # so a fallback chart's rank_difference doesn't leak into the result.
-    return replace(distribution, rank_difference=rank_difference)
+    return _distribution_for_chart(
+        chart, outcome_rows, roll_modifier=roll_modifier, rank_difference=rank_difference
+    )

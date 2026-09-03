@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -21,13 +20,10 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
+from commands.utils.argsplit import split_bracketed_prefix
 from world.scenes.place_models import Place
 
 _CMD_ALL_LOCK = "cmd:all()"
-
-# Per-say language tag (#2993): a leading "(tongue) rest of the line" switches
-# just this one utterance's language without touching the sticky default.
-_LANGUAGE_TAG_RE = re.compile(r"^\(([^)]{1,50})\)\s+(.*)$")
 
 
 def _flag_page_contact(sender_char: object, target_char: object) -> None:
@@ -111,9 +107,11 @@ class CmdSay(ArxCommand):
             raise CommandError(msg)
 
         language_id: int | None = None
-        tag_match = _LANGUAGE_TAG_RE.match(text)
+        # Per-say language tag (#2993): a leading "(tongue) rest of the line"
+        # switches just this one utterance's language without touching the default.
+        tag_match = split_bracketed_prefix(text, "(", ")")
         if tag_match:
-            tongue_name = tag_match.group(1).strip()
+            tongue_name = tag_match[0]
             from world.species.models import Language  # noqa: PLC0415
 
             language = Language.objects.filter(name__iexact=tongue_name).first()
@@ -121,7 +119,7 @@ class CmdSay(ArxCommand):
                 msg = f"There is no language called '{tongue_name}'."
                 raise CommandError(msg)
             language_id = language.pk
-            text = tag_match.group(2).strip()
+            text = tag_match[1]
             if not text:
                 msg = "Say what?"
                 raise CommandError(msg)
