@@ -682,10 +682,9 @@ for the viewer.
 running this beat" pointer — see `stories.md`'s "Session prep" section for the full
 `BeatOpponentLine`/`BeatStagedTemplate`/`RunBeatAction`/`GMListRunnableBeatsAction` contract.
 Written only by `RunBeatAction` (`src/actions/definitions/gm_story.py`); cleared by
-`finish_scene_full`. Exposed on `SceneDetailSerializer` as `running_beat`
-(`{id, risk, clock_size}`, GM/staff viewers only - mirrors `viewer_can_gm`'s gate;
-`SceneListSerializer`/`SceneDetailSerializer` deliberately omit it from the list
-serializer). Web surface: the
+`finish_scene_full`. Exposed on `SceneListSerializer` (and so on `SceneDetailSerializer`,
+which inherits it) as `running_beat` (`{id, risk, clock_size}`, GM/staff viewers only -
+mirrors `viewer_can_gm`'s gate; every other viewer gets `null`). Web surface: the
 `GMAdjudicationPanel`'s "Run Beat" tab (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`)
 authors it; the running beat's authored material then rides the GM story rail (#3434,
 `GET /api/scenes/{id}/gm-rail/`, see "API Endpoints" above) for referee-time reference.
