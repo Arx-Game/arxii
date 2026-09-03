@@ -29,3 +29,7 @@ _Avoid_: investigation, study.
 **Rescue**:
 The RESCUE clue target: a `Clue` pointing at a `Captivity`, planted at a capture site, that hands the finder the captive's rescue mission on acquisition. Capture plants discovery and freeing the captive clears the rescue clues.
 _Avoid_: free, recover.
+
+**Clue Authoring Policy** (`clue_target_kind_allowed`, #3566):
+The single callable holding "who may aim a clue at this target kind": staff may target anything, a non-staff account needs a `GMProfile` at SENIOR or above, and SECRET targets are refused regardless of level. Extracted from `author_clue`'s inline gate so `StakeRewardLineSerializer`'s CLUE-sink authoring could reuse it verbatim rather than re-deriving the rule; both callers stay byte-identical in behavior.
+_Avoid_: clue permission check, target gate (this is the one canonical policy, not per-caller logic).

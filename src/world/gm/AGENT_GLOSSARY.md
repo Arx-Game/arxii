@@ -25,7 +25,7 @@ A GM's trust tier (`GMProfile.level`, the `GMLevel` enum: STARTING/JUNIOR/GM/EXP
 _Avoid_: GM trust level (on PlayerTrust — that field is gone), trust score.
 
 **Level Cap**:
-`GMLevelCap` — one staff-tunable row per `GMLevel`, holding what a GM at that level may author: `max_beat_risk` (the highest `RenownRisk` beat tier), `allow_custom_stakes` (template-null Stakes), `allow_global_scope_authoring`. Seeded via `world.gm.factories.seed_default_gm_level_caps`. A GM with no `GMLevelCap` row (or no `GMProfile`) falls back to the most restrictive read (`RenownRisk.NONE` / `False`).
+`GMLevelCap` - one staff-tunable row per `GMLevel`, holding what a GM at that level may author: `max_beat_risk` (the highest `RenownRisk` beat tier), `allow_custom_stakes` (template-null Stakes), `allow_global_scope_authoring`, `auto_clear_regional`, `max_story_areas`, `max_story_rooms_per_area`, `max_story_npcs`, `allow_item_rewards` (#3566 - ITEM-sink `StakeRewardLine` authoring; seeded `True` for EXPERIENCED/SENIOR only, minting an item is world state). Seeded via `world.gm.factories.seed_default_gm_level_caps`. A GM with no `GMLevelCap` row (or no `GMProfile`) falls back to the most restrictive read (`RenownRisk.NONE` / `False`).
 _Avoid_: trust cap, permission cap.
 
 **Promotion**:

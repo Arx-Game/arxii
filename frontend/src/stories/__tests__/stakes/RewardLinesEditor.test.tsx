@@ -1,5 +1,5 @@
 /**
- * RewardLinesEditor tests (#3561).
+ * RewardLinesEditor tests (#3561; item/clue/codex pickers #3566).
  */
 
 import { screen } from '@testing-library/react';
@@ -17,11 +17,19 @@ vi.mock('../../queries', () => ({
   useDeleteStakeRewardLine: vi.fn(),
 }));
 
+vi.mock('../../api', () => ({
+  searchItemTemplates: vi.fn().mockResolvedValue([]),
+  resolveItemTemplateById: vi.fn().mockResolvedValue(null),
+  searchClues: vi.fn().mockResolvedValue([]),
+  searchCodexEntries: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 import * as queries from '../../queries';
+import * as api from '../../api';
 
 function mockLines(results: ReturnType<typeof makeRewardLine>[]) {
   vi.mocked(queries.useStakeRewardLines).mockReturnValue({
@@ -107,9 +115,166 @@ describe('RewardLinesEditor', () => {
     await user.click(screen.getByTestId('reward-line-save-2'));
 
     expect(update).toHaveBeenCalledWith(
-      { id: 2, resolutionId: 30, beatId: 200, sink: 'resonance', amount: 5, resonance: 7 },
+      {
+        id: 2,
+        resolutionId: 30,
+        beatId: 200,
+        sink: 'resonance',
+        amount: 5,
+        resonance: 7,
+        item_template: null,
+        clue: null,
+        codex_entry: null,
+      },
       expect.anything()
     );
+  });
+
+  it('MONEY Save is unchanged apart from the null item/clue/codex FKs', async () => {
+    const user = userEvent.setup();
+    mockLines([makeRewardLine({ id: 6, sink: 'money', amount: 5 })]);
+    const { update } = makeMutationMocks();
+
+    renderWithProviders(<RewardLinesEditor resolutionId={30} beatId={200} />);
+
+    await user.clear(screen.getByTestId('reward-line-amount-6'));
+    await user.type(screen.getByTestId('reward-line-amount-6'), '12');
+    await user.click(screen.getByTestId('reward-line-save-6'));
+
+    expect(update).toHaveBeenCalledWith(
+      {
+        id: 6,
+        resolutionId: 30,
+        beatId: 200,
+        sink: 'money',
+        amount: 12,
+        resonance: null,
+        item_template: null,
+        clue: null,
+        codex_entry: null,
+      },
+      expect.anything()
+    );
+  });
+
+  it('ITEM sink shows the picker and a read-only amount; Save omits amount', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.searchItemTemplates).mockResolvedValue([
+      { id: 12, name: 'Rusty Blade', hint: '40' },
+    ]);
+    mockLines([makeRewardLine({ id: 7, sink: 'money', amount: 5 })]);
+    const { update } = makeMutationMocks();
+
+    renderWithProviders(<RewardLinesEditor resolutionId={30} beatId={200} />);
+
+    await user.selectOptions(screen.getByTestId('reward-line-sink-7'), 'item');
+    expect(screen.getByTestId('reward-line-amount-7')).toHaveTextContent('Amount:');
+
+    const itemInput = screen.getByLabelText(/item template/i);
+    await user.type(itemInput, 'Rusty');
+    await user.click(await screen.findByText('Rusty Blade'));
+    expect(screen.getByTestId('reward-line-amount-7')).toHaveTextContent('Amount: 40');
+
+    await user.click(screen.getByTestId('reward-line-save-7'));
+
+    expect(update).toHaveBeenCalledWith(
+      {
+        id: 7,
+        resolutionId: 30,
+        beatId: 200,
+        sink: 'item',
+        resonance: null,
+        item_template: 12,
+        clue: null,
+        codex_entry: null,
+      },
+      expect.anything()
+    );
+  });
+
+  it('CLUE Save sends the picked clue id with the typed amount', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.searchClues).mockResolvedValue([
+      { id: 9, name: 'A torn letter', hint: 'npc_regard' },
+    ]);
+    mockLines([makeRewardLine({ id: 8, sink: 'money', amount: 5 })]);
+    const { update } = makeMutationMocks();
+
+    renderWithProviders(<RewardLinesEditor resolutionId={30} beatId={200} />);
+
+    await user.selectOptions(screen.getByTestId('reward-line-sink-8'), 'clue');
+    const clueInput = screen.getByLabelText(/^clue$/i);
+    await user.type(clueInput, 'torn');
+    await user.click(await screen.findByText('A torn letter'));
+
+    await user.clear(screen.getByTestId('reward-line-amount-8'));
+    await user.type(screen.getByTestId('reward-line-amount-8'), '3');
+    await user.click(screen.getByTestId('reward-line-save-8'));
+
+    expect(update).toHaveBeenCalledWith(
+      {
+        id: 8,
+        resolutionId: 30,
+        beatId: 200,
+        sink: 'clue',
+        amount: 3,
+        resonance: null,
+        item_template: null,
+        clue: 9,
+        codex_entry: null,
+      },
+      expect.anything()
+    );
+  });
+
+  it('CODEX Save sends the picked codex entry id with the typed amount', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.searchCodexEntries).mockResolvedValue([{ id: 4, name: 'The Sundering' }]);
+    mockLines([makeRewardLine({ id: 9, sink: 'money', amount: 5 })]);
+    const { update } = makeMutationMocks();
+
+    renderWithProviders(<RewardLinesEditor resolutionId={30} beatId={200} />);
+
+    await user.selectOptions(screen.getByTestId('reward-line-sink-9'), 'codex');
+    const codexInput = screen.getByLabelText(/codex entry/i);
+    await user.type(codexInput, 'Sunder');
+    await user.click(await screen.findByText('The Sundering'));
+
+    await user.clear(screen.getByTestId('reward-line-amount-9'));
+    await user.type(screen.getByTestId('reward-line-amount-9'), '1');
+    await user.click(screen.getByTestId('reward-line-save-9'));
+
+    expect(update).toHaveBeenCalledWith(
+      {
+        id: 9,
+        resolutionId: 30,
+        beatId: 200,
+        sink: 'codex',
+        amount: 1,
+        resonance: null,
+        item_template: null,
+        clue: null,
+        codex_entry: 4,
+      },
+      expect.anything()
+    );
+  });
+
+  it('renders the readonly name field for an existing ITEM reward line', () => {
+    mockLines([
+      makeRewardLine({
+        id: 10,
+        sink: 'item',
+        amount: 40,
+        item_template: 12,
+        item_template_name: 'Rusty Blade',
+      }),
+    ]);
+    makeMutationMocks();
+
+    renderWithProviders(<RewardLinesEditor resolutionId={30} beatId={200} />);
+
+    expect(screen.getByText('Current: Rusty Blade')).toBeInTheDocument();
   });
 
   it('surfaces the mutation error message on a rejected add', async () => {

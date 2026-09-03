@@ -99,8 +99,11 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
 ### Trust and Feedback ✅ (#2000)
 - **`GMProfile.level` is the canonical trust ladder** — see ADR-0097. `GMLevelCap`
   (one row per `GMLevel`, seeded via `seed_default_gm_level_caps`) holds the
-  per-level caps: `max_beat_risk`, `allow_custom_stakes`, `allow_global_scope_authoring`.
-  Staff-tunable in admin, not hardcoded.
+  per-level caps: `max_beat_risk`, `allow_custom_stakes`,
+  `allow_global_scope_authoring`, `auto_clear_regional`, `max_story_areas`,
+  `max_story_rooms_per_area`, `max_story_npcs`, and `allow_item_rewards`
+  (#3566 - may author ITEM-sink `StakeRewardLine`s, seeded `True` for
+  EXPERIENCED and SENIOR only). Staff-tunable in admin, not hardcoded.
 - **Advancement is staff-only and audited** — `world.gm.services.promote_gm` is the
   only path that changes `profile.level` (promotion or demotion); every call writes a
   `GMLevelChange` row (old level, new level, `changed_by`, `reason`). No automatic

@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0216_beat_clock_size_sceneclock")]
+    dependencies = [("arxii", "0217_gmlevelcap_allow_item_rewards_stakerewardline_clue_and_more")]
 
     operations = [
         migrations.AddField(

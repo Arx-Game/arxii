@@ -120,6 +120,43 @@ def target_already_known(clue: Clue, roster_entry: RosterEntry) -> bool:
     return False
 
 
+# Target kinds AUTOMATIC resolution can actually deliver on its own (#3566):
+# CODEX/RESCUE/SECRET/PERSONA_LINK are granted outright by grant_clue_target above.
+# MISSION hands off to a separate flow and ITEM is a bare pointer (no grant) --
+# neither is a coherent StakeRewardLine CLUE-sink payload, so both are excluded.
+RESOLVABLE_CLUE_TARGET_KINDS = frozenset(
+    {
+        ClueTargetKind.CODEX,
+        ClueTargetKind.RESCUE,
+        ClueTargetKind.SECRET,
+        ClueTargetKind.PERSONA_LINK,
+    }
+)
+
+
+def clue_target_kind_allowed(account: object, target_kind: str) -> bool:
+    """The clue authoring policy (#3432) as one callable (#3566).
+
+    Staff may aim a clue at anything. A GM needs a profile at SENIOR or
+    above, and SECRET targets stay staff-only. Both AuthorClueAction and the
+    stake reward-line validation call this.
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+    if is_staff_observer(account):
+        return True
+    from world.gm.constants import GMLevel, gm_level_index  # noqa: PLC0415
+    from world.gm.models import GMProfile  # noqa: PLC0415
+
+    try:
+        level = account.gm_profile.level
+    except (GMProfile.DoesNotExist, AttributeError):
+        return False
+    if gm_level_index(level) < gm_level_index(GMLevel.SENIOR):
+        return False
+    return target_kind != ClueTargetKind.SECRET
+
+
 def grant_clue_target(clue: Clue, roster_entry: RosterEntry) -> None:
     """AUTOMATIC resolution — grant a clue's target to the character on the spot.
 

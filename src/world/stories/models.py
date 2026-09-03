@@ -2879,21 +2879,75 @@ class StakeRewardLine(SharedMemoryModel):
         related_name="+",
         help_text="Required when sink=RESONANCE; must be null otherwise.",
     )
+    item_template = models.ForeignKey(
+        "arxii.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=ITEM; must be null otherwise.",
+    )
+    clue = models.ForeignKey(
+        "arxii.Clue",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=CLUE; must be null otherwise.",
+    )
+    codex_entry = models.ForeignKey(
+        "arxii.CodexEntry",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=CODEX; must be null otherwise.",
+    )
+
+    # Which FK field carries each sink's payload (#3566). PROTECT on the three
+    # new FKs (unlike resonance's SET_NULL) because an item/clue/codex-entry
+    # delete under a still-authored reward line would silently drop the line's
+    # meaning; the deleter has to clear the reward line first.
+    SINK_FIELDS = {
+        StakeRewardSink.RESONANCE: "resonance",
+        StakeRewardSink.ITEM: "item_template",
+        StakeRewardSink.CLUE: "clue",
+        StakeRewardSink.CODEX: "codex_entry",
+    }
 
     class Meta:
         ordering = ["resolution", "pk"]
 
     def clean(self) -> None:
         """Sink/payload shape guard (mirrored in StakeRewardLineSerializer)."""
+        from world.clues.services import RESOLVABLE_CLUE_TARGET_KINDS  # noqa: PLC0415
+
         super().clean()
         if self.resolution_id is not None and self.resolution.column != StakeResolutionColumn.WIN:
             raise ValidationError(
                 {"resolution": "Reward lines only attach to WIN-column resolutions."}
             )
-        if self.sink == StakeRewardSink.RESONANCE and self.resonance_id is None:
-            raise ValidationError({"resonance": "Required when sink is RESONANCE."})
-        if self.sink != StakeRewardSink.RESONANCE and self.resonance_id is not None:
-            raise ValidationError({"resonance": "Only allowed when sink is RESONANCE."})
+        for sink, field_name in self.SINK_FIELDS.items():
+            field_id = getattr(self, f"{field_name}_id")
+            if self.sink == sink and field_id is None:
+                raise ValidationError({field_name: f"Required when sink is {sink}."})
+            if self.sink != sink and field_id is not None:
+                raise ValidationError({field_name: f"Only allowed when sink is {sink}."})
+        if self.item_template_id is not None:
+            if self.item_template.value < 1:
+                raise ValidationError(
+                    {"item_template": "Item template must have a positive value to be a reward."}
+                )
+            if self.amount != self.item_template.value:
+                raise ValidationError({"amount": "Amount must equal the item template's value."})
+        if self.clue_id is not None and self.clue.target_kind not in RESOLVABLE_CLUE_TARGET_KINDS:
+            raise ValidationError(
+                {
+                    "clue": (
+                        "Reward clues must point at a codex entry, rescue, secret or persona link."
+                    )
+                }
+            )
 
     def __str__(self) -> str:
         return f"StakeRewardLine({self.resolution_id}: {self.sink} x{self.amount})"

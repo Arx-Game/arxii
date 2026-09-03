@@ -10,6 +10,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.items.factories import ItemTemplateFactory
 from world.missions.factories import (
     MissionNodeFactory,
     MissionOptionFactory,
@@ -22,6 +23,7 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     StakeResolutionColumn,
+    StakeRewardSink,
     StakeSeverity,
     StoryMaturity,
     StoryScope,
@@ -38,7 +40,7 @@ from world.stories.factories import (
     TransitionFactory,
     seed_default_risk_calibrations,
 )
-from world.stories.models import RiskCalibration, TransitionRequiredOutcome
+from world.stories.models import RiskCalibration, StakeResolution, TransitionRequiredOutcome
 from world.stories.services.beats import record_outcome_tier_completion
 from world.stories.services.stakes import (
     activate_stakes_contract,
@@ -240,6 +242,24 @@ class ValidateStakesReadinessTests(TestCase):
     def test_reward_in_band_stays_ready(self):
         beat = self._ready_shape_high(win_reward=400)
         self.assertTrue(validate_stakes_readiness(beat).is_ready)
+
+    def test_item_reward_amount_counts_toward_the_ceiling(self):
+        """An ITEM line's pinned amount (the template's value) bands exactly like
+        a MONEY line's amount (#3566, HIGH ceiling 1500)."""
+        beat = self._ready_shape_high(win_reward=0)
+        win = StakeResolution.objects.get(stake__beat=beat, column=StakeResolutionColumn.WIN)
+        template = ItemTemplateFactory(value=4000)
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.ITEM, item_template=template, amount=4000
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(report.is_ready)
+        self.assertTrue(
+            any(
+                "declared win reward 4000 exceeds the high ceiling 1500" in p
+                for p in report.problems
+            )
+        )
 
     def test_reward_ceiling_zero_skips_banding(self):
         """reward_ceiling == 0 means banding unconfigured — zero-reward contracts stay ready."""

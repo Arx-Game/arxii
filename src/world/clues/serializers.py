@@ -21,3 +21,15 @@ class HeldClueSerializer(serializers.ModelSerializer):
         model = CharacterClue
         fields = ["id", "name", "description", "target_kind", "found_at"]
         read_only_fields = fields
+
+
+class ClueSearchResultSerializer(serializers.Serializer):
+    """One row of the GM clue search picker (#3566): id, name, and target_kind only.
+
+    No description or target FK: the picker is for choosing which clue a stake reward
+    line grants, not for browsing clue content.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    target_kind = serializers.CharField(read_only=True)

@@ -95,6 +95,12 @@ export function makeRewardLine(overrides: Partial<StakeRewardLine> = {}): StakeR
     sink: 'money',
     amount: 10,
     resonance: null,
+    item_template: null,
+    clue: null,
+    codex_entry: null,
+    item_template_name: '',
+    clue_name: '',
+    codex_entry_name: '',
     ...overrides,
   } as StakeRewardLine;
 }

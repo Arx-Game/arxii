@@ -17,6 +17,9 @@ from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
 from world.assets.constants import AssetStatus
+from world.clues.services import grant_clue_target
+from world.codex.services import grant_codex_entry
+from world.items.services.narrative_grants import grant_touchstone_item_to_character
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
@@ -873,6 +876,9 @@ def _apply_stake_rewards(
     dispatches to — never the deed-anchored router itself (it reads
     MissionDeedRecord rows, and stories must not depend on missions,
     ADR-0010). Same contract as the other writers: skip-and-log, never raise.
+    Each line x participant delivery is wrapped so one line's unexpected
+    failure (a downstream service error) never stops the beat's other reward
+    lines or participants from being paid (#3566).
     """
     from world.stories.services.stakes import reward_band_problems_for_beat  # noqa: PLC0415
 
@@ -924,7 +930,14 @@ def _apply_stake_rewards(
         return
     for line in lines:
         for participant in participants:
-            _deliver_reward_line(line, participant, stake)
+            try:
+                _deliver_reward_line(line, participant, stake)
+            except Exception:
+                logger.exception(
+                    "StakeRewardLine %s: delivery to %s failed; continuing.",
+                    line.pk,
+                    participant.pk,
+                )
 
 
 def _reward_lines_for(resolution: StakeResolution) -> list[StakeRewardLine]:
@@ -934,7 +947,15 @@ def _reward_lines_for(resolution: StakeResolution) -> list[StakeRewardLine]:
 
 
 def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Stake) -> None:
-    """Deliver one reward line to one participant's sheet (skip-and-log)."""
+    """Deliver one reward line to one participant's sheet (skip-and-log).
+
+    ITEM mints a touchstone item on the participant's sheet directly; items
+    have no roster-entry dependency (a held ItemInstance is a sheet fact).
+    CLUE/CODEX both grant *knowledge*, which is a roster-entry fact (#3566):
+    an NPC participant whose sheet carries no roster entry is skipped for
+    those two sinks (logged, not raised) while MONEY/RESONANCE/ITEM still pay
+    that same participant on other lines.
+    """
     from world.currency.services import deliver_mission_money  # noqa: PLC0415
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
@@ -960,11 +981,62 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
             return
         grant_resonance(sheet, line.resonance, line.amount, source=GainSource.STAKE_REWARD)
         return
+    if line.sink == StakeRewardSink.ITEM:
+        if line.item_template is None:
+            logger.warning(
+                "StakeRewardLine %s: sink=ITEM but item_template is null "
+                "(deleted after authoring?); skipping.",
+                line.pk,
+            )
+            return
+        grant_touchstone_item_to_character(character_sheet=sheet, template=line.item_template)
+        return
+    if line.sink in (StakeRewardSink.CLUE, StakeRewardSink.CODEX):
+        _deliver_knowledge_reward_line(line, participant, sheet)
+        return
     logger.warning(
         "StakeRewardLine %s: unknown sink %r; skipping.",
         line.pk,
         line.sink,
     )
+
+
+def _deliver_knowledge_reward_line(
+    line: StakeRewardLine, participant: Persona, sheet: CharacterSheet
+) -> None:
+    """Deliver a CLUE or CODEX reward line: both grant knowledge to a roster entry.
+
+    Split out of ``_deliver_reward_line`` to keep that dispatcher's cyclomatic
+    complexity in bounds (#3566). An NPC participant's sheet with no roster
+    entry is skipped (logged, not raised); knowledge is a roster-entry fact.
+    """
+    roster_entry = sheet.roster_entry_or_none
+    if roster_entry is None:
+        logger.info(
+            "StakeRewardLine %s: participant %s's sheet has no roster entry "
+            "(NPC?); skipping knowledge delivery.",
+            line.pk,
+            participant.pk,
+        )
+        return
+    if line.sink == StakeRewardSink.CLUE:
+        if line.clue is None:
+            logger.warning(
+                "StakeRewardLine %s: sink=CLUE but clue is null "
+                "(deleted after authoring?); skipping.",
+                line.pk,
+            )
+            return
+        grant_clue_target(line.clue, roster_entry)
+        return
+    if line.codex_entry is None:
+        logger.warning(
+            "StakeRewardLine %s: sink=CODEX but codex_entry is null "
+            "(deleted after authoring?); skipping.",
+            line.pk,
+        )
+        return
+    grant_codex_entry(roster_entry, line.codex_entry)
 
 
 def _write_subject_standing(

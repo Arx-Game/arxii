@@ -18,12 +18,14 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
-from world.stories.constants import StakeSeverity
+from world.stories.constants import StakeResolutionColumn, StakeRewardSink, StakeSeverity
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
     StakeFactory,
+    StakeResolutionFactory,
+    StakeRewardLineFactory,
     StoryFactory,
 )
 
@@ -86,6 +88,17 @@ class SceneStakesSummaryViewTests(APITestCase):
         self.assertEqual(stakes[0]["id"], self.stake.pk)
         self.assertEqual(stakes[0]["player_summary"], "A dueling scar, worn for all to see.")
         self.assertEqual(stakes[0]["severity"], StakeSeverity.GRAVE)
+        self.assertEqual(stakes[0]["reward_kinds"], [])  # no WIN reward lines authored yet
+
+    def test_reward_kinds_carries_the_payout_categories(self) -> None:
+        """#3566: reward_kinds names the WIN branch's payout categories."""
+        win = StakeResolutionFactory(stake=self.stake, column=StakeResolutionColumn.WIN)
+        StakeRewardLineFactory(resolution=win, sink=StakeRewardSink.MONEY, amount=100)
+        self.client.force_authenticate(user=self.account_a)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.data["stakes"][0]["reward_kinds"], ["money"])
 
     def test_never_leaks_a_resolution_or_branch_key(self) -> None:
         self.client.force_authenticate(user=self.account_a)

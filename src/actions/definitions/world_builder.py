@@ -2422,8 +2422,8 @@ class AuthorClueAction(_WorldBuilderAction):
         from django.utils.text import slugify  # noqa: PLC0415
 
         from core_management.permissions import is_staff_observer  # noqa: PLC0415
-        from world.clues.constants import ClueTargetKind  # noqa: PLC0415
         from world.clues.models import Clue  # noqa: PLC0415
+        from world.clues.services import clue_target_kind_allowed  # noqa: PLC0415
 
         clue_name = (kwargs.get("name") or "").strip()
         if not clue_name:
@@ -2433,7 +2433,16 @@ class AuthorClueAction(_WorldBuilderAction):
             return ActionResult(success=False, message=_CLUE_TEXT_REQUIRED_MSG)
         target_kind = (kwargs.get("target_kind") or "").strip()
 
-        if target_kind == ClueTargetKind.SECRET and not is_staff_observer(actor):
+        try:
+            account = actor.active_account
+        except AttributeError:
+            account = None
+        allowed = (
+            is_staff_observer(actor)
+            if account is None
+            else clue_target_kind_allowed(account, target_kind)
+        )
+        if not allowed:
             return ActionResult(success=False, message=_SECRET_CLUE_STAFF_ONLY_MSG)
 
         clue = Clue(name=clue_name, description=description, target_kind=target_kind)

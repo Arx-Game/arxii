@@ -18,7 +18,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.societies.constants import RenownRisk
-from world.stories.constants import StakeSeverity, StakeSubjectKind
+from world.stories.constants import StakeResolutionColumn, StakeSeverity, StakeSubjectKind
 from world.stories.factories import (
     BeatFactory,
     StakeFactory,
@@ -213,3 +213,47 @@ class BeatStakesSummaryEndpointTests(APITestCase):
             reverse("beat-stakes-summary", kwargs={"pk": self.beat.pk}),
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+
+class BeatStakesSummaryRewardKindsTests(APITestCase):
+    """``reward_kinds`` on the stakes-summary payload (#3566): the WIN branch's
+    payout categories, never resolution content (pillar 9 still holds).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.clues.factories import ClueFactory
+        from world.items.factories import ItemTemplateFactory
+        from world.scenes.factories import SceneFactory
+        from world.stories.constants import StakeRewardSink
+        from world.stories.factories import EpisodeSceneFactory, StakeRewardLineFactory
+
+        cls.player = AccountFactory(is_staff=False)
+        cls.beat = BeatFactory(risk=RenownRisk.HIGH, target_level=4)
+        cls.stake = StakeFactory(beat=cls.beat, severity=StakeSeverity.DIRE)
+        win = StakeResolutionFactory(stake=cls.stake, column=StakeResolutionColumn.WIN)
+        template = ItemTemplateFactory(value=50)
+        StakeRewardLineFactory(resolution=win, sink=StakeRewardSink.MONEY, amount=100)
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.ITEM, item_template=template, amount=50
+        )
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.CLUE, clue=ClueFactory(), amount=25
+        )
+        cls.empty_stake = StakeFactory(beat=cls.beat, severity=StakeSeverity.SETBACK)
+
+        cls.scene = SceneFactory(participants=[cls.player])
+        EpisodeSceneFactory(episode=cls.beat.episode, scene=cls.scene)
+
+    def test_reward_kinds_names_the_payout_categories(self):
+        self.client.force_authenticate(user=self.player)
+        resp = self.client.get(reverse("beat-stakes-summary", kwargs={"pk": self.beat.pk}))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        by_id = {entry["id"]: entry for entry in resp.data["stakes"]}
+        self.assertEqual(by_id[self.stake.pk]["reward_kinds"], ["item", "knowledge", "money"])
+
+    def test_reward_kinds_empty_for_a_stake_with_no_reward_lines(self):
+        self.client.force_authenticate(user=self.player)
+        resp = self.client.get(reverse("beat-stakes-summary", kwargs={"pk": self.beat.pk}))
+        by_id = {entry["id"]: entry for entry in resp.data["stakes"]}
+        self.assertEqual(by_id[self.empty_stake.pk]["reward_kinds"], [])

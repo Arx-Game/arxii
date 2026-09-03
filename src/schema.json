@@ -6121,6 +6121,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedHeldClueList'
           description: ''
+  /api/clues/search/:
+    get:
+      operationId: clues_search_list
+      description: |-
+        GM-only clue search for the stake reward picker (#3566).
+
+        Only clues whose target kind ``AUTOMATIC`` resolution can actually deliver on its
+        own (``RESOLVABLE_CLUE_TARGET_KINDS``) are searchable: an ITEM-target clue is a
+        bare pointer, not a coherent reward payload. Rows are further filtered through
+        ``clue_target_kind_allowed`` so a GM never sees a clue whose target they aren't
+        permitted to author (SECRET targets stay staff-only).
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+      tags:
+      - clues
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClueSearchResult'
+          description: ''
   /api/codex/categories/:
     get:
       operationId: codex_categories_list
@@ -44652,6 +44681,27 @@ components:
       required:
       - clue
       - offer
+    ClueSearchResult:
+      type: object
+      description: |-
+        One row of the GM clue search picker (#3566): id, name, and target_kind only.
+
+        No description or target FK: the picker is for choosing which clue a stake reward
+        line grants, not for browsing clue content.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - target_kind
     CodexCategory:
       type: object
       properties:
@@ -67494,8 +67544,14 @@ components:
         Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
         walk via resolution.stake.beat (create-path enforcement), the two-sided
         open-activation lock, the completed-beat refusal, the WIN-column-only
-        rule, and the sink/resonance shape rule (resonance required iff
-        sink=RESONANCE; amount >= 1 rides the model validator).
+        rule, and the per-sink FK shape rule generalised over
+        ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+        every other sink field must stay null, mirroring the model's ``clean()``).
+        Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+        the template's value (never author-supplied) and is refused for a
+        non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+        refused for a non-resolvable target kind or a target kind the author's
+        clue-authoring policy (``clue_target_kind_allowed``) does not permit.
         Banding against the tier's reward floor/ceiling is deliberately NOT
         rejected here — out-of-band rewards make the contract UNREADY instead
         (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -67506,14 +67562,23 @@ components:
           $ref: '#/components/schemas/StakeRewardLineSinkEnum'
         amount:
           type: integer
-          maximum: 2147483647
           minimum: 1
-          description: Money-equivalent scalar paid to EACH participant (banded by
-            calibration).
         resonance:
           type: integer
           nullable: true
           description: Required when sink=RESONANCE; must be null otherwise.
+        item_template:
+          type: integer
+          nullable: true
+          description: Required when sink=ITEM; must be null otherwise.
+        clue:
+          type: integer
+          nullable: true
+          description: Required when sink=CLUE; must be null otherwise.
+        codex_entry:
+          type: integer
+          nullable: true
+          description: Required when sink=CODEX; must be null otherwise.
     PatchedStakeTemplateRequest:
       type: object
       description: |-
@@ -76109,8 +76174,14 @@ components:
         Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
         walk via resolution.stake.beat (create-path enforcement), the two-sided
         open-activation lock, the completed-beat refusal, the WIN-column-only
-        rule, and the sink/resonance shape rule (resonance required iff
-        sink=RESONANCE; amount >= 1 rides the model validator).
+        rule, and the per-sink FK shape rule generalised over
+        ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+        every other sink field must stay null, mirroring the model's ``clean()``).
+        Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+        the template's value (never author-supplied) and is refused for a
+        non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+        refused for a non-resolvable target kind or a target kind the author's
+        clue-authoring policy (``clue_target_kind_allowed``) does not permit.
         Banding against the tier's reward floor/ceiling is deliberately NOT
         rejected here — out-of-band rewards make the contract UNREADY instead
         (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -76124,17 +76195,37 @@ components:
           $ref: '#/components/schemas/StakeRewardLineSinkEnum'
         amount:
           type: integer
-          maximum: 2147483647
           minimum: 1
-          description: Money-equivalent scalar paid to EACH participant (banded by
-            calibration).
         resonance:
           type: integer
           nullable: true
           description: Required when sink=RESONANCE; must be null otherwise.
+        item_template:
+          type: integer
+          nullable: true
+          description: Required when sink=ITEM; must be null otherwise.
+        clue:
+          type: integer
+          nullable: true
+          description: Required when sink=CLUE; must be null otherwise.
+        codex_entry:
+          type: integer
+          nullable: true
+          description: Required when sink=CODEX; must be null otherwise.
+        item_template_name:
+          type: string
+          readOnly: true
+        clue_name:
+          type: string
+          readOnly: true
+        codex_entry_name:
+          type: string
+          readOnly: true
       required:
-      - amount
+      - clue_name
+      - codex_entry_name
       - id
+      - item_template_name
       - resolution
       - sink
     StakeRewardLineRequest:
@@ -76145,8 +76236,14 @@ components:
         Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
         walk via resolution.stake.beat (create-path enforcement), the two-sided
         open-activation lock, the completed-beat refusal, the WIN-column-only
-        rule, and the sink/resonance shape rule (resonance required iff
-        sink=RESONANCE; amount >= 1 rides the model validator).
+        rule, and the per-sink FK shape rule generalised over
+        ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+        every other sink field must stay null, mirroring the model's ``clean()``).
+        Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+        the template's value (never author-supplied) and is refused for a
+        non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+        refused for a non-resolvable target kind or a target kind the author's
+        clue-authoring policy (``clue_target_kind_allowed``) does not permit.
         Banding against the tier's reward floor/ceiling is deliberately NOT
         rejected here — out-of-band rewards make the contract UNREADY instead
         (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -76157,26 +76254,40 @@ components:
           $ref: '#/components/schemas/StakeRewardLineSinkEnum'
         amount:
           type: integer
-          maximum: 2147483647
           minimum: 1
-          description: Money-equivalent scalar paid to EACH participant (banded by
-            calibration).
         resonance:
           type: integer
           nullable: true
           description: Required when sink=RESONANCE; must be null otherwise.
+        item_template:
+          type: integer
+          nullable: true
+          description: Required when sink=ITEM; must be null otherwise.
+        clue:
+          type: integer
+          nullable: true
+          description: Required when sink=CLUE; must be null otherwise.
+        codex_entry:
+          type: integer
+          nullable: true
+          description: Required when sink=CODEX; must be null otherwise.
       required:
-      - amount
       - resolution
       - sink
     StakeRewardLineSinkEnum:
       enum:
       - money
       - resonance
+      - item
+      - clue
+      - codex
       type: string
       description: |-
         * `money` - Money
         * `resonance` - Resonance
+        * `item` - Item
+        * `clue` - Clue
+        * `codex` - Codex Entry
     StakeSummary:
       type: object
       description: |-
@@ -76184,7 +76295,11 @@ components:
 
         What is wagered is visible; branch contents stay hidden — resolutions
         (consequence pools, escalations, narrative) are deliberately NOT fields
-        here and must never be added.
+        here and must never be added. ``reward_kinds`` is the one exception in
+        spirit only: it names the WIN branch's payout *categories*
+        (money/resonance/item/knowledge), never an amount, template, clue or
+        codex entry, so it carries none of the branch content the rule above
+        forbids (#3566).
       properties:
         id:
           type: integer
@@ -76200,9 +76315,16 @@ components:
         severity_label:
           type: string
           readOnly: true
+        reward_kinds:
+          type: array
+          items:
+            type: string
+          description: Sorted, deduped reward-kind labels across the stake's WIN branch(es).
+          readOnly: true
       required:
       - id
       - player_summary
+      - reward_kinds
       - severity
       - severity_label
     StakeTemplate:
