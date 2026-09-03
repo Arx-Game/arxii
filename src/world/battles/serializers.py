@@ -268,13 +268,11 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         ).exists()
 
     def get_declared_this_round(self, obj: BattleParticipant) -> bool:
-        """Whether this participant already has a declaration in the CURRENT round (#3389).
-
-        Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
-        against the ``current_round`` ``BattleDetailSerializer.to_representation``
-        put in the shared context — never a per-participant query, so this stays
-        flat regardless of roster size.
-        """
+        """Whether this participant already has a declaration in the CURRENT round (#3389)."""
+        # Reads cached_declarations (the view's Prefetch, world/battles/views.py)
+        # against the current_round BattleDetailSerializer.to_representation put in
+        # the shared context — never a per-participant query, so this stays flat
+        # regardless of roster size.
         current_round = self.context.get("current_round")
         if current_round is None:
             return False

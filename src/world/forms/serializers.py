@@ -126,14 +126,10 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
         return obj.resonance.name if obj.resonance_id is not None else None
 
     def get_is_active(self, obj: AlternateSelf) -> bool:
-        """Whether this row is the alternate self the caller is currently wearing.
-
-        The id is resolved once per request by ``AlternateSelfViewSet.
-        get_serializer_context`` and read from the context here, rather than
-        resolved on the first row and kept on the serializer (ADR-0260). None
-        (no context entry, or nobody puppeted) never equals a pk, so the flag is
-        simply False.
-        """
+        """Whether this is the alternate self the character is currently wearing."""
+        # AlternateSelfViewSet.get_serializer_context resolves the id once for the
+        # whole page; nothing is kept on the serializer (ADR-0260). None (no context
+        # entry, or nobody puppeted) never equals a pk, so the flag is simply False.
         return self.context.get("active_alternate_self_id") == obj.pk
 
 

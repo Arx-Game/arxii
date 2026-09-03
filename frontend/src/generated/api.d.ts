@@ -24046,6 +24046,7 @@ export interface components {
       readonly has_combat_profile: boolean;
       readonly has_techniques: boolean;
       readonly resonance_name: string | null;
+      /** @description Whether this is the alternate self the character is currently wearing. */
       readonly is_active: boolean;
     };
     /**
@@ -24387,14 +24388,7 @@ export interface components {
        *     — dispatch remains gated by the unchanged service-layer check.
        */
       readonly is_champion: boolean;
-      /**
-       * @description Whether this participant already has a declaration in the CURRENT round (#3389).
-       *
-       *     Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
-       *     against ``current_round_id`` stashed once by
-       *     ``BattleDetailSerializer.to_representation`` — never a per-participant
-       *     query, so this stays flat regardless of roster size.
-       */
+      /** @description Whether this participant already has a declaration in the CURRENT round (#3389). */
       readonly declared_this_round: boolean;
     };
     /**
