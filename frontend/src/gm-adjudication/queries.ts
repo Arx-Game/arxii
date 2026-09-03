@@ -13,6 +13,8 @@ export const gmAdjudicationKeys = {
   challengeTemplates: () => [...gmAdjudicationKeys.all, 'challenge-templates'] as const,
   itemTemplates: (search: string) => [...gmAdjudicationKeys.all, 'item-templates', search] as const,
   summonOffers: () => [...gmAdjudicationKeys.all, 'summon-offers'] as const,
+  discovery: (q: string, risk: string | null) =>
+    [...gmAdjudicationKeys.all, 'discovery', q, risk ?? ''] as const,
 };
 
 /** Enabled only while the picker is open — `enabled` lets the panel defer the
@@ -77,5 +79,15 @@ export function useSummonOfferInbox(options: { enabled?: boolean } = {}) {
     enabled,
     refetchInterval: 15_000,
     staleTime: 10_000,
+  });
+}
+
+/** GM discovery catalog browse (#3564) — kind-first search behind the beat form. */
+export function useDiscovery(q: string, risk: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: gmAdjudicationKeys.discovery(q, risk),
+    queryFn: () => api.getDiscovery(q, risk),
+    enabled,
+    staleTime: 30_000,
   });
 }

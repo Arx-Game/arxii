@@ -51,10 +51,9 @@
  * setting `Scene.running_beat` (`actions/definitions/gm_story.py`).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import type { DispatchResult } from '@/combat/types';
@@ -1292,12 +1291,7 @@ interface GMAdjudicationPanelProps {
 }
 
 export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const characterId = useActiveCharacterId();
   const [targetCharacterId, setTargetCharacterId] = useState<number | null>(null);
 
   if (!scene?.viewer_can_gm || characterId === null) {

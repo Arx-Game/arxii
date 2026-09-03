@@ -73,6 +73,19 @@ export interface RunnableBeatEntry {
   staged_template_count: number;
 }
 
+/**
+ * GM discovery catalog browse (#3564), GET /api/gm/discovery/?q=&risk=.
+ * Same search as telnet `setsituation find`; kinds above the caller's
+ * tier never appear.
+ */
+export type DiscoveryResult = components['schemas']['DiscoveryResult'];
+export type DiscoveryKind = components['schemas']['DiscoveryKind'];
+export type DiscoveryTemplate = components['schemas']['DiscoveryTemplate'];
+export type DiscoveryChallenge = components['schemas']['DiscoveryChallenge'];
+export type DiscoveryCheckFit = components['schemas']['DiscoveryCheckFit'];
+export type DiscoveryDifficultyGuide = components['schemas']['DiscoveryDifficultyGuide'];
+export type DiscoveryPoolGuide = components['schemas']['DiscoveryPoolGuide'];
+
 /** Mirrors `world.scenes.action_constants.DifficultyChoice` — the only bands
  *  `gm_invoke_check` accepts (never a free integer). */
 export const DIFFICULTY_BANDS = [
