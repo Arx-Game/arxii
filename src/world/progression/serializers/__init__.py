@@ -246,22 +246,20 @@ class PathIntentDeclareSerializer(serializers.Serializer):
 
     path_id = serializers.IntegerField()
 
-    def validate_path_id(self, value: int) -> int:
+    def validate(self, attrs: dict) -> dict:
+        """Resolve ``path_id`` and return the Path in ``validated_data["path"]``.
+
+        The resolved row rides DRF's own channel rather than being stashed on the
+        serializer for the view to read back off ``self`` (ADR-0260), which also
+        retires the "Call is_valid() first" guard: validated_data cannot be read
+        before validation runs.
+        """
         try:
-            path = Path.objects.get(pk=value, is_active=True)
+            path = Path.objects.get(pk=attrs["path_id"], is_active=True)
         except Path.DoesNotExist as exc:
             msg = "Path does not exist or is not active."
-            raise serializers.ValidationError(msg) from exc
-        self._path = path
-        return value
-
-    @property
-    def validated_path(self) -> Path:
-        """Return the resolved Path instance after validation."""
-        if not hasattr(self, "_path"):
-            msg = "Call is_valid() before accessing validated_path."
-            raise AssertionError(msg)
-        return self._path
+            raise serializers.ValidationError({"path_id": msg}) from exc
+        return attrs | {"path": path}
 
 
 # --- SelectPath (late-selection recovery) serializers (#2121) --------------
@@ -283,21 +281,17 @@ class SelectPathSerializer(serializers.Serializer):
 
     path_id = serializers.IntegerField()
 
-    def validate_path_id(self, value: int) -> int:
+    def validate(self, attrs: dict) -> dict:
+        """Resolve ``path_id`` and return the Path in ``validated_data["path"]``.
+
+        Same contract as PathIntentDeclareSerializer above: the row travels in
+        validated_data, never on the serializer instance (ADR-0260).
+        """
         from world.classes.models import PathStage  # noqa: PLC0415
 
         try:
-            path = Path.objects.get(pk=value, is_active=True, stage=PathStage.PROSPECT)
+            path = Path.objects.get(pk=attrs["path_id"], is_active=True, stage=PathStage.PROSPECT)
         except Path.DoesNotExist as exc:
             msg = "Path does not exist, is not active, or is not a starting (Prospect) path."
-            raise serializers.ValidationError(msg) from exc
-        self._path = path
-        return value
-
-    @property
-    def validated_path(self) -> Path:
-        """Return the resolved Path instance after validation."""
-        if not hasattr(self, "_path"):
-            msg = "Call is_valid() before accessing validated_path."
-            raise AssertionError(msg)
-        return self._path
+            raise serializers.ValidationError({"path_id": msg}) from exc
+        return attrs | {"path": path}
