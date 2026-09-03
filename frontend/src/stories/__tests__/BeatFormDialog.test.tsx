@@ -111,6 +111,15 @@ vi.mock('@/battles/queries', () => ({
   })),
 }));
 
+// #3569 Fix round 1 - the region picker's flat area list. `listAreasFlat`
+// resolves directly to an `{id, name}[]` array (not paginated) - see
+// frontend/src/npc_services/api.ts.
+vi.mock('@/npc_services/queries', () => ({
+  useAreasFlatQuery: vi.fn(() => ({
+    data: [{ id: 4, name: 'The Marches' }],
+  })),
+}));
+
 // #3562 - the requesting account's own GM profile (risk cap).
 vi.mock('@/gm/queries', () => ({
   useGMProfileMine: vi.fn(),
@@ -1053,6 +1062,9 @@ describe('BeatFormDialog', () => {
     await user.click(within(screen.getByTestId('beat-battle-blueprint')).getByRole('combobox'));
     await user.click(await screen.findByText('Siege of the Gate'));
 
+    await user.click(within(screen.getByTestId('beat-battle-region')).getByRole('combobox'));
+    await user.click(await screen.findByText('The Marches'));
+
     await user.type(screen.getByTestId('beat-battle-name'), 'Hold the gate');
     await user.selectOptions(screen.getByTestId('beat-battle-party-side'), 'defender');
 
@@ -1073,6 +1085,7 @@ describe('BeatFormDialog', () => {
           staged_battle: {
             blueprint: 3,
             name: 'Hold the gate',
+            region: 4,
             party_side_role: 'defender',
             unit_lines: [
               { template: 7, side_role: 'attacker', place_name: 'Outer Gate', count: 2, order: 0 },
@@ -1116,6 +1129,7 @@ describe('BeatFormDialog', () => {
               id: 11,
               blueprint: 3,
               name: 'Hold the gate',
+              region: null,
               party_side_role: 'defender',
               unit_lines: [
                 {
@@ -1128,6 +1142,46 @@ describe('BeatFormDialog', () => {
                 },
               ],
             },
+          }),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('editing a staged battle with a region and clearing it sends region: null', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    setupMocks();
+    const updateMock = makeMutationMock('useUpdateBeat');
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 201 });
+    });
+
+    const beat = makeEncounterBeat({
+      staged_battle: { ...STAGED_BATTLE_FIXTURE, region: 4 },
+    });
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    expect(
+      within(screen.getByTestId('beat-battle-region')).getByRole('combobox')
+    ).toHaveTextContent('The Marches');
+
+    // Clicking the already-selected region deselects it (allowDeselect).
+    // The trigger button already shows 'The Marches' as its label, so target
+    // the popover's option (cmdk's Command.Item renders role="option") to
+    // avoid ambiguity with the trigger's own text.
+    await user.click(within(screen.getByTestId('beat-battle-region')).getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'The Marches' }));
+
+    await user.click(screen.getByRole('button', { name: /save beat/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 201,
+          data: expect.objectContaining({
+            staged_battle: expect.objectContaining({ region: null }),
           }),
         }),
         expect.any(Object)

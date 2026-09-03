@@ -12,6 +12,7 @@ import {
   deleteOffer,
   deleteRole,
   getRole,
+  listAreasFlat,
   listClueDetails,
   listMissionDetails,
   listOffers,
@@ -40,6 +41,11 @@ import type {
 
 export const npcServiceKeys = {
   all: ['npc-services'] as const,
+  // #1684 permit ward picker / #3569 battle prep region picker - both need a
+  // flat {id, name} list of every Area, not npc_services-specific data, but
+  // this is where the fetch (listAreasFlat) already lived so the query hook
+  // stays alongside it rather than spawning a new module for one hook.
+  areasFlat: () => [...npcServiceKeys.all, 'areas-flat'] as const,
   roles: () => [...npcServiceKeys.all, 'roles'] as const,
   roleList: (filters: NPCRoleFilters) => [...npcServiceKeys.roles(), 'list', filters] as const,
   roleDetail: (id: number) => [...npcServiceKeys.roles(), 'detail', id] as const,
@@ -88,6 +94,14 @@ export function useMissionDetailsForRole(
     queryKey: npcServiceKeys.missionDetailList(roleId ?? -1),
     queryFn: () => listMissionDetails({ role: roleId as number, page_size: 200 }),
     enabled: roleId !== null,
+  });
+}
+
+export function useAreasFlatQuery(): UseQueryResult<{ id: number; name: string }[]> {
+  return useQuery({
+    queryKey: npcServiceKeys.areasFlat(),
+    queryFn: listAreasFlat,
+    staleTime: 60_000,
   });
 }
 

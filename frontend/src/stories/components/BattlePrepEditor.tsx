@@ -11,15 +11,15 @@
  * converting to/from BeatStagedBattleBody (`battlePrepDraftToPayload`) and
  * seeding from a beat being edited (`battlePrepDraftFromBeat`).
  *
- * No region control (ruling 8, #3569 spec resolution): the only existing
- * areas list surface is `listAreasFlat` (frontend/src/npc_services/api.ts),
- * a one-off fetch built for the permit ward picker, not a general hook, and
- * none of this editor's tests exercise a region value. `region` stays
- * unset in both the draft and the payload - the backend's
- * `_sync_staged_battle` builds `defaults` from only the keys present in the
- * nested payload and calls `update_or_create(beat=beat, defaults=defaults)`,
- * so omitting `region` entirely leaves an existing value untouched (sending
- * an explicit `region: null` would instead clear it).
+ * Region (ruling 8, Fix round 1): `useAreasFlatQuery` (frontend/src/npc_services/queries.ts)
+ * lists every Area as a flat {id, name} pair - the same Area model
+ * `Battle.region` FKs to - so the region control reuses it rather than
+ * duplicating a hook. Region is optional and clearable: `region: ''` means
+ * "leave whatever is already there alone" on write (the backend's
+ * `_sync_staged_battle` only writes keys present in the payload, so omitting
+ * `region` entirely preserves an existing value), while an explicit clear on
+ * an existing staged battle sends `region: null` - see
+ * `battlePrepDraftToPayload` below for exactly when each applies.
  */
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Combobox } from '@/components/ui/combobox';
 import { useBattleMapBlueprintsQuery, useBattleUnitTemplatesQuery } from '@/battles/queries';
+import { useAreasFlatQuery } from '@/npc_services/queries';
 import type { BeatStagedBattleBody } from '../types';
 import type { Beat } from '../types';
 
@@ -44,7 +45,7 @@ export interface BattlePrepDraft {
   id?: number;
   blueprint: string;
   name: string;
-  /** '' = none. No control edits this yet - see the file header note. */
+  /** '' = none. See the file header note for exactly how this maps to the payload. */
   region: string;
   party_side_role: 'attacker' | 'defender';
   unit_lines: BattleUnitLineDraft[];
@@ -71,7 +72,7 @@ export function battlePrepDraftFromBeat(beat: Beat | undefined): BattlePrepDraft
     id: staged.id,
     blueprint: String(staged.blueprint),
     name: staged.name ?? '',
-    region: '',
+    region: staged.region != null ? String(staged.region) : '',
     party_side_role: staged.party_side_role ?? 'attacker',
     unit_lines: (staged.unit_lines ?? []).map((line) => ({
       id: line.id,
@@ -84,10 +85,23 @@ export function battlePrepDraftFromBeat(beat: Beat | undefined): BattlePrepDraft
 }
 
 export function battlePrepDraftToPayload(draft: BattlePrepDraft): BeatStagedBattleBody {
+  // region: '' either means "never set one" (a brand-new draft) or "clear the
+  // one this staged battle already has" (editing an existing one, id present).
+  // Omitting the key entirely leaves an existing value untouched server-side
+  // (see the file header note) - only send an explicit `null` when there is
+  // an existing staged battle to actually clear.
+  let region: { region?: number | null } = {};
+  if (draft.region !== '') {
+    region = { region: Number(draft.region) };
+  } else if (draft.id !== undefined) {
+    region = { region: null };
+  }
+
   return {
     ...(draft.id !== undefined ? { id: draft.id } : {}),
     blueprint: Number(draft.blueprint),
     name: draft.name.trim(),
+    ...region,
     party_side_role: draft.party_side_role,
     unit_lines: draft.unit_lines
       .filter((line) => line.template !== '')
@@ -127,10 +141,13 @@ export function BattlePrepEditor({ value, onChange, errors }: BattlePrepEditorPr
   const blueprints = blueprintsQuery.data?.results ?? [];
   const templatesQuery = useBattleUnitTemplatesQuery();
   const templates = templatesQuery.data?.results ?? [];
+  const areasQuery = useAreasFlatQuery();
+  const areas = areasQuery.data ?? [];
 
   const blueprintOptions = blueprints.map((bp) => ({ value: String(bp.id), label: bp.name }));
   const selectedBlueprint = blueprints.find((bp) => String(bp.id) === value.blueprint);
   const places = selectedBlueprint?.places ?? [];
+  const areaOptions = areas.map((area) => ({ value: String(area.id), label: area.name }));
 
   const formErrors = topLevelErrors(errors);
   const rowErrors = unitLineRowErrors(errors);
@@ -172,6 +189,18 @@ export function BattlePrepEditor({ value, onChange, errors }: BattlePrepEditorPr
           placeholder="Select a battle map…"
           searchPlaceholder="Search battle maps…"
           emptyMessage="No battle maps found."
+        />
+      </div>
+      <div className="space-y-1.5" data-testid="beat-battle-region">
+        <Label>Region</Label>
+        <Combobox
+          items={areaOptions}
+          value={value.region}
+          onValueChange={(val) => update({ region: val })}
+          placeholder="No region"
+          searchPlaceholder="Search areas…"
+          emptyMessage="No areas found."
+          allowDeselect
         />
       </div>
       <div className="space-y-1.5">

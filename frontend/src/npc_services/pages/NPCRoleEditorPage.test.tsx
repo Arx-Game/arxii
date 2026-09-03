@@ -69,6 +69,7 @@ vi.mock('@/missions/queries', () => ({
 // react-query-hook mocking convention (see PlayerBoundaryFormDialog.test.tsx).
 vi.mock('../queries', () => ({
   useRoles: vi.fn(),
+  useAreasFlatQuery: vi.fn(() => ({ data: [], isLoading: false })),
   useRole: vi.fn(),
   useOffersForRole: vi.fn(),
   useMissionDetailsForRole: vi.fn(),
