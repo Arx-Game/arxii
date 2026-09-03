@@ -270,6 +270,7 @@ export function CharacterCreationPage() {
             {/* PLACEHOLDER: Apostate rewrite */}
             <DialogTitle className="theme-heading">Tear out these pages</DialogTitle>
             <DialogDescription>
+              {/* PLACEHOLDER: Apostate rewrite */}
               Every chapter written so far is lost, and the record begins again at Origin.
             </DialogDescription>
           </DialogHeader>
