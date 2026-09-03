@@ -136,6 +136,21 @@ repos:
         # shape is narrow enough not to need the expand-one-app-at-a-time
         # rollout objectdb-param uses). Suppress with
         # `# noqa: IDMAPPER_MUTATE_ORDER` plus a stated reason.
+      - id: lint-only-defer
+        name: Reject .only()/.defer() on identity-mapped models
+        entry: uv run python tools/lint_only_defer.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        # Sentry ARX2-9 (2026-09-03): the idmapper hands back the resident
+        # instance for a pk and never refreshes its columns, so a row whose
+        # first load went through .only()/.defer() stays narrowed for the
+        # process and the next full read raises KeyError from Django's
+        # deferred-attribute getter. Nothing is saved by narrowing a row the
+        # identity map loads once. See ADR-0261 and django_notes.md. Suppress
+        # with `# noqa: IDMAPPER_ONLY` plus a reason, only for a model that is
+        # not a SharedMemoryModel.
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py

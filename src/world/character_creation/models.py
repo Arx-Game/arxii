@@ -416,7 +416,7 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             .prefetch_related(
                 Prefetch(
                     "tradition__codex_grants",
-                    queryset=TraditionCodexGrant.objects.only("tradition_id", "entry_id"),
+                    queryset=TraditionCodexGrant.objects.all(),
                     to_attr="cached_codex_grants",
                 ),
             )

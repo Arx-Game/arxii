@@ -1,4 +1,4 @@
-# ADR-0261: The routing report is advisory and open-world
+# ADR-0262: The routing report is advisory and open-world
 
 **Status:** Accepted (2026-09-03, #3563). Extends ADR-0258; related ADR-0259.
 
