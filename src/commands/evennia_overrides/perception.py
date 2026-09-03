@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar
 
 from actions.definitions.perception import (
@@ -13,12 +12,7 @@ from actions.definitions.perception import (
 from actions.types import ActionResult
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
-from commands.utils.argsplit import split_on_keyword
-
-# Drilled forms — try in order, fall through to plain look on no match. The
-# possessive keeps a regex (the separator is punctuation, not a word); the
-# connector forms split on the keyword instead, which does not backtrack.
-_POSSESSIVE_RE = re.compile(r"^([^']{1,200})'s\s+(.+)$", flags=re.IGNORECASE)
+from commands.utils.argsplit import split_on_keyword, split_possessive
 
 
 class CmdLook(ArxCommand):
@@ -53,9 +47,9 @@ class CmdLook(ArxCommand):
         #     (intent: look at bob)
         #   - Items literally named ``bob's hat`` when no character bob
         #     is present
-        if match := _POSSESSIVE_RE.match(args):
-            owner_name = match.group(1).strip()
-            item_name = match.group(2).strip()
+        # Drilled forms - try in order, fall through to plain look on no match.
+        if possessive := split_possessive(args):
+            owner_name, item_name = possessive
             result = self._try_dispatch_at_owner(owner_name, item_name)
             if result is not None:
                 return result

@@ -280,16 +280,6 @@ def _check_honor_eligibility(  # noqa: PLR0913 - mirrors honor_deed's inputs
 ) -> None:
     """Every refusal that must land before a Hare is spent or a row is written."""
     # --- Step 2: eligibility -------------------------------------------
-    # Always resolved as the PRIMARY persona (whole-branch-review C1) — never
-    # the active/masked one. `_grant_title` (world.achievements.services) makes
-    # the identical argument: an honor is a named public act (a public journal
-    # + a scene pose already posted under the primary persona via
-    # `_post_declaration`), so recording a mask as `LegendHonor.honorer` while
-    # publishing under the real name is a deterministic mask-to-real link. The
-    # rite is always performed as yourself.
-    honorer_persona = character_sheet.primary_persona
-    establishing = deed is None
-
     if establishing:
         _check_establish_eligibility(
             character_sheet=character_sheet,
@@ -330,6 +320,13 @@ def honor_deed(  # noqa: PLR0913
     with transaction.atomic():
         # --- Steps 1-2: resolve the anchor, then every eligibility refusal ---
         deed, anchor_event = _resolve_anchor(deed, event)
+        # Always resolved as the PRIMARY persona (whole-branch-review C1) — never
+        # the active/masked one. `_grant_title` (world.achievements.services) makes
+        # the identical argument: an honor is a named public act (a public journal
+        # + a scene pose already posted under the primary persona via
+        # `_post_declaration`), so recording a mask as `LegendHonor.honorer` while
+        # publishing under the real name is a deterministic mask-to-real link. The
+        # rite is always performed as yourself.
         honorer_persona = character_sheet.primary_persona
         establishing = deed is None
         _check_honor_eligibility(

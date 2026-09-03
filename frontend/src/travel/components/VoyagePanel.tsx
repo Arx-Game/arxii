@@ -209,21 +209,16 @@ export function VoyagePanel({ characterId }: VoyagePanelProps) {
           </Select>
         </div>
 
-        <div className="mt-3">
-          <span
-            id="voyage-destination-label"
-            className="text-[10px] font-semibold text-muted-foreground"
-          >
-            Destination
-          </span>
-          <div role="group" aria-labelledby="voyage-destination-label">
+        <fieldset className="mt-3">
+          <legend className="text-[10px] font-semibold text-muted-foreground">Destination</legend>
+          <div>
             <HubBrowser
               travelMode={travelMode}
               onSelectHub={setSelectedHub}
               selectedHubId={selectedHub?.id}
             />
           </div>
-        </div>
+        </fieldset>
 
         {selectedHub && selectedMethod && (
           <Button

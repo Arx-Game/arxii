@@ -199,19 +199,11 @@ export function ThreadPullDialog({
 
         <div className="space-y-4 py-2">
           {/* Resonance selector */}
-          <div className="space-y-1">
-            <span
-              id="pull-resonance-label"
-              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            >
+          <fieldset className="space-y-1">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Resonance
-            </span>
-            <div
-              className="flex flex-wrap gap-2"
-              data-testid="resonance-selector"
-              role="group"
-              aria-labelledby="pull-resonance-label"
-            >
+            </legend>
+            <div className="flex flex-wrap gap-2" data-testid="resonance-selector">
               {selectableResonances.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No eligible resonances with balance.
@@ -238,7 +230,7 @@ export function ThreadPullDialog({
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           {/* Tier selector */}
           <div className="space-y-1">
@@ -248,7 +240,7 @@ export function ThreadPullDialog({
             >
               Tier
             </span>
-            <div className="flex gap-2" role="group" aria-labelledby="pull-tier-label">
+            <div className="flex gap-2" role="radiogroup" aria-labelledby="pull-tier-label">
               {([1, 2, 3] as const).map((t) => (
                 <button
                   key={t}
@@ -271,19 +263,11 @@ export function ThreadPullDialog({
 
           {/* Thread checkboxes */}
           {selectedResonanceId !== null && (
-            <div className="space-y-1">
-              <span
-                id="pull-threads-label"
-                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
+            <fieldset className="space-y-1">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Threads
-              </span>
-              <div
-                className="space-y-1.5"
-                data-testid="thread-checklist"
-                role="group"
-                aria-labelledby="pull-threads-label"
-              >
+              </legend>
+              <div className="space-y-1.5" data-testid="thread-checklist">
                 {threadsForResonance.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     No eligible threads for this resonance.
@@ -311,7 +295,7 @@ export function ThreadPullDialog({
                   );
                 })}
               </div>
-            </div>
+            </fieldset>
           )}
 
           {/* Live preview */}
