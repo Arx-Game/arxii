@@ -34,7 +34,26 @@ runs:
         set -euo pipefail
         # Pin major.minor; bump deliberately (not a floating latest).
         pip install --quiet "ansible-core==2.18.*"
-        ansible-galaxy collection install -r infra/ansible/requirements.yml
+        # galaxy.ansible.com occasionally serves a malformed versions reply
+        # (2026-09-03: a v3 body with no `data` key, which ansible-core
+        # surfaces as "KeyError: 'results'"), and a single such reply used
+        # to fail the whole deploy. Three attempts with backoff. --no-cache
+        # so a bad reply is never written to the galaxy response cache and
+        # replayed by the retry; the runner is fresh, so the cache buys
+        # nothing anyway.
+        for attempt in 1 2 3; do
+          if ansible-galaxy collection install --no-cache \
+               -r infra/ansible/requirements.yml; then
+            break
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            echo "::error::ansible-galaxy collection install failed on all 3 attempts"
+            exit 1
+          fi
+          delay=$((attempt * 30))
+          echo "::warning::ansible-galaxy collection install failed (attempt $attempt); retrying in ${delay}s"
+          sleep "$delay"
+        done
 
     - name: SSH key (0600, never logged)
       shell: bash
