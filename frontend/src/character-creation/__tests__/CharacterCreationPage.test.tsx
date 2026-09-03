@@ -111,8 +111,8 @@ describe('CharacterCreationPage', () => {
     });
   });
 
-  describe('No Draft - Start Screen', () => {
-    it('shows start character creation button when no draft exists', async () => {
+  describe('No Draft - Arrival Plate', () => {
+    it('shows the open-the-record door when no draft exists', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
@@ -125,13 +125,11 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /start character creation/i })
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /open the record/i })).toBeInTheDocument();
       });
     });
 
-    it('displays welcome message', async () => {
+    it('displays the arrival eyebrow and title', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
@@ -144,10 +142,10 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Create a New Character')).toBeInTheDocument();
+        expect(screen.getByText(/one stands before us/i)).toBeInTheDocument();
       });
 
-      expect(screen.getByText(/begin your journey by creating a character/i)).toBeInTheDocument();
+      expect(screen.getByText(/the durance/i)).toBeInTheDocument();
     });
   });
 
@@ -265,6 +263,23 @@ describe('CharacterCreationPage', () => {
 
       expect(screen.queryByRole('button', { name: /turn the page/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^‹ back/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Arrival', () => {
+    it('opens on the night plate with one door that creates the draft', async () => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: null,
+        explanations: mockCGExplanations,
+      });
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, { queryClient });
+      const plate = await screen.findByRole('region', { name: /the durance/i });
+      expect(plate).toHaveClass('plate-night');
+      expect(screen.getByText(mockCGExplanations.origin_lore_intro)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /open the record/i })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
     });
   });
 

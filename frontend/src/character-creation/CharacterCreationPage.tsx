@@ -15,7 +15,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAccount } from '@/store/hooks';
-import { AlertCircle, Plus } from 'lucide-react';
+import { pageBackgroundStyle, usePageBackgrounds } from '@/hooks/usePageBackgrounds';
+import { AlertCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -32,9 +33,10 @@ import {
   ReviewStage,
   StageErrorBoundary,
 } from './components';
-import { CHAPTERS, ContentsRail, PageTurn } from './folio';
+import { CHAPTERS, ContentsRail, NightPlate, PageTurn } from './folio';
 import {
   useCanCreateCharacter,
+  useCGExplanations,
   useCreateDraft,
   useDeleteDraft,
   useDraft,
@@ -48,6 +50,8 @@ export function CharacterCreationPage() {
   const account = useAccount();
   const { data: canCreate, isLoading: canCreateLoading } = useCanCreateCharacter();
   const { data: draft, isLoading: draftLoading } = useDraft();
+  const { data: copy } = useCGExplanations();
+  const { data: backgrounds } = usePageBackgrounds();
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
   const deleteDraft = useDeleteDraft();
@@ -149,32 +153,31 @@ export function CharacterCreationPage() {
     );
   }
 
-  // No draft yet - show start button
+  // No draft yet: the arrival plate, the first of the two night moments.
   if (!draft) {
+    const backgroundUrl = backgrounds
+      ? pageBackgroundStyle(backgrounds, 'cg_stage', 'Character Creation')
+          ?.backgroundImage?.toString()
+          .replace(/^url\((.*)\)$/, '$1')
+      : undefined;
     return (
-      <div className="container mx-auto max-w-5xl px-4 py-8">
-        <div className="py-12 text-center">
-          <h1 className="text-3xl font-bold">Create a New Character</h1>
-          <p className="mx-auto mt-4 max-w-lg text-muted-foreground">
-            Begin your journey by creating a character. You'll define their origin, heritage,
-            abilities, and story through a guided process.
-          </p>
-          <Button
-            size="lg"
-            className="mt-8"
-            onClick={() => createDraft.mutate()}
-            disabled={createDraft.isPending}
-          >
-            {createDraft.isPending ? (
-              'Creating...'
-            ) : (
-              <>
-                <Plus className="mr-2 h-5 w-5" />
-                Start Character Creation
-              </>
-            )}
-          </Button>
-        </div>
+      <div className="interview">
+        <NightPlate
+          titleId="arrival-title"
+          eyebrow={copy?.arrival_eyebrow ?? 'The Durance · Chapter the First'}
+          title={copy?.arrival_title ?? 'One stands before us'}
+          backgroundImage={backgroundUrl}
+          door={{
+            label: createDraft.isPending
+              ? 'Opening the record...'
+              : (copy?.arrival_door ?? 'Open the record'),
+            onClick: () => createDraft.mutate(),
+            disabled: createDraft.isPending,
+          }}
+          quiet={{ label: copy?.arrival_quiet ?? 'or return to the Hall', to: '/' }}
+        >
+          {copy?.origin_lore_intro && <p className="plate-sub">{copy.origin_lore_intro}</p>}
+        </NightPlate>
       </div>
     );
   }
