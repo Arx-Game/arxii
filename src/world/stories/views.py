@@ -2268,7 +2268,7 @@ class TransitionRequiredOutcomeViewSet(viewsets.ModelViewSet):
 
         IsLeadGMOnTransitionStoryOrStaff returns True for every SAFE_METHOD
         regardless of object - it also guards TransitionViewSet, whose reads
-        stay intentionally open (the gated routing_rules field does the
+        stay intentionally open (the gated required_outcomes field does the
         actual GM-only filtering there). This queryset is the only scoping
         for the raw rule rows themselves: unscoped, any authenticated player
         could list every story's routing predicates. Staff see everything;
