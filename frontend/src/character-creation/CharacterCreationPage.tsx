@@ -13,11 +13,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { useAccount } from '@/store/hooks';
-import { AnimatePresence } from 'framer-motion';
-import { AlertCircle, Plus, RotateCcw } from 'lucide-react';
+import { AlertCircle, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -33,8 +31,8 @@ import {
   PathStage,
   ReviewStage,
   StageErrorBoundary,
-  StageStepper,
 } from './components';
+import { CHAPTERS, ContentsRail, PageTurn } from './folio';
 import {
   useCanCreateCharacter,
   useCreateDraft,
@@ -42,12 +40,11 @@ import {
   useDraft,
   useUpdateDraft,
 } from './queries';
-import { Stage } from './types';
+import { Stage, STAGE_LABELS } from './types';
 import { getRealmTheme } from './utils';
-import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
+import './cg.css';
 
 export function CharacterCreationPage() {
-  const { data: backgrounds } = usePageBackgrounds();
   const account = useAccount();
   const { data: canCreate, isLoading: canCreateLoading } = useCanCreateCharacter();
   const { data: draft, isLoading: draftLoading } = useDraft();
@@ -218,83 +215,83 @@ export function CharacterCreationPage() {
     }
   };
 
-  return (
-    <div
-      className="container mx-auto max-w-5xl px-4 py-8"
-      style={pageBackgroundStyle(backgrounds, 'cg_stage', 'Character Creation')}
-    >
-      <header className="mb-8">
-        <h1 className="theme-heading text-3xl font-bold">Character Creation</h1>
-      </header>
+  const currentIndex = CHAPTERS.findIndex((c) => c.stage === draft.current_stage);
+  const prev = CHAPTERS[currentIndex - 1]?.stage;
+  const nextStage = CHAPTERS[currentIndex + 1]?.stage;
 
-      <div className="mb-8 flex items-start gap-4">
-        <div className="flex-1">
-          <StageStepper
+  const restartDoor = (
+    <button type="button" onClick={() => setRestartDialogOpen(true)}>
+      {/* PLACEHOLDER: Apostate rewrite */}
+      Tear out these pages and begin again
+    </button>
+  );
+
+  return (
+    <div className="interview">
+      <div className="interview-grid">
+        <ContentsRail
+          currentStage={draft.current_stage}
+          stageCompletion={draft.stage_completion}
+          stageErrors={draft.stage_errors ?? {}}
+          onStageSelect={handleStageSelect}
+          restartSlot={restartDoor}
+        />
+        <div className="chapter-column" id={`chapter-${draft.current_stage}`}>
+          <StageErrorBoundary
             currentStage={draft.current_stage}
-            stageCompletion={draft.stage_completion}
-            stageErrors={draft.stage_errors ?? {}}
-            onStageSelect={handleStageSelect}
-          />
+            onNavigateToStage={handleStageSelect}
+          >
+            {renderStage()}
+          </StageErrorBoundary>
+          {/* Stages that own their own PageTurn (Origin, Review) render nothing here. */}
+          {draft.current_stage !== Stage.ORIGIN && draft.current_stage !== Stage.REVIEW && (
+            <PageTurn
+              back={
+                prev !== undefined
+                  ? { label: `Back: ${STAGE_LABELS[prev]}`, onClick: () => handleStageSelect(prev) }
+                  : undefined
+              }
+              next={
+                nextStage !== undefined
+                  ? {
+                      label: `Turn the page: ${STAGE_LABELS[nextStage]}`,
+                      onClick: () => handleStageSelect(nextStage),
+                    }
+                  : undefined
+              }
+            />
+          )}
         </div>
-        <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground">
-              <RotateCcw className="mr-1.5 h-4 w-4" />
-              <span className="hidden sm:inline">Restart</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Restart Character Creation?</DialogTitle>
-              <DialogDescription>
-                This will permanently delete all your current progress, selections, stats, magic,
-                appearance, everything, and start a completely fresh character. This cannot be
-                undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setRestartDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleRestart}
-                disabled={deleteDraft.isPending || createDraft.isPending}
-              >
-                {deleteDraft.isPending || createDraft.isPending
-                  ? 'Restarting...'
-                  : 'Delete & Restart'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
-      <main className="min-h-[400px]">
-        <StageErrorBoundary
-          currentStage={draft.current_stage}
-          onNavigateToStage={handleStageSelect}
-        >
-          <AnimatePresence mode="wait">{renderStage()}</AnimatePresence>
-        </StageErrorBoundary>
-      </main>
-
-      {/* Navigation buttons */}
-      <footer className="mt-12 flex justify-between border-t pt-6">
-        <Button
-          variant="outline"
-          disabled={draft.current_stage === Stage.ORIGIN}
-          onClick={() => handleStageSelect((draft.current_stage - 1) as Stage)}
-        >
-          Previous
-        </Button>
-        <Button
-          disabled={draft.current_stage === Stage.REVIEW}
-          onClick={() => handleStageSelect((draft.current_stage + 1) as Stage)}
-        >
-          Next
-        </Button>
-      </footer>
+      <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
+        <DialogContent className="rounded-none">
+          <DialogHeader>
+            {/* PLACEHOLDER: Apostate rewrite */}
+            <DialogTitle className="theme-heading">Tear out these pages</DialogTitle>
+            <DialogDescription>
+              Every chapter written so far is lost, and the record begins again at Origin.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-none"
+              onClick={() => setRestartDialogOpen(false)}
+            >
+              Keep what is written
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-none"
+              onClick={handleRestart}
+              disabled={deleteDraft.isPending || createDraft.isPending}
+            >
+              {deleteDraft.isPending || createDraft.isPending ? 'Tearing out...' : 'Tear them out'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -15,8 +15,8 @@ interface LayoutProps {
 /** Routes that use a full-viewport layout without container padding or footer. */
 const FULL_VIEWPORT_ROUTES: ReadonlySet<string> = new Set(['/game']);
 
-/** Routes that use a full-bleed layout (no container padding) but keep the Footer (#3305). */
-const FULL_BLEED_ROUTES: ReadonlySet<string> = new Set(['/']);
+/** Routes that use a full-bleed layout (no container padding) but keep the Footer (#3305, #3540). */
+const FULL_BLEED_ROUTES: ReadonlySet<string> = new Set(['/', '/characters/create']);
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
