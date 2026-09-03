@@ -148,7 +148,7 @@ function TierStrip({
   return (
     <div
       className="flex items-center gap-1.5"
-      role="group"
+      role="radiogroup"
       aria-label={`Tier selection for thread ${threadId}`}
     >
       <span className="mr-1 text-xs text-muted-foreground">Tier</span>
@@ -172,6 +172,8 @@ function TierStrip({
           <button
             key={tier}
             type="button"
+            role="radio"
+            aria-checked={isSelected}
             onClick={() => {
               if (!isUnaffordable) onSelectTier(tier);
             }}

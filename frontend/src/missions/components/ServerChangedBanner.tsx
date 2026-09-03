@@ -17,12 +17,11 @@ interface Props {
 
 export function ServerChangedBanner({ onPull, className }: Props) {
   return (
-    <div
+    <output
       className={`flex items-center justify-between gap-2 rounded border border-amber-500/60 bg-amber-100/30 px-3 py-2 text-sm ${
         className ?? ''
       }`}
       data-testid="server-changed-banner"
-      role="status"
     >
       <span>
         <strong>Updated server-side</strong> since you started editing. Refresh to discard your
@@ -31,6 +30,6 @@ export function ServerChangedBanner({ onPull, className }: Props) {
       <Button size="sm" variant="outline" onClick={onPull}>
         Refresh
       </Button>
-    </div>
+    </output>
   );
 }
