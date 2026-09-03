@@ -2,6 +2,8 @@
 Character Creation serializers.
 """
 
+from collections import defaultdict
+
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -23,8 +25,10 @@ from world.character_creation.models import (
     DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
+    OriginTemplateSlotChoice,
     StartingArea,
 )
+from world.character_creation.services import select_origin_template, set_family_path
 from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Pronouns
 from world.classes.models import Path, PathStage
@@ -47,6 +51,15 @@ from world.societies.houses.models import (
 from world.species.models import Language, Species
 from world.worship.models import WorshippedBeing
 from world.worship.serializers import WorshippedBeingRefSerializer
+
+# Sentinel distinguishing "key not present in this PATCH" from an explicit
+# ``None``/empty value, for CharacterDraftSerializer.update() (#3617).
+_UNSET = object()
+
+# Draft_data keys cleared when the selected Upbringing changes; mirrors
+# services.py's own ``_UPBRINGING_DRAFT_KEYS``, applied here for the
+# clear-selected-origin-template-to-None branch that services.py never sees.
+_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
 
 
 class PerspectiveEntrySerializer(serializers.Serializer):
@@ -400,35 +413,101 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
         ).data
 
 
-class OriginTemplateSlotSerializer(serializers.ModelSerializer):
-    """Slot prompt within an origin template (#2478)."""
+class OriginTemplateSlotChoiceSerializer(serializers.ModelSerializer):
+    """One priced answer on a pick-list Upbringing prompt (#3617)."""
 
     class Meta:
-        model = OriginTemplateSlot
-        fields = ["id", "name", "prompt", "example", "sort_order", "is_required"]
+        model = OriginTemplateSlotChoice
+        fields = ["id", "name", "description", "cg_point_cost", "cost_per_influence", "sort_order"]
         read_only_fields = fields
 
 
+class OriginTemplateSlotSerializer(serializers.ModelSerializer):
+    """Slot prompt within an origin template (#2478, #3617)."""
+
+    choices = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OriginTemplateSlot
+        fields = [
+            "id",
+            "name",
+            "prompt",
+            "example",
+            "sort_order",
+            "is_required",
+            "applies_to",
+            "allows_text",
+            "choices",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(OriginTemplateSlotChoiceSerializer(many=True))
+    def get_choices(self, obj: OriginTemplateSlot) -> list[dict]:
+        """Return this slot's active choices from the parent's flat-queried grouping.
+
+        ADR-0263: a ``to_attr`` prefetch keyed on a per-slot query would be a new
+        stale-cache hit on this identity-mapped model, so the parent serializer
+        (``CGOriginTemplateSerializer.get_slots``) runs one flat query for every
+        slot's choices and passes the grouping down via context instead (mirrors
+        the two-flat-queries approach in ``validators.py:_get_prompt_errors``).
+        """
+        rows = self.context.get("choices_by_slot", {}).get(obj.id, [])
+        return OriginTemplateSlotChoiceSerializer(rows, many=True).data
+
+
 class CGOriginTemplateSerializer(serializers.ModelSerializer):
-    """Origin template for the CG guided flow (#2478).
+    """Origin template for the CG guided flow (#2478, #3617).
 
     Backs ``GET /api/character-creation/origin-templates/``.
     """
 
     slots = serializers.SerializerMethodField()
+    claimable_kind_ids = serializers.PrimaryKeyRelatedField(
+        source="claimable_kinds", many=True, read_only=True
+    )
 
     class Meta:
         model = OriginTemplate
-        fields = ["id", "name", "frame_narrative", "is_active", "sort_order", "slots"]
+        fields = [
+            "id",
+            "name",
+            "frame_narrative",
+            "is_active",
+            "sort_order",
+            "cg_point_cost",
+            "trust_required",
+            "allows_claim_family",
+            "allows_name_family",
+            "allows_no_family",
+            "claimable_kind_ids",
+            "named_family_kind",
+            "slots",
+        ]
         read_only_fields = fields
 
     @extend_schema_field(OriginTemplateSlotSerializer(many=True))
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
-        """Return nested slots, preferring the prefetched ``cached_slots`` attr."""
+        """Return nested slots, preferring the prefetched ``cached_slots`` attr.
+
+        Choices are resolved with one flat query across every slot on this
+        template, grouped by slot id in Python, rather than a per-slot query in
+        the loop below or a new ``to_attr`` prefetch (see
+        ``OriginTemplateSlotSerializer.get_choices``).
+        """
         slots = (
             obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
         )
-        return OriginTemplateSlotSerializer(slots, many=True).data
+        choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
+        slot_ids = [slot.id for slot in slots]
+        if slot_ids:
+            choice_rows = OriginTemplateSlotChoice.objects.filter(
+                slot_id__in=slot_ids, is_active=True
+            ).order_by("sort_order")
+            for choice in choice_rows:
+                choices_by_slot[choice.slot_id].append(choice)
+        nested_context = {**self.context, "choices_by_slot": choices_by_slot}
+        return OriginTemplateSlotSerializer(slots, many=True, context=nested_context).data
 
 
 class DraftMarkingSerializer(serializers.ModelSerializer):
@@ -479,6 +558,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     family_id = serializers.PrimaryKeyRelatedField(
         queryset=Family.objects.all(),
         source="family",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    # The Upbringing and family path taken under it (#3617).
+    selected_origin_template = CGOriginTemplateSerializer(read_only=True)
+    selected_origin_template_id = serializers.PrimaryKeyRelatedField(
+        queryset=OriginTemplate.objects.filter(is_active=True),
+        source="selected_origin_template",
         write_only=True,
         required=False,
         allow_null=True,
@@ -601,6 +689,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "birthday_day",
             "family",
             "family_id",
+            "selected_origin_template",
+            "selected_origin_template_id",
+            "family_path",
             "claimed_kin_slot",
             "claimed_kin_slot_id",
             "claimed_kin_pool",
@@ -781,14 +872,48 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        """Merge ``draft_data`` keys on partial update instead of replacing the blob.
+        """Handle the Upbringing/family-path picks, then merge ``draft_data``.
 
         The wizard's stages save independently (debounced skills, slider commits,
-        navigation-triggered saves) — whole-blob replacement made every PATCH a
+        navigation-triggered saves) - whole-blob replacement made every PATCH a
         last-write-wins race over a snapshot of the client cache, silently
         reverting sibling stages' keys (2026-07 audit). A key set to ``null``
         still clears it; omitted keys are untouched.
+
+        ``selected_origin_template`` and ``family_path`` (#3617) are popped and
+        handled explicitly before that merge and before ``super().update()``:
+        a key absent from this PATCH (``_UNSET``) is left untouched; an explicit
+        ``None`` clears the Upbringing and everything downstream of it; a change
+        to a different Upbringing goes through ``select_origin_template`` (which
+        raises a DRF ``ValidationError``, surfacing as a 400, on the wrong
+        beginning or insufficient trust, and clears downstream state itself);
+        the same pk is a no-op. ``family_path`` similarly goes through
+        ``set_family_path`` (which raises when the Upbringing does not allow
+        that path) unless it is being cleared to the empty string.
         """
+        template = validated_data.pop("selected_origin_template", _UNSET)
+        if template is _UNSET:
+            pass
+        elif template is None:
+            instance.selected_origin_template = None
+            instance.family_path = ""
+            instance.family = None
+            instance.claimed_kin_slot = None
+            instance.claimed_kin_pool = None
+            for key in _UPBRINGING_DRAFT_KEYS:
+                instance.draft_data.pop(key, None)
+        elif template.pk != instance.selected_origin_template_id:
+            select_origin_template(instance, template)
+        # else: same pk selected again, no-op.
+
+        path = validated_data.pop("family_path", _UNSET)
+        if path is _UNSET:
+            pass
+        elif path:
+            set_family_path(instance, path)
+        else:
+            instance.family_path = ""
+
         incoming = validated_data.pop("draft_data", None)
         if incoming is not None:
             validated_data["draft_data"] = {**instance.draft_data, **incoming}
@@ -821,12 +946,43 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             self._validate_stats(stats)
 
         self._validate_tarot_card_name(value)
+        self._validate_origin_choices(value)
+        self._validate_new_family_name(value)
 
         goals = value.get("goals")
         if goals is not None:
             value["goals"] = self._validate_goals(goals)
 
         return value
+
+    def _validate_origin_choices(self, data: dict) -> None:
+        """``origin_choices`` maps a str slot id to a picked choice id, or null (#3617)."""
+        origin_choices = data.get("origin_choices")
+        if origin_choices is None:
+            return
+        if not isinstance(origin_choices, dict):
+            msg = "origin_choices must be a dictionary"
+            raise serializers.ValidationError({"origin_choices": msg})
+        for slot_id, choice_id in origin_choices.items():
+            if not isinstance(slot_id, str):
+                msg = "origin_choices keys must be strings"
+                raise serializers.ValidationError({"origin_choices": msg})
+            if choice_id is not None and not isinstance(choice_id, int):
+                msg = "origin_choices values must be an integer choice id or null"
+                raise serializers.ValidationError({"origin_choices": msg})
+
+    def _validate_new_family_name(self, data: dict) -> None:
+        """``new_family_name`` must fit ``Family.name``'s column width (#3617)."""
+        new_family_name = data.get("new_family_name")
+        if new_family_name is None:
+            return
+        if not isinstance(new_family_name, str):
+            msg = "new_family_name must be a string"
+            raise serializers.ValidationError({"new_family_name": msg})
+        max_length = Family._meta.get_field("name").max_length  # noqa: SLF001
+        if len(new_family_name) > max_length:
+            msg = f"new_family_name must be at most {max_length} characters"
+            raise serializers.ValidationError({"new_family_name": msg})
 
     def _validate_tarot_card_name(self, data: dict) -> None:
         """Validate that tarot_card_name refers to an existing TarotCard."""

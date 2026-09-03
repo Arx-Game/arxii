@@ -599,10 +599,11 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    """List active origin-story templates for the CG guided flow (#2478).
+    """List active origin-story templates for the CG guided flow (#2478, #3617).
 
     Filter by ``beginning`` to get templates available for a specific beginning.
-    Mirrors ``CGGlimpseTagViewSet``.
+    Trust-gated: staff see every active row, everyone else only rows whose
+    ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
     """
 
     pagination_class = None  # ADR-0138: opt out of default paginator
@@ -612,9 +613,24 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["beginning"]
 
     def get_queryset(self) -> QuerySet[OriginTemplate]:
-        """Return active templates with prefetched slots, ordered."""
+        """Return active, trust-accessible templates with prefetched slots, ordered.
+
+        Choices are resolved by the serializer via a flat query grouped in
+        Python, not a nested ``to_attr`` prefetch here (ADR-0263: a new
+        ``to_attr`` hit on this identity-mapped model risks a stale cache;
+        the existing ``cached_slots`` prefetch below is the one already-shipped
+        exception, kept as-is rather than touched by this task).
+        """
+        user = self.request.user
+        qs = OriginTemplate.objects.filter(is_active=True)
+        if not user.is_staff:
+            try:
+                trust = user.trust
+            except AttributeError:
+                trust = 0
+            qs = qs.filter(trust_required__lte=trust)
         return (
-            OriginTemplate.objects.filter(is_active=True)
+            qs.select_related("named_family_kind")
             .prefetch_related(
                 Prefetch(
                     "slots",
