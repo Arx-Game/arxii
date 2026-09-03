@@ -294,6 +294,35 @@ keep:
 # This is the tier `sonar.issue.ignore.multicriteria` was reaching for and could not
 # deliver under Automatic Analysis. Record each standing suppression here.
 false_positives:
+  - rule: pythonsecurity:S2083
+    path: "src/cli/arx.py"
+    why: >
+      "I/O function calls should not be vulnerable to path injection attacks" (CWE-22),
+      raised as a BLOCKER on `_rewrite_env_keys`'s `env_file.write_text(...)` when that
+      function was extracted (PR #3602). The reported flow is:
+      source `env_file.read_text()` -> `updated` list -> sink `env_file.write_text(...)`.
+
+      The tainted value in that flow is the CONTENT argument, not the path. Sonar has
+      mis-modelled `pathlib.Path.write_text`, whose single positional argument is the
+      data to write; the path is the bound receiver. That receiver is `SRC_DIR / ".env"`
+      or `env_file.parent.parent / "frontend" / ".env"` - both built from module
+      constants, with no caller-supplied component anywhere on the path. There is no
+      path injection to have.
+
+      The flow's labelled source, "a user can craft an HTTP request with malicious
+      content", is also wrong for this code: `arx ngrok` is a local developer CLI that
+      no HTTP request reaches, and its docstring already refuses production use.
+
+      Not disabled at the rule level: S2083 is a genuine high-severity taint rule and
+      stays ACTIVE. This is an instance disposition only.
+
+      The flow did point at a real, adjacent problem, which IS fixed rather than
+      dispositioned: the values written come from the ngrok API's tunnel URL, and a
+      newline in one would have ended the KEY=value line and let the remainder land in
+      .env as its own setting. `_rewrite_env_keys` now rejects any value containing a
+      newline or carriage return before it writes, covered by two tests in
+      core_management/tests/test_arx_cli.py that fail when the guard is removed.
+
   - rule: typescript:S6479
     path: "frontend/src/*"
     why: >

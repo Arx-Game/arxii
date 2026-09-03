@@ -622,7 +622,17 @@ def _rewrite_env_keys(env_file: Path, values: dict[str, str]) -> None:
 
     One pass over the file: a line whose key we are setting is replaced, anything
     else is copied through, and whatever was never seen is appended at the end.
+
+    Raises ``ValueError`` if a value spans lines - see the guard below.
     """
+    for key, value in values.items():
+        # Values reach here from the ngrok API's tunnel URL, not from us. A newline
+        # in one would end the KEY=value line and let whatever followed it land in
+        # .env as its own setting, so refuse rather than write it.
+        if "\n" in value or "\r" in value:
+            msg = f"Refusing to write a multi-line value for {key} into {env_file.name}."
+            raise ValueError(msg)
+
     remaining = dict(values)
     updated: list[str] = []
     for line in env_file.read_text().splitlines(keepends=True):
