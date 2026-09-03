@@ -159,9 +159,11 @@ repos:
         types: [python]
         files: ^src/.*(/(views|serializers)/.*|(views|serializers)[^/]*)\.py$
         # #3597 / ADR-0260 (2026-09-03): a `_thing: T | None = None` class
-        # attribute filled during a request is a memo the ruling rejects. Account
-        # data is a cached_property on the Account typeclass; request data is an
-        # explicit argument or middleware. Suppress with `# noqa: VIEW_MEMO`
+        # attribute filled during a request is a memo the ruling rejects, and so is
+        # the lazy `hasattr(self, "_thing")` / `self._thing = ...` spelling of it
+        # inside a method. Account data is a cached_property on the Account
+        # typeclass; request data is an explicit argument (serializer `context=`,
+        # or `validated_data`) or middleware. Suppress with `# noqa: VIEW_MEMO`
         # plus a reason, only for constant configuration that defaults to None.
       - id: check-migrations
         name: Check Django migrations
