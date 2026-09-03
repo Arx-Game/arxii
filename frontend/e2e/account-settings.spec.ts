@@ -25,6 +25,14 @@
  *     The password-change journey does not need a verified email, so it uses
  *     a fresh UI-registered account the same way user-journey.spec.ts does.
  *
+ * The TOTP journey is NOT idempotent against a seeded account an earlier run
+ * left with 2FA enabled: this test has no way to answer a login-time code
+ * challenge for an authenticator it did not just enrol itself, and it fails
+ * fast with a clear message rather than hanging in that case. If that
+ * happens, delete the account's rows in the admin (MFA > Authenticators) and
+ * re-run. A completed run always turns 2FA back off, so this only bites
+ * after a run that stopped partway through.
+ *
  * Run with: just fe-e2e account-settings
  * Not run in CI, since this suite needs a live Evennia backend.
  */
@@ -102,8 +110,25 @@ async function registerFreshAccount(
   await expect(page.locator('h1')).toContainText('Email Verified', { timeout: 10000 });
 }
 
-/** Log in through the UI, landing wherever the app sends us (/ or /account/unverified). */
-async function loginViaUi(page: Page, login: string, password: string): Promise<void> {
+type LoginRace = 'navigated' | 'mfa' | 'timeout';
+
+/**
+ * Log in through the UI, landing wherever the app sends us (/ or
+ * /account/unverified). If the account has TOTP enabled, the login form
+ * shows a second "Authenticator code or recovery code" step; pass
+ * `getCode` to answer it (e.g. `() => totpCode(secret)`).
+ *
+ * If that step appears with no `getCode` supplied, this fails fast with a
+ * clear message rather than hanging on `waitForURL` forever: there is no way
+ * to compute a code for an authenticator this test did not itself enrol
+ * (see the header comment).
+ */
+async function loginViaUi(
+  page: Page,
+  login: string,
+  password: string,
+  options: { getCode?: () => string } = {}
+): Promise<void> {
   await page.goto(`${BASE_URL}/login`);
   await page.waitForLoadState('networkidle');
 
@@ -111,17 +136,58 @@ async function loginViaUi(page: Page, login: string, password: string): Promise<
   await page.getByPlaceholder('Password').fill(password);
   await page.getByRole('button', { name: 'Log In' }).click();
 
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10000 });
+  const mfaCodeField = page.locator('#mfa-code');
+  const navigated: Promise<LoginRace> = page
+    .waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 })
+    .then((): LoginRace => 'navigated')
+    .catch((): LoginRace => 'timeout');
+  const mfaChallenge: Promise<LoginRace> = mfaCodeField
+    .waitFor({ state: 'visible', timeout: 15000 })
+    .then((): LoginRace => 'mfa')
+    .catch((): LoginRace => 'timeout');
+
+  const outcome = await Promise.race([navigated, mfaChallenge]);
+
+  if (outcome === 'navigated') return;
+
+  if (outcome === 'timeout') {
+    // Neither settled inside the window - re-await the navigation promise
+    // with a short timeout so the failure surfaces as a real Playwright
+    // timeout error instead of the swallowed 'timeout' sentinel above.
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 1 });
+    return;
+  }
+
+  if (!options.getCode) {
+    throw new Error(
+      `Login for "${login}" hit a 2FA challenge with no code source supplied. This ` +
+        'account already has an authenticator enrolled from a run this spec has no ' +
+        'secret for. Delete its rows in the admin (MFA > Authenticators) and re-run.'
+    );
+  }
+  await mfaCodeField.fill(options.getCode());
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });
 }
 
 /**
  * If a reauthentication challenge dialog appeared (session too stale, or the
  * server just wants a fresh password), answer it with the account password
  * and continue. A no-op when the dialog never opens.
+ *
+ * The dialog only opens after the guarded mutation's fetch round-trip comes
+ * back with a reauthentication-required error, so a plain isVisible() check
+ * right after the click is a one-shot snapshot that runs before the dialog
+ * exists and always reads false. waitFor() polls instead, so it actually
+ * catches the dialog whenever it shows up within the window.
  */
 async function answerReauthIfPresent(page: Page, password: string): Promise<void> {
   const reauthValue = page.locator('#reauth-value');
-  if (await reauthValue.isVisible().catch(() => false)) {
+  const present = await reauthValue
+    .waitFor({ state: 'visible', timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  if (present) {
     await reauthValue.fill(password);
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(reauthValue).toBeHidden();
@@ -223,20 +289,19 @@ test.describe('Account settings: two-factor authentication', () => {
   test('enrol TOTP, see ten recovery codes, then turn it off', async ({ page }) => {
     const getErrors = captureConsoleErrors(page);
 
+    // This is NOT idempotent against a seeded account left with TOTP already
+    // enabled by a prior interrupted run: an enabled authenticator makes the
+    // login form demand a code, and this test has no way to produce one for
+    // a secret it did not itself just enrol. loginViaUi fails fast with a
+    // clear message in that case instead of hanging - see its doc comment.
+    // A completed run always ends with 2FA turned back off (below), so this
+    // only bites after a run that stopped partway through.
     await loginViaUi(page, SEEDED_USERNAME, SEEDED_PASSWORD);
     await page.goto(`${BASE_URL}/profile/account`);
     await page.waitForLoadState('networkidle');
 
     const setUpButton = page.getByRole('button', { name: 'Set up' });
     const turnOffButton = page.getByRole('button', { name: 'Turn off' });
-
-    // The seeded account is shared across runs. If a previous run stalled
-    // after turning 2FA on, reset it before enrolling again.
-    if (await turnOffButton.isVisible().catch(() => false)) {
-      await turnOffButton.click();
-      await answerReauthIfPresent(page, SEEDED_PASSWORD);
-      await expect(setUpButton).toBeVisible({ timeout: 10000 });
-    }
 
     await setUpButton.click();
 
