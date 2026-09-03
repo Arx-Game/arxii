@@ -35,7 +35,7 @@ vi.mock('../queries', async (importOriginal) => {
     useUnsubmitDraft: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useWithdrawDraft: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useResubmitDraft: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
-    useDraftApplication: () => ({ data: null }),
+    useDraftApplication: vi.fn(() => ({ data: null })),
     // No query data: cgRemaining/conversionRate fall back to the draft prop's
     // own cg_points_remaining, so each test controls it via the draft fixture
     // rather than a fixed hook return (mockCompleteDraft's own remaining is 0,
@@ -46,8 +46,14 @@ vi.mock('../queries', async (importOriginal) => {
 vi.mock('@/tables/queries', () => ({
   useTables: vi.fn(() => ({ data: { results: [] } })),
 }));
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useNavigate: () => mockNavigate,
+}));
 
 import { useTables } from '@/tables/queries';
+import { useDraftApplication } from '../queries';
 import type { GMTable } from '@/tables/types';
 
 function makeGMTable(overrides: Partial<GMTable> = {}): GMTable {
@@ -87,9 +93,13 @@ function renderReview(
 describe('ReviewStage', () => {
   beforeEach(() => {
     submit.mockClear();
+    mockNavigate.mockClear();
     vi.mocked(useTables).mockReturnValue({
       data: { results: [] },
     } as unknown as ReturnType<typeof useTables>);
+    vi.mocked(useDraftApplication).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useDraftApplication>);
   });
 
   it('quotes the player’s own writing under plain labels and composes nothing', async () => {
@@ -212,6 +222,18 @@ describe('ReviewStage', () => {
       renderReview(mockCompleteDraft, { isStaff: true, account: mockStaffAccount });
       const rosterDoor = screen.getByRole('button', { name: /add to roster/i });
       expect(rosterDoor).not.toBeDisabled();
+    });
+  });
+
+  describe('approved testament', () => {
+    it('keeps a door into the world and navigates to /game on click', async () => {
+      vi.mocked(useDraftApplication).mockReturnValue({
+        data: { status: 'approved', reviewer_name: null, expires_at: null },
+      } as unknown as ReturnType<typeof useDraftApplication>);
+      renderReview(mockCompleteDraft);
+      const enterWorld = await screen.findByRole('button', { name: /enter the world/i });
+      await userEvent.click(enterWorld);
+      expect(mockNavigate).toHaveBeenCalledWith('/game');
     });
   });
 

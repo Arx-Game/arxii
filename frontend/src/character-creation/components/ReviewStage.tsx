@@ -11,9 +11,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -24,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { useTables } from '@/tables/queries';
 import type { GMTable } from '@/tables/types';
-import { ExternalLink, Send, XCircle } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { ChapterLeaf, Marginalia, Note, NightPlate } from '../folio';
 import { FinalizeForTableDialog } from './FinalizeForTableDialog';
 import {
@@ -48,6 +47,7 @@ interface ReviewStageProps {
 }
 
 export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps) {
+  const navigate = useNavigate();
   const submitDraft = useSubmitDraft();
   const { data: copy } = useCGExplanations();
   const addToRoster = useAddToRoster();
@@ -297,8 +297,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             withdrawPending={withdraw.isPending}
           />
         )}
-        {hasApplication &&
-          (appStatus === 'denied' || appStatus === 'withdrawn' || appStatus === 'approved') && (
+        {hasApplication && appStatus === 'approved' && (
+          <div className="plate-door">
             <p className="ledger-line">
               {getBannerMessage(
                 appStatus,
@@ -307,9 +307,23 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
                 copy
               )}
             </p>
-          )}
+            <button type="button" className="btn" onClick={() => navigate('/game')}>
+              {copy?.review_approved_enter_world ?? 'Enter the World'}
+            </button>
+          </div>
+        )}
         {hasApplication && (appStatus === 'denied' || appStatus === 'withdrawn') && (
-          <TerminalActions />
+          <>
+            <p className="ledger-line">
+              {getBannerMessage(
+                appStatus,
+                application.data!.reviewer_name,
+                application.data!.expires_at,
+                copy
+              )}
+            </p>
+            <TerminalActions />
+          </>
         )}
         {(submitDraft.isError ||
           addToRoster.isError ||
@@ -574,45 +588,27 @@ function RevisionsActions({
   withdrawPending,
 }: RevisionsActionsProps) {
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <label htmlFor="resubmit-comment" className="text-sm font-medium">
-          Comment for Reviewers{' '}
-          <span className="font-normal text-muted-foreground">(optional)</span>
-        </label>
-        <Textarea
+    <>
+      <div className="field">
+        <label htmlFor="resubmit-comment">A word to the staff</label>
+        <textarea
           id="resubmit-comment"
-          placeholder="Describe the changes you made in response to feedback..."
           value={resubmitComment}
           onChange={(e) => onCommentChange(e.target.value)}
           rows={3}
-          className="resize-y"
         />
+        <span className="hint">Read by staff only. It does not enter the record.</span>
       </div>
 
-      <div className="flex flex-wrap gap-4">
-        <Button size="lg" disabled={resubmitPending} onClick={onResubmit}>
-          {resubmitPending ? (
-            'Resubmitting...'
-          ) : (
-            <>
-              <Send className="mr-2 h-4 w-4" />
-              Resubmit for Review
-            </>
-          )}
-        </Button>
-        <Button variant="destructive" size="lg" disabled={withdrawPending} onClick={onWithdraw}>
-          {withdrawPending ? (
-            'Withdrawing...'
-          ) : (
-            <>
-              <XCircle className="mr-2 h-4 w-4" />
-              Withdraw Application
-            </>
-          )}
-        </Button>
+      <div className="plate-door">
+        <button type="button" className="btn" disabled={resubmitPending} onClick={onResubmit}>
+          {resubmitPending ? 'Resubmitting…' : 'Resubmit for Review'}
+        </button>
+        <button type="button" className="btn-quiet" disabled={withdrawPending} onClick={onWithdraw}>
+          {withdrawPending ? 'Withdrawing…' : 'Withdraw the testament'}
+        </button>
       </div>
-    </div>
+    </>
   );
 }
 
