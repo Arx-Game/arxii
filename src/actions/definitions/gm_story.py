@@ -400,6 +400,7 @@ class RunBeatAction(Action):
 
         location = scene.location
         present_ids = {obj.pk for obj in location.contents} if location is not None else set()
+        already_enlisted = set(battle.participants.values_list("character_sheet_id", flat=True))
 
         enlisted: list[int] = []
         participations = scene.participations.filter(
@@ -410,9 +411,10 @@ class RunBeatAction(Action):
                 sheet = entry.character_sheet
                 if sheet.character_id not in present_ids:
                     continue
-                if battle.participants.filter(character_sheet=sheet).exists():
+                if sheet.pk in already_enlisted:
                     continue
                 enlist_participant(battle=battle, character_sheet=sheet, side=party_side)
+                already_enlisted.add(sheet.pk)
                 enlisted.append(sheet.pk)
         return enlisted
 
