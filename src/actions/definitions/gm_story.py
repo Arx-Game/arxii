@@ -369,9 +369,31 @@ class RunBeatAction(Action):
         return units
 
     def _enlist_scene_party(self, scene: Scene, battle: Any, party_side: Any) -> list[int]:
-        """Enlist every active non-GM scene participant's sheet on *party_side*."""
+        """Enlist only the PRESENT sheets of active non-GM scene participants (#3569).
+
+        ``RosterEntry.objects.for_account(account)`` alone returns every
+        currently-tenured character of an account -- an account playing two
+        characters at once (a PC plus a companion/alt elsewhere) would get
+        the one NOT standing in this scene's room swept in too (fix round 1,
+        follow-up to 29219b1b0). Narrowed to characters physically present at
+        ``scene.location`` (``location.contents``) -- the same room-presence
+        check ``actions.definitions.gm_stories._present_participant_sheets``
+        already applies for stakes declaration, whose own docstring names
+        this exact trap: "an account's off-scene alts must not skew...".
+        ``scene.persona_handler.active_participant_personas()`` was
+        considered directly, but it does not itself narrow to the present
+        room (it walks every available character of every participating
+        account, same as ``for_account``) or exclude participants who left
+        the scene (``participations_cached`` carries every row, ``left_at``
+        included) -- the pre-existing ``is_gm=False, left_at__isnull=True``
+        participation filter stays the authority for GM/left exclusion; the
+        room-presence check is layered on top of it, not instead of it.
+        """
         from world.battles.services import enlist_participant  # noqa: PLC0415
         from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        location = scene.location
+        present_ids = {obj.pk for obj in location.contents} if location is not None else set()
 
         enlisted: list[int] = []
         participations = scene.participations.filter(
@@ -380,6 +402,8 @@ class RunBeatAction(Action):
         for participation in participations:
             for entry in RosterEntry.objects.for_account(participation.account):
                 sheet = entry.character_sheet
+                if sheet.character_id not in present_ids:
+                    continue
                 if battle.participants.filter(character_sheet=sheet).exists():
                     continue
                 enlist_participant(battle=battle, character_sheet=sheet, side=party_side)

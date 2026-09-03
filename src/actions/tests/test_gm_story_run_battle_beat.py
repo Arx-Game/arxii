@@ -9,7 +9,8 @@ GMListRunnableBeatsAction's staged_battle_name row flag is covered too.
 from __future__ import annotations
 
 from actions.definitions.gm_story import GMListRunnableBeatsAction, RunBeatAction
-from actions.tests.test_gm_story_run_beat import RunBeatActionTestBase
+from actions.tests.test_gm_story_run_beat import RunBeatActionTestBase, _make_room
+from evennia_extensions.factories import CharacterFactory
 from world.battles.constants import BattleSideRole
 from world.battles.factories import (
     BattleMapBlueprintFactory,
@@ -17,6 +18,8 @@ from world.battles.factories import (
     BlueprintBattlePlaceFactory,
 )
 from world.battles.models import Battle
+from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import RosterTenureFactory
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind
 from world.stories.factories import (
@@ -123,6 +126,22 @@ class RunBeatActionBattleJourneyTests(RunBeatActionTestBase):
         battle = Battle.objects.get(pk=result.data["battle_id"])
         self.assertEqual(battle.participants.count(), 0)
         self.assertEqual(result.data["enlisted"], [])
+
+    def test_off_scene_alt_of_a_present_player_is_not_enlisted(self) -> None:
+        """An account playing two characters at once only enlists the one
+        physically present in this scene's room (#3569 fix round 1: a bare
+        RosterEntry.objects.for_account(account) sweep would enlist both)."""
+        other_room = _make_room("RunBeatOtherRoom")
+        alt_char = CharacterFactory(db_key="runbeat_player_alt", location=other_room)
+        alt_sheet = CharacterSheetFactory(character=alt_char)
+        RosterTenureFactory(
+            roster_entry__character_sheet=alt_sheet,
+            player_data=self.player_account.player_data,
+            end_date=None,
+        )
+
+        result = self._run()
+        self.assertEqual(result.data["enlisted"], [self.player_sheet.pk])
 
     def test_runnable_list_marks_the_staged_battle(self) -> None:
         result = GMListRunnableBeatsAction().run(self.lead_gm_actor)
