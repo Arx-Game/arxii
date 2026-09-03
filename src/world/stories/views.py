@@ -2247,6 +2247,32 @@ class TransitionRequiredOutcomeViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id"]
     ordering = ["transition", "id"]
 
+    def get_queryset(self) -> QuerySet[TransitionRequiredOutcome]:
+        """Scope raw routing rules to owners/leads/staff (#3563).
+
+        IsLeadGMOnTransitionStoryOrStaff returns True for every SAFE_METHOD
+        regardless of object - it also guards TransitionViewSet, whose reads
+        stay intentionally open (the gated routing_rules field does the
+        actual GM-only filtering there). This queryset is the only scoping
+        for the raw rule rows themselves: unscoped, any authenticated player
+        could list every story's routing predicates. Staff see everything;
+        everyone else is scoped to stories they own or Lead-GM, mirroring
+        user_owns_or_leads_story.
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        if user.is_staff:
+            return qs
+        gm_profile = user.gm_profile_or_none
+        filters_q = models.Q(transition__source_episode__chapter__story__owners=user)
+        if gm_profile is not None:
+            filters_q |= models.Q(
+                transition__source_episode__chapter__story__primary_table__gm=gm_profile
+            )
+        return qs.filter(filters_q).distinct()
+
     def perform_create(self, serializer: BaseSerializer) -> None:
         """Invalidate the writing transition's cached_required_outcomes (#3563).
 
