@@ -13,17 +13,22 @@ class CovenantsViewTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.accounts.models import AccountDB
+        # Must be the typeclassed Account (evennia.utils.create.create_account), not a
+        # raw AccountDB row: request.user.cached_covenant_memberships (#3597) lives on
+        # the Account typeclass, and every view in this suite reads it.
+        from evennia_extensions.factories import AccountFactory
 
-        cls.user = AccountDB.objects.create_user(
-            username="covtestuser",
-            email="cov@test.com",
-            password="testpass123",
-        )
+        cls.user = AccountFactory(username="covtestuser", email="cov@test.com")
 
     def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
+
+    def tearDown(self) -> None:
+        # cls.user is idmapper-shared across every test method in the class; clear
+        # its cached_covenant_memberships so one method's warm read can't leak
+        # into the next (mirrors TreasuryBalanceBatchListTests, #3597).
+        self.user.clear_cached_properties()
 
 
 class GearArchetypeCompatibilityViewTests(CovenantsViewTestCase):
@@ -188,13 +193,10 @@ class CharacterCovenantRoleViewTests(CovenantsViewTestCase):
 
     def test_staff_sees_all_assignments(self) -> None:
         """Staff users see all character covenant role assignments."""
-        from evennia.accounts.models import AccountDB
+        from evennia_extensions.factories import AccountFactory
 
-        staff_user = AccountDB.objects.create_user(
-            username="cov_role_staff",
-            email="cov_role_staff@test.com",
-            password="staffpass",
-            is_staff=True,
+        staff_user = AccountFactory(
+            username="cov_role_staff", email="cov_role_staff@test.com", is_staff=True
         )
         self.client.force_authenticate(user=staff_user)
         response = self.client.get("/api/covenants/character-roles/")
@@ -205,13 +207,10 @@ class CharacterCovenantRoleViewTests(CovenantsViewTestCase):
 
     def test_filter_by_character_sheet(self) -> None:
         """Staff: ?character_sheet=<pk> narrows to assignments on that sheet."""
-        from evennia.accounts.models import AccountDB
+        from evennia_extensions.factories import AccountFactory
 
-        staff_user = AccountDB.objects.create_user(
-            username="cov_role_staff2",
-            email="cov_role_staff2@test.com",
-            password="staffpass",
-            is_staff=True,
+        staff_user = AccountFactory(
+            username="cov_role_staff2", email="cov_role_staff2@test.com", is_staff=True
         )
         self.client.force_authenticate(user=staff_user)
         response = self.client.get(
@@ -486,16 +485,16 @@ class CovenantViewTests(CovenantsViewTestCase):
 
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
-        from evennia.accounts.models import AccountDB
         from evennia.utils.idmapper.models import flush_cache
 
+        from evennia_extensions.factories import AccountFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
             CovenantFactory,
         )
 
-        staff = AccountDB.objects.create_user(
-            username="cov_agg_staff", email="cov_agg_staff@test.com", password="p", is_staff=True
+        staff = AccountFactory(
+            username="cov_agg_staff", email="cov_agg_staff@test.com", is_staff=True
         )
         self.client.force_authenticate(user=staff)
         url = "/api/covenants/covenants/"
