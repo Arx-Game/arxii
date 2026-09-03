@@ -8782,6 +8782,17 @@ access, no deploy required.
   `EmailAddressAdmin.mark_as_verified`/`mark_as_unverified` in
   `evennia_extensions/admin.py`.
 - **Source:** `src/world/registration/`, `src/evennia_extensions/adapters.py`
+- **Account settings (#3591):** `/profile/account` lets a signed-in player change
+  email and password and manage two-factor authentication (2FA), all through
+  `allauth.headless` endpoints (no home-grown credential views). The one
+  first-party field is `PlayerData.block_telnet_login_with_2fa` (opt-in on top of
+  opt-in 2FA, read by `Account.authenticate`, written by
+  `GET`/`PATCH /api/account/security-settings/`); TOTP secrets and recovery-code
+  seeds are encrypted at rest by `MFA_ADAPTER = evennia_extensions.mfa_adapter
+  .ArxMFAAdapter` under `MFA_SECRETS_KEY`, checked at startup and by the
+  `mfa-secrets-key` required-content probe. See ADR-0266 (telnet block is a
+  second opt-in) and ADR-0267 (dedicated encryption key), and registration.md's
+  "Account settings" section for endpoints and runbooks.
 - **Details:** [registration.md](registration.md)
 
 ---

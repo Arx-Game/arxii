@@ -314,4 +314,6 @@ treat those names as hints to confirm, not gospel.
 - [0263 - No to_attr prefetch onto identity-mapped instances](0263-no-to-attr-prefetch-onto-identity-mapped-instances.md) (#3564, found in #3563; extends ADR-0008, ADR-0261)
 - [0264 - A scene clock fill completes the beat after commit, and the GM gesture spends ticks, never outcomes](0264-scene-clock-fills-complete-after-commit.md) (#3567; extends ADR-0030, ADR-0240, ADR-0256)
 - [0265 - The scenario graph is the stage engine; situations stay flat](0265-the-scenario-graph-is-the-stage-engine.md) (#3568; related ADR-0110, ADR-0258, ADR-0237)
+- [0266 - Two-factor authentication is opt-in and telnet blocking is a second opt-in](0266-two-factor-is-opt-in-and-telnet-blocking-is-a-second-opt-in.md) (#3591)
+- [0267 - MFA secrets are encrypted at rest under a dedicated vault key](0267-mfa-secrets-encrypted-under-a-dedicated-vault-key.md) (#3591)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

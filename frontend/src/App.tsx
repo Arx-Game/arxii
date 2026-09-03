@@ -26,6 +26,7 @@ import { CharacterCreationPage } from './character-creation';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { AccountSettingsPage } from './account/pages/AccountSettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { TidingsPage } from './tidings/pages/TidingsPage';
 import { JournalPage } from './missions/pages/JournalPage';
@@ -407,6 +408,7 @@ function App() {
             <Route path="mail" element={<MailPage />} />
             <Route path="media" element={<PlayerMediaPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="account" element={<AccountSettingsPage />} />
             <Route
               path="privacy"
               element={

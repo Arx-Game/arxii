@@ -7,6 +7,7 @@ import logging
 from typing import ClassVar
 
 from allauth.account.models import EmailAddress, EmailConfirmation
+from allauth.mfa.models import Authenticator
 from django.contrib import admin, messages
 from django.utils.html import format_html
 
@@ -269,6 +270,32 @@ class EmailAddressAdmin(admin.ModelAdmin):
         )
 
     mark_as_unverified.short_description = "Mark selected email addresses as unverified"
+
+
+# allauth's stock AuthenticatorAdmin shows Authenticator.data on the change form:
+# the TOTP secret and recovery-code seed (ciphertext since ADR-0267, but still
+# nothing staff should ever see). Re-registered read-only: the only staff action
+# is delete, which is the lockout reset (#3591, decision 12).
+with contextlib.suppress(admin.sites.NotRegistered):
+    admin.site.unregister(Authenticator)
+
+
+@admin.register(Authenticator)
+class AuthenticatorAdmin(admin.ModelAdmin):
+    raw_id_fields = ("user",)
+    list_display = ("user", "type", "created_at", "last_used_at")
+    list_filter = ("type", "created_at", "last_used_at")
+    search_fields = ("user__username",)
+    exclude = ("data",)
+    readonly_fields = ("user", "type", "created_at", "last_used_at")
+
+    def has_add_permission(self, request):
+        del request
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        del request, obj
+        return False
 
 
 class RoomDescVariantInline(admin.TabularInline):

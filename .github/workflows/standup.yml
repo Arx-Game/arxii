@@ -110,6 +110,7 @@ jobs:
           # Runtime app secrets (ansible step -> 0600 EnvironmentFile only):
           ARXII_PG_PASSWORD: ${{ secrets.ARXII_PG_PASSWORD }}
           ARXII_DJANGO_SECRET_KEY: ${{ secrets.ARXII_DJANGO_SECRET_KEY }}
+          ARXII_MFA_SECRETS_KEY: ${{ secrets.ARXII_MFA_SECRETS_KEY }}
           # Three discrete secrets, not one CLOUDINARY_URL — settings.py
           # reads CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET individually
           # (see secrets_vault/defaults/main.yml's secrets_map comment).

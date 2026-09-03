@@ -1,5 +1,6 @@
 """Custom django-allauth adapters for Arx II."""
 
+import ipaddress
 import json
 import logging
 
@@ -79,6 +80,24 @@ class ArxAccountAdapter(DefaultAccountAdapter):
         if not isinstance(data, dict):
             return "", ""
         return str(data.get("email") or ""), str(data.get("invite_token") or "")
+
+    def get_client_ip(self, request) -> str:
+        """Prefer ``X-Real-IP`` (#3591): allauth's per-IP rate limits key on this.
+
+        The parent reads the first ``X-Forwarded-For`` entry, which the client
+        controls. Caddy sets ``X-Real-IP`` from Cloudflare's ``CF-Connecting-IP``
+        (``infra/ansible/roles/caddy/templates/Caddyfile.j2``), which it cannot
+        forge. Dev and tests have no proxy, so the parent's behaviour stands. An
+        ``X-Real-IP`` that is not a valid IP address is ignored and the parent's
+        X-Forwarded-For/REMOTE_ADDR path runs instead.
+        """
+        real_ip = request.META.get("HTTP_X_REAL_IP", "").strip()
+        if real_ip:
+            try:
+                return str(ipaddress.ip_address(real_ip))
+            except ValueError:
+                pass
+        return super().get_client_ip(request)
 
     def new_user(self, request):
         """Instantiate the configured Account typeclass, not the base ``AccountDB``.

@@ -1,6 +1,7 @@
 import {
   AccountData,
   ConnectedSocialAccount,
+  LoginResult,
   RegistrationStatus,
   SignupResponse,
   SocialProvider,
@@ -51,7 +52,7 @@ export async function fetchAccount(): Promise<AccountData | null> {
   }
 }
 
-export async function postLogin(data: { login: string; password: string }): Promise<AccountData> {
+export async function postLogin(data: { login: string; password: string }): Promise<LoginResult> {
   // Django-allauth headless API expects 'username' or 'email' fields, not 'login'
   // Transform the login field to the appropriate field type
   const isEmail = data.login.includes('@');
@@ -67,6 +68,17 @@ export async function postLogin(data: { login: string; password: string }): Prom
     // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
     const errorData = (await res.json().catch(() => null)) ?? {};
     console.error('Login error response:', res.status, errorData);
+
+    // A 401 whose pending flows include mfa_authenticate means the password
+    // was correct and a second factor is needed, not that login failed.
+    if (
+      res.status === 401 &&
+      (errorData as SignupResponse).data?.flows?.some(
+        (f) => f.id === 'mfa_authenticate' && f.is_pending
+      )
+    ) {
+      return { kind: 'mfa_required' };
+    }
 
     // Handle different error response formats
     if (errorData.detail) {
@@ -98,6 +110,41 @@ export async function postLogin(data: { login: string; password: string }): Prom
     throw new Error('Failed to load user data after login');
   }
 
+  return { kind: 'ok', account: await userRes.json() };
+}
+
+/** Completes a login that stopped at the 2FA step (#3591): submits the
+ * authenticator/recovery code to allauth's headless 2FA endpoint directly
+ * (rather than importing `@/account/api`'s `mfaAuthenticate`, which itself
+ * imports `apiFetch` from this module, so a static import here would be a
+ * module cycle), then fetches the now-authenticated user. */
+export async function completeMfaLogin(code: string): Promise<AccountData> {
+  const res = await apiFetch('/api/auth/browser/v1/auth/2fa/authenticate', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    // A 500 returns Django's HTML error page, never feed that to res.json() (#3193)
+    const errorData = (await res.json().catch(() => null)) ?? {};
+    console.error('2FA authenticate error response:', res.status, errorData);
+
+    if (errorData.errors && Array.isArray(errorData.errors)) {
+      const errorMessages = errorData.errors
+        .map((err: { message?: string }) => err.message)
+        .filter(Boolean)
+        .join(', ');
+      if (errorMessages) {
+        throw new Error(errorMessages);
+      }
+    }
+
+    throw new Error('That code was not accepted.');
+  }
+
+  const userRes = await apiFetch('/api/user/');
+  if (!userRes.ok) {
+    throw new Error('Failed to load user data after login');
+  }
   return userRes.json();
 }
 
@@ -242,20 +289,6 @@ export async function confirmPasswordReset(data: { key: string; password: string
   if (!res.ok) {
     const errorData = await res.json();
     throw new Error(errorData.detail || 'Password reset confirmation failed');
-  }
-}
-
-export async function changePassword(data: {
-  current_password: string;
-  new_password: string;
-}): Promise<void> {
-  const res = await apiFetch('/api/auth/browser/v1/auth/password/change', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Password change failed');
   }
 }
 

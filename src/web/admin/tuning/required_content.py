@@ -269,6 +269,35 @@ def _probe_typeclassed_accounts() -> ProbeResult:
     return ProbeResult(present=not base_model_rows, missing=base_model_rows, detail=detail)
 
 
+def _probe_mfa_secrets_key() -> ProbeResult:
+    """``MFA_SECRETS_KEY`` parses and still decrypts the oldest stored 2FA secret.
+
+    Consumer: every 2FA sign-in and every recovery-code read
+    (``ArxMFAAdapter.decrypt``, ADR-0267). A key rotated without re-encrypting,
+    or a wrong key deployed, locks every enrolled player out at once; nothing
+    else on the site notices until the first player fails to log in.
+    """
+    from allauth.mfa.models import Authenticator  # noqa: PLC0415
+    from django.conf import settings  # noqa: PLC0415
+
+    from evennia_extensions.mfa_adapter import ArxMFAAdapter, fernet_from_setting  # noqa: PLC0415
+
+    try:
+        fernet_from_setting(settings.MFA_SECRETS_KEY)
+    except ValueError as exc:
+        return ProbeResult(present=False, missing=("MFA_SECRETS_KEY",), detail=str(exc))
+    oldest = (
+        Authenticator.objects.filter(type=Authenticator.Type.TOTP).order_by("created_at").first()
+    )
+    if oldest is None:
+        return ProbeResult(present=True)
+    try:
+        ArxMFAAdapter().decrypt(oldest.data["secret"])
+    except ValueError as exc:
+        return ProbeResult(present=False, missing=("MFA_SECRETS_KEY",), detail=str(exc))
+    return ProbeResult(present=True)
+
+
 def _probe_audere_majora_thresholds() -> ProbeResult:
     """`AudereMajoraThreshold` rows exist for every tier-crossing boundary level.
 
@@ -1264,6 +1293,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "pre-adapter signup rows stay on AccountDB until fixed by hand."
             ),
             probe=CustomProbe(fn=_probe_typeclassed_accounts),
+        ),
+        ContentDependency(
+            key="mfa-secrets-key",
+            label="2FA secrets key decrypts stored authenticators",
+            tier=DependencyTier.REQUIRED,
+            consumer="evennia_extensions/mfa_adapter.py ArxMFAAdapter.decrypt (every 2FA sign-in)",
+            consequence=(
+                "Every player with two-factor authentication on fails to sign in, and their "
+                "recovery codes fail too, until MFA_SECRETS_KEY is restored or staff delete "
+                "their authenticators in the admin (ADR-0267)."
+            ),
+            probe=CustomProbe(fn=_probe_mfa_secrets_key),
         ),
         ContentDependency(
             key="game-clock",

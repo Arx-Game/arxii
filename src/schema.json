@@ -4,6 +4,42 @@ info:
   version: 0.1.0
   description: API for the Arx web interface
 paths:
+  /api/account/security-settings/:
+    get:
+      operationId: account_security_settings_retrieve
+      description: '``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the
+        signed-in account.'
+      tags:
+      - account
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSecuritySettings'
+          description: ''
+    patch:
+      operationId: account_security_settings_partial_update
+      description: '``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the
+        signed-in account.'
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountSecuritySettingsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSecuritySettings'
+          description: ''
   /api/achievements/achievements/:
     get:
       operationId: achievements_achievements_list
@@ -38788,6 +38824,14 @@ components:
       required:
       - email
       - expires_at
+    AccountSecuritySettings:
+      type: object
+      description: The account's own security switches (#3591). One field for now.
+      properties:
+        block_telnet_login_with_2fa:
+          type: boolean
+      required:
+      - block_telnet_login_with_2fa
     Achievement:
       type: object
       description: Full serializer for achievement detail view.
@@ -65373,6 +65417,12 @@ components:
       description: |-
         * `attacker` - Attacker
         * `defender` - Defender
+    PatchedAccountSecuritySettingsRequest:
+      type: object
+      description: The account's own security switches (#3591). One field for now.
+      properties:
+        block_telnet_login_with_2fa:
+          type: boolean
     PatchedAuthoredSecretRequest:
       type: object
       description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.

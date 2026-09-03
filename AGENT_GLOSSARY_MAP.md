@@ -174,6 +174,24 @@ The bridge record linking one character (ObjectDB) to its Roster. _Avoid_: membe
 A player↔character relationship over a span of time, carrying anonymity (player number)
 and approval data; `end_date` null means current. _Avoid_: ownership record.
 
+**Two-factor authentication (2FA)**:
+The player-facing name for an account's second sign-in factor (TOTP plus recovery
+codes), opt-in and never required (#3591, ADR-0266). `MFA` is allauth's code-level
+name for the same feature and stays in code (`MFA_ADAPTER`, `MFA_SECRETS_KEY`,
+`allauth.mfa`); player-facing copy always says 2FA. _Avoid_: "MFA" in copy.
+
+**Reauthentication**:
+allauth's recent-sign-in window: a sensitive account change (adding an email,
+enrolling or disabling 2FA) is refused with a 401 until the player re-proves
+identity with their password or a 2FA code, inside a five-minute window of their
+last sign-in (#3591). _Avoid_: confirm password, sudo mode.
+
+**Pending email change**:
+The unverified second `EmailAddress` row that exists between a player changing
+their email and verifying the new address, under `ACCOUNT_CHANGE_EMAIL`; it
+promotes to primary and replaces the old address on verification, and there is
+never more than one on an account (#3591). _Avoid_: secondary email.
+
 ## Resolution
 
 **Check**:

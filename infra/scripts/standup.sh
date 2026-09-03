@@ -68,7 +68,7 @@ fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
 # moment it actually runs (see roles/content_repo/tasks/main.yml's own
 # "Collect names of missing content-repo env vars" / "Fail-closed" tasks).
 readonly REQUIRED_ARXII=(
-  ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY
+  ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY ARXII_MFA_SECRETS_KEY
   ARXII_CLOUDINARY_CLOUD_NAME ARXII_CLOUDINARY_API_KEY ARXII_CLOUDINARY_API_SECRET
   ARXII_RESEND_API_KEY ARXII_R2_ACCESS_KEY_ID ARXII_R2_SECRET_ACCESS_KEY
   ARXII_OFFBOX_ALERT_TOKEN ARXII_CADDY_CF_DNS_TOKEN

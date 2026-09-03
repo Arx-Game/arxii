@@ -59,6 +59,10 @@ export interface AccountData {
   selected_entry: MyRosterEntry | null;
 }
 
+/** Result of `postLogin`, a second factor may be required before the account
+ * data is available (#3591). */
+export type LoginResult = { kind: 'ok'; account: AccountData } | { kind: 'mfa_required' };
+
 /** Public GET /api/registration/status/ (#3054) — never enumerates invites. */
 export interface RegistrationStatus {
   open: boolean;

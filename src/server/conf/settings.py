@@ -78,6 +78,7 @@ INSTALLED_APPS += [
     "allauth.socialaccount.providers.facebook",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.discord",
+    "allauth.mfa",
     # Load after allauth to override admin
     "evennia_extensions.apps.EvenniaExtensionsConfig",
     "django_htmx",
@@ -323,6 +324,7 @@ NEW_ACCOUNT_REGISTRATION_ENABLED = False
 # Allauth settings
 ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "evennia_extensions.social_adapters.ArxSocialAccountAdapter"
+MFA_ADAPTER = "evennia_extensions.mfa_adapter.ArxMFAAdapter"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 # Without a prefix allauth falls back to "[<Site.name>] ", and the only row in
 # Django's sites table is the framework default "example.com". The stock body
@@ -331,9 +333,33 @@ ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Arx II] "
 ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email login
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+LOGIN_URL = "/login"  # the React page; the admin redirects here (#3591)
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
 ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = FRONTEND_URL + "/login?verified=true"
+
+# Account settings surface (#3591). One email per account: a change adds a
+# pending second address that replaces the first once verified.
+ACCOUNT_CHANGE_EMAIL = True
+# allauth only raises its reauthentication 401 inside the email flows when this
+# is on (it defaults to off); the MFA flows raise it unconditionally.
+ACCOUNT_REAUTHENTICATION_REQUIRED = True
+# "Your password / email was changed" mail, best-effort via ArxAccountAdapter.send_mail.
+ACCOUNT_EMAIL_NOTIFICATIONS = True
+
+# Two-factor authentication (#3591, ADR-0266): opt-in, never required.
+MFA_SUPPORTED_TYPES = ["totp", "recovery_codes"]  # no WebAuthn/passkeys in v1
+MFA_TOTP_TOLERANCE = 1  # accept the previous and next 30s step (clock drift)
+# allauth's default interlock stops a 2FA account from changing its email and an
+# account with a pending change from enrolling. Verification is mandatory before
+# login completes, and email changes are reauth-gated, so the interlock's threat
+# (an unverified signup enabling 2FA to lock out the real owner) cannot occur here.
+MFA_ALLOW_UNVERIFIED_EMAIL = True
+MFA_TOTP_ISSUER = "Arx II"
+# Fernet key(s) for TOTP secrets and recovery-code seeds (ADR-0267). Comma-separated,
+# first key current; rotation is prepend, deploy, re-encrypt, drop. Required, like
+# SECRET_KEY: losing it locks every 2FA user out until staff reset them.
+MFA_SECRETS_KEY = env("MFA_SECRETS_KEY")
 
 # Django-allauth headless configuration
 HEADLESS_ONLY = True  # Use headless API mode with custom email verification

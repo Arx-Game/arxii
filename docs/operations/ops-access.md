@@ -78,6 +78,17 @@ For a stronger revoke (e.g. you suspect the key leaked), also clear the
 an empty `authorized_keys` and the key is dead everywhere; re-mint a fresh
 pair before the next session.
 
+## Two-factor authentication lockout resets
+
+A player or administrator locked out of two-factor authentication (2FA, #3591)
+is never recovered over SSH. The `arxops` user has no Postgres access and no
+`/etc/arxii` secrets, and there is no shell-side reset path for
+`allauth.mfa.Authenticator` rows even for `arxadmin`. The only sanctioned reset
+is the Django admin: MFA > Authenticators, delete the account's rows after
+verifying identity out of band. See `docs/systems/registration.md`'s "Account
+settings" section for the full runbook, including the administrator-lockout
+layers.
+
 ## Verifying the gate state
 
 Inside the container: `ssh -o BatchMode=yes -o ConnectTimeout=5 arxii-prod true`
