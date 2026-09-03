@@ -1,4 +1,5 @@
 from http import HTTPMethod
+from typing import Any
 
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
@@ -137,6 +138,22 @@ class AlternateSelfViewSet(
     filterset_fields = {"character": ["exact"]}
     pagination_class = AlternateSelfPagination
     permission_classes = [IsAuthenticated]
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        """Add the caller's active alternate-self id, resolved once for the page.
+
+        ``AlternateSelfSerializer.is_active`` compares every row against it. It is
+        one fact about this request, so the view resolves it and passes it in
+        (ADR-0260) instead of the serializer resolving it on the first row and
+        keeping it on itself.
+        """
+        context = super().get_serializer_context()
+        sheet = puppeted_sheet_for(self.request.user)
+        active = sheet.active_alternate_self_or_none if sheet is not None else None
+        context["active_alternate_self_id"] = (
+            active.alternate_self_id if active is not None else None
+        )
+        return context
 
     def get_queryset(self):
         """Filter to alternate selves belonging to the played character's sheet."""
