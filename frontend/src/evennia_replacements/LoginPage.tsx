@@ -9,11 +9,11 @@ import { SubmitButton } from '@/components/SubmitButton';
 import { Button } from '@/components/ui/button';
 import { fetchSocialProviders, initiateSocialLogin } from './api';
 
-/** Only a same-origin, absolute path is a safe post-login redirect target —
- * anything else (a `//host` scheme-relative URL, an absolute URL with a
- * scheme, a relative path) falls back to '/'. */
+/** Only a same-origin, absolute path is a safe post-login redirect target, anything
+ * else (a `//host` or `/\host` scheme-relative URL, an absolute URL with a scheme, a
+ * relative path) falls back to '/'. */
 function safeNext(value: string | null): string {
-  if (value && value.startsWith('/') && !value.startsWith('//')) {
+  if (value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')) {
     return value;
   }
   return '/';

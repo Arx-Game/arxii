@@ -59,7 +59,7 @@ export interface AccountData {
   selected_entry: MyRosterEntry | null;
 }
 
-/** Result of `postLogin` — a second factor may be required before the account
+/** Result of `postLogin`, a second factor may be required before the account
  * data is available (#3591). */
 export type LoginResult = { kind: 'ok'; account: AccountData } | { kind: 'mfa_required' };
 

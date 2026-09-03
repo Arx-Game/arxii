@@ -116,7 +116,7 @@ export async function postLogin(data: { login: string; password: string }): Prom
 /** Completes a login that stopped at the 2FA step (#3591): submits the
  * authenticator/recovery code to allauth's headless 2FA endpoint directly
  * (rather than importing `@/account/api`'s `mfaAuthenticate`, which itself
- * imports `apiFetch` from this module — a static import here would be a
+ * imports `apiFetch` from this module, so a static import here would be a
  * module cycle), then fetches the now-authenticated user. */
 export async function completeMfaLogin(code: string): Promise<AccountData> {
   const res = await apiFetch('/api/auth/browser/v1/auth/2fa/authenticate', {
@@ -124,7 +124,7 @@ export async function completeMfaLogin(code: string): Promise<AccountData> {
     body: JSON.stringify({ code }),
   });
   if (!res.ok) {
-    // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
+    // A 500 returns Django's HTML error page, never feed that to res.json() (#3193)
     const errorData = (await res.json().catch(() => null)) ?? {};
     console.error('2FA authenticate error response:', res.status, errorData);
 

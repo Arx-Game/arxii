@@ -94,4 +94,19 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /log in/i }));
     expect(await screen.findByText('home')).toBeInTheDocument();
   });
+
+  it('ignores a backslash-prefixed off-site next', async () => {
+    vi.mocked(api.postLogin).mockResolvedValue({ kind: 'ok', account: mockAccount });
+    renderWithProviders(
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<div>home</div>} />
+      </Routes>,
+      { initialEntries: ['/login?next=/\\evil.example'] }
+    );
+    await userEvent.type(screen.getByPlaceholderText('Username or Email'), 'tester');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.click(screen.getByRole('button', { name: /log in/i }));
+    expect(await screen.findByText('home')).toBeInTheDocument();
+  });
 });
