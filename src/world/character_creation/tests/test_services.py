@@ -238,19 +238,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         assert "Mira cut the lock" in sheet.background
         assert CharacterOriginSlot.objects.filter(sheet=sheet).count() == 1
 
-    def test_finalize_legacy_background_still_works(self) -> None:
-        """A draft with legacy draft_data['background'] and no origin slots
-        still writes background verbatim (backward compat)."""
-        draft = self._create_base_draft(
-            first_name="Legacy BG",
-            background="A plain free-text background.",
-        )
-        draft.draft_data.pop("origin_slots", None)
-        draft.save(update_fields=["draft_data"])
-
-        character = finalize_character(draft, add_to_roster=True)
-        assert character.sheet_data.background == "A plain free-text background."
-
     def test_finalize_converts_unspent_cg_points_to_xp(self):
         """Test that unspent CG points are converted to locked XP."""
         from world.progression.models import CharacterXP, CharacterXPTransaction

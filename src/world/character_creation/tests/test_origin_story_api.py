@@ -139,3 +139,63 @@ class PostCGOriginSlotAPITest(TestCase):
             format="json",
         )
         assert response.status_code == 404
+
+    def test_player_cannot_change_a_costed_choice_after_approval(self) -> None:
+        """A non-staff caller cannot set a pick-list choice via the sheet API (#3617)."""
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+
+        slot = OriginTemplateSlotFactory(allows_text=False)
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+        assert response.status_code == 403
+
+    def test_player_can_still_edit_a_write_in(self) -> None:
+        """A non-staff caller can still edit a plain write-in slot (#3617)."""
+        from world.character_creation.factories import OriginTemplateSlotFactory
+
+        slot = OriginTemplateSlotFactory()
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+        assert response.status_code == 200
+
+    def test_text_edit_preserves_stored_choice(self) -> None:
+        """A text-only write on a slot with a stored choice keeps that choice (#3617)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+
+        staff_account = AccountFactory(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_account)
+        set_response = staff_client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+        assert set_response.status_code == 200
+
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+        assert response.status_code == 200
+        row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
+        assert row.choice == choice
+        assert row.value == "A fuller account."

@@ -26,6 +26,7 @@ from world.character_creation.constants import (
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
     CommentType,
+    FamilyPath,
     OriginStoryState,
 )
 from world.character_creation.models import (
@@ -33,6 +34,7 @@ from world.character_creation.models import (
     CharacterOriginSlot,
     OriginTemplate,
     OriginTemplateSlot,
+    OriginTemplateSlotChoice,
 )
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
@@ -50,7 +52,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet, Gender, Profile
-    from world.roster.models import Kinsperson
+    from world.roster.models import Family, Kinsperson
     from world.scenes.models import Persona
     from world.stories.models import Story
 
@@ -564,24 +566,34 @@ def _grant_orientation_mission(
     staff_assign_mission(template, character, persona=persona)
 
 
-def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) -> str:
-    """Upsert CharacterOriginSlot rows from draft_data and assemble prose (#2478).
+def _finalize_origin_slots(
+    sheet: CharacterSheet, origin_slots: dict[str, str], origin_choices: dict[str, int]
+) -> str:
+    """Upsert answers (text and choices) from draft_data and assemble prose (#2478, #3617).
 
     Called from ``_apply_sheet_demographics`` when the draft carries
-    ``origin_slots``. Returns the assembled prose for ``Profile.background``.
-    State refresh is deferred to the caller (after ``profile.save()``) so
-    ``refresh_origin_story_state`` sees the final prose value.
+    ``origin_slots`` and/or ``origin_choices``. Returns the assembled prose for
+    ``Profile.background``. State refresh is deferred to the caller (after
+    ``profile.save()``) so ``refresh_origin_story_state`` sees the final prose value.
     """
-    for slot_id_str, value in origin_slots.items():
+    for slot_id_str in set(origin_slots) | set(origin_choices):
         try:
             slot = OriginTemplateSlot.objects.get(pk=int(slot_id_str))
         except (OriginTemplateSlot.DoesNotExist, ValueError, TypeError):
-            logger.warning(
-                "Origin slot id %s not found during finalize; skipping.",
-                slot_id_str,
-            )
+            logger.warning("Origin slot id %s not found during finalize; skipping.", slot_id_str)
             continue
-        set_origin_slot(sheet, slot, value)
+        choice = None
+        choice_id = origin_choices.get(slot_id_str)
+        if choice_id is not None:
+            choice = OriginTemplateSlotChoice.objects.filter(pk=choice_id, slot=slot).first()
+            if choice is None:
+                logger.warning(
+                    "Origin choice %s not on slot %s; skipping choice.", choice_id, slot.pk
+                )
+        value = str(origin_slots.get(slot_id_str, "")).strip()
+        if not value and choice is None:
+            continue
+        set_origin_slot(sheet, slot, value, choice=choice)
     return assemble_origin_prose(sheet)
 
 
@@ -599,8 +611,35 @@ def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         sheet.birthday_day = draft.birthday_day
     if draft.selected_species:
         sheet.species = draft.selected_species
-    if draft.family:
+    path = draft.resolve_family_path()
+    if path == FamilyPath.NAMED:
+        family = _create_named_family(draft)
+        draft.family = family  # downstream kinship binding reads draft.family
+        draft.save(update_fields=["family"])
+        sheet.family = family
+    elif draft.family:
         sheet.family = draft.family
+
+
+def _create_named_family(draft: CharacterDraft) -> Family:
+    """Create the player-named family at approval (#3617): no authority, influence 0."""
+    from world.roster.models import Family  # noqa: PLC0415
+
+    template = draft.selected_origin_template
+    name = str(draft.draft_data.get("new_family_name", "")).strip()
+    existing = Family.objects.filter(name__iexact=name).first()
+    if existing is not None:
+        # The validator rejects collisions; a race between two approvals lands here.
+        return existing
+    return Family.objects.create(
+        name=name,
+        kind=template.named_family_kind,
+        is_playable=True,
+        created_by_cg=True,
+        created_by=draft.account,
+        origin_realm=draft.selected_area.realm if draft.selected_area else None,
+        influence=0,
+    )
 
 
 def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:
@@ -675,24 +714,23 @@ def _ensure_profile(sheet: CharacterSheet) -> Profile:
     return profile
 
 
-def _set_descriptive_text(sheet: CharacterSheet, draft_data: dict) -> str | None:
+def _set_descriptive_text(sheet: CharacterSheet, draft_data: dict) -> dict:
     """Apply descriptive/profile text fields from draft_data.
 
     additional_desc is appearance text (stays on the sheet); the narrative bio
     lives on true_profile now (#1270). Origin story: assemble prose from
-    structured slots if present (#2478), otherwise fall back to legacy
-    free-text background for backward compat. Returns the origin_slots dict
-    if prose was assembled (so the caller can refresh state), else None.
+    structured slots and/or picked choices (#2478, #3617). Returns a truthy
+    dict (whichever of origin_slots/origin_choices was non-empty) when prose
+    was assembled, so the caller can refresh state; else an empty dict.
     """
     if draft_data.get("description"):
         sheet.additional_desc = draft_data["description"]
 
     profile = _ensure_profile(sheet)
-    origin_slots = draft_data.get("origin_slots")
-    if origin_slots:
-        profile.background = _finalize_origin_slots(sheet, origin_slots)
-    elif draft_data.get("background"):
-        profile.background = draft_data["background"]
+    origin_slots = draft_data.get("origin_slots") or {}
+    origin_choices = draft_data.get("origin_choices") or {}
+    if origin_slots or origin_choices:
+        profile.background = _finalize_origin_slots(sheet, origin_slots, origin_choices)
     if draft_data.get("personality"):
         profile.personality = draft_data["personality"]
     if draft_data.get("concept"):
@@ -700,7 +738,7 @@ def _set_descriptive_text(sheet: CharacterSheet, draft_data: dict) -> str | None
     if draft_data.get("quote"):
         profile.quote = draft_data["quote"]
     profile.save()
-    return origin_slots
+    return origin_slots or origin_choices
 
 
 def _set_physical_characteristics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
@@ -2526,12 +2564,19 @@ def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
 
 
 @transaction.atomic
-def set_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot, value: str) -> None:
-    """Upsert a character's slot answer, then refresh state.
+def set_origin_slot(
+    sheet: CharacterSheet,
+    slot: OriginTemplateSlot,
+    value: str,
+    choice: OriginTemplateSlotChoice | None = None,
+) -> None:
+    """Upsert a character's answer (text and/or picked choice), then refresh state.
 
     Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``).
     """
-    CharacterOriginSlot.objects.update_or_create(sheet=sheet, slot=slot, defaults={"value": value})
+    CharacterOriginSlot.objects.update_or_create(
+        sheet=sheet, slot=slot, defaults={"value": value, "choice": choice}
+    )
     refresh_origin_story_state(sheet)
 
 
@@ -2548,7 +2593,9 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     sheet-editor save. Returns empty string when the sheet has no slots
     filled.
     """
-    slots = list(sheet.origin_slots.select_related("slot__template").order_by("slot__sort_order"))
+    slots = list(
+        sheet.origin_slots.select_related("slot__template", "choice").order_by("slot__sort_order")
+    )
     if not slots:
         return ""
 
@@ -2559,7 +2606,10 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     lines = [template.frame_narrative, ""]
     for row in slots:
         lines.append(row.slot.prompt)
-        lines.append(row.value)
+        answer = row.choice.name if row.choice is not None else ""
+        if row.value:
+            answer = f"{answer}: {row.value}" if answer else row.value
+        lines.append(answer)
         lines.append("")
     return "\n".join(lines).strip()
 
