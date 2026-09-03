@@ -19,9 +19,10 @@ from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.societies.constants import RenownRisk
-from world.stories.constants import StakeResolutionColumn, StakeSeverity
+from world.stories.constants import BeatKind, StakeResolutionColumn, StakeSeverity
 from world.stories.factories import (
     BeatFactory,
+    BeatStagedBattleFactory,
     StakeFactory,
     StakeOutcomeFactory,
     StakeResolutionFactory,
@@ -70,6 +71,14 @@ class GMStoryRailViewTests(APITestCase):
         self.assertIsNone(response.data["beat"]["opponent_lines"])
         self.assertIsNone(response.data["beat"]["staged_templates"])
 
+    def test_co_gm_with_no_story_standing_gets_null_staged_battle(self) -> None:
+        self.beat.kind = BeatKind.ENCOUNTER
+        self.beat.save(update_fields=["kind"])
+        BeatStagedBattleFactory(beat=self.beat)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["beat"]["staged_battle"])
+
     def test_story_owner_gm_sees_protected_subjects_and_internal_text(self) -> None:
         self.story.owners.add(self.gm_account)
         protected = StoryProtectedSubjectFactory(story=self.story, is_active=True)
@@ -82,6 +91,20 @@ class GMStoryRailViewTests(APITestCase):
         )
         self.assertIsNotNone(response.data["beat"]["opponent_lines"])
         self.assertIsNotNone(response.data["beat"]["staged_templates"])
+
+    def test_story_owner_gm_sees_staged_battle(self) -> None:
+        self.story.owners.add(self.gm_account)
+        self.beat.kind = BeatKind.ENCOUNTER
+        self.beat.save(update_fields=["kind"])
+        staged = BeatStagedBattleFactory(beat=self.beat, name="Ambush at the Ford")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        staged_battle = response.data["beat"]["staged_battle"]
+        self.assertIsNotNone(staged_battle)
+        self.assertEqual(staged_battle["blueprint_name"], staged.blueprint.name)
+        self.assertEqual(staged_battle["name"], "Ambush at the Ford")
+        self.assertEqual(staged_battle["party_side_role"], staged.party_side_role)
+        self.assertEqual(staged_battle["unit_line_count"], staged.unit_lines.count())
 
     def test_story_owner_gm_sees_stakes_with_outcome_and_activation(self) -> None:
         """A story-standing GM sees the contract's stakes (with the fired
