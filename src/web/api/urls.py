@@ -2,6 +2,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView
 from rest_framework.permissions import AllowAny
 
+from web.api.views.account_settings_views import AccountSecuritySettingsView
 from web.api.views.arx1_archive_views import Arx1ArchiveAuthorizeAPIView
 from web.api.views.general_views import (
     CurrentUserAPIView,
@@ -27,6 +28,12 @@ urlpatterns = [
         name="api-arx1-archive-authorize",
     ),
     path("user/", CurrentUserAPIView.as_view(), name="api-current-user"),
+    # Account security switches (#3591): the opt-in telnet block that rides on 2FA.
+    path(
+        "account/security-settings/",
+        AccountSecuritySettingsView.as_view(),
+        name="api-account-security-settings",
+    ),
     path(
         "register/availability/",
         RegisterAvailabilityAPIView.as_view(),

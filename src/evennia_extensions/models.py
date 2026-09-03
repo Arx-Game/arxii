@@ -89,6 +89,20 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     hide_from_watch = models.BooleanField(default=False)
     private_mode = models.BooleanField(default=False)
 
+    # Opt-in telnet block (#3591, ADR-0264). Two-factor authentication is itself
+    # opt-in and never required; this second switch is the player's choice to
+    # refuse password-only telnet sign-in while 2FA is enrolled, because telnet
+    # cannot take a second factor. Read by Account.authenticate; inert while the
+    # account has no authenticator. Written only by the account's own
+    # /api/account/security-settings/ PATCH.
+    block_telnet_login_with_2fa = models.BooleanField(
+        default=False,
+        help_text=(
+            "When on and two-factor authentication is enrolled, password sign-in over "
+            "telnet is refused with a message pointing at the web client."
+        ),
+    )
+
     # Looking-for-table flag (#2431) — persistent profile flag a player sets
     # so GMs browsing for players can find them. Auto-clears on GMTable join.
     looking_for_table = models.BooleanField(
