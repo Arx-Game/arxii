@@ -531,6 +531,25 @@ class JoinPlaceEncounterAction(Action):
 
 _NO_SUCH_BATTLE = "No such battle."
 _NO_SUCH_BLUEPRINT = "No such active battle-map blueprint."
+_NO_SUCH_STORY = "No such story."
+_NO_SUCH_REGION = "No such region."
+
+
+def _resolve_optional_fk(model, pk, missing_message: str, **filters):
+    """Resolve an optional FK by pk, returning ``(instance, error)`` with exactly one set.
+
+    A missing pk is not an error: the caller simply gets ``(None, None)``. TypeError and
+    ValueError are folded in with DoesNotExist because the pk arrives off a payload and
+    may not even be an integer.
+    """
+    if pk is None:
+        return None, None
+    try:
+        return model.objects.get(pk=pk, **filters), None
+    except (model.DoesNotExist, TypeError, ValueError):
+        return None, ActionResult(success=False, message=missing_message)
+
+
 _NO_SUCH_TEMPLATE = "No such active battle-unit template."
 _NO_SUCH_SIDE = "No such side on this battle."
 _NO_SUCH_PLACE = "No such place on this battle."
@@ -569,7 +588,7 @@ class CreateBattleAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(  # noqa: C901
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -577,11 +596,13 @@ class CreateBattleAction(Action):
     ) -> ActionResult:
         from django.db import transaction  # noqa: PLC0415
 
+        from world.areas.models import Area  # noqa: PLC0415
         from world.battles.exceptions import BattleStagingError  # noqa: PLC0415
         from world.battles.models import BattleMapBlueprint  # noqa: PLC0415
         from world.battles.staging import stage_battle  # noqa: PLC0415
         from world.combat.constants import RiskLevel  # noqa: PLC0415
         from world.scenes.models import SceneParticipation  # noqa: PLC0415
+        from world.stories.models import Story  # noqa: PLC0415
 
         name = str(kwargs.get("name") or "").strip()
         if not name:
@@ -594,33 +615,21 @@ class CreateBattleAction(Action):
                 message="Pick a risk level: " + ", ".join(RiskLevel.values) + ".",
             )
 
-        blueprint = None
-        blueprint_id = kwargs.get("blueprint_id")
-        if blueprint_id is not None:
-            try:
-                blueprint = BattleMapBlueprint.objects.get(pk=blueprint_id, is_active=True)
-            except (BattleMapBlueprint.DoesNotExist, TypeError, ValueError):
-                return ActionResult(success=False, message=_NO_SUCH_BLUEPRINT)
+        blueprint, error = _resolve_optional_fk(
+            BattleMapBlueprint, kwargs.get("blueprint_id"), _NO_SUCH_BLUEPRINT, is_active=True
+        )
+        if error is not None:
+            return error
 
-        campaign_story = None
-        campaign_story_id = kwargs.get("campaign_story_id")
-        if campaign_story_id is not None:
-            from world.stories.models import Story  # noqa: PLC0415
+        campaign_story, error = _resolve_optional_fk(
+            Story, kwargs.get("campaign_story_id"), _NO_SUCH_STORY
+        )
+        if error is not None:
+            return error
 
-            try:
-                campaign_story = Story.objects.get(pk=campaign_story_id)
-            except (Story.DoesNotExist, TypeError, ValueError):
-                return ActionResult(success=False, message="No such story.")
-
-        region = None
-        region_id = kwargs.get("region_id")
-        if region_id is not None:
-            from world.areas.models import Area  # noqa: PLC0415
-
-            try:
-                region = Area.objects.get(pk=region_id)
-            except (Area.DoesNotExist, TypeError, ValueError):
-                return ActionResult(success=False, message="No such region.")
+        region, error = _resolve_optional_fk(Area, kwargs.get("region_id"), _NO_SUCH_REGION)
+        if error is not None:
+            return error
 
         beat, beat_error = _resolve_optional_routed_beat(actor, kwargs)
         if beat_error is not None:

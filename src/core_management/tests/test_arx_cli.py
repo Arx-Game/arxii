@@ -143,3 +143,67 @@ class TestParallelWorkerCount(unittest.TestCase):
         command = mock_run.call_args[0][0]
         self.assertIn("--parallel=3", command)
         self.assertNotIn("--parallel", command)
+
+
+class TestRewriteEnvKeys(unittest.TestCase):
+    """`_rewrite_env_keys` updates keys in place and refuses line-spanning values."""
+
+    def setUp(self) -> None:
+        import tempfile
+
+        self.dir = Path(tempfile.mkdtemp())
+        self.env = self.dir / ".env"
+
+    def test_replaces_an_existing_key_in_place(self) -> None:
+        from cli.arx import _rewrite_env_keys
+
+        self.env.write_text("A=1\nFRONTEND_URL=old\nB=2\n")
+        _rewrite_env_keys(self.env, {"FRONTEND_URL": "new"})
+        self.assertEqual(self.env.read_text(), "A=1\nFRONTEND_URL=new\nB=2\n")
+
+    def test_appends_a_key_that_is_not_present(self) -> None:
+        from cli.arx import _rewrite_env_keys
+
+        self.env.write_text("A=1\n")
+        _rewrite_env_keys(self.env, {"B": "2"})
+        self.assertIn("B=2\n", self.env.read_text())
+        self.assertIn("A=1\n", self.env.read_text())
+
+    def test_refuses_a_value_containing_a_newline(self) -> None:
+        """A newline would let the tail land in .env as its own setting."""
+        from cli.arx import _rewrite_env_keys
+
+        self.env.write_text("A=1\n")
+        with self.assertRaises(ValueError):
+            _rewrite_env_keys(self.env, {"FRONTEND_URL": "https://x\nSECRET_KEY=pwned"})
+        self.assertEqual(self.env.read_text(), "A=1\n", "the file must be left untouched")
+
+    def test_refuses_a_value_containing_a_carriage_return(self) -> None:
+        from cli.arx import _rewrite_env_keys
+
+        self.env.write_text("A=1\n")
+        with self.assertRaises(ValueError):
+            _rewrite_env_keys(self.env, {"FRONTEND_URL": "https://x\rSECRET_KEY=pwned"})
+        self.assertEqual(self.env.read_text(), "A=1\n")
+
+
+class TestEnvBackupRoundTrip(unittest.TestCase):
+    """Backup then restore must return the file's exact bytes."""
+
+    def test_restores_crlf_bytes_unchanged(self) -> None:
+        """A text round-trip would normalise CRLF and lose the original bytes."""
+        import tempfile
+
+        from cli.arx import _backup_env_file, _restore_env_file
+
+        d = Path(tempfile.mkdtemp())
+        env, backup = d / ".env", d / ".env.ngrok_backup"
+        original = b"A=1\r\nB=2\r\n"
+        env.write_bytes(original)
+
+        _backup_env_file(env, backup)
+        env.write_bytes(b"A=clobbered\n")
+        _restore_env_file(env, backup)
+
+        self.assertEqual(env.read_bytes(), original)
+        self.assertFalse(backup.exists(), "the backup is consumed by the restore")

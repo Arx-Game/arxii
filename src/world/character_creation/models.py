@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+from typing import TYPE_CHECKING
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -44,6 +45,11 @@ from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from world.skills.models import SkillPointBudget
 
 logger = logging.getLogger(__name__)
 
@@ -1207,6 +1213,43 @@ class CharacterDraft(SharedMemoryModel):
         """Check Stage 5 (Path) completion status."""
         return not self.get_stage_validation_errors().get(self.Stage.PATH, [])
 
+    def _check_allocation_ceiling(self, values: Iterable[int], maximum: int, noun: str) -> None:
+        """No single allocation may exceed the character-generation ceiling."""
+        for value in values:
+            if value > maximum:
+                msg = f"{noun} value ({value}) exceeds maximum allowed ({maximum})."
+                raise serializers.ValidationError(msg)
+
+    def _check_specialization_parents(
+        self, skills: dict, specializations: dict, budget: SkillPointBudget
+    ) -> None:
+        """A specialization only unlocks once its parent skill sits at the threshold.
+
+        The per-row ``get(pk=...)`` is deliberate, not an N+1: Specialization is a
+        SharedMemoryModel over an authored catalog, so a pk lookup is answered from
+        the identity map and costs no query once the catalog is warm (see
+        ``core.managers.CachedAllMixin``, #1846). A ``pk__in`` batch is not a pk
+        lookup, so it would bypass the map and issue a query on every call instead.
+        """
+        from world.skills.models import Specialization  # noqa: PLC0415
+
+        for spec_id, spec_value in specializations.items():
+            if spec_value <= 0:
+                continue
+            try:
+                spec = Specialization.objects.get(pk=int(spec_id))
+            except Specialization.DoesNotExist:
+                msg = f"Invalid specialization ID: {spec_id}."
+                raise serializers.ValidationError(msg) from None
+            parent_value = skills.get(str(spec.parent_skill_id), 0)
+            if parent_value < budget.specialization_unlock_threshold:
+                msg = (
+                    f"Specialization '{spec.name}' requires parent skill "
+                    f"at {budget.specialization_unlock_threshold} or higher "
+                    f"(current: {parent_value})."
+                )
+                raise serializers.ValidationError(msg)
+
     def validate_path_skills(self) -> None:
         """
         Validate skill point allocation data.
@@ -1225,52 +1268,22 @@ class CharacterDraft(SharedMemoryModel):
         - Specializations only where parent >= threshold
         - No values exceed CG max
         """
-        from world.skills.models import SkillPointBudget, Specialization  # noqa: PLC0415
+        from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
         budget = SkillPointBudget.get_active_budget()
         skills = self.draft_data.get("skills", {})
         specializations = self.draft_data.get("specializations", {})
 
-        # Calculate total points spent
-        skill_points = sum(skills.values())
-        spec_points = sum(specializations.values())
-        total_spent = skill_points + spec_points
-
+        total_spent = sum(skills.values()) + sum(specializations.values())
         if total_spent > budget.total_points:
             msg = f"Total skill points ({total_spent}) exceeds budget ({budget.total_points})."
             raise serializers.ValidationError(msg)
 
-        # Validate no skill values exceed CG max
-        for value in skills.values():
-            if value > budget.max_skill_value:
-                msg = f"Skill value ({value}) exceeds maximum allowed ({budget.max_skill_value})."
-                raise serializers.ValidationError(msg)
-
-        # Validate no specialization values exceed CG max
-        for value in specializations.values():
-            if value > budget.max_specialization_value:
-                msg = (
-                    f"Specialization value ({value}) exceeds maximum allowed "
-                    f"({budget.max_specialization_value})."
-                )
-                raise serializers.ValidationError(msg)
-
-        # Validate specializations have parent at threshold
-        for spec_id, spec_value in specializations.items():
-            if spec_value > 0:
-                try:
-                    spec = Specialization.objects.get(pk=int(spec_id))
-                    parent_value = skills.get(str(spec.parent_skill_id), 0)
-                    if parent_value < budget.specialization_unlock_threshold:
-                        msg = (
-                            f"Specialization '{spec.name}' requires parent skill "
-                            f"at {budget.specialization_unlock_threshold} or higher "
-                            f"(current: {parent_value})."
-                        )
-                        raise serializers.ValidationError(msg)
-                except Specialization.DoesNotExist:
-                    msg = f"Invalid specialization ID: {spec_id}."
-                    raise serializers.ValidationError(msg) from None
+        self._check_allocation_ceiling(skills.values(), budget.max_skill_value, "Skill")
+        self._check_allocation_ceiling(
+            specializations.values(), budget.max_specialization_value, "Specialization"
+        )
+        self._check_specialization_parents(skills, specializations, budget)
 
     def _is_distinctions_complete(self) -> bool:
         """Check if distinctions stage is complete."""

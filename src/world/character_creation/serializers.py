@@ -795,40 +795,34 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             validated_data["draft_data"] = {**instance.draft_data, **incoming}
         return super().update(instance, validated_data)
 
+    def _validate_stats(self, stats) -> None:
+        """Each named stat is a real stat, an integer, and inside the allowed band."""
+        if not isinstance(stats, dict):
+            msg = "stats must be a dictionary"
+            raise serializers.ValidationError(msg)
+        for stat_name, stat_value in stats.items():
+            if stat_name not in REQUIRED_STATS:
+                msg = f"'{stat_name}' is not a valid stat name"
+                raise serializers.ValidationError(msg)
+            if not isinstance(stat_value, int):
+                msg = f"{stat_name} must be an integer, got {type(stat_value).__name__}"
+                raise serializers.ValidationError(msg)
+            if not (STAT_MIN_VALUE <= stat_value <= STAT_MAX_VALUE):
+                msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
+                raise serializers.ValidationError(msg)
+
     def validate_draft_data(self, value):
         """Validate draft_data fields, including stat allocations and goals."""
         if not isinstance(value, dict):
             msg = "draft_data must be a dictionary"
             raise serializers.ValidationError(msg)
 
-        # Validate stats if present
         stats = value.get("stats")
         if stats is not None:
-            if not isinstance(stats, dict):
-                msg = "stats must be a dictionary"
-                raise serializers.ValidationError(msg)
+            self._validate_stats(stats)
 
-            # Validate each stat
-            for stat_name, stat_value in stats.items():
-                # Check stat name is valid
-                if stat_name not in REQUIRED_STATS:
-                    msg = f"'{stat_name}' is not a valid stat name"
-                    raise serializers.ValidationError(msg)
-
-                # Check value is integer
-                if not isinstance(stat_value, int):
-                    msg = f"{stat_name} must be an integer, got {type(stat_value).__name__}"
-                    raise serializers.ValidationError(msg)
-
-                # Check value is in valid range (1-5)
-                if not (STAT_MIN_VALUE <= stat_value <= STAT_MAX_VALUE):
-                    msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
-                    raise serializers.ValidationError(msg)
-
-        # Validate tarot card selection
         self._validate_tarot_card_name(value)
 
-        # Validate goals if present
         goals = value.get("goals")
         if goals is not None:
             value["goals"] = self._validate_goals(goals)
@@ -845,6 +839,41 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"tarot_card_name": f"Unknown tarot card: {tarot_card_name}"}
                 )
+
+    def _validate_goal(self, goal, valid_domains: dict, valid_domain_ids: set) -> dict:
+        """One goal row, resolved to the PK-only shape finalize_character reads back."""
+        if not isinstance(goal, dict):
+            msg = "Each goal must be a dictionary"
+            raise serializers.ValidationError(msg)
+
+        # Resolve domain - accept either domain_id (PK) or domain (name)
+        domain_id = goal.get("domain_id")
+        domain_name = goal.get("domain")
+        if domain_id is not None:
+            if domain_id not in valid_domain_ids:
+                msg = f"Invalid goal domain ID: {domain_id}"
+                raise serializers.ValidationError(msg)
+            resolved_id = domain_id
+        elif domain_name:
+            domain = valid_domains.get(domain_name.lower())
+            if domain is None:
+                msg = f"Invalid goal domain: '{domain_name}'"
+                raise serializers.ValidationError(msg)
+            resolved_id = domain.id
+        else:
+            msg = "Each goal must have either domain_id or domain"
+            raise serializers.ValidationError(msg)
+
+        points = goal.get("points", 0)
+        if not isinstance(points, int) or points < 0:
+            msg = "Goal points must be a non-negative integer"
+            raise serializers.ValidationError(msg)
+
+        return {
+            "domain_id": resolved_id,
+            "points": points,
+            "notes": goal.get("notes", goal.get("text", "")),
+        }
 
     def _validate_goals(self, goals: list) -> list:
         """
@@ -875,52 +904,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             for mt in ModifierTarget.objects.filter(category__name=GOAL_CATEGORY_NAME)
         }
         valid_domain_ids = {mt.id for mt in valid_domains.values()}
-
-        validated_goals = []
-        for goal in goals:
-            if not isinstance(goal, dict):
-                msg = "Each goal must be a dictionary"
-                raise serializers.ValidationError(msg)
-
-            points = goal.get("points", 0)
-            notes = goal.get("notes", goal.get("text", ""))
-
-            # Resolve domain - accept either domain_id (PK) or domain (name)
-            domain_id = goal.get("domain_id")
-            domain_name = goal.get("domain")
-
-            if domain_id is not None:
-                # Validate PK exists
-                if domain_id not in valid_domain_ids:
-                    msg = f"Invalid goal domain ID: {domain_id}"
-                    raise serializers.ValidationError(msg)
-                resolved_id = domain_id
-            elif domain_name:
-                # Validate name and resolve to PK
-                domain = valid_domains.get(domain_name.lower())
-                if domain is None:
-                    msg = f"Invalid goal domain: '{domain_name}'"
-                    raise serializers.ValidationError(msg)
-                resolved_id = domain.id
-            else:
-                msg = "Each goal must have either domain_id or domain"
-                raise serializers.ValidationError(msg)
-
-            # Validate points
-            if not isinstance(points, int) or points < 0:
-                msg = "Goal points must be a non-negative integer"
-                raise serializers.ValidationError(msg)
-
-            # Store JSON-serializable data (PKs, not instances)
-            validated_goals.append(
-                {
-                    "domain_id": resolved_id,
-                    "points": points,
-                    "notes": notes,
-                }
-            )
-
-        return validated_goals
+        return [self._validate_goal(g, valid_domains, valid_domain_ids) for g in goals]
 
     def validate(self, attrs):
         """Cross-field validation."""
