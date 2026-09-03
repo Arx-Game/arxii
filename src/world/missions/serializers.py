@@ -582,35 +582,45 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
         {DeedRewardSink.MONEY, DeedRewardSink.RESONANCE, DeedRewardSink.LEGEND_POINTS}
     )
 
-    def validate(self, attrs: dict) -> dict:
-        # Honor partial updates: fall back to instance values for fields
-        # not in attrs (PATCH).
-        instance = self.instance
-        route = attrs.get("route")
-        if route is None and instance is not None:
-            route = instance.route
-        candidate = attrs.get("candidate")
-        if candidate is None and instance is not None:
-            candidate = instance.candidate
+    def _patched(self, attrs: dict, field: str):
+        """Read a field the way PATCH means it: what was sent, else what is stored."""
+        value = attrs.get(field)
+        if value is None and self.instance is not None:
+            return getattr(self.instance, field)
+        return value
+
+    def _check_exactly_one_target(self, attrs: dict) -> None:
+        """A reward hangs off a route or a candidate, never both and never neither."""
+        route = self._patched(attrs, "route")
+        candidate = self._patched(attrs, "candidate")
         if route is None and candidate is None:
             raise serializers.ValidationError(self._ERR_BOTH_NULL)
         if route is not None and candidate is not None:
             raise serializers.ValidationError(self._ERR_BOTH_SET)
-        # Mirror the model's clean() sink↔FK check (DRF skips clean()).
-        sink = attrs.get("sink", instance.sink if instance else None)
+
+    def _check_offer_matches_sink(self, attrs: dict, sink) -> None:
+        """Mirror the model's clean() sink<->FK check, which DRF skips."""
         followon_offer = attrs.get(
-            "followon_offer", instance.followon_offer_id if instance else None
+            "followon_offer", self.instance.followon_offer_id if self.instance else None
         )
         if sink == DeedRewardSink.FOLLOW_ON_SUMMONS.value and followon_offer is None:
             raise serializers.ValidationError({"followon_offer": self._ERR_SUMMONS_NO_OFFER})
         if sink != DeedRewardSink.FOLLOW_ON_SUMMONS.value and followon_offer is not None:
             raise serializers.ValidationError({"followon_offer": self._ERR_OFFER_WRONG_SINK})
 
+    def _check_sink_allowed(self, sink) -> None:
+        """Non-staff authors may only reach the sinks on the allow-list."""
         request = self.context.get("request")
         user = request.user if request is not None else None
         is_non_staff = user is not None and user.is_authenticated and not user.is_staff
         if is_non_staff and sink not in self._NON_STAFF_ALLOWED_SINKS:
             raise serializers.ValidationError({"sink": self._ERR_NON_STAFF_SINK})
+
+    def validate(self, attrs: dict) -> dict:
+        self._check_exactly_one_target(attrs)
+        sink = attrs.get("sink", self.instance.sink if self.instance else None)
+        self._check_offer_matches_sink(attrs, sink)
+        self._check_sink_allowed(sink)
         return attrs
 
 
