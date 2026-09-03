@@ -6,12 +6,14 @@ from rest_framework.test import APIClient
 
 from world.character_creation.constants import FamilyPath
 from world.character_creation.factories import (
+    BeginningsFactory,
     CharacterDraftFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
 )
 from world.character_creation.models import CharacterDraft
+from world.roster.factories import FamilyKindFactory
 
 
 class UpbringingListTest(TestCase):
@@ -49,6 +51,49 @@ class UpbringingListTest(TestCase):
             "cost_per_influence": 3,
             "sort_order": self.choice.sort_order,
         }
+
+    def test_claimable_kind_ids_query_count_does_not_grow_with_template_count(self):
+        """claimable_kind_ids is one batched query per response, not one per row.
+
+        Two independent beginnings (never touched before in this test, so
+        SharedMemoryModel's identity map holds no warm state for either) isolate
+        the comparison from cross-request cache effects: 1 template vs 3
+        templates must cost the same number of queries.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        one_beginning = BeginningsFactory()
+        one_template = OriginTemplateFactory(beginning=one_beginning)
+        one_template.claimable_kinds.add(FamilyKindFactory())
+
+        three_beginning = BeginningsFactory()
+        for _ in range(3):
+            template = OriginTemplateFactory(beginning=three_beginning)
+            template.claimable_kinds.add(FamilyKindFactory())
+
+        # Separate clients (no shared session) so both requests pay the same
+        # one-time session-creation cost - the comparison isolates the
+        # origin-templates query count, not Django's session bookkeeping.
+        client_one = APIClient()
+        client_one.force_authenticate(self.account)
+        with CaptureQueriesContext(connection) as ctx_one:
+            res_one = client_one.get(
+                f"/api/character-creation/origin-templates/?beginning={one_beginning.id}"
+            )
+        assert res_one.status_code == 200
+        assert len(res_one.json()) == 1
+
+        client_three = APIClient()
+        client_three.force_authenticate(self.account)
+        with CaptureQueriesContext(connection) as ctx_three:
+            res_three = client_three.get(
+                f"/api/character-creation/origin-templates/?beginning={three_beginning.id}"
+            )
+        assert res_three.status_code == 200
+        assert len(res_three.json()) == 3
+
+        assert len(ctx_one.captured_queries) == len(ctx_three.captured_queries)
 
 
 class DraftUpbringingPatchTest(TestCase):

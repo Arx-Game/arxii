@@ -463,9 +463,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
     """
 
     slots = serializers.SerializerMethodField()
-    claimable_kind_ids = serializers.PrimaryKeyRelatedField(
-        source="claimable_kinds", many=True, read_only=True
-    )
+    claimable_kind_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = OriginTemplate
@@ -485,6 +483,21 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "slots",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
+    def get_claimable_kind_ids(self, obj: OriginTemplate) -> list[int]:
+        """Prefer the list view's batched grouping; fall back to a direct query.
+
+        ``CGOriginTemplateViewSet.list()`` passes ``claimable_kind_ids_by_template``
+        (one flat query for the whole response) into context. Nested usage
+        (``CharacterDraftSerializer.selected_origin_template``) never provides that
+        key, since it is one object, not a list - a direct query there is a single
+        query, not a loop.
+        """
+        grouping = self.context.get("claimable_kind_ids_by_template")
+        if grouping is not None:
+            return list(grouping.get(obj.id, []))
+        return list(obj.claimable_kinds.values_list("id", flat=True))
 
     @extend_schema_field(OriginTemplateSlotSerializer(many=True))
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
