@@ -74,8 +74,11 @@ class CodexVisibilityMixin:
     never widen into another player's knowledge.
 
     Nothing is memoized here (#3597, ADR-0260): roster entries and knowledge come
-    from the Account typeclass's caches at zero queries, and the public-entry set
-    is fetched once per request by whichever action needs it and passed down.
+    from the Account typeclass's caches (``cached_roster_entries`` /
+    ``cached_codex_knowledge``, zero queries after the first per process), so
+    reading them more than once per request costs nothing extra. The public-entry
+    set is not cached anywhere - it is fetched once per request by whichever
+    action needs it and passed down.
     """
 
     def _selected_roster_entries(self) -> list[RosterEntry]:

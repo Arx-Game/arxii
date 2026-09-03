@@ -21,7 +21,7 @@ from server.conf.serversession import ServerSession
 from world.areas.constants import GridOrigin
 from world.contributors.models import CreditedContent
 from world.game_clock.constants import Season, TimePhase
-from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
+from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication, RosterEntry
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]
@@ -37,6 +37,18 @@ class MediaType(models.TextChoices):
     GALLERY = "gallery", "Gallery Image"
     BACKGROUND = "background", "Background"
     ILLUSTRATION = "illustration", "Illustration"
+
+
+def is_available_roster_entry(entry: RosterEntry) -> bool:
+    """Active roster and not retired (#2287): the one definition of "available".
+
+    Shared by ``PlayerData.get_available_roster_entries`` (tenure-scoped, one
+    query) and ``Account.get_available_roster_entries`` (identity-mapped,
+    zero queries after the first) so the two never drift apart (#3597).
+    """
+    from world.vitals.services import is_retired  # noqa: PLC0415
+
+    return entry.roster.is_active and not is_retired(entry.character_sheet)
 
 
 class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -179,13 +191,10 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         interlude ends at retire, and the character can never be logged into
         again. Dead-but-unretired characters stay available (spectator ghost).
         """
-        from world.vitals.services import is_retired  # noqa: PLC0415
-
         return [
             tenure.roster_entry
             for tenure in self.cached_active_tenures
-            if tenure.roster_entry.roster.is_active
-            and not is_retired(tenure.roster_entry.character_sheet)
+            if is_available_roster_entry(tenure.roster_entry)
         ]
 
     def get_available_characters(self):

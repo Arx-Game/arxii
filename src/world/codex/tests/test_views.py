@@ -483,20 +483,19 @@ class TestCodexTreeQueryCount(TestCase):
 
         # Steady-state queries for the authenticated tree endpoint (#3597: the
         # account's roster entries and codex knowledge are cache hits after the
-        # warm-up above, so neither RosterEntry nor CharacterCodexKnowledge is
-        # queried here):
+        # warm-up above - Account.get_available_roster_entries() filters
+        # cached_roster_entries directly and never touches player_data, so
+        # neither RosterEntry, PlayerData, nor CharacterCodexKnowledge is
+        # queried here - identical in shape to the anonymous composition below):
         #   1. SELECT django_session
         #   2. SELECT public CodexEntry ids
-        #   3. SELECT PlayerData for the account (Account.player_data is a plain
-        #      property that get_or_creates on every access, so this one query
-        #      still fires even with the tenure cache warm)
-        #   4. SELECT all CodexSubjects (subtree-visibility ancestor walk)
-        #   5. SELECT subject ids of the visible entries
-        #   6. SELECT top-level CodexSubjects (with has_children + entry_count)
-        #   7. SELECT CodexCategory list
+        #   3. SELECT all CodexSubjects (subtree-visibility ancestor walk)
+        #   4. SELECT subject ids of the visible entries
+        #   5. SELECT top-level CodexSubjects (with has_children + entry_count)
+        #   6. SELECT CodexCategory list
         # Prior to the N+1 fix this also fired one COUNT per subject; the
         # count must stay constant in the number of subjects and characters.
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(6):
             response = self.client.get("/api/codex/categories/tree/")
         assert response.status_code == status.HTTP_200_OK
 
@@ -506,6 +505,41 @@ class TestCodexTreeQueryCount(TestCase):
         assert relevant[self.subjects[0].name] == 3
         for subject in self.subjects[1:]:
             assert relevant[subject.name] == 2
+
+    def test_authenticated_entry_list_query_count_no_player_data_refetch(self):
+        """Entry list stays O(1) though _selected_roster_entries() reads three times.
+
+        CodexEntryViewSet.get_queryset() and get_serializer_context() each call
+        _selected_roster_entries() (three calls total per request), so this pins
+        that Account.get_available_roster_entries() being a cache read - never a
+        PlayerData.get_or_create() - keeps the query count flat (#3597).
+        """
+        account = AccountFactory(username="qcentries")
+        tenure = RosterTenureFactory(player_data__account=account)
+        restricted = self.subjects[0].entries.filter(is_public=False).first()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=tenure.roster_entry,
+            entry=restricted,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+
+        self.client.force_authenticate(user=account)
+        warmup = self.client.get("/api/codex/entries/")
+        assert warmup.status_code == status.HTTP_200_OK
+
+        # Steady-state queries for the authenticated entry list endpoint (#3597):
+        # roster entries and knowledge are cache hits after the warm-up above, and
+        # Account.get_available_roster_entries() never touches player_data, so no
+        # PlayerData query appears despite _selected_roster_entries() being read
+        # three times in this one request.
+        #   1. SELECT django_session
+        #   2. SELECT public CodexEntry ids
+        #   3. SELECT visible CodexEntry list (with perspective_of annotation)
+        with self.assertNumQueries(3):
+            response = self.client.get("/api/codex/entries/")
+        assert response.status_code == status.HTTP_200_OK
+        names = [e["name"] for e in response.data]
+        assert restricted.name in names
 
     def test_knowledge_granted_after_a_request_is_visible_on_the_next(self):
         """The Account cache clears on a knowledge write, never on a request boundary."""

@@ -283,8 +283,19 @@ class Account(DefaultAccount):
         return self.player_data.get_available_characters()
 
     def get_available_roster_entries(self):
-        """Roster entries this player can currently control (active roster, not retired)."""
-        return self.player_data.get_available_roster_entries()
+        """Roster entries this account can currently control (active roster, not retired).
+
+        Filters ``cached_roster_entries`` (#3597) rather than going through
+        ``player_data.get_available_roster_entries()``: ``player_data`` is a plain
+        property that ``get_or_create``s on every access, so routing through it would
+        cost one query per call even with the tenure cache warm. Zero queries after
+        the first per process; ``is_available_roster_entry`` is evaluated per call
+        against the live, identity-mapped rows (a roster/retirement change on one of
+        them is reflected immediately, with no separate cache to invalidate).
+        """
+        from evennia_extensions.models import is_available_roster_entry
+
+        return [entry for entry in self.cached_roster_entries if is_available_roster_entry(entry)]
 
     def get_seance_manifestable_characters(self):
         """Retired characters this account can manifest via an accepted, open seance (#2393)."""
