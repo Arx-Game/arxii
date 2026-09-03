@@ -240,32 +240,33 @@ def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDe
 
 
 def _probe_typeclassed_accounts() -> ProbeResult:
-    """No account row is pinned to the bare ``AccountDB`` class.
+    """No account row has ``db_typeclass_path`` = the base ``AccountDB`` model.
 
     Consumer: every view that reads typeclass state off ``request.user``
     (``get_available_characters`` behind the ``X-Character-ID`` header,
     ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
-    ``ArxAccountAdapter.new_user`` stops signup making bare rows; Django's
+    ``ArxAccountAdapter.new_user`` stops signup making such rows; Django's
     ``create_superuser`` still does, and rows from before the adapter fix stay
-    bare until repointed by hand (ADR-0260: no data migration for a handful of
+    on ``AccountDB`` until repointed by hand (ADR-0260: no data migration for a handful of
     pre-launch rows). A hit here is one of those.
     """
     from evennia.accounts.models import AccountDB  # noqa: PLC0415
 
-    bare = tuple(
+    base_model_rows = tuple(
         AccountDB.objects.filter(
             db_typeclass_path__in=("", "evennia.accounts.models.AccountDB")
         ).values_list("username", flat=True)
     )
     detail = (
-        f"Account(s) pinned to the bare AccountDB class: {', '.join(bare)}. "
+        f"Account(s) whose typeclass path is the base AccountDB model, not "
+        f"typeclasses.accounts.Account: {', '.join(base_model_rows)}. "
         "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS by hand: "
         "AccountDB.objects.filter(username=...).update(db_typeclass_path=...) in "
         "`arx manage shell`."
-        if bare
+        if base_model_rows
         else ""
     )
-    return ProbeResult(present=not bare, missing=bare, detail=detail)
+    return ProbeResult(present=not base_model_rows, missing=base_model_rows, detail=detail)
 
 
 def _probe_audere_majora_thresholds() -> ProbeResult:
@@ -1256,11 +1257,11 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "world/combat/views.py:1207 played_character_sheet_ids"
             ),
             consequence=(
-                "An account pinned to the bare AccountDB class has no typeclass "
+                "An account whose typeclass path is the base AccountDB model has no typeclass "
                 "attributes, so every persona-aware endpoint answers 500 for that "
                 "player or staff member (Sentry ARX2-8: the first outside player's "
                 "signup account). createsuperuser still makes such rows, and "
-                "pre-adapter signup rows stay bare until fixed by hand."
+                "pre-adapter signup rows stay on AccountDB until fixed by hand."
             ),
             probe=CustomProbe(fn=_probe_typeclassed_accounts),
         ),

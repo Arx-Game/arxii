@@ -38,7 +38,7 @@ def selected_character(account: AbstractBaseUser | AnonymousUser) -> ObjectDB | 
     selection needs no live session and no typeclass. It replaces reading
     ``Account.puppet`` off ``request.user``, which under ``MULTISESSION_MODE
     = 2`` is the *list* of all puppets (empty, never ``None``, with no
-    session) and does not exist at all on a bare ``AccountDB`` (Sentry
+    session) and does not exist at all on the base ``AccountDB`` (Sentry
     ARX2-7, 2026-09-02).
     """
     from evennia_extensions.models import PlayerData  # noqa: PLC0415

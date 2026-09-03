@@ -65,7 +65,7 @@ class SignupJourneyTests(TestCase):
         self.assertIsNotNone(invite.redeemed_at)
         account = User.objects.get(username="matched_user")
         self.assertEqual(invite.redeemed_by_id, account.id)
-        # The row must carry the Account typeclass, not the bare AccountDB
+        # The row must carry the Account typeclass, not the base AccountDB
         # (Sentry ARX2-8): every persona-aware endpoint reads typeclass state.
         from django.conf import settings
 

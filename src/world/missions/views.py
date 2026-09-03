@@ -602,7 +602,7 @@ def _acting_character(request: Request) -> "ObjectDB":
     Resolved from the account's durable selection (``PlayerData.selected_entry``,
     #3412) via ``selected_character`` rather than ``request.user.puppet``:
     under ``MULTISESSION_MODE = 2`` that property is a list (empty with no
-    session, never ``None``) and it does not exist on a bare ``AccountDB``
+    session, never ``None``) and it does not exist on the base ``AccountDB``
     at all, which is how the journal 500'd in production (Sentry ARX2-7).
     """
     from rest_framework.exceptions import ValidationError  # noqa: PLC0415

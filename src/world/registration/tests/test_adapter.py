@@ -92,8 +92,8 @@ class IsOpenForSignupTests(TestCase):
 class NewUserTypeclassTests(TestCase):
     """Sentry ARX2-8: allauth's default ``new_user`` is ``get_user_model()()``.
 
-    That is the bare ``AccountDB``; Evennia pins ``db_typeclass_path`` to the
-    class it was instantiated as, so every web-signup account stayed bare
+    That is the base ``AccountDB``; Evennia pins ``db_typeclass_path`` to the
+    class it was instantiated as, so every web-signup account stayed on ``AccountDB``
     forever and lacked the ``Account`` typeclass (no ``puppet``, no
     ``get_available_characters``, no ``cached_primary_persona_ids``).
     """

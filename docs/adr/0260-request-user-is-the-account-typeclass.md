@@ -30,7 +30,9 @@
 Evennia swaps an instance's class from `db_typeclass_path` in `__init__`, and when
 that column is empty it pins the column to the class the instance was built as.
 allauth's default `new_user` is `get_user_model()()`, and Django's `create_superuser`
-has the same shape, so an account created either way is a bare `AccountDB` forever:
+has the same shape, so an account created either way carries `db_typeclass_path =
+evennia.accounts.models.AccountDB` (the base model, not `typeclasses.accounts.Account`)
+forever:
 no `puppet`, no `get_available_characters`, no `cached_primary_persona_ids`, and a
 500 from every view that reads them. The signup journey test proves the row shape
 end to end (it failed before the adapter change). Tests never saw it before because
@@ -40,16 +42,16 @@ That is exactly what ARX2-8 was. The first outside player's account (account 3,
 created through web signup) carries `db_typeclass_path =
 evennia.accounts.models.AccountDB`, and the server log at the first 500 (21:47:17
 UTC) shows no Evennia traceback before it, only the view reading
-`cached_primary_persona_ids` off the bare model through Django's lazy user proxy.
+`cached_primary_persona_ids` off the base `AccountDB` through Django's lazy user proxy.
 Accounts created through Evennia's own `create_account` (the developer accounts) were
 never affected, which is why the site worked for staff and broke for the first
 player. Repair is a row edit plus a server reload, since the identity map already
-holds the bare instance.
+holds the `AccountDB` instance.
 
 The first fix attempt moved the persona query off the typeclass into a per-request
-memo on the viewset so a bare `request.user` would not crash. That was papering over
+memo on the viewset so an `AccountDB` `request.user` would not crash. That was papering over
 the symptom: the persona list is account data, the Account is persistent, and the
-cache on it was already right. Whatever made the account bare is the bug.
+cache on it was already right. The account not being an `Account` is the bug.
 
 `request.user.puppet` has a separate, confirmed problem: under `MULTISESSION_MODE = 2`
 it is the list of every puppet, empty with no session and never `None`, so the
@@ -63,7 +65,7 @@ should use.
   state, order-dependent query counts, and it only exists to avoid trusting
   `request.user`'s type. Reverted in the same PR; the wider family is #3597.
 - **Guarding reads with `hasattr(request.user, ...)`.** Same objection.
-- **A data migration to repoint existing bare rows.** Before launch that is a single
+- **A data migration to repoint existing `AccountDB` rows.** Before launch that is a single
   row, fixed with one shell statement. Schema history is not the place for a
   one-off repair.
 - **Patching Evennia's manager so `createsuperuser` typeclasses.** Dependency code

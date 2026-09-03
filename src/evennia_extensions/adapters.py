@@ -81,16 +81,18 @@ class ArxAccountAdapter(DefaultAccountAdapter):
         return str(data.get("email") or ""), str(data.get("invite_token") or "")
 
     def new_user(self, request):
-        """Instantiate the configured Account typeclass, not the bare ``AccountDB``.
+        """Instantiate the configured Account typeclass, not the base ``AccountDB``.
 
         allauth's default is ``get_user_model()()``. Evennia pins
         ``db_typeclass_path`` to whatever class an instance was built as, so a
-        bare instance stays the bare model on every later load and never
+        ``db_typeclass_path`` reads ``evennia.accounts.models.AccountDB`` (the
+        base model, not ``typeclasses.accounts.Account``), loads as that on
+        every later load, and never
         gains the ``Account`` typeclass (no ``puppet``, no
         ``get_available_characters``, no persona cache). That was Sentry
         ARX2-8 (2026-09-02): the first outside player's account, made by
         signup, 500'd on every events list. Proven end to end by the signup
-        journey test. Existing bare rows are repointed by hand (the ops panel's
+        journey test. Existing ``AccountDB`` rows are repointed by hand (the ops panel's
         ``typeclassed-accounts`` probe names them; no data migration for a
         handful of pre-launch rows, ADR-0260).
         """

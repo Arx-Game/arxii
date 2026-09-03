@@ -95,8 +95,9 @@ fallback, closed by default.
 
 `ArxAccountAdapter.new_user(request)` returns an instance of
 `settings.BASE_ACCOUNT_TYPECLASS`, never allauth's default `get_user_model()()`.
-Evennia pins `db_typeclass_path` to the class an instance was built as, so a bare
-`AccountDB` stays bare on every later load and lacks the whole `Account` typeclass
+Evennia pins `db_typeclass_path` to the class an instance was built as, so the row says
+`evennia.accounts.models.AccountDB` (the base model, not `typeclasses.accounts.Account`),
+loads as that on every later load, and lacks the whole `Account` typeclass
 (`puppet`, `get_available_characters`, the persona cache). That was Sentry ARX2-8
 (2026-09-02): the first outside player's account, made by signup, 500'd on every
 events list. The signup journey test proves the row shape end to end. Rows from

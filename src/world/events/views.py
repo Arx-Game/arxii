@@ -101,9 +101,9 @@ class _EventActorMixin:
         computed once per account per process and reused across requests.
         Invalidation is wired via ``RosterTenure.related_cache_fields``.
 
-        ``request.user`` is the Account typeclass, never the bare ``AccountDB``:
+        ``request.user`` is the Account typeclass, never the base ``AccountDB``:
         signup instantiates the typeclass and migration 0213 repointed the rows
-        that predate it (ADR-0260). A bare row is a data error the ops panel's
+        that predate it (ADR-0260). A row still on ``AccountDB`` is a data error the ops panel's
         ``typeclassed-accounts`` probe names, not a case views branch on.
         """
         user = self.request.user
