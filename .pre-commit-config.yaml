@@ -151,6 +151,18 @@ repos:
         # identity map loads once. See ADR-0261 and django_notes.md. Suppress
         # with `# noqa: IDMAPPER_ONLY` plus a reason, only for a model that is
         # not a SharedMemoryModel.
+      - id: view-memo
+        name: Reject per-request memos on views and serializers
+        entry: uv run python tools/lint_view_memo.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*(views|serializers)[^/]*\.py$
+        # #3597 / ADR-0260 (2026-09-03): a `_thing: T | None = None` class
+        # attribute filled during a request is a memo the ruling rejects. Account
+        # data is a cached_property on the Account typeclass; request data is an
+        # explicit argument or middleware. Suppress with `# noqa: VIEW_MEMO`
+        # plus a reason, only for constant configuration that defaults to None.
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
