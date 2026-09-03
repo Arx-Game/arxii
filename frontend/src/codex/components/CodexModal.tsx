@@ -17,7 +17,16 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
   const [historyIndex, setHistoryIndex] = useState(0);
 
   const currentEntryId = history[historyIndex];
-  const { data: entry, isLoading, isError } = useCodexEntry(currentEntryId);
+  // A 404 here means the entry does not exist or the viewer's characters have
+  // no knowledge row for it. Either way it is this dialog's problem to report,
+  // not the page's (a heritage card once took down a whole chargen stage).
+  const {
+    data: entry,
+    isLoading,
+    isError,
+  } = useCodexEntry(currentEntryId, undefined, {
+    throwOnError: false,
+  });
 
   const navigateToEntry = (id: number) => {
     const newHistory = history.slice(0, historyIndex + 1);
@@ -46,7 +55,12 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
       );
     }
     if (isError) {
-      return <div className="py-4 text-center text-muted-foreground">Unable to load entry</div>;
+      return (
+        <div role="alert" className="py-4 text-center text-muted-foreground">
+          Codex entry {currentEntryId} is not available. It may not exist, or none of your
+          characters have learned it yet.
+        </div>
+      );
     }
     if (entry) {
       return (

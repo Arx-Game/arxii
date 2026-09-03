@@ -387,14 +387,10 @@ def _story_text_for(presented: PresentedOption, deed: MissionDeedRecord, templat
 
     outcome_name = deed.outcome.name if deed.outcome_id else None
     if outcome_name is not None:
-        route = (
-            MissionOptionRoute.objects.filter(
-                option=presented.option,
-                outcome_tier__name=outcome_name,
-            )
-            .only("outcome_text")
-            .first()
-        )
+        route = MissionOptionRoute.objects.filter(
+            option=presented.option,
+            outcome_tier__name=outcome_name,
+        ).first()
         if route is not None and route.outcome_text:
             return route.outcome_text
     outcome_clause = f" The outcome: {outcome_name}." if outcome_name else ""

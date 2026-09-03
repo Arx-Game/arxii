@@ -171,7 +171,7 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
                 Prefetch(
                     "codex_grants",
-                    queryset=BeginningsCodexGrant.objects.only("beginnings_id", "entry_id"),
+                    queryset=BeginningsCodexGrant.objects.all(),
                     to_attr="cached_codex_grants",
                 ),
             )
@@ -306,7 +306,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
         )
         codex_grants_prefetch = Prefetch(
             "codex_grants",
-            queryset=PathCodexGrant.objects.only("path_id", "entry_id"),
+            queryset=PathCodexGrant.objects.all(),
             to_attr="cached_codex_grants",
         )
         return (

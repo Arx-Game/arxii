@@ -104,9 +104,7 @@ class ObjectParent:
 
         from world.areas.positioning.models import PositionEdge
 
-        passable = PositionEdge.objects.filter(is_passable=True).only(
-            "position_a_id", "position_b_id"
-        )
+        passable = PositionEdge.objects.filter(is_passable=True)
         return list(
             self.positions.select_related("rampart__element_profile").prefetch_related(
                 Prefetch("edges_as_a", queryset=passable, to_attr="passable_edges_as_a"),
