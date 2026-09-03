@@ -44,29 +44,21 @@ class AccountInviteSerializer(serializers.ModelSerializer):
 
 
 class VerificationLinkRequestSerializer(serializers.Serializer):
-    """Input for the staff verification-link endpoint (#3193) — write-only."""
+    """Input for the staff verification-link endpoint (#3193) — write-only.
+
+    Never persists: the view builds the link from ``validated_data``. DRF's own
+    ``create``/``update`` already raise ``NotImplementedError``.
+    """
 
     email = serializers.EmailField()
-
-    def create(self, validated_data):
-        msg = "VerificationLinkRequestSerializer never persists — the view builds the link."
-        raise NotImplementedError(msg)
-
-    def update(self, instance, validated_data):
-        msg = "VerificationLinkRequestSerializer never persists — the view builds the link."
-        raise NotImplementedError(msg)
 
 
 class IssueInviteSerializer(serializers.Serializer):
-    """Input for issuing a new invite — write-only, not model-backed."""
+    """Input for issuing a new invite — write-only, not model-backed.
+
+    Never persists directly: the view calls ``issue_invite()``. DRF's own
+    ``create``/``update`` already raise ``NotImplementedError``.
+    """
 
     email = serializers.EmailField()
     note = serializers.CharField(required=False, allow_blank=True, default="")
-
-    def create(self, validated_data):
-        msg = "IssueInviteSerializer never persists directly — the view calls issue_invite()."
-        raise NotImplementedError(msg)
-
-    def update(self, instance, validated_data):
-        msg = "IssueInviteSerializer never persists directly — the view calls issue_invite()."
-        raise NotImplementedError(msg)
