@@ -84,8 +84,13 @@ vi.mock('../queries', () => ({
 }));
 
 describe('SkillsSection', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   const renderSkillsSection = (draft: CharacterDraft) => {
@@ -119,7 +124,6 @@ describe('SkillsSection', () => {
   });
 
   it('saves a raised skill value after the debounce', () => {
-    vi.useFakeTimers();
     renderSkillsSection(draft);
 
     fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
@@ -137,7 +141,6 @@ describe('SkillsSection', () => {
         }),
       })
     );
-    vi.useRealTimers();
   });
 
   it('gives the specialization accordion trigger the quiet-link style', () => {
