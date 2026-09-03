@@ -73,7 +73,20 @@ party plays it, the terminal option and tier report back to the beat
 `Beat.predicate_type` now defaults to `OUTCOME_TIER`, not `GM_MARKED` - a
 beat resolves from its graph, an encounter, a battle, or a decisive check by
 default; GM-marked is the exception a story author opts into for an
-out-of-band fact a machine grader cannot see. Still open: copy-beat/reusable
+out-of-band fact a machine grader cannot see. **Battle prep (#3569):** an
+ENCOUNTER beat can now pre-stage a whole battle instead of a freeform
+opponent roster - `BeatStagedBattle`/`BeatStagedBattleUnit` (blueprint,
+region, party side, unit lines by template/side/place), mutually exclusive
+with `BeatOpponentLine` on the same beat. `RunBeatAction` stages the `Battle`
+from the blueprint, routes it to the beat (`Battle.story_beat`, so its
+conclusion grades this beat and `activate_stakes_for_battle` locks only this
+beat's stakes rather than every staked beat sharing the scene), spawns the
+authored units, and enlists the running scene's present party on the
+declared side - one press instead of the GM working through
+`create_battle`/`stage_battle_map`/`spawn_battle_units`/
+`enlist_battle_participant` by hand. `BeatFormDialog`'s Opponents/Battle
+toggle and the Run Beat tab's "Start siege" affordance are the web surfaces.
+Still open: copy-beat/reusable
 prep tooling (ruled deferred at #3425 spec time),
 (3) consequence + reward computation (where risk numbers gain meaning),
 (4) ✅ GM leveling / the trust→risk gating hook (#2000 — see ADR-0097;

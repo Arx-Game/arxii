@@ -270,6 +270,11 @@ cloning a blueprint in the same call) → `stage_battle_map` / `spawn_battle_uni
 `enlist_battle_participant`, discoverable via `browse_battle_catalog`. Wraps
 `world.battles.staging`'s services (`stage_battle`/`instantiate_battle_blueprint`/
 `spawn_units_from_template`); never accepts free-form terrain/fortification/unit-stat
-authoring at stage time (ADR-0110, ADR-0111).
+authoring at stage time (ADR-0110, ADR-0111). A second entry point reuses the same
+services one level up: a story author pre-stages an ENCOUNTER beat's battle
+(`stories.BeatStagedBattle`) ahead of the table, and `RunBeatAction` calls
+`stage_battle`/`spawn_units_from_template`/`enlist_participant` directly to
+instantiate it into the GM's live scene in one press, rather than the GM working
+the JUNIOR pipeline by hand (#3569 - see stories glossary's **Session prep**).
 _Avoid_: setup wizard (implies a bespoke multi-step authoring UI, not a catalog-pick
 action pipeline), army preset (see **Unit Template**).

@@ -6,6 +6,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.battles.constants import BattleSideRole
 from world.character_sheets.types import LifecycleState
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
@@ -1261,6 +1262,13 @@ class BeatOpponentLine(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.count}x {self.creature_template.name} on Beat #{self.beat_id}"
 
+    def clean(self) -> None:
+        super().clean()
+        if BeatStagedBattle.objects.filter(beat_id=self.beat_id).exists():
+            raise ValidationError(
+                {"beat": "A beat stages either opponent lines or a battle, not both."}
+            )
+
 
 class BeatStagedTemplate(SharedMemoryModel):
     """An authored situation or challenge template to place when a SITUATION beat runs.
@@ -1320,6 +1328,91 @@ class BeatStagedTemplate(SharedMemoryModel):
         else:
             name = self.challenge_template.name
         return f"{name} on Beat #{self.beat_id}"
+
+
+class BeatStagedBattle(SharedMemoryModel):
+    """Session prep for an ENCOUNTER beat that is a battle (#3569).
+
+    One per beat. ``RunBeatAction`` stages a ``Battle`` from ``blueprint`` with
+    the beat's risk, spawns ``unit_lines``, enlists the running scene's party on
+    ``party_side_role``, and links the battle to the beat (``Battle.story_beat``)
+    so its conclusion grades this beat and its stakes lock at declared risk. A
+    beat has either opponent lines or a staged battle, never both.
+    """
+
+    beat = models.OneToOneField(
+        STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="staged_battle"
+    )
+    blueprint = models.ForeignKey(
+        "arxii.BattleMapBlueprint",
+        on_delete=models.PROTECT,
+        related_name="staged_on_beats",
+        help_text="The map this beat's battle is cloned from at run time.",
+    )
+    name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Battle name; blank uses the first line of the beat's internal description.",
+    )
+    region = models.ForeignKey(
+        "arxii.Area",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Optional region the battle is set in (Battle.region).",
+    )
+    party_side_role = models.CharField(
+        max_length=20,
+        choices=BattleSideRole.choices,
+        default=BattleSideRole.DEFENDER,
+        help_text="Which side the running scene's party is enlisted on.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Beat staged battle"
+
+    def __str__(self) -> str:
+        return f"Staged battle for Beat #{self.beat_id}: {self.blueprint}"
+
+    def clean(self) -> None:
+        super().clean()
+        beat = self.beat
+        if beat.kind != BeatKind.ENCOUNTER:
+            raise ValidationError({"beat": "Only an ENCOUNTER beat can stage a battle."})
+        if beat.opponent_lines.exists():
+            raise ValidationError(
+                {"beat": "A beat stages either opponent lines or a battle, not both."}
+            )
+
+
+class BeatStagedBattleUnit(SharedMemoryModel):
+    """One unit line of a staged battle: template x count on a side, at a place (#3569)."""
+
+    staged_battle = models.ForeignKey(
+        BeatStagedBattle, on_delete=models.CASCADE, related_name="unit_lines"
+    )
+    template = models.ForeignKey(
+        "arxii.BattleUnitTemplate", on_delete=models.PROTECT, related_name="staged_on_beats"
+    )
+    side_role = models.CharField(
+        max_length=20, choices=BattleSideRole.choices, default=BattleSideRole.ATTACKER
+    )
+    place_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Blueprint place name to spawn at; blank spawns unplaced.",
+    )
+    count = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["staged_battle", "order", "pk"]
+
+    def __str__(self) -> str:
+        return f"{self.count} x {self.template} ({self.side_role})"
 
 
 class EpisodeProgressionRequirement(SharedMemoryModel):

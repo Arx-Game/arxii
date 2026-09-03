@@ -633,10 +633,16 @@ Looks up the `BattleOutcomeMapping` row for `battle.outcome`. Raises
 
 Called from `begin_battle_round` the first time a battle opens round 1.
 Collects every currently-`ACTIVE` `BattleParticipant`'s character sheet
-(no-ops if none), and for each staked `UNSATISFIED` beat linked to
+(no-ops if none). **Scoped to `battle.story_beat` when routed (#3569):** when
+`battle.story_beat` is set and is itself a staked, still-`UNSATISFIED` beat
+(and `risk != RenownRisk.NONE`), activation locks only that one beat - a
+battle explicitly pre-staged onto a beat via session prep (`RunBeatAction`'s
+`_run_battle_beat`, see stories.md's "Run Beat") must not also lock a sibling
+staked beat that merely happens to share the battle's scene. Otherwise it
+falls back to the pre-#3569 rule: every staked `UNSATISFIED` beat linked to
 `battle.scene` (via `staked_unsatisfied_beats_for_scene`,
-`world.stories.services.stakes`), boundary-screens it
-(`check_stake_boundaries`) and locks it with
+`world.stories.services.stakes`). Either way, each candidate beat is
+boundary-screened (`check_stake_boundaries`) and locked with
 `activate_stakes_contract(beat, sheets, scale_by_party_level=False)`.
 
 **`scale_by_party_level=False`**: a war's stakes reflect the objective being
@@ -1266,6 +1272,32 @@ ref being present. Mirrors `SceneTacticalMap`'s dispatch idiom exactly
 (`useDispatchPlayerAction`); a failed dispatch (`result.success === false`) shows
 error styling and leaves the form/state alone; a successful dispatch resets its form
 and invalidates the battle detail + for-scene queries so `BattleMapCanvas` refetches.
+
+### Beat-staged battles (#3569)
+
+A second, GM-authoring-time entry point onto this same staging layer: a story
+author pre-stages an ENCOUNTER beat's battle ahead of the table
+(`world.stories.models.BeatStagedBattle`/`BeatStagedBattleUnit` - blueprint,
+optional region/name, party side, unit lines by template/side/place; see
+stories.md's "Session prep"), and `RunBeatAction` (`run_beat`,
+`actions/definitions/gm_story.py::_run_battle_beat`) instantiates it into the
+GM's live scene in one press instead of the GM working through
+`create_battle`/`stage_battle_map`/`spawn_battle_units`/
+`enlist_battle_participant` by hand. It reuses this layer's own services
+directly rather than re-deriving them: `stage_battle` (blueprint clone +
+`location=scene.location`), `spawn_units_from_template` (per authored unit
+line, resolving `place_name` against the staged blueprint's places - an
+unknown name logs and spawns unplaced), and `world.battles.services
+.enlist_participant` (the running scene's present, non-GM participants, onto
+`staged.party_side_role`). What it adds on top: `battle.story_beat = beat`
+(so `activate_stakes_for_battle`/`resolve_battle_beats` scope to this one
+beat, see "Stakes / Beat Wiring" above), an `EpisodeScene` link from the
+battle's scene to the beat's episode, and an `is_gm` grant for the running
+account on the battle's scene (mirroring `CreateBattleAction`). Idempotent:
+re-running a beat whose battle already exists and hasn't concluded returns
+that same battle (`already_staged=True`) rather than staging a second one.
+See stories.md's "Run Beat" section for the full field-by-field contract and
+the web `GMAdjudicationPanel` Run Beat tab's "Start siege" affordance.
 
 ## Web surface (#2009)
 

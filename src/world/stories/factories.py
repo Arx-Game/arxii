@@ -2,6 +2,8 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
+from world.battles.constants import BattleSideRole
+from world.battles.factories import BattleMapBlueprintFactory, BattleUnitTemplateFactory
 from world.boundaries.factories import TreasuredSubjectFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CreatureTemplateFactory
@@ -11,6 +13,7 @@ from world.societies.constants import RenownRisk
 from world.stories.constants import (
     DEFAULT_RISK_CALIBRATIONS,
     AssistantClaimStatus,
+    BeatKind,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
@@ -33,6 +36,8 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     BeatOpponentLine,
+    BeatStagedBattle,
+    BeatStagedBattleUnit,
     BeatStagedTemplate,
     Chapter,
     CustodyClearance,
@@ -431,6 +436,32 @@ class BeatStagedTemplateFactory(factory_django.DjangoModelFactory):
     beat = factory.SubFactory(BeatFactory)
     situation_template = factory.SubFactory(SituationTemplateFactory)
     challenge_template = None
+    order = 0
+
+
+class BeatStagedBattleFactory(factory_django.DjangoModelFactory):
+    """Factory for creating BeatStagedBattle session-prep rows (#3569)."""
+
+    class Meta:
+        model = BeatStagedBattle
+
+    beat = factory.SubFactory(BeatFactory, kind=BeatKind.ENCOUNTER)
+    blueprint = factory.SubFactory(BattleMapBlueprintFactory)
+    name = ""
+    party_side_role = BattleSideRole.DEFENDER
+
+
+class BeatStagedBattleUnitFactory(factory_django.DjangoModelFactory):
+    """Factory for creating BeatStagedBattleUnit session-prep rows (#3569)."""
+
+    class Meta:
+        model = BeatStagedBattleUnit
+
+    staged_battle = factory.SubFactory(BeatStagedBattleFactory)
+    template = factory.SubFactory(BattleUnitTemplateFactory)
+    side_role = BattleSideRole.ATTACKER
+    place_name = ""
+    count = 1
     order = 0
 
 

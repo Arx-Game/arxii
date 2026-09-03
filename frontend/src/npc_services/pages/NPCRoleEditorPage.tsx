@@ -34,10 +34,10 @@ import {
 } from '@/missions/components/PredicateBuilder';
 import { useMissionTemplates, usePredicateLeaves } from '@/missions/queries';
 import { useBuildingKindsQuery } from '@/buildings/queries';
-import { useQuery } from '@tanstack/react-query';
 
-import { ApiValidationError, flattenErrorMessage, listAreasFlat } from '../api';
+import { ApiValidationError, flattenErrorMessage } from '../api';
 import {
+  useAreasFlatQuery,
   useClueDetailsForRole,
   useCreateClueDetails,
   useCreateMissionDetails,
@@ -490,7 +490,7 @@ function PermitDetailsPanel({
   details: PermitOfferDetails | null;
 }) {
   const buildingKinds = useBuildingKindsQuery();
-  const areas = useQuery({ queryKey: ['areas', 'flat'], queryFn: listAreasFlat });
+  const areas = useAreasFlatQuery();
   const createDetails = useCreatePermitDetails(roleId);
   const patchDetails = usePatchPermitDetails(roleId);
 

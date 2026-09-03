@@ -53,6 +53,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
@@ -1287,6 +1288,7 @@ function RunBeatTab({ characterId }: { characterId: number }) {
   const [loading, setLoading] = useState(false);
   const [runningId, setRunningId] = useState<number | null>(null);
   const dispatch = useDispatchPlayerAction(characterId);
+  const navigate = useNavigate();
 
   function loadBeats() {
     setLoading(true);
@@ -1320,7 +1322,12 @@ function RunBeatTab({ characterId }: { characterId: number }) {
         ref: { backend: 'registry', registry_key: 'run_beat' },
         kwargs: { beat_id: beatId },
       })
-      .then((result) => reportResult(result, 'Beat is now running in this scene.'))
+      .then((result) => {
+        reportResult(result, 'Beat is now running in this scene.');
+        if (!isDispatchFailure(result) && typeof result.data?.battle_scene_id === 'number') {
+          navigate(`/scenes/${result.data.battle_scene_id}/battle`);
+        }
+      })
       .catch(() => toast.error('Could not run that beat.'))
       .finally(() => setRunningId(null));
   }
@@ -1343,28 +1350,44 @@ function RunBeatTab({ characterId }: { characterId: number }) {
         {beats.length === 0 && (
           <p className="text-xs text-muted-foreground">No runnable beats at your tables.</p>
         )}
-        {beats.map((beat) => (
-          <div
-            key={beat.id}
-            className="flex items-center justify-between gap-2 rounded-md border p-2"
-            data-testid={`gm-runbeat-row-${beat.id}`}
-          >
-            <span className="text-sm">
-              {beat.story_title} / {beat.episode_title} ({beat.kind}, risk={beat.risk})
-              {beat.kind === 'encounter'
-                ? ` — ${beat.opponent_line_count} opponent line(s)`
-                : ` — ${beat.staged_template_count} staged template(s)`}
-            </span>
-            <Button
-              size="sm"
-              disabled={dispatch.isPending}
-              onClick={() => runBeat(beat.id)}
-              data-testid={`gm-runbeat-run-${beat.id}`}
+        {beats.map((beat) => {
+          let descriptor: string;
+          if (beat.staged_battle_name) {
+            descriptor = ` - battle: ${beat.staged_battle_name}`;
+          } else if (beat.kind === 'encounter') {
+            descriptor = ` - ${beat.opponent_line_count} opponent line(s)`;
+          } else {
+            descriptor = ` - ${beat.staged_template_count} staged template(s)`;
+          }
+          let runLabel: string;
+          if (runningId === beat.id) {
+            runLabel = 'Running…';
+          } else if (beat.staged_battle_name) {
+            runLabel = 'Start siege';
+          } else {
+            runLabel = 'Run';
+          }
+          return (
+            <div
+              key={beat.id}
+              className="flex items-center justify-between gap-2 rounded-md border p-2"
+              data-testid={`gm-runbeat-row-${beat.id}`}
             >
-              {runningId === beat.id ? 'Running…' : 'Run'}
-            </Button>
-          </div>
-        ))}
+              <span className="text-sm">
+                {beat.story_title} / {beat.episode_title} ({beat.kind}, risk={beat.risk})
+                {descriptor}
+              </span>
+              <Button
+                size="sm"
+                disabled={dispatch.isPending}
+                onClick={() => runBeat(beat.id)}
+                data-testid={`gm-runbeat-run-${beat.id}`}
+              >
+                {runLabel}
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

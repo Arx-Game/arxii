@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0212_alter_stakeresolution_machine_match_lifecycle_state"),
-    ]
+    dependencies = [("arxii", "0213_beatstagedbattle_beatstagedbattleunit")]
 
     operations = [
         migrations.AddField(

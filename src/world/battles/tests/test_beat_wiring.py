@@ -209,6 +209,66 @@ class ActivateStakesForBattleTests(EvenniaTestCase):
         self.assertEqual(activation.declared_risk, RenownRisk.HIGH)
         self.assertEqual(activation.effective_risk, RenownRisk.HIGH)  # not downgraded to LOW
 
+    def test_story_beat_scopes_activation_to_that_beat_only(self) -> None:
+        """A battle routed to a beat (story_beat, #3569) activates only that
+        beat, not a sibling staked beat that merely shares the scene."""
+        from world.battles.beat_wiring import activate_stakes_for_battle
+        from world.stories.models import StakeContractActivation
+
+        story = StoryFactory(scope=StoryScope.CHARACTER)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        staked_beat = self._ready_beat(episode)
+
+        battle = BattleFactory(story_beat=staked_beat)
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.ATTACKER)
+        for sheet in self._sheets_at_levels(4, 4):
+            BattleParticipantFactory(
+                battle=battle,
+                side=side,
+                character_sheet=sheet,
+                status=BattleParticipantStatus.ACTIVE,
+            )
+        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+
+        sibling = BeatFactory(episode=episode, risk=RenownRisk.HIGH)
+        StakeFactory(beat=sibling)
+
+        activate_stakes_for_battle(battle)
+
+        self.assertTrue(StakeContractActivation.objects.filter(beat=staked_beat).exists())
+        self.assertFalse(StakeContractActivation.objects.filter(beat=sibling).exists())
+
+    def test_without_story_beat_the_scene_wide_rule_still_applies(self) -> None:
+        """No story_beat routes back to the pre-#3569 scene-wide rule: every
+        staked, unsatisfied beat linked via EpisodeScene activates."""
+        from world.battles.beat_wiring import activate_stakes_for_battle
+        from world.stories.models import StakeContractActivation
+
+        story = StoryFactory(scope=StoryScope.CHARACTER)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        staked_beat = self._ready_beat(episode)
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.ATTACKER)
+        for sheet in self._sheets_at_levels(4, 4):
+            BattleParticipantFactory(
+                battle=battle,
+                side=side,
+                character_sheet=sheet,
+                status=BattleParticipantStatus.ACTIVE,
+            )
+        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+
+        sibling = BeatFactory(episode=episode, risk=RenownRisk.HIGH)
+        StakeFactory(beat=sibling)
+
+        activate_stakes_for_battle(battle)
+
+        self.assertTrue(StakeContractActivation.objects.filter(beat=staked_beat).exists())
+        self.assertTrue(StakeContractActivation.objects.filter(beat=sibling).exists())
+
 
 class BeginBattleRoundActivatesStakesTests(TestCase):
     """begin_battle_round calls activate_stakes_for_battle exactly once, at round 1."""

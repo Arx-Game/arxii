@@ -90,6 +90,7 @@ def _serialize_beat_summary(beat: Any) -> dict[str, Any]:
         "internal_description": None,
         "opponent_lines": None,
         "staged_templates": None,
+        "staged_battle": None,
     }
 
 
@@ -169,6 +170,7 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
     story-privileged content (internal_description, opponent/staged lines,
     protected subjects) and staff-only clue placements.
     """
+    from world.stories.models import BeatStagedBattle  # noqa: PLC0415
     from world.stories.serializers import (  # noqa: PLC0415
         BeatOpponentLineSerializer,
         BeatStagedTemplateSerializer,
@@ -192,6 +194,14 @@ def build_gm_story_rail_payload(scene: Scene, user: AccountDB) -> dict[str, Any]
             beat_payload["staged_templates"] = BeatStagedTemplateSerializer(
                 beat.staged_templates.all(), many=True
             ).data
+            staged = BeatStagedBattle.objects.filter(beat=beat).select_related("blueprint").first()
+            if staged is not None:
+                beat_payload["staged_battle"] = {
+                    "blueprint_name": staged.blueprint.name,
+                    "name": staged.name,
+                    "party_side_role": staged.party_side_role,
+                    "unit_line_count": staged.unit_lines.count(),
+                }
             protected_subjects = StoryProtectedSubjectSerializer(
                 story.protected_subjects.filter(is_active=True), many=True
             ).data
