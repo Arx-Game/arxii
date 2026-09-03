@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-02
 **Status:** Accepted
-**Context:** Sentry ARX2-7 and ARX2-8 (production, 2026-09-02). ARX2-7 is explained and fixed here; ARX2-8's production trigger is still open (see Why).
+**Context:** Sentry ARX2-7 and ARX2-8 (production, 2026-09-02, the first outside player).
 
 ## Decision
 
@@ -36,16 +36,15 @@ no `puppet`, no `get_available_characters`, no `cached_primary_persona_ids`, and
 end to end (it failed before the adapter change). Tests never saw it before because
 factories build accounts through `create.create_account`.
 
-**What ARX2-8 in production actually was is not that.** The three production
-accounts all carry the Account typeclass, and the journal event (ARX2-7, 18:06 UTC)
-shows the same account with a working `puppet` earlier in the same release. From
-21:47 UTC the events endpoints saw that account as a bare `AccountDB` for two hours.
-Evennia's `set_class_from_typeclass` falls back to the bare model, after logging a
-traceback, when both the configured typeclass and `DefaultAccount` fail to import at
-the moment the row is first loaded in a process; the identity map then keeps that
-bare instance for the life of the process. The server log around 21:47 UTC is the
-evidence for or against that; it is not in Sentry (only `web.api.exceptions` reports
-there). Until it is read, the production trigger is open.
+That is exactly what ARX2-8 was. The first outside player's account (account 3,
+created through web signup) carries `db_typeclass_path =
+evennia.accounts.models.AccountDB`, and the server log at the first 500 (21:47:17
+UTC) shows no Evennia traceback before it, only the view reading
+`cached_primary_persona_ids` off the bare model through Django's lazy user proxy.
+Accounts created through Evennia's own `create_account` (the developer accounts) were
+never affected, which is why the site worked for staff and broke for the first
+player. Repair is a row edit plus a server reload, since the identity map already
+holds the bare instance.
 
 The first fix attempt moved the persona query off the typeclass into a per-request
 memo on the viewset so a bare `request.user` would not crash. That was papering over

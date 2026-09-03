@@ -97,10 +97,10 @@ fallback, closed by default.
 `settings.BASE_ACCOUNT_TYPECLASS`, never allauth's default `get_user_model()()`.
 Evennia pins `db_typeclass_path` to the class an instance was built as, so a bare
 `AccountDB` stays bare on every later load and lacks the whole `Account` typeclass
-(`puppet`, `get_available_characters`, the persona cache). The signup journey test
-proves the row shape end to end; it was found while chasing Sentry ARX2-8
-(2026-09-02), whose production trigger turned out to be something else (see
-ADR-0260). Rows from before the fix, and
+(`puppet`, `get_available_characters`, the persona cache). That was Sentry ARX2-8
+(2026-09-02): the first outside player's account, made by signup, 500'd on every
+events list. The signup journey test proves the row shape end to end. Rows from
+before the fix, and
 any Django `createsuperuser` makes, are repointed by hand; the ops dashboard's
 required-content panel names them (`typeclassed-accounts`). No data migration: a
 handful of pre-launch rows is a shell one-liner, not schema history. See ADR-0260.

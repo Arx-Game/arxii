@@ -87,9 +87,10 @@ class ArxAccountAdapter(DefaultAccountAdapter):
         ``db_typeclass_path`` to whatever class an instance was built as, so a
         bare instance stays the bare model on every later load and never
         gains the ``Account`` typeclass (no ``puppet``, no
-        ``get_available_characters``, no persona cache). Proven by the
-        signup journey test, found while chasing Sentry ARX2-8 (2026-09-02).
-        Any bare row that exists is repointed by hand (the ops panel's
+        ``get_available_characters``, no persona cache). That was Sentry
+        ARX2-8 (2026-09-02): the first outside player's account, made by
+        signup, 500'd on every events list. Proven end to end by the signup
+        journey test. Existing bare rows are repointed by hand (the ops panel's
         ``typeclassed-accounts`` probe names them; no data migration for a
         handful of pre-launch rows, ADR-0260).
         """
