@@ -141,9 +141,9 @@ def clue_target_kind_allowed(account: object, target_kind: str) -> bool:
     above, and SECRET targets stay staff-only. Both AuthorClueAction and the
     stake reward-line validation call this.
     """
-    # GETATTR_LITERAL noqa: account is duck-typed (AccountDB or any object with
-    # is_staff), mirroring core_management.permissions.is_staff_observer.
-    if getattr(account, "is_staff", False):  # noqa: GETATTR_LITERAL
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+    if is_staff_observer(account):
         return True
     from world.gm.constants import GMLevel, gm_level_index  # noqa: PLC0415
     from world.gm.models import GMProfile  # noqa: PLC0415
