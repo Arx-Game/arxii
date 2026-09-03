@@ -13,6 +13,10 @@ secrets_group: arxii
 secrets_map:
   ARXII_PG_PASSWORD: POSTGRES_PASSWORD
   ARXII_DJANGO_SECRET_KEY: SECRET_KEY
+  # Fernet key(s) for 2FA secrets at rest (#3591, ADR-0265). Comma-separated,
+  # first key current. Losing it locks every 2FA user out; back it up with the
+  # Django key. settings.py reads MFA_SECRETS_KEY via env(), required.
+  ARXII_MFA_SECRETS_KEY: MFA_SECRETS_KEY
   # Three discrete vars, NOT a single CLOUDINARY_URL: settings.py calls
   # cloudinary.config(cloud_name=env("CLOUDINARY_CLOUD_NAME", default=""),
   # api_key=env(...), api_secret=env(...)) — each with an explicit

@@ -171,6 +171,12 @@
       ansible.builtin.command: /tmp/aws/install --update
       changed_when: true
 
+- name: Keep the host clock disciplined (TOTP codes fail site-wide past 30s of drift, #3591)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    enabled: true
+    state: started
+
 - name: Create the game cgroup slice (MemoryMax isolates a leak from the box)
   ansible.builtin.copy:
     dest: /etc/systemd/system/arxii.slice

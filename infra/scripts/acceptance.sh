@@ -425,6 +425,8 @@ chk   "settings.py guards the prod secret_settings overlay import" \
   "grep -q 'import server.conf.secret_settings' src/server/conf/settings.py && grep -B1 'import server.conf.secret_settings' src/server/conf/settings.py | grep -q 'contextlib.suppress(ImportError)'"
 chk   "secrets_vault's EnvironmentFile renders SECRET_KEY and DATABASE_URL (settings.py's actual env-read contract)" \
   "grep -q 'ARXII_DJANGO_SECRET_KEY: SECRET_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^DATABASE_URL=' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
+chk   "secrets_vault renders MFA_SECRETS_KEY (settings.py's required 2FA key, #3591)" \
+  "grep -q 'ARXII_MFA_SECRETS_KEY: MFA_SECRETS_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q 'ARXII_MFA_SECRETS_KEY' infra/scripts/standup.sh"
 
 echo "== #2236 Phase 3 P1 (dress rehearsal) =="
 # (a) rehearse.sh must NEVER touch the prod terraform root — grep its own

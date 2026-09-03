@@ -93,6 +93,7 @@ command -v aws     >/dev/null 2>&1 || fail "aws CLI not found (required to verif
 pg_password="$(openssl rand -hex 24)"
 django_secret_key="$(openssl rand -hex 24)"
 superuser_password="$(openssl rand -hex 24)"
+mfa_secrets_key="$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
 
 export ANSIBLE_HOST_KEY_CHECKING="${ANSIBLE_HOST_KEY_CHECKING:-False}"
 
@@ -350,6 +351,7 @@ log "converging the FULL site.yml on the stage box (idempotent role list," \
   "unmodified except for the rehearsal_mode group_vars above)…"
 ARXII_PG_PASSWORD="${pg_password}" \
 ARXII_DJANGO_SECRET_KEY="${django_secret_key}" \
+ARXII_MFA_SECRETS_KEY="${mfa_secrets_key}" \
 ARXII_DJANGO_SUPERUSER_PASSWORD="${superuser_password}" \
 ARXII_DJANGO_SUPERUSER_USERNAME="${ARXII_DJANGO_SUPERUSER_USERNAME:-arxii_admin}" \
 ARXII_DJANGO_SUPERUSER_EMAIL="${ARXII_DJANGO_SUPERUSER_EMAIL:-admin@rehearsal.invalid}" \

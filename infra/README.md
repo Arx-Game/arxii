@@ -129,6 +129,8 @@ NEVER reach the box; standing credentials — see "Credential hygiene"):**
 as `ARXII_*` on that step ONLY; rendered to the 0600 on-box EnvironmentFile;
 long-lived, rotate on suspicion):**
 - `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
+  `ARXII_MFA_SECRETS_KEY` (Fernet key for 2FA secrets; generate with the
+  python one-liner in `src/.env.example`),
   `ARXII_CLOUDINARY_CLOUD_NAME`, `ARXII_CLOUDINARY_API_KEY`,
   `ARXII_CLOUDINARY_API_SECRET` (three discrete secrets — settings.py's
   `cloudinary.config()` reads each individually via `env()`, so a single
