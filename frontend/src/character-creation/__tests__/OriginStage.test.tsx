@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { OriginStage } from '../components/OriginStage';
+import { useStartingAreas } from '../queries';
 import {
   mockCGExplanations,
   mockDraftWithArea,
@@ -17,7 +18,11 @@ import {
 const mutate = vi.fn();
 vi.mock('../queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../queries')>();
-  return { ...actual, useUpdateDraft: () => ({ mutate, isPending: false }) };
+  return {
+    ...actual,
+    useUpdateDraft: () => ({ mutate, isPending: false }),
+    useStartingAreas: vi.fn(actual.useStartingAreas),
+  };
 });
 
 beforeAll(() => {
@@ -101,5 +106,27 @@ describe('OriginStage', () => {
     const item = (await screen.findByText(closed.name)).closest('li')!;
     expect(item).toHaveClass('closed');
     expect(within(item).queryByRole('button', { name: /begin in/i })).toBeNull();
+  });
+
+  it('shows the busy line while the record opens', () => {
+    vi.mocked(useStartingAreas).mockReturnValueOnce({
+      data: undefined,
+      isLoading: true,
+      error: null,
+    } as unknown as ReturnType<typeof useStartingAreas>);
+    renderOrigin();
+    expect(screen.getByText('Opening the record.')).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('shows the read-failure line when the starting realms cannot be read', () => {
+    vi.mocked(useStartingAreas).mockReturnValueOnce({
+      data: undefined,
+      isLoading: false,
+      error: new Error('boom'),
+    } as unknown as ReturnType<typeof useStartingAreas>);
+    renderOrigin();
+    expect(
+      screen.getByText('The starting realms could not be read. Try again.')
+    ).toBeInTheDocument();
   });
 });

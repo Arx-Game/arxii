@@ -119,6 +119,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
               <Entry
                 key={area.id}
                 name={area.name}
+                // PLACEHOLDER: Apostate rewrite
                 tag={closed ? `${realmName} · closed to you` : realmName}
                 chosen={isChosen}
                 closed={closed}
