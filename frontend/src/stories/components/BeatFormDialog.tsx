@@ -1344,7 +1344,7 @@ export function BeatFormDialog({
                   <BattlePrepEditor
                     value={battlePrep}
                     onChange={setBattlePrep}
-                    errors={fieldErrors.staged_battle as Record<string, unknown> | undefined}
+                    errors={fieldErrors.staged_battle}
                   />
                 )}
               </div>

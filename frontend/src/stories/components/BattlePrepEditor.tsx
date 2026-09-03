@@ -54,7 +54,7 @@ export interface BattlePrepDraft {
 export interface BattlePrepEditorProps {
   value: BattlePrepDraft;
   onChange: (v: BattlePrepDraft) => void;
-  errors: Record<string, unknown> | undefined;
+  errors: Record<string, unknown> | string[] | undefined;
 }
 
 export function battlePrepDraftFromBeat(beat: Beat | undefined): BattlePrepDraft {
@@ -122,14 +122,14 @@ export function battlePrepDraftToPayload(draft: BattlePrepDraft): BeatStagedBatt
  * string list for a whole-field error (e.g. the ENCOUNTER-only/XOR
  * invariant). Extract each shape defensively; never throw on the other one.
  */
-function topLevelErrors(errors: Record<string, unknown> | undefined): string[] {
+function topLevelErrors(errors: Record<string, unknown> | string[] | undefined): string[] {
   if (!errors) return [];
   if (Array.isArray(errors)) return errors.filter((e): e is string => typeof e === 'string');
   return [];
 }
 
 function unitLineRowErrors(
-  errors: Record<string, unknown> | undefined
+  errors: Record<string, unknown> | string[] | undefined
 ): Record<string, string[]>[] | undefined {
   if (!errors || Array.isArray(errors)) return undefined;
   const raw = (errors as { unit_lines?: unknown }).unit_lines;
