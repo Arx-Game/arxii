@@ -4,6 +4,21 @@
 The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically - the lowest authored `(order, pk)` eligible edge, never a runtime GM pick (#3565, ADR-0258; the retired mode was called GM Choice). Episodes are nodes and Transitions are edges - a Story progresses by satisfying Beats to make Transitions eligible.
 _Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition), GM choice (routing is never a runtime pick, #3565).
 
+**Session prep**:
+What a GM authors on a Beat, ahead of the table, so `RunBeatAction` can
+instantiate it into the live scene in one press: an **opponent line**
+(`BeatOpponentLine` - creature template x count x position hint) or a
+**staged template** (`BeatStagedTemplate` - situation XOR challenge template)
+on a SITUATION beat, or, on an ENCOUNTER beat, either a freeform roster of
+opponent lines or a whole **staged battle** (`BeatStagedBattle` - a battle-map
+blueprint, region, party side, and `BeatStagedBattleUnit` lines by
+template/side/place) - never both on the same beat (server-enforced XOR,
+#3569). "Prep" names the row set; "session prep" names the workflow of
+authoring it before play.
+_Avoid_: encounter roster (ambiguous with the live `CombatEncounter`), battle
+prep (staged battle is the specific term), pre-stage without naming which of
+the three rows.
+
 **Routing report**:
 The authoring-time check on an episode's outbound transitions, before any
 session ever runs them (`services/routing.py::routing_report`/
