@@ -231,7 +231,8 @@ anti-reinvention pass).
 
 A signed-in player manages email, password, and two-factor authentication (2FA) at
 `/profile/account`. Every state change goes through `allauth.headless` endpoints
-already mounted at `/api/auth/` (`web/api/urls.py:73`); there are no home-grown
+already mounted at `/api/auth/` (`path("auth/", include("allauth.headless.urls"))`
+in `src/web/api/urls.py`); there are no home-grown
 credential views. See ADR-0264 (telnet's opt-in 2FA block) and ADR-0265 (secrets
 encrypted at rest).
 
@@ -366,8 +367,15 @@ for row in Authenticator.objects.all():
     for field in ("secret", "seed"):
         if field in row.data:
             row.data[field] = a.encrypt(a.decrypt(row.data[field]))
+    if "migrated_codes" in row.data:
+        row.data["migrated_codes"] = [a.encrypt(a.decrypt(c)) for c in row.data["migrated_codes"]]
     row.save(update_fields=["data"])
 ```
+
+`migrated_codes` is allauth's imported-recovery-codes path
+(`allauth/mfa/recovery_codes/internal/auth.py`); nothing in this app writes it
+today, but the loop covers it so a future write is never stranded unencrypted
+mid-rotation.
 
 Drop the old key from `ARXII_MFA_SECRETS_KEY` and deploy again. `MultiFernet`
 encrypts with the first (current) key and decrypts with any configured key,
@@ -399,7 +407,7 @@ Researched 2026-09-03 against allauth 65.14.1 and the prod infra in
 | 7 | Used-code replay protection lives in Django's in-process cache, correct only for a single server process. | Noted; not acted on, since Evennia runs as one process. Revisit if Django is ever split across processes. |
 | 8 | The pending TOTP secret between setup and confirmation lives in the session. | Sessions are database-backed, so a reload mid-enrolment is safe; a player who logs out mid-enrolment simply starts over. |
 | 9 | An account with no usable password and no 2FA gets no reauthentication challenge (allauth's own documented gap). | Accepted; such an account can still enrol 2FA, after which the 2FA reauth challenge applies. |
-| 10 | The migration is additive (three `allauth.mfa` tables plus one boolean with a default). | `migrate --noinput` on converge cannot lose or block anything; ADR-0237's data-disposition rule does not apply. |
+| 10 | The migration is additive (three `allauth.mfa` migrations creating one table, `Authenticator`, whose `type` column holds TOTP, recovery-codes, and WebAuthn rows alike, plus one first-party boolean with a default). | `migrate --noinput` on converge cannot lose or block anything; ADR-0237's data-disposition rule does not apply. |
 | 11 | Django's stock `AdminSite.login` never runs allauth's MFA stage, so a 2FA-enrolled staff account could sign into `/admin/login/` on its password alone. | `ArxAdminSite.login` wrapped with `secure_admin_login` (Admin, above). |
 | 12 | allauth's stock admin shows `Authenticator.data` (the secret, in the clear) to any staff member with admin access. | Read-only `AuthenticatorAdmin` with `data` excluded (Admin, above); with ADR-0265 the column is ciphertext regardless. |
 | 13 | `pull-prod` copies encrypted secrets into a dev database, which cannot decrypt them without the prod key. | Harmless: the sentinel probe reports the mismatch. Never copy the prod `ARXII_MFA_SECRETS_KEY` into a dev `.env`. |
