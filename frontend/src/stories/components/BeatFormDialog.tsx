@@ -41,6 +41,12 @@ import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { SituationFinder } from '@/gm-adjudication/SituationFinder';
 import { getMissionTemplate, listMissionTemplates } from '@/missions/api';
 import { OpponentLineDraft, OpponentLinesEditor } from './OpponentLinesEditor';
+import {
+  BattlePrepDraft,
+  BattlePrepEditor,
+  battlePrepDraftFromBeat,
+  battlePrepDraftToPayload,
+} from './BattlePrepEditor';
 import { ConsequencePoolPicker } from './ConsequencePoolPicker';
 import { StakesPanel } from './stakes/StakesPanel';
 import {
@@ -106,6 +112,10 @@ interface DRFFieldErrors {
   // submitted row (empty object = that row is valid).
   opponent_lines?: Record<string, string[]>[];
   staged_templates?: Record<string, string[]>[];
+  // #3569: either a nested {unit_lines: [...]} dict (row-level validation
+  // errors) or a bare string list (a whole-field error, e.g. the
+  // ENCOUNTER-only/XOR invariant) - BattlePrepEditor handles both shapes.
+  staged_battle?: Record<string, unknown> | string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1034,6 +1044,13 @@ export function BeatFormDialog({
   const [stagedTemplates, setStagedTemplates] = useState<StagedTemplateDraft[]>(
     stagedTemplateDraftsFromBeat(beat)
   );
+  // #3569: an ENCOUNTER beat prepares either opponent lines or a staged
+  // battle, never both - `prepMode` picks which editor the ENCOUNTER mount
+  // renders, seeded from whether this beat already has one.
+  const [prepMode, setPrepMode] = useState<'opponents' | 'battle'>(
+    beat?.staged_battle ? 'battle' : 'opponents'
+  );
+  const [battlePrep, setBattlePrep] = useState<BattlePrepDraft>(battlePrepDraftFromBeat(beat));
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
   // Never hide an already-authored value the current viewer's cap wouldn't
@@ -1088,6 +1105,8 @@ export function BeatFormDialog({
     setAgmEligible(beat?.agm_eligible ?? false);
     setOpponentLines(opponentLineDraftsFromBeat(beat));
     setStagedTemplates(stagedTemplateDraftsFromBeat(beat));
+    setPrepMode(beat?.staged_battle ? 'battle' : 'opponents');
+    setBattlePrep(battlePrepDraftFromBeat(beat));
     setFieldErrors({});
   }
 
@@ -1140,7 +1159,16 @@ export function BeatFormDialog({
     // BeatSerializer.update()).
     const sessionPrep: Partial<BeatCreateBody> = {};
     if (kind === 'encounter') {
-      sessionPrep.opponent_lines = opponentLineDraftsToPayload(opponentLines);
+      if (prepMode === 'battle') {
+        sessionPrep.staged_battle = battlePrepDraftToPayload(battlePrep);
+        sessionPrep.opponent_lines = [];
+      } else {
+        sessionPrep.opponent_lines = opponentLineDraftsToPayload(opponentLines);
+        // Switching back from a previously-staged battle deletes it server-side
+        // (see BeatSerializer._sync_staged_battle) - only send the delete
+        // sentinel when this beat actually had one, never on a plain new beat.
+        if (beat?.staged_battle) sessionPrep.staged_battle = null;
+      }
     } else if (kind === 'situation') {
       sessionPrep.staged_templates = stagedTemplateDraftsToPayload(stagedTemplates);
     }
@@ -1328,13 +1356,45 @@ export function BeatFormDialog({
               )}
             </div>
 
-            {/* Session prep (#3425) — kind-gated repeatable rows */}
+            {/* Session prep (#3425/#3569) - kind-gated repeatable rows */}
             {kind === 'encounter' && (
-              <OpponentLinesEditor
-                lines={opponentLines}
-                onChange={setOpponentLines}
-                rowErrors={fieldErrors.opponent_lines}
-              />
+              <div className="space-y-2">
+                <div className="flex gap-1" data-testid="beat-prep-mode">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={prepMode === 'opponents' ? 'default' : 'outline'}
+                    aria-pressed={prepMode === 'opponents'}
+                    onClick={() => setPrepMode('opponents')}
+                    data-testid="beat-prep-mode-opponents"
+                  >
+                    Opponents
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={prepMode === 'battle' ? 'default' : 'outline'}
+                    aria-pressed={prepMode === 'battle'}
+                    onClick={() => setPrepMode('battle')}
+                    data-testid="beat-prep-mode-battle"
+                  >
+                    Battle
+                  </Button>
+                </div>
+                {prepMode === 'opponents' ? (
+                  <OpponentLinesEditor
+                    lines={opponentLines}
+                    onChange={setOpponentLines}
+                    rowErrors={fieldErrors.opponent_lines}
+                  />
+                ) : (
+                  <BattlePrepEditor
+                    value={battlePrep}
+                    onChange={setBattlePrep}
+                    errors={fieldErrors.staged_battle}
+                  />
+                )}
+              </div>
             )}
             {kind === 'situation' && (
               <StagedTemplatesEditor

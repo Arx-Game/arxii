@@ -24568,6 +24568,7 @@ export interface components {
       } | null;
       opponent_lines?: components['schemas']['BeatOpponentLine'][];
       staged_templates?: components['schemas']['BeatStagedTemplate'][];
+      staged_battle?: components['schemas']['BeatStagedBattle'] | null;
     };
     /**
      * @description * `situation` - Situation
@@ -24737,11 +24738,90 @@ export interface components {
       required_mission?: number | null;
       opponent_lines?: components['schemas']['BeatOpponentLineRequest'][];
       staged_templates?: components['schemas']['BeatStagedTemplateRequest'][];
+      staged_battle?: components['schemas']['BeatStagedBattleRequest'] | null;
     };
     /** @description POST body for the #885 resolve endpoint. */
     BeatResolveRequestRequest: {
       option_id: number;
       approach_id?: number | null;
+    };
+    /**
+     * @description Nested battle prep on a beat (#3569); written through BeatSerializer only.
+     *
+     *     Not registered as a standalone router endpoint -- a staged battle only
+     *     exists attached to its beat, so it is read/written exclusively via
+     *     ``BeatSerializer.staged_battle``.
+     */
+    BeatStagedBattle: {
+      readonly id: number;
+      /** @description The map this beat's battle is cloned from at run time. */
+      blueprint: number;
+      readonly blueprint_name: string;
+      /** @description Battle name; blank uses the first line of the beat's internal description. */
+      name?: string;
+      /** @description Optional region the battle is set in (Battle.region). */
+      region?: number | null;
+      /**
+       * @description Which side the running scene's party is enlisted on.
+       *
+       *     * `attacker` - Attacker
+       *     * `defender` - Defender
+       */
+      party_side_role?: components['schemas']['PartySideRoleEnum'];
+      unit_lines?: components['schemas']['BeatStagedBattleUnit'][];
+    };
+    /**
+     * @description Nested battle prep on a beat (#3569); written through BeatSerializer only.
+     *
+     *     Not registered as a standalone router endpoint -- a staged battle only
+     *     exists attached to its beat, so it is read/written exclusively via
+     *     ``BeatSerializer.staged_battle``.
+     */
+    BeatStagedBattleRequest: {
+      /** @description The map this beat's battle is cloned from at run time. */
+      blueprint: number;
+      /** @description Battle name; blank uses the first line of the beat's internal description. */
+      name?: string;
+      /** @description Optional region the battle is set in (Battle.region). */
+      region?: number | null;
+      /**
+       * @description Which side the running scene's party is enlisted on.
+       *
+       *     * `attacker` - Attacker
+       *     * `defender` - Defender
+       */
+      party_side_role?: components['schemas']['PartySideRoleEnum'];
+      unit_lines?: components['schemas']['BeatStagedBattleUnitRequest'][];
+    };
+    /**
+     * @description One unit line of a staged battle (#3569).
+     *
+     *     ``id`` is writable-but-optional, the same diff-by-id convention as
+     *     ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+     */
+    BeatStagedBattleUnit: {
+      id?: number;
+      template: number;
+      side_role?: components['schemas']['SideRoleEnum'];
+      /** @description Blueprint place name to spawn at; blank spawns unplaced. */
+      place_name?: string;
+      count?: number;
+      order?: number;
+    };
+    /**
+     * @description One unit line of a staged battle (#3569).
+     *
+     *     ``id`` is writable-but-optional, the same diff-by-id convention as
+     *     ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+     */
+    BeatStagedBattleUnitRequest: {
+      id?: number;
+      template: number;
+      side_role?: components['schemas']['SideRoleEnum'];
+      /** @description Blueprint place name to spawn at; blank spawns unplaced. */
+      place_name?: string;
+      count?: number;
+      order?: number;
     };
     /**
      * @description One authored situation/challenge template on a SITUATION beat (#3425).
@@ -29706,6 +29786,7 @@ export interface components {
       internal_description: string | null;
       opponent_lines: components['schemas']['BeatOpponentLine'][] | null;
       staged_templates: components['schemas']['BeatStagedTemplate'][] | null;
+      staged_battle: components['schemas']['GMStoryRailStagedBattle'] | null;
     };
     /** @description One room clue placement - staff viewers only. */
     GMStoryRailClue: {
@@ -29718,6 +29799,13 @@ export interface components {
     GMStoryRailParticipant: {
       character_sheet_id: number;
       name: string;
+    };
+    /** @description The running beat's staged battle, story-standing viewers only (#3569). */
+    GMStoryRailStagedBattle: {
+      blueprint_name: string;
+      name: string;
+      party_side_role: components['schemas']['PartySideRoleEnum'];
+      unit_line_count: number;
     };
     /** @description One stake on the running beat's contract, story-standing viewers only. */
     GMStoryRailStake: {
@@ -37300,6 +37388,12 @@ export interface components {
      * @enum {string}
      */
     ParticipationRuleEnum: 'SINGLE_ACTOR' | 'FORMATION' | 'INDUCTION' | 'BILATERAL';
+    /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    PartySideRoleEnum: 'attacker' | 'defender';
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     PatchedAuthoredSecretRequest: {
       /** @description The character this secret is about — and its sole owner. */
@@ -37408,6 +37502,7 @@ export interface components {
       required_mission?: number | null;
       opponent_lines?: components['schemas']['BeatOpponentLineRequest'][];
       staged_templates?: components['schemas']['BeatStagedTemplateRequest'][];
+      staged_battle?: components['schemas']['BeatStagedBattleRequest'] | null;
     };
     PatchedBequestRequest: {
       will?: number;
@@ -42013,6 +42108,12 @@ export interface components {
       /** @description PLACEHOLDER baseline cargo capacity. */
       readonly base_cargo_capacity: number;
     };
+    /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    SideRoleEnum: 'attacker' | 'defender';
     /**
      * @description * `positive` - Positive
      *     * `negative` - Negative

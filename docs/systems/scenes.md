@@ -459,7 +459,10 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   no models/writes/migration):
   - `beat` - null when no `running_beat`; else id/kind/risk/outcome/predicate_type/
     pools-authored booleans for any qualifying viewer, plus `internal_description`/
-    `opponent_lines`/`staged_templates` (else null) gated on story standing
+    `opponent_lines`/`staged_templates`/`staged_battle` (else null) gated on story
+    standing - `staged_battle` (#3569) carries `blueprint_name`/`name`/
+    `party_side_role`/`unit_line_count`, null when the running ENCOUNTER beat
+    has no `BeatStagedBattle` or the viewer lacks story standing
   - `protected_subjects` - active `StoryProtectedSubject` rows for the running beat's
     story, same scoping `stories.permissions.user_owns_or_leads_story` enforces
     (never widened - see `IsProtectedSubjectStoryOwnerOrStaff`'s "no carve-out" invariant)

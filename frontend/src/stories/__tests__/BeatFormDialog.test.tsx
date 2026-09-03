@@ -17,6 +17,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { BeatFormDialog } from '../components/BeatFormDialog';
+import type { Beat } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -94,6 +95,61 @@ vi.mock('@/gm-adjudication/queries', () => ({
 // #3564 - the roster character the finder's "Suggest an entry" dispatches as.
 vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({
   useActiveCharacterId: vi.fn(() => 42),
+}));
+
+// #3569 - the battle prep editor's blueprint/unit template catalogs. Shaped
+// as the real generated PaginatedBattleMapBlueprintList/PaginatedBattleUnitTemplateList
+// (a `results` array, not a bare array) so BattlePrepEditor's `.data?.results`
+// read matches production.
+vi.mock('@/battles/queries', () => ({
+  useBattleMapBlueprintsQuery: vi.fn(() => ({
+    data: {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        {
+          id: 3,
+          name: 'Siege of the Gate',
+          description: '',
+          is_active: true,
+          places: [
+            { id: 1, name: 'Outer Gate', x: 0, y: 0, footprint_radius: 1, fortifications: [] },
+          ],
+        },
+      ],
+    },
+  })),
+  useBattleUnitTemplatesQuery: vi.fn(() => ({
+    data: {
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        {
+          id: 7,
+          name: 'Levy spears',
+          descriptor: '',
+          quality: 'trained',
+          strength: 100,
+          morale: 50,
+          individual_count: null,
+          is_active: true,
+          properties: [],
+          capability_values: [],
+        },
+      ],
+    },
+  })),
+}));
+
+// #3569 Fix round 1 - the region picker's flat area list. `listAreasFlat`
+// resolves directly to an `{id, name}[]` array (not paginated) - see
+// frontend/src/npc_services/api.ts.
+vi.mock('@/npc_services/queries', () => ({
+  useAreasFlatQuery: vi.fn(() => ({
+    data: [{ id: 4, name: 'The Marches' }],
+  })),
 }));
 
 // #3562 - the requesting account's own GM profile (risk cap).
@@ -1015,6 +1071,290 @@ describe('BeatFormDialog', () => {
         expect.any(Object)
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // #3569 - pre-stage a battle on an encounter beat: the Opponents/Battle
+  // toggle and BattlePrepEditor. A beat stages either opponent lines or a
+  // battle, never both (server-enforced XOR).
+  // -------------------------------------------------------------------------
+
+  function makeEncounterBeat(overrides: Partial<{ staged_battle: Beat['staged_battle'] }> = {}) {
+    return {
+      id: 201,
+      episode: 42,
+      predicate_type: 'outcome_tier' as const,
+      kind: 'encounter' as const,
+      advances: true,
+      risk: 'none' as const,
+      outcome: 'unsatisfied' as const,
+      visibility: 'hinted' as const,
+      internal_description: 'Hold the gate',
+      player_hint: '',
+      player_resolution_text: undefined,
+      order: 1,
+      agm_eligible: false,
+      deadline: null,
+      required_level: null,
+      required_achievement: null,
+      required_condition_template: null,
+      required_codex_entry: null,
+      referenced_story: null,
+      referenced_milestone_type: undefined,
+      referenced_chapter: null,
+      referenced_episode: null,
+      required_points: null,
+      episode_title: 'Test Episode',
+      chapter_title: 'Chapter 1',
+      story_id: 1,
+      story_title: 'Test Story',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      can_mark: false,
+      scenario: null,
+      opponent_lines: [],
+      staged_templates: [],
+      staged_battle: null,
+      ...overrides,
+    };
+  }
+
+  const STAGED_BATTLE_FIXTURE = {
+    id: 11,
+    blueprint: 3,
+    blueprint_name: 'Siege of the Gate',
+    name: 'Hold the gate',
+    region: null,
+    party_side_role: 'defender' as const,
+    unit_lines: [
+      {
+        id: 21,
+        template: 7,
+        side_role: 'attacker' as const,
+        place_name: 'Outer Gate',
+        count: 2,
+        order: 0,
+      },
+    ],
+  };
+
+  it('kind=encounter offers an Opponents/Battle toggle; Battle shows the battle prep editor', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    expect(screen.getByTestId('beat-opponent-lines')).toBeInTheDocument();
+    expect(screen.queryByTestId('beat-battle-prep')).not.toBeInTheDocument();
+
+    const opponentsBtn = screen.getByTestId('beat-prep-mode-opponents');
+    const battleBtn = screen.getByTestId('beat-prep-mode-battle');
+    expect(opponentsBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(battleBtn).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(battleBtn);
+    expect(screen.getByTestId('beat-battle-prep')).toBeInTheDocument();
+    expect(screen.queryByTestId('beat-opponent-lines')).not.toBeInTheDocument();
+    expect(battleBtn).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('submits an encounter beat with a staged battle and clears opponent lines', async () => {
+    // The Combobox popover's option list uses a `pointer-events: none` span
+    // under cmdk's default highlight styling until pointer/mouse move
+    // settles - bypass the userEvent pointer-events guard, same as
+    // AttachFacetDialog.test.tsx's Combobox interaction.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 110 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/internal description/i), 'Hold the wall');
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    await user.click(screen.getByTestId('beat-prep-mode-battle'));
+
+    await user.click(within(screen.getByTestId('beat-battle-blueprint')).getByRole('combobox'));
+    await user.click(await screen.findByText('Siege of the Gate'));
+
+    await user.click(within(screen.getByTestId('beat-battle-region')).getByRole('combobox'));
+    await user.click(await screen.findByText('The Marches'));
+
+    await user.type(screen.getByTestId('beat-battle-name'), 'Hold the gate');
+    await user.selectOptions(screen.getByTestId('beat-battle-party-side'), 'defender');
+
+    await user.click(screen.getByTestId('beat-battle-unit-add'));
+    await user.selectOptions(screen.getByTestId('beat-battle-unit-template-0'), '7');
+    await user.selectOptions(screen.getByTestId('beat-battle-unit-side-0'), 'attacker');
+    await user.selectOptions(screen.getByTestId('beat-battle-unit-place-0'), 'Outer Gate');
+    await user.clear(screen.getByTestId('beat-battle-unit-count-0'));
+    await user.type(screen.getByTestId('beat-battle-unit-count-0'), '2');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'encounter',
+          opponent_lines: [],
+          staged_battle: {
+            blueprint: 3,
+            name: 'Hold the gate',
+            region: 4,
+            party_side_role: 'defender',
+            unit_lines: [
+              { template: 7, side_role: 'attacker', place_name: 'Outer Gate', count: 2, order: 0 },
+            ],
+          },
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('editing a beat with a staged battle opens in Battle mode with its rows', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    const updateMock = makeMutationMock('useUpdateBeat');
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 201 });
+    });
+
+    const beat = makeEncounterBeat({ staged_battle: STAGED_BATTLE_FIXTURE });
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    expect(screen.getByTestId('beat-battle-prep')).toBeInTheDocument();
+    expect(screen.queryByTestId('beat-opponent-lines')).not.toBeInTheDocument();
+    expect(screen.getByTestId('beat-prep-mode-battle')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('beat-battle-unit-row-0')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('beat-battle-blueprint')).getByRole('combobox')
+    ).toHaveTextContent('Siege of the Gate');
+
+    await user.click(screen.getByRole('button', { name: /save beat/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 201,
+          data: expect.objectContaining({
+            opponent_lines: [],
+            staged_battle: {
+              id: 11,
+              blueprint: 3,
+              name: 'Hold the gate',
+              region: null,
+              party_side_role: 'defender',
+              unit_lines: [
+                {
+                  id: 21,
+                  template: 7,
+                  side_role: 'attacker',
+                  place_name: 'Outer Gate',
+                  count: 2,
+                  order: 0,
+                },
+              ],
+            },
+          }),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('editing a staged battle with a region and clearing it sends region: null', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    setupMocks();
+    const updateMock = makeMutationMock('useUpdateBeat');
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 201 });
+    });
+
+    const beat = makeEncounterBeat({
+      staged_battle: { ...STAGED_BATTLE_FIXTURE, region: 4 },
+    });
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    expect(
+      within(screen.getByTestId('beat-battle-region')).getByRole('combobox')
+    ).toHaveTextContent('The Marches');
+
+    // Clicking the already-selected region deselects it (allowDeselect).
+    // The trigger button already shows 'The Marches' as its label, so target
+    // the popover's option (cmdk's Command.Item renders role="option") to
+    // avoid ambiguity with the trigger's own text.
+    await user.click(within(screen.getByTestId('beat-battle-region')).getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'The Marches' }));
+
+    await user.click(screen.getByRole('button', { name: /save beat/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 201,
+          data: expect.objectContaining({
+            staged_battle: expect.objectContaining({ region: null }),
+          }),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('switching a staged-battle beat back to Opponents sends staged_battle null', async () => {
+    const user = userEvent.setup();
+    setupMocks();
+    const updateMock = makeMutationMock('useUpdateBeat');
+    updateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 201 });
+    });
+
+    const beat = makeEncounterBeat({ staged_battle: STAGED_BATTLE_FIXTURE });
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={beat} />);
+
+    await user.click(screen.getByTestId('beat-prep-mode-opponents'));
+    expect(screen.getByTestId('beat-opponent-lines')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save beat/i }));
+
+    await waitFor(() => {
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 201,
+          data: expect.objectContaining({
+            opponent_lines: [],
+            staged_battle: null,
+          }),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('the place select lists the chosen blueprint places', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+    await user.click(screen.getByTestId('beat-prep-mode-battle'));
+    await user.click(screen.getByTestId('beat-battle-unit-add'));
+
+    const placeSelect = screen.getByTestId('beat-battle-unit-place-0') as HTMLSelectElement;
+    expect(placeSelect).toBeDisabled();
+
+    await user.click(within(screen.getByTestId('beat-battle-blueprint')).getByRole('combobox'));
+    await user.click(await screen.findByText('Siege of the Gate'));
+
+    expect(placeSelect).toBeEnabled();
+    expect(within(placeSelect).getByRole('option', { name: 'Outer Gate' })).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

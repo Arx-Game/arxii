@@ -10,11 +10,21 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from world.battles.constants import BattleSideRole
 from world.stories.serializers import (
     BeatOpponentLineSerializer,
     BeatStagedTemplateSerializer,
     StoryProtectedSubjectSerializer,
 )
+
+
+class GMStoryRailStagedBattleSerializer(serializers.Serializer):
+    """The running beat's staged battle, story-standing viewers only (#3569)."""
+
+    blueprint_name = serializers.CharField()
+    name = serializers.CharField(allow_blank=True)
+    party_side_role = serializers.ChoiceField(choices=BattleSideRole.choices)
+    unit_line_count = serializers.IntegerField()
 
 
 class GMStoryRailBeatSerializer(serializers.Serializer):
@@ -31,6 +41,7 @@ class GMStoryRailBeatSerializer(serializers.Serializer):
     internal_description = serializers.CharField(allow_null=True)
     opponent_lines = BeatOpponentLineSerializer(many=True, allow_null=True)
     staged_templates = BeatStagedTemplateSerializer(many=True, allow_null=True)
+    staged_battle = GMStoryRailStagedBattleSerializer(allow_null=True)
 
 
 class GMStoryRailStakeOutcomeSerializer(serializers.Serializer):

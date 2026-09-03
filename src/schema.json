@@ -40384,6 +40384,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatStagedTemplate'
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/BeatStagedBattle'
+          nullable: true
       required:
       - can_mark
       - chapter_title
@@ -40715,6 +40719,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatStagedTemplateRequest'
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/BeatStagedBattleRequest'
+          nullable: true
       required:
       - episode
       - internal_description
@@ -40731,6 +40739,140 @@ components:
           nullable: true
       required:
       - option_id
+    BeatStagedBattle:
+      type: object
+      description: |-
+        Nested battle prep on a beat (#3569); written through BeatSerializer only.
+
+        Not registered as a standalone router endpoint -- a staged battle only
+        exists attached to its beat, so it is read/written exclusively via
+        ``BeatSerializer.staged_battle``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        blueprint:
+          type: integer
+          description: The map this beat's battle is cloned from at run time.
+        blueprint_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          description: Battle name; blank uses the first line of the beat's internal
+            description.
+          maxLength: 100
+        region:
+          type: integer
+          nullable: true
+          description: Optional region the battle is set in (Battle.region).
+        party_side_role:
+          allOf:
+          - $ref: '#/components/schemas/PartySideRoleEnum'
+          description: |-
+            Which side the running scene's party is enlisted on.
+
+            * `attacker` - Attacker
+            * `defender` - Defender
+        unit_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedBattleUnit'
+      required:
+      - blueprint
+      - blueprint_name
+      - id
+    BeatStagedBattleRequest:
+      type: object
+      description: |-
+        Nested battle prep on a beat (#3569); written through BeatSerializer only.
+
+        Not registered as a standalone router endpoint -- a staged battle only
+        exists attached to its beat, so it is read/written exclusively via
+        ``BeatSerializer.staged_battle``.
+      properties:
+        blueprint:
+          type: integer
+          description: The map this beat's battle is cloned from at run time.
+        name:
+          type: string
+          description: Battle name; blank uses the first line of the beat's internal
+            description.
+          maxLength: 100
+        region:
+          type: integer
+          nullable: true
+          description: Optional region the battle is set in (Battle.region).
+        party_side_role:
+          allOf:
+          - $ref: '#/components/schemas/PartySideRoleEnum'
+          description: |-
+            Which side the running scene's party is enlisted on.
+
+            * `attacker` - Attacker
+            * `defender` - Defender
+        unit_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedBattleUnitRequest'
+      required:
+      - blueprint
+    BeatStagedBattleUnit:
+      type: object
+      description: |-
+        One unit line of a staged battle (#3569).
+
+        ``id`` is writable-but-optional, the same diff-by-id convention as
+        ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        template:
+          type: integer
+        side_role:
+          $ref: '#/components/schemas/SideRoleEnum'
+        place_name:
+          type: string
+          description: Blueprint place name to spawn at; blank spawns unplaced.
+          maxLength: 100
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - template
+    BeatStagedBattleUnitRequest:
+      type: object
+      description: |-
+        One unit line of a staged battle (#3569).
+
+        ``id`` is writable-but-optional, the same diff-by-id convention as
+        ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        template:
+          type: integer
+        side_role:
+          $ref: '#/components/schemas/SideRoleEnum'
+        place_name:
+          type: string
+          description: Blueprint place name to spawn at; blank spawns unplaced.
+          maxLength: 100
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - template
     BeatStagedTemplate:
       type: object
       description: |-
@@ -51361,6 +51503,10 @@ components:
           items:
             $ref: '#/components/schemas/BeatStagedTemplate'
           nullable: true
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailStagedBattle'
+          nullable: true
       required:
       - expired_consequences_authored
       - failure_consequences_authored
@@ -51371,6 +51517,7 @@ components:
       - outcome
       - predicate_type
       - risk
+      - staged_battle
       - staged_templates
       - success_consequences_authored
     GMStoryRailClue:
@@ -51401,6 +51548,23 @@ components:
       required:
       - character_sheet_id
       - name
+    GMStoryRailStagedBattle:
+      type: object
+      description: The running beat's staged battle, story-standing viewers only (#3569).
+      properties:
+        blueprint_name:
+          type: string
+        name:
+          type: string
+        party_side_role:
+          $ref: '#/components/schemas/PartySideRoleEnum'
+        unit_line_count:
+          type: integer
+      required:
+      - blueprint_name
+      - name
+      - party_side_role
+      - unit_line_count
     GMStoryRailStake:
       type: object
       description: One stake on the running beat's contract, story-standing viewers
@@ -65038,6 +65202,14 @@ components:
         * `FORMATION` - Formation (all must accept, ≥2)
         * `INDUCTION` - Induction (majority of respondents)
         * `BILATERAL` - Bilateral (exactly 2, both must accept)
+    PartySideRoleEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
     PatchedAuthoredSecretRequest:
       type: object
       description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
@@ -65232,6 +65404,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatStagedTemplateRequest'
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/BeatStagedBattleRequest'
+          nullable: true
     PatchedBequestRequest:
       type: object
       properties:
@@ -74061,6 +74237,14 @@ components:
       - description
       - id
       - name
+    SideRoleEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
     SignEnum:
       enum:
       - positive

@@ -687,6 +687,7 @@
 ### BattleMapBlueprint
 **Pointed to by:**
   - places <- battles.BlueprintBattlePlace
+  - staged_on_beats <- stories.BeatStagedBattle
 
 ### BattleOutcomeMapping
 **Foreign Keys:**
@@ -752,6 +753,7 @@
   - capabilities -> conditions.CapabilityType [M2M]
 **Pointed to by:**
   - capability_values <- battles.BattleUnitTemplateCapability
+  - staged_on_beats <- stories.BeatStagedBattleUnit
 
 ### BattleUnitTemplateCapability
 **Foreign Keys:**
@@ -9397,6 +9399,7 @@
   - decisive_markers <- scenes.DecisiveCheckMarker
   - opponent_lines <- stories.BeatOpponentLine
   - staged_templates <- stories.BeatStagedTemplate
+  - staged_battle <- stories.BeatStagedBattle
   - gating_for_episodes <- stories.EpisodeProgressionRequirement
   - routing_for_transitions <- stories.TransitionRequiredOutcome
   - aggregate_contributions <- stories.AggregateBeatContribution
@@ -9423,6 +9426,19 @@
 **Foreign Keys:**
   - beat -> stories.Beat [FK]
   - creature_template -> combat.CreatureTemplate [FK]
+
+### BeatStagedBattle
+**Foreign Keys:**
+  - beat -> stories.Beat [OneToOne]
+  - blueprint -> battles.BattleMapBlueprint [FK]
+  - region -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - unit_lines <- stories.BeatStagedBattleUnit
+
+### BeatStagedBattleUnit
+**Foreign Keys:**
+  - staged_battle -> stories.BeatStagedBattle [FK]
+  - template -> battles.BattleUnitTemplate [FK]
 
 ### BeatStagedTemplate
 **Foreign Keys:**

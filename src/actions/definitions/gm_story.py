@@ -1,20 +1,25 @@
 """GM session-prep run actions (#3425, scenario runs #3565).
 
 A GM authors what a beat stages ahead of a session -- opponent lines
-(``BeatOpponentLine``) for an ENCOUNTER beat, situation/challenge templates
-(``BeatStagedTemplate``) for a SITUATION beat, or a mission scenario graph
-(``Beat.required_mission``) for a TASK beat (and optionally alongside a
-SITUATION beat's staged templates) -- and, at the table, presses "Run this
-beat" to instantiate all of it into the live scene at once: ``RunBeatAction``.
-A beat with ``required_mission`` set starts (or rejoins) that scenario for
-the whole scene's party via
+(``BeatOpponentLine``) or a staged battle (``BeatStagedBattle``, #3569) for
+an ENCOUNTER beat, situation/challenge templates (``BeatStagedTemplate``) for
+a SITUATION beat, or a mission scenario graph (``Beat.required_mission``) for
+a TASK beat (and optionally alongside a SITUATION beat's staged templates)
+-- and, at the table, presses "Run this beat" to instantiate all of it into
+the live scene at once: ``RunBeatAction``. An ENCOUNTER beat with a
+``BeatStagedBattle`` row stages a ``Battle`` from its blueprint instead of a
+``CombatEncounter`` (``_run_battle_beat`` vs ``_run_encounter_beat``) -- a
+beat carries either opponent lines or a staged battle, never both
+(``BeatStagedBattle.clean``). A beat with ``required_mission`` set starts
+(or rejoins) that scenario for the whole scene's party via
 ``world.missions.services.run.start_scenario_for_scene`` -- the beat's
 authored options play out as story choices on the mission graph rather than
 a bespoke option engine (#3565). ``GMListRunnableBeatsAction`` is the read
 side that feeds the web "Run Beat" tab (and telnet, if a future command
 wants it) a scoped list of runnable beats -- ENCOUNTER/SITUATION beats, plus
 any TASK beat that carries a scenario (``has_scenario``) -- on episodes the
-acting GM currently runs.
+acting GM currently runs; each row's ``staged_battle_name`` names the
+blueprint an ENCOUNTER beat will stage from, or None.
 
 Deliberately a new module (not ``gm_stories.py``, which holds the story/beat
 *lifecycle* actions -- complete/resolve/promote/mark/declare-stakes): this is
@@ -41,7 +46,7 @@ from commands.utils.gm_resolution import resolve_account_or_none
 from world.gm.constants import GMLevel
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind
-from world.stories.models import Beat
+from world.stories.models import Beat, BeatStagedBattle
 from world.stories.permissions import CanMarkBeat
 
 if TYPE_CHECKING:
@@ -199,7 +204,15 @@ class RunBeatAction(Action):
         scene.save(update_fields=["running_beat"])
 
         if beat.kind == BeatKind.ENCOUNTER:
-            data = self._run_encounter_beat(beat, scene, account)
+            staged = (
+                BeatStagedBattle.objects.filter(beat=beat)
+                .select_related("blueprint", "region")
+                .first()
+            )
+            if staged is not None:
+                data = self._run_battle_beat(beat, staged, scene, account)
+            else:
+                data = self._run_encounter_beat(beat, scene, account)
         else:
             if beat.kind == BeatKind.SITUATION:
                 data = self._run_situation_beat(actor, beat, scene)
@@ -242,6 +255,168 @@ class RunBeatAction(Action):
             "risk_level": encounter.risk_level,
             "opponents": outcomes,
         }
+
+    def _run_battle_beat(
+        self,
+        beat: Beat,
+        staged: BeatStagedBattle,
+        scene: Scene,
+        account: AccountDB | None,
+    ) -> dict[str, Any]:
+        """Stage the beat's battle from its blueprint, link it, spawn, enlist (#3569).
+
+        Idempotent: re-running a beat whose battle already exists and hasn't
+        concluded returns that same battle (``already_staged=True``) instead of
+        staging a second one. Otherwise stages a ``Battle`` from
+        ``staged.blueprint`` at the beat's mapped risk, routes it to this beat
+        (``Battle.story_beat``, so ``activate_stakes_for_battle`` and
+        ``resolve_battle_beats`` scope to it), sets ``battle.scene.running_beat``
+        so the battle's own scene (where the web navigates and where
+        ``stakes-summary`` reads from) shows this beat's declared-risk badge --
+        not just the GM's original scene, which ``execute()`` already stamps --
+        links the battle's Scene to the beat's episode (``EpisodeScene``), grants
+        the running GM ``is_gm`` on that Scene (mirroring ``CreateBattleAction``),
+        spawns every authored
+        unit line, and enlists every active non-GM participant of the running
+        scene on ``staged.party_side_role``.
+        """
+        from world.battles.models import Battle  # noqa: PLC0415
+        from world.battles.staging import stage_battle  # noqa: PLC0415
+        from world.scenes.models import SceneParticipation  # noqa: PLC0415
+        from world.stories.models import EpisodeScene  # noqa: PLC0415
+
+        existing = Battle.objects.filter(story_beat=beat).order_by("-pk").first()
+        if existing is not None and not existing.is_concluded:
+            return {
+                "battle_id": existing.pk,
+                "battle_scene_id": existing.scene_id,
+                "already_staged": True,
+            }
+
+        description = beat.internal_description.strip()
+        if staged.name:
+            name = staged.name
+        elif description:
+            name = description.splitlines()[0][:100]
+        else:
+            name = f"Beat #{beat.pk}"
+
+        with transaction.atomic():
+            battle = stage_battle(
+                name=name,
+                risk_level=_RISK_MAP.get(beat.risk, "low"),
+                blueprint=staged.blueprint,
+                campaign_story=beat.episode.chapter.story,
+                region=staged.region,
+                location=scene.location,
+            )
+            battle.story_beat = beat
+            battle.save(update_fields=["story_beat"])
+            battle.scene.running_beat = beat
+            battle.scene.save(update_fields=["running_beat"])
+            EpisodeScene.objects.get_or_create(
+                episode=beat.episode,
+                scene=battle.scene,
+                defaults={"order": EpisodeScene.objects.filter(scene=battle.scene).count()},
+            )
+            if account is not None:
+                SceneParticipation.objects.update_or_create(
+                    scene=battle.scene,
+                    account=account,
+                    defaults={"is_gm": True},
+                )
+
+        sides = {side.role: side for side in battle.sides.all()}
+        units = self._spawn_staged_battle_units(staged, battle, sides)
+        enlisted = self._enlist_scene_party(scene, battle, sides[staged.party_side_role])
+
+        return {
+            "battle_id": battle.pk,
+            "battle_scene_id": battle.scene_id,
+            "risk_level": battle.risk_level,
+            "units": units,
+            "enlisted": enlisted,
+            "already_staged": False,
+        }
+
+    def _spawn_staged_battle_units(
+        self,
+        staged: BeatStagedBattle,
+        battle: Any,
+        sides: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Spawn every authored unit line onto *battle*; log-and-continue per line."""
+        from world.battles.staging import spawn_units_from_template  # noqa: PLC0415
+
+        places = {place.name: place for place in battle.places.all()}
+        units: list[dict[str, Any]] = []
+        for line in staged.unit_lines.select_related("template").order_by("order", "pk"):
+            place = places.get(line.place_name) if line.place_name else None
+            if line.place_name and place is None:
+                logger.warning(
+                    "run_beat: staged unit line %s names unknown place %r; spawning unplaced",
+                    line.pk,
+                    line.place_name,
+                )
+            try:
+                with transaction.atomic():
+                    spawned = spawn_units_from_template(
+                        line.template,
+                        battle=battle,
+                        side=sides[line.side_role],
+                        place=place,
+                        count=line.count,
+                    )
+            except (KeyError, ValueError, ObjectDoesNotExist) as exc:
+                logger.exception("run_beat: staged unit line %s failed to spawn", line.pk)
+                units.append({"line_id": line.pk, "success": False, "message": str(exc)})
+                continue
+            units.append({"line_id": line.pk, "success": True, "unit_ids": [u.pk for u in spawned]})
+        return units
+
+    def _enlist_scene_party(self, scene: Scene, battle: Any, party_side: Any) -> list[int]:
+        """Enlist only the PRESENT sheets of active non-GM scene participants (#3569).
+
+        ``RosterEntry.objects.for_account(account)`` alone returns every
+        currently-tenured character of an account -- an account playing two
+        characters at once (a PC plus a companion/alt elsewhere) would get
+        the one NOT standing in this scene's room swept in too (fix round 1,
+        follow-up to 29219b1b0). Narrowed to characters physically present at
+        ``scene.location`` (``location.contents``) -- the same room-presence
+        check ``actions.definitions.gm_stories._present_participant_sheets``
+        already applies for stakes declaration, whose own docstring names
+        this exact trap: "an account's off-scene alts must not skew...".
+        ``scene.persona_handler.active_participant_personas()`` was
+        considered directly, but it does not itself narrow to the present
+        room (it walks every available character of every participating
+        account, same as ``for_account``) or exclude participants who left
+        the scene (``participations_cached`` carries every row, ``left_at``
+        included) -- the pre-existing ``is_gm=False, left_at__isnull=True``
+        participation filter stays the authority for GM/left exclusion; the
+        room-presence check is layered on top of it, not instead of it.
+        """
+        from world.battles.services import enlist_participant  # noqa: PLC0415
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        location = scene.location
+        present_ids = {obj.pk for obj in location.contents} if location is not None else set()
+        already_enlisted = set(battle.participants.values_list("character_sheet_id", flat=True))
+
+        enlisted: list[int] = []
+        participations = scene.participations.filter(
+            is_gm=False, left_at__isnull=True
+        ).select_related("account")
+        for participation in participations:
+            for entry in RosterEntry.objects.for_account(participation.account):
+                sheet = entry.character_sheet
+                if sheet.character_id not in present_ids:
+                    continue
+                if sheet.pk in already_enlisted:
+                    continue
+                enlist_participant(battle=battle, character_sheet=sheet, side=party_side)
+                already_enlisted.add(sheet.pk)
+                enlisted.append(sheet.pk)
+        return enlisted
 
     def _run_situation_beat(self, actor: ObjectDB, beat: Beat, scene: Scene) -> dict[str, Any]:
         """Instantiate every authored situation/challenge staged template."""
@@ -341,16 +516,32 @@ class GMListRunnableBeatsAction(Action):
         if not account.is_staff:
             stories = [s for s in stories if _actor_is_lead_gm(account, s)]
 
-        rows: list[dict[str, Any]] = []
+        beats_by_story: list[tuple[Any, Any, list[Beat]]] = []
+        all_beats: list[Beat] = []
         for story in stories:
             progress = get_active_progress_for_story(story)
             episode = progress.current_episode if progress is not None else None
             if episode is None:
                 continue
-            beats = episode.beats.filter(
-                Q(kind__in=(BeatKind.ENCOUNTER, BeatKind.SITUATION))
-                | Q(kind=BeatKind.TASK, required_mission__isnull=False)
+            beats = list(
+                episode.beats.filter(
+                    Q(kind__in=(BeatKind.ENCOUNTER, BeatKind.SITUATION))
+                    | Q(kind=BeatKind.TASK, required_mission__isnull=False)
+                )
             )
+            beats_by_story.append((story, episode, beats))
+            all_beats.extend(beats)
+
+        # One query for staged-battle names across every row (never per-row, #3569).
+        staged_battle_names = {
+            row.beat_id: row.blueprint.name
+            for row in BeatStagedBattle.objects.filter(
+                beat_id__in=[beat.pk for beat in all_beats]
+            ).select_related("blueprint")
+        }
+
+        rows: list[dict[str, Any]] = []
+        for story, episode, beats in beats_by_story:
             rows.extend(
                 {
                     "id": beat.pk,
@@ -361,6 +552,7 @@ class GMListRunnableBeatsAction(Action):
                     "opponent_line_count": beat.opponent_lines.count(),
                     "staged_template_count": beat.staged_templates.count(),
                     "has_scenario": beat.required_mission_id is not None,
+                    "staged_battle_name": staged_battle_names.get(beat.pk),
                 }
                 for beat in beats
             )

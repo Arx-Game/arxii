@@ -53,6 +53,11 @@ export type Episode = EpisodeDetail;
 export type BeatOpponentLine = components['schemas']['BeatOpponentLine'];
 export type BeatStagedTemplate = components['schemas']['BeatStagedTemplate'];
 
+// #3569: session prep for an ENCOUNTER beat that is a battle, staged ahead
+// of RunBeatAction so the GM can prep the map/roster before running the beat.
+export type BeatStagedBattle = components['schemas']['BeatStagedBattle'];
+export type BeatStagedBattleUnit = components['schemas']['BeatStagedBattleUnit'];
+
 // #3562: the beat-authoring GM readiness dashboard
 // (`GET /api/beats/{id}/readiness/`) and the stakes-contract lock it
 // surfaces (`GET /api/stake-activations/?beat=&resolved_at_isnull=true`).
@@ -431,6 +436,24 @@ export interface EpisodeCreateBody {
 // from accidentally including server-derived data.
 // ---------------------------------------------------------------------------
 
+// #3569: write shape for a beat's staged battle (id-less unit_lines create,
+// id-carrying unit_lines edit in place - mirrors opponent_lines/staged_templates).
+export interface BeatStagedBattleBody {
+  id?: number;
+  blueprint: number;
+  name?: string;
+  region?: number | null;
+  party_side_role?: 'attacker' | 'defender';
+  unit_lines?: Array<{
+    id?: number;
+    template: number;
+    side_role?: 'attacker' | 'defender';
+    place_name?: string;
+    count?: number;
+    order?: number;
+  }>;
+}
+
 export interface BeatCreateBody {
   episode: number;
   predicate_type?: BeatPredicateType;
@@ -473,6 +496,10 @@ export interface BeatCreateBody {
   // PATCH; an explicit [] clears every existing row (see BeatSerializer.update()).
   opponent_lines?: BeatOpponentLine[];
   staged_templates?: BeatStagedTemplate[];
+
+  // #3569: session prep for an ENCOUNTER beat that is a battle. omit to
+  // leave untouched; null deletes.
+  staged_battle?: BeatStagedBattleBody | null;
 }
 
 export type BeatUpdateBody = Partial<BeatCreateBody>;

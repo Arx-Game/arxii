@@ -20,6 +20,19 @@ matching `privacy` select. See the `Beat` model table and "StoryScenario"
 below, and [stakes.md](stakes.md)'s "Readiness (GM-facing, #3562)" section,
 for the field-by-field detail.
 
+**Battle prep toggle (#3569).** For an ENCOUNTER beat, `BeatFormDialog` mounts
+an Opponents/Battle toggle (`prepMode`) above the session-prep rows: Opponents
+mounts the pre-existing freeform `OpponentLinesEditor`; Battle mounts
+`BattlePrepEditor` (blueprint + region + name + party side + unit lines,
+`frontend/src/stories/components/BattlePrepEditor.tsx`). The two are mutually
+exclusive on submit, mirroring the server XOR: Battle mode sends
+`staged_battle` populated and `opponent_lines: []`; Opponents mode sends
+`opponent_lines` populated and, only when the beat already had a staged
+battle, an explicit `staged_battle: null` to delete it. `prepMode` seeds from
+whichever the beat already carries (`beat?.staged_battle ? 'battle' :
+'opponents'`) so re-opening the form on an existing beat lands on the right
+tab.
+
 **Stakes editor on the beat (#3561).** A stakes-contract engine has existed
 since #1770 with no web surface at all - only the Django admin could author a
 `Stake`. `StakesPanel` now mounts under the beat in two places: expanded
@@ -388,11 +401,16 @@ credited participants are the GM table's current members (`GMTableMembership` ro
 - GROUP / GLOBAL scope: predicates that require a CharacterSheet (ACHIEVEMENT_HELD, CONDITION_HELD, CODEX_ENTRY_UNLOCKED, CHARACTER_LEVEL_AT_LEAST) are skipped — the GM must mark these manually. STORY_AT_MILESTONE is evaluated without a sheet.
 - AGGREGATE_THRESHOLD is write-path triggered (via `record_aggregate_contribution`), not evaluated by `evaluate_auto_beats`.
 
-#### Session prep: `BeatOpponentLine` / `BeatStagedTemplate` (#3425)
+#### Session prep: `BeatOpponentLine` / `BeatStagedTemplate` / `BeatStagedBattle` (#3425, #3569)
 
 A GM authors, ahead of the session, exactly what an ENCOUNTER or SITUATION beat
 stages in the room — child rows on the `Beat`, no standalone reusable prep
-object (copy-beat tooling is a deferred follow-up).
+object (copy-beat tooling is a deferred follow-up). An ENCOUNTER beat stages
+either a freeform opponent roster (`BeatOpponentLine`) or a whole pre-built
+battle (`BeatStagedBattle`), never both - the first kind-vs-prep XOR rule in
+the app, enforced on both sides: `BeatStagedBattle.clean()` refuses to save
+while the beat has any `opponent_lines`, and `BeatOpponentLine.clean()`
+refuses to save while the beat has a `staged_battle`.
 
 **`BeatOpponentLine`** (`related_name="opponent_lines"`, ENCOUNTER beats):
 
@@ -417,30 +435,86 @@ Exactly one of `situation_template`/`challenge_template` is set per row —
 enforced by a DB `CheckConstraint` (`beatstagedtemplate_exactly_one_template`)
 plus a mirroring `clean()`.
 
-`BeatSerializer` exposes both as nested read-write child lists
-(`opponent_lines`/`staged_templates`), including the update path: a custom
-`update()` diffs incoming rows against the beat's existing children **by id**
-(an id present + matching an existing row = edit; no id, or an id not
-found = create; an existing row whose id is absent from the payload =
-delete). Omitting the field entirely from a PATCH leaves the rows untouched;
-an explicit empty list clears them.
+**`BeatStagedBattle`** (`related_name="staged_battle"`, one per ENCOUNTER beat, #3569):
 
-#### Run Beat (#3425)
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | O2O → Beat | CASCADE; one staged battle per beat |
+| `blueprint` | FK → battles.BattleMapBlueprint | PROTECT; the map this beat's battle is cloned from at run time |
+| `name` | CharField (blank) | Battle name; blank uses the first line of the beat's `internal_description` |
+| `region` | FK → areas.Area (nullable) | SET_NULL; optional region the battle is set in (`Battle.region`) |
+| `party_side_role` | CharField (`BattleSideRole`) | Default DEFENDER; which side the running scene's party is enlisted on |
+
+**`BeatStagedBattleUnit`** (`related_name="unit_lines"` on `BeatStagedBattle`, #3569):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `staged_battle` | FK → BeatStagedBattle | CASCADE |
+| `template` | FK → battles.BattleUnitTemplate | PROTECT |
+| `side_role` | CharField (`BattleSideRole`) | Default ATTACKER |
+| `place_name` | CharField (blank) | Blueprint place name to spawn at; blank spawns unplaced |
+| `count` | PositiveSmallIntegerField | Default 1, min 1 |
+| `order` | PositiveIntegerField | |
+
+`BeatSerializer` exposes `opponent_lines`/`staged_templates` as nested
+read-write child lists, and `staged_battle` as a single nested object
+(`BeatStagedBattleSerializer`, with `unit_lines` nested inside it), including
+the update path: a custom `update()` diffs incoming rows against the beat's
+existing children **by id** (an id present + matching an existing row = edit;
+no id, or an id not found = create; an existing row whose id is absent from
+the payload = delete). Omitting `opponent_lines`/`staged_templates` entirely
+from a PATCH leaves the rows untouched; an explicit empty list clears them.
+`staged_battle` follows the same "omitted = untouched" rule but distinguishes
+it from deletion by sentinel rather than by emptiness - omitting the key
+entirely leaves the staged battle untouched, while `{"staged_battle": null}`
+explicitly deletes it (`None` is itself a legal payload value there, unlike
+an empty list). `validate()` mirrors the XOR/ENCOUNTER-only invariants as a
+400 before either write lands, including on a kind change away from
+ENCOUNTER while a staged battle already exists.
+
+#### Run Beat (#3425, #3569)
 
 `RunBeatAction` (`run_beat`, `actions/definitions/gm_story.py`) instantiates
 a beat's authored session prep into the GM's live scene in one call: sets
-`Scene.running_beat`, and for `kind=ENCOUNTER` creates a `CombatEncounter`
+`Scene.running_beat`, and for `kind=ENCOUNTER` branches on whether the beat
+has a `BeatStagedBattle`. With no staged battle it creates a `CombatEncounter`
 (`story_beat=beat`, `risk_level` mapped from `Beat.risk` — see below) and
-spawns each opponent line via `spawn_from_creature_template` (position looked
-up by name against the room's `Position` set; an unresolvable name spawns
-without position rather than refusing the line); for `kind=SITUATION`,
-instantiates each staged template via `instantiate_situation`/
-`instantiate_challenge` exactly as `SetSituationAction`/`PlaceChallengeAction`
-do. Each line runs in its own DB savepoint — a failing line is logged and
-skipped, never aborting the whole run; `result.data` reports a per-line
-outcome. REQUIREMENT kinds are refused (nothing to run); re-running the same
-beat while it is already the scene's `running_beat` is an idempotent no-op;
-running a *different* beat while one is already running is refused.
+spawns each opponent line via `spawn_opponent_lines`
+(`world.combat.encounter_prep`; position looked up by name against the room's
+`Position` set, an unresolvable name spawns without position rather than
+refusing the line); for `kind=SITUATION`, instantiates each staged template
+via `instantiate_situation`/`instantiate_challenge` exactly as
+`SetSituationAction`/`PlaceChallengeAction` do. Each line runs in its own DB
+savepoint - a failing line is logged and skipped, never aborting the whole
+run; `result.data` reports a per-line outcome. REQUIREMENT kinds are refused
+(nothing to run); re-running the same beat while it is already the scene's
+`running_beat` is an idempotent no-op; running a *different* beat while one is
+already running is refused.
+
+**Battle arm (#3569).** With a `BeatStagedBattle`, `_run_battle_beat` stages a
+`Battle` instead of a `CombatEncounter`: an already-running, unconcluded
+`Battle(story_beat=beat)` is returned as-is (`already_staged=True` - a GM
+pressing Run twice never spawns a second battle); otherwise it calls
+`stage_battle(name, risk_level, blueprint=staged.blueprint,
+campaign_story=beat.episode.chapter.story, region=staged.region,
+location=scene.location)` (`world.battles.staging`), sets
+`battle.story_beat = beat` (so `activate_stakes_for_battle` and
+`resolve_battle_beats` scope to this one beat - see battles.md's "Stakes /
+Beat Wiring"), links the battle's scene to the beat's episode via
+`EpisodeScene`, and grants the running GM `is_gm` on that scene (mirroring
+`CreateBattleAction`). `name` falls back to the first line of the beat's
+`internal_description`, then to `f"Beat #{beat.pk}"`, when
+`staged.name` is blank. Every authored `BeatStagedBattleUnit` line then spawns
+via `spawn_units_from_template` onto the matching `BattleSide`, at the named
+blueprint place when one is given (an unknown place name logs and spawns the
+unit unplaced) - each line runs in its own savepoint, log-and-continue on
+failure, same as the opponent-line loop. Finally, every active non-GM
+participant of the *running scene* who is physically present in the scene's
+room (an account's off-scene alts are not swept in) is enlisted on
+`staged.party_side_role` via `enlist_participant`. `result.data` carries
+`battle_id`, `battle_scene_id`, `risk_level`, `units`, `enlisted`, and
+`already_staged`. The web Run Beat tab (below) navigates to
+`/scenes/{battle_scene_id}/battle` on a successful dispatch.
 
 **Scenario start (#3565).** A SITUATION or TASK beat carrying a scenario
 (`Beat.required_mission` set) also starts that scenario for the scene's
@@ -471,7 +545,12 @@ adjusts it afterward via the existing `UpdateEncounterSettingsAction`.
 lists ENCOUNTER/SITUATION beats on the episode currently active (per
 `get_active_progress_for_story`) on stories the acting GM runs — staff see
 every table-assigned story, a non-staff GM only stories where they are the
-Lead GM. Feeds the web `GMAdjudicationPanel`'s Run Beat tab.
+Lead GM. Each row's `staged_battle_name` names the `BeatStagedBattle`'s
+blueprint when an ENCOUNTER beat has one, else `None` - one query across all
+rows, never per-row (#3569). Feeds the web `GMAdjudicationPanel`'s Run Beat
+tab, which shows a "Start siege" button (instead of the plain "Run" button)
+for a `staged_battle_name`-carrying row and navigates the GM to
+`/scenes/{battle_scene_id}/battle` on a successful run.
 
 `Scene.running_beat` (FK → `arxii.Beat`, nullable, `SET_NULL`,
 `related_name="running_scenes"`, string-FK form matching
