@@ -188,6 +188,11 @@ function DeclaredRiskBadge({
                 <li key={stake.id}>
                   <p>{stake.player_summary}</p>
                   <p className="text-muted-foreground">{stake.severity_label}</p>
+                  {stake.reward_kinds.length > 0 && (
+                    <p className="text-muted-foreground" data-testid="stake-reward-kinds">
+                      Rewards: {stake.reward_kinds.join(', ')}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

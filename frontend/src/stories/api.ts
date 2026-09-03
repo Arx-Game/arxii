@@ -16,6 +16,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type { EntitySearchResult } from '@/components/EntitySearchField';
+import { searchEntries as searchCodexEntriesApi } from '@/codex/api';
 import { throwApiError } from '@/lib/errors';
 import type { MissionTemplate } from '@/missions/types';
 import type { components } from '@/generated/api';
@@ -1727,4 +1728,53 @@ export async function searchNpcAssets(query: string): Promise<EntitySearchResult
     name: row.asset_persona_name,
     hint: row.status_display,
   }));
+}
+
+/**
+ * GET /api/items/templates/?name=&page_size=25 (#3566) - name search over the
+ * item-template catalog for the ITEM reward-line picker. Mirrors
+ * gm-adjudication/api.ts's getItemTemplateCatalog, adapted to
+ * EntitySearchResult (hint = the template's gold value, the amount the
+ * server pins an ITEM reward line's payout to).
+ */
+export async function searchItemTemplates(query: string): Promise<EntitySearchResult[]> {
+  const params = new URLSearchParams({ name: query, page_size: '25' });
+  const res = await apiFetch(`/api/items/templates/?${params.toString()}`);
+  if (!res.ok) await throwApiError(res, 'Failed to search item templates');
+  const data = (await res.json()) as PaginatedResponse<components['schemas']['ItemTemplateList']>;
+  return data.results.map((row) => ({
+    id: row.id,
+    name: row.name,
+    hint: String(row.value),
+  }));
+}
+
+/** GET /api/items/templates/{id}/ (#3566) - resolves an item template id to its display name. */
+export async function resolveItemTemplateById(id: number): Promise<EntitySearchResult | null> {
+  const res = await apiFetch(`/api/items/templates/${id}/`);
+  if (!res.ok) return null;
+  const row = (await res.json()) as components['schemas']['ItemTemplateDetail'];
+  return { id: row.id, name: row.name, hint: String(row.value) };
+}
+
+/**
+ * GET /api/clues/search/?q= (#3566) - GM-only clue search for the CLUE
+ * reward-line picker; a bare array response, not paginated. No retrieve-by-id
+ * route exists, so unlike item templates there is no `resolveById` adapter -
+ * an existing CLUE line's name comes from `StakeRewardLine.clue_name` instead.
+ */
+export async function searchClues(query: string): Promise<EntitySearchResult[]> {
+  const res = await apiFetch(`/api/clues/search/?q=${encodeURIComponent(query)}`);
+  if (!res.ok) await throwApiError(res, 'Failed to search clues');
+  const data = (await res.json()) as components['schemas']['ClueSearchResult'][];
+  return data.map((row) => ({ id: row.id, name: row.name, hint: row.target_kind }));
+}
+
+/**
+ * Codex entry search for the CODEX reward-line picker (#3566) - reuses the
+ * codex app's own `searchEntries` rather than a new endpoint.
+ */
+export async function searchCodexEntries(query: string): Promise<EntitySearchResult[]> {
+  const entries = await searchCodexEntriesApi(query);
+  return entries.map((entry) => ({ id: entry.id, name: entry.name }));
 }

@@ -462,12 +462,18 @@ export interface HighlightReel {
   index: HighlightReelEntry[];
 }
 
-/** #3561 player opt-in - one stake's player-visible summary (mirrors GMStoryRailStake, minus subject_kind/outcome). */
+/**
+ * #3561 player opt-in - one stake's player-visible summary (mirrors
+ * GMStoryRailStake, minus subject_kind/outcome). `reward_kinds` (#3566) names
+ * the WIN branch's payout categories only (money/item/knowledge) - never an
+ * amount, template, clue, or codex entry.
+ */
 export interface SceneStakeSummary {
   id: number;
   player_summary: string;
   severity: number;
   severity_label: string;
+  reward_kinds: string[];
 }
 
 /**

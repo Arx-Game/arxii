@@ -5,7 +5,7 @@
  * BeatFormDialog's copy doesn't expose.
  */
 
-import type { StakeResolutionColumn, StakeSeverity } from '../../types';
+import type { StakeResolutionColumn, StakeRewardSink, StakeSeverity } from '../../types';
 
 // Mirrors the backend's RenownRisk ladder (`GMLevelCap.risk_index`, #3562).
 export const RISK_LADDER = ['none', 'low', 'moderate', 'high', 'extreme'] as const;
@@ -69,4 +69,13 @@ export const ASSET_TRANSITION_OPTIONS: { value: string; label: string }[] = [
   { value: 'compromised', label: 'Compromised' },
   { value: 'lost', label: 'Lost' },
   { value: 'dismissed', label: 'Dismissed' },
+];
+
+// `StakeRewardLineSinkEnum` (#3566) - a WIN branch's reward-line payout kinds.
+export const REWARD_SINK_OPTIONS: { value: StakeRewardSink; label: string }[] = [
+  { value: 'money', label: 'Money' },
+  { value: 'resonance', label: 'Resonance' },
+  { value: 'item', label: 'Item' },
+  { value: 'clue', label: 'Clue' },
+  { value: 'codex', label: 'Codex entry' },
 ];

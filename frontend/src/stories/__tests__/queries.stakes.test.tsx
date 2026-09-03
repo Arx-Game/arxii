@@ -96,6 +96,9 @@ const mockRewardLine: StakeRewardLine = {
   sink: 'money',
   amount: 10,
   resonance: null,
+  item_template_name: '',
+  clue_name: '',
+  codex_entry_name: '',
 };
 
 describe('storiesKeys - stakes', () => {
