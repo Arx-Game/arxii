@@ -1155,7 +1155,7 @@ def find_situations(*, query: str, risk: str | None, actor_level_index: int) -> 
     templates or challenges (the cold open of a kind-first browse). Kinds
     above ``actor_level_index`` never appear, whatever the query. Guides,
     fits and pool guidance are loaded with three grouped queries rather
-    than a prefetch onto the identity-mapped kinds (ADR-0262). ``all_guides``
+    than a prefetch onto the identity-mapped kinds (ADR-0263). ``all_guides``
     is sorted by ``RenownRisk``'s own declaration order (weakest to
     strongest, the same ladder ``risk_meets_legend_floor`` reads) rather than
     the DB's alphabetical string order on the stored value -- "high" would

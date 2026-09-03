@@ -130,9 +130,7 @@ class BattleViewSet(ReadOnlyModelViewSet):
                     # instead of a per-participant query.
                     Prefetch(
                         "declarations",
-                        queryset=BattleActionDeclaration.objects.only(
-                            "id", "battle_round_id", "participant_id"
-                        ),
+                        queryset=BattleActionDeclaration.objects.all(),
                         to_attr="cached_declarations",
                     ),
                 ),

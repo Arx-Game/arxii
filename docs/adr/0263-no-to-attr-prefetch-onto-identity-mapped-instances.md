@@ -1,7 +1,7 @@
-# ADR-0262: No `to_attr` prefetch onto identity-mapped instances
+# ADR-0263: No `to_attr` prefetch onto identity-mapped instances
 
 **Status:** Accepted (2026-09-03, #3564; the failure was found in #3563). Extends ADR-0008
-(SharedMemoryModel everywhere).
+(SharedMemoryModel everywhere) and ADR-0261 (no .only()/.defer() on identity-mapped models: the same cache, a sibling hazard).
 
 **Context.** Django decides whether to run a `Prefetch(..., to_attr=X)` by asking whether the
 instance already has `X` (`django/db/models/query.py::get_prefetcher`: `X in instance.__dict__`

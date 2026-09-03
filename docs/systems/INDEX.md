@@ -2446,7 +2446,7 @@ GM at a given level may author (#2000, ADR-0097).
   when `query` is non-empty (capped `FIND_RESULT_LIMIT = 15`), fits/guides/pool
   guidance loaded with three grouped `filter(situation_kind_id__in=...)`
   queries rather than a `to_attr` prefetch onto the identity-mapped kinds
-  (ADR-0262). **`user_breadth_index(user) -> int`**: the web caller's
+  (ADR-0263). **`user_breadth_index(user) -> int`**: the web caller's
   `find_situations` breadth: staff get the top index, a GM their own level
   index, an account with no `GMProfile` get `0`; mirrors
   `FindSituationAction._actor_breadth_index` for a request user rather than an
