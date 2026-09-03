@@ -39,6 +39,19 @@ class AdminLoginRoutesThroughTheSiteTests(TestCase):
         self.client.force_login(self.staff)
         self.assertEqual(self.client.get("/admin/").status_code, 200)
 
+    def test_signed_in_non_staff_gets_403_not_a_redirect(self):
+        # Stock Django's own admin_view redirects an unauthorized signed-in
+        # visitor to /admin/login/ first (never to the site's /login) - it is
+        # only there that allauth's secure_admin_login raises PermissionDenied
+        # for a signed-in non-staff account. The requirement is the eventual
+        # 403, and that the chain never routes through the site login.
+        player = AccountFactory(username="admin_2fa_player_only")
+        self.client.force_login(player)
+        response = self.client.get("/admin/", follow=True)
+        self.assertEqual(response.status_code, 403)
+        for redirect_url, _status in response.redirect_chain:
+            self.assertNotIn("/login?", redirect_url)
+
 
 class AuthenticatorAdminTests(TestCase):
     @classmethod
