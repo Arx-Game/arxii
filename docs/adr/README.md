@@ -312,4 +312,6 @@ treat those names as hints to confirm, not gospel.
 - [0261 - No .only() or .defer() on identity-mapped models](0261-no-only-or-defer-on-identity-mapped-models.md) (Sentry ARX2-9; extends ADR-0008; `lint-only-defer` hook)
 - [0262 - The routing report is advisory and open-world](0262-routing-report-is-advisory-and-open-world.md) (#3563; extends ADR-0258; related ADR-0259)
 - [0263 - No to_attr prefetch onto identity-mapped instances](0263-no-to-attr-prefetch-onto-identity-mapped-instances.md) (#3564, found in #3563; extends ADR-0008, ADR-0261)
+- [0264 - Two-factor authentication is opt-in and telnet blocking is a second opt-in](0264-two-factor-is-opt-in-and-telnet-blocking-is-a-second-opt-in.md) (#3591)
+- [0265 - MFA secrets are encrypted at rest under a dedicated vault key](0265-mfa-secrets-encrypted-under-a-dedicated-vault-key.md) (#3591)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
