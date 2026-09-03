@@ -9,13 +9,11 @@
  *   4. Denied / Withdrawn (read-only grace period)
  */
 
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -24,23 +22,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
 import { useTables } from '@/tables/queries';
 import type { GMTable } from '@/tables/types';
-import {
-  AlertCircle,
-  Clock,
-  ExternalLink,
-  Info,
-  MessageSquare,
-  Play,
-  Send,
-  Sparkles,
-  Undo2,
-  UserPlus,
-  XCircle,
-} from 'lucide-react';
+import { ExternalLink, Send, XCircle } from 'lucide-react';
+import { ChapterLeaf, Marginalia, Note, NightPlate } from '../folio';
 import { FinalizeForTableDialog } from './FinalizeForTableDialog';
 import {
   useAddToRoster,
@@ -54,7 +39,7 @@ import {
 } from '../queries';
 import type { ApplicationStatus, CharacterDraft } from '../types';
 import { Stage, STAGE_LABELS } from '../types';
-import { statusLabel, statusVariant, composeFullName } from '../utils';
+import { composeFullName } from '../utils';
 
 interface ReviewStageProps {
   draft: CharacterDraft;
@@ -143,232 +128,236 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
     resubmit.mutate({ draftId: draft.id, comment: resubmitComment || undefined });
   };
 
+  const written: { label: string; text?: string; stage: Stage }[] = [
+    {
+      label: copy?.review_glimpse_label ?? 'What your character would speak of themselves',
+      text: draftData.glimpse_story,
+      stage: Stage.GIFT,
+    },
+    { label: 'Background', text: draftData.background, stage: Stage.IDENTITY },
+    { label: 'Description', text: draftData.description, stage: Stage.APPEARANCE },
+    { label: 'Personality', text: draftData.personality, stage: Stage.IDENTITY },
+  ];
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  const birthday =
+    draft.birthday_month && draft.birthday_day
+      ? `${months[draft.birthday_month - 1]} ${draft.birthday_day}`
+      : undefined;
+  const record: { label: string; value?: string; stage: Stage }[] = [
+    { label: 'Homeland', value: draft.selected_area?.name, stage: Stage.ORIGIN },
+    { label: 'Beginnings', value: draft.selected_beginnings?.name, stage: Stage.HERITAGE },
+    { label: 'Species', value: draft.selected_species?.name, stage: Stage.HERITAGE },
+    { label: 'Gender', value: draft.selected_gender?.display_name, stage: Stage.HERITAGE },
+    { label: 'Age', value: draft.age?.toString(), stage: Stage.HERITAGE },
+    { label: 'Birthday', value: birthday, stage: Stage.HERITAGE },
+    { label: 'Family', value: familyDisplay, stage: Stage.LINEAGE },
+    { label: 'Path', value: draft.selected_path?.name, stage: Stage.PATH },
+    { label: 'Tradition', value: draft.selected_tradition?.name, stage: Stage.GIFT },
+  ];
+  const firstIncomplete = incompleteStages[0];
+  const submitted = hasApplication && (appStatus === 'submitted' || appStatus === 'in_review');
+
+  // Focus moves to the second night plate's title the moment the record
+  // closes (design law §1) — tracked as a false-to-true transition rather
+  // than a submit-mutation callback, so a page load that already finds a
+  // submitted draft does not steal focus on mount.
+  const wasSubmittedRef = useRef(submitted);
+  useEffect(() => {
+    if (submitted && !wasSubmittedRef.current) {
+      requestAnimationFrame(() => document.getElementById('after-title')?.focus());
+    }
+    wasSubmittedRef.current = submitted;
+  }, [submitted]);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
-    >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.review_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.review_intro ?? ''}</p>
+    <>
+      <ChapterLeaf
+        stage={Stage.REVIEW}
+        title={copy?.review_heading ?? 'Your Testament'}
+        intro={copy?.review_intro}
+        className="review"
+        aside={
+          <Marginalia id="note-rite">
+            {/* PLACEHOLDER: Apostate rewrite */}
+            <Note lead="Nothing is final">
+              until staff approve the testament. Any chapter may be reopened until then.
+            </Note>
+          </Marginalia>
+        }
+      >
         {copy?.review_epigraph && (
-          <blockquote className="mt-4 border-l-2 border-primary/30 pl-4 text-sm italic text-muted-foreground">
-            {copy.review_epigraph}
-          </blockquote>
+          <div className="epigraph">
+            <blockquote>
+              “<span>{copy.review_epigraph}</span>”
+            </blockquote>
+            <cite>The Ritual of the Durance</cite>
+          </div>
         )}
-      </div>
+        <p className="plate-name">{fullName}</p>
+        <p className="plate-kicker">
+          {[draft.selected_beginnings?.name, familyDisplay, draft.selected_area?.name]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
 
-      {/* Application Status Banner */}
-      {hasApplication && appStatus && (
-        <ApplicationBanner application={application.data!} copy={copy} />
-      )}
-
-      {/* Validation Summary (only when no active application) */}
-      {!hasApplication && incompleteStages.length > 0 && (
-        <Card className="border-yellow-500/50 bg-yellow-500/10">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
-              <CardTitle className="text-base">Incomplete Sections</CardTitle>
+        {written
+          .filter((w) => w.text)
+          .map((w) => (
+            <div className="written" key={w.label}>
+              <span className="written-label">{w.label}</span>
+              <blockquote>
+                “<span>{w.text}</span>”
+              </blockquote>
+              <button type="button" className="quiet-link" onClick={() => onStageSelect(w.stage)}>
+                Rewrite in {STAGE_LABELS[w.stage]}
+              </button>
             </div>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-3 text-sm text-muted-foreground">
-              Please complete these sections before submitting:
+          ))}
+
+        <div
+          className="record-frame"
+          style={{ ['--rows' as string]: Math.ceil(record.length / 2) }}
+        >
+          <h2>{copy?.review_record_heading ?? 'The Record'}</h2>
+          <dl>
+            {record.map((r) => (
+              <div className="row" key={r.label}>
+                <dt>{r.label}</dt>
+                <dd>
+                  {r.value ? (
+                    <button type="button" onClick={() => onStageSelect(r.stage)}>
+                      {r.value}
+                    </button>
+                  ) : (
+                    <span className="unwritten">not set</span>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {hasUnspentPoints && (
+            // PLACEHOLDER: Apostate rewrite
+            <p className="frame-ledger">
+              {cgRemaining} points remain unspent; they convert to {bonusXP} experience when the
+              testament is approved.
             </p>
-            <ul className="space-y-1">
-              {incompleteStages.map((stage) => (
-                <li key={stage}>
+          )}
+        </div>
+
+        {!hasApplication && (
+          <NoApplicationActions
+            canSubmit={canSubmit}
+            reason={
+              firstIncomplete !== undefined ? (
+                <>
+                  One chapter is still unwritten:{' '}
                   <button
-                    onClick={() => onStageSelect(stage)}
-                    className="text-sm text-primary underline-offset-4 hover:underline"
+                    type="button"
+                    className="quiet-link"
+                    id="incomplete-link"
+                    onClick={() => onStageSelect(firstIncomplete)}
                   >
-                    {STAGE_LABELS[stage]}
+                    {STAGE_LABELS[firstIncomplete]}
                   </button>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Unspent CG Points Banner */}
-      {!hasApplication && hasUnspentPoints && (
-        <Card className="border-blue-500/50 bg-blue-500/10">
-          <CardContent className="flex items-start gap-3 pt-6">
-            <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
-            <p className="text-sm text-muted-foreground">
-              You have <strong className="text-foreground">{cgRemaining} unspent CG points</strong>.
-              If you submit now, these will convert to{' '}
-              <strong className="text-foreground">{bonusXP} bonus XP</strong> on your character. You
-              can go back to earlier stages to spend them if you prefer.
+                  .
+                </>
+              ) : undefined
+            }
+            isStaff={isStaff}
+            submissionNotes={submissionNotes}
+            onNotesChange={setSubmissionNotes}
+            onSubmit={handleSubmit}
+            submitPending={submitDraft.isPending}
+            onAddToRoster={() => addToRoster.mutate(draft.id)}
+            addToRosterPending={addToRoster.isPending}
+            hasGMTable={ownedGMTables.length > 0}
+            onFinalizeForTable={() => setShowFinalizeForTable(true)}
+          />
+        )}
+        {hasApplication && appStatus === 'revisions_requested' && (
+          <RevisionsActions
+            resubmitComment={resubmitComment}
+            onCommentChange={setResubmitComment}
+            onResubmit={handleResubmit}
+            resubmitPending={resubmit.isPending}
+            onWithdraw={handleWithdraw}
+            withdrawPending={withdraw.isPending}
+          />
+        )}
+        {hasApplication &&
+          (appStatus === 'denied' || appStatus === 'withdrawn' || appStatus === 'approved') && (
+            <p className="ledger-line">
+              {getBannerMessage(
+                appStatus,
+                application.data!.reviewer_name,
+                application.data!.expires_at,
+                copy
+              )}
             </p>
-          </CardContent>
-        </Card>
+          )}
+        {hasApplication && (appStatus === 'denied' || appStatus === 'withdrawn') && (
+          <TerminalActions />
+        )}
+        {(submitDraft.isError ||
+          addToRoster.isError ||
+          unsubmit.isError ||
+          withdraw.isError ||
+          resubmit.isError) && <p className="ledger-line">Something went wrong. Try again.</p>}
+        {!submitted && <p className="plate-imprint">As Arx endures, we remember</p>}
+      </ChapterLeaf>
+
+      {submitted && (
+        <NightPlate
+          id="after"
+          titleId="after-title"
+          titleAs="h2"
+          eyebrow="The Durance · Submitted"
+          title={getBannerMessage(
+            appStatus!,
+            application.data!.reviewer_name,
+            application.data!.expires_at,
+            copy
+          )}
+          imprint
+          quiet={{
+            label: 'Read the testament again',
+            onClick: () => {
+              const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+              document
+                .getElementById('chapter-11')
+                ?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+            },
+          }}
+        >
+          {/* PLACEHOLDER: Apostate rewrite */}
+          <p className="plate-sub">
+            You will be told in the Hall when staff have read it. If they ask for revisions, the
+            chapters reopen.
+          </p>
+          <SubmittedActions
+            appStatus={appStatus as 'submitted' | 'in_review'}
+            onUnsubmit={handleUnsubmit}
+            unsubmitPending={unsubmit.isPending}
+            onWithdraw={handleWithdraw}
+            withdrawPending={withdraw.isPending}
+          />
+        </NightPlate>
       )}
 
-      {/* Character Sheet Preview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">{fullName}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* The Testament — identity picks the character carries into the Durance */}
-          <section className="space-y-4">
-            <h3 className="text-lg font-semibold">
-              {copy?.review_testament_heading ?? 'The Testament'}
-            </h3>
-
-            {draftData.glimpse_story && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">
-                  {copy?.review_glimpse_label ?? 'What your character would speak of themselves'}
-                </p>
-                <p className="whitespace-pre-wrap text-sm">{draftData.glimpse_story}</p>
-              </div>
-            )}
-
-            {draftData.background && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Background</p>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                  {draftData.background}
-                </p>
-              </div>
-            )}
-
-            {draft.selected_path && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Path of the Durance</p>
-                <p className="text-sm">{draft.selected_path.name}</p>
-              </div>
-            )}
-
-            {draft.selected_tradition && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Tradition</p>
-                <p className="text-sm">{draft.selected_tradition.name}</p>
-              </div>
-            )}
-
-            {draftData.description && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Description</p>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                  {draftData.description}
-                </p>
-              </div>
-            )}
-
-            {draftData.personality && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Personality</p>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                  {draftData.personality}
-                </p>
-              </div>
-            )}
-          </section>
-
-          <Separator />
-
-          {/* The Record — supporting biographical and mechanical data */}
-          <section className="space-y-4">
-            <h3 className="text-lg font-semibold">{copy?.review_record_heading ?? 'The Record'}</h3>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <InfoRow label="Homeland" value={draft.selected_area?.name} />
-              <InfoRow label="Beginnings" value={draft.selected_beginnings?.name ?? 'Unknown'} />
-              <InfoRow label="Species" value={draft.selected_species?.name} />
-              <InfoRow label="Gender" value={draft.selected_gender?.display_name} />
-              <InfoRow label="Age" value={draft.age?.toString()} />
-              <InfoRow
-                label="Birthday"
-                value={
-                  draft.birthday_month && draft.birthday_day
-                    ? `${
-                        [
-                          'January',
-                          'February',
-                          'March',
-                          'April',
-                          'May',
-                          'June',
-                          'July',
-                          'August',
-                          'September',
-                          'October',
-                          'November',
-                          'December',
-                        ][draft.birthday_month - 1]
-                      } ${draft.birthday_day}`
-                    : undefined
-                }
-              />
-            </div>
-
-            <div>
-              <h4 className="mb-2 font-semibold">Lineage</h4>
-              <InfoRow label="Family" value={familyDisplay} />
-            </div>
-          </section>
-        </CardContent>
-      </Card>
-
-      {/* Action Area - depends on application state */}
-      {!hasApplication && (
-        <NoApplicationActions
-          canSubmit={canSubmit}
-          isStaff={isStaff}
-          submissionNotes={submissionNotes}
-          onNotesChange={setSubmissionNotes}
-          onSubmit={handleSubmit}
-          submitPending={submitDraft.isPending}
-          onAddToRoster={() => addToRoster.mutate(draft.id)}
-          addToRosterPending={addToRoster.isPending}
-          hasGMTable={ownedGMTables.length > 0}
-          onFinalizeForTable={() => setShowFinalizeForTable(true)}
-        />
-      )}
-
-      {hasApplication && (appStatus === 'submitted' || appStatus === 'in_review') && (
-        <SubmittedActions
-          appStatus={appStatus}
-          onUnsubmit={handleUnsubmit}
-          unsubmitPending={unsubmit.isPending}
-          onWithdraw={handleWithdraw}
-          withdrawPending={withdraw.isPending}
-        />
-      )}
-
-      {hasApplication && appStatus === 'revisions_requested' && (
-        <RevisionsActions
-          resubmitComment={resubmitComment}
-          onCommentChange={setResubmitComment}
-          onResubmit={handleResubmit}
-          resubmitPending={resubmit.isPending}
-          onWithdraw={handleWithdraw}
-          withdrawPending={withdraw.isPending}
-        />
-      )}
-
-      {hasApplication && (appStatus === 'denied' || appStatus === 'withdrawn') && (
-        <TerminalActions />
-      )}
-
-      {/* Error display */}
-      {(submitDraft.isError ||
-        addToRoster.isError ||
-        unsubmit.isError ||
-        withdraw.isError ||
-        resubmit.isError) && (
-        <p className="text-sm text-destructive">An error occurred. Please try again.</p>
-      )}
-
-      {/* CG Points Conversion Confirmation Modal */}
+      {/* CG Points Conversion Confirmation Modal — unchanged */}
       <Dialog open={showConversionModal} onOpenChange={setShowConversionModal}>
         <DialogContent>
           <DialogHeader>
@@ -388,7 +377,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         </DialogContent>
       </Dialog>
 
-      {/* Finalize for My Table (#3268) — player-GM direct-to-roster flow */}
+      {/* Finalize for My Table (#3268) — player-GM direct-to-roster flow, unchanged */}
       {!isStaff && ownedGMTables.length > 0 && (
         <FinalizeForTableDialog
           draftId={draft.id}
@@ -397,64 +386,13 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           onOpenChange={setShowFinalizeForTable}
         />
       )}
-    </motion.div>
+    </>
   );
 }
 
 // =============================================================================
-// Application Status Banner
+// Application status message (the second night plate's title / a ledger line)
 // =============================================================================
-
-interface ApplicationBannerProps {
-  application: {
-    status: ApplicationStatus;
-    reviewer_name: string | null;
-    expires_at: string | null;
-  };
-  copy: Record<string, string> | undefined;
-}
-
-const BANNER_STYLES: Record<
-  ApplicationStatus,
-  { border: string; bg: string; Icon: typeof Clock; iconClass: string }
-> = {
-  submitted: {
-    border: 'border-blue-500/50',
-    bg: 'bg-blue-500/10',
-    Icon: Clock,
-    iconClass: 'text-blue-500',
-  },
-  in_review: {
-    border: 'border-blue-500/50',
-    bg: 'bg-blue-500/10',
-    Icon: Clock,
-    iconClass: 'text-blue-500',
-  },
-  revisions_requested: {
-    border: 'border-yellow-500/50',
-    bg: 'bg-yellow-500/10',
-    Icon: MessageSquare,
-    iconClass: 'text-yellow-500',
-  },
-  approved: {
-    border: 'border-green-500/50',
-    bg: 'bg-green-500/10',
-    Icon: Send,
-    iconClass: 'text-green-500',
-  },
-  denied: {
-    border: 'border-red-500/50',
-    bg: 'bg-red-500/10',
-    Icon: XCircle,
-    iconClass: 'text-red-500',
-  },
-  withdrawn: {
-    border: 'border-muted-foreground/50',
-    bg: 'bg-muted/50',
-    Icon: XCircle,
-    iconClass: 'text-muted-foreground',
-  },
-};
 
 function getBannerMessage(
   status: ApplicationStatus,
@@ -486,46 +424,14 @@ function getBannerMessage(
   }
 }
 
-function ApplicationBanner({ application, copy }: ApplicationBannerProps) {
-  const navigate = useNavigate();
-  const { status, reviewer_name, expires_at } = application;
-  const { border, bg, Icon, iconClass } = BANNER_STYLES[status];
-  const message = getBannerMessage(status, reviewer_name, expires_at, copy);
-
-  return (
-    <Card className={cn(border, bg)}>
-      <CardContent className="flex items-start gap-3 pt-6">
-        <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', iconClass)} />
-        <div className="flex flex-1 flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Badge variant={statusVariant(status)}>{statusLabel(status)}</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{message}</p>
-          {status === 'approved' && (
-            <Button size="sm" className="w-fit" onClick={() => navigate('/game')}>
-              <Play className="mr-2 h-4 w-4" />
-              {copy?.review_approved_enter_world ?? 'Enter the World'}
-            </Button>
-          )}
-          <Link
-            to="/characters/create/application"
-            className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            View Application Thread
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // =============================================================================
 // State 1: No Application - Submit with notes
 // =============================================================================
 
 interface NoApplicationActionsProps {
   canSubmit: boolean;
+  /** The named reason beside the closed door — the first unwritten chapter, as a door back to it. */
+  reason?: ReactNode;
   isStaff: boolean;
   submissionNotes: string;
   onNotesChange: (notes: string) => void;
@@ -540,6 +446,7 @@ interface NoApplicationActionsProps {
 
 function NoApplicationActions({
   canSubmit,
+  reason,
   isStaff,
   submissionNotes,
   onNotesChange,
@@ -551,61 +458,64 @@ function NoApplicationActions({
   onFinalizeForTable,
 }: NoApplicationActionsProps) {
   return (
-    <div className="space-y-4">
-      {/* Submission Notes */}
-      <div className="space-y-2">
-        <label htmlFor="submission-notes" className="text-sm font-medium">
-          Notes for Reviewers <span className="font-normal text-muted-foreground">(optional)</span>
-        </label>
-        <Textarea
+    <>
+      <div className="field">
+        <label htmlFor="submission-notes">A word to the staff</label>
+        <textarea
           id="submission-notes"
-          placeholder="Any context or notes for the staff reviewing your character..."
           value={submissionNotes}
           onChange={(e) => onNotesChange(e.target.value)}
           rows={3}
-          className="resize-y"
         />
+        <span className="hint">Read by staff only. It does not enter the record.</span>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex flex-wrap gap-4">
-        <Button size="lg" disabled={!canSubmit || submitPending} onClick={onSubmit}>
-          {submitPending ? (
-            'Submitting...'
-          ) : (
-            <>
-              <Send className="mr-2 h-4 w-4" />
-              Submit for Review
-            </>
-          )}
-        </Button>
+      <div className="plate-door" id="door">
+        {reason && (
+          <span className="door-reason" id="door-reason">
+            {reason}
+          </span>
+        )}
+        <button
+          type="button"
+          className="btn"
+          aria-disabled={!canSubmit ? 'true' : undefined}
+          aria-describedby={!canSubmit ? 'door-reason' : undefined}
+          disabled={submitPending}
+          onClick={() => {
+            if (!canSubmit) {
+              document.getElementById('incomplete-link')?.focus();
+              return;
+            }
+            onSubmit();
+          }}
+        >
+          {submitPending ? 'Submitting…' : 'Submit for Review'}
+        </button>
 
         {isStaff && (
-          <Button
-            size="lg"
-            variant="secondary"
+          <button
+            type="button"
+            className="quiet-link"
             disabled={!canSubmit || addToRosterPending}
             onClick={onAddToRoster}
           >
-            {addToRosterPending ? (
-              'Adding...'
-            ) : (
-              <>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add to Roster
-              </>
-            )}
-          </Button>
+            {addToRosterPending ? 'Adding…' : 'Add to Roster'}
+          </button>
         )}
 
         {!isStaff && hasGMTable && (
-          <Button size="lg" variant="secondary" disabled={!canSubmit} onClick={onFinalizeForTable}>
-            <Sparkles className="mr-2 h-4 w-4" />
+          <button
+            type="button"
+            className="quiet-link"
+            disabled={!canSubmit}
+            onClick={onFinalizeForTable}
+          >
             Finalize for My Table
-          </Button>
+          </button>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -629,29 +539,15 @@ function SubmittedActions({
   withdrawPending,
 }: SubmittedActionsProps) {
   return (
-    <div className="flex flex-wrap gap-4">
+    <div className="plate-door">
       {appStatus === 'submitted' && (
-        <Button variant="outline" size="lg" disabled={unsubmitPending} onClick={onUnsubmit}>
-          {unsubmitPending ? (
-            'Un-submitting...'
-          ) : (
-            <>
-              <Undo2 className="mr-2 h-4 w-4" />
-              Un-submit to Edit
-            </>
-          )}
-        </Button>
+        <button type="button" className="btn-quiet" disabled={unsubmitPending} onClick={onUnsubmit}>
+          {unsubmitPending ? 'Un-submitting…' : 'Un-submit to edit'}
+        </button>
       )}
-      <Button variant="destructive" size="lg" disabled={withdrawPending} onClick={onWithdraw}>
-        {withdrawPending ? (
-          'Withdrawing...'
-        ) : (
-          <>
-            <XCircle className="mr-2 h-4 w-4" />
-            Withdraw Application
-          </>
-        )}
-      </Button>
+      <button type="button" className="btn-quiet" disabled={withdrawPending} onClick={onWithdraw}>
+        {withdrawPending ? 'Withdrawing…' : 'Withdraw the testament'}
+      </button>
     </div>
   );
 }
@@ -733,24 +629,6 @@ function TerminalActions() {
           View Application Thread
         </Link>
       </Button>
-    </div>
-  );
-}
-
-// =============================================================================
-// Shared Components
-// =============================================================================
-
-interface InfoRowProps {
-  label: string;
-  value: string | undefined;
-}
-
-function InfoRow({ label, value }: InfoRowProps) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={cn(!value && 'italic text-muted-foreground')}>{value ?? 'Not set'}</span>
     </div>
   );
 }
