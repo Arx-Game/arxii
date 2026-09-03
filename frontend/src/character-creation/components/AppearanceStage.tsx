@@ -19,9 +19,9 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { ChapterLeaf } from '../folio';
 import {
   useBuilds,
   useCGExplanations,
@@ -30,6 +30,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { MarkingsEditor } from './MarkingsEditor';
+import { Stage, STAGE_LABELS } from '../types';
 import type {
   Build,
   CharacterDraft,
@@ -353,210 +354,206 @@ export function AppearanceStage({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.APPEARANCE}
+      title={copy?.appearance_heading ?? STAGE_LABELS[Stage.APPEARANCE]}
+      intro={copy?.appearance_intro}
+      wide
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.appearance_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.appearance_intro ?? ''}</p>
-      </div>
-
-      {/* Age */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Age</h3>
-        <div className="max-w-xs">
-          <Input
-            type="number"
-            min={AGE_MIN}
-            max={ageMax}
-            value={localAge}
-            onChange={(e) => setLocalAge(e.target.value)}
-            onBlur={commitAge}
-            placeholder={`Enter age (${AGE_MIN}-${ageMax})`}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Age must be between {AGE_MIN} and {ageMax} years.
-            {draft.selected_species?.eternal_youth &&
-              ' Your species keeps its eternal youth; apparent age locks in the early twenties.'}
-          </p>
-        </div>
-      </section>
-
-      {/* Birthday */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Birthday</h3>
-        <p className="text-sm text-muted-foreground">
-          The day your character celebrates each year. Friends will see it coming up in the Town
-          Crier&apos;s tidings.
-        </p>
-        <div className="flex max-w-md gap-3">
-          <div className="flex-1">
-            <Label className="text-xs">Month</Label>
-            <Select
-              value={birthdayMonth ? String(birthdayMonth) : ''}
-              onValueChange={(value) => commitBirthday(parseInt(value, 10), birthdayDay ?? 1)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Month" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_NAMES.map((name, index) => (
-                  <SelectItem key={name} value={String(index + 1)}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-28">
-            <Label className="text-xs">Day</Label>
+      <div className="space-y-8">
+        {/* Age */}
+        <section className="space-y-4">
+          <h3 className="theme-heading text-lg font-semibold">Age</h3>
+          <div className="max-w-xs">
             <Input
               type="number"
-              min={1}
-              max={maxDay}
-              value={birthdayDay ?? ''}
-              onChange={(e) => {
-                const parsed = parseInt(e.target.value, 10);
-                if (!Number.isNaN(parsed) && birthdayMonth) {
-                  commitBirthday(birthdayMonth, parsed);
-                }
-              }}
-              placeholder="Day"
-              disabled={!birthdayMonth}
+              min={AGE_MIN}
+              max={ageMax}
+              value={localAge}
+              onChange={(e) => setLocalAge(e.target.value)}
+              onBlur={commitAge}
+              placeholder={`Enter age (${AGE_MIN}-${ageMax})`}
             />
-          </div>
-        </div>
-      </section>
-
-      {/* Height Band Selection */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Height</h3>
-        <p className="text-sm text-muted-foreground">
-          Select your height category, then fine-tune your exact height.
-        </p>
-        {heightBandsLoading ? (
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {heightBands?.map((band) => (
-              <Button
-                key={band.id}
-                variant={draft.height_band?.id === band.id ? 'default' : 'outline'}
-                onClick={() => handleHeightBandSelect(band)}
-                className={cn(
-                  !band.is_cg_selectable &&
-                    isStaff &&
-                    'border-red-500 text-red-500 hover:bg-red-500/10 hover:text-red-500'
-                )}
-              >
-                {band.display_name}
-              </Button>
-            ))}
-          </div>
-        )}
-
-        {draft.height_band && (
-          <div className="max-w-md space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>{formatHeight(draft.height_band.min_inches)}</span>
-              <span className="font-semibold">
-                {(heightDraft ?? draft.height_inches)
-                  ? formatHeight(heightDraft ?? draft.height_inches!)
-                  : '-'}
-              </span>
-              <span>{formatHeight(draft.height_band.max_inches)}</span>
-            </div>
-            <Slider
-              value={[heightDraft ?? draft.height_inches ?? draft.height_band.min_inches]}
-              min={draft.height_band.min_inches}
-              max={draft.height_band.max_inches}
-              step={1}
-              // Commit-only PATCH (2026-07 audit): onValueChange fired one
-              // request per drag tick — a request storm whose out-of-order
-              // responses rubber-banded the thumb. Local state keeps the
-              // thumb tracking during the drag.
-              onValueChange={(value) => setHeightDraft(value[0])}
-              onValueCommit={handleHeightInchesCommit}
-            />
-            <p className="text-xs text-muted-foreground">
-              Other characters will see you as "{draft.height_band.display_name}" rather than your
-              exact height.
+            <p className="mt-1 text-xs text-muted-foreground">
+              Age must be between {AGE_MIN} and {ageMax} years.
+              {draft.selected_species?.eternal_youth &&
+                ' Your species keeps its eternal youth; apparent age locks in the early twenties.'}
             </p>
           </div>
-        )}
-      </section>
-
-      {/* Build Selection */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Build</h3>
-        <p className="text-sm text-muted-foreground">Select your body type.</p>
-        {buildsLoading ? (
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {builds?.map((build) => (
-              <Button
-                key={build.id}
-                variant={draft.build?.id === build.id ? 'default' : 'outline'}
-                onClick={() => handleBuildSelect(build)}
-                className={cn(
-                  !build.is_cg_selectable &&
-                    isStaff &&
-                    'border-red-500 text-red-500 hover:bg-red-500/10 hover:text-red-500'
-                )}
-              >
-                {build.display_name}
-              </Button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Form Traits (Hair, Eyes, Skin, etc.) */}
-      {draft.selected_species && (
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Physical Features</h3>
-          <p className="text-sm text-muted-foreground">
-            Select your character's physical features.
-          </p>
-          {renderFormOptions()}
         </section>
-      )}
 
-      {/* Description */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Physical Description</h3>
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            {...register('description')}
-            placeholder="Describe your character's physical appearance..."
-            rows={4}
-            className="resize-y"
-          />
-          <p className="text-xs text-muted-foreground">
-            (Optional, appended to automatic descriptions)
+        {/* Birthday */}
+        <section className="space-y-4">
+          <h3 className="theme-heading text-lg font-semibold">Birthday</h3>
+          <p className="text-sm text-muted-foreground">
+            The day your character celebrates each year. Friends will see it coming up in the Town
+            Crier&apos;s tidings.
           </p>
-        </div>
-      </section>
+          <div className="flex max-w-md gap-3">
+            <div className="flex-1">
+              <Label className="text-xs">Month</Label>
+              <Select
+                value={birthdayMonth ? String(birthdayMonth) : ''}
+                onValueChange={(value) => commitBirthday(parseInt(value, 10), birthdayDay ?? 1)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_NAMES.map((name, index) => (
+                    <SelectItem key={name} value={String(index + 1)}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-28">
+              <Label className="text-xs">Day</Label>
+              <Input
+                type="number"
+                min={1}
+                max={maxDay}
+                value={birthdayDay ?? ''}
+                onChange={(e) => {
+                  const parsed = parseInt(e.target.value, 10);
+                  if (!Number.isNaN(parsed) && birthdayMonth) {
+                    commitBirthday(birthdayMonth, parsed);
+                  }
+                }}
+                placeholder="Day"
+                disabled={!birthdayMonth}
+              />
+            </div>
+          </div>
+        </section>
 
-      {/* Body markings (#2985) */}
-      <section className="space-y-4">
-        <MarkingsEditor />
-      </section>
-    </motion.div>
+        {/* Height Band Selection */}
+        <section className="space-y-4">
+          <h3 className="theme-heading text-lg font-semibold">Height</h3>
+          <p className="text-sm text-muted-foreground">
+            Select your height category, then fine-tune your exact height.
+          </p>
+          {heightBandsLoading ? (
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {heightBands?.map((band) => (
+                <Button
+                  key={band.id}
+                  variant={draft.height_band?.id === band.id ? 'default' : 'outline'}
+                  onClick={() => handleHeightBandSelect(band)}
+                  className={cn(
+                    !band.is_cg_selectable &&
+                      isStaff &&
+                      'border-red-500 text-red-500 hover:bg-red-500/10 hover:text-red-500'
+                  )}
+                >
+                  {band.display_name}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {draft.height_band && (
+            <div className="max-w-md space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>{formatHeight(draft.height_band.min_inches)}</span>
+                <span className="font-semibold">
+                  {(heightDraft ?? draft.height_inches)
+                    ? formatHeight(heightDraft ?? draft.height_inches!)
+                    : '-'}
+                </span>
+                <span>{formatHeight(draft.height_band.max_inches)}</span>
+              </div>
+              <Slider
+                value={[heightDraft ?? draft.height_inches ?? draft.height_band.min_inches]}
+                min={draft.height_band.min_inches}
+                max={draft.height_band.max_inches}
+                step={1}
+                // Commit-only PATCH (2026-07 audit): onValueChange fired one
+                // request per drag tick — a request storm whose out-of-order
+                // responses rubber-banded the thumb. Local state keeps the
+                // thumb tracking during the drag.
+                onValueChange={(value) => setHeightDraft(value[0])}
+                onValueCommit={handleHeightInchesCommit}
+              />
+              <p className="text-xs text-muted-foreground">
+                Other characters will see you as "{draft.height_band.display_name}" rather than your
+                exact height.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* Build Selection */}
+        <section className="space-y-4">
+          <h3 className="theme-heading text-lg font-semibold">Build</h3>
+          <p className="text-sm text-muted-foreground">Select your body type.</p>
+          {buildsLoading ? (
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {builds?.map((build) => (
+                <Button
+                  key={build.id}
+                  variant={draft.build?.id === build.id ? 'default' : 'outline'}
+                  onClick={() => handleBuildSelect(build)}
+                  className={cn(
+                    !build.is_cg_selectable &&
+                      isStaff &&
+                      'border-red-500 text-red-500 hover:bg-red-500/10 hover:text-red-500'
+                  )}
+                >
+                  {build.display_name}
+                </Button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Form Traits (Hair, Eyes, Skin, etc.) */}
+        {draft.selected_species && (
+          <section className="space-y-4">
+            <h3 className="theme-heading text-lg font-semibold">Physical Features</h3>
+            <p className="text-sm text-muted-foreground">
+              Select your character's physical features.
+            </p>
+            {renderFormOptions()}
+          </section>
+        )}
+
+        {/* Description */}
+        <section className="space-y-4">
+          <h3 className="theme-heading text-lg font-semibold">Physical Description</h3>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              {...register('description')}
+              placeholder="Describe your character's physical appearance..."
+              rows={4}
+              className="resize-y"
+            />
+            <p className="text-xs text-muted-foreground">
+              (Optional, appended to automatic descriptions)
+            </p>
+          </div>
+        </section>
+
+        {/* Body markings (#2985) */}
+        <section className="space-y-4">
+          <MarkingsEditor />
+        </section>
+      </div>
+    </ChapterLeaf>
   );
 }

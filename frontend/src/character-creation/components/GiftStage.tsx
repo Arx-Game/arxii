@@ -19,12 +19,13 @@ import { CodexTerm } from '@/codex/components/CodexTerm';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
-import { motion } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { ChapterLeaf } from '../folio';
 import { useCGExplanations, useResonances, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
+import { Stage, STAGE_LABELS } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
@@ -128,134 +129,129 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   }, [onRegisterBeforeLeave, saveFormFields]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.GIFT}
+      title={copy?.magic_heading ?? STAGE_LABELS[Stage.GIFT]}
+      intro={copy?.magic_intro}
+      wide
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.magic_heading ?? 'Gift'}</h2>
-        <p className="mt-2 text-muted-foreground">
-          {copy?.magic_intro ?? 'Choose your magical tradition, gift, and how your magic works.'}
-        </p>
+      <div className="space-y-8">
         {copy?.gift_lore_intro && (
           <p className="mt-2 text-sm text-muted-foreground">{copy.gift_lore_intro}</p>
         )}
-      </div>
 
-      <Accordion
-        type="single"
-        collapsible
-        value={openStep}
-        onValueChange={(value) => setOpenStep(value as FunnelStepId | '')}
-      >
-        <AccordionItem value="tradition">
-          <AccordionTrigger>
-            <StepLabel label={FUNNEL_STEPS[0].label} complete={completion.tradition} />
-          </AccordionTrigger>
-          <AccordionContent>
-            <TraditionStep draft={draft} />
-          </AccordionContent>
-        </AccordionItem>
+        <Accordion
+          type="single"
+          collapsible
+          value={openStep}
+          onValueChange={(value) => setOpenStep(value as FunnelStepId | '')}
+        >
+          <AccordionItem value="tradition">
+            <AccordionTrigger>
+              <StepLabel label={FUNNEL_STEPS[0].label} complete={completion.tradition} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <TraditionStep draft={draft} />
+            </AccordionContent>
+          </AccordionItem>
 
-        <AccordionItem value="gift" disabled={!completion.tradition}>
-          <AccordionTrigger disabled={!completion.tradition}>
-            <StepLabel label={FUNNEL_STEPS[1].label} complete={completion.gift} />
-          </AccordionTrigger>
-          <AccordionContent>
-            <GiftSelector draft={draft} />
-          </AccordionContent>
-        </AccordionItem>
+          <AccordionItem value="gift" disabled={!completion.tradition}>
+            <AccordionTrigger disabled={!completion.tradition}>
+              <StepLabel label={FUNNEL_STEPS[1].label} complete={completion.gift} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <GiftSelector draft={draft} />
+            </AccordionContent>
+          </AccordionItem>
 
-        <AccordionItem value="techniques" disabled={!completion.gift}>
-          <AccordionTrigger disabled={!completion.gift}>
-            <StepLabel label={FUNNEL_STEPS[2].label} complete={completion.techniques} />
-          </AccordionTrigger>
-          <AccordionContent>
-            {giftId != null ? (
-              <TechniqueSelector draft={draft} giftId={giftId} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Select a gift first.</p>
-            )}
-          </AccordionContent>
-        </AccordionItem>
+          <AccordionItem value="techniques" disabled={!completion.gift}>
+            <AccordionTrigger disabled={!completion.gift}>
+              <StepLabel label={FUNNEL_STEPS[2].label} complete={completion.techniques} />
+            </AccordionTrigger>
+            <AccordionContent>
+              {giftId != null ? (
+                <TechniqueSelector draft={draft} giftId={giftId} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Select a gift first.</p>
+              )}
+            </AccordionContent>
+          </AccordionItem>
 
-        <AccordionItem value="resonance" disabled={!completion.gift}>
-          <AccordionTrigger disabled={!completion.gift}>
-            <StepLabel label={FUNNEL_STEPS[3].label} complete={completion.resonance} />
-          </AccordionTrigger>
-          <AccordionContent>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {resonances.map((resonance) => {
-                const isSelected = selectedResonanceId === resonance.id;
-                return (
-                  <Card
-                    key={resonance.id}
-                    onClick={() => handleSelectResonance(resonance.id.toString())}
-                    className={cn(
-                      'cursor-pointer transition-colors hover:bg-accent',
-                      isSelected && 'border-primary bg-accent'
-                    )}
-                  >
-                    <CardHeader className="p-3">
-                      <CardTitle className="flex items-center justify-between gap-2 text-sm">
-                        <span>
-                          {resonance.codex_entry_id != null ? (
-                            <CodexTerm entryId={resonance.codex_entry_id}>
-                              {resonance.name}
-                            </CodexTerm>
-                          ) : (
-                            resonance.name
-                          )}
-                        </span>
-                        {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
-                      </CardTitle>
-                    </CardHeader>
-                    {resonance.description && (
-                      <CardContent className="px-3 pb-3 pt-0">
-                        <CardDescription className="text-xs">
-                          {resonance.description}
-                        </CardDescription>
-                      </CardContent>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+          <AccordionItem value="resonance" disabled={!completion.gift}>
+            <AccordionTrigger disabled={!completion.gift}>
+              <StepLabel label={FUNNEL_STEPS[3].label} complete={completion.resonance} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {resonances.map((resonance) => {
+                  const isSelected = selectedResonanceId === resonance.id;
+                  return (
+                    <Card
+                      key={resonance.id}
+                      onClick={() => handleSelectResonance(resonance.id.toString())}
+                      className={cn(
+                        'cursor-pointer transition-colors hover:bg-accent',
+                        isSelected && 'border-primary bg-accent'
+                      )}
+                    >
+                      <CardHeader className="p-3">
+                        <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                          <span>
+                            {resonance.codex_entry_id != null ? (
+                              <CodexTerm entryId={resonance.codex_entry_id}>
+                                {resonance.name}
+                              </CodexTerm>
+                            ) : (
+                              resonance.name
+                            )}
+                          </span>
+                          {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+                        </CardTitle>
+                      </CardHeader>
+                      {resonance.description && (
+                        <CardContent className="px-3 pb-3 pt-0">
+                          <CardDescription className="text-xs">
+                            {resonance.description}
+                          </CardDescription>
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-        <AccordionItem value="anima">
-          <AccordionTrigger>
-            <StepLabel label={FUNNEL_STEPS[4].label} complete={completion.anima} />
-          </AccordionTrigger>
-          <AccordionContent>
-            <AnimaCheckStep draft={draft} ritualNameField={register('anima_ritual_name')} />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+          <AccordionItem value="anima">
+            <AccordionTrigger>
+              <StepLabel label={FUNNEL_STEPS[4].label} complete={completion.anima} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <AnimaCheckStep draft={draft} ritualNameField={register('anima_ritual_name')} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
-      {/* Motif — always visible (carried from the old MagicStage advanced section).
+        {/* Motif — always visible (carried from the old MagicStage advanced section).
           Glimpse is the guided tag-driven flow below (#2427). */}
-      <section className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="motif-description">{copy?.magic_motif_heading ?? 'Motif'}</Label>
-          <Textarea
-            id="motif-description"
-            {...register('motif_description')}
-            placeholder="Describe the aesthetic of your magic..."
-            rows={3}
-            className="resize-y"
+        <section className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="motif-description">{copy?.magic_motif_heading ?? 'Motif'}</Label>
+            <Textarea
+              id="motif-description"
+              {...register('motif_description')}
+              placeholder="Describe the aesthetic of your magic..."
+              rows={3}
+              className="resize-y"
+            />
+          </div>
+          <GlimpseSection
+            draft={draft}
+            glimpseProseField={register('glimpse_story')}
+            heading={copy?.magic_glimpse_heading}
           />
-        </div>
-        <GlimpseSection
-          draft={draft}
-          glimpseProseField={register('glimpse_story')}
-          heading={copy?.magic_glimpse_heading}
-        />
-      </section>
-    </motion.div>
+        </section>
+      </div>
+    </ChapterLeaf>
   );
 }

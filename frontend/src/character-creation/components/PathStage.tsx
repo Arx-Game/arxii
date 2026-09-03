@@ -30,8 +30,10 @@ import {
   Zap,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ChapterLeaf } from '../folio';
 import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
+import { Stage, STAGE_LABELS } from '../types';
 
 interface PathStageProps {
   draft: CharacterDraft;
@@ -158,104 +160,103 @@ export function PathStage({ draft }: PathStageProps) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.PATH}
+      title={copy?.path_heading ?? STAGE_LABELS[Stage.PATH]}
+      intro={copy?.path_intro}
+      wide
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.path_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.path_intro ?? ''}</p>
+      <div className="space-y-8">
         {copy?.path_lore_durance && (
           <p className="mt-2 text-sm text-muted-foreground">{copy.path_lore_durance}</p>
         )}
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-        {/* Path cards */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {paths?.map((path) => {
-            const isSelected = draft.selected_path?.id === path.id;
-            const Icon = getPathIcon(path.icon_name);
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          {/* Path cards */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {paths?.map((path) => {
+              const isSelected = draft.selected_path?.id === path.id;
+              const Icon = getPathIcon(path.icon_name);
 
-            return (
-              <Card
-                key={path.id}
-                className={cn(
-                  'relative cursor-pointer transition-all hover:shadow-md',
-                  isSelected && 'ring-2 ring-primary',
-                  hoveredPath?.id === path.id && !isSelected && 'ring-1 ring-primary/30'
-                )}
-                onClick={() => handleSelectPath(path)}
-                onMouseEnter={() => setHoveredPath(path)}
-                onMouseLeave={() => setHoveredPath(null)}
-              >
-                {isSelected && (
-                  <div className="absolute right-2 top-2">
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
-                  </div>
-                )}
-                <CardHeader className="pb-2">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        'flex h-10 w-10 items-center justify-center rounded-lg',
-                        isSelected ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <CardTitle className="text-lg">
-                      {path.codex_entry_ids?.length > 0 ? (
-                        <CodexTerm entryId={path.codex_entry_ids[0]}>{path.name}</CodexTerm>
-                      ) : (
-                        path.name
-                      )}
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="line-clamp-3">{path.description}</CardDescription>
-                  {path.aspects.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {path.aspects.map((aspect) => (
-                        <span
-                          key={aspect}
-                          className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                        >
-                          {aspect}
-                        </span>
-                      ))}
+              return (
+                <Card
+                  key={path.id}
+                  className={cn(
+                    'relative cursor-pointer transition-all hover:shadow-md',
+                    isSelected && 'ring-2 ring-primary',
+                    hoveredPath?.id === path.id && !isSelected && 'ring-1 ring-primary/30'
+                  )}
+                  onClick={() => handleSelectPath(path)}
+                  onMouseEnter={() => setHoveredPath(path)}
+                  onMouseLeave={() => setHoveredPath(null)}
+                >
+                  {isSelected && (
+                    <div className="absolute right-2 top-2">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          'flex h-10 w-10 items-center justify-center rounded-lg',
+                          isSelected
+                            ? 'bg-primary/20 text-primary'
+                            : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <CardTitle className="text-lg">
+                        {path.codex_entry_ids?.length > 0 ? (
+                          <CodexTerm entryId={path.codex_entry_ids[0]}>{path.name}</CodexTerm>
+                        ) : (
+                          path.name
+                        )}
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="line-clamp-3">{path.description}</CardDescription>
+                    {path.aspects.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {path.aspects.map((aspect) => (
+                          <span
+                            key={aspect}
+                            className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                          >
+                            {aspect}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
 
-        {/* Sidebar: Path detail panel (desktop only) */}
-        <div className="hidden lg:block">
-          <div className="sticky top-4">
-            <PathDetailPanel path={hoveredPath ?? draft.selected_path ?? null} />
+          {/* Sidebar: Path detail panel (desktop only) */}
+          <div className="hidden lg:block">
+            <div className="sticky top-4">
+              <PathDetailPanel path={hoveredPath ?? draft.selected_path ?? null} />
+            </div>
           </div>
         </div>
+
+        {/* Mobile: Path detail below cards */}
+        {draft.selected_path && (
+          <div className="lg:hidden">
+            <PathDetailPanel path={draft.selected_path} />
+          </div>
+        )}
+
+        {paths?.length === 0 && (
+          <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+            No paths are currently available for selection.
+          </div>
+        )}
       </div>
-
-      {/* Mobile: Path detail below cards */}
-      {draft.selected_path && (
-        <div className="lg:hidden">
-          <PathDetailPanel path={draft.selected_path} />
-        </div>
-      )}
-
-      {paths?.length === 0 && (
-        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-          No paths are currently available for selection.
-        </div>
-      )}
-    </motion.div>
+    </ChapterLeaf>
   );
 }
