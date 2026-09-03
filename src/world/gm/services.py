@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 import logging
 import secrets
 from typing import TYPE_CHECKING
 
+from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from world.gm.constants import (
+    GM_LEVEL_ORDER,
     GMLevel,
     GMTableStatus,
     TableRequestKind,
     TableRequestStatus,
+    gm_level_index,
 )
 from world.gm.models import (
     AreaBuildGrant,
     CatalogSuggestion,
+    CheckTypeSituationFit,
+    ConsequencePoolGuide,
     GMLevelCap,
     GMLevelChange,
     GMProfile,
@@ -30,9 +36,11 @@ from world.gm.models import (
     GMTable,
     GMTableMembership,
     GMWeeklyRewardTracker,
+    SituationDifficultyGuide,
     SituationKind,
 )
-from world.gm.types import CategoryFeedback, GMEvidenceSummary
+from world.gm.types import CategoryFeedback, DiscoveryResult, GMEvidenceSummary, KindResult
+from world.mechanics.models import ChallengeTemplate, SituationTemplate
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
@@ -53,6 +61,7 @@ if TYPE_CHECKING:
     from world.stories.models import Story
 
 DEFAULT_INVITE_DURATION_DAYS = 30
+FIND_RESULT_LIMIT = 15
 
 logger = logging.getLogger(__name__)
 
@@ -1075,3 +1084,119 @@ def signoff_table_update_request(
             sender=gm_profile.account,
         )
     return request
+
+
+# ---------------------------------------------------------------------------
+# Catalog discovery (#3564) - one search behind telnet ``setsituation find``
+# and the future ``GET /api/gm/discovery/``.
+# ---------------------------------------------------------------------------
+
+
+def user_breadth_index(user: AbstractBaseUser | AnonymousUser) -> int:
+    """How far up the GM ladder a web caller may browse (#3564).
+
+    Staff see everything (top index); a GM sees up to their level; an
+    authenticated account without a profile browses at STARTING breadth.
+    Mirrors ``FindSituationAction._actor_breadth_index`` for a request user.
+    """
+    if user.is_staff:
+        return len(GM_LEVEL_ORDER) - 1
+    try:
+        level = user.gm_profile.level
+    except (GMProfile.DoesNotExist, AttributeError):
+        return 0
+    return gm_level_index(level)
+
+
+def search_situation_templates(
+    query: str, *, limit: int = FIND_RESULT_LIMIT
+) -> list[SituationTemplate]:
+    qs = SituationTemplate.objects.select_related("category")
+    query = query.strip()
+    if query:
+        qs = qs.filter(Q(name__icontains=query) | Q(description_template__icontains=query))
+    return list(qs.order_by("name")[:limit])
+
+
+def search_challenge_templates(
+    query: str, *, limit: int = FIND_RESULT_LIMIT
+) -> list[ChallengeTemplate]:
+    qs = ChallengeTemplate.objects.select_related("category")
+    query = query.strip()
+    if query:
+        qs = qs.filter(
+            Q(name__icontains=query)
+            | Q(description_template__icontains=query)
+            | Q(goal__icontains=query)
+        )
+    return list(qs.order_by("name")[:limit])
+
+
+def search_situation_kinds(query: str, actor_level_index: int) -> list[SituationKind]:
+    """Return SituationKinds matching *query* within the actor's breadth.
+
+    Filtered server-side on ``SituationKind.minimum_gm_level`` (Decision 9) --
+    a kind above the actor's tier never appears in results, even if the name
+    matches exactly (the leak-analysis contract: never a client-side hide).
+    """
+    kinds = SituationKind.objects.cached_all()
+    query = query.strip().lower()
+    if query:
+        kinds = [k for k in kinds if query in k.name.lower()]
+    kinds = [k for k in kinds if gm_level_index(k.minimum_gm_level) <= actor_level_index]
+    return sorted(kinds, key=lambda k: k.name)
+
+
+def find_situations(*, query: str, risk: str | None, actor_level_index: int) -> DiscoveryResult:
+    """The one catalog search behind telnet ``setsituation find`` and
+    ``GET /api/gm/discovery/`` (#3564).
+
+    An empty query returns every kind within the caller's breadth and no
+    templates or challenges (the cold open of a kind-first browse). Kinds
+    above ``actor_level_index`` never appear, whatever the query. Guides,
+    fits and pool guidance are loaded with three grouped queries rather
+    than a prefetch onto the identity-mapped kinds (ADR-0261). ``all_guides``
+    is sorted by ``RenownRisk``'s own declaration order (weakest to
+    strongest, the same ladder ``risk_meets_legend_floor`` reads) rather than
+    the DB's alphabetical string order on the stored value -- "high" would
+    otherwise sort before "low".
+    """
+    query = query.strip()
+    kinds = search_situation_kinds(query, actor_level_index)
+    templates = search_situation_templates(query) if query else []
+    challenges = search_challenge_templates(query) if query else []
+    kind_ids = [kind.pk for kind in kinds]
+    fits_by_kind: dict[int, list[CheckTypeSituationFit]] = defaultdict(list)
+    for fit in (
+        CheckTypeSituationFit.objects.filter(situation_kind_id__in=kind_ids)
+        .select_related("check_type")
+        .order_by("check_type__name")
+    ):
+        fits_by_kind[fit.situation_kind_id].append(fit)
+    guides_by_kind: dict[int, list[SituationDifficultyGuide]] = defaultdict(list)
+    for guide in SituationDifficultyGuide.objects.filter(situation_kind_id__in=kind_ids):
+        guides_by_kind[guide.situation_kind_id].append(guide)
+    risk_ladder = list(RenownRisk.values)
+    for guides in guides_by_kind.values():
+        guides.sort(key=lambda g: risk_ladder.index(g.risk))
+    pools_by_kind: dict[int, list[ConsequencePoolGuide]] = defaultdict(list)
+    for pool_guide in (
+        ConsequencePoolGuide.objects.filter(situation_kind_id__in=kind_ids)
+        .select_related("pool")
+        .order_by("-is_default", "pool__name")
+    ):
+        pools_by_kind[pool_guide.situation_kind_id].append(pool_guide)
+    results = []
+    for kind in kinds:
+        guides = guides_by_kind.get(kind.pk, [])
+        for_risk = next((g for g in guides if risk and g.risk == risk), None)
+        results.append(
+            KindResult(
+                kind=kind,
+                check_fits=fits_by_kind.get(kind.pk, []),
+                difficulty_guide=for_risk,
+                all_guides=guides,
+                pool_guides=pools_by_kind.get(kind.pk, []),
+            )
+        )
+    return DiscoveryResult(templates=templates, challenges=challenges, kinds=results)
