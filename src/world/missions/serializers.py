@@ -324,6 +324,25 @@ class MissionTemplateDetailSerializer(MissionTemplateSerializer):
 # ---------------------------------------------------------------------------
 
 
+def _node_clean_fields(instance: MissionNode) -> dict:
+    """Current persisted values ``MissionNode.clean()`` reads (#3568 partial-update probe)."""
+    return {
+        "template": instance.template,
+        "is_entry": instance.is_entry,
+        "conflict_mode": instance.conflict_mode,
+        "joint_combine": instance.joint_combine,
+        "joint_count": instance.joint_count,
+        "location_mode": instance.location_mode,
+        "target_area": instance.target_area,
+        "track_successes": instance.track_successes,
+        "track_failures": instance.track_failures,
+        "track_success_target": instance.track_success_target,
+        "track_failure_target": instance.track_failure_target,
+        "track_success_beat_outcome": instance.track_success_beat_outcome,
+        "track_failure_beat_outcome": instance.track_failure_beat_outcome,
+    }
+
+
 class MissionNodeSerializer(serializers.ModelSerializer):
     """Editor CRUD for MissionNode rows.
 
@@ -331,7 +350,10 @@ class MissionNodeSerializer(serializers.ModelSerializer):
     authoring UI passes them through unchanged). Editor layout fields
     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
     sibling are both editable. ``location_mode``/``locations``/``target_area``
-    round-trip the node's location gate (#885, #888).
+    round-trip the node's location gate (#885, #888). ``track_successes``/
+    ``track_failures``/``track_success_target``/``track_failure_target``/
+    ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+    progress track (#3568): 0/0 = not a track.
     """
 
     class Meta:
@@ -353,6 +375,12 @@ class MissionNodeSerializer(serializers.ModelSerializer):
             "location_mode",
             "locations",
             "target_area",
+            "track_successes",
+            "track_failures",
+            "track_success_target",
+            "track_failure_target",
+            "track_success_beat_outcome",
+            "track_failure_beat_outcome",
         ]
         read_only_fields = ["id"]
 
@@ -364,13 +392,40 @@ class MissionNodeSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs: dict) -> dict:
-        """AREA mode requires a target_area."""
+        """AREA mode requires a target_area; #3568 mirrors the rest of MissionNode.clean()
+        (entry-uniqueness, JOINT coupling, track invariants) via a probe instance so a bad
+        row surfaces as a 400 (``MissionGiverSerializer`` precedent) instead of the
+        ``ValidationError`` ``MissionNode.save()`` raises going uncaught.
+        """
         attrs = super().validate(attrs)
         location_mode = attrs.get("location_mode")
         if location_mode is None and self.instance is not None:
             location_mode = self.instance.location_mode
         if location_mode == NodeLocationMode.AREA and not attrs.get("target_area"):
             raise serializers.ValidationError({"target_area": _ERR_AREA_REQUIRES_TARGET_AREA})
+
+        merged = {**({} if self.instance is None else _node_clean_fields(self.instance)), **attrs}
+        probe = MissionNode(
+            pk=self.instance.pk if self.instance is not None else None,
+            template=merged.get("template"),
+            is_entry=merged.get("is_entry", False),
+            conflict_mode=merged.get("conflict_mode", ""),
+            joint_combine=merged.get("joint_combine"),
+            joint_count=merged.get("joint_count"),
+            location_mode=merged.get("location_mode", NodeLocationMode.ANYWHERE),
+            target_area=merged.get("target_area"),
+            track_successes=merged.get("track_successes", 0),
+            track_failures=merged.get("track_failures", 0),
+            track_success_target=merged.get("track_success_target"),
+            track_failure_target=merged.get("track_failure_target"),
+            track_success_beat_outcome=merged.get("track_success_beat_outcome", ""),
+            track_failure_beat_outcome=merged.get("track_failure_beat_outcome", ""),
+        )
+        try:
+            probe.clean()
+        except DjangoValidationError as exc:
+            detail = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+            raise serializers.ValidationError(detail) from exc
         return attrs
 
     def _effective_location_mode(self) -> str | None:
@@ -396,6 +451,24 @@ class MissionOptionOpponentLineSerializer(serializers.ModelSerializer):
         fields = ["id", "creature_template", "count", "position_name", "order"]
 
 
+def _option_clean_fields(instance: MissionOption) -> dict:
+    """Current persisted values ``MissionOption.clean()`` reads (#3568 partial-update probe)."""
+    return {
+        "node": instance.node,
+        "option_kind": instance.option_kind,
+        "source_kind": instance.source_kind,
+        "encounter_risk_level": instance.encounter_risk_level,
+        "authored_check_type": instance.authored_check_type,
+        "authored_base_risk": instance.authored_base_risk,
+        "authored_ic_framing": instance.authored_ic_framing,
+        "branch_target": instance.branch_target,
+        "challenge": instance.challenge,
+        "required_act": instance.required_act,
+        "opposition_sheet": instance.opposition_sheet,
+        "opposition_check_type": instance.opposition_check_type,
+    }
+
+
 class MissionOptionSerializer(serializers.ModelSerializer):
     """Editor CRUD for MissionOption rows (authored or challenge-sourced).
 
@@ -409,6 +482,8 @@ class MissionOptionSerializer(serializers.ModelSerializer):
     child list -- create()/update() diff-sync it against the option's
     existing rows by id (add/edit/delete), same pattern as
     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+    ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+    the authored opposition whose passive level term adds to the difficulty.
     """
 
     opponent_lines = MissionOptionOpponentLineSerializer(many=True, required=False)
@@ -431,8 +506,41 @@ class MissionOptionSerializer(serializers.ModelSerializer):
             "branch_target",
             "challenge",
             "opponent_lines",
+            "opposition_sheet",
+            "opposition_check_type",
         ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs: dict) -> dict:
+        """Mirror ``MissionOption.clean()`` (#3568 ruling 12 precedent; see
+        ``MissionGiverSerializer``/``MissionNodeSerializer``): DRF's
+        ModelSerializer skips ``clean()`` on ``save()``, so kind-pairing
+        invariants (ENCOUNTER's risk level, CONTEST's opposition fields, a
+        track node refusing ENCOUNTER/EXTERNAL_ACT, ...) would otherwise raise
+        out of ``save()`` as an unhandled 500 instead of a 400.
+        """
+        attrs = super().validate(attrs)
+        merged = {**({} if self.instance is None else _option_clean_fields(self.instance)), **attrs}
+        probe = MissionOption(
+            node=merged.get("node"),
+            option_kind=merged.get("option_kind", ""),
+            source_kind=merged.get("source_kind", ""),
+            encounter_risk_level=merged.get("encounter_risk_level", ""),
+            authored_check_type=merged.get("authored_check_type"),
+            authored_base_risk=merged.get("authored_base_risk", 0),
+            authored_ic_framing=merged.get("authored_ic_framing", ""),
+            branch_target=merged.get("branch_target"),
+            challenge=merged.get("challenge"),
+            required_act=merged.get("required_act", ""),
+            opposition_sheet=merged.get("opposition_sheet"),
+            opposition_check_type=merged.get("opposition_check_type"),
+        )
+        try:
+            probe.clean()
+        except DjangoValidationError as exc:
+            detail = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+            raise serializers.ValidationError(detail) from exc
+        return attrs
 
     def create(self, validated_data: dict) -> MissionOption:  # type: ignore[override]
         opponent_lines_data = validated_data.pop("opponent_lines", [])
@@ -498,6 +606,16 @@ class _ClearOutcomeRewriteOnEditMixin:
         return super().update(instance, validated_data)
 
 
+def _route_clean_fields(instance: MissionOptionRoute) -> dict:
+    """Current persisted values ``MissionOptionRoute.clean()`` reads (#3568 probe)."""
+    return {
+        "option": instance.option,
+        "target_node": instance.target_node,
+        "is_random_set": instance.is_random_set,
+        "beat_outcome": instance.beat_outcome,
+    }
+
+
 class MissionOptionRouteSerializer(_ClearOutcomeRewriteOnEditMixin, serializers.ModelSerializer):
     """Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
 
@@ -523,6 +641,28 @@ class MissionOptionRouteSerializer(_ClearOutcomeRewriteOnEditMixin, serializers.
             "beat_outcome",
         ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs: dict) -> dict:
+        """Mirror ``MissionOptionRoute.clean()`` (#3568 ruling 12): unlike
+        ``MissionNode``/``MissionOption``, ``MissionOptionRoute.save()`` never calls
+        ``clean()`` at all, so without this both the pre-existing beat_outcome
+        terminal-only rule (#3560/#3565) and the new track-route rule pass silently
+        through the API instead of surfacing as a 400.
+        """
+        attrs = super().validate(attrs)
+        merged = {**({} if self.instance is None else _route_clean_fields(self.instance)), **attrs}
+        probe = MissionOptionRoute(
+            option=merged.get("option"),
+            target_node=merged.get("target_node"),
+            is_random_set=merged.get("is_random_set", False),
+            beat_outcome=merged.get("beat_outcome", ""),
+        )
+        try:
+            probe.clean()
+        except DjangoValidationError as exc:
+            detail = exc.message_dict if hasattr(exc, "message_dict") else exc.messages
+            raise serializers.ValidationError(detail) from exc
+        return attrs
 
 
 class MissionOptionRouteCandidateSerializer(
@@ -783,6 +923,20 @@ class BeatOptionSerializer(serializers.Serializer):
     base_risk = serializers.IntegerField()
 
 
+class TrackViewSerializer(serializers.Serializer):
+    """Read-only mirror of :class:`world.missions.types.TrackView` (#3568).
+
+    Counts only - no opposition sheet, no check type, no difficulty number
+    reaches the player payload (the leak boundary is enforced upstream in
+    ``services.play._track_view``, not here).
+    """
+
+    successes = serializers.IntegerField()
+    needed = serializers.IntegerField()
+    failures = serializers.IntegerField()
+    allowed = serializers.IntegerField()
+
+
 class BeatViewSerializer(serializers.Serializer):
     """Read-only mirror of :class:`world.missions.types.BeatView`."""
 
@@ -792,6 +946,7 @@ class BeatViewSerializer(serializers.Serializer):
     flavor_text = serializers.CharField(allow_blank=True)
     options = BeatOptionSerializer(many=True)
     is_paused = serializers.BooleanField()
+    track = TrackViewSerializer(allow_null=True)
 
 
 class ResolvedBeatSerializer(serializers.Serializer):
@@ -863,6 +1018,7 @@ class GroupBeatViewSerializer(serializers.Serializer):
     ballots = GroupBallotStateSerializer(many=True)
     expires_at = serializers.CharField(allow_null=True)
     is_paused = serializers.BooleanField()
+    track = TrackViewSerializer(allow_null=True)
 
 
 class GroupBeatResultSerializer(serializers.Serializer):

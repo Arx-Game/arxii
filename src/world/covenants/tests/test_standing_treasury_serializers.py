@@ -128,6 +128,9 @@ class TreasuryBalanceBatchListTests(TestCase):
 
         cls.covenant_non_member = CovenantFactory()
 
+    def tearDown(self) -> None:
+        self.member_account.clear_cached_properties()
+
     def _request_for(self, account):
         factory = APIRequestFactory()
         request = factory.get("/")
@@ -189,10 +192,10 @@ class TreasuryBalanceBatchListTests(TestCase):
         }
         serializer = CovenantSerializer(context=context)
 
-        # One query per covenant to memoize its viewer-membership lookup
-        # (_resolve_viewer_membership), zero additional queries for treasury —
-        # the whole point of threading the batch map through.
-        with self.assertNumQueries(3):
+        # Viewer membership comes from the Account cache (#3597): warm it, then the
+        # three balance reads cost nothing at all.
+        self.member_account.cached_covenant_memberships  # noqa: B018
+        with self.assertNumQueries(0):
             result_with_balance = serializer.get_treasury_balance(self.covenant_with_balance)
             result_no_row = serializer.get_treasury_balance(self.covenant_no_treasury_row)
             result_non_member = serializer.get_treasury_balance(self.covenant_non_member)
@@ -206,30 +209,24 @@ class TreasuryBalanceBatchListTests(TestCase):
             ).exists()
         )
 
-    def test_get_serializer_context_includes_treasury_balances_when_page_precomputed(self) -> None:
+    def test_list_hands_page_maps_to_the_serializer_as_explicit_context(self) -> None:
+        """``list()`` passes aggregates and treasury balances as ``context=``; nothing is
+        stashed on the viewset instance (#3597)."""
+        from unittest.mock import patch
+
         from world.covenants.views import CovenantViewSet
 
-        viewset = CovenantViewSet()
-        viewset.request = self._request_for(self.member_account)
-        viewset.format_kwarg = None
-        viewset._page_treasury_balances = {self.covenant_with_balance.pk: 250}
+        request = APIRequestFactory().get("/api/covenants/covenants/")
+        request.user = self.member_account
+        view = CovenantViewSet.as_view({"get": "list"})
+        with patch.object(CovenantViewSet, "get_serializer") as get_serializer:
+            get_serializer.return_value.data = []
+            response = view(request)
 
-        context = viewset.get_serializer_context()
-
-        self.assertEqual(
-            context["covenant_treasury_balances"], {self.covenant_with_balance.pk: 250}
-        )
-
-    def test_get_serializer_context_omits_treasury_balances_outside_list(self) -> None:
-        from world.covenants.views import CovenantViewSet
-
-        viewset = CovenantViewSet()
-        viewset.request = self._request_for(self.member_account)
-        viewset.format_kwarg = None
-
-        context = viewset.get_serializer_context()
-
-        self.assertNotIn("covenant_treasury_balances", context)
+        self.assertEqual(response.status_code, 200)
+        context = get_serializer.call_args.kwargs["context"]
+        self.assertEqual(context["covenant_treasury_balances"][self.covenant_with_balance.pk], 250)
+        self.assertIn(self.covenant_with_balance.pk, context["covenant_aggregates"])
 
     def test_detail_context_still_lazily_creates_treasury_on_first_deposit_path(self) -> None:
         """Outside list context (no batch map), get_treasury_balance falls back to

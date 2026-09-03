@@ -4,52 +4,30 @@ from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from evennia_extensions.models import PlayerData
 from world.roster.models import RosterEntry
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
-from world.scenes.models import Interaction, Persona
+from world.scenes.models import Interaction
 from world.scenes.place_models import InteractionReceiver
 
 
 def get_account_roster_entries(request: Request) -> list[RosterEntry]:
-    """Return all roster entries belonging to the authenticated user's account.
+    """Roster entries the authenticated account holds a current tenure on.
 
-    Path: Account -> PlayerData -> RosterTenure (current) -> RosterEntry
-    Results are cached per-request to avoid redundant queries.
+    A stateless read of ``Account.cached_roster_entries`` (ADR-0260, #3597); the
+    only work here is the anonymous guard. Nothing is stored on the request.
     """
-    _cache_attr = "_cached_roster_entries"
-    cached = getattr(request, _cache_attr, None)
-    if cached is not None:
-        return cached
-
     user = request.user
     if not user.is_authenticated:
-        setattr(request, _cache_attr, [])
         return []
-    try:
-        player_data = PlayerData.objects.get(account=user)
-    except PlayerData.DoesNotExist:
-        setattr(request, _cache_attr, [])
-        return []
-    entries = list(
-        RosterEntry.objects.filter(
-            tenures__player_data=player_data,
-            tenures__end_date__isnull=True,
-        )
-    )
-    setattr(request, _cache_attr, entries)
-    return entries
+    return user.cached_roster_entries
 
 
 def get_account_personas(request: Request) -> list[int]:
-    """Get all persona IDs for characters owned by the requesting account."""
-    roster_entries = get_account_roster_entries(request)
-    if not roster_entries:
+    """Every persona id (any type) on a sheet the authenticated account plays."""
+    user = request.user
+    if not user.is_authenticated:
         return []
-    character_ids = [re.character_sheet_id for re in roster_entries]
-    return list(
-        Persona.objects.filter(character_sheet_id__in=character_ids).values_list("id", flat=True)
-    )
+    return user.cached_persona_ids
 
 
 def _is_receiver_or_writer(

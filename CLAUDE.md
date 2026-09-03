@@ -338,6 +338,11 @@ Code quality (always-on; full list in `django_notes.md`):
   as impossible same-locked-rev-different-bytes failures (admin.E038 incident,
   2026-07-17: an admin sweep added `autocomplete_fields` to Evennia's own admin).
 - **No Django signals** — explicit, testable service-function calls instead (see ADR-0009).
+- **No per-request memos on views, serializers or requests** (see ADR-0260). Account
+  data is a `cached_property` on the `Account` typeclass, cleared through
+  `related_cache_fields`; request data is an explicit argument or attached once by
+  middleware. Enforced by `tools/lint_view_memo.py` (`view-memo` hook);
+  `# noqa: VIEW_MEMO` suppresses and must say why.
 - **Data migrations are required where authored content is at risk** — a `RunPython`
   backfill accompanies any migration that drops or renames an authored-content column
   (see ADR-0237, which supersedes ADR-0013). Play-state tables still need none.

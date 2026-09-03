@@ -1564,7 +1564,8 @@ Lore storage and character knowledge tracking.
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`
   per-character breakdown in entry payloads) — `CodexVisibilityMixin` in
-  `world/codex/views.py`
+  `world/codex/views.py`; the account's knowledge map is `Account.cached_codex_knowledge`
+  (#3597), cleared on every knowledge write, so the mixin holds no per-request state
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
@@ -4225,8 +4226,14 @@ reshape the world around them. No engine arbitration: the player picks, pick+che
 state is node position + snapshots + already-applied consequences, never a scratch blob.
 
 - **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
-  band, risk tier, draw weight, visibility) → `MissionNode` → `MissionOption` (`OptionKind`:
-  `BRANCH` / `CHECK` / `EXTERNAL_ACT` / `ENCOUNTER`, #3565) → `MissionOptionRoute`
+  band, risk tier, draw weight, visibility) → `MissionNode` (`track_successes`/
+  `track_failures`/`track_success_target`/`track_failure_target`/`track_success_beat_outcome`/
+  `track_failure_beat_outcome`, #3568 - a progress-track node: 0/0 = not a track, both
+  thresholds travel together; `is_track` property reads `track_successes > 0`) →
+  `MissionOption` (`OptionKind`: `BRANCH` / `CHECK` / `EXTERNAL_ACT` / `ENCOUNTER` (#3565) /
+  `CONTEST` (#3568 - a CHECK whose difficulty adds `level_opposition` for the option's
+  `opposition_sheet` at `effective_combat_level`, checked with `opposition_check_type`; the
+  NPC never rolls, tiers and routes are a CHECK's)) → `MissionOptionRoute`
   (outcome-tier-keyed, optionally weighted `Candidate`s; `beat_outcome` (SUCCESS/FAILURE,
   blank), meaningful only on a terminal route, #3565 - a terminal route can declare the
   linked story beat FAILURE even when the party reached an ending, so walking away isn't
@@ -4234,7 +4241,10 @@ state is node position + snapshots + already-applied consequences, never a scrat
   RESONANCE / RUMOR / CRIME_WATCH / BEAT / ITEM / FOLLOW_ON_SUMMONS / PROJECT).
   `MissionInstance` (the live run — `current_node`, participant set, status),
   `MissionParticipant`, `MissionDeedRecord` (+ child `MissionDeedRewardLine` rows, no dict
-  payloads), `MissionRiskAcknowledgement`, `MissionRunTale` (#2047 player-authored epilogue),
+  payloads), `MissionTrackProgress` (#3568 - per-run `successes`/`failures` counter for a
+  track node, one row per (instance, node); `enter_node` resets it to 0/0 on every entry,
+  matching `MissionNodeSnapshot`'s per-visit semantics; play state, resettable),
+  `MissionRiskAcknowledgement`, `MissionRunTale` (#2047 player-authored epilogue),
   `MissionGiver` (`GiverKind`: `ROOM_TRIGGER` / `ENVIRONMENTAL_DETAIL` / `BOARD` — a Notice
   Board), `MissionAssistPattern` (support-move density catalog), `MissionInvite`/
   `MissionGroupBallot` (co-op), `MissionOption.encounter_risk_level` (`RiskLevel`, ENCOUNTER
@@ -4296,13 +4306,55 @@ state is node position + snapshots + already-applied consequences, never a scrat
   .encounter_completed_beat_handler` branches on `encounter.scenario_deed_id` first: a
   scenario ENCOUNTER never touches the linked story beat, only the graph's eventual terminal
   does (a fight is incidental to the objective, never grades the beat by itself).
-- **Key services:** `services/resolution.py` (`resolve_option`, `enter_node`,
-  `_route_graded_outcome` - shared tier-routing tail for both a rolled CHECK and a completed
-  ENCOUNTER, #3565), `services/run.py` (`start_scenario_for_scene(beat, scene)` - starts or
+- **CONTEST option and track nodes - multi-stage scenes on the scenario graph, not a second
+  engine (#3568, ADR-0265):** `OptionKind.CONTEST` resolves inside `resolve_option` exactly
+  like an AUTHORED CHECK, except the target difficulty is `instance.template.risk_tier +
+  _contest_opposition(option)`, where `_contest_opposition` adds
+  `level_opposition(option.opposition_check_type, level=effective_combat_level
+  (option.opposition_sheet), character=option.opposition_sheet.character)` - the opposition
+  is an authored `CharacterSheet` (usually an NPC's), never a second roller; its passive level
+  term is the only cost. `MissionOption.clean()`'s `_contest_errors` requires AUTHORED source,
+  both check types, `opposition_sheet`, and forbids `branch_target` (a CONTEST is always a
+  dice resolution, like a CHECK). A **track node** is a `MissionNode` with both
+  `track_successes`/`track_failures` set (`is_track`): its CHECK/CONTEST options' routes may
+  not set `target_node`/`is_random_set` (`MissionOptionRoute.clean()`) - "the track decides."
+  `_route_graded_outcome` still applies the resolving route's per-tier consequence, then (when
+  `node.is_track` and the option is CHECK/CONTEST) hands the graded deed to `_advance_track`
+  instead of routing/terminating; `tier_is_success(outcome)` (`success_level >= 1`) decides
+  which counter on the per-run `MissionTrackProgress` row increments. Reaching
+  `track_successes` routes to `track_success_target` with `track_success_beat_outcome` (default
+  SUCCESS); reaching `track_failures` routes to `track_failure_target` with
+  `track_failure_beat_outcome` (default FAILURE); `_end_track` enters the target node when set,
+  else calls `_finish_terminal(instance, beat_outcome=...)` for a null target. `enter_node`
+  resets a re-entered track's counter to 0/0. `MissionNode.clean()`'s `_validate_track` forbids
+  a track node on `ConflictMode.JOINT` (each attempt would count once per participant, not
+  once for the node) and forbids ENCOUNTER/EXTERNAL_ACT options on a track
+  (`_track_node_kind_errors`) - a track's tier comes only from a CHECK or CONTEST deed.
+  Presentation: `TrackView` (`successes`/`needed`/`failures`/`allowed`, counts only - no
+  opposition sheet, no check type, no difficulty number) on `BeatView.track`/
+  `GroupBeatView.track`, built by `services/play.py`'s `_track_view`; the web `BeatCard`/
+  `GroupBeatCard` render it via the generic `frontend/src/components/ui/pips.tsx` `Pips`
+  component (two rows: successes toward the threshold, failures toward theirs) rather than a
+  bespoke scene-clock widget. `MissionNodeSerializer`/`MissionOptionSerializer`/
+  `MissionOptionRouteSerializer` (`world.missions.serializers`) each gained a `validate()` that
+  builds a probe model instance and calls its `clean()` - DRF's `ModelSerializer` skips
+  `clean()` on `save()`, so without this a bad CONTEST/track row 500'd instead of 400'ing (the
+  fix also closed two pre-existing gaps: `MissionOptionRoute.save()` never called `clean()` at
+  all, and the node/option serializers hadn't mirrored their models' pre-#3568 kind-pairing
+  invariants either).
+- **Key services:** `services/resolution.py` (`resolve_option`, `enter_node` (resets
+  `MissionTrackProgress` on track re-entry, #3568), `tier_is_success` (#3568 - whether a graded
+  `CheckOutcome.success_level >= 1`), `_route_graded_outcome` - shared tier-routing tail for a
+  rolled CHECK, a completed ENCOUNTER (#3565), and a track-node CHECK/CONTEST hand-off to
+  `_advance_track` (#3568), `_advance_track`/`_end_track` (#3568 - count a track deed and route
+  a threshold hit)), `services/run.py` (`start_scenario_for_scene(beat, scene)` - starts or
   rejoins the beat's scenario for the scene's whole party, #3565), `services/beat.py`
-  (`beat_outcome_for_route`, `on_mission_complete_for_beat(instance, *, route=, option=)` -
-  the mission→beat report-back seam, reads the resolving option's key and applies the
-  `beat_outcome` rule before calling `stories.services.beats.record_scenario_outcome`, #3565),
+  (`beat_outcome_for_route`, `on_mission_complete_for_beat(instance, *, route=, option=,
+  beat_outcome=)` - the mission→beat report-back seam, reads the resolving option's key and
+  applies the `beat_outcome` rule before calling `stories.services.beats
+  .record_scenario_outcome`, #3565; the `beat_outcome` keyword (#3568) overrides the derived
+  outcome with a track node's authored terminal outcome - the route's graded tier, when any,
+  still records as `outcome_tier`),
   `services/encounter_option.py` (`start_encounter_for_option`, `complete_encounter_for_option`,
   #3565), `services/play.py` (journal/beat presentation + `abandon_mission`), `services/report.py`
   (after-action payout + `ReportStyle`), `services/boards.py` (Notice Board preview-then-take),

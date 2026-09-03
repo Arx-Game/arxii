@@ -36,6 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { OpponentLineDraft, OpponentLinesEditor } from '@/stories/components/OpponentLinesEditor';
+import { useCheckTypeCatalog } from '@/gm-adjudication/queries';
 
 import {
   coercePredicate,
@@ -52,7 +53,7 @@ import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionOption } from '../types';
 import { useMutation } from '@tanstack/react-query';
 
-const KINDS = ['branch', 'check', 'encounter'] as const;
+const KINDS = ['branch', 'check', 'contest', 'external_act', 'encounter'] as const;
 const SOURCES = ['authored', 'challenge'] as const;
 const RISK_LEVELS = ['low', 'moderate', 'high', 'extreme', 'lethal'] as const;
 
@@ -188,6 +189,7 @@ function useOption(id: number) {
 function OptionEditor({ option }: { option: MissionOption }) {
   const qc = useQueryClient();
   const leaves = usePredicateLeaves();
+  const { data: checkTypes = [] } = useCheckTypeCatalog('', true);
   const { draft, setDraft, dirty, serverChanged, pullFromServer } = useServerDraft(option, (o) => ({
     order: o.order,
     option_kind: o.option_kind,
@@ -195,9 +197,12 @@ function OptionEditor({ option }: { option: MissionOption }) {
     authored_ic_framing: o.authored_ic_framing ?? '',
     authored_ic_framing_needs_rewrite: o.authored_ic_framing_needs_rewrite ?? false,
     authored_base_risk: o.authored_base_risk ?? 0,
+    authored_check_type: o.authored_check_type ?? null,
     visibility_rule: (o.visibility_rule ?? {}) as PredicateNode,
     encounter_risk_level: o.encounter_risk_level ?? '',
     opponent_lines: opponentLineDraftsFromOption(o.opponent_lines),
+    opposition_sheet: o.opposition_sheet ?? null,
+    opposition_check_type: o.opposition_check_type ?? null,
   }));
 
   // Validate the predicate tree before save — blocks empty leaves, missing
@@ -205,6 +210,10 @@ function OptionEditor({ option }: { option: MissionOption }) {
   // crashes _eligible_templates at evaluate time.
   const ruleErrors = validatePredicate(draft.visibility_rule, leaves.data ?? []);
   const ruleValid = ruleErrors.length === 0;
+
+  const isEncounter = draft.option_kind === 'encounter';
+  const isCheck = draft.option_kind === 'check';
+  const isContest = draft.option_kind === 'contest';
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -220,6 +229,15 @@ function OptionEditor({ option }: { option: MissionOption }) {
           draft.option_kind === 'encounter'
             ? opponentLineDraftsToPayload(draft.opponent_lines)
             : [],
+        // authored_check_type resolves a CHECK (AUTHORED source) or a CONTEST;
+        // every other kind forbids it, so a re-kinded option sends null.
+        authored_check_type:
+          (isCheck && draft.source_kind === 'authored') || isContest
+            ? draft.authored_check_type
+            : null,
+        // opposition_sheet/opposition_check_type are CONTEST-only (#3568).
+        opposition_sheet: isContest ? draft.opposition_sheet : null,
+        opposition_check_type: isContest ? draft.opposition_check_type : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({
@@ -228,9 +246,6 @@ function OptionEditor({ option }: { option: MissionOption }) {
       qc.invalidateQueries({ queryKey: missionKeys.options() });
     },
   });
-
-  const isEncounter = draft.option_kind === 'encounter';
-  const isCheck = draft.option_kind === 'check';
 
   return (
     <Card>
@@ -306,15 +321,89 @@ function OptionEditor({ option }: { option: MissionOption }) {
             />
           </div>
         ) : null}
+        {/* authored_check_type resolves an AUTHORED CHECK or a CONTEST (#3568). */}
+        {isCheck || isContest ? (
+          <div>
+            <Label htmlFor="opt-check-type">Check type</Label>
+            <Select
+              value={
+                draft.authored_check_type !== null ? String(draft.authored_check_type) : 'none'
+              }
+              onValueChange={(v) =>
+                setDraft({
+                  ...draft,
+                  authored_check_type: v === 'none' ? null : Number(v),
+                })
+              }
+            >
+              <SelectTrigger id="opt-check-type">
+                <SelectValue placeholder="Select a check type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {checkTypes.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        {isContest ? (
+          <div>
+            <Label htmlFor="opt-opposition-sheet">Opposition sheet id</Label>
+            <Input
+              id="opt-opposition-sheet"
+              type="number"
+              min={1}
+              value={draft.opposition_sheet ?? ''}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  opposition_sheet: e.target.value === '' ? null : Number(e.target.value),
+                })
+              }
+            />
+          </div>
+        ) : null}
+        {isContest ? (
+          <div>
+            <Label htmlFor="opt-opposition-check-type">Opposition check type</Label>
+            <Select
+              value={
+                draft.opposition_check_type !== null ? String(draft.opposition_check_type) : 'none'
+              }
+              onValueChange={(v) =>
+                setDraft({
+                  ...draft,
+                  opposition_check_type: v === 'none' ? null : Number(v),
+                })
+              }
+            >
+              <SelectTrigger id="opt-opposition-check-type">
+                <SelectValue placeholder="Select a check type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unset</SelectItem>
+                {checkTypes.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
         {isEncounter ? (
           <div>
             <Label htmlFor="opt-encounter-risk">Encounter risk level</Label>
             <Select
-              value={draft.encounter_risk_level ?? ''}
+              value={draft.encounter_risk_level || 'none'}
               onValueChange={(v) =>
                 setDraft({
                   ...draft,
-                  encounter_risk_level: v as '' | (typeof RISK_LEVELS)[number],
+                  encounter_risk_level: v === 'none' ? '' : (v as (typeof RISK_LEVELS)[number]),
                 })
               }
             >
@@ -322,7 +411,7 @@ function OptionEditor({ option }: { option: MissionOption }) {
                 <SelectValue placeholder="Select a risk level" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unset</SelectItem>
+                <SelectItem value="none">Unset</SelectItem>
                 {RISK_LEVELS.map((r) => (
                   <SelectItem key={r} value={r}>
                     {r}
