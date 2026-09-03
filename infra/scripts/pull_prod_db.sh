@@ -147,6 +147,42 @@ else
     "or 'pip install awscli' / 'pipx install awscli', or install uv (https://docs.astral.sh/uv/)"
 fi
 
+# LOCALITY GATE — the drop/recreate below is the destructive act, and until
+# now the ONLY thing aiming it at a local database was the DATABASE_URL a
+# human happened to have in src/.env. That variable is routinely re-pointed
+# by hand (inspecting another environment, a colleague's box, a staging
+# copy), and nothing in this script noticed: it would terminate every
+# connection and drop whatever it was aimed at, with prod-shaped confidence
+# in a "local dev tool" banner. Aiming this at a remote host is never a
+# legitimate use of THIS script (restore.sh is the remote-target tool, with
+# its own operator-supplied RESTORE_* gating), so refuse rather than confirm.
+#
+# Fail-closed on every axis: an unresolvable host, or ANY resolved address
+# outside loopback/RFC1918/link-local, refuses. Checking every A record (not
+# just the first) matters because a round-robin name can answer with a
+# private address on one query and a public one on the next.
+assert_local_target() {
+  local host="$1" ips ip
+  case "${host}" in
+    localhost|localhost.localdomain) return 0 ;;
+  esac
+  # A literal IP needs no resolution; getent echoes it straight back.
+  ips="$(getent ahostsv4 "${host}" 2>/dev/null | awk '{print $1}' | sort -u)"
+  [[ -n "${ips}" ]] || fail "cannot resolve DATABASE_URL host '${host}'" \
+    "— refusing to drop a database on a host that does not resolve"
+  while read -r ip; do
+    case "${ip}" in
+      127.*|10.*|192.168.*|169.254.*) ;;
+      172.1[6-9].*|172.2[0-9].*|172.3[01].*) ;;
+      *) fail "DATABASE_URL host '${host}' resolves to ${ip}, which is NOT a" \
+           "loopback/private address. This script only ever drops a LOCAL dev" \
+           "database. To restore a remote target use infra/scripts/restore.sh." ;;
+    esac
+  done <<< "${ips}"
+  log "target host '${host}' resolves only to local/private addresses — ok"
+}
+assert_local_target "${DB_HOST}"
+
 log "!!! OVERWRITING local dev DB '${DB_NAME}' on ${DB_HOST}:${DB_PORT} with the latest prod dump !!!"
 
 tmp="$(mktemp -d)"

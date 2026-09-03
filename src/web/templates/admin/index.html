@@ -8,9 +8,11 @@
         {% for group in grouped_apps %}
             <div class="app-group" data-group="{{ group.grouper|lower }}">
                 <h2 class="app-group-heading">
-                    {# A real <button> rather than role="button" on the heading: the
-                       heading was not keyboard-reachable at all (no tabindex), and a
-                       native button brings focus, Enter/Space and the right role. #}
+                    {% comment %}
+                        A real <button> rather than role="button" on the heading: the
+                        heading was not keyboard-reachable at all (no tabindex), and a
+                        native button brings focus, Enter/Space and the right role.
+                    {% endcomment %}
                     <button type="button"
                             class="app-group-header collapsible"
                             aria-expanded="true"
