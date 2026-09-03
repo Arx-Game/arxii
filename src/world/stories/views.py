@@ -837,10 +837,26 @@ class ChapterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def episodes(self, request: Request, pk: int | None = None) -> Response:
-        """Get all episodes for a chapter"""
+        """Get all episodes for a chapter.
+
+        Carries the request in the serializer context (#3563) so
+        EpisodeListSerializer's GM-only routing_problems field can resolve
+        the viewer instead of default-denying every caller, and preloads one
+        routing report per episode on the page the way EpisodeViewSet.list
+        does, so this action does not pay four queries per episode.
+        """
+        from world.stories.services.routing import routing_reports_for_episodes  # noqa: PLC0415
+
         chapter = self.get_object()
-        episodes = chapter.episodes.annotate(scenes_count=Count("episode_scenes")).order_by("order")
-        serializer = EpisodeListSerializer(episodes, many=True)
+        episodes = list(
+            chapter.episodes.annotate(scenes_count=Count("episode_scenes")).order_by("order")
+        )
+        serializer = EpisodeListSerializer(
+            episodes, many=True, context=self.get_serializer_context()
+        )
+        serializer.context["routing_reports"] = routing_reports_for_episodes(
+            [episode.pk for episode in episodes]
+        )
         return Response(serializer.data)
 
 

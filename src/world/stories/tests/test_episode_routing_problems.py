@@ -87,6 +87,29 @@ class EpisodeRoutingProblemsTests(APITestCase):
             "routing_problems", EpisodeDetailSerializer(self.dead_end, context={}).data
         )
 
+    def test_chapter_episodes_action_carries_problems_for_lead_gm(self) -> None:
+        """ChapterViewSet.episodes must carry the request in context (#3563).
+
+        Without it, EpisodeListSerializer's _gm_text_gate default-denies
+        even the Lead GM (no request in context reads as an anonymous
+        viewer), stripping routing_problems for everyone.
+        """
+        self.client.force_authenticate(user=self.lead_gm_account)
+        response = self.client.get(reverse("chapter-episodes", args=[self.chapter.pk]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        by_id = {row["id"]: row for row in response.data}
+        self.assertEqual(
+            by_id[self.dead_end.pk]["routing_problems"],
+            [f"beat #{self.beat.pk} (Hostage exchange) = FAILURE: no transition accepts it"],
+        )
+
+    def test_chapter_episodes_action_has_no_routing_problems_key_for_player(self) -> None:
+        self.client.force_authenticate(user=self.player_account)
+        response = self.client.get(reverse("chapter-episodes", args=[self.chapter.pk]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for row in response.data:
+            self.assertNotIn("routing_problems", row)
+
     def test_pitch_maturity_list_row_never_carries_summary(self) -> None:
         # summary isn't a declared EpisodeListSerializer field; _gm_text_gate
         # must not inject it just because the episode is PITCH-maturity (#3563).
