@@ -40,6 +40,7 @@ import {
 import { loadThreadTabs, saveThreadTabs } from './threadTabsStorage';
 import { useSceneInteractions } from '@/scenes/hooks/useSceneInteractions';
 import { useThreading, getThreadKey } from '@/scenes/hooks/useThreading';
+import type { Thread } from '@/scenes/hooks/useThreading';
 import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threadToComposerMode';
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
@@ -81,6 +82,71 @@ function deriveRoomTabLabel(focus: FocusEntry, roomName: string | undefined): st
     default:
       return 'Room';
   }
+}
+
+/** Map the open thread keys onto the conversation strip's tab descriptors. */
+function buildTabDescriptors(openThreadTabs: string[], threads: Thread[]) {
+  return openThreadTabs.map((key) => {
+    const thread = threads.find((t) => t.key === key);
+    return {
+      key,
+      label: thread?.label ?? (key.startsWith('place:') ? 'Place' : 'Whisper'),
+      unreadCount: thread?.unreadCount ?? 0,
+    };
+  });
+}
+
+/** The composer mode the room anchor resets to when its tab is selected. */
+function roomComposerMode(threads: Thread[], roomName: string): ComposerMode {
+  const roomThread = threads.find((t) => t.key === 'room');
+  return roomThread
+    ? threadToComposerMode(roomThread, roomName)
+    : { command: 'pose', targets: [], label: `Pose → ${roomName}` };
+}
+
+/**
+ * Hydrate the scene's saved thread-tab layout once, then persist later changes.
+ *
+ * #2165 tab-layout persistence (spec decision 5a). Hydration runs once per
+ * character+scene, BEFORE the save effect may write. This used to be a ref
+ * handshake, but a ref is set synchronously the instant hydration is
+ * *attempted*: the save effect runs in the same commit right after, while its
+ * closure still holds the pre-hydration `openThreadTabs: []`, so it wrote (and
+ * pruned) an empty layout over the entry just loaded. That self-healed on the
+ * next render UNLESS the user switched character/scene first (A->B->A), leaving
+ * the empty write durable. Using React state instead means `setTabsReadyFor`
+ * and the `hydrateThreadTabs` dispatch land in the same batched re-render, so
+ * the save effect's first run for a key is the POST-hydration commit, with
+ * hydrated values in the closure. The save is gated on hydration having
+ * LANDED, not attempted.
+ */
+function useThreadTabPersistence(
+  active: string | null,
+  sceneId: string | undefined,
+  openThreadTabs: string[],
+  activeThreadTabRaw: string | null
+) {
+  const dispatch = useAppDispatch();
+  const [tabsReadyFor, setTabsReadyFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!active || !sceneId) return;
+    const hydrationKey = `${active}:${sceneId}`;
+    if (tabsReadyFor === hydrationKey) return;
+    const stored = loadThreadTabs(active, sceneId);
+    if (stored && stored.openThreadTabs.length > 0) {
+      dispatch(hydrateThreadTabs({ character: active, ...stored }));
+    }
+    setTabsReadyFor(hydrationKey);
+  }, [active, sceneId, dispatch, tabsReadyFor]);
+
+  useEffect(() => {
+    if (!active || !sceneId) return;
+    if (tabsReadyFor !== `${active}:${sceneId}`) return;
+    saveThreadTabs(active, sceneId, {
+      openThreadTabs,
+      activeThreadTab: activeThreadTabRaw,
+    });
+  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor]);
 }
 
 export function GamePage() {
@@ -218,38 +284,7 @@ export function GamePage() {
       ? activeThreadTabRaw
       : null;
 
-  // #2165 tab-layout persistence (spec decision 5a). Hydrate once per
-  // character+scene, BEFORE the save effect below may write. This used to be
-  // a ref handshake, but a ref is set synchronously the instant hydration is
-  // *attempted* — the save effect runs in the same commit right after, while
-  // its closure still holds the pre-hydration `openThreadTabs: []`, so it
-  // wrote (and pruned) an empty layout over the entry just loaded. That
-  // self-healed on the next render UNLESS the user switched character/scene
-  // first (A->B->A), leaving the empty write durable (review fold-in). Using
-  // React state instead means `setTabsReadyFor` and the `hydrateThreadTabs`
-  // dispatch land in the same batched re-render, so the save effect's first
-  // run for a key is the POST-hydration commit, with hydrated values in the
-  // closure — the save is gated on hydration having LANDED, not attempted.
-  const [tabsReadyFor, setTabsReadyFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (!active || !sceneId) return;
-    const hydrationKey = `${active}:${sceneId}`;
-    if (tabsReadyFor === hydrationKey) return;
-    const stored = loadThreadTabs(active, sceneId);
-    if (stored && stored.openThreadTabs.length > 0) {
-      dispatch(hydrateThreadTabs({ character: active, ...stored }));
-    }
-    setTabsReadyFor(hydrationKey);
-  }, [active, sceneId, dispatch, tabsReadyFor]);
-
-  useEffect(() => {
-    if (!active || !sceneId) return;
-    if (tabsReadyFor !== `${active}:${sceneId}`) return;
-    saveThreadTabs(active, sceneId, {
-      openThreadTabs,
-      activeThreadTab: activeThreadTabRaw,
-    });
-  }, [active, sceneId, openThreadTabs, activeThreadTabRaw, tabsReadyFor]);
+  useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw);
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
@@ -273,14 +308,7 @@ export function GamePage() {
     return {
       roomLabel: roomName,
       roomUnreadCount: roomThread?.unreadCount ?? 0,
-      tabs: openThreadTabs.map((key) => {
-        const thread = threading.threads.find((t) => t.key === key);
-        return {
-          key,
-          label: thread?.label ?? (key.startsWith('place:') ? 'Place' : 'Whisper'),
-          unreadCount: thread?.unreadCount ?? 0,
-        };
-      }),
+      tabs: buildTabDescriptors(openThreadTabs, threading.threads),
       activeKey: activeThreadTab,
       onSelect: (key: string | null) => {
         dispatch(setActiveThreadTab({ character: active, threadKey: key }));
@@ -289,12 +317,7 @@ export function GamePage() {
         // below) — otherwise a stale locked mode (e.g. a whisper) survives the
         // switch back to the room anchor.
         if (key === null) {
-          const roomThread = threading.threads.find((t) => t.key === 'room');
-          setComposerMode(
-            roomThread
-              ? threadToComposerMode(roomThread, roomName)
-              : { command: 'pose', targets: [], label: `Pose → ${roomName}` }
-          );
+          setComposerMode(roomComposerMode(threading.threads, roomName));
         }
       },
       onClose: (key: string) => dispatch(closeThreadTab({ character: active, threadKey: key })),
