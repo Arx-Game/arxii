@@ -986,8 +986,8 @@ class CharacterDraft(SharedMemoryModel):
         """
         Check completion status of each stage.
 
-        Returns dict mapping stage number to completion boolean.
-        Uses get_stage_validation_errors() so both share cached computation.
+        Returns dict mapping stage number to completion boolean. Derived from
+        get_stage_validation_errors(): a stage is complete when it has no errors.
         """
         errors = self.get_stage_validation_errors()
         return {
@@ -999,17 +999,19 @@ class CharacterDraft(SharedMemoryModel):
         Get validation errors for each stage.
 
         Returns dict mapping stage number to list of error messages.
-        Empty list means the stage is complete. Result is cached on the
-        instance so get_stage_completion() and serializer share computation.
-        """
-        if hasattr(self, "_cached_stage_errors"):
-            return self._cached_stage_errors
+        Empty list means the stage is complete.
 
+        Computed on every call, never cached on the instance. CharacterDraft is
+        a SharedMemoryModel, and Evennia's idmapper holds strong references, so
+        a memo here is process-wide, not per-request: the first request to
+        serialize a draft would freeze its verdict, and every later response —
+        the PATCH echo that completes a stage, a reload, and can_submit() — would
+        replay it. That showed up as finished stages still wearing the stepper's
+        "incomplete" badge and a complete draft refused at submit.
+        """
         from world.character_creation.validators import get_all_stage_errors  # noqa: PLC0415
 
-        errors = get_all_stage_errors(self)
-        self._cached_stage_errors = errors
-        return errors
+        return get_all_stage_errors(self)
 
     def _is_heritage_complete(self) -> bool:
         """Check if heritage stage is complete."""

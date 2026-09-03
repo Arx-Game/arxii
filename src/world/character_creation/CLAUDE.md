@@ -176,3 +176,12 @@ Checks if account can create characters (verified, positive trust, under limit).
 - Staff bypass all access restrictions and limits
 - Navigation between stages is free; incomplete stages are highlighted but not blocked
 - Submit is blocked until all required stages are complete
+- **Stage completion is computed per call, never cached on the draft.**
+  `get_stage_validation_errors()` / `get_stage_completion()` back both the stepper
+  badges (`stage_completion`/`stage_errors` on `CharacterDraftSerializer`) and the
+  `can_submit()` gate. `CharacterDraft` is a `SharedMemoryModel`, so a memo on the
+  instance is process-wide, not per-request: it froze the first request's verdict
+  and every later response replayed it, which read to the player as finished stages
+  still flagged incomplete and a complete draft refused at submit. Each response
+  therefore runs the validator pass twice (once per field); if that cost ever
+  matters, make the validators cheaper rather than caching their result on the draft.
