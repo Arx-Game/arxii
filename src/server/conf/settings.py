@@ -233,23 +233,34 @@ SEED_SAMPLE_CONTENT = env.bool("ARXII_SEED_SAMPLE_CONTENT", default=False)
 # disables it entirely (dev/rehearsal have none), matching the ops dashboard's
 # `sentry_dsn_configured` probe in `web/admin/tuning/tech_health.py`, which reads
 # the same `SENTRY_DSN` env var. Deliberately separate from the bespoke, no-SaaS
-# `SystemErrorReport` path (#1164, `world/player_submissions/services.py`) — that
+# `SystemErrorReport` path (#1164, `world/player_submissions/services.py`) - that
 # system stays player-facing and DB-backed by design; Sentry here is for
 # ops/dev-facing infra-level error and performance telemetry.
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     import sentry_sdk  # deferred so DSN-less envs pay zero import cost
 
+    from evennia_extensions.observability.sentry_twisted import install_sentry_log_observer
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
-        # PII off by design — player privacy is content-boundaries ADR territory;
-        # Sentry must never capture request bodies, user emails, or IPs.
+        # PII off by design - player privacy is content-boundaries ADR territory.
+        # This flag withholds cookies, the logged-in user block and IP-shaped
+        # headers. It does NOT withhold request bodies (the SDK sends bodies up
+        # to max_request_body_size regardless), hence the explicit "never"
+        # below (#3599). Local variables in tracebacks stay on: they are most
+        # of a traceback's value, and the SDK's scrubber blanks password/token/
+        # cookie/IP-named values by name.
         send_default_pii=False,
+        max_request_body_size="never",
         # Low sample rate: performance tracing is a sampling signal, not a full log.
         traces_sample_rate=float(env("SENTRY_TRACES_SAMPLE_RATE", default="0.05")),
         environment=env("SENTRY_ENVIRONMENT", default="production"),
         release=env("SENTRY_RELEASE", default="") or None,
     )
+    # Evennia's own log_err/log_trace never reach Sentry's stdlib logging
+    # integration (they go through Twisted). This forwards them (#3599).
+    install_sentry_log_observer()
 
 # GitHub issue filing (#1164) — staff can file a public issue from a player bug
 # report or an auto-captured error. Repo + token are env-configured; an empty
