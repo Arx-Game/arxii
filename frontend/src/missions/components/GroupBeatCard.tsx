@@ -12,11 +12,11 @@ import { useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Pips } from '@/components/ui/pips';
 
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useCastGroupVote, useGroupBeat, useSubmitGroupPick } from '../queries';
 import type { GroupBeatView, ResolvedBeat } from '../types';
+import { BeatTrack } from './BeatTrack';
 import { InvitePicker } from './InvitePicker';
 
 interface GroupBeatCardProps {
@@ -128,24 +128,7 @@ function GroupBeatView({
 
       {beat.flavor_text ? <p className="whitespace-pre-wrap text-sm">{beat.flavor_text}</p> : null}
 
-      {beat.track ? (
-        <div className="flex gap-3" data-testid="beat-track">
-          <Pips
-            filled={beat.track.successes}
-            total={beat.track.needed}
-            label="Successes"
-            tone="success"
-            testId="beat-track-successes"
-          />
-          <Pips
-            filled={beat.track.failures}
-            total={beat.track.allowed}
-            label="Failures"
-            tone="failure"
-            testId="beat-track-failures"
-          />
-        </div>
-      ) : null}
+      <BeatTrack track={beat.track} />
 
       <ParticipantRow beat={beat} />
 

@@ -24,7 +24,10 @@ export function Pips({
   testId = 'pips',
   className,
 }: PipsProps) {
-  const pips = Array.from({ length: total }, (_, i) => i < filled);
+  const items = Array.from({ length: total }, (_, i) => ({
+    id: `${testId}-${i}`,
+    filled: i < filled,
+  }));
   return (
     <div
       className={cn('inline-flex items-center gap-1', className)}
@@ -33,13 +36,13 @@ export function Pips({
       title={`${label} ${filled} of ${total}`}
       data-testid={testId}
     >
-      {pips.map((isFilled, i) => (
+      {items.map((item) => (
         <span
-          key={i}
-          data-testid={isFilled ? `${testId}-filled` : `${testId}-empty`}
+          key={item.id}
+          data-testid={item.filled ? `${testId}-filled` : `${testId}-empty`}
           className={cn(
             'h-2.5 w-2.5 rounded-full border',
-            isFilled ? TONE[tone] : 'border-foreground/40 bg-transparent'
+            item.filled ? TONE[tone] : 'border-foreground/40 bg-transparent'
           )}
         />
       ))}

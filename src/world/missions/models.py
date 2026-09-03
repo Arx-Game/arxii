@@ -498,6 +498,11 @@ class MissionNode(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def _validate_track(self, errors: dict[str, str]) -> None:
         """#3568: thresholds travel together; targets and outcomes need a track; never JOINT."""
+        self._validate_track_thresholds(errors)
+        self._validate_track_fields_off_track(errors)
+
+    def _validate_track_thresholds(self, errors: dict[str, str]) -> None:
+        """#3568: thresholds travel together; a track node is never JOINT."""
         if (self.track_successes > 0) != (self.track_failures > 0):
             field = "track_failures" if self.track_successes > 0 else "track_successes"
             errors[field] = "A track needs both thresholds above zero (or both zero)."
@@ -505,13 +510,17 @@ class MissionNode(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["conflict_mode"] = (
                 "A track node cannot be JOINT: each attempt would count once per participant."
             )
-        if not self.is_track:
-            for field in ("track_success_target", "track_failure_target"):
-                if getattr(self, f"{field}_id"):
-                    errors[field] = "Only a track node may set this."
-            for field in ("track_success_beat_outcome", "track_failure_beat_outcome"):
-                if getattr(self, field):
-                    errors[field] = "Only a track node may set this."
+
+    def _validate_track_fields_off_track(self, errors: dict[str, str]) -> None:
+        """#3568: track targets and outcomes only make sense on a track node."""
+        if self.is_track:
+            return
+        for field in ("track_success_target", "track_failure_target"):
+            if getattr(self, f"{field}_id"):
+                errors[field] = "Only a track node may set this."
+        for field in ("track_success_beat_outcome", "track_failure_beat_outcome"):
+            if getattr(self, field):
+                errors[field] = "Only a track node may set this."
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
