@@ -97,6 +97,20 @@ with a mid-sweep snapshot indefinitely. Call `RosterEntry.invalidate_tenure_cach
 after any bulk fill and after any tenure mutation — the sweep does it for every
 character it examines, including ones it decides not to demote.
 
+### Account-level caches (#3597, ADR-0260)
+
+`request.user` is the identity-mapped `Account` typeclass, so account facts are
+`cached_property` entries on it, computed once per account per process and never
+memoized on a view or a request: `cached_roster_entries` (current tenures),
+`cached_persona_ids` (every persona type on those sheets), `cached_codex_knowledge`
+(`roster_entry_id -> entry_id -> CharacterKnowledge`), `cached_covenant_memberships`
+(`covenant_id -> own active membership`), beside the older `cached_primary_persona_ids`
+and `played_character_sheet_ids`. Invalidation is `related_cache_fields`: any
+`RosterTenure` save clears them all; `CharacterCodexKnowledge`, `Persona` and
+`CharacterCovenantRole` each walk `... -> current_tenure -> player_data -> account` on
+save/delete. "Available" (active roster, not retired) stays one definition:
+`PlayerData.get_available_roster_entries()`, which `get_available_characters()` maps over.
+
 ### Release is narrower than the flag
 
 | | Flagged INACTIVE at 30d | Auto-released |

@@ -176,6 +176,96 @@ class Account(DefaultAccount):
             .distinct()
         )
 
+    @cached_property
+    def cached_roster_entries(self) -> list:
+        """RosterEntries this account holds a current tenure on (#3597).
+
+        Cached on the Account instance (identity-mapped, so it outlives the
+        request). Cleared by any ``RosterTenure`` save through
+        ``RosterTenure.related_cache_fields``. The web helpers
+        ``world.scenes.interaction_permissions.get_account_roster_entries`` /
+        ``get_account_personas`` read this and ``cached_persona_ids``.
+        """
+        from world.roster.models import RosterEntry
+
+        return list(RosterEntry.objects.for_account(self))
+
+    @cached_property
+    def cached_persona_ids(self) -> list[int]:
+        """Every persona id, of any ``PersonaType``, on a sheet this account plays.
+
+        Distinct from ``cached_primary_persona_ids``: interaction visibility has to
+        recognise a mask or established persona as the viewer's own. Cleared by
+        tenure saves and by ``Persona`` save/delete
+        (``Persona.related_cache_fields``).
+        """
+        from world.scenes.models import Persona
+
+        sheet_ids = [entry.character_sheet_id for entry in self.cached_roster_entries]
+        if not sheet_ids:
+            return []
+        return list(
+            Persona.objects.filter(character_sheet_id__in=sheet_ids)
+            .order_by("pk")
+            .values_list("id", flat=True)
+        )
+
+    @cached_property
+    def cached_codex_knowledge(self) -> dict:
+        """``roster_entry_id -> entry_id -> CharacterKnowledge`` for the account's
+        current roster entries (#3597).
+
+        One query, then free for the process. Cleared by tenure saves and by
+        ``CharacterCodexKnowledge`` save/delete
+        (``CharacterCodexKnowledge.related_cache_fields``). ``character_name`` is
+        the name at compute time; a rename is not a knowledge write and shows on
+        the next tenure change.
+        """
+        from world.codex.models import CharacterCodexKnowledge
+        from world.codex.types import CharacterKnowledge
+
+        entries = self.cached_roster_entries
+        if not entries:
+            return {}
+        knowledge: dict[int, dict[int, CharacterKnowledge]] = {}
+        rows = CharacterCodexKnowledge.objects.filter(roster_entry__in=entries).select_related(
+            "roster_entry__character_sheet__character"
+        )
+        for row in rows:
+            knowledge.setdefault(row.roster_entry_id, {})[row.entry_id] = CharacterKnowledge(
+                roster_entry_id=row.roster_entry_id,
+                character_name=row.roster_entry.character_sheet.character.name,
+                status=row.status,
+                learning_progress=row.learning_progress,
+            )
+        return knowledge
+
+    @cached_property
+    def cached_covenant_memberships(self) -> dict:
+        """``covenant_id -> this account's own active CharacterCovenantRole`` (#3597).
+
+        First membership by pk wins when two played sheets sit in the same
+        covenant (the semantics the old per-covenant ``.first()`` had). Cleared by
+        tenure saves and by ``CharacterCovenantRole`` save/delete
+        (``CharacterCovenantRole.related_cache_fields``).
+        """
+        from world.covenants.models import CharacterCovenantRole
+
+        sheet_ids = [entry.character_sheet_id for entry in self.cached_roster_entries]
+        if not sheet_ids:
+            return {}
+        memberships: dict[int, CharacterCovenantRole] = {}
+        rows = (
+            CharacterCovenantRole.objects.filter(
+                character_sheet_id__in=sheet_ids, left_at__isnull=True
+            )
+            .select_related("rank")
+            .order_by("pk")
+        )
+        for row in rows:
+            memberships.setdefault(row.covenant_id, row)
+        return memberships
+
     def clear_cached_properties(self) -> None:
         """Drop every ``@cached_property`` entry from the instance ``__dict__``.
 
@@ -191,6 +281,10 @@ class Account(DefaultAccount):
     def get_available_characters(self):
         """Returns characters this player can currently control."""
         return self.player_data.get_available_characters()
+
+    def get_available_roster_entries(self):
+        """Roster entries this player can currently control (active roster, not retired)."""
+        return self.player_data.get_available_roster_entries()
 
     def get_seance_manifestable_characters(self):
         """Retired characters this account can manifest via an accepted, open seance (#2393)."""
