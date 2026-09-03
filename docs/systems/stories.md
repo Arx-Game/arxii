@@ -604,8 +604,9 @@ section).
 `related_name="running_scenes"`, string-FK form matching
 `CombatEncounter.story_beat`) is the first-class "this scene is running this
 beat" pointer, written only by `RunBeatAction` and cleared by
-`finish_scene_full`. Exposed on the scene serializers as `running_beat`
-(id + risk only) for GM/staff viewers — never beat internals.
+`finish_scene_full`. Exposed on `SceneListSerializer` (inherited by the detail
+serializer) as `running_beat` (`{id, risk, clock_size}`) for GM/staff viewers - never
+beat internals.
 
 #### Objective-first grading (#3559)
 
