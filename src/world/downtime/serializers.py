@@ -4,11 +4,12 @@ from rest_framework import serializers
 
 
 class PlannedDowntimeSerializer(serializers.Serializer):
-    """Read shape for ``PlannedDowntime`` — public, display-safe fields only.
+    """Read shape for ``PlannedDowntime`` — public, display-safe fields only."""
 
-    Read-only: never saved. DRF's own ``create``/``update`` already raise
-    ``NotImplementedError``, so this class does not restate them.
-    """
+    # Read-only: never saved. DRF's own create()/update() already raise
+    # NotImplementedError, so this class does not restate them. Kept out of the
+    # docstring deliberately: drf-spectacular publishes that as the schema's
+    # public description, and this is our implementation detail, not the API's.
 
     source = serializers.CharField(read_only=True)
     starts_at = serializers.DateTimeField(read_only=True)

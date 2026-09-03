@@ -44,21 +44,21 @@ class AccountInviteSerializer(serializers.ModelSerializer):
 
 
 class VerificationLinkRequestSerializer(serializers.Serializer):
-    """Input for the staff verification-link endpoint (#3193) — write-only.
+    """Input for the staff verification-link endpoint (#3193) — write-only."""
 
-    Never persists: the view builds the link from ``validated_data``. DRF's own
-    ``create``/``update`` already raise ``NotImplementedError``.
-    """
+    # Never persists: the view builds the link from validated_data. DRF's own
+    # create()/update() already raise NotImplementedError. A comment, not the
+    # docstring: the docstring is published as the schema description.
 
     email = serializers.EmailField()
 
 
 class IssueInviteSerializer(serializers.Serializer):
-    """Input for issuing a new invite — write-only, not model-backed.
+    """Input for issuing a new invite — write-only, not model-backed."""
 
-    Never persists directly: the view calls ``issue_invite()``. DRF's own
-    ``create``/``update`` already raise ``NotImplementedError``.
-    """
+    # Never persists directly: the view calls issue_invite(). DRF's own
+    # create()/update() already raise NotImplementedError. A comment, not the
+    # docstring: the docstring is published as the schema description.
 
     email = serializers.EmailField()
     note = serializers.CharField(required=False, allow_blank=True, default="")
