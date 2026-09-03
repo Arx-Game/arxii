@@ -184,7 +184,12 @@ export function computeLayout(
     return {
       id: String(n.id),
       position: { x, y },
-      data: { label: n.key + (n.is_entry ? ' (entry)' : '') },
+      data: {
+        label:
+          n.key +
+          (n.is_entry ? ' (entry)' : '') +
+          ((n.track_successes ?? 0) > 0 ? ` [track ${n.track_successes}/${n.track_failures}]` : ''),
+      },
       style: {
         width: NODE_WIDTH,
         background: n.is_entry ? 'hsl(var(--primary) / 0.15)' : undefined,
