@@ -251,6 +251,33 @@ class TestRealDeclarations(TestCase):
         self.assertFalse(result.present)
         self.assertIn("rc_base_root", result.detail)
 
+    def test_mfa_secrets_key_probe_reports_a_key_that_cannot_decrypt(self) -> None:
+        """A rotated-without-re-encrypt key locks every 2FA user out (#3591, ADR-0265)."""
+        from allauth.mfa.models import Authenticator
+        from cryptography.fernet import Fernet
+        from django.test import override_settings
+
+        from evennia_extensions.factories import AccountFactory
+        from evennia_extensions.mfa_adapter import ArxMFAAdapter
+
+        dep = next(d for d in rc._declarations() if d.key == "mfa-secrets-key")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        # No rows yet: a parseable key is enough.
+        self.assertTrue(dep.probe.resolve(None).present)
+        account = AccountFactory(username="rc_mfa_user")
+        Authenticator.objects.create(
+            user=account,
+            type=Authenticator.Type.TOTP,
+            data={"secret": ArxMFAAdapter().encrypt("JBSWY3DPEHPK3PXP")},
+        )
+        self.assertTrue(dep.probe.resolve(None).present)
+        with override_settings(MFA_SECRETS_KEY=Fernet.generate_key().decode()):
+            result = dep.probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("MFA_SECRETS_KEY", result.detail)
+        with override_settings(MFA_SECRETS_KEY="not-a-key"):
+            self.assertFalse(dep.probe.resolve(None).present)
+
     def test_game_clock_singleton_is_a_required_dependency(self) -> None:
         """An unset clock 503s `GET /api/clock/` and blanks every IC-date reader.
 
