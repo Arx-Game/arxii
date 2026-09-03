@@ -37,7 +37,7 @@
  * Not run in CI, since this suite needs a live Evennia backend.
  */
 
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { test, expect, type Page } from '@playwright/test';
 
 const BASE_URL = 'http://localhost:4001';
@@ -47,7 +47,7 @@ const SEEDED_PASSWORD = 'TestPass123!';
 
 /** Unique suffix so parallel runs / repeated runs don't collide on usernames. */
 function uniqueSuffix(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${Date.now()}-${randomBytes(3).toString('hex')}`;
 }
 
 /**
