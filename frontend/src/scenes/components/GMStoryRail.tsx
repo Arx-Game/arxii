@@ -18,13 +18,15 @@
  * vitals being unavailable never breaks the rest of the rail.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { COLUMN_LABELS, severityLabel } from '@/stories/components/stakes/constants';
 import type { GMStoryRailParticipant, SceneDetail } from '../types';
 import { useGMStoryRailQuery, useSceneScenarioQuery } from '../queries';
@@ -106,12 +108,9 @@ export interface GMStoryRailProps {
 }
 
 export function GMStoryRail({ scene }: GMStoryRailProps) {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const actorCharacterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const actorCharacterId = useActiveCharacterId();
+  const qc = useQueryClient();
+  const advance = useDispatchPlayerAction(actorCharacterId ?? 0);
 
   const hasRunningBeat = scene.running_beat != null;
   const { data: rail } = useGMStoryRailQuery(String(scene.id), hasRunningBeat);
@@ -122,6 +121,25 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
     String(scene.id),
     scene.viewer_can_gm && hasRunningBeat
   );
+
+  // #3567 - the referee's Advance gesture on the running beat's scene clock.
+  function advanceClock() {
+    advance
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'advance_clock' },
+        kwargs: { by: 1 },
+      })
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          toast.error(result.message ?? 'Could not advance the clock.');
+          return;
+        }
+        toast.success(result.message ?? 'Clock advanced.');
+        qc.invalidateQueries({ queryKey: ['scene', String(scene.id)] });
+        qc.invalidateQueries({ queryKey: ['scene-gm-rail', String(scene.id)] });
+      })
+      .catch(() => toast.error('Could not advance the clock.'));
+  }
 
   if (!scene.viewer_can_gm) {
     return null;
@@ -162,6 +180,28 @@ export function GMStoryRail({ scene }: GMStoryRailProps) {
             <div>
               <span className="font-medium">Risk:</span> {rail.beat.risk}
             </div>
+            {rail.beat.clock_size > 0 && (
+              <div data-testid="gm-story-rail-clock">
+                <span className="font-medium">Clock:</span>{' '}
+                {scene.clock
+                  ? `${scene.clock.filled}/${scene.clock.size}`
+                  : `0/${rail.beat.clock_size}`}
+                {scene.clock &&
+                  actorCharacterId !== null &&
+                  scene.clock.filled < scene.clock.size && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ml-2"
+                      disabled={advance.isPending}
+                      onClick={advanceClock}
+                      data-testid="gm-story-rail-advance-clock"
+                    >
+                      Advance
+                    </Button>
+                  )}
+              </div>
+            )}
             <div>
               <span className="font-medium">Outcome:</span> {rail.beat.outcome}
             </div>
