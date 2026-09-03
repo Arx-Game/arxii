@@ -125,17 +125,17 @@ export function useRegister(
 }
 
 /**
- * Log out and land on the logged-out home page (#3592).
+ * Log out and land on the logged-out home page, whatever page is open (#3592).
  *
- * Clearing the cache alone does NOT leave the current page: a mounted
- * guard keeps its last observer result until something re-renders it,
- * and nothing it subscribes to changes when the `['account']` entry is
- * removed. So the guarded page stayed on screen after logout. Even when a
- * guard did re-evaluate, its destination (`/login`) is wrong for a
- * deliberate logout; the user asked for the home page. Hence this hook
- * navigates to `/` itself, and writes `null` into `['account']` so every
- * reader (guards, GatefoldPage) sees a settled logged-out account instead
- * of a pending refetch.
+ * Clearing the cache alone does NOT leave the current page. Most routes
+ * (e.g. /characters/create) have no guard at all, so nothing would ever
+ * move them. On a guarded route the guard keeps its last observer result
+ * until something re-renders it, and nothing it subscribes to changes when
+ * the `['account']` entry is removed, so it stayed put too; and even when
+ * a guard did re-evaluate, its destination (`/login`) is wrong for a
+ * deliberate logout. Hence this hook navigates to `/` itself, and writes
+ * `null` into `['account']` so every reader (guards, GatefoldPage) sees a
+ * settled logged-out account instead of a pending refetch.
  */
 export function useLogout(onSuccess?: () => void) {
   const dispatch = useAppDispatch();

@@ -40,8 +40,9 @@ cookies so session authentication works without extra boilerplate.
 Both mutations also write through to the React Query `['account']` entry, which
 is what the route guards (`ProtectedRoute`, `StaffRoute`, `GMRoute`,
 `GuestOnlyRoute`) read via `useAuthStatus`. `useLogout` navigates to `/` itself
-after clearing the cache and writing `null` into `['account']` (#3592): clearing
-the cache alone never re-renders a mounted guard, so the guarded page stayed on
-screen, and a guard's own redirect goes to `/login`, which is the wrong
+after clearing the cache and writing `null` into `['account']` (#3592). Nothing
+else would leave the current page: most routes (`/characters/create`, the
+roster, character sheets) have no guard at all, a mounted guard never re-renders
+on a cache clear, and a guard's own redirect goes to `/login`, which is the wrong
 destination for a deliberate logout. Logging out from any page lands on the
 logged-out home view.
