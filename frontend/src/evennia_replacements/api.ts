@@ -245,20 +245,6 @@ export async function confirmPasswordReset(data: { key: string; password: string
   }
 }
 
-export async function changePassword(data: {
-  current_password: string;
-  new_password: string;
-}): Promise<void> {
-  const res = await apiFetch('/api/auth/browser/v1/auth/password/change', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.detail || 'Password change failed');
-  }
-}
-
 // Email verification functionality
 export async function verifyEmail(key: string): Promise<void> {
   const res = await apiFetch('/api/auth/browser/v1/auth/email/verify', {
