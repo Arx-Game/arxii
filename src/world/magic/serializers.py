@@ -3139,63 +3139,55 @@ _ERR_NO_ACTIVE_CHARACTER = "You must have an active character to draft a ritual 
 _ERR_REQUEST_CONTEXT_REQUIRED = "Request context is required."
 
 
+def _fetch_reference(model, pk, error_field: str):
+    """Resolve one reference FK, naming the field that pointed at a missing row."""
+    try:
+        return model.objects.get(pk=pk)
+    except model.DoesNotExist:
+        msg = f"{model.__name__} {pk} not found."
+        raise serializers.ValidationError({error_field: msg}) from None
+
+
+def _parse_reference_spec(raw: dict, valid_kinds: set):
+    """One reference spec: a kind, and exactly one of the three ref FKs."""
+    from world.covenants.models import Covenant, CovenantRole  # noqa: PLC0415
+    from world.magic.types.sessions import RitualSessionReferenceSpec  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    candidates = [
+        (Covenant, raw.get("ref_covenant_id"), "ref_covenant_id"),
+        (CovenantRole, raw.get("ref_covenant_role_id"), "ref_covenant_role_id"),
+        (Organization, raw.get("ref_organization_id"), "ref_organization_id"),
+    ]
+    given = [(model, pk, field) for model, pk, field in candidates if pk is not None]
+    kind = raw.get("kind")
+    if kind not in valid_kinds or len(given) != 1:
+        raise serializers.ValidationError(_ERR_REFERENCE_SPEC_INVALID)
+
+    model, pk, error_field = given[0]
+    referent = _fetch_reference(model, pk, error_field)
+    return RitualSessionReferenceSpec(
+        kind=kind,
+        ref_covenant=referent if model is Covenant else None,
+        ref_covenant_role=referent if model is CovenantRole else None,
+        ref_organization=referent if model is Organization else None,
+    )
+
+
 def _parse_reference_specs(raw_specs: list[dict]) -> list:
     """Convert raw dicts to RitualSessionReferenceSpec instances.
 
     Validates that each spec has a kind and exactly one ref FK. Raises
     serializers.ValidationError if any spec is malformed.
     """
-    from world.covenants.models import Covenant, CovenantRole  # noqa: PLC0415
     from world.magic.constants import ReferenceKind  # noqa: PLC0415
-    from world.magic.types.sessions import RitualSessionReferenceSpec  # noqa: PLC0415
-    from world.societies.models import Organization  # noqa: PLC0415
 
-    specs = []
-    valid_kinds = {ReferenceKind.COVENANT, ReferenceKind.COVENANT_ROLE, ReferenceKind.ORGANIZATION}
-    for raw in raw_specs:
-        kind = raw.get("kind")
-        covenant_id = raw.get("ref_covenant_id")
-        role_id = raw.get("ref_covenant_role_id")
-        organization_id = raw.get("ref_organization_id")
-        has_covenant = covenant_id is not None
-        has_role = role_id is not None
-        has_organization = organization_id is not None
-        provided_count = sum([has_covenant, has_role, has_organization])
-        if kind not in valid_kinds or provided_count != 1:
-            raise serializers.ValidationError(_ERR_REFERENCE_SPEC_INVALID)
-        ref_covenant = None
-        ref_covenant_role = None
-        ref_organization = None
-        if has_covenant:
-            try:
-                ref_covenant = Covenant.objects.get(pk=covenant_id)
-            except Covenant.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"ref_covenant_id": f"Covenant {covenant_id} not found."}
-                ) from None
-        elif has_role:
-            try:
-                ref_covenant_role = CovenantRole.objects.get(pk=role_id)
-            except CovenantRole.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"ref_covenant_role_id": f"CovenantRole {role_id} not found."}
-                ) from None
-        else:
-            try:
-                ref_organization = Organization.objects.get(pk=organization_id)
-            except Organization.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"ref_organization_id": f"Organization {organization_id} not found."}
-                ) from None
-        specs.append(
-            RitualSessionReferenceSpec(
-                kind=kind,
-                ref_covenant=ref_covenant,
-                ref_covenant_role=ref_covenant_role,
-                ref_organization=ref_organization,
-            )
-        )
-    return specs
+    valid_kinds = {
+        ReferenceKind.COVENANT,
+        ReferenceKind.COVENANT_ROLE,
+        ReferenceKind.ORGANIZATION,
+    }
+    return [_parse_reference_spec(raw, valid_kinds) for raw in raw_specs]
 
 
 class RitualSessionDraftSerializer(serializers.Serializer):
