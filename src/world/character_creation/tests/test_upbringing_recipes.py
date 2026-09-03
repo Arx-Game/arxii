@@ -1,8 +1,12 @@
 """One test per authoring recipe in docs/systems/family-authoring-recipes.md (#3617).
 
 Each test authors ONLY the rows the recipe names, through the same models staff
-use in admin, then proves a character can walk the result through CG. If a
-recipe stops working, this file says which one.
+use in admin. Recipes 1, 2, 3, 8 and 9 build an Upbringing and assert on
+``get_lineage_errors``/``calculate_upbringing_cost``, the CG-facing surface;
+recipes 4 through 7 have no CG surface of their own and instead assert
+directly on the houses/societies rows the recipe names (``FealtyEdge``,
+``OrgPact``, ``OrganizationAspect``/``OrganizationFeature``). If a recipe
+stops working, this file says which one.
 """
 
 from django.test import TestCase
@@ -20,7 +24,6 @@ from world.character_creation.factories import (
 from world.character_creation.validators import get_lineage_errors
 from world.roster.constants import CRIME_KIND_NAME, NOBLE_KIND_NAME
 from world.roster.factories import FamilyFactory, FamilyKindFactory
-from world.roster.models import FamilyKind
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.models import (
     FealtyEdge,
@@ -110,7 +113,7 @@ class UpbringingRecipesTest(TestCase):
         clan_org = OrganizationFactory(
             family=FamilyFactory(
                 name="Clan Ashfang",
-                kind=FamilyKind.objects.create(name="Clan"),
+                kind=FamilyKindFactory(name="Clan"),
                 influence=2,
             )
         )
@@ -122,7 +125,7 @@ class UpbringingRecipesTest(TestCase):
         """Recipe 6: patronage is an OrgPact on an authored PactKind row."""
         patronage = PactKind.objects.create(name="Patronage", allied_share_pct=10)
         humble = OrganizationFactory(
-            family=FamilyFactory(kind=FamilyKind.objects.create(name="Humble"), influence=3)
+            family=FamilyFactory(kind=FamilyKindFactory(name="Humble"), influence=3)
         )
         crime = OrganizationFactory(
             family=FamilyFactory(kind=FamilyKindFactory(name=CRIME_KIND_NAME), influence=2)
@@ -181,7 +184,7 @@ class UpbringingRecipesTest(TestCase):
 
     def test_recipe_9_new_family_kind(self):
         """Recipe 9: a new kind is a row; an Upbringing offers it by picking the row."""
-        humble = FamilyKind.objects.create(name="Humble", description="Stripped-titles gentry.")
+        humble = FamilyKindFactory(name="Humble", description="Stripped-titles gentry.")
         template = OriginTemplateFactory(
             beginning=BeginningsFactory(),
             name="One of the Humble",

@@ -77,6 +77,43 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   end reasons (disowned / married-out / renounced / annulled), with dates.
   `Kinsperson.family` is only the surname denorm of the active primary
   claim. _Avoid:_ family as a container that owns people.
+- **Family Kind** (#3617): `FamilyKind`, an authored kind of family
+  (Commoner, Noble, Crime, or any kind staff add): a row, not a code list.
+  `styles_as_house` is the one behaviour code reads (orgs rooted in the kind
+  are styled "House <name>" and wear nobiliary particles). Canonical rows
+  come from migration 0219 in a real deploy; test tiers never replay
+  migration `RunPython`, so a caller that needs a canonical kind without
+  assuming a migrated database calls `world.roster.seeds.ensure_family_kinds()`
+  (tests use `FamilyKindFactory`). _Avoid:_ family type (the retired code
+  list `Family.kind` replaced).
+- **Influence** (#3617): `Family.influence`, how much authority a family
+  holds over the world. 0 = none; player-named families are always 0; only
+  staff-authored families are ever above 0. The price base for claim-path
+  Upbringing Choices (`cost_per_influence x influence`). See
+  `docs/systems/family-authoring-recipes.md`. _Avoid:_ stature (House
+  Stature, #3091, is a live computed org-level deterrence score; influence
+  is a staff-set, CG-pricing-only number on the family itself).
+- **Upbringing** (#3617): `OriginTemplate`, the authored card a player picks
+  in the Lineage stage within a Beginning: a CG point cost, a trust gate,
+  and which Family Paths it allows. The code keeps the `OriginTemplate*`
+  class names (Decision 4 on #3617); "Upbringing" is the player- and
+  staff-facing word. _Avoid:_ origin option, household.
+- **Family Path** (#3617): `FamilyPath`, the shape an Upbringing gives a
+  character's family record: claimed (a staff-authored family of an offered
+  Family Kind), named (a new family with no authority, influence 0), or none
+  (the tarot surname ritual). Resolved per-draft by
+  `CharacterDraft.resolve_family_path()`. _Avoid:_ family-known flag (the
+  retired `Beginnings.family_known`; the job is now the Upbringing's paths).
+- **Prompt (Upbringing)** (#2478, #3617): `OriginTemplateSlot`, an authored
+  question scoped to a Family Path (`applies_to`) or shown on every path
+  (`any`); `allows_text` controls whether a free-text write-in is offered
+  alongside any pick-list Choices. _Avoid:_ slot alone outside kinship
+  app-in context (that word already names the appable-slot mountain here).
+- **Choice (Upbringing)** (#3617): `OriginTemplateSlotChoice`, one authored
+  pick-list answer on a Prompt, priced `cg_point_cost + cost_per_influence x
+  influence` (`cost_for()`); influence is 0 on the name and none Family
+  Paths. _Avoid:_ option (reserved for `HouseAspectOption`/`FormTraitOption`
+  elsewhere in this codebase).
 - **Mail (PlayerMail)** - a `PlayerMail` row: private, OOC, tenure-to-tenure
   correspondence between players (`sender_tenure` -> `recipient_tenure`,
   threaded via `in_reply_to`), routed by `RosterTenure` rather than

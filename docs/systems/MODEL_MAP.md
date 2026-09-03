@@ -1334,6 +1334,7 @@
   - public_worship -> worship.WorshippedBeing [FK] (nullable)
   - secret_worship -> worship.WorshippedBeing [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
+  - selected_origin_template -> character_creation.OriginTemplate [FK] (nullable)
   - claimed_kin_slot -> roster.Kinsperson [FK] (nullable)
   - claimed_kin_pool -> roster.KinSlotPool [FK] (nullable)
   - second_parent_species -> species.Species [FK] (nullable)
@@ -1351,6 +1352,7 @@
 **Foreign Keys:**
   - sheet -> character_sheets.CharacterSheet [FK]
   - slot -> character_creation.OriginTemplateSlot [FK]
+  - choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
 
 ### DraftApplication
 **Foreign Keys:**
@@ -1375,14 +1377,26 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - beginning -> character_creation.Beginnings [FK]
+  - named_family_kind -> roster.FamilyKind [FK] (nullable)
+  - claimable_kinds -> roster.FamilyKind [M2M]
 **Pointed to by:**
   - slots <- character_creation.OriginTemplateSlot
+  - drafts <- character_creation.CharacterDraft
 
 ### OriginTemplateSlot
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - template -> character_creation.OriginTemplate [FK]
+**Pointed to by:**
+  - choices <- character_creation.OriginTemplateSlotChoice
+  - character_rows <- character_creation.CharacterOriginSlot
+
+### OriginTemplateSlotChoice
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - slot -> character_creation.OriginTemplateSlot [FK]
 **Pointed to by:**
   - character_rows <- character_creation.CharacterOriginSlot
 
@@ -1407,6 +1421,7 @@
 - `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' - Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
+- `family_name_is_taken(name: 'str') -> 'bool' - Case-insensitive collision with any family or organisation name (#3617).`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
@@ -1415,7 +1430,9 @@
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Request revisions on an application.`
 - `require_draft_complete(draft: 'CharacterDraft') -> 'None' - Raise DraftIncompleteError unless every non-Review stage is complete.`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' - Resubmit a draft application after revisions.`
-- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str') -> 'None' - Upsert a character's slot answer, then refresh state.`
+- `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
+- `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
+- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None) -> 'None' - Upsert a character's answer (text and/or picked choice), then refresh state.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' - Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' - Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' - Withdraw a draft application.`
@@ -7769,6 +7786,7 @@
 
 ### Family
 **Foreign Keys:**
+  - kind -> roster.FamilyKind [FK]
   - created_by -> evennia.AccountDB [FK] (nullable)
   - origin_realm -> realms.Realm [FK] (nullable)
 **Pointed to by:**
@@ -7778,6 +7796,14 @@
   - character_drafts <- character_creation.CharacterDraft
   - profiles <- character_sheets.Profile
   - organizations <- societies.Organization
+
+### FamilyKind
+**Pointed to by:**
+  - families <- roster.Family
+  - named_in_templates <- character_creation.OriginTemplate
+  - claimable_in_templates <- character_creation.OriginTemplate
+  - particles <- societies.NobiliaryParticle
+  - house_templates <- societies.HouseTemplate
 
 ### FamilyMembership
 **Foreign Keys:**
@@ -8866,6 +8892,7 @@
 ### HouseTemplate
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
+  - kind -> roster.FamilyKind [FK]
   - society -> societies.Society [FK]
   - liege -> societies.Organization [FK]
   - default_succession_law -> societies.SuccessionLaw [FK]
@@ -8967,6 +8994,7 @@
 ### NobiliaryParticle
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
+  - kind -> roster.FamilyKind [FK]
 
 ### OrgAppeal
 **Foreign Keys:**

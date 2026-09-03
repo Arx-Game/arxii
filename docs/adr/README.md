@@ -316,4 +316,6 @@ treat those names as hints to confirm, not gospel.
 - [0265 - The scenario graph is the stage engine; situations stay flat](0265-the-scenario-graph-is-the-stage-engine.md) (#3568; related ADR-0110, ADR-0258, ADR-0237)
 - [0266 - Two-factor authentication is opt-in and telnet blocking is a second opt-in](0266-two-factor-is-opt-in-and-telnet-blocking-is-a-second-opt-in.md) (#3591)
 - [0267 - MFA secrets are encrypted at rest under a dedicated vault key](0267-mfa-secrets-encrypted-under-a-dedicated-vault-key.md) (#3591)
+- [0268 - Family standing is expressed through existing organisation mechanisms, and family kinds are rows](0268-family-standing-uses-existing-organisation-mechanisms-and-kinds-are-rows.md) (#3617; related ADR-0010, ADR-0101, ADR-0238, ADR-0251)
+- [0269 - Upbringings price standing as family influence times position](0269-upbringings-price-standing-as-family-influence-times-position.md) (#3617; related ADR-0268, ADR-0209)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

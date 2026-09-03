@@ -38,7 +38,10 @@ from world.character_creation.types import (
 |-------|---------|------------|
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level`, `minimum_trust` |
-| `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `family_known`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
+| `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
+| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `named_family_kind` (FK `FamilyKind`, required when naming is allowed) |
+| `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text` |
+| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `is_active`, `sort_order` |
 
 **Content vs seeds:** the real, authored `Beginnings` rows (e.g. the Arx trio —
 Caretaker/Sleeper/Misbegotten) are **lore-repo content fixtures**
@@ -60,7 +63,8 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `family`, `family_member`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
+| `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `selected_origin_template` (FK `OriginTemplate`, the chosen Upbringing, #3617), `family_path` (`FamilyPath`: claimed/named/none, #3617), `family`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
+| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617) |
 
 **Note:** Magic selections during CG (gift, techniques, gift resonance, Anima Check stat/skill, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
@@ -79,7 +83,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 |---|-------|-------------------|
 | 1 | Origin | `selected_area` is set |
 | 2 | Heritage | Beginnings, species, gender selected; family/tarot complete; CG points >= 0; species allowed by beginnings |
-| 3 | Lineage | Family selected, OR familyless with tarot card |
+| 3 | Lineage | Upbringing chosen and accessible; family path resolved (claim: playable family of an offered kind in the area's realm; name: unique name; none: tarot card); every required prompt on that path answered (`get_lineage_errors`, #3617) |
 | 4 | Distinctions | `traits_complete` flag set; CG points >= 0 |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
@@ -117,9 +121,11 @@ draft.can_submit()                      # True if all stages (except Review) com
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent
 draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]:
                                          # "heritage" (Beginnings.cg_point_cost),
+                                         # "upbringing" (OriginTemplate.cg_point_cost +
+                                         # choices priced by Family.influence, #3617),
                                          # "distinction" (per draft_data distinction),
                                          # "species" (SpeciesGiftGrant.cg_point_cost summed
-                                         # across the selected species + ancestors —
+                                         # across the selected species + ancestors -
                                          # see docs/systems/species.md)
 draft.calculate_final_stats()           # Dict[str, int] with bonuses applied
 draft.enforce_stat_caps()               # Clamp stats after distinction changes
@@ -237,6 +243,11 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/beginnings/` - Beginnings filtered by `starting_area` and trust
 - `GET /api/character-creation/species/` - Species with parent hierarchy
 - `GET /api/character-creation/families/` - Playable families, filterable by `area_id`
+  and `kind=` (one or more `FamilyKind` ids, #3617)
+- `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for a beginning,
+  trust-filtered; each row carries its `slots` (prefetched) and `claimable_kind_ids`, batched
+  with one flat query grouped in Python and passed through serializer context rather than a
+  per-instance `.claimable_kinds.all()` or a bare `prefetch_related` (ADR-0263; #3617)
 - `GET /api/character-creation/genders/` - Gender options
 - `GET /api/character-creation/pronouns/` - Pronoun sets
 - `GET /api/character-creation/cg-budgets/` - Active CG point budget
@@ -299,7 +310,20 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ## Admin
 
-Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+
+## Lineage step (#3617)
+
+Per-beginning Upbringings replaced the old single family-known/orphan split: each
+`OriginTemplate` carries its own CG cost, trust gate, and choice of family paths
+(claim a staff-authored family, name a new one, or none), with typed prompts
+(`OriginTemplateSlot`) and costed pick-list choices (`OriginTemplateSlotChoice`)
+authored underneath it. Family standing (kind, influence, subordination, patronage,
+culture-specific facts) is expressed through the existing organisation mechanisms
+rather than bespoke fields: see the authoring recipes in
+[family-authoring-recipes.md](family-authoring-recipes.md) and the design record in
+ADR-0268 (family standing uses existing organisation mechanisms; kinds are rows) and
+ADR-0269 (Upbringings price standing as family influence x position).
 
 ## Seeded content + Game Setup hub
 

@@ -2135,6 +2135,12 @@ Multi-stage character creation flow with draft system.
   the same change so a sibling domain service can reuse `_send_email`/`_get_staff_emails`
   without subclassing `RosterEmailService` itself, whose approve/deny methods take a
   roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
+- **Lineage stage: Upbringings (#3617):** the Lineage stage offers per-beginning
+  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost, a trust
+  gate, and a family path (claim a staff-authored family, name a new one, or
+  none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
+  new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
+  the design decisions: ADR-0268, ADR-0269.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
@@ -2327,7 +2333,9 @@ Character lifecycle management with web-first applications and player anonymity.
 Person-node genealogy: typed parentage/union edges, truth-vs-public-record via
 Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 
-- **Models:** `Family`, `Kinsperson` (5 definition tiers; heredity stubs
+- **Models:** `Family` (`kind` FK `FamilyKind`, `influence`, #3617),
+  `FamilyKind` (authored rows: Commoner, Noble, Crime, or any kind staff add;
+  `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
   `species`/`power_band`, #2815), `FamilyMembership`, `UnionKind`/`Union`,
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent

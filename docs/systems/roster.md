@@ -181,7 +181,8 @@ definition of it.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Family` | Family/house definition (SharedMemoryModel) | `name` (unique), `family_type` (COMMONER/NOBLE), `description`, `is_playable`, `created_by_cg`, `created_by` (FK AccountDB), `origin_realm` (FK Realm) |
+| `Family` | Family/house definition (SharedMemoryModel) | `name` (unique), `kind` (FK `FamilyKind`, #3617), `influence` (0 = holds no authority; player-named families are always 0), `description`, `is_playable`, `created_by_cg`, `created_by` (FK AccountDB), `origin_realm` (FK Realm) |
+| `FamilyKind` | Authored kind of family: Commoner, Noble, Crime, or any kind staff add (#3617) | `name` (unique), `styles_as_house`, `description`, `is_active`, `sort_order` |
 | `FamilyMember` | Individual member of a family tree | `family` (FK), `member_type` (CHARACTER/PLACEHOLDER/NPC), `character` (OneToOne ObjectDB, nullable), `name`, `description`, `age`, `mother` (FK self), `father` (FK self), `created_by` (FK AccountDB) |
 
 ---
