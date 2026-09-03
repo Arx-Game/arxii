@@ -24,6 +24,7 @@ from world.scenes.models import (
     Persona,
     PersonaDiscovery,
     Scene,
+    SceneClock,
     SceneParticipation,
     SceneRound,
     SceneRoundParticipant,
@@ -260,3 +261,13 @@ class SceneActionTargetFactory(factory_django.DjangoModelFactory):
     action_request = factory.SubFactory(SceneActionRequestFactory)
     target_persona = factory.SubFactory(PersonaFactory)
     status = ActionRequestStatus.PENDING
+
+
+class SceneClockFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneClock
+
+    scene = factory.SubFactory(SceneFactory)
+    beat = factory.SubFactory("world.stories.factories.BeatFactory")
+    size = 3
+    filled = 0

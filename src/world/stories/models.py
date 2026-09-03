@@ -1061,6 +1061,14 @@ class Beat(SharedMemoryModel):
             "the expired consequence pool fires and stakes grade LOSS."
         ),
     )
+    clock_size = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens "
+            "a SceneClock of this size; combat rounds and the GM's advance gesture fill "
+            "it, and a full clock resolves the beat EXPIRED."
+        ),
+    )
 
     order = models.PositiveIntegerField(default=0)
     kind = models.CharField(
