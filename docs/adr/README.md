@@ -312,4 +312,5 @@ treat those names as hints to confirm, not gospel.
 - [0261 - No .only() or .defer() on identity-mapped models](0261-no-only-or-defer-on-identity-mapped-models.md) (Sentry ARX2-9; extends ADR-0008; `lint-only-defer` hook)
 - [0262 - The routing report is advisory and open-world](0262-routing-report-is-advisory-and-open-world.md) (#3563; extends ADR-0258; related ADR-0259)
 - [0263 - No to_attr prefetch onto identity-mapped instances](0263-no-to-attr-prefetch-onto-identity-mapped-instances.md) (#3564, found in #3563; extends ADR-0008, ADR-0261)
+- [0264 - A scene clock fill completes the beat after commit, and the GM gesture spends ticks, never outcomes](0264-scene-clock-fills-complete-after-commit.md) (#3567; extends ADR-0030, ADR-0240, ADR-0256)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

@@ -8320,6 +8320,7 @@
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
   - relationshipcapstone_set <- relationships.RelationshipCapstone
   - affection_shifts <- relationships.AffectionShift
+  - clocks <- scenes.SceneClock
   - participations <- scenes.SceneParticipation
   - unseen_observers <- scenes.SceneUnseenObserver
   - interactions <- scenes.Interaction
@@ -8391,6 +8392,11 @@
 **Foreign Keys:**
   - scene -> scenes.Scene [FK]
   - check_type -> checks.CheckType [FK]
+
+### SceneClock
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - beat -> stories.Beat [FK]
 
 ### SceneParticipation
 **Foreign Keys:**
@@ -9397,6 +9403,7 @@
   - resolving_battles <- battles.Battle
   - resolving_encounters <- combat.CombatEncounter
   - running_scenes <- scenes.Scene
+  - scene_clocks <- scenes.SceneClock
   - decisive_markers <- scenes.DecisiveCheckMarker
   - opponent_lines <- stories.BeatOpponentLine
   - staged_templates <- stories.BeatStagedTemplate
