@@ -26,7 +26,7 @@ export function parseActionContent(content: string): ParsedAction {
   // Peeled off one clause at a time rather than matched by a single pattern with
   // four optional lazy groups: that pattern backtracked super-linearly, and each
   // step here is anchored and independent.
-  const bracket = /^\[([^\]]+)\]\s*([\s\S]*)$/.exec(content);
+  const bracket = /^\[([^\]]+)\]([\s\S]*)$/.exec(content);
   if (!bracket) {
     return {
       actionName: 'Action',
@@ -41,10 +41,15 @@ export function parseActionContent(content: string): ParsedAction {
 
   // Trailing "(ConsequenceLabel)".
   let consequenceLabel: string | null = null;
-  const paren = /\(([^)]+)\)\s*$/.exec(rest);
-  if (paren) {
-    consequenceLabel = paren[1];
-    rest = rest.slice(0, paren.index).trim();
+  const open = rest.lastIndexOf('(');
+  if (open !== -1 && rest.endsWith(')')) {
+    // The label may not itself contain ')', matching what the [^)]+ this replaced
+    // would accept - "((x))" is not a labelled tail.
+    const label = rest.slice(open + 1, -1);
+    if (label && !label.includes(')')) {
+      consequenceLabel = label;
+      rest = rest.slice(0, open).trim();
+    }
   }
 
   // " -- OutcomeName".
