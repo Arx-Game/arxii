@@ -110,6 +110,11 @@ and `played_character_sheet_ids`. Invalidation is `related_cache_fields`: any
 `CharacterCovenantRole` each walk `... -> current_tenure -> player_data -> account` on
 save/delete. "Available" (active roster, not retired) stays one definition:
 `PlayerData.get_available_roster_entries()`, which `get_available_characters()` maps over.
+These three `related_cache_fields` walks read `RosterEntry.current_tenure`, which is
+served from `RosterEntry.cached_tenures` (see "Bulk callers must clear up after
+themselves" above), so a bulk tenure fill or mutation that skips
+`invalidate_tenure_cache()` would clear the wrong account's caches (never leak another
+account's data, since every read re-derives from the account's own tenures).
 
 ### Release is narrower than the flag
 

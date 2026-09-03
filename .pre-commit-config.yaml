@@ -157,7 +157,7 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
-        files: ^src/.*(views|serializers)[^/]*\.py$
+        files: ^src/.*(/(views|serializers)/.*|(views|serializers)[^/]*)\.py$
         # #3597 / ADR-0260 (2026-09-03): a `_thing: T | None = None` class
         # attribute filled during a request is a memo the ruling rejects. Account
         # data is a cached_property on the Account typeclass; request data is an
