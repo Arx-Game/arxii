@@ -40,8 +40,9 @@ class FamilyKind(NaturalKeyMixin, SharedMemoryModel):
     """An authored kind of family (#3617): Commoner, Noble, Crime, Humble, Clan...
 
     Rows, not a code list, so a new kind is a row staff add. ``styles_as_house``
-    is the one behaviour code reads: materialized orgs are named "House <name>"
-    and nobiliary particles apply (``world.societies.houses``).
+    makes materialized orgs named "House <name>" (``world.societies.houses``);
+    nobiliary particles come from ``NobiliaryParticle`` rows authored per realm
+    and kind, independent of this flag.
     """
 
     name = models.CharField(max_length=60, unique=True)

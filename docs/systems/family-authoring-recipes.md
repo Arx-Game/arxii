@@ -57,9 +57,10 @@ pick-list prompt on the claim path ("Your place in their household?") whose choi
 carry per-influence costs. The price scales with the claimed family's influence.
 
 ## Recipe 9: a new family kind (the Humble, a merchant house, a clan)
-Admin > Roster > Family Kinds > Add. Tick "styles as house" if its orgs should be
-"House <name>" and wear nobiliary particles. Then pick the kind on the Upbringings that
-should offer it. Do not: edit a code list.
+Admin > Roster > Family Kinds > Add. Tick "styles as house" if its orgs should be named
+"House <name>"; nobiliary particles come separately, from NobiliaryParticle rows
+authored per realm and kind (add one if the realm should mark this kind). Then pick the
+kind on the Upbringings that should offer it. Do not: edit a code list.
 
 ## Pricing at a glance
 Cost of an Upbringing = its flat cost + for each picked choice (flat + per-influence x

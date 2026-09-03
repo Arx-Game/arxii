@@ -79,8 +79,9 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   claim. _Avoid:_ family as a container that owns people.
 - **Family Kind** (#3617): `FamilyKind`, an authored kind of family
   (Commoner, Noble, Crime, or any kind staff add): a row, not a code list.
-  `styles_as_house` is the one behaviour code reads (orgs rooted in the kind
-  are styled "House <name>" and wear nobiliary particles). Canonical rows
+  `styles_as_house` makes materialized orgs rooted in the kind named
+  "House <name>"; nobiliary particles come from `NobiliaryParticle` rows
+  authored per realm and kind, independent of this flag. Canonical rows
   come from migration 0219 in a real deploy; test tiers never replay
   migration `RunPython`, so a caller that needs a canonical kind without
   assuming a migrated database calls `world.roster.seeds.ensure_family_kinds()`
