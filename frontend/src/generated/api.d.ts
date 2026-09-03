@@ -2239,7 +2239,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Get all episodes for a chapter */
+    /**
+     * @description Get all episodes for a chapter.
+     *
+     *     Carries the request in the serializer context (#3563) so
+     *     EpisodeListSerializer's GM-only routing_problems field can resolve
+     *     the viewer instead of default-denying every caller, and preloads one
+     *     routing report per episode on the page the way EpisodeViewSet.list
+     *     does, so this action does not pay four queries per episode.
+     */
     get: operations['chapters_episodes_retrieve'];
     put?: never;
     post?: never;
