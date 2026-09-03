@@ -1,5 +1,5 @@
 /**
- * BeatTrack — the successes/failures pip rows shared by BeatCard and
+ * BeatTrack - the successes/failures pip rows shared by BeatCard and
  * GroupBeatCard (#3568). Renders nothing when the beat has no track.
  */
 import { Pips } from '@/components/ui/pips';
