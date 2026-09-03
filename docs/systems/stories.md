@@ -174,6 +174,8 @@ a **player-facing** lens, enforced server-side in two independent places.
 | `description` | GM/staff only | The internal authoring "pitch"/intent text. Stripped from the serialized payload for any non-privileged viewer |
 | `consequences` (Chapter, Episode) | GM/staff only | Stripped from the serialized payload for any non-privileged viewer (absent on the Story serializer — the pop is a safe no-op there) |
 | `summary` | Player-facing | "The Story So Far" running recap. Visible to players, **but blanked to `""` while the node's `maturity == PITCH`** so an unfinished node leaks nothing |
+| `Transition.required_outcomes` | GM/staff only | Nested routing rules (beat- and stake-level predicates, #3563). Stripped for non-privileged viewers by `TransitionSerializer.to_representation` |
+| `Episode.routing_problems` | GM/staff only | The routing report's dead-end and ambiguity lines (list and detail, #3563). Stripped by `_gm_text_gate` |
 
 There is **no dedicated `pitch` field** — by design: `description` *is* the GM
 pitch, `summary` *is* the player recap. (Resolves design follow-up I-2.)
@@ -181,15 +183,22 @@ pitch, `summary` *is* the player recap. (Resolves design follow-up I-2.)
 **Enforcement point 1 — detail serializers.** `StoryDetailSerializer`,
 `ChapterDetailSerializer`, and `EpisodeDetailSerializer` each override
 `to_representation()` to call the shared `_gm_text_gate(serializer, data, story,
-node_maturity)` helper (in `serializers.py`). The helper resolves the viewer's
-story-log role via `classify_story_log_viewer_role(user, story)`. If the role is
-**not** `VIEWER_ROLE_STAFF` or `VIEWER_ROLE_LEAD_GM` (i.e. player, no_access, or
-**no request in context**), it pops `description`/`consequences` and blanks
-`summary` when `node_maturity == PITCH`. **Default-deny:** with no request/user
-in context the most-restrictive (player) treatment is applied, so GM text never
-leaks by default (locked by tests; see `test_views_*` default-deny coverage).
-The Chapter gate is keyed on `instance.story`; the Episode gate on
-`instance.chapter.story`.
+node_maturity)` helper (in `serializers.py`). The helper's role test is
+`_viewer_may_see_gm_text(serializer, story)`, the one predicate behind every
+GM-only field, wrapping `can_view_story_gm_text(user, story)`: authenticated AND
+one of staff, the Lead GM of `story.primary_table`, or an owner of the story. If
+that test fails (player, anonymous, or **no request in context**), the gate pops
+`description`/`consequences` and blanks `summary` when `node_maturity == PITCH`.
+**Default-deny:** with no request/user in context the most-restrictive (player)
+treatment is applied, so GM text never leaks by default (locked by tests; see
+`test_views_*` default-deny coverage). The Chapter gate is keyed on
+`instance.story`; the Episode gate on `instance.chapter.story`. The same
+`_viewer_may_see_gm_text` test also gates `Transition.required_outcomes` and
+`Episode.routing_problems`, applied directly in `TransitionSerializer` and
+folded into `_gm_text_gate` for Episode (#3563) rather than reusing
+`classify_story_log_viewer_role`, which is a separate role classifier that
+drives `serialize_story_log` beat-visibility instead (owners are privileged for
+GM text but not for that log).
 
 **Enforcement point 2 — `serialize_story_log`.** Independently, the per-beat
 story log (`services/story_log.py::serialize_story_log`) gates GM-only beat
@@ -261,11 +270,38 @@ First-class directed edge in the episode DAG.
 eligible outbound transitions is the authoring frontier (`resolve_frontier`); one
 eligible transition fires; several fire the lowest `(order, pk)` edge, never a
 runtime GM pick - the GM's judgment call is when they author the `order` values,
-not after the party has already played the beat. `validate_routing_readiness`
-(`world.stories.services.transitions`) reports every pair of an episode's outbound
-transitions whose requirement sets never contradict each other - that pair is a
-silent authoring mistake (the lowest-order one always wins) - surfaced as
-`EpisodeDetailSerializer.routing_ambiguous` on the author tree.
+not after the party has already played the beat.
+
+`services/routing.py::routing_report(episode)` / `routing_reports_for_episodes(ids)`
+build a `RoutingReport` before any of that plays out. Dead ends: a beat's FAILURE,
+its EXPIRED when it has a deadline, or a stake's LOSS that no outbound transition
+accepts, each tested with `rule_accepts` over a hypothetical outcome map where
+anything unpinned counts as satisfiable. Ambiguities: pairs of outbound transitions
+whose requirement sets never contradict (`_contradict`) - that pair is a silent
+authoring mistake, since the lowest `(order, pk)` one always wins. The report is
+advisory only, it never blocks saving or resolving. An episode with no outbound
+transitions gets an empty report (that is the authoring frontier by design, not a
+dead end), and a rule that references another episode's beat is never counted
+toward a dead end. It surfaces as `routing_problems` on `EpisodeListSerializer` and
+`EpisodeDetailSerializer` (the list view preloads one report per episode on the
+page via `routing_reports_for_episodes`) and as `routing_ambiguous` on detail. The
+payload's `required_outcomes` rows carry `beat_title` and `stake_summary` so the
+graph and the author tree can render the rule without a second fetch.
+
+`Transition.cached_required_outcomes` is a `cached_property`, and the identity map
+means the same Python `Transition` instance can be handed back across unrelated
+calls in one process, so a stale cached list survives past the write that changed
+it. Every writer of `TransitionRequiredOutcome` rows (`save_transition.py`'s
+`save_transition_with_outcomes`, and `TransitionRequiredOutcomeViewSet.perform_create` /
+`perform_update` / `perform_destroy`) pops `cached_required_outcomes` from the
+transition's `__dict__` right after writing, so the next read re-queries instead of
+reusing the pre-write list. New code that loads rules for many transitions at once
+(the way `routing_reports_for_episodes` does for a page of episodes) should follow
+that function's plain filtered query keyed by `transition_id__in=...`, not a
+`Prefetch(..., to_attr="cached_required_outcomes")`: Django's `to_attr` prefetch
+decides whether it already ran via `hasattr(instance, to_attr)`, so it silently
+no-ops on an instance the identity map already populated once, which is exactly the
+same staleness bug in different clothes.
 
 ---
 
@@ -707,7 +743,18 @@ All services in `src/world/stories/services/`.
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `get_eligible_transitions` | `(progress: AnyStoryProgress) -> list[Transition]` | Returns eligible outbound transitions ordered `(order, pk)`; lazily expires overdue beats; raises `ProgressionRequirementNotMetError` if any gate is unmet |
-| `validate_routing_readiness` | `(episode: Episode) -> RoutingReadinessReport` | Reports every pair of an episode's outbound transitions whose requirement sets never contradict each other (#3565) - the lowest `(order, pk)` of an ambiguous pair would always fire, which is a silent authoring mistake. `RoutingReadinessReport.is_ambiguous` (`world.stories.types`) surfaces on `EpisodeDetailSerializer.routing_ambiguous` |
+
+### routing.py (#3563)
+
+Authoring-time routing report; see the Transition section above for the full
+write-up.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `routing_report` | `(episode: Episode) -> RoutingReport` | One episode's dead ends and ambiguities |
+| `routing_reports_for_episodes` | `(episode_ids: Iterable[int]) -> dict[int, RoutingReport]` | Same report for any number of episodes, in four queries |
+| `rule_accepts` | `(req, beat_outcomes, stake_columns) -> bool` | Whether one requirement could be met under a hypothetical outcome map; unpinned counts as satisfiable |
+| `beat_title` | `(beat: Beat) -> str` | First line of the beat's internal description, capped for labels |
 
 ### episodes.py
 
