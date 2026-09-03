@@ -171,7 +171,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const submitted = hasApplication && (appStatus === 'submitted' || appStatus === 'in_review');
 
   // Focus moves to the second night plate's title the moment the record
-  // closes (design law §1) — tracked as a false-to-true transition rather
+  // closes (design law §1). Tracked as a false-to-true transition rather
   // than a submit-mutation callback, so a page load that already finds a
   // submitted draft does not steal focus on mount.
   const wasSubmittedRef = useRef(submitted);
@@ -357,7 +357,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         </NightPlate>
       )}
 
-      {/* CG Points Conversion Confirmation Modal — unchanged */}
+      {/* CG Points Conversion Confirmation Modal (unchanged) */}
       <Dialog open={showConversionModal} onOpenChange={setShowConversionModal}>
         <DialogContent>
           <DialogHeader>
@@ -377,7 +377,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         </DialogContent>
       </Dialog>
 
-      {/* Finalize for My Table (#3268) — player-GM direct-to-roster flow, unchanged */}
+      {/* Finalize for My Table (#3268) — player-GM direct-to-roster flow */}
       {!isStaff && ownedGMTables.length > 0 && (
         <FinalizeForTableDialog
           draftId={draft.id}
@@ -430,7 +430,7 @@ function getBannerMessage(
 
 interface NoApplicationActionsProps {
   canSubmit: boolean;
-  /** The named reason beside the closed door — the first unwritten chapter, as a door back to it. */
+  /** The named reason beside the closed door: the first unwritten chapter, as a door back to it. */
   reason?: ReactNode;
   isStaff: boolean;
   submissionNotes: string;
