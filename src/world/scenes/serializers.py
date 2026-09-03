@@ -22,6 +22,7 @@ from world.scenes.models import (
     Persona,
     PersonaType,
     Scene,
+    SceneClock,
     SceneParticipation,
     SceneRound,
     SceneSummaryRevision,
@@ -311,15 +312,28 @@ class SceneListSerializer(serializers.ModelSerializer):
     def get_running_beat(self, obj: Scene) -> dict[str, object] | None:
         """The Beat this scene is currently running (#3425), GM/staff viewers only.
 
-        Only id + risk tier -- beat internals (internal_description, player
-        hints, etc.) never ride this payload (see the #3425 spec's leak
-        table); #3433 decides the separate player-visible slice.
+        Only id, risk tier and authored clock size -- beat internals
+        (internal_description, player hints, etc.) never ride this payload
+        (see the #3425 spec's leak table); #3433 decides the separate
+        player-visible slice.
         """
         if obj.running_beat_id is None:
             return None
         if not self.get_viewer_can_gm(obj):
             return None
-        return {"id": obj.running_beat_id, "risk": obj.running_beat.risk}
+        return {
+            "id": obj.running_beat_id,
+            "risk": obj.running_beat.risk,
+            "clock_size": obj.running_beat.clock_size,
+        }
+
+
+class SceneClockSerializer(serializers.ModelSerializer):
+    """The player-visible scene clock (#3567): size and fill, nothing about the beat."""
+
+    class Meta:
+        model = SceneClock
+        fields = ["size", "filled"]
 
 
 class SceneRoundSerializer(serializers.ModelSerializer):
@@ -354,6 +368,7 @@ class SceneDetailSerializer(SceneListSerializer):
     persona_positions = serializers.SerializerMethodField()
     active_round = serializers.SerializerMethodField()
     declared_risk = serializers.SerializerMethodField()
+    clock = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -370,6 +385,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "persona_positions",
             "active_round",
             "declared_risk",
+            "clock",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -468,6 +484,18 @@ class SceneDetailSerializer(SceneListSerializer):
 
         rnd = active_round_for_room(obj.location)
         return SceneRoundSerializer(rnd).data if rnd is not None else None
+
+    @extend_schema_field(SceneClockSerializer(allow_null=True))
+    def get_clock(self, obj: Scene) -> dict | None:
+        """The running beat's open clock, visible to every viewer (#3567 Decision 4)."""
+        from world.scenes.beat_selectors import running_beat_for_scene  # noqa: PLC0415
+        from world.scenes.clock_services import open_clock_for_beat  # noqa: PLC0415
+
+        beat = running_beat_for_scene(obj)
+        if beat is None:
+            return None
+        clock = open_clock_for_beat(beat)
+        return SceneClockSerializer(clock).data if clock is not None else None
 
     def get_declared_risk(self, obj: Scene) -> str | None:
         """Player-visible declared risk tier for the scene header badge (#3433).

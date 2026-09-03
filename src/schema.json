@@ -40377,6 +40377,13 @@ components:
           nullable: true
           description: 'Optional wall-clock deadline. When it passes, the beat resolves
             EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
+        clock_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Scene clock size in ticks (#3567); 0 means no clock. Running
+            the beat opens a SceneClock of this size; combat rounds and the GM's advance
+            gesture fill it, and a full clock resolves the beat EXPIRED.
         success_consequences:
           type: integer
           nullable: true
@@ -40753,6 +40760,13 @@ components:
           nullable: true
           description: 'Optional wall-clock deadline. When it passes, the beat resolves
             EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
+        clock_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Scene clock size in ticks (#3567); 0 means no clock. Running
+            the beat opens a SceneClock of this size; combat rounds and the GM's advance
+            gesture fill it, and a full clock resolves the beat EXPIRED.
         success_consequences:
           type: integer
           nullable: true
@@ -51549,6 +51563,8 @@ components:
           type: string
         predicate_type:
           type: string
+        clock_size:
+          type: integer
         success_consequences_authored:
           type: boolean
         failure_consequences_authored:
@@ -51573,6 +51589,7 @@ components:
           - $ref: '#/components/schemas/GMStoryRailStagedBattle'
           nullable: true
       required:
+      - clock_size
       - expired_consequences_authored
       - failure_consequences_authored
       - id
@@ -65532,6 +65549,13 @@ components:
           nullable: true
           description: 'Optional wall-clock deadline. When it passes, the beat resolves
             EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
+        clock_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Scene clock size in ticks (#3567); 0 means no clock. Running
+            the beat opens a SceneClock of this size; combat rounds and the GM's advance
+            gesture fill it, and a full clock resolves the beat EXPIRED.
         success_consequences:
           type: integer
           nullable: true
@@ -73501,6 +73525,21 @@ components:
           readOnly: true
       required:
       - band
+    SceneClock:
+      type: object
+      description: 'The player-visible scene clock (#3567): size and fill, nothing
+        about the beat.'
+      properties:
+        size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        filled:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - size
     SceneDetail:
       type: object
       description: Full scene representation with personas
@@ -73599,8 +73638,14 @@ components:
             which stay on the GM/staff-gated ``running_beat`` field above.
             ``RenownRisk.NONE`` renders nothing: undeclared risk is not "safe".
           readOnly: true
+        clock:
+          allOf:
+          - $ref: '#/components/schemas/SceneClock'
+          nullable: true
+          readOnly: true
       required:
       - active_round
+      - clock
       - date_started
       - declared_risk
       - id

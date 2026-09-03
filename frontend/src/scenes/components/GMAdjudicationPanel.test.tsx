@@ -162,6 +162,7 @@ function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     position_edges: [],
     running_beat: null,
     declared_risk: null,
+    clock: null,
     ...overrides,
   };
 }
@@ -340,7 +341,11 @@ test('Situation tab in Challenge mode dispatches place_challenge with target_obj
 
 test('Call Check: picking a fitting check selects it and pre-fills the band from the running risk', async () => {
   const user = userEvent.setup();
-  render(<GMAdjudicationPanel scene={makeScene({ running_beat: { id: 1, risk: 'high' } })} />);
+  render(
+    <GMAdjudicationPanel
+      scene={makeScene({ running_beat: { id: 1, risk: 'high', clock_size: 0 } })}
+    />
+  );
 
   await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
   await user.click(screen.getByTestId('finder-toggle'));
@@ -709,6 +714,38 @@ test('Run Beat tab keeps "Run" for a plain encounter beat and does not navigate 
     })
   );
   expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+test('Run Beat tab appends the authored clock size to the row descriptor (#3567)', async () => {
+  mutateAsync.mockResolvedValueOnce({
+    backend: 'registry',
+    deferred: false,
+    success: true,
+    message: 'listed',
+    data: {
+      beats: [
+        {
+          id: 14,
+          story_title: 'The Long Watch',
+          episode_title: 'Ambush at Dusk',
+          kind: 'encounter',
+          risk: 'high',
+          opponent_line_count: 2,
+          staged_template_count: 0,
+          has_scenario: false,
+          staged_battle_name: null,
+          clock_size: 4,
+        },
+      ],
+    },
+  });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  const row = await screen.findByTestId('gm-runbeat-row-14');
+  expect(row).toHaveTextContent('clock 4');
 });
 
 test('Condition tab Remove mode lists active instances then dispatches gm_remove_condition (#3431)', async () => {

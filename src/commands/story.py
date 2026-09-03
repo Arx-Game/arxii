@@ -64,7 +64,9 @@ _USAGE = (
     "  story impact <story-id>=<table|regional|world>\n"
     "                                     - set impact tier (Lead GM; #2003)\n"
     "  story review-status <story-id>     - tier + review state (#2003)\n"
-    "  story surrender <story-id>          - GM surrenders oversight (#2004)"
+    "  story surrender <story-id>          - GM surrenders oversight (#2004)\n"
+    "  story clock [n]                     - advance the running beat's scene\n"
+    "                                     clock by n ticks (default 1; #3567)"
 )
 
 _IMPACT_USAGE = "Usage: story impact <story-id>=<table|regional|world>"
@@ -185,6 +187,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "impact": "_handle_impact",
     "review-status": "_handle_review_status",
     "surrender": "_handle_surrender",
+    "clock": "_handle_clock",
 }
 
 
@@ -377,6 +380,19 @@ class CmdStory(ArxNamespaceCommand):
             kwargs["gm_notes"] = gm_notes
 
         self._run_action(MarkBeatAction, **kwargs)
+
+    def _handle_clock(self, rest: str) -> None:
+        """Parse ``clock [n]`` and dispatch AdvanceClockAction (#3567)."""
+        from actions.definitions.gm_story import AdvanceClockAction  # noqa: PLC0415
+
+        token = rest.strip()
+        by = 1
+        if token:
+            if not token.isdigit() or int(token) < 1:
+                msg = "Usage: story clock [n], n a whole number of at least 1."
+                raise CommandError(msg)
+            by = int(token)
+        self._run_action(AdvanceClockAction, by=by)
 
     def _handle_signoff(self, rest: str) -> None:
         """Grant or withdraw a treasured sign-off for a beat (#1853)."""

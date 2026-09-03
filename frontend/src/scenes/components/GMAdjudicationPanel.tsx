@@ -1359,6 +1359,7 @@ function RunBeatTab({ characterId }: { characterId: number }) {
           } else {
             descriptor = ` - ${beat.staged_template_count} staged template(s)`;
           }
+          if (beat.clock_size > 0) descriptor += ` - clock ${beat.clock_size}`;
           let runLabel: string;
           if (runningId === beat.id) {
             runLabel = 'Running…';

@@ -165,3 +165,11 @@ class DecisiveCheckMarkerStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     RESOLVED = "resolved", "Resolved"
     CANCELLED = "cancelled", "Cancelled"
+
+
+class SceneClockClosedReason(models.TextChoices):
+    """Why a SceneClock stopped accepting ticks (#3567)."""
+
+    FILLED = "filled", "Filled"
+    COMPLETED = "completed", "Beat completed"
+    SCENE_ENDED = "scene_ended", "Scene ended"

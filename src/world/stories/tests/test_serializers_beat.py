@@ -110,6 +110,19 @@ class BeatSerializerCreateValidationTest(APITestCase):
         response = self._post_beat(self._base_beat_data())
         assert response.status_code == status.HTTP_201_CREATED
 
+    def test_clock_size_round_trips(self):
+        """clock_size (#3567) is writable and round-trips through the create response."""
+        data = {**self._base_beat_data(), "clock_size": 3}
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["clock_size"] == 3
+
+    def test_negative_clock_size_rejected(self):
+        """clock_size (#3567) is a PositiveSmallIntegerField -- negatives are rejected."""
+        data = {**self._base_beat_data(), "clock_size": -1}
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
     def test_character_level_beat_creates_successfully(self):
         """CHARACTER_LEVEL_AT_LEAST beat with required_level is accepted."""
         data = {

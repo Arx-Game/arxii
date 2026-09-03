@@ -362,6 +362,7 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `player_hint` | TextField | Shown while active (HINTED or VISIBLE) |
 | `player_resolution_text` | TextField | Shown in story log after completion |
 | `deadline` | DateTimeField (nullable) | When it passes, the beat resolves EXPIRED as a real completion (#3558) - see "Expiry" below |
+| `clock_size` | PositiveSmallIntegerField (default 0) | Scene clock size in ticks (#3567); 0 means no clock. `RunBeatAction` opens a `SceneClock` of this size when the beat runs; combat round starts and the GM's `advance_clock` gesture fill it. A full clock resolves the beat EXPIRED - see the Run Beat section's "Scene clock" below |
 | `agm_eligible` | BooleanField | True = AGM may claim this beat |
 | `order` | PositiveIntegerField | |
 | `kind` | BeatKind | SITUATION / ENCOUNTER / TASK (default) / REQUIREMENT — what the beat *is*; resolution still flows through `predicate_type` |
@@ -371,11 +372,17 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 
 **Expiry (#3558):** a past-deadline beat resolves through `expire_beat` /
 `complete_beat_expired` (`world.stories.services.beats`), the same completion tail
-every other beat resolution uses - it is not a bare field flip. Three sites call it,
-each per-beat inside its own savepoint (`_expire_each`) so one beat's failure never
-aborts the sweep: the cron sweep `expire_overdue_beats`, and the two lazy sites that
-fire when a progress record checks its transitions (`_expire_overdue_beats_for_episode`
-in `transitions.py`, `_expire_overdue_beats_for_episodes` in `views.py`). Expiry fires
+every other beat resolution uses - it is not a bare field flip. Four sites call
+`complete_beat_expired`, each per-beat inside its own savepoint (`_expire_each`) so
+one beat's failure never aborts the sweep: the cron sweep `expire_overdue_beats`, the
+two lazy sites that fire when a progress record checks its transitions
+(`_expire_overdue_beats_for_episode` in `transitions.py`,
+`_expire_overdue_beats_for_episodes` in `views.py`) - all three reach it through
+`expire_beat`, which locks the beat and re-checks the deadline first - and the scene
+clock fill (`world.scenes.clock_services._complete_filled_clock_beat`, #3567), which
+calls `complete_beat_expired` directly, after the filling transaction commits, under
+its own lock-then-check rather than `expire_beat`'s deadline check (a clock has no
+deadline field to re-check). Expiry fires
 the beat's `expired_consequences` pool with every effect type except `LEGEND_AWARD`
 skipped (expiry earns no legend, ADR-0066), grades any open stakes LOSS, and closes the
 open `StakeContractActivation` - see [stakes.md](stakes.md). For a GROUP-scope story the
@@ -492,6 +499,35 @@ run; `result.data` reports a per-line outcome. REQUIREMENT kinds are refused
 `running_beat` is an idempotent no-op; running a *different* beat while one is
 already running is refused.
 
+**One running scene per beat (#3567).** Before writing a new `running_beat`,
+`RunBeatAction` also refuses when a *different* active `Scene` already runs this
+same beat, so a clock never couples two tables to one countdown. A battle this
+beat staged runs the same beat on its own private scene by design (see the
+Battle arm below) and is excluded from that check - the GM's table scene and
+its spun-off battle scene both legitimately run the beat at once; any other
+second scene is refused.
+
+**Scene clock (#3567).** When `beat.clock_size > 0`, `RunBeatAction` opens a
+`SceneClock` of that size via `start_scene_clock` (`world.scenes.clock_services`)
+- keyed by beat, so the battle scene above shares the same clock as the GM's
+table scene rather than getting its own. Re-running an already-running beat
+reuses the open clock instead of opening a second one. Combat round starts
+(`begin_declaration_phase`, `world.combat.services`) and the GM's
+`AdvanceClockAction` (`advance_clock`, telnet `story clock [n]`) each spend one
+or more ticks (`tick_scene_clock`); battle rounds never call
+`begin_declaration_phase`, so a staged battle's own rounds do not tick the
+clock - only combat encounters and the GM gesture do. A full clock stamps the
+`SceneClock` FILLED and resolves the beat EXPIRED through `complete_beat_expired`
+after the ticking transaction commits (ADR-0264). The clock also closes -
+without completing the beat - when the beat completes by any other route
+(`close_open_clock_for_beat`) or when the scene that opened it ends
+(`close_scene_clocks(scene, SCENE_ENDED)`, called from `finish_scene_full`, which
+closes only the clocks opened in *that* scene - a battle scene's own clock row
+survives its GM table scene finishing, and vice versa). A re-run of the beat
+after its clock closed opens a fresh one. The scene detail payload's `clock`
+field (`{size, filled}`, every viewer - see [scenes.md](scenes.md)) is the
+open clock on the scene's `running_beat`, not the beat's authored `clock_size`.
+
 **Battle arm (#3569).** With a `BeatStagedBattle`, `_run_battle_beat` stages a
 `Battle` instead of a `CombatEncounter`: an already-running, unconcluded
 `Battle(story_beat=beat)` is returned as-is (`already_staged=True` - a GM
@@ -548,17 +584,29 @@ lists ENCOUNTER/SITUATION beats on the episode currently active (per
 every table-assigned story, a non-staff GM only stories where they are the
 Lead GM. Each row's `staged_battle_name` names the `BeatStagedBattle`'s
 blueprint when an ENCOUNTER beat has one, else `None` - one query across all
-rows, never per-row (#3569). Feeds the web `GMAdjudicationPanel`'s Run Beat
+rows, never per-row (#3569). Each row also carries `clock_size` (#3567), the
+beat's authored scene clock size (0 = no clock). Feeds the web `GMAdjudicationPanel`'s Run Beat
 tab, which shows a "Start siege" button (instead of the plain "Run" button)
 for a `staged_battle_name`-carrying row and navigates the GM to
 `/scenes/{battle_scene_id}/battle` on a successful run.
+
+`AdvanceClockAction` (`advance_clock`, #3567) spends ticks on the acting GM's
+scene's running beat's open clock: kwarg `by` (default 1, a whole number ≥ 1),
+gated `IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite(JUNIOR)` - the same
+gate as `RunBeatAction`. Wraps `tick_scene_clock`; refuses (`_NO_CLOCK`) when
+the scene runs no beat or the beat has no open clock. `result.data` carries
+`{size, filled, filled_now}` - `filled_now` is true exactly when this call
+closed the clock. Telnet: `story clock [n]` (`commands/story.py`); web: the GM
+story rail's Advance button (see [scenes.md](scenes.md)'s GM story rail
+section).
 
 `Scene.running_beat` (FK → `arxii.Beat`, nullable, `SET_NULL`,
 `related_name="running_scenes"`, string-FK form matching
 `CombatEncounter.story_beat`) is the first-class "this scene is running this
 beat" pointer, written only by `RunBeatAction` and cleared by
-`finish_scene_full`. Exposed on the scene serializers as `running_beat`
-(id + risk only) for GM/staff viewers — never beat internals.
+`finish_scene_full`. Exposed on `SceneListSerializer` (inherited by the detail
+serializer) as `running_beat` (`{id, risk, clock_size}`) for GM/staff viewers - never
+beat internals.
 
 #### Objective-first grading (#3559)
 
@@ -815,8 +863,8 @@ All services in `src/world/stories/services/`.
 | `record_scenario_outcome` | `(*, progress, beat, outcome, outcome_tier, outcome_key, participants=None) -> BeatCompletion` | Records a scenario run's ending on an OUTCOME_TIER beat (#3565, closes #3560); called from `world.missions.services.beat.on_mission_complete_for_beat` via `beat_outcome_for_route`. `outcome` is SUCCESS or FAILURE only - the scenario graph already decided it (the terminal route's authored `beat_outcome`, or the tier's sign, or SUCCESS for a tier-less BRANCH terminal). `outcome_tier` is the graded tier for a CHECK/ENCOUNTER terminal (fires the tier-aware pool) or `None` for a BRANCH terminal (fires the coarse pool). `outcome_key` is the `MissionOption.key` that ended the run, written to `BeatCompletion.outcome_key` and denormalised onto `Beat.outcome_key` for `TransitionRequiredOutcome.required_outcome_key` to route on |
 | `beat_for_scene_conclusion` | `(scene, explicit_beat) -> Beat \| None` | The one beat a concluded fight or battle may grade (#3559) - see [Objective-first grading](#objective-first-grading-3559) above |
 | `expire_overdue_beats` | `(now=None) -> int` | Cron sweep; completes every UNSATISFIED past-deadline beat via `expire_beat` (#3558), one savepoint per beat (`_expire_each`); returns the count of beats whose outcome changed. Idempotent |
-| `complete_beat_expired` | `(beat: Beat) -> BeatCompletion \| None` | Resolves a beat EXPIRED as a real completion (#3558): fires `expired_consequences` with `LEGEND_AWARD` skipped, grades open stakes LOSS, closes the contract, writes the ledger row. `None` when the story has no active progress to credit (outcome still flips) |
-| `expire_beat` | `(beat: Beat, *, now=None) -> BeatCompletion \| None` | Locks the beat row, no-ops if not UNSATISFIED or the deadline hasn't passed, else delegates to `complete_beat_expired`. Idempotent; the per-beat entry point every expiry site calls |
+| `complete_beat_expired` | `(beat: Beat) -> BeatCompletion \| None` | Resolves a beat EXPIRED as a real completion (#3558): fires `expired_consequences` with `LEGEND_AWARD` skipped, grades open stakes LOSS, closes the contract, writes the ledger row. `None` when the story has no active progress to credit (outcome still flips). Called by `expire_beat` (deadline path) and, directly, by `world.scenes.clock_services._complete_filled_clock_beat` (scene clock fill, #3567, ADR-0264) |
+| `expire_beat` | `(beat: Beat, *, now=None) -> BeatCompletion \| None` | Locks the beat row, no-ops if not UNSATISFIED or the deadline hasn't passed, else delegates to `complete_beat_expired`. Idempotent; the per-beat entry point every deadline-based expiry site calls (the scene clock fill calls `complete_beat_expired` directly instead - see above) |
 
 ### transitions.py
 
@@ -1168,6 +1216,12 @@ be performed by an approved Assistant GM for that beat.
 `GMProfile` and pass it through as `resolved_by`/credit the GM whose `primary_table`
 owns the story — so an approved Assistant GM who marks a beat is credited with GM
 Story Reward XP directly, never silently the Lead GM (#2123).
+
+`story clock [n]` (`advance_clock`, #3567) is gated differently from the table above -
+scene-GM standing on the acting GM's current scene (`IsSceneGMPrerequisite`), not the
+story's Lead GM - since it paces the running beat's scene clock, not the story itself.
+Spends `n` ticks (default 1) via `AdvanceClockAction`; see "Scene clock" in the Run Beat
+section above.
 
 ## Player→GM recruitment loop (#2119)
 

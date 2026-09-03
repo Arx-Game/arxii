@@ -340,6 +340,12 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
 
         resolve_open_activation(beat)
 
+        from world.scenes.clock_services import close_open_clock_for_beat  # noqa: PLC0415
+        from world.scenes.constants import SceneClockClosedReason  # noqa: PLC0415
+
+        # #3567: a clock that filled is already closed FILLED; any other route closes it.
+        close_open_clock_for_beat(beat, SceneClockClosedReason.COMPLETED)
+
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Idempotent — safe to call unconditionally.
         maybe_create_session_request(progress)

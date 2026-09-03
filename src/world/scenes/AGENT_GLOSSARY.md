@@ -18,8 +18,15 @@ _Avoid_: fake sheet, alt bio, cover profile (the model is `Profile`; the surface
 Root term — a staff/GM broadcast pushed to a public-reaction surface. Not redefined here.
 
 **SceneRound**:
-A non-combat round/turn structure anchored to a room, carrying a gating mode (OPEN, POSE_ORDER, STRICT) plus per-round knobs (quorum, action cap, repeat-target lock). At most one active round exists per room. Combat is one specialization of this round seam; rounds advance on declared action, never on wall-clock time.
+A non-combat round/turn structure anchored to a room, carrying a gating mode (OPEN, POSE_ORDER, STRICT) plus per-round knobs (quorum, action cap, repeat-target lock). At most one active round exists per room. Combat is one specialization of this round seam; rounds advance on declared action, never on wall-clock time. Each combat round start burns one tick of the running beat's Scene clock (below) - a round is time pressure only when a clock is running.
 _Avoid_: turn, tick, combat round (for the general case)
+
+**Scene clock** (#3567, ADR-0264): an authored countdown on the beat a scene is running.
+`Beat.clock_size` ticks; a `SceneClock` row per run, keyed by beat, filled by combat round
+starts and the GM's `advance_clock` gesture (`story clock [n]` on telnet), visible to every
+viewer as pips on the scene header. Full means the beat completes EXPIRED after commit.
+_Avoid_: "countdown timer", "deadline" (the wall-clock `Beat.deadline` is a different thing),
+"world clock" (the calendar in `world.game_clock`).
 
 **Pose**:
 A single IC contribution recorded within a scene — the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas for thread derivation.

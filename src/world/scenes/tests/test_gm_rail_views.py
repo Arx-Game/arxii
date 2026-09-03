@@ -45,7 +45,7 @@ class GMStoryRailViewTests(APITestCase):
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
         self.story = StoryFactory()
-        self.beat = BeatFactory(episode__chapter__story=self.story)
+        self.beat = BeatFactory(episode__chapter__story=self.story, clock_size=2)
         self.scene.running_beat = self.beat
         self.scene.save(update_fields=["running_beat"])
 
@@ -60,6 +60,7 @@ class GMStoryRailViewTests(APITestCase):
         self.assertEqual(beat["kind"], self.beat.kind)
         self.assertEqual(beat["risk"], self.beat.risk)
         self.assertEqual(beat["outcome"], self.beat.outcome)
+        self.assertEqual(beat["clock_size"], self.beat.clock_size)
 
     def test_co_gm_with_no_story_standing_gets_empty_protected_subjects(self) -> None:
         """The leak test (#3434 spec) - must not skip this."""

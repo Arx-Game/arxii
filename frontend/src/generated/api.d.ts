@@ -24555,6 +24555,8 @@ export interface components {
        * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
+      /** @description Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens a SceneClock of this size; combat rounds and the GM's advance gesture fill it, and a full clock resolves the beat EXPIRED. */
+      clock_size?: number;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
       success_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves FAILURE. */
@@ -24754,6 +24756,8 @@ export interface components {
        * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
+      /** @description Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens a SceneClock of this size; combat rounds and the GM's advance gesture fill it, and a full clock resolves the beat EXPIRED. */
+      clock_size?: number;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
       success_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves FAILURE. */
@@ -29807,6 +29811,7 @@ export interface components {
       risk: string;
       outcome: string;
       predicate_type: string;
+      clock_size: number;
       success_consequences_authored: boolean;
       failure_consequences_authored: boolean;
       expired_consequences_authored: boolean;
@@ -37563,6 +37568,8 @@ export interface components {
        * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
+      /** @description Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens a SceneClock of this size; combat rounds and the GM's advance gesture fill it, and a full clock resolves the beat EXPIRED. */
+      clock_size?: number;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
       success_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves FAILURE. */
@@ -41755,6 +41762,11 @@ export interface components {
     SceneActivity: {
       readonly band: string;
     };
+    /** @description The player-visible scene clock (#3567): size and fill, nothing about the beat. */
+    SceneClock: {
+      size: number;
+      filled?: number;
+    };
     /** @description Full scene representation with personas */
     SceneDetail: {
       readonly id: number;
@@ -41801,6 +41813,7 @@ export interface components {
        *     ``RenownRisk.NONE`` renders nothing: undeclared risk is not "safe".
        */
       readonly declared_risk: string | null;
+      readonly clock: components['schemas']['SceneClock'] | null;
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {

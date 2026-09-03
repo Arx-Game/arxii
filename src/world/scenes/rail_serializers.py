@@ -35,6 +35,7 @@ class GMStoryRailBeatSerializer(serializers.Serializer):
     risk = serializers.CharField()
     outcome = serializers.CharField()
     predicate_type = serializers.CharField()
+    clock_size = serializers.IntegerField()
     success_consequences_authored = serializers.BooleanField()
     failure_consequences_authored = serializers.BooleanField()
     expired_consequences_authored = serializers.BooleanField()

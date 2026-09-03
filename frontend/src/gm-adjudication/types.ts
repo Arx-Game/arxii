@@ -76,6 +76,7 @@ export interface RunnableBeatEntry {
   staged_template_count: number;
   has_scenario: boolean;
   staged_battle_name: string | null;
+  clock_size: number;
 }
 
 /**
