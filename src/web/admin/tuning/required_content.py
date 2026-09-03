@@ -239,6 +239,36 @@ def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDe
     return tuple(registry)
 
 
+def _probe_typeclassed_accounts() -> ProbeResult:
+    """No account row has ``db_typeclass_path`` = the base ``AccountDB`` model.
+
+    Consumer: every view that reads typeclass state off ``request.user``
+    (``get_available_characters`` behind the ``X-Character-ID`` header,
+    ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
+    ``ArxAccountAdapter.new_user`` stops signup making such rows; Django's
+    ``create_superuser`` still does, and rows from before the adapter fix stay
+    on ``AccountDB`` until repointed by hand (ADR-0260: no data migration for a handful of
+    pre-launch rows). A hit here is one of those.
+    """
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    base_model_rows = tuple(
+        AccountDB.objects.filter(
+            db_typeclass_path__in=("", "evennia.accounts.models.AccountDB")
+        ).values_list("username", flat=True)
+    )
+    detail = (
+        f"Account(s) whose typeclass path is the base AccountDB model, not "
+        f"typeclasses.accounts.Account: {', '.join(base_model_rows)}. "
+        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS by hand: "
+        "AccountDB.objects.filter(username=...).update(db_typeclass_path=...) in "
+        "`arx manage shell`."
+        if base_model_rows
+        else ""
+    )
+    return ProbeResult(present=not base_model_rows, missing=base_model_rows, detail=detail)
+
+
 def _probe_audere_majora_thresholds() -> ProbeResult:
     """`AudereMajoraThreshold` rows exist for every tier-crossing boundary level.
 
@@ -1216,6 +1246,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "error, so players believe the offer failed for no reason."
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
+        ),
+        ContentDependency(
+            key="typeclassed-accounts",
+            label="Accounts load as the Account typeclass",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "web/api/mixins.py:63 get_available_characters (X-Character-ID auth); "
+                "world/checks/views.py:135 played_character_sheet_ids; "
+                "world/combat/views.py:1207 played_character_sheet_ids"
+            ),
+            consequence=(
+                "An account whose typeclass path is the base AccountDB model has no typeclass "
+                "attributes, so every persona-aware endpoint answers 500 for that "
+                "player or staff member (Sentry ARX2-8: the first outside player's "
+                "signup account). createsuperuser still makes such rows, and "
+                "pre-adapter signup rows stay on AccountDB until fixed by hand."
+            ),
+            probe=CustomProbe(fn=_probe_typeclassed_accounts),
         ),
         ContentDependency(
             key="game-clock",

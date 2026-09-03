@@ -271,7 +271,7 @@ class ScenarioJourneyTests(APITestCase):
         return f"/api/missions/journal/{instance_id}/{action_name}/"
 
     def _group_pick(self, instance_id: int, actor: object, option_id: int) -> dict:
-        with mock.patch("world.missions.views._puppet_character", return_value=actor):
+        with mock.patch("world.missions.views._acting_character", return_value=actor):
             resp = self.client.post(
                 self._journal_url(instance_id, "group-pick"),
                 {"option_id": option_id},
@@ -281,7 +281,7 @@ class ScenarioJourneyTests(APITestCase):
         return resp.data
 
     def _group_vote(self, instance_id: int, actor: object, option_id: int) -> dict:
-        with mock.patch("world.missions.views._puppet_character", return_value=actor):
+        with mock.patch("world.missions.views._acting_character", return_value=actor):
             resp = self.client.post(
                 self._journal_url(instance_id, "group-vote"),
                 {"option_id": option_id},

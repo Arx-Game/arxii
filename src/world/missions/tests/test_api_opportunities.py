@@ -47,7 +47,7 @@ class OpportunitiesAPITests(TestCase):
         ObjectDB.objects.filter(pk=self.character.pk).update(db_location=self.room)
         self.character.db_location = self.room
         self._patch = mock.patch(
-            "world.missions.views._puppet_character", return_value=self.character
+            "world.missions.views._acting_character", return_value=self.character
         )
         self._patch.start()
         self.addCleanup(self._patch.stop)

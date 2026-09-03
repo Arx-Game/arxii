@@ -65,6 +65,11 @@ class SignupJourneyTests(TestCase):
         self.assertIsNotNone(invite.redeemed_at)
         account = User.objects.get(username="matched_user")
         self.assertEqual(invite.redeemed_by_id, account.id)
+        # The row must carry the Account typeclass, not the base AccountDB
+        # (Sentry ARX2-8): every persona-aware endpoint reads typeclass state.
+        from django.conf import settings
+
+        self.assertEqual(account.db_typeclass_path, settings.BASE_ACCOUNT_TYPECLASS)
 
     def test_closed_with_valid_invite_and_different_email_is_rejected(self):
         invite = AccountInviteFactory(invited_by=self.staff, email="matched@example.com")
