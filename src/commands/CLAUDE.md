@@ -842,7 +842,11 @@ actions, backends, and service functions.
   story's Lead GM), `withdraw <invite-id>` (inviter), `list [pending]` (#2002) — thin over
   `world.stories.services.crossover` (the same service the web `CrossoverInviteViewSet` calls);
   authorization replicated inline (sender-only withdraw, recipient-only accept/decline) so telnet
-  cannot escalate.
+  cannot escalate. `story clock [n]` (#3567) dispatches `AdvanceClockAction` (key `advance_clock`,
+  `actions/definitions/gm_story.py`) - spends `n` ticks (default 1) on the acting GM's current
+  scene's running beat's open `SceneClock`; gated by scene-GM standing
+  (`IsSceneGMPrerequisite`), not story Lead-GM standing like the subverbs above, since it paces
+  the scene, not the story.
 - **`story_rooms.py`**: telnet play verbs for GM story areas / temp scene rooms (#2450, epic
   #2436 slice 3) — canvas authoring (create/dig/link/place/remove a story area's rooms) stays
   web-only (epic Decision 2); only the play-time verbs get a telnet face, mirroring the "no

@@ -2724,7 +2724,8 @@ GM at a given level may author (#2000, ADR-0097).
   panel's Situation tab below (one-click Place), and its Call Check tab
   (a fitting check selects it and pre-fills the difficulty band from the
   guide for the running beat's risk, `GMAdjudicationPanel`'s
-  `scene.running_beat?.risk`). Suggestion inbox: `SubmissionCategory
+  `scene.running_beat?.risk`; the same running beat may also carry a scene
+  clock, `scene.clock` - see "Scene clock (#3567)" below). Suggestion inbox: `SubmissionCategory
   .CATALOG_SUGGESTION` (`world.player_submissions.constants`) +
   `_catalog_suggestion_to_item` in `world.staff_inbox.services.get_staff_inbox`,
   mirroring `GMApplication`'s exact mapping shape (Decision 8); staff triage via
@@ -2940,7 +2941,10 @@ action consent flow, and a three-mode non-combat round framework.
 
 - **Models:** `Scene` (incl. `running_beat` FK → `stories.Beat`, nullable, #3425 — the beat this
   scene is currently running, set by `RunBeatAction`/cleared by `finish_scene_full`; see
-  stories.md's "Session prep"), `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
+  stories.md's "Session prep"), `SceneClock` (#3567 - an authored countdown on the beat a scene
+  is running: `scene`/`beat` FKs, `size`/`filled`, `closed_at`/`closed_reason`
+  (`SceneClockClosedReason`); one open clock per beat (`UniqueConstraint`); see scenes.md's
+  "Scene clock" and ADR-0264), `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
   `SceneCastPullDeclaration`,
   **Round framework (#1351):** `SceneRound` (room-anchored non-combat round — `room` FKs
   `evennia_extensions.RoomProfile` since #2608, as do `Place.room` and `SpeakerQueue.room`;
@@ -3205,6 +3209,22 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `BeatStagedBattle`/`BeatStagedBattleUnit` (a whole pre-staged battle on an ENCOUNTER beat, O2O + child rows, mutually exclusive with `BeatOpponentLine`, #3569 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
 - **The scenario graph is a beat's body, not a second option engine (#3565):** a `Beat` (SITUATION or TASK kind) points at a `missions.MissionTemplate` via `required_mission`; when that template is `StoryScenario`-owned, the story's Lead GM authored it under the trust ladder rather than staff. `Transition.mode`/`TransitionMode`/`AmbiguousTransitionError` are retired: routing is fully automatic, the lowest `(order, pk)` eligible outbound transition fires, and `services/routing.py`'s `routing_report`/`RoutingReport` (surfaced as `routing_problems` on the episode payloads and `EpisodeDetailSerializer.routing_ambiguous`, #3563) warns the author tree when two transitions could both be eligible at once, or when a beat/stake outcome has no accepting transition. `Beat.predicate_type` defaults to `OUTCOME_TIER` (was `GM_MARKED`) - a beat resolves from its graph, an encounter, a battle, or a decisive check by default; GM-marked is now the exception, authored only for an out-of-band fact a machine grader cannot see. See stories.md's "StoryScenario" section and Missions & Living Grid below.
 - **Session prep + Run Beat (#3425, #3569):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat, or - mutually exclusive with `BeatOpponentLine` - a whole `BeatStagedBattle` (blueprint/region/name/party side + `BeatStagedBattleUnit` lines) on an ENCOUNTER beat, #3569 - nested read-write on `BeatSerializer`, including the id-based-diff update path for the child lists and an omitted-vs-null convention for the single nested `staged_battle`. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: for ENCOUNTER, creates a `CombatEncounter`/spawns opponents, or - when a `BeatStagedBattle` exists - stages a `Battle` from its blueprint instead (`Battle.story_beat=beat`, units spawned by side/place, the running scene's present party enlisted on the declared side, idempotent re-run); for SITUATION, instantiates situations/challenges; and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows (plus an Opponents/Battle toggle for ENCOUNTER, mounting `BattlePrepEditor` in Battle mode) + `GMAdjudicationPanel`'s Run Beat tab ("Start siege" for a staged-battle row, navigates to `/scenes/{battle_scene_id}/battle`). See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
+- **Scene clock (#3567; ADR-0264):** `Beat.clock_size` (0 = no clock) authors a countdown that
+  `RunBeatAction` opens as a `world.scenes.models.SceneClock` (`scenes` app, keyed by beat, one
+  open row per beat) when the beat runs. Filled by two sources - combat round starts
+  (`begin_declaration_phase`, `world.combat.services`; battle rounds never call it, so a staged
+  battle's own rounds don't tick) and the GM `advance_clock` gesture (`AdvanceClockAction`,
+  `actions/definitions/gm_story.py`, telnet `story clock [n]`) - both via `tick_scene_clock`
+  (`world.scenes.clock_services`, the sole writer of `SceneClock` rows: also
+  `start_scene_clock`/`open_clock_for_beat`/`close_open_clock_for_beat`/`close_scene_clocks`). A
+  full clock stamps FILLED and schedules the beat's EXPIRED completion via
+  `transaction.on_commit`, lock-then-checked so a later round-pipeline failure can never roll
+  back a completion players were already told about. `finish_scene_full` closes every clock
+  opened in that scene as SCENE_ENDED (no completion); any other beat completion closes the open
+  clock as COMPLETED. Player-visible on every scene viewer as `SceneDetailSerializer.clock`
+  (`{size, filled}`, no beat/consequence named) rendered by `SceneClockPips.tsx` on the scene
+  header; the GM story rail additionally shows the beat's authored `clock_size` plus an Advance
+  control. See stories.md's "Scene clock" (Run Beat section) and scenes.md's "Scene clock".
 - **Declared-risk badge (#3433):** `SceneDetailSerializer.declared_risk` - the player-visible
   sibling of the GM-gated `running_beat` field, tier string only (`RenownRisk`, never a beat
   id/name). Precedence: `scene.running_beat.risk` → the active `CombatEncounter.story_beat.risk`

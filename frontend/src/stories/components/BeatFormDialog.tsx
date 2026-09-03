@@ -88,6 +88,7 @@ interface DRFFieldErrors {
   risk?: string[];
   order?: string[];
   deadline?: string[];
+  clock_size?: string[];
   agm_eligible?: string[];
   required_level?: string[];
   required_achievement?: string[];
@@ -1099,6 +1100,7 @@ export function BeatFormDialog({
   );
   const [order, setOrder] = useState<string>(beat?.order !== undefined ? String(beat.order) : '');
   const [deadline, setDeadline] = useState(beat?.deadline ?? '');
+  const [clockSize, setClockSize] = useState<string>(String(beat?.clock_size ?? 0));
   const [agmEligible, setAgmEligible] = useState(beat?.agm_eligible ?? false);
   const [opponentLines, setOpponentLines] = useState<OpponentLineDraft[]>(
     opponentLineDraftsFromBeat(beat)
@@ -1164,6 +1166,7 @@ export function BeatFormDialog({
     setRequiredMission(beat?.required_mission ?? null);
     setOrder(beat?.order !== undefined ? String(beat.order) : '');
     setDeadline(beat?.deadline ?? '');
+    setClockSize(String(beat?.clock_size ?? 0));
     setAgmEligible(beat?.agm_eligible ?? false);
     setOpponentLines(opponentLineDraftsFromBeat(beat));
     setStagedTemplates(stagedTemplateDraftsFromBeat(beat));
@@ -1211,6 +1214,7 @@ export function BeatFormDialog({
       required_mission: kindHasRequiredMission(kind) ? requiredMission : null,
       order: order !== '' ? Number(order) : undefined,
       deadline: deadline ? new Date(deadline).toISOString() : undefined,
+      clock_size: Number(clockSize) || 0,
       agm_eligible: agmEligible,
     };
 
@@ -1655,8 +1659,8 @@ export function BeatFormDialog({
               )}
             </div>
 
-            {/* Order and deadline side-by-side */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Order, deadline and scene clock side-by-side */}
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="beat-order">Order</Label>
                 <Input
@@ -1681,6 +1685,23 @@ export function BeatFormDialog({
                 />
                 {fieldErrors.deadline && (
                   <p className="text-xs text-destructive">{fieldErrors.deadline.join(' ')}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="beat-clock-size">Scene clock (ticks, 0 = none)</Label>
+                <Input
+                  id="beat-clock-size"
+                  type="number"
+                  min={0}
+                  value={clockSize}
+                  onChange={(e) => setClockSize(e.target.value)}
+                  disabled={isLocked}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Combat rounds and your Advance gesture fill it; full means the beat expires.
+                </p>
+                {fieldErrors.clock_size && (
+                  <p className="text-xs text-destructive">{fieldErrors.clock_size.join(' ')}</p>
                 )}
               </div>
             </div>

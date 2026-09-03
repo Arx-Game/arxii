@@ -695,6 +695,33 @@ describe('BeatFormDialog', () => {
     });
   });
 
+  it('submits the scene clock size as a number (#3567)', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 102 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    await user.type(screen.getByLabelText(/internal description/i), 'Beat with a clock');
+
+    const clockInput = screen.getByLabelText(/scene clock/i);
+    await user.clear(clockInput);
+    await user.type(clockInput, '3');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({ clock_size: 3 }),
+        expect.any(Object)
+      );
+    });
+  });
+
   it('renders in edit mode pre-populated', () => {
     setupMocks();
     const existingBeat = {

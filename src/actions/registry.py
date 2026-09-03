@@ -226,7 +226,11 @@ from actions.definitions.gm_stories import (
     ResolveEpisodeAction,
     WithdrawGroupStoryRequestAction,
 )
-from actions.definitions.gm_story import GMListRunnableBeatsAction, RunBeatAction
+from actions.definitions.gm_story import (
+    AdvanceClockAction,
+    GMListRunnableBeatsAction,
+    RunBeatAction,
+)
 from actions.definitions.gm_summon_offers import AcceptGMSummonAction, DeclineGMSummonAction
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.hazards import HazardEndureAction, HazardRetreatAction
@@ -805,6 +809,7 @@ _ALL_ACTIONS: list[Action] = [
     WithdrawGroupStoryRequestAction(),
     RunBeatAction(),
     GMListRunnableBeatsAction(),
+    AdvanceClockAction(),
     ResolveAlterationAction(),
     RestAction(),
     ToggleFavoriteAction(),

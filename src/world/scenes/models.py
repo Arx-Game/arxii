@@ -21,6 +21,7 @@ from world.scenes.constants import (
     PoseKind,
     ReactionValence,
     RoundStatus,
+    SceneClockClosedReason,
     ScenePrivacyMode,
     SceneRoundMode,
     SceneRoundParticipantStatus,
@@ -246,6 +247,46 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
                 for persona in self.persona_handler.active_participant_personas()
             }
             clear_very_attracted(sheets)
+
+
+class SceneClock(SharedMemoryModel):
+    """An authored countdown on the beat a scene is running (#3567).
+
+    Opened by ``RunBeatAction`` when ``beat.clock_size > 0``; ticked by
+    ``clock_services.tick_scene_clock`` (combat round starts and the GM's
+    ``advance_clock`` gesture); closed when it fills (the beat then completes
+    EXPIRED), when the beat completes by any other route, or when the scene
+    that opened it ends. One open clock per beat: ``scene`` records where it
+    was opened, ``beat`` is the key (a staged battle's private scene runs the
+    same beat and reads the same clock). Play state: resettable.
+    """
+
+    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="clocks")
+    beat = models.ForeignKey("arxii.Beat", on_delete=models.CASCADE, related_name="scene_clocks")
+    size = models.PositiveSmallIntegerField()
+    filled = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_reason = models.CharField(
+        max_length=20, choices=SceneClockClosedReason.choices, blank=True, default=""
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["beat"],
+                condition=models.Q(closed_at__isnull=True),
+                name="unique_open_clock_per_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Clock {self.filled}/{self.size} on beat {self.beat_id}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.closed_at is None
 
 
 class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
