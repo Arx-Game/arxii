@@ -409,10 +409,10 @@ class CovenantViewTests(CovenantsViewTestCase):
     @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_staff_sees_all(self) -> None:
         """Staff users see all covenants regardless of membership."""
-        from evennia.accounts.models import AccountDB
+        from evennia_extensions.factories import AccountFactory
 
-        staff_user = AccountDB.objects.create_user(
-            username="cov_view_staff", email="cov_view_staff@test.com", password="p", is_staff=True
+        staff_user = AccountFactory(
+            username="cov_view_staff", email="cov_view_staff@test.com", is_staff=True
         )
         self.client.force_authenticate(user=staff_user)
         response = self.client.get("/api/covenants/covenants/")
@@ -425,15 +425,11 @@ class CovenantViewTests(CovenantsViewTestCase):
     @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_filter_by_covenant_type(self) -> None:
         """?covenant_type= filters to only covenants of that type."""
-        from evennia.accounts.models import AccountDB
-
+        from evennia_extensions.factories import AccountFactory
         from world.covenants.constants import CovenantType
 
-        staff_user = AccountDB.objects.create_user(
-            username="cov_view_staff2",
-            email="cov_view_staff2@test.com",
-            password="p",
-            is_staff=True,
+        staff_user = AccountFactory(
+            username="cov_view_staff2", email="cov_view_staff2@test.com", is_staff=True
         )
         self.client.force_authenticate(user=staff_user)
         response = self.client.get(
@@ -446,13 +442,10 @@ class CovenantViewTests(CovenantsViewTestCase):
     @tag("postgres")  # serializes legend_total → PG materialized view (#758)
     def test_filter_by_is_active_true(self) -> None:
         """?is_active=true returns only covenants with dissolved_at=None."""
-        from evennia.accounts.models import AccountDB
+        from evennia_extensions.factories import AccountFactory
 
-        staff_user = AccountDB.objects.create_user(
-            username="cov_view_staff3",
-            email="cov_view_staff3@test.com",
-            password="p",
-            is_staff=True,
+        staff_user = AccountFactory(
+            username="cov_view_staff3", email="cov_view_staff3@test.com", is_staff=True
         )
         self.client.force_authenticate(user=staff_user)
         response = self.client.get("/api/covenants/covenants/", {"is_active": "true"})
@@ -831,8 +824,7 @@ class CovenantRankViewSetTests(CovenantsViewTestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.accounts.models import AccountDB
-
+        from evennia_extensions.factories import AccountFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.factories import (
             CharacterCovenantRoleFactory,
@@ -859,10 +851,8 @@ class CovenantRankViewSetTests(CovenantsViewTestCase):
         )
 
         # Non-manager user.
-        cls.non_mgr_user = AccountDB.objects.create_user(
-            username="ranktestnonmgr",
-            email="ranktestnonmgr@test.com",
-            password="p",
+        cls.non_mgr_user = AccountFactory(
+            username="ranktestnonmgr", email="ranktestnonmgr@test.com"
         )
         cls.non_mgr_sheet = CharacterSheetFactory()
         cls.non_mgr_entry = RosterEntryFactory(character_sheet=cls.non_mgr_sheet)
@@ -1164,12 +1154,11 @@ class InductionDraftAuthzApiTests(TestCase):
     def _make_authenticated_client_with_sheet(self) -> tuple:
         """Return (client, initiator_sheet) for a user with an active character.
 
-        Creates an AccountDB → PlayerData → RosterTenure → RosterEntry →
+        Creates an Account -> PlayerData -> RosterTenure -> RosterEntry ->
         CharacterSheet chain so the serializer's for_account() lookup
         resolves the initiator from request.user.
         """
-        from evennia.accounts.models import AccountDB
-
+        from evennia_extensions.factories import AccountFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.roster.factories import (
             PlayerDataFactory,
@@ -1177,10 +1166,8 @@ class InductionDraftAuthzApiTests(TestCase):
             RosterTenureFactory,
         )
 
-        account = AccountDB.objects.create_user(
-            username=f"induct_test_{id(self)}",
-            email=f"induct_{id(self)}@test.com",
-            password="testpass123",
+        account = AccountFactory(
+            username=f"induct_test_{id(self)}", email=f"induct_{id(self)}@test.com"
         )
         sheet = CharacterSheetFactory()
         roster_entry = RosterEntryFactory(character_sheet=sheet)
