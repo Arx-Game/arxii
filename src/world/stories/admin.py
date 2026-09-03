@@ -307,6 +307,7 @@ class BeatAdmin(admin.ModelAdmin):
     search_fields = ("internal_description", "player_hint", "episode__title")
     ordering = ("episode", "order")
     readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ["required_npc_sheet"]
     inlines = [BeatOpponentLineInline, BeatStagedTemplateInline]
 
 

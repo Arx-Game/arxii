@@ -1511,6 +1511,9 @@ class BeatViewSet(viewsets.ModelViewSet):
         "referenced_story",
         "referenced_chapter",
         "referenced_episode",
+        "required_npc_sheet",
+        "required_society",
+        "required_organization",
     )
     serializer_class = BeatSerializer
     permission_classes = [IsBeatStoryOwnerOrStaff]

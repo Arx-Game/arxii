@@ -86,6 +86,7 @@ class BeatPredicateType(models.TextChoices):
     AGGREGATE_THRESHOLD = "aggregate_threshold", "Aggregate threshold reached"
     OUTCOME_TIER = "outcome_tier", "Outcome tier (machine-graded)"
     FACTION_STANDING_AT_LEAST = "faction_standing_at_least", "Faction standing at least"
+    NPC_REGARD_AT_LEAST = "npc_regard_at_least", "NPC regard at least"
 
 
 class StoryMilestoneType(models.TextChoices):

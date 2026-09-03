@@ -485,6 +485,86 @@ describe('BeatFormDialog', () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // #3570 - tenth predicate: npc_regard_at_least (required_npc_sheet + shared
+  // required_standing input)
+  // -------------------------------------------------------------------------
+
+  it('npc_regard_at_least shows the NPC sheet and standing inputs and submits both', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 202 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const predicateGroup = screen.getByTestId('predicate-type-group');
+    await user.click(within(predicateGroup).getByRole('radio', { name: /npc regard at least/i }));
+
+    await user.type(screen.getByLabelText(/required npc sheet id/i), '42');
+    await user.type(screen.getByLabelText(/required standing/i), '5');
+    await user.type(screen.getByLabelText(/internal description/i), 'NPC regard beat');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          predicate_type: 'npc_regard_at_least',
+          required_npc_sheet: 42,
+          required_standing: 5,
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('editing an npc_regard_at_least beat pre-populates both fields', () => {
+    setupMocks();
+    const existingBeat = {
+      id: 6,
+      episode: 42,
+      predicate_type: 'npc_regard_at_least' as const,
+      required_npc_sheet: 42,
+      required_standing: 5,
+      outcome: 'unsatisfied' as const,
+      visibility: 'hinted' as const,
+      internal_description: 'NPC must regard the character well',
+      player_hint: 'An NPC regard threshold',
+      player_resolution_text: undefined,
+      order: 1,
+      agm_eligible: false,
+      deadline: null,
+      required_level: null,
+      required_achievement: null,
+      required_condition_template: null,
+      required_codex_entry: null,
+      referenced_story: null,
+      referenced_milestone_type: undefined,
+      referenced_chapter: null,
+      referenced_episode: null,
+      required_points: null,
+      episode_title: 'Test Episode',
+      chapter_title: 'Chapter 1',
+      story_id: 1,
+      story_title: 'Test Story',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      can_mark: false,
+      scenario: null,
+      opponent_lines: [],
+      staged_templates: [],
+    };
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={existingBeat} />);
+
+    expect((screen.getByLabelText(/required npc sheet id/i) as HTMLInputElement).value).toBe('42');
+    expect((screen.getByLabelText(/required standing/i) as HTMLInputElement).value).toBe('5');
+  });
+
   it('submits gm_marked beat with correct payload', async () => {
     const user = userEvent.setup();
     const createMock = setupMocks();

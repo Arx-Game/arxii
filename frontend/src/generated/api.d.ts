@@ -24522,8 +24522,10 @@ export interface components {
       required_society?: number | null;
       /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
       required_organization?: number | null;
-      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      /** @description For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the minimum raw value (-1000..1000). */
       required_standing?: number | null;
+      /** @description For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character is read (NpcRegard from the NPC's primary persona toward the character's primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD pool effect write). Not the functionary standing (NPCStanding.affection) and not the relationships affection track. */
+      required_npc_sheet?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
@@ -24719,8 +24721,10 @@ export interface components {
       required_society?: number | null;
       /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
       required_organization?: number | null;
-      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      /** @description For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the minimum raw value (-1000..1000). */
       required_standing?: number | null;
+      /** @description For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character is read (NpcRegard from the NPC's primary persona toward the character's primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD pool effect write). Not the functionary standing (NPCStanding.affection) and not the relationships affection track. */
+      required_npc_sheet?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
@@ -37483,8 +37487,10 @@ export interface components {
       required_society?: number | null;
       /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
       required_organization?: number | null;
-      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      /** @description For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the minimum raw value (-1000..1000). */
       required_standing?: number | null;
+      /** @description For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character is read (NpcRegard from the NPC's primary persona toward the character's primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD pool effect write). Not the functionary standing (NPCStanding.affection) and not the relationships affection track. */
+      required_npc_sheet?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
@@ -40161,6 +40167,7 @@ export interface components {
      *     * `aggregate_threshold` - Aggregate threshold reached
      *     * `outcome_tier` - Outcome tier (machine-graded)
      *     * `faction_standing_at_least` - Faction standing at least
+     *     * `npc_regard_at_least` - NPC regard at least
      * @enum {string}
      */
     PredicateTypeEnum:
@@ -40172,7 +40179,8 @@ export interface components {
       | 'story_at_milestone'
       | 'aggregate_threshold'
       | 'outcome_tier'
-      | 'faction_standing_at_least';
+      | 'faction_standing_at_least'
+      | 'npc_regard_at_least';
     /**
      * @description * `public` - Public
      *     * `private` - Private

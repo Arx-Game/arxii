@@ -101,6 +101,7 @@ interface DRFFieldErrors {
   required_society?: string[];
   required_organization?: string[];
   required_standing?: string[];
+  required_npc_sheet?: string[];
   target_level?: string[];
   success_consequences?: string[];
   failure_consequences?: string[];
@@ -135,6 +136,7 @@ const PREDICATE_OPTIONS: { value: BeatPredicateType; label: string }[] = [
   { value: 'story_at_milestone', label: 'Story At Milestone' },
   { value: 'aggregate_threshold', label: 'Aggregate Threshold' },
   { value: 'faction_standing_at_least', label: 'Faction standing at least' },
+  { value: 'npc_regard_at_least', label: 'NPC regard at least' },
 ];
 
 const KIND_OPTIONS: { value: BeatKind; label: string }[] = [
@@ -219,6 +221,7 @@ interface BeatConfig {
   required_society: string;
   required_organization: string;
   required_standing: string;
+  required_npc_sheet: string;
 }
 
 function blankConfig(): BeatConfig {
@@ -236,6 +239,7 @@ function blankConfig(): BeatConfig {
     required_society: '',
     required_organization: '',
     required_standing: '',
+    required_npc_sheet: '',
   };
 }
 
@@ -282,6 +286,11 @@ function predicateConfigPayload(
             required_organization: null,
             required_standing: numOrNull(config.required_standing),
           };
+    case 'npc_regard_at_least':
+      return {
+        required_npc_sheet: numOrNull(config.required_npc_sheet),
+        required_standing: numOrNull(config.required_standing),
+      };
     default:
       return {};
   }
@@ -307,6 +316,7 @@ function configFromBeat(beat: Beat): BeatConfig {
     required_organization:
       beat.required_organization != null ? String(beat.required_organization) : '',
     required_standing: beat.required_standing != null ? String(beat.required_standing) : '',
+    required_npc_sheet: beat.required_npc_sheet != null ? String(beat.required_npc_sheet) : '',
   };
 }
 
@@ -319,6 +329,35 @@ interface ConfigFieldsProps {
   config: BeatConfig;
   onChange: (partial: Partial<BeatConfig>) => void;
   errors: DRFFieldErrors;
+}
+
+/**
+ * The "Required standing" minimum raw value input, shared by
+ * FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST so the label text and
+ * test id stay identical across both predicate types.
+ */
+function RequiredStandingInput({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="beat-required-standing">Required Standing</Label>
+      <Input
+        id="beat-required-standing"
+        type="number"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. 50"
+      />
+      {error && <p className="text-xs text-destructive">{error.join(' ')}</p>}
+    </div>
+  );
 }
 
 function PredicateConfigFields({ predicateType, config, onChange, errors }: ConfigFieldsProps) {
@@ -588,22 +627,45 @@ function PredicateConfigFields({ predicateType, config, onChange, errors }: Conf
               )}
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="beat-required-standing">Required Standing</Label>
-            <Input
-              id="beat-required-standing"
-              type="number"
-              value={config.required_standing}
-              onChange={(e) => onChange({ required_standing: e.target.value })}
-              placeholder="e.g. 50"
-            />
-            {errors.required_standing && (
-              <p className="text-xs text-destructive">{errors.required_standing.join(' ')}</p>
-            )}
-          </div>
+          <RequiredStandingInput
+            value={config.required_standing}
+            onChange={(value) => onChange({ required_standing: value })}
+            error={errors.required_standing}
+          />
         </div>
       );
     }
+
+    case 'npc_regard_at_least':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="beat-required-npc-sheet">Required NPC sheet id</Label>
+            <Input
+              id="beat-required-npc-sheet"
+              type="number"
+              min={1}
+              value={config.required_npc_sheet}
+              onChange={(e) => onChange({ required_npc_sheet: e.target.value })}
+              placeholder="Character sheet id"
+              data-testid="beat-required-npc-sheet"
+            />
+            <p className="text-xs text-muted-foreground">
+              The NPC's character sheet id. Reads the NPC's regard for the character (what a stake's
+              regard delta and the Shift NPC regard pool effect write), not functionary standing or
+              affection.
+            </p>
+            {errors.required_npc_sheet && (
+              <p className="text-xs text-destructive">{errors.required_npc_sheet.join(' ')}</p>
+            )}
+          </div>
+          <RequiredStandingInput
+            value={config.required_standing}
+            onChange={(value) => onChange({ required_standing: value })}
+            error={errors.required_standing}
+          />
+        </div>
+      );
 
     default:
       return null;

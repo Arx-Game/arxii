@@ -10,7 +10,9 @@ interface ContentSectionProps {
   onNavigate?: (entryId: number) => void;
 }
 
-const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
+// `[^[\\]]` rather than `[^\\]]`: excluding the opening bracket too means a run of
+// brackets cannot be re-scanned from every position looking for a closing pair.
+const WIKILINK_RE = /\[\[([^[\]]+)\]\]/g;
 
 /**
  * Split content into text and link segments based on [[wikilink]] syntax.

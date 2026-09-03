@@ -968,6 +968,8 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
             return _evaluate_story_at_milestone(beat)
         case BeatPredicateType.FACTION_STANDING_AT_LEAST:
             return _evaluate_faction_standing_at_least(beat, sheet)
+        case BeatPredicateType.NPC_REGARD_AT_LEAST:
+            return _evaluate_npc_regard_at_least(beat, sheet)
         case _:
             # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
             return BeatOutcome.UNSATISFIED
@@ -1016,6 +1018,36 @@ def _evaluate_faction_standing_at_least(beat: Beat, sheet: CharacterSheet) -> Be
     else:
         return BeatOutcome.UNSATISFIED
 
+    value = row.value if row is not None else 0
+    return BeatOutcome.SUCCESS if value >= beat.required_standing else BeatOutcome.UNSATISFIED
+
+
+def _evaluate_npc_regard_at_least(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """A named NPC's regard for this character meets the threshold (#3570).
+
+    Reads ``NpcRegard`` from the NPC's primary persona toward the character's
+    primary persona, the row ``record_npc_regard_event`` writes for the stake
+    ``npc_regard_delta`` and the ``SHIFT_NPC_REGARD`` pool effect. A missing row
+    is 0. A nulled NPC, a missing persona on either side, or a null threshold
+    leaves the beat waiting (UNSATISFIED, never FAILURE).
+    """
+    from world.npc_services.constants import RegardTargetType  # noqa: PLC0415
+    from world.npc_services.models import NpcRegard  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if beat.required_standing is None or beat.required_npc_sheet_id is None:
+        return BeatOutcome.UNSATISFIED
+    try:
+        pc_persona = sheet.primary_persona
+        npc_persona = beat.required_npc_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return BeatOutcome.UNSATISFIED
+    row = NpcRegard.objects.filter(
+        holder_persona=npc_persona,
+        target_type=RegardTargetType.PERSONA,
+        target_persona=pc_persona,
+        ended_at__isnull=True,
+    ).first()
     value = row.value if row is not None else 0
     return BeatOutcome.SUCCESS if value >= beat.required_standing else BeatOutcome.UNSATISFIED
 

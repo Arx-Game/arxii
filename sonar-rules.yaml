@@ -330,65 +330,55 @@ false_positives:
       `_rewrite_env_keys` now rejects any value containing a newline or carriage return
       before writing anything, covered by two tests that fail when the guard is removed.
 
-  - rule: typescript:S6479
+  - rule: typescript:S6819
+    path: "frontend/src/scenes/components/TargetPicker.tsx"
     why: >
-      Array index as JSX key. Genuinely silent: React reuses component state across
-      reordered rows, so the wrong data renders in the wrong row with no error. Moving
-      to eslint-plugin-react `no-array-index-key` in phase 3.
-  - rule: python:S8786
-    why: Regex non-linear backtracking (ReDoS). Silent until it is a hang.
+      "Use <input type=checkbox> instead of the checkbox role" on a styled
+      button carrying role="checkbox" and aria-checked. That IS the ARIA checkbox
+      pattern, correctly implemented, and ActionPanel's tests assert
+      getByRole('checkbox') against it. A native input cannot carry this control's
+      presentation - a full-width row with a name, a tick glyph and selected-state
+      styling - without being visually hidden inside a label, which is a rebuild of
+      working accessible markup to satisfy a preference. Removing the role instead is
+      what broke four tests in #3598; the semantics were deliberate.
 
-# Instance-level false positives — NOT rule-level.
-#
-# Some rules are right in general and wrong in one place. Turning them off in the
-# profile would lose real coverage, so those single findings are marked false-positive
-# on the issue itself, which survives re-analysis:
-#
-#   uv run python tools/sonarcloud_triage.py --rule <key> --path "<glob>" [--dry-run]
-#
-# This is the tier `sonar.issue.ignore.multicriteria` was reaching for and could not
-# deliver under Automatic Analysis. Record each standing suppression here.
-false_positives:
-  - rule: pythonsecurity:S2083
-    path: "src/cli/arx.py"
+  - rule: typescript:S6819
+    path: "frontend/src/character-creation/components/LineageStage.tsx"
     why: >
-      "I/O function calls should not be vulnerable to path injection attacks" (CWE-22),
-      raised as a BLOCKER on `_rewrite_env_keys`'s `env_file.write_text(...)` when that
-      function was extracted (PR #3602). The reported flow is:
-      source `env_file.read_text()` -> `updated` list -> sink `env_file.write_text(...)`.
+      Rule conflict, not a defect. This role="presentation" is the fix #3598 made for
+      S1082/S6848: the span exists only to swallow the card's click so toggling the
+      Switch does not also select the card, and keyboard users tab straight to the
+      Switch inside it. S6819 objects to the role while proposing "<img alt=...>",
+      which is meaningless for a click-swallowing span. Removing the role reopens two
+      findings and misreports a non-interactive wrapper to assistive tech.
 
-      The tainted value in that flow is the CONTENT argument, not the path. Sonar has
-      mis-modelled `pathlib.Path.write_text`, whose single positional argument is the
-      data to write; the path is the bound receiver. That receiver is `SRC_DIR / ".env"`
-      or `env_file.parent.parent / "frontend" / ".env"` - both built from module
-      constants, with no caller-supplied component anywhere on the path. There is no
-      path injection to have.
+  - rule: typescript:S6819
+    path: "frontend/src/stories/components/EpisodeNode.tsx"
+    why: >
+      "Use <button> instead of the button role." The node is genuinely clickable and
+      #3606 gave it role="button", tabIndex and an Enter/Space handler. It cannot become
+      a native button: its content is two <p> elements plus a React Flow <Handle> div,
+      and a button's content model is phrasing content, so the native form would be
+      invalid HTML. The ARIA form is correct and keyboard-reachable.
 
-      The flow's labelled source, "a user can craft an HTTP request with malicious
-      content", does not describe this code either. Be precise about why, because the
-      obvious phrasing is false: the arx CLI is NOT dev-only. `arx test` and
-      `arx manage spectacular` run in CI, and `arx manage collectstatic --noinput`
-      runs on the PRODUCTION box during deploy - the app_deploy role builds the
-      frontend there, and frontend/scripts/postbuild.mjs shells out to it. (The
-      long-running server is not arx: arxii.service runs `uv run evennia start`.)
+  - rule: typescript:S6853
+    path: "frontend/src/components/ui/label.tsx"
+    why: >
+      "A form label must be associated with a control", raised on the shared shadcn
+      Label primitive. A generic wrapper cannot know its control: association is the
+      caller's job via htmlFor, forwarded through the spread props. No edit to this file
+      satisfies the rule without breaking its purpose. The rule stays active and does
+      catch real cases at call sites - PetitionPage's radios were one, fixed in #3608.
 
-      The `ngrok` command specifically has no invoker outside a developer's shell -
-      no workflow, ansible task, script or unit file references `arx ngrok`, and
-      `_rewrite_env_keys`'s only non-test caller is `_update_env_with_ngrok_url`,
-      itself called only from `ngrok()`. No HTTP request reaches any of it.
-
-      None of that is load-bearing for the disposition, though: the path is a module
-      constant regardless of who invokes the command.
-
-      Not disabled at the rule level: S2083 is a genuine high-severity taint rule and
-      stays ACTIVE. This is an instance disposition only.
-
-      The flow did point at a real, adjacent problem, which IS fixed rather than
-      dispositioned: the values written come from the ngrok API's tunnel URL, and a
-      newline in one would have ended the KEY=value line and let the remainder land in
-      .env as its own setting. `_rewrite_env_keys` now rejects any value containing a
-      newline or carriage return before it writes, covered by two tests in
-      core_management/tests/test_arx_cli.py that fail when the guard is removed.
+  - rule: typescript:S6767
+    path: "frontend/src/combat/components/CombatRail.tsx"
+    why: >
+      "'sceneId' PropType is defined but prop is never used." True today: SceneDetailPage
+      passes it and the component ignores it. NOT removed, because the prop carries a
+      written reservation ("reserved for rail-level scene-scoped affordances"), which
+      makes it a deliberate placeholder rather than an oversight, and CLAUDE.md is
+      explicit that placeholders are asked about before removal rather than deleted on an
+      agent's judgement. Revisit with whoever reserved it.
 
   - rule: typescript:S6479
     path: "frontend/src/*"

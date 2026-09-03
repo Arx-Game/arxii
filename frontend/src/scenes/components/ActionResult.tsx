@@ -22,25 +22,50 @@ interface ParsedAction {
  * Parse the backend content format:
  * "[ActionKey] using TechniqueName -- OutcomeName (ConsequenceLabel)"
  */
-function parseActionContent(content: string): ParsedAction {
-  const pattern = /^\[([^\]]+)\](?:\s+using\s+(.+?))?\s*(?:--\s*(.+?))?(?:\s*\(([^)]+)\))?\s*$/;
-  const match = content.match(pattern);
-
-  if (match) {
+export function parseActionContent(content: string): ParsedAction {
+  // Peeled off one clause at a time rather than matched by a single pattern with
+  // four optional lazy groups: that pattern backtracked super-linearly, and each
+  // step here is anchored and independent.
+  const bracket = /^\[([^\]]+)\]\s*([\s\S]*)$/.exec(content);
+  if (!bracket) {
     return {
-      actionName: match[1],
-      techniqueName: match[2] || null,
-      outcomeName: match[3]?.trim() || null,
-      consequenceLabel: match[4] || null,
+      actionName: 'Action',
+      techniqueName: null,
+      outcomeName: null,
+      consequenceLabel: null,
       rawContent: content,
     };
   }
 
+  let rest = bracket[2].trim();
+
+  // Trailing "(ConsequenceLabel)".
+  let consequenceLabel: string | null = null;
+  const paren = /\(([^)]+)\)\s*$/.exec(rest);
+  if (paren) {
+    consequenceLabel = paren[1];
+    rest = rest.slice(0, paren.index).trim();
+  }
+
+  // " -- OutcomeName".
+  let outcomeName: string | null = null;
+  const dash = rest.indexOf('--');
+  if (dash !== -1) {
+    outcomeName = rest.slice(dash + 2).trim() || null;
+    rest = rest.slice(0, dash).trim();
+  }
+
+  // "using TechniqueName".
+  let techniqueName: string | null = null;
+  if (/^using\s/i.test(rest)) {
+    techniqueName = rest.replace(/^using\s+/i, '').trim() || null;
+  }
+
   return {
-    actionName: 'Action',
-    techniqueName: null,
-    outcomeName: null,
-    consequenceLabel: null,
+    actionName: bracket[1],
+    techniqueName,
+    outcomeName,
+    consequenceLabel,
     rawContent: content,
   };
 }

@@ -393,6 +393,7 @@ credited participants are the GM table's current members (`GMTableMembership` ro
 | `STORY_AT_MILESTONE` | `referenced_story` FK → Story, `referenced_milestone_type` (StoryMilestoneType), `referenced_chapter` FK → Chapter (nullable), `referenced_episode` FK → Episode (nullable) |
 | `AGGREGATE_THRESHOLD` | `required_points` PositiveIntegerField |
 | `FACTION_STANDING_AT_LEAST` | one of `required_society` FK → Society or `required_organization` FK → Organization, plus `required_standing` IntegerField (-1000..1000) |
+| `NPC_REGARD_AT_LEAST` | `required_npc_sheet` FK → CharacterSheet (the NPC), plus `required_standing` IntegerField (-1000..1000, shared with `FACTION_STANDING_AT_LEAST`) - a named NPC's regard for the character (#3570) |
 | `OUTCOME_TIER` | (no config fields; the default, #3565) - graded by a scenario run, an encounter, a battle, or a decisive check, never authored config |
 | `GM_MARKED` | (no config fields; no longer the default - authored only for an out-of-band fact a machine grader cannot see, #3565) |
 
@@ -898,11 +899,11 @@ Maturity-promotion validation. Forward promotion is gated by minimal per-node co
 
 ### reactivity.py (Phase 3)
 
-External-facing entry points called by achievements, conditions, codex, and (future) progression services after mutations. Each hook invalidates the relevant `CharacterSheet` cache and re-evaluates auto-beats across the character's active stories across all three scopes (CHARACTER via `StoryProgress`; GROUP via `GMTableMembership.left_at__isnull=True`; GLOBAL via active `StoryParticipation`).
+External-facing entry points called by achievements, conditions, codex, and progression services after mutations. Each hook invalidates the relevant `CharacterSheet` cache and re-evaluates auto-beats across the character's active stories across all three scopes (CHARACTER via `StoryProgress`; GROUP via `GMTableMembership.left_at__isnull=True`; GLOBAL via active `StoryParticipation`).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `on_character_state_changed` | `(sheet) -> None` | General-purpose re-evaluation entry point; called by the specific hooks below |
+| `on_character_state_changed` | `(sheet) -> None` | General-purpose re-evaluation entry point; called by the specific hooks below, and directly by two new writers so an `NPC_REGARD_AT_LEAST`/`FACTION_STANDING_AT_LEAST` beat can flip in the same request (#3570): `world.npc_services.regard.record_npc_regard_event` (inside its transaction, after the relationships-track mirror call) and `world.societies.renown.bump_society_reputation`/`bump_organization_reputation` (after a non-zero reputation write; a zero delta is a no-op that skips the call) |
 | `on_character_level_changed` | `(sheet) -> None` | Called by progression after `CharacterClassLevel` mutation; invalidates class-level cache |
 | `on_achievement_earned` | `(sheet, achievement) -> None` | Called by `achievements.services.grant_achievement`; invalidates achievement cache |
 | `on_condition_applied` | `(sheet, condition_instance) -> None` | Called by `conditions.services.apply_condition` after instance creation |

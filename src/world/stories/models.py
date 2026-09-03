@@ -974,8 +974,22 @@ class Beat(SharedMemoryModel):
         null=True,
         blank=True,
         help_text=(
-            "For FACTION_STANDING_AT_LEAST predicates — minimum raw "
-            "SocietyReputation/OrganizationReputation.value (-1000..1000)."
+            "For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the "
+            "minimum raw value (-1000..1000)."
+        ),
+    )
+    required_npc_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character "
+            "is read (NpcRegard from the NPC's primary persona toward the character's "
+            "primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD "
+            "pool effect write). Not the functionary standing (NPCStanding.affection) and "
+            "not the relationships affection track."
         ),
     )
 
@@ -1105,6 +1119,7 @@ class Beat(SharedMemoryModel):
         BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
         BeatPredicateType.AGGREGATE_THRESHOLD: ("required_points",),
         BeatPredicateType.FACTION_STANDING_AT_LEAST: ("required_standing",),
+        BeatPredicateType.NPC_REGARD_AT_LEAST: ("required_npc_sheet", "required_standing"),
     }
 
     def _required_config_fields(self) -> tuple[str, ...]:
@@ -1155,6 +1170,7 @@ class Beat(SharedMemoryModel):
             "required_society",
             "required_organization",
             "required_standing",
+            "required_npc_sheet",
         }
         for field_name in all_config_fields - set(required):
             val = getattr(self, field_name)

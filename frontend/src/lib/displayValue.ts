@@ -9,6 +9,9 @@
  */
 export function toDisplayString(value: unknown, empty = ''): string {
   if (value === undefined || value === null) return empty;
-  if (typeof value === 'object') return JSON.stringify(value) ?? empty;
-  return String(value);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  return JSON.stringify(value) ?? empty;
 }

@@ -115,6 +115,30 @@ function collectErrors(
   return errors;
 }
 
+/** The validation errors collected by the last save attempt, if any. */
+function ValidationErrors({ errors }: { errors: string[] }) {
+  if (errors.length === 0) return null;
+  return (
+    <div className="space-y-1 rounded border border-destructive/40 bg-destructive/5 p-3">
+      {errors.map((err) => (
+        <p key={err} className="text-sm text-destructive">
+          {err}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Whatever the server said about a failed save. */
+function MutationError({ error }: { error: unknown }) {
+  if (!error) return null;
+  const message =
+    error instanceof ApiValidationError
+      ? flattenErrorMessage(error.fieldErrors)
+      : 'Could not save the trigger definition.';
+  return <p className="text-sm text-destructive">{message}</p>;
+}
+
 interface SaveArgs {
   state: EditorState;
   isCreate: boolean;
@@ -257,6 +281,10 @@ export function TriggerDefinitionEditorPage() {
       setValidationErrors,
     });
 
+  // The three install surfaces all mean the same thing: an existing row being
+  // edited. Named once so the condition is not re-derived at each of them.
+  const editingId = !isCreate && tdId !== undefined ? tdId : null;
+
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-6">
       <Button variant="ghost" size="sm" onClick={goBack}>
@@ -352,49 +380,35 @@ export function TriggerDefinitionEditorPage() {
         </CardContent>
       </Card>
 
-      {validationErrors.length > 0 ? (
-        <div className="space-y-1 rounded border border-destructive/40 bg-destructive/5 p-3">
-          {validationErrors.map((err) => (
-            <p key={err} className="text-sm text-destructive">
-              {err}
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {mutationError ? (
-        <p className="text-sm text-destructive">
-          {mutationError instanceof ApiValidationError
-            ? flattenErrorMessage(mutationError.fieldErrors)
-            : 'Could not save the trigger definition.'}
-        </p>
-      ) : null}
+      <ValidationErrors errors={validationErrors} />
+      <MutationError error={mutationError} />
 
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={!state.name.trim() || busy || !catalog}>
           {busy ? 'Saving…' : 'Save trigger definition'}
         </Button>
-        {!isCreate && tdId !== undefined ? (
+        {editingId !== null && (
           <Button variant="outline" onClick={() => setInstallOpen(true)}>
             Install on an object…
           </Button>
-        ) : null}
+        )}
       </div>
 
-      {!isCreate && tdId !== undefined && state.flowDefinition !== null ? (
+      {editingId !== null && state.flowDefinition !== null && (
         <InstallingTemplatesCard
-          triggerDefinitionId={tdId}
+          triggerDefinitionId={editingId}
           flowId={state.flowDefinition}
           interactions={flowDetailQuery.data?.interactions}
         />
-      ) : null}
+      )}
 
-      {!isCreate && tdId !== undefined ? (
+      {editingId !== null && (
         <TriggerInstallDialog
           open={installOpen}
           onOpenChange={setInstallOpen}
-          fixedTriggerDefinitionId={tdId}
+          fixedTriggerDefinitionId={editingId}
         />
-      ) : null}
+      )}
     </div>
   );
 }

@@ -480,7 +480,8 @@ export interface BeatCreateBody {
   required_points?: number | null; // AGGREGATE_THRESHOLD
   required_society?: number | null; // FACTION_STANDING_AT_LEAST (society-level)
   required_organization?: number | null; // FACTION_STANDING_AT_LEAST (organization-level)
-  required_standing?: number | null; // FACTION_STANDING_AT_LEAST minimum raw reputation
+  required_standing?: number | null; // FACTION_STANDING_AT_LEAST/NPC_REGARD_AT_LEAST minimum raw value
+  required_npc_sheet?: number | null; // NPC_REGARD_AT_LEAST
 
   // #3562 stakes/consequences - the character level this beat's stakes are
   // declared against, the ConsequencePools that fire on each outcome, and
