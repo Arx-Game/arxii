@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import Any
 
 import typer
 
@@ -616,72 +617,126 @@ def _kill_ngrok() -> None:
         pass
 
 
+def _rewrite_env_keys(env_file: Path, values: dict[str, str]) -> None:
+    """Set each ``KEY=value`` in ``env_file``, appending any key that is not already there.
+
+    One pass over the file: a line whose key we are setting is replaced, anything
+    else is copied through, and whatever was never seen is appended at the end.
+    """
+    remaining = dict(values)
+    updated: list[str] = []
+    for line in env_file.read_text().splitlines(keepends=True):
+        key = next((k for k in remaining if line.startswith(f"{k}=")), None)
+        updated.append(line if key is None else f"{key}={remaining.pop(key)}\n")
+    if remaining:
+        updated.append("\n# Added by arx ngrok\n")
+        updated.extend(f"{k}={v}\n" for k, v in remaining.items())
+    env_file.write_text("".join(updated))
+
+
 def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
-    """Update .env file with ngrok URL."""
+    """Point .env (and frontend/.env) at the tunnel."""
     typer.echo("\nUpdating .env with ngrok URL...")
-    lines = env_file.read_text().splitlines(keepends=True)
-
-    updated_lines = []
-    found_frontend_url = False
-    found_csrf_origins = False
-
-    for line in lines:
-        if line.startswith("FRONTEND_URL="):
-            updated_lines.append(f"FRONTEND_URL={ngrok_url}\n")
-            found_frontend_url = True
-        elif line.startswith("CSRF_TRUSTED_ORIGINS="):
-            updated_lines.append(
-                f"CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000\n"
-            )
-            found_csrf_origins = True
-        else:
-            updated_lines.append(line)
-
-    # Add if not found
-    if not found_frontend_url:
-        updated_lines.append("\n# Added by arx ngrok\n")
-        updated_lines.append(f"FRONTEND_URL={ngrok_url}\n")
-    if not found_csrf_origins:
-        updated_lines.append(
-            f"CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000\n"
-        )
-
-    env_file.write_text("".join(updated_lines))
+    csrf_origins = f"{ngrok_url},http://localhost:4001,http://localhost:3000"
+    _rewrite_env_keys(env_file, {"FRONTEND_URL": ngrok_url, "CSRF_TRUSTED_ORIGINS": csrf_origins})
     typer.echo(f"SUCCESS: Updated FRONTEND_URL={ngrok_url}")
-    typer.echo(
-        f"SUCCESS: Updated CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000"
-    )
+    typer.echo(f"SUCCESS: Updated CSRF_TRUSTED_ORIGINS={csrf_origins}")
 
-    # Also update frontend/.env with VITE_ALLOWED_HOSTS
     frontend_env = env_file.parent.parent / "frontend" / ".env"
     ngrok_hostname = ngrok_url.replace("https://", "").replace("http://", "")
-
     if frontend_env.exists():
-        frontend_lines = frontend_env.read_text().splitlines(keepends=True)
-        updated_frontend = []
-        found_vite_hosts = False
-
-        for line in frontend_lines:
-            if line.startswith("VITE_ALLOWED_HOSTS="):
-                updated_frontend.append(f"VITE_ALLOWED_HOSTS={ngrok_hostname}\n")
-                found_vite_hosts = True
-            else:
-                updated_frontend.append(line)
-
-        if not found_vite_hosts:
-            updated_frontend.append("\n# Added by arx ngrok\n")
-            updated_frontend.append(f"VITE_ALLOWED_HOSTS={ngrok_hostname}\n")
-
-        frontend_env.write_text("".join(updated_frontend))
+        _rewrite_env_keys(frontend_env, {"VITE_ALLOWED_HOSTS": ngrok_hostname})
         typer.echo(f"SUCCESS: Updated frontend/.env VITE_ALLOWED_HOSTS={ngrok_hostname}")
     else:
-        # Create frontend/.env if it doesn't exist
         frontend_env.write_text(f"# Added by arx ngrok\nVITE_ALLOWED_HOSTS={ngrok_hostname}\n")
         typer.echo(f"SUCCESS: Created frontend/.env with VITE_ALLOWED_HOSTS={ngrok_hostname}")
 
 
+def _stop_tunnel(tunnel: Any) -> None:
+    """Disconnect the tunnel, reporting rather than raising: this runs from atexit."""
+    from pyngrok import ngrok as pyngrok
+
+    try:
+        typer.echo("\nStopping ngrok tunnel...")
+        pyngrok.disconnect(tunnel.public_url)
+        typer.echo("SUCCESS: Stopped ngrok tunnel")
+    except Exception as exc:  # noqa: BLE001 — atexit cleanup boundary
+        typer.echo(f"WARNING: Error stopping ngrok: {exc!r}", err=True)
+
+
+def _print_tunnel_failure(exc: object) -> None:
+    """Explain a failed tunnel start."""
+    typer.echo(f"ERROR: Failed to start ngrok: {exc}")
+    typer.echo("\nTroubleshooting:")
+    typer.echo("1. Make sure ngrok is installed: https://ngrok.com/download")
+    typer.echo("2. Sign up for a free ngrok account")
+    typer.echo("3. Run: ngrok config add-authtoken <your-token>")
+
+
+def _print_tunnel_ready(public_url: str) -> None:
+    """Print the checklist for using the live tunnel."""
+    typer.echo("\n" + "=" * 70)
+    typer.echo("NGROK TUNNEL ACTIVE")
+    typer.echo("=" * 70)
+    typer.echo(f"\nPublic URL: {public_url}")
+    typer.echo("\nNext steps:")
+    typer.echo("1. Start Evennia server: cd src && uv run arx start")
+    typer.echo("2. Start frontend: cd frontend && pnpm dev")
+    typer.echo(f"3. Access your app at: {public_url}")
+    typer.echo("\nPress Ctrl+C to stop ngrok and restore .env")
+    typer.echo("=" * 70)
+
+
+def _block_until_interrupt() -> None:
+    """Hold the tunnel open until Ctrl+C; the registered cleanup restores .env."""
+    import time
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
+
+def _exit_if_nothing_to_start(*, status_only: bool, force: bool) -> None:
+    """Handle --status and the already-running tunnel, exiting when there is nothing to start."""
+    import time
+
+    if status_only:
+        status = _get_ngrok_status()
+        if status:
+            typer.echo(f"Ngrok is running: {status['url']} (port {status['port']})")
+        else:
+            typer.echo("Ngrok is not running")
+        raise typer.Exit(0)
+
+    existing = _get_ngrok_status()
+    if existing and not force:
+        typer.echo(f"Ngrok is already running: {existing['url']} (port {existing['port']})")
+        typer.echo("\nOptions:")
+        typer.echo("1. Use the existing URL (shown above)")
+        typer.echo("2. Run with --force to kill and restart: arx ngrok --force")
+        raise typer.Exit(0)
+    if existing:  # reached only with --force
+        typer.echo("Killing existing ngrok process...")
+        _kill_ngrok()
+        time.sleep(1)  # Give it a moment to clean up
+
+
+def _confirm_not_production() -> None:
+    """Refuse to tunnel a production-looking .env without an explicit go-ahead."""
+    setup_env()
+    if not os.environ.get("RESEND_API_KEY"):
+        return
+    typer.echo("WARNING: RESEND_API_KEY is set in .env")
+    typer.echo("This suggests you're NOT using dev_settings.py (console email backend).")
+    typer.echo("Are you sure you want to run ngrok in a production-like setup?")
+    if not typer.confirm("Continue anyway?"):
+        raise typer.Exit(0)
+
+
 @app.command()
-def ngrok(  # noqa: C901, PLR0915
+def ngrok(
     port: int = typer.Option(3000, help="Port to expose (default: 3000)"),
     force: bool = typer.Option(False, "--force", "-f", help="Kill existing ngrok and restart"),
     status_only: bool = typer.Option(False, "--status", "-s", help="Show ngrok status and exit"),
@@ -717,33 +772,7 @@ def ngrok(  # noqa: C901, PLR0915
     import atexit
     import signal
 
-    # Check status if requested
-    if status_only:
-        status = _get_ngrok_status()
-        if status:
-            typer.echo(f"Ngrok is running: {status['url']} (port {status['port']})")
-            raise typer.Exit(0)
-        typer.echo("Ngrok is not running")
-        raise typer.Exit(0)
-
-    # Check if ngrok is already running
-    existing = _get_ngrok_status()
-    if existing and not force:
-        url = existing["url"]
-        port = existing["port"]
-        typer.echo(f"Ngrok is already running: {url} (port {port})")
-        typer.echo("\nOptions:")
-        typer.echo("1. Use the existing URL (shown above)")
-        typer.echo("2. Run with --force to kill and restart: arx ngrok --force")
-        raise typer.Exit(0)
-
-    # Kill existing ngrok if --force
-    if force and existing:
-        typer.echo("Killing existing ngrok process...")
-        _kill_ngrok()
-        import time
-
-        time.sleep(1)  # Give it a moment to clean up
+    _exit_if_nothing_to_start(status_only=status_only, force=force)
 
     try:
         from pyngrok import ngrok as pyngrok
@@ -753,14 +782,7 @@ def ngrok(  # noqa: C901, PLR0915
         typer.echo("Install with: uv sync")
         raise typer.Exit(1) from None
 
-    # Check we're in dev environment
-    setup_env()
-    if os.environ.get("RESEND_API_KEY"):
-        typer.echo("WARNING: RESEND_API_KEY is set in .env")
-        typer.echo("This suggests you're NOT using dev_settings.py (console email backend).")
-        typer.echo("Are you sure you want to run ngrok in a production-like setup?")
-        if not typer.confirm("Continue anyway?"):
-            raise typer.Exit(0)
+    _confirm_not_production()
 
     env_file = SRC_DIR / ".env"
     env_backup = SRC_DIR / ".env.ngrok_backup"
@@ -774,13 +796,7 @@ def ngrok(  # noqa: C901, PLR0915
         typer.echo("=" * 70)
 
         if tunnel:
-            try:
-                typer.echo("\nStopping ngrok tunnel...")
-                pyngrok.disconnect(tunnel.public_url)
-                typer.echo("SUCCESS: Stopped ngrok tunnel")
-            except Exception as exc:  # noqa: BLE001 — atexit cleanup boundary
-                typer.echo(f"WARNING: Error stopping ngrok: {exc!r}", err=True)
-
+            _stop_tunnel(tunnel)
         _restore_env_file(env_file, env_backup)
 
     def signal_handler(sig, frame):
@@ -803,38 +819,16 @@ def ngrok(  # noqa: C901, PLR0915
         tunnel = pyngrok.connect(port, bind_tls=True, pyngrok_config=conf)
         public_url = tunnel.public_url
         typer.echo(f"SUCCESS: ngrok tunnel started: {public_url}")
-    except Exception as e:  # noqa: BLE001
-        typer.echo(f"ERROR: Failed to start ngrok: {e}")
-        typer.echo("\nTroubleshooting:")
-        typer.echo("1. Make sure ngrok is installed: https://ngrok.com/download")
-        typer.echo("2. Sign up for a free ngrok account")
-        typer.echo("3. Run: ngrok config add-authtoken <your-token>")
+    except Exception as exc:  # noqa: BLE001
+        _print_tunnel_failure(exc)
         cleanup()
         raise typer.Exit(1) from None
 
     # Update .env
     _update_env_with_ngrok_url(env_file, public_url)
 
-    # Print instructions
-    typer.echo("\n" + "=" * 70)
-    typer.echo("NGROK TUNNEL ACTIVE")
-    typer.echo("=" * 70)
-    typer.echo(f"\nPublic URL: {public_url}")
-    typer.echo("\nNext steps:")
-    typer.echo("1. Start Evennia server: cd src && uv run arx start")
-    typer.echo("2. Start frontend: cd frontend && pnpm dev")
-    typer.echo(f"3. Access your app at: {public_url}")
-    typer.echo("\nPress Ctrl+C to stop ngrok and restore .env")
-    typer.echo("=" * 70)
-
-    # Keep running
-    try:
-        while True:
-            import time
-
-            time.sleep(1)
-    except KeyboardInterrupt:
-        pass
+    _print_tunnel_ready(public_url)
+    _block_until_interrupt()
 
 
 @app.command(name="integration-test")
