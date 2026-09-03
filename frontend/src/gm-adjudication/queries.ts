@@ -82,7 +82,7 @@ export function useSummonOfferInbox(options: { enabled?: boolean } = {}) {
   });
 }
 
-/** GM discovery catalog browse (#3564) — kind-first search behind the beat form. */
+/** GM discovery catalog browse (#3564): kind-first search behind the beat form. */
 export function useDiscovery(q: string, risk: string | null, enabled: boolean) {
   return useQuery({
     queryKey: gmAdjudicationKeys.discovery(q, risk),
