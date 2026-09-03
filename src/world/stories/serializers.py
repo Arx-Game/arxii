@@ -82,6 +82,7 @@ from world.stories.permissions import user_owns_or_leads_story
 from world.stories.types import (
     AnyStoryProgress,
     ConnectionType,
+    RoutingReport,
     StoryLogBeatEntry,
     StoryLogEpisodeEntry,
 )
@@ -179,6 +180,18 @@ class StoryListSerializer(serializers.ModelSerializer):
         ]
 
 
+def _viewer_may_see_gm_text(serializer: serializers.BaseSerializer, story: Story) -> bool:
+    """The one role test behind every GM-only field: staff, Lead GM, or owner.
+
+    Default deny: no request in context (or an anonymous user) sees nothing.
+    """
+    from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
+
+    request = serializer.context.get("request")
+    user = request.user if request is not None else None
+    return user is not None and can_view_story_gm_text(user, story)
+
+
 def _gm_text_gate(
     serializer: serializers.ModelSerializer,
     data: dict[str, object],
@@ -212,20 +225,39 @@ def _gm_text_gate(
     role on ``classify_story_log_viewer_role`` because that classifier also
     drives ``serialize_story_log`` beat-visibility (owners must not gain
     SECRET-beat / GM-note access there).
-    """
-    from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
 
-    request = serializer.context.get("request")
-    user = request.user if request is not None else None
-    # No request in context → user is None → most-restrictive (strip), so
-    # GM authoring text never leaks by default.
-    if user is None or not can_view_story_gm_text(user, story):
+    Transition routing rules (``TransitionSerializer.required_outcomes``,
+    #3563) are gated by the same role test, applied directly through
+    ``_viewer_may_see_gm_text`` in ``TransitionSerializer.to_representation``
+    rather than through this helper (that field isn't one of the three
+    Story/Chapter/Episode shapes this function strips from).
+    """
+    if not _viewer_may_see_gm_text(serializer, story):
         data.pop("description", None)
         # consequences is absent on the Story serializer — pop default is safe.
         data.pop("consequences", None)
-        if node_maturity == StoryMaturity.PITCH:
+        # routing_problems is absent on the Story serializer: pop default is safe.
+        data.pop("routing_problems", None)
+        # noqa: STRING_LITERAL below: a membership test on the serialized dict (the list
+        # serializer never declares summary), not a bare identifier string.
+        if node_maturity == StoryMaturity.PITCH and "summary" in data:  # noqa: STRING_LITERAL
             data["summary"] = ""
     return data
+
+
+def _routing_report_for(serializer: serializers.BaseSerializer, episode: Episode) -> RoutingReport:
+    """One report per episode per serializer context.
+
+    ``EpisodeViewSet.list`` preloads the page's reports under
+    ``context["routing_reports"]``; detail and bare serializations compute
+    on first use and memoize in the same context dict.
+    """
+    from world.stories.services.routing import routing_report  # noqa: PLC0415
+
+    reports = serializer.context.setdefault("routing_reports", {})
+    if episode.pk not in reports:
+        reports[episode.pk] = routing_report(episode)
+    return reports[episode.pk]
 
 
 class StoryDetailSerializer(serializers.ModelSerializer):
@@ -453,10 +485,8 @@ class EpisodeListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for episode lists"""
 
     chapter = serializers.StringRelatedField(read_only=True)
-    scenes_count = serializers.IntegerField(
-        source="episode_scenes.count",
-        read_only=True,
-    )
+    scenes_count = serializers.IntegerField(read_only=True)
+    routing_problems = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -468,7 +498,16 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             "is_active",
             "scenes_count",
             "completed_at",
+            "routing_problems",
         ]
+
+    def get_routing_problems(self, obj: Episode) -> list[str]:
+        return list(_routing_report_for(self, obj).problems)
+
+    def to_representation(self, instance: Episode) -> dict[str, object]:
+        """Gate GM-only routing text for player-tier viewers (#3563)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance.chapter.story, str(instance.maturity))
 
 
 class EpisodeDetailSerializer(serializers.ModelSerializer):
@@ -476,6 +515,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 
     chapter = serializers.StringRelatedField(read_only=True)
     routing_ambiguous = serializers.SerializerMethodField()
+    routing_problems = serializers.SerializerMethodField()
 
     class Meta:
         model = Episode
@@ -495,13 +535,15 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "routing_ambiguous",
+            "routing_problems",
         ]
 
     def get_routing_ambiguous(self, obj: Episode) -> bool:
         """Whether any pair of this episode's outbound transitions is ambiguous (#3565)."""
-        from world.stories.services.transitions import validate_routing_readiness  # noqa: PLC0415
+        return _routing_report_for(self, obj).is_ambiguous
 
-        return validate_routing_readiness(obj).is_ambiguous
+    def get_routing_problems(self, obj: Episode) -> list[str]:
+        return list(_routing_report_for(self, obj).problems)
 
     def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
@@ -1435,16 +1477,62 @@ class BeatSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 
+class TransitionRoutingRuleSerializer(serializers.ModelSerializer):
+    """One routing rule as the graph and the author tree read it (#3563).
+
+    Read-only. Rows are written through ``TransitionRequiredOutcomeSerializer``
+    and ``save_with_outcomes``; this nested view adds the beat title and the
+    stake's player summary so the rule renders without a second fetch.
+    """
+
+    beat_title = serializers.SerializerMethodField()
+    stake_summary = serializers.SerializerMethodField()
+    required_outcome = serializers.ChoiceField(
+        choices=BeatOutcome.choices, allow_blank=True, read_only=True
+    )
+    required_stake_column = serializers.ChoiceField(
+        choices=StakeResolutionColumn.choices, allow_blank=True, read_only=True
+    )
+
+    class Meta:
+        model = TransitionRequiredOutcome
+        fields = [
+            "id",
+            "beat",
+            "beat_title",
+            "required_outcome",
+            "required_outcome_key",
+            "stake",
+            "stake_summary",
+            "required_stake_column",
+        ]
+        read_only_fields = fields
+
+    def get_beat_title(self, obj: TransitionRequiredOutcome) -> str:
+        from world.stories.services.routing import beat_title  # noqa: PLC0415
+
+        return beat_title(obj.beat)
+
+    def get_stake_summary(self, obj: TransitionRequiredOutcome) -> str:
+        return obj.stake.player_summary if obj.stake_id is not None else ""
+
+
 class TransitionSerializer(serializers.ModelSerializer):
     """Full serializer for Transition — guarded episode graph edges.
 
     Read-only breadcrumb fields (source_episode_title, target_episode_title)
     provide context for the Wave 9 author editor without requiring extra lookups;
     they are served free via TransitionViewSet.queryset.select_related.
+
+    ``required_outcomes`` is GM text: stripped for viewers who fail
+    ``can_view_story_gm_text`` (#3563).
     """
 
     source_episode_title = serializers.CharField(source="source_episode.title", read_only=True)
     target_episode_title = serializers.SerializerMethodField()
+    required_outcomes = TransitionRoutingRuleSerializer(
+        many=True, read_only=True, source="cached_required_outcomes"
+    )
 
     class Meta:
         model = Transition
@@ -1458,12 +1546,14 @@ class TransitionSerializer(serializers.ModelSerializer):
             "connection_summary",
             "order",
             "created_at",
+            "required_outcomes",
         ]
         read_only_fields = [
             "id",
             "source_episode_title",
             "target_episode_title",
             "created_at",
+            "required_outcomes",
         ]
 
     def get_target_episode_title(self, obj: Transition) -> str | None:
@@ -1471,6 +1561,12 @@ class TransitionSerializer(serializers.ModelSerializer):
         if obj.target_episode_id is None:
             return None
         return obj.target_episode.title
+
+    def to_representation(self, instance: Transition) -> dict[str, object]:
+        data = super().to_representation(instance)
+        if not _viewer_may_see_gm_text(self, instance.source_episode.chapter.story):
+            data.pop("required_outcomes", None)
+        return data
 
 
 class EpisodeProgressionRequirementSerializer(serializers.ModelSerializer):

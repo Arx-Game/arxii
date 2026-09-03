@@ -80,19 +80,12 @@ function PositionMapNodeComponent({ data }: NodeProps<PositionMapNodeType>) {
   const kindClass = KIND_STYLES[data.kind] ?? KIND_STYLES.feature;
   const rampartRing = rampartRingProps(data);
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      className={`relative w-[140px] cursor-pointer rounded-md border p-2 shadow-sm transition-colors hover:border-primary/60 ${kindClass} ${
+    <button
+      type="button"
+      className={`relative w-[140px] cursor-pointer rounded-md border p-2 text-left shadow-sm transition-colors hover:border-primary/60 ${kindClass} ${
         data.canMoveHere ? 'ring-2 ring-amber-400/50' : ''
       }`}
       onClick={() => data.onClick(data.positionId)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          data.onClick(data.positionId);
-        }
-      }}
       // React Flow sets `pointer-events: none` inline on the `.react-flow__node`
       // wrapper for nodes that are neither selectable nor draggable (both true
       // here — this is a read-only map) and that have no `onNodeClick` wired at
@@ -118,7 +111,7 @@ function PositionMapNodeComponent({ data }: NodeProps<PositionMapNodeType>) {
         </div>
       )}
       <Handle type="source" position={FlowPosition.Bottom} className="!opacity-0" />
-    </div>
+    </button>
   );
 }
 

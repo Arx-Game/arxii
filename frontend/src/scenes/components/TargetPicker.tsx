@@ -118,7 +118,6 @@ export function TargetPicker({ spec, candidates, onConfirm, onCancel }: TargetPi
                       type="button"
                       role="checkbox"
                       aria-checked={isSelected}
-                      aria-pressed={isSelected}
                       onClick={() => toggleMultiSelect(candidate.id)}
                       className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm hover:bg-muted/50 ${
                         isSelected ? 'bg-muted font-semibold' : ''

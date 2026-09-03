@@ -128,21 +128,35 @@ def _jeopardy_reachable(beat: Beat, max_hops: int) -> bool:
         next_frontier: set[int] = set()
         for episode_id in frontier - visited:
             visited.add(episode_id)
-            transitions = Transition.objects.filter(source_episode_id=episode_id).select_related(
-                "target_episode"
-            )
-            for transition in transitions:
-                target = transition.target_episode
-                reachable = _downstream_episode_reaches_removal(target, transition, episode_id)
-                if reachable is None:
-                    continue
-                if reachable is True:
-                    return True
-                next_frontier.add(target.pk)
+            reached, onward = _follow_episode_transitions(episode_id)
+            if reached:
+                return True
+            next_frontier |= onward
         frontier = next_frontier
         if not frontier:
             break
     return False
+
+
+def _follow_episode_transitions(episode_id: int) -> tuple[bool, set[int]]:
+    """Walk one episode's outgoing transitions.
+
+    Returns whether any of them reaches a removal (which ends the whole search)
+    and, if not, the episode ids to visit on the next hop.
+    """
+    onward: set[int] = set()
+    transitions = Transition.objects.filter(source_episode_id=episode_id).select_related(
+        "target_episode"
+    )
+    for transition in transitions:
+        target = transition.target_episode
+        reachable = _downstream_episode_reaches_removal(target, transition, episode_id)
+        if reachable is None:
+            continue
+        if reachable is True:
+            return True, onward
+        onward.add(target.pk)
+    return False, onward
 
 
 def _downstream_episode_reaches_removal(

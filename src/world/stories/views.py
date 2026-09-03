@@ -837,10 +837,26 @@ class ChapterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def episodes(self, request: Request, pk: int | None = None) -> Response:
-        """Get all episodes for a chapter"""
+        """Get all episodes for a chapter.
+
+        Carries the request in the serializer context (#3563) so
+        EpisodeListSerializer's GM-only routing_problems field can resolve
+        the viewer instead of default-denying every caller, and preloads one
+        routing report per episode on the page the way EpisodeViewSet.list
+        does, so this action does not pay four queries per episode.
+        """
+        from world.stories.services.routing import routing_reports_for_episodes  # noqa: PLC0415
+
         chapter = self.get_object()
-        episodes = chapter.episodes.all().order_by("order")
-        serializer = EpisodeListSerializer(episodes, many=True)
+        episodes = list(
+            chapter.episodes.annotate(scenes_count=Count("episode_scenes")).order_by("order")
+        )
+        serializer = EpisodeListSerializer(
+            episodes, many=True, context=self.get_serializer_context()
+        )
+        serializer.context["routing_reports"] = routing_reports_for_episodes(
+            [episode.pk for episode in episodes]
+        )
         return Response(serializer.data)
 
 
@@ -850,7 +866,9 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     Manages story episodes with narrative connection tracking.
     """
 
-    queryset = Episode.objects.all()
+    queryset = Episode.objects.select_related("chapter__story__primary_table").annotate(
+        scenes_count=Count("episode_scenes")
+    )
     permission_classes = [IsEpisodeStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -870,6 +888,21 @@ class EpisodeViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return EpisodeCreateSerializer
         return EpisodeDetailSerializer
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Preload one routing report per episode on the page (#3563)."""
+        from world.stories.services.routing import routing_reports_for_episodes  # noqa: PLC0415
+
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        episodes = page if page is not None else list(queryset)
+        serializer = self.get_serializer(episodes, many=True)
+        serializer.context["routing_reports"] = routing_reports_for_episodes(
+            [episode.pk for episode in episodes]
+        )
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def scenes(self, request: Request, pk: int | None = None) -> Response:
@@ -2089,6 +2122,12 @@ class TransitionViewSet(viewsets.ModelViewSet):
     queryset = Transition.objects.select_related(
         "source_episode__chapter__story__primary_table",
         "target_episode",
+    ).prefetch_related(
+        Prefetch(
+            "required_outcomes",
+            queryset=TransitionRequiredOutcome.objects.select_related("beat", "stake"),
+            to_attr="cached_required_outcomes",
+        )
     )
     serializer_class = TransitionSerializer
     permission_classes = [IsLeadGMOnTransitionStoryOrStaff]
@@ -2174,7 +2213,7 @@ class TransitionViewSet(viewsets.ModelViewSet):
             outcomes=outcome_inputs,
             existing_transition=existing,
         )
-        out_ser = TransitionSerializer(transition)
+        out_ser = TransitionSerializer(transition, context={"request": request})
         http_status = status.HTTP_200_OK if existing is not None else status.HTTP_201_CREATED
         return Response(out_ser.data, status=http_status)
 
@@ -2223,6 +2262,52 @@ class TransitionRequiredOutcomeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["id"]
     ordering = ["transition", "id"]
+
+    def get_queryset(self) -> QuerySet[TransitionRequiredOutcome]:
+        """Scope raw routing rules to owners/leads/staff (#3563).
+
+        IsLeadGMOnTransitionStoryOrStaff returns True for every SAFE_METHOD
+        regardless of object - it also guards TransitionViewSet, whose reads
+        stay intentionally open (the gated required_outcomes field does the
+        actual GM-only filtering there). This queryset is the only scoping
+        for the raw rule rows themselves: unscoped, any authenticated player
+        could list every story's routing predicates. Staff see everything;
+        everyone else is scoped to stories they own or Lead-GM, mirroring
+        user_owns_or_leads_story.
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        if user.is_staff:
+            return qs
+        gm_profile = user.gm_profile_or_none
+        filters_q = models.Q(transition__source_episode__chapter__story__owners=user)
+        if gm_profile is not None:
+            filters_q |= models.Q(
+                transition__source_episode__chapter__story__primary_table__gm=gm_profile
+            )
+        return qs.filter(filters_q).distinct()
+
+    def perform_create(self, serializer: BaseSerializer) -> None:
+        """Invalidate the writing transition's cached_required_outcomes (#3563).
+
+        Django skips a to_attr prefetch once the attribute is already in the
+        identity-mapped instance's __dict__, so a stale cache would otherwise
+        outlive this write for the rest of the process.
+        """
+        super().perform_create(serializer)
+        serializer.instance.transition.__dict__.pop("cached_required_outcomes", None)
+
+    def perform_update(self, serializer: BaseSerializer) -> None:
+        """Invalidate the writing transition's cached_required_outcomes (#3563)."""
+        super().perform_update(serializer)
+        serializer.instance.transition.__dict__.pop("cached_required_outcomes", None)
+
+    def perform_destroy(self, instance: TransitionRequiredOutcome) -> None:
+        """Invalidate the writing transition's cached_required_outcomes (#3563)."""
+        super().perform_destroy(instance)
+        instance.transition.__dict__.pop("cached_required_outcomes", None)
 
 
 # ---------------------------------------------------------------------------

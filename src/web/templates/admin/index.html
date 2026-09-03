@@ -7,12 +7,17 @@
         {% regroup app_list by app_group_name as grouped_apps %}
         {% for group in grouped_apps %}
             <div class="app-group" data-group="{{ group.grouper|lower }}">
-                <h2 class="app-group-header collapsible"
-                    role="button"
-                    aria-expanded="true"
-                    aria-controls="group-{{ group.grouper|lower }}">
-                    <span class="toggle-icon" aria-hidden="true">▼</span>
-                    {{ group.grouper }}
+                <h2 class="app-group-heading">
+                    {# A real <button> rather than role="button" on the heading: the
+                       heading was not keyboard-reachable at all (no tabindex), and a
+                       native button brings focus, Enter/Space and the right role. #}
+                    <button type="button"
+                            class="app-group-header collapsible"
+                            aria-expanded="true"
+                            aria-controls="group-{{ group.grouper|lower }}">
+                        <span class="toggle-icon" aria-hidden="true">▼</span>
+                        {{ group.grouper }}
+                    </button>
                 </h2>
                 <div class="app-group-content" id="group-{{ group.grouper|lower }}">
                     {% for app in group.list %}
@@ -29,6 +34,7 @@
                                                    data-app-label="{{ app.app_label }}"
                                                    data-model-name="{{ model.object_name|lower }}"
                                                    {% if not model.export_excluded %}checked{% endif %}
+                                                   aria-label="Include {{ app.app_label }}.{{ model.object_name|lower }} in export"
                                                    title="Include in export">
                                         </td>
                                         {% if model.admin_url %}
