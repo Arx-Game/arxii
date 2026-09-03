@@ -13,7 +13,30 @@
     group: adm
     mode: "0750"
 
+# twistd forces umask 0077 when it daemonizes (no --umask from Evennia's
+# launcher), so every ROTATED log file would be created 0600 and arxops
+# would lose read access at the first rotation. A default ACL on the dir
+# overrides the umask for files created inside it: new files get
+# group:adm:r-- no matter what the process's umask says.
+- name: Install acl tools (setfacl/getfacl for the default ACL below)
+  ansible.builtin.apt:
+    name: acl
+    state: present
+
+- name: Default ACL so twistd's 0077 umask still leaves new logs adm-readable
+  ansible.posix.acl:
+    path: "{{ app_log_dir }}"
+    etype: group
+    entity: adm
+    permissions: rx
+    default: true
+    state: present
+
 # Age-based pruning. `d` also (re)creates the dir at boot with these perms.
+# Pruning runs on systemd's daily `systemd-tmpfiles --clean` timer, not on
+# the `--create` the deploy runs, so nothing is deleted on day 0; the age is
+# by mtime, so a file untouched for the retention window (realistically only
+# lockwarnings.log) is removed even if a handle is open.
 - name: Install the tmpfiles.d rule that prunes old game logs
   ansible.builtin.copy:
     dest: /etc/tmpfiles.d/arxii-logs.conf

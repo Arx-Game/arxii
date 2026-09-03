@@ -378,6 +378,8 @@ assert_before "app_deploy creates the log dir BEFORE the first Django command" \
   infra/ansible/roles/app_deploy/tasks/main.yml
 chk   "app_deploy installs a tmpfiles.d age rule for the log dir" \
   "has_code 'tmpfiles.d/arxii-logs.conf' infra/ansible/roles/app_deploy/tasks/main.yml && has_code 'app_log_retention_days' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy sets a default ACL on the log dir (twistd umask 0077 makes rotated files 0600)" \
+  "has_code_between 'name: Default ACL so twistd' 'name: Install the tmpfiles.d rule' 'default: true' infra/ansible/roles/app_deploy/tasks/main.yml && has_code_between 'name: Default ACL so twistd' 'name: Install the tmpfiles.d rule' 'entity: adm' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "settings.py recomputes all four Evennia log-file paths from LOG_DIR" \
   "has_code '^SERVER_LOG_FILE = ' src/server/conf/settings.py && has_code '^PORTAL_LOG_FILE = ' src/server/conf/settings.py && has_code '^HTTP_LOG_FILE = ' src/server/conf/settings.py && has_code '^LOCKWARNING_LOG_FILE = ' src/server/conf/settings.py"
 

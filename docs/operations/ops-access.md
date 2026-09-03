@@ -89,7 +89,12 @@ The postStart output also prints the gate state on every container start.
 Since #3599 the game writes its log files to `/var/log/arxii` on the box
 (`LOG_DIR` in the EnvironmentFile; `roles/app_deploy` creates the directory
 as `arxii:adm` 0750 and a systemd-tmpfiles rule deletes files older than 30
-days). `arxops` is in `adm`, so with the gate open it reads them with no sudo:
+days). `arxops` is in `adm`, so with the gate open it reads them with no sudo.
+A default ACL on the directory keeps rotated files group-readable (twistd
+runs with umask 0077, so without it every rotated log would be 0600). After
+the first deploy, confirm with `ssh arxii-prod stat -c '%a %U:%G'
+/var/log/arxii/server.log` again after the first rotation, not only on day
+one.
 
 ```bash
 ssh arxii-prod tail -n 200 /var/log/arxii/server.log
