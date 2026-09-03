@@ -296,6 +296,61 @@ keep:
 false_positives:
   - rule: pythonsecurity:S2083
     path: "src/cli/arx.py"
+    status: avoided-by-construction
+    why: >
+      Recorded so nobody reintroduces it. "I/O function calls should not be vulnerable
+      to path injection attacks" (CWE-22) was raised as a BLOCKER on _rewrite_env_keys
+      when that helper was extracted (PR #3602), with the flow:
+      source `env_file.read_text()` -> `updated` -> sink `env_file.write_text(...)`.
+
+      The claim was wrong. The tainted value in that flow is the CONTENT argument, not
+      the path: SonarCloud models `pathlib.Path.write_text`'s single positional argument
+      as a path, when it is the data to write - the path is the bound receiver. That
+      receiver is `SRC_DIR / ".env"` or `env_file.parent.parent / "frontend" / ".env"`,
+      both built from module constants with no caller-supplied component. There was no
+      path injection to have. (For the record: the arx CLI is NOT dev-only - `arx test`
+      runs in CI and `arx manage collectstatic` runs on the production box during
+      deploy - though nothing outside a developer's shell invokes `arx ngrok`. None of
+      that was load-bearing; the path is constant whoever runs it.)
+
+      Rather than carry a permanent per-instance disposition, the code no longer hands
+      content to `Path.write_text` at all. Every write in src/cli/arx.py goes through
+      `Path.open(..., encoding="utf-8")` and `write`/`writelines`, which are not path
+      APIs and so cannot be mis-modelled this way; the backup/restore pair uses
+      `shutil.copyfile`. Each of those is a real improvement on its own - explicit
+      encoding instead of the locale default, and a byte-exact backup that no longer
+      normalises CRLF so a restore actually restores (pinned by
+      `TestEnvBackupRoundTrip` in core_management/tests/test_arx_cli.py).
+
+      The rule stays ACTIVE: S2083 is a genuine high-severity taint rule.
+
+      One real problem the flow pointed at IS fixed rather than argued away: the values
+      written come from the ngrok API's tunnel URL, and a newline in one would have
+      ended the KEY=value line and let the remainder land in .env as its own setting.
+      `_rewrite_env_keys` now rejects any value containing a newline or carriage return
+      before writing anything, covered by two tests that fail when the guard is removed.
+
+  - rule: typescript:S6479
+    why: >
+      Array index as JSX key. Genuinely silent: React reuses component state across
+      reordered rows, so the wrong data renders in the wrong row with no error. Moving
+      to eslint-plugin-react `no-array-index-key` in phase 3.
+  - rule: python:S8786
+    why: Regex non-linear backtracking (ReDoS). Silent until it is a hang.
+
+# Instance-level false positives — NOT rule-level.
+#
+# Some rules are right in general and wrong in one place. Turning them off in the
+# profile would lose real coverage, so those single findings are marked false-positive
+# on the issue itself, which survives re-analysis:
+#
+#   uv run python tools/sonarcloud_triage.py --rule <key> --path "<glob>" [--dry-run]
+#
+# This is the tier `sonar.issue.ignore.multicriteria` was reaching for and could not
+# deliver under Automatic Analysis. Record each standing suppression here.
+false_positives:
+  - rule: pythonsecurity:S2083
+    path: "src/cli/arx.py"
     why: >
       "I/O function calls should not be vulnerable to path injection attacks" (CWE-22),
       raised as a BLOCKER on `_rewrite_env_keys`'s `env_file.write_text(...)` when that

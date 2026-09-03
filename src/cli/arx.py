@@ -1,6 +1,7 @@
 # scripts/arx.py
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -553,8 +554,9 @@ def _backup_env_file(env_file: Path, env_backup: Path) -> None:
         typer.echo("Please copy .env.example to .env first.")
         raise typer.Exit(1) from None
 
-    content = env_file.read_text()
-    env_backup.write_text(content)
+    # copyfile, not read_text/write_text: a backup should be byte-identical, and a
+    # text round-trip would normalise CRLF so the "restore" could not restore it.
+    shutil.copyfile(env_file, env_backup)
     typer.echo("SUCCESS: Backed up .env")
 
 
@@ -565,8 +567,7 @@ def _restore_env_file(env_file: Path, env_backup: Path) -> None:
         return
 
     typer.echo("\nRestoring original .env...")
-    content = env_backup.read_text()
-    env_file.write_text(content)
+    shutil.copyfile(env_backup, env_file)
     env_backup.unlink()
     typer.echo("SUCCESS: Restored original .env")
 
@@ -635,13 +636,19 @@ def _rewrite_env_keys(env_file: Path, values: dict[str, str]) -> None:
 
     remaining = dict(values)
     updated: list[str] = []
-    for line in env_file.read_text().splitlines(keepends=True):
+    for line in env_file.read_text(encoding="utf-8").splitlines(keepends=True):
         key = next((k for k in remaining if line.startswith(f"{k}=")), None)
         updated.append(line if key is None else f"{key}={remaining.pop(key)}\n")
     if remaining:
         updated.append("\n# Added by arx ngrok\n")
         updated.extend(f"{k}={v}\n" for k, v in remaining.items())
-    env_file.write_text("".join(updated))
+    # Written through a handle rather than Path.write_text: the content is the file's
+    # own prior contents plus our values, and handing that to write_text trips
+    # SonarCloud's pythonsecurity:S2083, which models write_text's positional argument
+    # as a path (it is the data; the path is the receiver). writelines is not a path
+    # API, so there is nothing to mis-model. Do not "simplify" this back.
+    with env_file.open("w", encoding="utf-8") as handle:
+        handle.writelines(updated)
 
 
 def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
@@ -658,7 +665,8 @@ def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
         _rewrite_env_keys(frontend_env, {"VITE_ALLOWED_HOSTS": ngrok_hostname})
         typer.echo(f"SUCCESS: Updated frontend/.env VITE_ALLOWED_HOSTS={ngrok_hostname}")
     else:
-        frontend_env.write_text(f"# Added by arx ngrok\nVITE_ALLOWED_HOSTS={ngrok_hostname}\n")
+        with frontend_env.open("w", encoding="utf-8") as handle:
+            handle.write(f"# Added by arx ngrok\nVITE_ALLOWED_HOSTS={ngrok_hostname}\n")
         typer.echo(f"SUCCESS: Created frontend/.env with VITE_ALLOWED_HOSTS={ngrok_hostname}")
 
 

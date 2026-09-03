@@ -185,3 +185,25 @@ class TestRewriteEnvKeys(unittest.TestCase):
         with self.assertRaises(ValueError):
             _rewrite_env_keys(self.env, {"FRONTEND_URL": "https://x\rSECRET_KEY=pwned"})
         self.assertEqual(self.env.read_text(), "A=1\n")
+
+
+class TestEnvBackupRoundTrip(unittest.TestCase):
+    """Backup then restore must return the file's exact bytes."""
+
+    def test_restores_crlf_bytes_unchanged(self) -> None:
+        """A text round-trip would normalise CRLF and lose the original bytes."""
+        import tempfile
+
+        from cli.arx import _backup_env_file, _restore_env_file
+
+        d = Path(tempfile.mkdtemp())
+        env, backup = d / ".env", d / ".env.ngrok_backup"
+        original = b"A=1\r\nB=2\r\n"
+        env.write_bytes(original)
+
+        _backup_env_file(env, backup)
+        env.write_bytes(b"A=clobbered\n")
+        _restore_env_file(env, backup)
+
+        self.assertEqual(env.read_bytes(), original)
+        self.assertFalse(backup.exists(), "the backup is consumed by the restore")
