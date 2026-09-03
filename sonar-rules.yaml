@@ -310,8 +310,20 @@ false_positives:
       path injection to have.
 
       The flow's labelled source, "a user can craft an HTTP request with malicious
-      content", is also wrong for this code: `arx ngrok` is a local developer CLI that
-      no HTTP request reaches, and its docstring already refuses production use.
+      content", does not describe this code either. Be precise about why, because the
+      obvious phrasing is false: the arx CLI is NOT dev-only. `arx test` and
+      `arx manage spectacular` run in CI, and `arx manage collectstatic --noinput`
+      runs on the PRODUCTION box during deploy - the app_deploy role builds the
+      frontend there, and frontend/scripts/postbuild.mjs shells out to it. (The
+      long-running server is not arx: arxii.service runs `uv run evennia start`.)
+
+      The `ngrok` command specifically has no invoker outside a developer's shell -
+      no workflow, ansible task, script or unit file references `arx ngrok`, and
+      `_rewrite_env_keys`'s only non-test caller is `_update_env_with_ngrok_url`,
+      itself called only from `ngrok()`. No HTTP request reaches any of it.
+
+      None of that is load-bearing for the disposition, though: the path is a module
+      constant regardless of who invokes the command.
 
       Not disabled at the rule level: S2083 is a genuine high-severity taint rule and
       stays ACTIVE. This is an instance disposition only.
