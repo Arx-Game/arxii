@@ -161,6 +161,18 @@ on the already staff-only `StaffSecretsPanel`. CODEX / MISSION / RESCUE / ITEM /
 PERSONA_LINK targets are open to SENIOR GMs. When in doubt on this axis, the rule
 is to gate harder, not looser.
 
+**The policy is one callable, shared beyond authoring (#3566).**
+`world.clues.services.clue_target_kind_allowed(account, target_kind)` holds
+the SENIOR-GM-or-staff / SECRET-staff-only rule above as a single function:
+staff may target anything, a non-staff account needs a `GMProfile` at SENIOR
+or above, and SECRET targets are refused regardless of level. `author_clue`
+calls it (unchanged prerequisite; the extraction just moved the check out of
+the action body), and `world.stories.serializers.StakeRewardLineSerializer`
+now calls the same helper to gate a CLUE-sink `StakeRewardLine`'s
+`clue.target_kind` (see `docs/systems/stakes.md`'s "Two-sided Contract" - a
+stake reward can only point at a clue the authoring GM would also be allowed
+to mint).
+
 Kwargs: `name`, `description` (the clue text), `target_kind`, `target_id` (the
 primary target pk per `Clue.DISCRIMINATOR_MAP`), optional `target_secondary_id`
 (the paired persona for PERSONA_LINK — required — or the narrowing item instance
@@ -180,6 +192,20 @@ Frontend: `PlaceClueDialog`'s "New clue…" affordance and `StaffSecretsPanel`'s
 placement flow. The frontend hides the SECRET target kind from a non-staff
 account, but this is show/disable only — the server refusal above is the
 authority. No telnet verb — authoring tools are web-only by standing rule.
+
+## GM clue search (#3566)
+
+`GET /api/clues/search/?q=` (`ClueSearchView`, `IsAuthenticated` +
+`IsGMOrStaff`) is a small, purpose-built picker endpoint for the stake
+reward-line editor (`RewardLinesEditor`'s CLUE sink), not a general clue
+browser. It filters to `RESOLVABLE_CLUE_TARGET_KINDS` (codex, rescue, secret,
+persona link - the same set `StakeRewardLine.clean()` accepts; an ITEM-target
+clue is a bare pointer, not a coherent reward target), then runs each
+candidate through `clue_target_kind_allowed` for the requesting account so a
+GM is never offered a clue they aren't permitted to aim. Returns at most 25
+`{id, name, target_kind}` rows (`ClueSearchResultSerializer`) - no
+description or target FK, since the picker is for choosing which clue to
+grant, not for browsing clue content.
 
 ## Build constraint (authoring vs. mechanism)
 

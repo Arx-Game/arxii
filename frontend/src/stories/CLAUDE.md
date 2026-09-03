@@ -110,7 +110,7 @@ collapsed-by-default "Stakes" chevron):**
 | `StakesPanel.tsx`       | Header (declared/effective risk, target level, readiness, lock) + the beat's `Stake` rows + "Add stake" (template-banded to the beat's risk) / "Custom stake" (staff or `GMProfileMine.allow_custom_stakes`)                                  |
 | `StakeRow.tsx`          | One `Stake`: read-only template, `SubjectRefFields`, severity, player summary, Save/Delete; mounts `BranchColumns`                                                                                                                            |
 | `BranchColumns.tsx`     | The stake's WIN/LOSS/WITHDRAWAL `StakeResolution` branches - consequence pool, escalates_to_risk, narrative summary, and the writer fields for the stake's subject_kind (ITEM/NPC_FATE/FACTION/ASSET); WIN branches mount `RewardLinesEditor` |
-| `RewardLinesEditor.tsx` | A WIN branch's `StakeRewardLine` rows (sink/amount/resonance id)                                                                                                                                                                              |
+| `RewardLinesEditor.tsx` | A WIN branch's `StakeRewardLine` rows (sink: money/resonance/item/clue/codex; amount; the sink's FK - resonance id, or an `EntitySearchField` name-search pick for item/clue/codex, #3566)                                                    |
 | `ReadinessStrip.tsx`    | The beat readiness verdict + open-activation lock banner (`useBeatReadiness`/`useOpenBeatActivation`, #3562); reused by `StakesPanel`'s header                                                                                                |
 | `constants.ts`          | Shared risk ladder, severity labels, column labels, lifecycle/asset-transition option lists                                                                                                                                                   |
 
@@ -122,6 +122,13 @@ plain numeric id input, not a name-search picker: no endpoint lists the global
 `Resonance` catalog by id (only `character-resonances`, scoped to one character's
 claimed set, and the `resonance-grants` audit ledger exist), mirroring
 `SubjectRefFields`' documented fallback for CharacterSheet/ItemInstance ids.
+ITEM/CLUE/CODEX (#3566) do get `EntitySearchField` pickers
+(`searchItemTemplates`/`searchClues`/`searchCodexEntries` in `stories/api.ts`); ITEM's
+amount is server-pinned to the picked template's value, so the row shows it read-only
+and Save never sends a client `amount` for that sink. The player-visible opt-in
+summaries (`StakeSummary.reward_kinds`, beat- and scene-scoped) render a "Rewards:
+..." line naming the WIN branch's payout categories - never an amount, template,
+clue, or codex entry.
 
 ### `pages/`
 

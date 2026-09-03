@@ -246,6 +246,7 @@ describe('SceneHeader stakes-summary opt-in panel (#3561)', () => {
             player_summary: 'A dueling scar, worn for all to see.',
             severity: 4,
             severity_label: 'Dire',
+            reward_kinds: [],
           },
         ],
       },
@@ -262,6 +263,64 @@ describe('SceneHeader stakes-summary opt-in panel (#3561)', () => {
     expect(panel).toHaveTextContent('Dire');
     expect(panel).toHaveTextContent('extreme');
     expect(mockUseSceneStakesSummaryQuery).toHaveBeenCalledWith('1', true);
+  });
+
+  it('renders the reward kinds line when a stake has reward_kinds (#3566)', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: {
+        declared_risk: 'high',
+        effective_risk: 'high',
+        is_ready: true,
+        stakes: [
+          {
+            id: 12,
+            player_summary: 'A treasured heirloom, at risk.',
+            severity: 2,
+            severity_label: 'Costly',
+            reward_kinds: ['item', 'knowledge'],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    await user.click(screen.getByTestId('scene-header-risk-badge'));
+
+    const rewardLine = await screen.findByTestId('stake-reward-kinds');
+    expect(rewardLine).toHaveTextContent('Rewards: item, knowledge');
+  });
+
+  it('renders no reward kinds line when a stake has none', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: {
+        declared_risk: 'high',
+        effective_risk: 'high',
+        is_ready: true,
+        stakes: [
+          {
+            id: 13,
+            player_summary: 'A minor grudge.',
+            severity: 1,
+            severity_label: 'Setback',
+            reward_kinds: [],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    await user.click(screen.getByTestId('scene-header-risk-badge'));
+
+    await screen.findByTestId('scene-header-stakes-panel');
+    expect(screen.queryByTestId('stake-reward-kinds')).not.toBeInTheDocument();
   });
 
   it('shows a locked message when the scene runs no beat (empty stakes)', async () => {

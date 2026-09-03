@@ -209,13 +209,19 @@ class StakeRewardSink(models.TextChoices):
     """Where a StakeRewardLine's payout lands (#1770 PR3 — two-sided contract).
 
     Only sinks with a real, coherent delivery service are offered: MONEY
-    (world.currency.services.deliver_mission_money) and RESONANCE
-    (world.magic.services.resonance.grant_resonance). Legend is deliberately
-    NOT a sink — it stays automatic on top via effective risk (pillar 6).
+    (world.currency.services.deliver_mission_money), RESONANCE
+    (world.magic.services.resonance.grant_resonance), ITEM (mints an
+    ItemInstance off item_template), CLUE (world.clues.services.grant_clue_target
+    via acquire_clue), and CODEX (world.codex.services.grant_codex_entry).
+    Legend is deliberately NOT a sink: it stays automatic on top via
+    effective risk (pillar 6, #3566).
     """
 
     MONEY = "money", "Money"
     RESONANCE = "resonance", "Resonance"
+    ITEM = "item", "Item"
+    CLUE = "clue", "Clue"
+    CODEX = "codex", "Codex Entry"
 
 
 class StakeOutcomeMethod(models.TextChoices):
