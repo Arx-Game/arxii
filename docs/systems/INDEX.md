@@ -2417,7 +2417,11 @@ GM at a given level may author (#2000, ADR-0097).
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
-  `average_rating`, `rating_count`)
+  `average_rating`, `rating_count`), `DiscoveryResult` (#3564: `templates`,
+  `challenges`, `kinds: list[KindResult]`, what `find_situations` returns and
+  both its faces render), `KindResult` (`kind`, `check_fits`,
+  `difficulty_guide` (the guide for the requested risk or `None`),
+  `all_guides` (the full ladder), `pool_guides`)
 - **Key Services (`services.py`):** `create_table`/`archive_table`/`transfer_ownership`,
   `join_table`/`leave_table` (auto-detaches CHARACTER-scope stories on leave),
   `gm_application_queue(gm)`/`approve_application_as_gm`/`deny_application_as_gm`,
@@ -2435,6 +2439,18 @@ GM at a given level may author (#2000, ADR-0097).
   `GameWeek`; awards via `progression.award_xp(reason=ProgressionReason.GM_STORY_REWARD)`.
   Never raises — a bug here logs and returns `None` rather than aborting the beat
   mark/episode resolve/story completion/feedback submission that triggered it.
+  **`find_situations(*, query, risk, actor_level_index) -> DiscoveryResult`**
+  (#3564): the one catalog search behind telnet `setsituation find` and
+  `GET /api/gm/discovery/`; kinds always come from `SituationKind.objects
+  .cached_all()` filtered to `actor_level_index`, templates and challenges only
+  when `query` is non-empty (capped `FIND_RESULT_LIMIT = 15`), fits/guides/pool
+  guidance loaded with three grouped `filter(situation_kind_id__in=...)`
+  queries rather than a `to_attr` prefetch onto the identity-mapped kinds
+  (ADR-0262). **`user_breadth_index(user) -> int`**: the web caller's
+  `find_situations` breadth: staff get the top index, a GM their own level
+  index, an account with no `GMProfile` get `0`; mirrors
+  `FindSituationAction._actor_breadth_index` for a request user rather than an
+  actor object.
 - **Trust-ladder consumers:** `cap_for_profile(profile) -> GMLevelCap | None`
   (`world.gm.services`, #3562) is the single `GMLevelCap.objects.get(level=profile.level)`
   lookup - `None` when the level is unseeded, never raises. `stories.BeatSerializer`'s risk
@@ -2472,7 +2488,11 @@ GM at a given level may author (#2000, ADR-0097).
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
   queue), `GMInviteClaimView`, `DemandRansomView`, `GMSummonOfferViewSet`
-  (`/api/gm/summon-offers/`, read-only, #3071 — see "GM summon" below). **UI-wired
+  (`/api/gm/summon-offers/`, read-only, #3071, see "GM summon" below),
+  `DiscoveryView` (`GET /api/gm/discovery/?q=&risk=`, `IsAuthenticated` +
+  `IsGMOrStaff`, #3564: the web GM panel's and beat form's catalog browse;
+  invalid `risk` 400s, empty `q` returns kinds only, see "Scenario catalog"
+  below). **UI-wired
   (#3268):** the invite/application group (`GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView`) renders in `RecruitmentTab` on
   `frontend/src/tables/pages/TableDetailPage.tsx`; `GMInviteClaimView` renders in
@@ -2667,12 +2687,18 @@ GM at a given level may author (#2000, ADR-0097).
   `GET /api/scenes/{id}/gm-rail/`, see `docs/systems/scenes.md`'s "API Endpoints"
   section) as one of its per-participant sections.
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
-  shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
-  read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
-  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) searches
-  `mechanics.SituationTemplate` by name/description and, independently by the same
-  term, any matching `SituationKind` — returning its `CheckTypeSituationFit`,
-  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows as text.
+  shape from checks to situations. Since #3564 the search itself lives in one
+  service, `find_situations` (`world.gm.services`), behind two faces:
+  `FindSituationAction` (key `gm_find_situation`, read-only, gated
+  `MinimumGMLevelPrerequisite(GMLevel.STARTING)`, lower than
+  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) formats
+  the result for telnet, and `DiscoveryView` (`GET /api/gm/discovery/`) formats
+  it for the web; both search `mechanics.SituationTemplate`/`ChallengeTemplate`
+  by name/description(/goal) and, independently by the same term, any matching
+  `SituationKind`, returning its `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows (text on telnet,
+  structured JSON on the wire). An empty query is a kind-first cold open:
+  every kind in breadth, no templates or challenges, on both faces.
   `SituationKind` results are filtered server-side on `minimum_gm_level` against the
   caller's own `GMLevel` (staff see everything) — a kind above a GM's tier never
   appears, even on an exact name match. `SubmitCatalogSuggestionAction` (key
@@ -2680,12 +2706,24 @@ GM at a given level may author (#2000, ADR-0097).
   via `world.gm.services.submit_catalog_suggestion`, gated additionally on
   `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]` (Decision 9) — refuses a below-tier
   `proposal_kind` with a level-appropriate message; staff bypass every gate. Both
-  live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find <term>`
-  (extends `commands/setsituation.py`, mirroring `gm check find`'s shape) and `gm
-  suggest <kind>=<text>` (`commands/gm_ops.py`'s `CmdGMDashboard`, kind one of
-  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). Web: the
-  same generic `DispatchActionView` seam `set_the_stage`/`gm_invoke_check` already
-  use — no dedicated endpoint. Suggestion inbox: `SubmissionCategory
+  actions live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find
+  <term>` (extends `commands/setsituation.py`, mirroring `gm check find`'s
+  shape) and `gm suggest <kind>=<text>` (`commands/gm_ops.py`'s
+  `CmdGMDashboard`, kind one of
+  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). **Web
+  (#3564):** `DiscoveryView` (`IsAuthenticated` + `IsGMOrStaff`) backs
+  `SituationFinder.tsx` (`frontend/src/gm-adjudication/`), which renders kind
+  cards (fits, difficulty guide, pool guidance always marked advisory) plus
+  templates and challenges, with host-injected Stage/Place/Use-this-check
+  buttons and a "Suggest an entry" dialog (`CatalogSuggestionDialog.tsx`,
+  dispatches `gm_submit_catalog_suggestion`) shown only when a character is
+  active. Three hosts embed it behind a "Browse the catalog" toggle: beat
+  prep's staged-templates editor (`StagedTemplatesEditor` in
+  `stories/components/BeatFormDialog.tsx`, Stage appends a row), the scene
+  panel's Situation tab below (one-click Place), and its Call Check tab
+  (a fitting check selects it and pre-fills the difficulty band from the
+  guide for the running beat's risk, `GMAdjudicationPanel`'s
+  `scene.running_beat?.risk`). Suggestion inbox: `SubmissionCategory
   .CATALOG_SUGGESTION` (`world.player_submissions.constants`) +
   `_catalog_suggestion_to_item` in `world.staff_inbox.services.get_staff_inbox`,
   mirroring `GMApplication`'s exact mapping shape (Decision 8); staff triage via
@@ -2721,7 +2759,11 @@ GM at a given level may author (#2000, ADR-0097).
   (`situation_template_id`) or `place_challenge` (`challenge_template_id` +
   `target_object_name` + optional edge/setback) the same generic REST way as the
   check/award/condition tabs above — both act on the GM's own room
-  (`target_type=SELF`), so this tab has no participant picker. Two fold-ins:
+  (`target_type=SELF`), so this tab has no participant picker. **Since #3564**
+  the same tab embeds `SituationFinder` behind a "Browse the catalog" toggle;
+  choosing a template or challenge card there dispatches the same
+  `set_situation`/`place_challenge` one-click, with an empty challenge target
+  refused server-side rather than client-validated. Two fold-ins:
   `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
   `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
   scale resolved every authored challenge at the bottom rank), and

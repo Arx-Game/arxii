@@ -484,9 +484,24 @@ the consequences, and the discovery type are the template's own.
 - **Difficulty** is read through `ChallengeInstance.effective_severity`
   (`template.severity + severity_adjustment`) by every resolution path in
   `challenge_resolution.py`.
-- **Discovery** rides the same `FindSituationAction` (`setsituation find <term>`),
-  which searches `ChallengeTemplate` alongside `SituationTemplate` and
-  `SituationKind`.
+- **Discovery** rides one service, `find_situations` (`world/gm/services.py`),
+  behind two faces: telnet `setsituation find <term>` (`FindSituationAction`,
+  which now only formats the result) and `GET /api/gm/discovery/?q=&risk=`
+  (#3564) for the web GM panel and beat-authoring form. Kinds come from
+  `SituationKind.objects.cached_all()` filtered server-side to the caller's GM
+  tier (staff bypass); `ChallengeTemplate` and `SituationTemplate` are only
+  searched once the query is non-empty, each capped at
+  `FIND_RESULT_LIMIT = 15`. An empty query is a kind-first cold open: every
+  kind within the caller's breadth, no templates or challenges (telnet's own
+  empty-query listing changed to match, so it is not a regression). The web
+  finder (`SituationFinder.tsx`, `frontend/src/gm-adjudication/`) surfaces the
+  same kind cards, fits and difficulty guides, with pool guidance always
+  marked advisory, in three hosts: beat-prep's staged-templates editor
+  (`BeatFormDialog.tsx`), the scene panel's Situation tab (one-click Stage or
+  Place), and its Call Check tab (a fitting check pre-fills the difficulty
+  band from the running beat's risk), each behind a "Browse the catalog"
+  toggle. A "Suggest an entry" dialog dispatches `gm_submit_catalog_suggestion`
+  from the finder when a character is active.
 - Gated `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`, matching `SetSituationAction`
   — it mints the same class of live row (ADR-0091). Telnet:
   `setsituation challenge <template>=<target name> [edge=<why>|setback=<why>]`.

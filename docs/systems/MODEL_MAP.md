@@ -4077,9 +4077,11 @@
 - `create_invite(gm: 'GMProfile', roster_entry: 'RosterEntry', is_public: 'bool' = False, invited_email: 'str' = '', expires_at: 'datetime | None' = None) -> 'GMRosterInvite' - Create a GMRosterInvite. Callers must validate GM oversight.`
 - `create_table(gm: 'GMProfile', name: 'str', description: 'str' = '') -> 'GMTable' - Create a new GM table owned by the given GM.`
 - `deny_application_as_gm(gm: 'GMProfile', application: 'RosterApplication', review_notes: 'str' = '') -> 'None' - Deny an application on behalf of the overseeing GM.`
+- `find_situations(*, query: 'str', risk: 'str | None', actor_level_index: 'int') -> 'DiscoveryResult' - The one catalog search behind telnet ``setsituation find`` and`
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' - Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' - Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' - Aggregate a GM's track record for staff reviewing a level change.`
+- `gm_level_index(level: str) -> int - Return ``level``'s position in ``GM_LEVEL_ORDER`` (STARTING=0 .. SENIOR=4).`
 - `gm_max_risk(user) -> 'str' - RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.`
 - `gm_may_review_for_persona(gm_profile: 'GMProfile', persona: 'Persona') -> 'bool' - The review-pool rule (#2631 ruling): staff, or a GM with table access.`
 - `has_build_warrant(account: 'AccountDB | None', *, area: 'Area', level: 'int') -> 'bool' - Whether ``account`` may build-author at ``level`` within ``area``'s subtree.`
@@ -4091,6 +4093,9 @@
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' - Set profile.level (promotion OR demotion), writing the audit row.`
 - `resolve_gm_summon_offer(offer: 'GMSummonOffer', *, accept: 'bool') -> 'None' - Resolve a pending summon offer: move the target on accept, always clear it (#3071).`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' - Revoke an invite by setting expires_at to now.`
+- `search_challenge_templates(query: 'str', *, limit: 'int' = 15) -> 'list[ChallengeTemplate]'`
+- `search_situation_kinds(query: 'str', actor_level_index: 'int') -> 'list[SituationKind]' - Return SituationKinds matching *query* within the actor's breadth.`
+- `search_situation_templates(query: 'str', *, limit: 'int' = 15) -> 'list[SituationTemplate]'`
 - `set_looking_for_table(player_data: 'PlayerData', looking: 'bool') -> 'None' - Set or clear the looking-for-table flag on a player's profile (#2431).`
 - `signoff_table_update_request(request: 'TableUpdateRequest', gm_profile: 'GMProfile', *, approve: 'bool', notes: 'str' = '') -> 'TableUpdateRequest' - Approve or reject a PENDING request — the GM's yes/no judgment call (#2631).`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' - Future integration hook: called when a persona is retired.`
@@ -4100,6 +4105,7 @@
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' - GM surrenders oversight of a story.`
 - `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' - Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' - Reassign a table to a different GM. Staff-only action.`
+- `user_breadth_index(user: 'AbstractBaseUser | AnonymousUser') -> 'int' - How far up the GM ladder a web caller may browse (#3564).`
 - `withdraw_table_update_request(request: 'TableUpdateRequest') -> 'None' - Withdraw a PENDING request (player-initiated).`
 
 

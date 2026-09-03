@@ -169,17 +169,21 @@ def _format_kind_results(
 
 @dataclass
 class FindSituationAction(Action):
-    """STARTING-tier GM action: search situations, challenges, or SituationKinds (#2127).
+    """STARTING-tier GM action: format a catalog browse for telnet (#2127, #3564).
 
-    Extends #2118's ``gm check find`` shape to situations: search
-    ``SituationTemplate`` by name/description, ``ChallengeTemplate`` by
-    name/description/goal (#2865 -- so one browse surface covers both what
-    ``SetSituationAction`` and ``PlaceChallengeAction`` can place), and
-    (independently, by the same search term) any ``SituationKind`` whose name
-    matches -- surfacing its proven-fit ``CheckType``s, authored
-    ``SituationDifficultyGuide`` rows, and advisory ``ConsequencePoolGuide``
-    text. Read-only: no field or kwarg on this Action writes a
-    `SituationTemplate`, `ChallengeTemplate`, `SituationKind`, or
+    Extends #2118's ``gm check find`` shape to situations. The actual search
+    lives in one service, ``world.gm.services.find_situations`` -- the same
+    call ``GET /api/gm/discovery/`` makes -- covering ``SituationTemplate``
+    by name/description, ``ChallengeTemplate`` by name/description/goal
+    (#2865 -- so one browse surface covers both what ``SetSituationAction``
+    and ``PlaceChallengeAction`` can place), and (independently, by the same
+    search term) any ``SituationKind`` whose name matches, each carrying its
+    proven-fit ``CheckType``s, authored ``SituationDifficultyGuide`` rows,
+    and advisory ``ConsequencePoolGuide`` text. This action only formats that
+    ``DiscoveryResult`` into telnet lines -- it never queries a model itself.
+    An empty query is a kind-first cold open: every kind within breadth, no
+    templates or challenges. Read-only: no field or kwarg on this Action
+    writes a `SituationTemplate`, `ChallengeTemplate`, `SituationKind`, or
     `consequence_pool` FK anywhere.
 
     Gated ``MinimumGMLevelPrerequisite(GMLevel.STARTING)`` -- lower than
