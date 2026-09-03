@@ -12,6 +12,12 @@ Unlike combat's wiring, this is a direct function call from conclude_battle,
 not a flow event/TriggerDefinition — Battle has no location (#1733), so the
 location-based flows.emit_event machinery doesn't apply, and conclude_battle
 is already the single call-site choke point (#1785 spec Decision 1).
+
+activate_stakes_for_battle (called from begin_battle_round's round 1) scopes
+to battle.story_beat alone when that beat is itself staked and unsatisfied
+(#3569, session-prep pre-staging) rather than every staked beat sharing the
+battle's scene -- a pre-staged battle's own routed beat is the only one this
+specific battle should be able to lock.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from world.battles.constants import BattleParticipantStatus
+from world.societies.constants import RenownRisk
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -63,12 +70,18 @@ def activate_stakes_for_battle(battle: Battle) -> None:
 
     Called from begin_battle_round when opening the battle's very first round
     (#1785 spec Decision 3). Collects every currently-ACTIVE participant's
-    character sheet; no-ops when there are none. For each staked UNSATISFIED
-    beat linked to the battle's scene, boundary-screens it (same guard as
-    combat's activate_stakes_for_scene) and activates it with
-    scale_by_party_level=False — a war's stakes reflect the objective, not
-    which specific PCs happen to be enlisted (#1785 spec Decision 4; ADR-0080).
+    character sheet; no-ops when there are none. When ``battle.story_beat``
+    is set and is itself a staked, still-UNSATISFIED beat, activation is
+    scoped to that one beat only (#3569) -- a battle explicitly routed to a
+    beat via session-prep pre-staging must not also lock a sibling staked
+    beat that merely shares the battle's scene. Otherwise falls back to the
+    pre-#3569 rule: every staked UNSATISFIED beat linked to the battle's
+    scene. Each candidate beat is boundary-screened (same guard as combat's
+    activate_stakes_for_scene) and activated with scale_by_party_level=False
+    -- a war's stakes reflect the objective, not which specific PCs happen to
+    be enlisted (#1785 spec Decision 4; ADR-0080).
     """
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
     from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
     from world.stories.services.stakes import (  # noqa: PLC0415
         activate_stakes_contract,
@@ -80,7 +93,18 @@ def activate_stakes_for_battle(battle: Battle) -> None:
     ]
     if not sheets:
         return
-    for beat in staked_unsatisfied_beats_for_scene(battle.scene):
+
+    routed_beat = battle.story_beat
+    if (
+        routed_beat is not None
+        and routed_beat.outcome == BeatOutcome.UNSATISFIED
+        and routed_beat.risk != RenownRisk.NONE
+    ):
+        beats = [routed_beat]
+    else:
+        beats = staked_unsatisfied_beats_for_scene(battle.scene)
+
+    for beat in beats:
         report = check_stake_boundaries(beat.stakes.all(), sheets)
         if not report.cleared:
             logger.info(
