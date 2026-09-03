@@ -68,6 +68,21 @@ _REDIRECT_AWAY_KEYWORD = "away"
 # of Soulfray. Stripped off the raw text before the ally/with/into parsing.
 _SOULFRAY_TOKEN = "soulfray"  # noqa: S105 - a maneuver keyword, not a credential
 
+
+def _split_padded(text: str, separator: str) -> tuple[str, str] | None:
+    """Split ``text`` on ``separator``, padding so a leading clause may be empty.
+
+    Padding lets a bare ``with <technique>`` match the " with " separator at
+    position 0. Both slices come off the SAME padded string, so the indexes stay
+    consistent. Returns ``None`` when the separator is absent.
+    """
+    padded = f" {text} "
+    index = padded.lower().find(separator)
+    if index == -1:
+        return None
+    return padded[:index].strip(), padded[index + len(separator) :].strip()
+
+
 _NOT_IN_ACTIVE_ROUND = "You are not in an active combat round."
 
 # ``_require_rest`` argument-description literal, shared by cover/succor/rally.
@@ -189,38 +204,34 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         stripped off the raw text before any of the above parsing runs.
         """
         text = text.strip()
-        consent = False
-        if text.lower() == _SOULFRAY_TOKEN or text.lower().endswith(f" {_SOULFRAY_TOKEN}"):
-            consent = True
+        consent = text.lower() == _SOULFRAY_TOKEN or text.lower().endswith(f" {_SOULFRAY_TOKEN}")
+        if consent:
             text = text[: -len(_SOULFRAY_TOKEN)].strip()
 
-        # Pad with spaces so a bare "with <technique>" (no ally clause) still
-        # matches the " with " separator at position 0; both slices come off the
-        # SAME padded string so the indexes stay consistent.
-        padded = f" {text} "
-        ally_text = text
-        rest_text = ""
-        with_index = padded.lower().find(_WITH_SEPARATOR)
-        if with_index != -1:
-            ally_text = padded[:with_index].strip()
-            rest_text = padded[with_index + len(_WITH_SEPARATOR) :].strip()
+        ally_text, rest_text = text, ""
+        with_clause = _split_padded(text, _WITH_SEPARATOR)
+        if with_clause is not None:
+            ally_text, rest_text = with_clause
             if not rest_text:
                 msg = "Usage: combat interpose [ally] with <technique> [into <destination>]."
                 raise CommandError(msg)
 
-        technique_text = rest_text
-        destination_text = ""
-        if rest_text:
-            padded_rest = f" {rest_text} "
-            into_index = padded_rest.lower().find(_INTO_SEPARATOR)
-            if into_index != -1:
-                technique_text = padded_rest[:into_index].strip()
-                destination_text = padded_rest[into_index + len(_INTO_SEPARATOR) :].strip()
-                if not technique_text or not destination_text:
-                    msg = "Usage: combat interpose [ally] with <technique> into <destination>."
-                    raise CommandError(msg)
+        technique_text, destination_text = rest_text, ""
+        into_clause = _split_padded(rest_text, _INTO_SEPARATOR) if rest_text else None
+        if into_clause is not None:
+            technique_text, destination_text = into_clause
+            if not technique_text or not destination_text:
+                msg = "Usage: combat interpose [ally] with <technique> into <destination>."
+                raise CommandError(msg)
 
-        ally_text = ally_text.strip()
+        return self._interpose_kwargs(
+            ally_text.strip(), technique_text, destination_text, consent=consent
+        )
+
+    def _interpose_kwargs(
+        self, ally_text: str, technique_text: str, destination_text: str, *, consent: bool
+    ) -> dict[str, Any]:
+        """Turn the parsed interpose clauses into the declare_interpose payload."""
         kwargs: dict[str, Any] = {
             "ally_participant_id": self._resolve_ally_pk(ally_text) if ally_text else None,
         }
