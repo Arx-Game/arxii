@@ -467,6 +467,8 @@ export interface BeatCreateBody {
   risk?: BeatRisk;
   agm_eligible?: boolean;
   deadline?: string | null;
+  /** Scene clock size in ticks (#3567); 0 means no clock. */
+  clock_size?: number;
 
   // Predicate-type-specific config (exactly one set applies per predicate_type):
   required_level?: number | null; // CHARACTER_LEVEL_AT_LEAST

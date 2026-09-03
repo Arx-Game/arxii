@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0215_remove_situationchallengelink_depends_on_and_more")]
+    dependencies = [("arxii", "0216_beat_clock_size_sceneclock")]
 
     operations = [
         migrations.AddField(

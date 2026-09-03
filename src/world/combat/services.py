@@ -3140,6 +3140,13 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
 
+    # #3567: a new round burns one tick of the running beat's scene clock. The
+    # selector resolves the beat; a scene with no running beat or no open clock
+    # is a no-op. The fill's completion is scheduled on_commit by the service.
+    from world.scenes.clock_services import tick_scene_clock  # noqa: PLC0415
+
+    tick_scene_clock(enc.scene)
+
     # Reaction economy (#2639): every participant's reaction budget refills
     # each round. A raw queryset .update() would bypass the SharedMemoryModel
     # identity map — any already-cached CombatParticipant instance (e.g. one

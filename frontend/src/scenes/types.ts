@@ -131,10 +131,11 @@ export interface SceneDetail extends SceneListItem {
   position_edges: PositionEdgeInfo[];
   /**
    * The Beat this scene is currently running (#3425), null when none. Only
-   * id + risk tier ride this payload — GM/staff viewers only, server-side
-   * (`SceneListSerializer.get_running_beat`); never internal beat text.
+   * id, risk tier and authored clock size ride this payload - GM/staff
+   * viewers only, server-side (`SceneListSerializer.get_running_beat`);
+   * never internal beat text.
    */
-  running_beat: { id: number; risk: string } | null;
+  running_beat: { id: number; risk: string; clock_size: number } | null;
   /**
    * Player-visible declared risk tier for the scene-header badge (#3433).
    * Precedence: running_beat.risk -> the active combat encounter's
@@ -143,6 +144,11 @@ export interface SceneDetail extends SceneListItem {
    * null also covers RenownRisk 'none' (undeclared risk is not "safe").
    */
   declared_risk: 'low' | 'moderate' | 'high' | 'extreme' | null;
+  /**
+   * The running beat's open scene clock (#3567): size and fill only, every
+   * viewer. null when the scene runs no beat or the beat has no clock.
+   */
+  clock: { size: number; filled: number } | null;
 }
 
 /** #3434 GM story rail - one authored opponent line on an ENCOUNTER beat. */
@@ -183,6 +189,7 @@ export interface GMStoryRailBeat {
   risk: string;
   outcome: string;
   predicate_type: string;
+  clock_size: number;
   success_consequences_authored: boolean;
   failure_consequences_authored: boolean;
   expired_consequences_authored: boolean;

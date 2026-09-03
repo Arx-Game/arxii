@@ -42,7 +42,7 @@ the three rows.
 The authoring-time check on an episode's outbound transitions, before any
 session ever runs them (`services/routing.py::routing_report`/
 `routing_reports_for_episodes`, `RoutingReport`, #3563). A **dead end** is a
-beat's FAILURE, its EXPIRED when it has a deadline, or a stake's LOSS that no
+beat's FAILURE, its EXPIRED when it has a deadline or its scene clock fills, or a stake's LOSS that no
 outbound transition accepts - at runtime that outcome would pause the run at
 the frontier mid-session. An **ambiguity** is a pair of outbound transitions
 whose requirement sets never contradict, so both could be eligible at once and

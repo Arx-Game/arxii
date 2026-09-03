@@ -74,9 +74,9 @@ def viewer_has_story_standing(user: AccountDB, story: Any) -> bool:
 def _serialize_beat_summary(beat: Any) -> dict[str, Any]:
     """The low-sensitivity refereeing metadata any qualifying scene GM sees.
 
-    id/kind/risk/outcome/predicate state/pools-authored booleans only - never
-    internal_description or line details (those are gated separately by
-    story standing, see ``build_gm_story_rail_payload``).
+    id/kind/risk/outcome/predicate state/authored clock size/pools-authored
+    booleans only - never internal_description or line details (those are
+    gated separately by story standing, see ``build_gm_story_rail_payload``).
     """
     return {
         "id": beat.id,
@@ -84,6 +84,7 @@ def _serialize_beat_summary(beat: Any) -> dict[str, Any]:
         "risk": beat.risk,
         "outcome": beat.outcome,
         "predicate_type": beat.predicate_type,
+        "clock_size": beat.clock_size,
         "success_consequences_authored": beat.success_consequences_id is not None,
         "failure_consequences_authored": beat.failure_consequences_id is not None,
         "expired_consequences_authored": beat.expired_consequences_id is not None,

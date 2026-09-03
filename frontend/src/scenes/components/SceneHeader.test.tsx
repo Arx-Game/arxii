@@ -50,6 +50,7 @@ const SCENE = {
   is_owner: false,
   participants: [],
   active_round: null,
+  clock: null,
 } as unknown as SceneDetail;
 
 function renderWrapped(scene: SceneDetail = SCENE) {
@@ -102,6 +103,7 @@ const BASE_SCENE: SceneDetail = {
   persona_positions: [],
   active_round: null,
   declared_risk: null,
+  clock: null,
 } as unknown as SceneDetail;
 
 describe('SceneHeader round-state badge (#2158)', () => {
@@ -354,5 +356,25 @@ describe('SceneHeader stakes-summary opt-in panel (#3561)', () => {
 
     await user.click(badge);
     expect(screen.queryByTestId('scene-header-stakes-panel')).not.toBeInTheDocument();
+  });
+});
+
+describe('SceneHeader scene clock pips (#3567)', () => {
+  it('shows the clock with one filled pip when the scene carries one', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, clock: { size: 3, filled: 1 } });
+
+    const clock = screen.getByTestId('scene-clock');
+    expect(clock).toHaveAttribute('aria-label', 'Clock 1 of 3');
+    expect(screen.getAllByTestId('scene-clock-pip-filled')).toHaveLength(1);
+  });
+
+  it('does not render the clock when the scene carries none', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, clock: null });
+
+    expect(screen.queryByTestId('scene-clock')).not.toBeInTheDocument();
   });
 });

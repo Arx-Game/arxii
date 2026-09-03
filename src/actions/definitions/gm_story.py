@@ -65,6 +65,9 @@ _NO_SUCH_BEAT = "No beat with that ID exists."
 _NO_BEAT_PERMISSION = "You do not have authority over this beat's story."
 _NO_ACTIVE_SCENE = "There is no active scene here."
 _ALREADY_RUNNING_OTHER = "This scene is already running a different beat."
+_ALREADY_RUNNING_ELSEWHERE = "Another active scene is already running this beat."
+_NO_CLOCK = "This scene has no clock to advance."
+_BAD_BY = "by must be a whole number of at least 1."
 
 # Decision 3 (#3425 spec): RenownRisk -> combat RiskLevel, by name, with NONE
 # folded into LOW (a beat authored at NONE risk still needs SOME encounter
@@ -180,6 +183,20 @@ class RunBeatAction(Action):
         if scene.running_beat_id is not None and scene.running_beat_id != beat.pk:
             return ActionResult(success=False, message=_ALREADY_RUNNING_OTHER)
 
+        if scene.running_beat_id != beat.pk:
+            from world.scenes.models import Scene as SceneModel  # noqa: PLC0415
+
+            # #3567: one running scene per beat, so a clock never couples two
+            # tables. A battle this beat staged runs the same beat on its own
+            # private scene by design (``_run_battle_beat``); exclude it.
+            elsewhere = (
+                SceneModel.objects.filter(running_beat=beat, is_active=True)
+                .exclude(pk=scene.pk)
+                .exclude(battle__story_beat=beat)
+            )
+            if elsewhere.exists():
+                return ActionResult(success=False, message=_ALREADY_RUNNING_ELSEWHERE)
+
         return beat, scene, account
 
     def execute(
@@ -203,6 +220,10 @@ class RunBeatAction(Action):
         scene.running_beat = beat
         scene.save(update_fields=["running_beat"])
 
+        from world.scenes.clock_services import start_scene_clock  # noqa: PLC0415
+
+        clock = start_scene_clock(scene, beat)
+
         if beat.kind == BeatKind.ENCOUNTER:
             staged = (
                 BeatStagedBattle.objects.filter(beat=beat)
@@ -224,6 +245,8 @@ class RunBeatAction(Action):
                 instance = start_scenario_for_scene(beat, scene)
                 data["scenario_instance_id"] = instance.pk
         data["beat_id"] = beat.pk
+        if clock is not None:
+            data["clock"] = {"size": clock.size, "filled": clock.filled}
 
         return ActionResult(
             success=True,
@@ -553,6 +576,7 @@ class GMListRunnableBeatsAction(Action):
                     "staged_template_count": beat.staged_templates.count(),
                     "has_scenario": beat.required_mission_id is not None,
                     "staged_battle_name": staged_battle_names.get(beat.pk),
+                    "clock_size": beat.clock_size,
                 }
                 for beat in beats
             )
@@ -562,6 +586,58 @@ class GMListRunnableBeatsAction(Action):
 
         lines = [
             f"[{r['id']}] {r['story_title']} / {r['episode_title']} ({r['kind']}, risk={r['risk']})"
+            + (f" clock {r['clock_size']}" if r["clock_size"] > 0 else "")
             for r in rows
         ]
         return ActionResult(success=True, message="\n".join(lines), data={"beats": rows})
+
+
+@dataclass
+class AdvanceClockAction(Action):
+    """GM: spend ticks on the running beat's scene clock (#3567).
+
+    Kwarg ``by`` (default 1, whole number >= 1). Pacing, not outcome: the
+    size and the EXPIRED consequence are authored on the beat; this only
+    spends the ticks the fiction consumed. Filling completes the beat EXPIRED
+    after this request commits (``clock_services.tick_scene_clock``).
+    """
+
+    key: str = "advance_clock"
+    name: str = "Advance Clock"
+    icon: str = "clock"
+    category: str = "gm"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.clock_services import tick_scene_clock  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        by = kwargs.get("by", 1)
+        if isinstance(by, bool) or not isinstance(by, int) or by < 1:
+            return ActionResult(success=False, message=_BAD_BY)
+        scene = get_active_scene(actor.location)
+        if scene is None:
+            return ActionResult(success=False, message=_NO_ACTIVE_SCENE)
+        clock = tick_scene_clock(scene, by=by)
+        if clock is None:
+            return ActionResult(success=False, message=_NO_CLOCK)
+        filled_now = clock.closed_at is not None
+        message = (
+            f"The clock fills: {clock.filled}/{clock.size}. Time is up."
+            if filled_now
+            else f"The clock advances: {clock.filled}/{clock.size}."
+        )
+        return ActionResult(
+            success=True,
+            message=message,
+            data={"size": clock.size, "filled": clock.filled, "filled_now": filled_now},
+        )

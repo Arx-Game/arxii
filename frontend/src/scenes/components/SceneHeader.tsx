@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SubmitButton } from '@/components/SubmitButton';
 import { RoundSettingsDialog } from './RoundSettingsDialog';
+import { SceneClockPips } from './SceneClockPips';
 import { Badge } from '@/components/ui/badge';
 import { useEncounterForScene } from '@/combat/queries';
 
@@ -277,6 +278,9 @@ export function SceneHeader({ scene, onRefresh }: Props) {
         </Badge>
       )}
       <DeclaredRiskBadge risk={scene.declared_risk} sceneId={scene.id} />
+      {scene.clock != null && (
+        <SceneClockPips size={scene.clock.size} filled={scene.clock.filled} className="mb-2 ml-2" />
+      )}
       <p className="mb-4">{scene.description}</p>
       {(scene.is_owner || scene.is_active) && (
         <div className="mb-2 flex gap-2">

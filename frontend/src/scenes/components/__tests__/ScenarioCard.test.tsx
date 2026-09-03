@@ -46,6 +46,7 @@ function buildScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     position_edges: [],
     running_beat: null,
     declared_risk: null,
+    clock: null,
     ...overrides,
   };
 }

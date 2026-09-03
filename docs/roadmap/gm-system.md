@@ -237,6 +237,24 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   (see `docs/systems/INDEX.md`'s "Pool opacity" entry). Frontend: `GMStoryRail`
   (`frontend/src/scenes/components/GMStoryRail.tsx`), a `CombatRail`-pattern sibling
   in `SceneDetailPage`'s right rail.
+- **Scene clock: time pressure inside a session ✅ (#3567, ADR-0264)** - the story-prep
+  system had a beat's *stakes* (risk-declared consequences) but no way to make a
+  session-running GM feel a clock ticking. **Built:** `Beat.clock_size` (authored
+  ticks, 0 = none) opens a `SceneClock` when `RunBeatAction` runs the beat (keyed by
+  beat, so a staged battle's own private scene shares its GM table scene's clock).
+  Two fill sources: every combat round start (`begin_declaration_phase`) ticks it by
+  one - battle rounds never call that function, so a staged battle's own rounds don't
+  tick it - and the GM's `advance_clock` gesture (telnet `story clock [n]`, web the GM
+  story rail's Advance button) spends an explicit tick count; the gesture paces, it
+  never decides the outcome (ADR-0030/ADR-0240). A full clock resolves the beat
+  EXPIRED through the same completion tail deadline expiry uses
+  (`complete_beat_expired`, #3558), scheduled via `transaction.on_commit` and
+  lock-then-checked so a later failure in the same round pipeline can never roll back
+  a completion already told to players (ADR-0264). `RunBeatAction` also refuses a
+  second scene running the same beat (excluding that beat's own staged battle) so a
+  clock never couples two tables. Player-visible on every scene viewer as pips
+  (`SceneClockPips.tsx`, size/filled only - no beat, no consequence); the GM story
+  rail additionally shows the authored size and the Advance control.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system

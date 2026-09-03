@@ -1215,6 +1215,8 @@ class BeatSerializer(serializers.ModelSerializer):
             # AGM / scheduling
             "agm_eligible",
             "deadline",
+            # Scene clock (#3567)
+            "clock_size",
             # Consequence pools
             "success_consequences",
             "failure_consequences",
@@ -1350,6 +1352,7 @@ class BeatSerializer(serializers.ModelSerializer):
                 "target_level",
                 "agm_eligible",
                 "deadline",
+                "clock_size",
                 "required_mission",
             ]:
                 existing[field_name] = getattr(self.instance, field_name)
