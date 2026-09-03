@@ -39,9 +39,9 @@ Extends Evennia's functionality with additional models and data handlers while p
 
 ### `checks.py`
 - `check_mfa_secrets_key` (`evennia_extensions.E001`, #3591) - Django system
-  check that every key in `MFA_SECRETS_KEY` is a valid Fernet key, run at
-  `migrate`/`check` time so a bad key fails the converge, not a player's
-  sign-in
+  check that every key in `MFA_SECRETS_KEY` is a valid Fernet key and none is
+  the all-zero placeholder, run at `migrate`/`check` time so a bad key fails
+  the converge, not a player's sign-in
 
 ### `typeclass_hook_guard.py`
 - Guards Evennia's server reload/shutdown lifecycle hooks (`at_server_reload`,

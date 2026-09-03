@@ -60,6 +60,14 @@ class MfaSecretsKeyCheckTests(SimpleTestCase):
     def test_empty_key_is_an_error(self):
         self.assertEqual(len(check_mfa_secrets_key(None)), 1)
 
+    @override_settings(MFA_SECRETS_KEY=f"{KEY_A},{'A' * 43}=")
+    def test_all_zero_placeholder_key_is_an_error(self):
+        errors = check_mfa_secrets_key(None)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0].id, "evennia_extensions.E001")
+        self.assertIn("position 2", errors[0].msg)
+        self.assertIn("all-zero", errors[0].msg)
+
 
 class AdapterIsWiredTests(TestCase):
     def test_settings_point_at_the_adapter(self):

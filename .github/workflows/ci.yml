@@ -263,7 +263,6 @@ jobs:
     env:
       DEBUG: False
       SECRET_KEY: test-secret-key-for-ci-only
-      MFA_SECRETS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero bytes: valid Fernet shape, not a secret
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key
@@ -274,6 +273,10 @@ jobs:
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
       - uses: actions/checkout@v6
+      - name: Mint a throwaway MFA_SECRETS_KEY for this job
+        # settings.py requires the key (ADR-0267) and the startup check refuses the
+        # all-zero placeholder, so each job mints its own instead of committing a literal.
+        run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
       - name: Start Postgres with max_locks_per_transaction bumped
         run: |
           docker run -d \
@@ -411,11 +414,14 @@ jobs:
       # matching migration. Scoped to first-party apps so the phantom
       # Evennia-library proxy-model changes that core_management's custom
       # makemigrations filters only at write time can't trip this gate.
+      - name: Mint a throwaway MFA_SECRETS_KEY for this job
+        # settings.py requires the key (ADR-0267) and the startup check refuses the
+        # all-zero placeholder, so each job mints its own instead of committing a literal.
+        run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
       - name: Check migrations match models
         env:
           DEBUG: False
           SECRET_KEY: test-secret-key-for-ci-only
-          MFA_SECRETS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero bytes: valid Fernet shape, not a secret
           DATABASE_URL: postgresql://postgres@localhost:5432/unused
           CLOUDINARY_CLOUD_NAME: test-cloud
           CLOUDINARY_API_KEY: test-key
@@ -502,7 +508,6 @@ jobs:
     env:
       DEBUG: False
       SECRET_KEY: test-secret-key-for-ci-only
-      MFA_SECRETS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  # 32 zero bytes: valid Fernet shape, not a secret
       DATABASE_URL: postgresql://postgres@localhost:5432/arxii_test
       CLOUDINARY_CLOUD_NAME: test-cloud
       CLOUDINARY_API_KEY: test-key
@@ -513,6 +518,10 @@ jobs:
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
       - uses: actions/checkout@v6
+      - name: Mint a throwaway MFA_SECRETS_KEY for this job
+        # settings.py requires the key (ADR-0267) and the startup check refuses the
+        # all-zero placeholder, so each job mints its own instead of committing a literal.
+        run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
       # Third-party actions SHA-pinned (SonarCloud supply-chain rule on new code).
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from importlib import import_module
 import os
 from pathlib import Path
@@ -29,9 +30,11 @@ def setup_environment() -> None:
 
     os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
     os.environ.setdefault("SECRET_KEY", "arxii-placeholder-secret-key")
-    # 32 zero bytes, URL-safe base64: a valid Fernet key shape for settings.MFA_SECRETS_KEY
-    # (#3591), which settings.py requires like SECRET_KEY. Not a secret.
-    os.environ.setdefault("MFA_SECRETS_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+    # settings.py requires a Fernet key (#3591, ADR-0267) and the startup check refuses
+    # the all-zero placeholder, so mint a throwaway one; a real .env value wins above.
+    os.environ.setdefault(
+        "MFA_SECRETS_KEY", base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+    )
     if "DJANGO_SETTINGS_MODULE" not in os.environ:
         os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
 

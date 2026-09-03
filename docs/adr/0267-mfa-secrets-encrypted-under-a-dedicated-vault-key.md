@@ -20,7 +20,10 @@ cut that locks out rows written under the key being retired.
 A Django system check (`evennia_extensions.checks.check_mfa_secrets_key`,
 `evennia_extensions.E001`) builds a `Fernet` for every configured key at
 `migrate`/`check` time, failing the converge before a release with a bad key
-goes live. A REQUIRED-tier sentinel probe (`mfa-secrets-key` in
+goes live. It also refuses the all-zero key (32 zero bytes, the lowest-entropy
+string that still parses as Fernet): it is public, so ciphertext under it is
+plaintext in practice. No placeholder key is committed anywhere; CI jobs and the
+pre-commit hooks that import settings mint a throwaway key per process instead. A REQUIRED-tier sentinel probe (`mfa-secrets-key` in
 `web/admin/tuning/required_content.py`) additionally decrypts the oldest
 stored TOTP row on demand, so a key that parses but no longer decrypts real
 data (the wrong key deployed, or a rotation that skipped re-encryption) is
