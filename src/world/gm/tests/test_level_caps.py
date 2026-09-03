@@ -49,6 +49,14 @@ class SeedDefaultGmLevelCapsTest(TestCase):
         assert caps[GMLevel.EXPERIENCED].auto_clear_regional is True
         assert caps[GMLevel.SENIOR].auto_clear_regional is True
 
+    def test_allow_item_rewards_for_experienced_and_senior(self) -> None:
+        caps = seed_default_gm_level_caps()
+
+        for level in (GMLevel.STARTING, GMLevel.JUNIOR, GMLevel.GM):
+            assert caps[level].allow_item_rewards is False
+        assert caps[GMLevel.EXPERIENCED].allow_item_rewards is True
+        assert caps[GMLevel.SENIOR].allow_item_rewards is True
+
     def test_idempotent(self) -> None:
         first = seed_default_gm_level_caps()
         first_pks = {level: cap.pk for level, cap in first.items()}

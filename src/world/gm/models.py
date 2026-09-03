@@ -406,6 +406,10 @@ class GMLevelCap(SharedMemoryModel):
             "Concurrent Story NPCs (active NPC-shelf tenures) a GM at this level may hold (#3426)."
         ),
     )
+    allow_item_rewards = models.BooleanField(
+        default=False,
+        help_text="May author ITEM stake reward lines (minting an item is world state) (#3566).",
+    )
 
     class Meta:
         verbose_name = "GM Level Cap"
