@@ -308,5 +308,6 @@ treat those names as hints to confirm, not gospel.
 - [0098 — Custody is story-declared narrative-structure protection, distinct from player boundaries](0098-custody-is-story-structure-distinct-from-boundaries.md)
 - [0099 — Custody clearance requests are identity-based, not protected_subject-pk-based](0099-custody-clearance-requests-are-identity-based.md) (supersedes the pk-only Task 6 first pass)
 - [0259 - Stake branches are chosen by authored key, never by a GM pick](0259-stake-branches-are-chosen-by-authored-key.md) (#3561; supersedes the PR2 constrained-pick decision recorded in stakes.md; extends ADR-0067, ADR-0078; related ADR-0257)
-- [0260 - The routing report is advisory and open-world](0260-routing-report-is-advisory-and-open-world.md) (#3563; extends ADR-0258; related ADR-0259)
+- [0260 - request.user is the Account typeclass; account data caches on the Account, request data goes through middleware](0260-request-user-is-the-account-typeclass.md) (Sentry ARX2-7/ARX2-8; extends ADR-0241)
+- [0261 - The routing report is advisory and open-world](0261-routing-report-is-advisory-and-open-world.md) (#3563; extends ADR-0258; related ADR-0259)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

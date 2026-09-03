@@ -58,12 +58,21 @@ export function useFeaturedCodexEntries() {
   });
 }
 
-export function useCodexEntry(id: number, characterId?: number) {
+/**
+ * `throwOnError` defaults to the app-wide convention (route error boundary).
+ * An overlay such as `CodexModal` passes `false` so a missing or hidden entry
+ * is reported inside the dialog instead of replacing the page behind it.
+ */
+export function useCodexEntry(
+  id: number,
+  characterId?: number,
+  options: { throwOnError?: boolean } = {}
+) {
   return useQuery({
     queryKey: codexKeys.entry(id, characterId),
     queryFn: () => getEntry(id, characterId),
     enabled: id > 0,
-    throwOnError: true,
+    throwOnError: options.throwOnError ?? true,
   });
 }
 

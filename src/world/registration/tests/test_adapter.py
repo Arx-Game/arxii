@@ -87,3 +87,22 @@ class IsOpenForSignupTests(TestCase):
         first_read = request.body
         self.assertTrue(self.adapter.is_open_for_signup(request))
         self.assertEqual(first_read, request.body)
+
+
+class NewUserTypeclassTests(TestCase):
+    """Sentry ARX2-8: allauth's default ``new_user`` is ``get_user_model()()``.
+
+    That is the base ``AccountDB``; Evennia pins ``db_typeclass_path`` to the
+    class it was instantiated as, so every web-signup account stayed on ``AccountDB``
+    forever and lacked the ``Account`` typeclass (no ``puppet``, no
+    ``get_available_characters``, no ``cached_primary_persona_ids``).
+    """
+
+    def test_new_user_is_the_configured_account_typeclass(self):
+        from django.conf import settings
+        from evennia.utils.utils import class_from_module
+
+        user = ArxAccountAdapter().new_user(_json_post_request({}))
+
+        self.assertIsInstance(user, class_from_module(settings.BASE_ACCOUNT_TYPECLASS))
+        self.assertEqual(user.db_typeclass_path, settings.BASE_ACCOUNT_TYPECLASS)

@@ -65,7 +65,7 @@ class MissionInviteEndpointTests(TestCase):
         self.account = AccountFactory()
         self.client = APIClient()
         self.client.force_authenticate(self.account)
-        self._patch = mock.patch("world.missions.views._puppet_character", return_value=self.holder)
+        self._patch = mock.patch("world.missions.views._acting_character", return_value=self.holder)
         self._patch.start()
         self.addCleanup(self._patch.stop)
 
@@ -86,7 +86,7 @@ class MissionInviteEndpointTests(TestCase):
         """A non-participant gets 404 (existence must not leak)."""
         outsider = CharacterFactory()
         CharacterSheetFactory(character=outsider)
-        with mock.patch("world.missions.views._puppet_character", return_value=outsider):
+        with mock.patch("world.missions.views._acting_character", return_value=outsider):
             res = self.client.post(
                 f"/api/missions/journal/{self.instance.pk}/invite/",
                 {"invitee_character_id": self.invitee.pk},
@@ -111,7 +111,7 @@ class MissionInviteEndpointTests(TestCase):
         )
         invite_id = res.json()["invite_id"]
 
-        with mock.patch("world.missions.views._puppet_character", return_value=self.invitee):
+        with mock.patch("world.missions.views._acting_character", return_value=self.invitee):
             res = self.client.post(
                 "/api/missions/journal/respond/",
                 {"invite_id": invite_id, "response": "accept"},
@@ -134,7 +134,7 @@ class MissionInviteEndpointTests(TestCase):
         )
         invite_id = res.json()["invite_id"]
 
-        with mock.patch("world.missions.views._puppet_character", return_value=self.invitee):
+        with mock.patch("world.missions.views._acting_character", return_value=self.invitee):
             res = self.client.post(
                 "/api/missions/journal/respond/",
                 {"invite_id": invite_id, "response": "decline"},
@@ -161,7 +161,7 @@ class MissionInviteEndpointTests(TestCase):
             {"invitee_character_id": self.invitee.pk},
             format="json",
         )
-        with mock.patch("world.missions.views._puppet_character", return_value=self.invitee):
+        with mock.patch("world.missions.views._acting_character", return_value=self.invitee):
             journal = self.client.get("/api/missions/journal/")
             invites = self.client.get("/api/missions/journal/pending-invites/")
         self.assertEqual(journal.json()["results"], [])  # no participations
@@ -181,7 +181,7 @@ class MissionInviteEndpointTests(TestCase):
             format="json",
         )
         invite_id = MissionInvite.objects.get(target_persona=third.sheet_data.primary_persona).pk
-        with mock.patch("world.missions.views._puppet_character", return_value=self.invitee):
+        with mock.patch("world.missions.views._acting_character", return_value=self.invitee):
             res = self.client.post(
                 "/api/missions/journal/respond/",
                 {"invite_id": invite_id, "response": "accept"},

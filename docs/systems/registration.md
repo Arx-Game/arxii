@@ -93,6 +93,19 @@ fallback, closed by default.
 
 ## The adapter seam
 
+`ArxAccountAdapter.new_user(request)` returns an instance of
+`settings.BASE_ACCOUNT_TYPECLASS`, never allauth's default `get_user_model()()`.
+Evennia pins `db_typeclass_path` to the class an instance was built as, so the row says
+`evennia.accounts.models.AccountDB` (the base model, not `typeclasses.accounts.Account`),
+loads as that on every later load, and lacks the whole `Account` typeclass
+(`puppet`, `get_available_characters`, the persona cache). That was Sentry ARX2-8
+(2026-09-02): the first outside player's account, made by signup, 500'd on every
+events list. The signup journey test proves the row shape end to end. Rows from
+before the fix, and
+any Django `createsuperuser` makes, are repointed by hand; the ops dashboard's
+required-content panel names them (`typeclassed-accounts`). No data migration: a
+handful of pre-launch rows is a shell one-liner, not schema history. See ADR-0261.
+
 `ArxAccountAdapter.is_open_for_signup(request)` (`src/evennia_extensions/adapters.py`)
 is the allauth hook this gate hangs on. It was previously unoverridden — the
 standard hook allauth's headless `SignupView.post` already calls before doing
