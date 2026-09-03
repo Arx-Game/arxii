@@ -184,6 +184,30 @@ applied values land as the same real `CharacterTraitValue`/
   system already protects story assets; revisit if multiple GMs start
   running recurring casts that would benefit from sharing presets.
 
+## Regard feeds beats (#3570)
+
+`Beat.predicate_type=NPC_REGARD_AT_LEAST` gates a beat on a named NPC's regard
+for the character: `Beat.required_npc_sheet` (the NPC) plus `required_standing`
+(-1000..1000, the same field `FACTION_STANDING_AT_LEAST` uses). The evaluator
+(`_evaluate_npc_regard_at_least`, `world.stories.services.beats`) reads
+`NpcRegard` from the NPC's primary persona toward the character's primary
+persona (`target_type=PERSONA`, `ended_at` null) - a missing row counts as 0,
+never a `FAILURE`. It never reads `NPCStanding.affection` (the functionary
+disposition track `adjust_npc_affection` writes) or the relationships
+affection track - `NpcRegard` is a separate memory (see the opening
+paragraph's "regard" mention above, ADR-0085).
+
+`record_npc_regard_event` (`world.npc_services.regard`) - the single write
+seam for every buildup path (combat auto-hooks, the `SHIFT_NPC_REGARD` pool
+effect, a stake's `npc_regard_delta`, GM manual adjustment, distinction
+seeding) - calls `on_character_state_changed(target.character_sheet)` inside
+its own transaction, right after the relationships-track mirror call. A
+regard-gated beat can flip in the same request that moved the regard, instead
+of waiting for the character's next login (`catch_up_character_stories`
+remains the offline safety net). `bump_society_reputation`/
+`bump_organization_reputation` (`world.societies.renown`) gained the same call
+so a `FACTION_STANDING_AT_LEAST` beat flips just as promptly.
+
 ## Deliberately not here
 
 Tier-0 *consumers* (mob formation, stealth publicness, venue economics) are

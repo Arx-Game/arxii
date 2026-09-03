@@ -9388,6 +9388,7 @@
   - referenced_episode -> stories.Episode [FK] (nullable)
   - required_society -> societies.Society [FK] (nullable)
   - required_organization -> societies.Organization [FK] (nullable)
+  - required_npc_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - required_mission -> missions.MissionTemplate [FK] (nullable)
   - success_consequences -> actions.ConsequencePool [FK] (nullable)
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)

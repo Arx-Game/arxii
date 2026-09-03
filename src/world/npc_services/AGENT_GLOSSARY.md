@@ -54,6 +54,14 @@ favor, negative is hostility — there is no separate "enemy" model. Holder is
 always a notable NPC's `Persona` (v1; org/society-as-holder is a future
 extension of the same discriminator, not built). Deliberately separate from
 `NPCStanding` — see that entry's cross-reference and ADR-0085.
+
+A Beat can gate on it directly (#3570): `BeatPredicateType.NPC_REGARD_AT_LEAST`
+reads the `NpcRegard` row from the named NPC's primary persona toward the
+character's primary persona, never `NPCStanding.affection`.
+`record_npc_regard_event` calls
+`stories.services.reactivity.on_character_state_changed` inside its own
+transaction after every write, so a regard-gated beat can flip in the same
+request the regard moved in, not at the character's next login.
 _Avoid: "NpcEnmity" (collides with the dead `ThreadAxis.ENMITY`), "grudge" as a
 model name (implies negative-only; fine as informal narration of a strongly
 negative row)._
