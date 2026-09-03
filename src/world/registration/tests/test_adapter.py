@@ -133,3 +133,11 @@ class ClientIpTests(SimpleTestCase):
     def test_plain_remote_addr(self):
         request = self.factory.get("/", REMOTE_ADDR="192.0.2.4")
         self.assertEqual(self.adapter.get_client_ip(request), "192.0.2.4")
+
+    def test_garbage_x_real_ip_falls_back_to_parent(self):
+        request = self.factory.get("/", HTTP_X_REAL_IP="not-an-ip", REMOTE_ADDR="192.0.2.4")
+        self.assertEqual(self.adapter.get_client_ip(request), "192.0.2.4")
+
+    def test_x_real_ip_is_canonicalised(self):
+        request = self.factory.get("/", HTTP_X_REAL_IP="2001:DB8::1", REMOTE_ADDR="127.0.0.1")
+        self.assertEqual(self.adapter.get_client_ip(request), "2001:db8::1")
