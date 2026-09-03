@@ -73,9 +73,9 @@ class ClueSearchView(APIView):
     permission_classes = [IsAuthenticated, IsGMOrStaff]
 
     def get(self, request: Request) -> Response:
-        # A FilterSet only narrows the queryset, but this view's second pass
-        # (clue_target_kind_allowed) is a per-row Python permission check, not a
-        # queryset filter, so a FilterSet class would still need this same
+        # The allowed target kinds come from the viewer's authoring policy
+        # (clue_target_kind_allowed), a per-request computation a FilterSet has
+        # no access to, so a FilterSet class would still need this same
         # request.query_params reach-in; one ad hoc `q` param isn't worth the split.
         q = request.query_params.get("q", "")  # noqa: USE_FILTERSET
         # Apply the per-account target-kind policy to the queryset itself, before the
