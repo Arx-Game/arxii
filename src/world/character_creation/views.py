@@ -525,10 +525,13 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
     def _resolve_options(self) -> TechniqueOptions | None:
-        """Resolve pool/tradition techniques for ``?draft_id=&gift_id=``, cached per request."""
-        if hasattr(self, "_cg_technique_options"):
-            return self._cg_technique_options
+        """Resolve pool/tradition techniques for ``?draft_id=&gift_id=``.
 
+        Recomputed by each caller rather than cached on the ViewSet: state does not
+        live on views (ADR-0260). ``get_queryset()`` and ``get_serializer_context()``
+        therefore resolve once each per request, which costs one extra pass over a
+        small authored catalog on the one request that opens the technique picker.
+        """
         request = _view_request(self)
         raw_draft_id = None
         raw_gift_id = None
@@ -551,7 +554,6 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
                         draft.selected_path, gift, draft.selected_tradition
                     )
 
-        self._cg_technique_options = options
         return options
 
     def get_queryset(self) -> QuerySet[Technique]:
