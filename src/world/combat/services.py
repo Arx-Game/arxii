@@ -9241,8 +9241,9 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
     that interaction, before ephemeral-NPC cleanup) → counters → completion
-    event → cleanup. ABANDONED is administrative closure: skips aftermath and
-    counters but still narrates, emits, and cleans up.
+    event → cleanup → acute-peril scene-round hand-off → aftermath digest
+    (#3551). ABANDONED is administrative closure: skips aftermath and counters
+    but still narrates, emits, cleans up, and delivers the aftermath digest.
 
     Atomic so a bare caller (the GM end endpoint) cannot strand a COMPLETED
     flip with the aftermath/cleanup tail skipped — the double-completion guard
@@ -9271,6 +9272,10 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     cleanup_completed_encounter(encounter)
     _hand_off_acute_peril_to_scene_round(encounter)
 
+    from world.combat.aftermath import deliver_aftermath_digests  # noqa: PLC0415
+
+    deliver_aftermath_digests(encounter)
+
 
 def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     """After combat ends, ensure any participant still Bleeding-Out or Plummeting is
@@ -9280,13 +9285,9 @@ def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     - Only PC participants (``CombatParticipant``), never NPC opponents.
     - Skip characters who are somehow still in another active encounter (paranoid guard).
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.combat.aftermath import has_acute_peril  # noqa: PLC0415
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
-
-    acute_condition_names = [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter).select_related(
@@ -9295,12 +9296,7 @@ def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     )
     for participant in participants:
         sheet = participant.character_sheet
-        character = sheet.character
-        has_acute = ConditionInstance.objects.filter(
-            target=character,
-            condition__name__in=acute_condition_names,
-        ).exists()
-        if not has_acute:
+        if not has_acute_peril(sheet):
             continue
         # Paranoid guard: skip if the character is already in another active encounter.
         if resolve_combat_round_context(sheet) is not None:

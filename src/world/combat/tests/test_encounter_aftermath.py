@@ -58,7 +58,7 @@ from world.magic.factories import (
 )
 from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.factories import RosterTenureFactory, grant_test_tenure
-from world.scenes.constants import InteractionMode, RoundStatus
+from world.scenes.constants import InteractionMode, InteractionVisibility, RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
 from world.traits.factories import CheckOutcomeFactory
@@ -148,7 +148,16 @@ class _CompletionSeamTestBase(TestCase):
         )
 
     def _outcome_interaction_qs(self, encounter: CombatEncounter):
-        return Interaction.objects.filter(scene=encounter.scene, mode=InteractionMode.OUTCOME)
+        """The room-wide ceremonial OUTCOME line only (#3551 added private,
+
+        PERCEIVED_ONLY per-participant aftermath-digest OUTCOME interactions
+        alongside it, so this narrows back to the one every pre-#3551 test expects).
+        """
+        return Interaction.objects.filter(
+            scene=encounter.scene,
+            mode=InteractionMode.OUTCOME,
+            visibility=InteractionVisibility.DEFAULT,
+        )
 
 
 class ClassifyEncounterOutcomeTests(_CompletionSeamTestBase):
