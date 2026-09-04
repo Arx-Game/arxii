@@ -1,5 +1,6 @@
 /**
- * MarkingsEditor (#2985) — CG appearance-stage authoring for body markings.
+ * MarkingsEditor (#2985, folio #3630) — CG appearance-stage authoring for body
+ * markings.
  *
  * Tattoos, scars, brands, birthmarks, runes: each a row on the draft
  * (`/api/character-creation/draft-markings/`), materialized onto the
@@ -8,17 +9,6 @@
  * draft PATCH, since rows are structured records, not draft_data blobs.
  */
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
@@ -27,6 +17,7 @@ import {
   listDraftMarkings,
   type DraftMarkingCreate,
 } from '../api';
+import { ChoiceRow, Entry, EntryList, Field } from '../folio';
 
 const MARKING_KINDS = [
   { value: 'tattoo', label: 'Tattoo' },
@@ -62,7 +53,15 @@ const EMPTY_FORM: DraftMarkingCreate = {
 
 const MARKINGS_QUERY_KEY = ['draft-markings'] as const;
 
-export function MarkingsEditor() {
+interface MarkingsEditorProps {
+  /**
+   * Accepted for interface parity with the stage; the draft-markings
+   * endpoints scope to the session's active draft server-side already.
+   */
+  draftId?: number;
+}
+
+export function MarkingsEditor({ draftId: _draftId }: MarkingsEditorProps) {
   const queryClient = useQueryClient();
   const { data: markings = [] } = useQuery({
     queryKey: MARKINGS_QUERY_KEY,
@@ -88,112 +87,73 @@ export function MarkingsEditor() {
   const kindLabel = (value: string) => MARKING_KINDS.find((k) => k.value === value)?.label ?? value;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold">Markings</h3>
-        <p className="text-sm text-muted-foreground">
-          Tattoos, scars, brands, birthmarks — what your character&apos;s skin remembers. Clothing
-          conceals a marking at the regions it covers; revealing garments and the in-game reveal
-          bare it. Optional.
-        </p>
-      </div>
-
+    <>
       {markings.length > 0 && (
-        <ul className="space-y-2">
+        <EntryList label="Markings">
           {markings.map((marking) => (
-            <li
+            <Entry
               key={marking.id}
-              className="flex items-start justify-between gap-2 rounded-md border p-3"
+              name={marking.name}
+              tag={`${kindLabel(marking.kind)} · ${regionLabel(marking.body_region)}`}
+              chosen={false}
+              open
             >
-              <div className="min-w-0">
-                <div className="text-sm font-medium">
-                  {marking.name}
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {kindLabel(marking.kind)} · {regionLabel(marking.body_region)}
-                  </span>
-                </div>
-                {marking.description && (
-                  <p className="mt-1 text-xs text-muted-foreground">{marking.description}</p>
-                )}
+              <p>{marking.description}</p>
+              <div className="entry-act">
+                <button
+                  type="button"
+                  className="btn-quiet"
+                  onClick={() => removeMutation.mutate(marking.id)}
+                  disabled={removeMutation.isPending}
+                >
+                  Remove
+                </button>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => removeMutation.mutate(marking.id)}
-                disabled={removeMutation.isPending}
-              >
-                Remove
-              </Button>
-            </li>
+            </Entry>
           ))}
-        </ul>
+        </EntryList>
       )}
 
-      <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor="marking-kind">Kind</Label>
-          <Select value={form.kind} onValueChange={(kind) => setForm((f) => ({ ...f, kind }))}>
-            <SelectTrigger id="marking-kind">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MARKING_KINDS.map((kind) => (
-                <SelectItem key={kind.value} value={kind.value}>
-                  {kind.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="marking-region">Where</Label>
-          <Select
-            value={form.body_region}
-            onValueChange={(body_region) => setForm((f) => ({ ...f, body_region }))}
-          >
-            <SelectTrigger id="marking-region">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {BODY_REGIONS.map((region) => (
-                <SelectItem key={region.value} value={region.value}>
-                  {region.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor="marking-name">Name</Label>
-          <Input
-            id="marking-name"
-            value={form.name}
-            maxLength={100}
-            placeholder="a coiled serpent tattoo"
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-        </div>
-        <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor="marking-description">Description (shown on close inspection)</Label>
-          <Textarea
-            id="marking-description"
-            value={form.description}
-            rows={2}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={!form.name.trim() || addMutation.isPending}
-            onClick={() => addMutation.mutate({ ...form, name: form.name.trim() })}
-          >
-            Add marking
-          </Button>
-        </div>
-      </div>
-    </div>
+      <h3 className="section-h">Add a marking</h3>
+      <Field id="mk-name" label="Name">
+        <input
+          id="mk-name"
+          type="text"
+          value={form.name}
+          maxLength={100}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+        />
+      </Field>
+      <ChoiceRow
+        label="Kind"
+        options={MARKING_KINDS}
+        value={form.kind}
+        onChange={(kind) => kind && setForm((f) => ({ ...f, kind }))}
+      />
+      <ChoiceRow
+        label="Region"
+        options={BODY_REGIONS}
+        value={form.body_region}
+        onChange={(body_region) => body_region && setForm((f) => ({ ...f, body_region }))}
+      />
+      <Field id="mk-desc" label="Description">
+        <textarea
+          id="mk-desc"
+          rows={2}
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+        />
+      </Field>
+      <p className="ledger-line">
+        <button
+          type="button"
+          className="btn-small"
+          disabled={!form.name.trim() || addMutation.isPending}
+          onClick={() => addMutation.mutate({ ...form, name: form.name.trim() })}
+        >
+          Add marking
+        </button>
+      </p>
+    </>
   );
 }
