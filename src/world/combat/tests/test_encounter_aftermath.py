@@ -61,6 +61,8 @@ from world.roster.factories import RosterTenureFactory, grant_test_tenure
 from world.scenes.constants import InteractionMode, InteractionVisibility, RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
+from world.stories.constants import BeatPredicateType, BeatVisibility
+from world.stories.factories import BeatCompletionFactory, BeatFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -649,3 +651,128 @@ class EndEncounterApiTests(TestCase):
         item = results[0]
         self.assertIn("outcome", item)
         self.assertIn("completed_at", item)
+
+
+class AftermathSerializerTests(_CompletionSeamTestBase):
+    """Tests for ParticipantSerializer.aftermath (#3551 Task 2)."""
+
+    def setUp(self) -> None:
+        self.owner_account = AccountFactory(username="aftermath_ser_owner")
+        self.owner_character = CharacterFactory(db_key="aftermath_ser_owner_char")
+        self.owner_sheet = CharacterSheetFactory(character=self.owner_character)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=self.owner_character,
+            player_data__account=self.owner_account,
+        )
+        CharacterVitals.objects.create(character_sheet=self.owner_sheet, health=100, max_health=100)
+
+        self.other_account = AccountFactory(username="aftermath_ser_other")
+        self.other_character = CharacterFactory(db_key="aftermath_ser_other_char")
+        self.other_sheet = CharacterSheetFactory(character=self.other_character)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=self.other_character,
+            player_data__account=self.other_account,
+        )
+        CharacterVitals.objects.create(character_sheet=self.other_sheet, health=100, max_health=100)
+
+        self.staff_account = AccountFactory(username="aftermath_ser_staff", is_staff=True)
+
+        self.encounter = self._make_encounter()
+        self.owner_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.owner_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.other_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.other_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+    def _get_detail(self, account: object) -> dict:
+        client = APIClient()
+        client.force_authenticate(user=account)
+        response = client.get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        return response.data
+
+    def test_live_encounter_aftermath_is_none_for_every_participant(self) -> None:
+        """A non-COMPLETED encounter never exposes an aftermath dict."""
+        data = self._get_detail(self.owner_account)
+        self.assertEqual(len(data["participants"]), 2)
+        for row in data["participants"]:
+            self.assertIsNone(row["aftermath"])
+
+    def test_completed_owner_row_has_digest_other_row_is_none(self) -> None:
+        """Owner sees their own aftermath dict; another player's row is None for them."""
+        tier = CheckOutcomeFactory(name="AftermathSerializerTier", success_level=-1)
+        consequence = ConsequenceFactory(outcome_tier=tier, character_loss=False)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        rule = EncounterAftermathRuleFactory(
+            outcome=EncounterOutcome.DEFEAT,
+            risk_level=self.encounter.risk_level,
+            consequence_pool=pool,
+        )
+        forced = CheckResult(
+            check_type=rule.check_type,
+            outcome=tier,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        with patch(
+            "world.checks.consequence_resolution.perform_check",
+            return_value=forced,
+        ):
+            complete_encounter(self.encounter, outcome=EncounterOutcome.DEFEAT)
+
+        data = self._get_detail(self.owner_account)
+        rows = {row["id"]: row for row in data["participants"]}
+
+        owner_row = rows[self.owner_participant.pk]
+        aftermath = owner_row["aftermath"]
+        self.assertIsNotNone(aftermath)
+        self.assertIn("outcome", aftermath)
+        self.assertIn("conditions", aftermath)
+        self.assertIn("legend", aftermath)
+        self.assertIn("peril_round_active", aftermath)
+        self.assertIsNotNone(aftermath["consequence"])
+
+        other_row = rows[self.other_participant.pk]
+        self.assertIsNone(other_row["aftermath"])
+
+    def test_secret_beat_hidden_from_owner_visible_to_staff(self) -> None:
+        """A SECRET beat's completion is withheld from the owning player but shown to staff."""
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.OUTCOME_TIER, visibility=BeatVisibility.SECRET
+        )
+        self.encounter.story_beat = beat
+        self.encounter.save(update_fields=["story_beat"])
+
+        complete_encounter(self.encounter, outcome=EncounterOutcome.VICTORY)
+        self.encounter.refresh_from_db()
+
+        BeatCompletionFactory(
+            beat=beat,
+            character_sheet=self.owner_sheet,
+            outcome_tier=CheckOutcomeFactory(),
+        )
+
+        owner_data = self._get_detail(self.owner_account)
+        owner_row = next(
+            row for row in owner_data["participants"] if row["id"] == self.owner_participant.pk
+        )
+        self.assertIsNone(owner_row["aftermath"]["beat"])
+
+        staff_data = self._get_detail(self.staff_account)
+        staff_row = next(
+            row for row in staff_data["participants"] if row["id"] == self.owner_participant.pk
+        )
+        self.assertIsNotNone(staff_row["aftermath"]["beat"])
+        self.assertIn("outcome", staff_row["aftermath"]["beat"])
+        self.assertIn("resolution_text", staff_row["aftermath"]["beat"])

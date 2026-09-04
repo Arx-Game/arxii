@@ -288,3 +288,18 @@ class RenderAftermathDigestTests(TestCase):
         text = render_aftermath_digest(digest, include_secret_beat=False)
         self.assertEqual(text, "Aftermath: Victory.")
         self.assertEqual(len(text.splitlines()), 1)
+
+    def test_render_legend_line_format(self) -> None:
+        """A legend entry renders the exact line the aftermath review noted (#3551)."""
+        entry = LegendEntryFactory(title="Slew the Gravewight", base_value=7)
+        digest = AftermathDigest(
+            outcome=EncounterOutcome.VICTORY,
+            consequence=None,
+            conditions=[],
+            legend_entries=[entry],
+            beat_completion=None,
+            beat_visible_to_player=False,
+            peril_round_active=False,
+        )
+        text = render_aftermath_digest(digest, include_secret_beat=False)
+        self.assertIn("Deed remembered: Slew the Gravewight (+7 legend).", text)

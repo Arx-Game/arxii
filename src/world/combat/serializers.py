@@ -16,6 +16,7 @@ from world.areas.positioning.serializers import (
     PositionNodeSerializer,
     PositionSummarySerializer,
 )
+from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
     SIGNIFICANT_NPC_TIERS,
@@ -46,7 +47,7 @@ from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
-from world.scenes.constants import PersonaType
+from world.scenes.constants import PersonaType, RoundStatus
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -236,6 +237,36 @@ class OpponentSerializer(serializers.ModelSerializer):
         return None
 
 
+class AftermathLegendSerializer(serializers.Serializer):
+    """Schema-only shape of one legend line in an aftermath digest (#3551)."""
+
+    title = serializers.CharField()
+    description = serializers.CharField()
+    base_value = serializers.IntegerField()
+
+
+class AftermathBeatSerializer(serializers.Serializer):
+    """Schema-only shape of the beat line in an aftermath digest (#3551)."""
+
+    outcome = serializers.CharField()
+    tier_name = serializers.CharField(allow_null=True)
+    resolution_text = serializers.CharField()
+
+
+class AftermathDigestSerializer(serializers.Serializer):
+    """Schema-only shape of ParticipantSerializer.aftermath (#3551).
+
+    Never instantiated for output.
+    """
+
+    outcome = serializers.CharField()
+    consequence = ConsequenceOutcomeSerializer(allow_null=True)
+    conditions = ConditionInstanceSerializer(many=True)
+    legend = AftermathLegendSerializer(many=True)
+    beat = AftermathBeatSerializer(allow_null=True)
+    peril_round_active = serializers.BooleanField()
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -260,6 +291,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
+    aftermath = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -280,6 +312,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "intensity_modifier",
             "control_modifier",
             "current_position",
+            "aftermath",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -506,6 +539,60 @@ class ParticipantSerializer(serializers.ModelSerializer):
         # context-over-cache a cached_property.
         cached_conditions = getattr(character, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
         return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
+
+    @extend_schema_field(AftermathDigestSerializer(allow_null=True))
+    def get_aftermath(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """What the fight changed for this participant (#3551).
+
+        Only on a COMPLETED encounter, only for the owner, scene GM, or staff;
+        None otherwise.
+        """
+        encounter = obj.encounter
+        if encounter.status != RoundStatus.COMPLETED or encounter.completed_at is None:
+            return None
+        if not self._can_view_vitals(obj):
+            return None
+
+        from world.combat.aftermath import build_aftermath_digest  # noqa: PLC0415
+
+        digest = build_aftermath_digest(encounter, obj)
+
+        request = self.context.get("request")
+        is_gm_or_staff = (request is not None and request.user.is_staff) or self.context.get(
+            "is_gm", False
+        )
+        beat = None
+        if digest.beat_completion is not None and (digest.beat_visible_to_player or is_gm_or_staff):
+            completion = digest.beat_completion
+            beat = {
+                "outcome": completion.outcome,
+                "tier_name": completion.outcome_tier.name if completion.outcome_tier_id else None,
+                "resolution_text": completion.beat.player_resolution_text,
+            }
+
+        consequence = None
+        if digest.consequence is not None:
+            consequence = ConsequenceOutcomeSerializer(
+                digest.consequence, context=self.context
+            ).data
+
+        return {
+            "outcome": digest.outcome,
+            "consequence": consequence,
+            "conditions": ConditionInstanceSerializer(
+                digest.conditions, many=True, context=self.context
+            ).data,
+            "legend": [
+                {
+                    "title": entry.title,
+                    "description": entry.description,
+                    "base_value": entry.base_value,
+                }
+                for entry in digest.legend_entries
+            ],
+            "beat": beat,
+            "peril_round_active": digest.peril_round_active,
+        }
 
 
 class RoundActionSerializer(serializers.ModelSerializer):
