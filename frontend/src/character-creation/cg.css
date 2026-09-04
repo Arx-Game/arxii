@@ -913,6 +913,11 @@
   appearance: none;
   cursor: pointer;
   max-width: 100%;
+  padding-right: 1.6rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 6l4 4 4-4' fill='none' stroke='currentColor' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.2rem center;
+  background-size: 0.9rem;
 }
 .interview .field textarea {
   border: 1px solid var(--cg-hairline-strong);

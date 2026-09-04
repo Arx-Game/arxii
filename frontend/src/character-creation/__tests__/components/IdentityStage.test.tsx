@@ -58,7 +58,9 @@ describe('IdentityStage', () => {
         queryClient,
       });
 
-      expect(screen.getByText(/full name:/i)).toBeInTheDocument();
+      // The preview moved from an inline "Full name:" paragraph to the record
+      // rail's "Name" row (#3630); the rail lists chosen values only.
+      expect(screen.getByText('Name', { selector: 'dt' })).toBeInTheDocument();
       expect(screen.getByText('Testchar Valardin')).toBeInTheDocument();
     });
 
@@ -184,6 +186,28 @@ describe('IdentityStage', () => {
 
       expect(screen.getByText('Identity')).toBeInTheDocument();
       expect(screen.getByText(/define your character.*s name and story/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Folio markup', () => {
+    it('renders the five writing fields on the field idiom and the name in the rail', () => {
+      const queryClient = createTestQueryClient();
+      const draft = createMockDraft({ draft_data: { first_name: 'Sharlotte' } });
+
+      renderWithCharacterCreationProviders(<IdentityStage draft={draft} />, { queryClient });
+
+      // Labels match the existing (pre-folio) tests above, not the brief's
+      // illustrative shorthand — those are what this file's other blocks query.
+      for (const label of [
+        'First Name',
+        'Character Concept',
+        'Character Quote',
+        'Personality Traits',
+      ]) {
+        expect(screen.getByLabelText(label).closest('.field')).not.toBeNull();
+      }
+      expect(screen.getByRole('heading', { name: 'Your choices so far' })).toBeInTheDocument();
+      expect(screen.getByText('Sharlotte')).toBeInTheDocument();
     });
   });
 });
