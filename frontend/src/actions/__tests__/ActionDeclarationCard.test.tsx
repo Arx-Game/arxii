@@ -736,6 +736,46 @@ describe('ActionDeclarationCard — #1001a combatant target picker', () => {
     );
   });
 
+  it('shows the hop distance on a target disabled by reach (#3555)', () => {
+    const adjacency = [
+      { position_id: 1, adjacent_position_ids: [2] },
+      { position_id: 2, adjacent_position_ids: [1, 3] },
+      { position_id: 3, adjacent_position_ids: [2] },
+      { position_id: 9, adjacent_position_ids: [] },
+    ];
+    render(
+      <ActionDeclarationCard
+        characterId={1}
+        characterSheetId={1}
+        actionContext={emptyContext()}
+        onContextChange={() => {}}
+        targets={[
+          { id: 7, kind: 'opponent', name: 'Bandit Captain', positionId: 3 },
+          { id: 8, kind: 'opponent', name: 'Bandit Archer', positionId: 9 },
+          { id: 9, kind: 'ally', name: 'Sir Alaric', positionId: 1 },
+        ]}
+        reach="same"
+        actorPositionId={1}
+        positionAdjacency={adjacency}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const captain = screen.getByRole('button', { name: /Bandit Captain/ });
+    expect(captain).toBeDisabled();
+    expect(captain).toHaveAttribute('title', 'Out of reach for this technique (2 positions away)');
+    expect(captain).toHaveTextContent('2 positions away');
+
+    const archer = screen.getByRole('button', { name: /Bandit Archer/ });
+    expect(archer).toBeDisabled();
+    expect(archer).toHaveAttribute('title', 'Out of reach for this technique (no path)');
+    expect(archer).not.toHaveTextContent('away');
+
+    const alaric = screen.getByRole('button', { name: /Sir Alaric/ });
+    expect(alaric).toBeEnabled();
+    expect(alaric).not.toHaveAttribute('title');
+  });
+
   it('clears the selected target', async () => {
     const onContextChange = vi.fn();
     render(

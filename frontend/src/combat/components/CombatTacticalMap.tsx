@@ -14,10 +14,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { isDispatchFailure } from '../types';
+import type { EncounterDetail, RoundActionTyped } from '../types';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
-import type { OccupantSummary } from '@/areas/components/PositionMapNode';
+import type { OccupantLink } from '@/areas/components/TacticalMap';
+import type { OccupantMark, OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import type { PositionTargetShape } from '@/actions/types';
 
@@ -38,6 +40,66 @@ export interface CombatTacticalMapProps {
    * presence-gated `onPickPosition` handoff below.
    */
   onPickPosition?: (positionId: number) => boolean;
+}
+
+/**
+ * Per-combatant status marks the encounter already knows (#3555), keyed by
+ * `p-<participant id>` / `o-<opponent id>`: engagement locks for both sides
+ * of the pair, and the declared cover maneuver for coverer and covered ally.
+ * Cover comes from `current_round_actions`, which the backend already scopes
+ * (own covenant, GM, staff), so this shows exactly what the list shows.
+ */
+function buildOccupantMarks(encounter: EncounterDetail): Map<string, OccupantMark[]> {
+  const marks = new Map<string, OccupantMark[]>();
+  const add = (key: string, mark: OccupantMark) => {
+    marks.set(key, [...(marks.get(key) ?? []), mark]);
+  };
+  const participants = encounter.participants ?? [];
+  const opponents = encounter.opponents ?? [];
+
+  for (const lock of encounter.engagement_locks ?? []) {
+    const pc = participants.find((p) => p.id === lock.participant_id);
+    const npc = opponents.find((o) => o.id === lock.opponent_id);
+    if (!pc || !npc) continue;
+    add(`p-${pc.id}`, { kind: 'locked', title: `${pc.character_name}: locked with ${npc.name}` });
+    add(`o-${npc.id}`, { kind: 'locked', title: `${npc.name}: locked with ${pc.character_name}` });
+  }
+
+  for (const raw of encounter.current_round_actions ?? []) {
+    const action = raw as RoundActionTyped;
+    if (action.maneuver !== 'cover' || action.focused_ally_target == null) continue;
+    const coverer = participants.find((p) => p.id === action.participant);
+    const ally = participants.find((p) => p.id === action.focused_ally_target);
+    if (!coverer || !ally) continue;
+    add(`p-${coverer.id}`, {
+      kind: 'covering',
+      title: `${coverer.character_name}: covering ${ally.character_name}`,
+    });
+    add(`p-${ally.id}`, {
+      kind: 'covered',
+      title: `${ally.character_name}: covered by ${coverer.character_name}`,
+    });
+  }
+  return marks;
+}
+
+/** Engagement locks as position-to-position links for the map overlay (#3555). */
+function buildLockLinks(encounter: EncounterDetail): OccupantLink[] {
+  const participants = encounter.participants ?? [];
+  const opponents = encounter.opponents ?? [];
+  const links: OccupantLink[] = [];
+  for (const lock of encounter.engagement_locks ?? []) {
+    const pc = participants.find((p) => p.id === lock.participant_id);
+    const npc = opponents.find((o) => o.id === lock.opponent_id);
+    if (!pc?.current_position || !npc?.current_position) continue;
+    links.push({
+      id: `lock-${lock.id}`,
+      positionAId: pc.current_position.id,
+      positionBId: npc.current_position.id,
+      label: `${pc.character_name} locked with ${npc.name}`,
+    });
+  }
+  return links;
 }
 
 export function CombatTacticalMap({
@@ -71,30 +133,36 @@ export function CombatTacticalMap({
 
   const occupantsByPosition = useMemo(() => {
     const map = new Map<number, OccupantSummary[]>();
-    for (const participant of encounter?.participants ?? []) {
+    if (!encounter) return map;
+    const marks = buildOccupantMarks(encounter);
+    for (const participant of encounter.participants ?? []) {
       if (participant.current_position) {
         const occupants = map.get(participant.current_position.id) ?? [];
         occupants.push({
           name: participant.character_name,
           thumbnailUrl: participant.thumbnail_url,
           thumbnailMediaUrl: participant.thumbnail_media_url,
+          marks: marks.get(`p-${participant.id}`),
         });
         map.set(participant.current_position.id, occupants);
       }
     }
-    for (const opponent of encounter?.opponents ?? []) {
+    for (const opponent of encounter.opponents ?? []) {
       if (opponent.current_position) {
         const occupants = map.get(opponent.current_position.id) ?? [];
         occupants.push({
           name: opponent.name,
           thumbnailUrl: opponent.thumbnail_url,
           thumbnailMediaUrl: opponent.thumbnail_media_url,
+          marks: marks.get(`o-${opponent.id}`),
         });
         map.set(opponent.current_position.id, occupants);
       }
     }
     return map;
-  }, [encounter?.participants, encounter?.opponents]);
+  }, [encounter]);
+
+  const lockLinks = useMemo(() => (encounter ? buildLockLinks(encounter) : []), [encounter]);
 
   if (!encounter) {
     return (
@@ -159,6 +227,7 @@ export function CombatTacticalMap({
             nodes={encounter.position_nodes ?? []}
             edges={encounter.position_edges ?? []}
             occupantsByPosition={occupantsByPosition}
+            links={lockLinks}
             moveActions={moveActions}
             onDispatchMove={handleDispatchMove}
             onPickPosition={isPositionPickActive ? onPickPosition : undefined}

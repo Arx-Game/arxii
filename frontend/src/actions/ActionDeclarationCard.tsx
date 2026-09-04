@@ -33,7 +33,7 @@ import type {
   TargetOption,
 } from './types';
 import type { PositionAdjacencyItem, PositionNode } from '@/combat/types';
-import { isPositionReachable, isTargetReachable } from '@/combat/reach';
+import { hopDistance, isPositionReachable, isTargetReachable } from '@/combat/reach';
 
 // ---------------------------------------------------------------------------
 // Public props contract
@@ -236,17 +236,33 @@ function TargetKindSelect({
 }
 
 /** One combatant button. */
+/**
+ * Out-of-reach explanation for a disabled target/position (#3555): the hop
+ * count when a path exists, "no path" when the graph does not connect them.
+ * `distance` is `hopDistance`'s result; null means unplaced or unconnected.
+ */
+function outOfReachHint(distance: number | null): { title: string; chip: string | null } {
+  if (distance == null) {
+    return { title: 'Out of reach for this technique (no path)', chip: null };
+  }
+  const away = distance === 1 ? '1 position away' : `${distance} positions away`;
+  return { title: `Out of reach for this technique (${away})`, chip: away };
+}
+
 function TargetButton({
   option,
   selected,
   disabled,
   title,
+  hint,
   onSelect,
 }: {
   option: TargetOption;
   selected: boolean;
   disabled?: boolean;
   title?: string;
+  /** Muted suffix shown after the name, e.g. the hop distance (#3555). */
+  hint?: string | null;
   onSelect: () => void;
 }) {
   return (
@@ -264,6 +280,11 @@ function TargetButton({
       )}
     >
       {option.name}
+      {hint && (
+        <span className="ml-1 font-normal text-muted-foreground" data-testid="reach-distance">
+          {hint}
+        </span>
+      )}
     </button>
   );
 }
@@ -307,13 +328,20 @@ function TargetPicker(props: TargetPickerProps) {
               positionAdjacency ?? []
             );
             const isDisabledByReach = !reachable;
+            // Hop distance (#3555): "two away" and "five away" no longer look the same.
+            const hint = isDisabledByReach
+              ? outOfReachHint(
+                  hopDistance(positionAdjacency ?? [], actorPositionId, option.positionId)
+                )
+              : null;
             return (
               <TargetButton
                 key={`${option.kind}-${option.id}`}
                 option={option}
                 selected={targetKind === option.kind && targetId === option.id}
                 disabled={disabled || isDisabledByReach}
-                title={isDisabledByReach ? 'Out of reach for this technique' : undefined}
+                title={hint?.title}
+                hint={hint?.chip}
                 onSelect={() => onTargetChange(option.kind, option.id)}
               />
             );
@@ -426,13 +454,16 @@ function PositionPicker({
               positionAdjacency ?? []
             );
             const isDisabledByReach = !reachable;
+            const hint = isDisabledByReach
+              ? outOfReachHint(hopDistance(positionAdjacency ?? [], actorPositionId, node.id))
+              : null;
             return (
               <PositionSlotButton
                 key={node.id}
                 node={node}
                 selected={castPosition.destinationId === node.id}
                 disabled={disabled || isDisabledByReach}
-                title={isDisabledByReach ? 'Out of reach for this technique' : undefined}
+                title={hint?.title}
                 onSelect={() => onCastPositionChange({ ...castPosition, destinationId: node.id })}
               />
             );

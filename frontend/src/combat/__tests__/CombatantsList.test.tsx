@@ -659,6 +659,30 @@ describe('CombatantsList', () => {
     expect(within(row).getByTestId('engagement-lock-badge')).toHaveTextContent('Aerande');
   });
 
+  it('renders a "Locked: <opponent name>" badge on the PC row of an active engagement lock', () => {
+    const encounter: EncounterDetail = {
+      ...makeEncounter(
+        [makeParticipant({ id: 1, character_name: 'Aerande' })],
+        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+      ),
+      engagement_locks: [
+        {
+          id: 1,
+          opponent_id: 10,
+          participant_id: 1,
+          status: 'active',
+          initiated_by: 'pc_challenge',
+          started_round: 1,
+        },
+      ],
+    };
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const row = screen.getByTestId('participant-row-1');
+    expect(within(row).getByTestId('engagement-lock-badge')).toHaveTextContent('Mire Knight');
+  });
+
   it('renders no engagement-lock badge when engagement_locks is empty', () => {
     const encounter = makeEncounter(
       [makeParticipant({ id: 1, character_name: 'Aerande' })],
@@ -669,5 +693,7 @@ describe('CombatantsList', () => {
 
     const row = screen.getByTestId('opponent-row-10');
     expect(within(row).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
+    const pcRow = screen.getByTestId('participant-row-1');
+    expect(within(pcRow).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
   });
 });
