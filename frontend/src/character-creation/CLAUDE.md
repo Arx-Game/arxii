@@ -17,7 +17,10 @@ character-creation/
     ├── StartingAreaCard.tsx  # Area selection card with gradient placeholder
     ├── OriginStage.tsx      # Stage 1: Area selection
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
-    ├── LineageStage.tsx     # Stage 3: Family selection
+    ├── LineageStage.tsx     # Stage 3: Upbringing + family selection (#3617); keeps
+    │                        #   InventedParentsCard, HouseFoundingPanel,
+    │                        #   FamilyNamePreview, KinSlotPicker, TarotNamingRitual,
+    │                        #   TarotCardItem, FamilyCard (exported for lineage/)
     ├── DistinctionsStage.tsx # Stage 4: Distinctions
     ├── PathStage.tsx        # Stage 5: Path selection
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
@@ -35,15 +38,22 @@ character-creation/
     ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions, mounted in
     │                        #   HeritageStage's beginning detail panel and
     │                        #   TraditionPicker's tradition detail panel (#3281)
-    └── gift/                # GiftStage funnel steps (#2426 Task 10)
-        ├── TraditionStep.tsx    # Wraps TraditionPicker
-        ├── GiftSelector.tsx     # Gift catalog cards (GET .../gifts/?draft_id=)
-        ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
-        ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
-        └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
-                                 #   binds `@/magic/components/glimpse/GlimpseFlow` to
-                                 #   draft_data glimpse_tag_ids/glimpse_linked_distinction_ids,
-                                 #   prose stays on GiftStage's register('glimpse_story')
+    ├── gift/                # GiftStage funnel steps (#2426 Task 10)
+    │   ├── TraditionStep.tsx    # Wraps TraditionPicker
+    │   ├── GiftSelector.tsx     # Gift catalog cards (GET .../gifts/?draft_id=)
+    │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
+    │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
+    │   └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
+    │                            #   binds `@/magic/components/glimpse/GlimpseFlow` to
+    │                            #   draft_data glimpse_tag_ids/glimpse_linked_distinction_ids,
+    │                            #   prose stays on GiftStage's register('glimpse_story')
+    └── lineage/             # LineageStage subsections (#3617)
+        ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
+        ├── UpbringingPrompts.tsx # Slot prompts scoped to the resolved family path;
+        │                         #   write-in -> draft_data.origin_slots, pick-list ->
+        │                         #   draft_data.origin_choices, priced off influence
+        └── FamilyPathSection.tsx # Path picker (when the Upbringing allows more than
+                                  #   one) plus the claim/name/none path UI
 ```
 
 ## Key Features
@@ -63,7 +73,11 @@ character-creation/
 
 - `GET /api/character-creation/starting-areas/` - List accessible areas
 - `GET /api/character-creation/species/` - List species (filtered)
-- `GET /api/character-creation/families/` - List families (filtered)
+- `GET /api/character-creation/families/?area_id=&kind=` - List families, optionally
+  filtered by area and one or more `FamilyKind` ids (the claimed-path Upbringing's
+  `claimable_kind_ids`, #3617)
+- `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for the
+  chosen Beginning (the Lineage step's picker, #3617)
 - `GET /api/character-creation/can-create/` - Check eligibility
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft

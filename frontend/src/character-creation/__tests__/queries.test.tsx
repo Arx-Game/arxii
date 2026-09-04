@@ -117,7 +117,7 @@ describe('Character Creation Query Hooks', () => {
       });
 
       expect(result.current.data).toEqual(mockFamilies);
-      expect(api.getFamilies).toHaveBeenCalledWith(1);
+      expect(api.getFamilies).toHaveBeenCalledWith(1, []);
     });
 
     it('does not fetch when areaId is undefined', () => {

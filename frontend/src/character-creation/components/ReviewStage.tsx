@@ -53,7 +53,7 @@ import {
   useWithdrawDraft,
 } from '../queries';
 import type { ApplicationStatus, CharacterDraft } from '../types';
-import { Stage, STAGE_LABELS } from '../types';
+import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import { statusLabel, statusVariant, composeFullName } from '../utils';
 
 interface ReviewStageProps {
@@ -93,16 +93,15 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
   const canSubmit = incompleteStages.length === 0;
   const draftData = draft.draft_data;
-  // Both arms of the old ternary here returned '', so family_known never affected
-  // the result. Reduced to what it actually evaluated to; if an unknown family was
-  // meant to read differently, that behaviour was never present to preserve.
-  const familyName = draft.family?.name ?? '';
-  // Unlike familyName above (which feeds composeFullName and must stay blank),
-  // the review row spells out a deliberately-unknown family.
-  const unknownFamily = draft.selected_beginnings?.family_known === false ? 'Unknown' : '';
-  const familyDisplay = draft.draft_data.lineage_is_orphan
-    ? 'Orphan / No Family'
-    : (draft.family?.name ?? unknownFamily);
+  // The path resolved from the chosen Upbringing decides which name feeds the
+  // full-name preview and the Family row (#3617): a named family that hasn't
+  // been saved to a real Family row yet, the claimed family's name, or ''
+  // (spelled out as 'Unknown' below) on the none path.
+  const path = resolveFamilyPath(draft);
+  const familyName =
+    path === 'named' ? (draftData.new_family_name ?? '') : (draft.family?.name ?? '');
+  const familyDisplay = path === 'none' ? 'Unknown' : familyName;
+  const upbringingDisplay = draft.selected_origin_template?.name ?? '';
   const fullName = composeFullName(draftData.first_name, familyName, 'Unnamed Character');
 
   const appStatus = application.data?.status ?? null;
@@ -312,6 +311,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
             <div>
               <h4 className="mb-2 font-semibold">Lineage</h4>
+              <InfoRow label="Upbringing" value={upbringingDisplay} />
               <InfoRow label="Family" value={familyDisplay} />
             </div>
           </section>

@@ -13,6 +13,7 @@ import {
   mockCGExplanations,
   mockCompleteDraft,
   mockIncompleteDraft,
+  mockUpbringingUnknown,
   createMockDraft,
 } from '../fixtures';
 import { mockPlayerAccount, mockStaffAccount } from '../mocks';
@@ -159,20 +160,25 @@ describe('ReviewStage', () => {
       ).toBeInTheDocument();
     });
 
-    it('shows orphan status when applicable', () => {
+    it('shows Unknown for a none-path Upbringing', () => {
       const queryClient = createTestQueryClient();
-      const orphanDraft = createMockDraft({
+      const unknownFamilyDraft = createMockDraft({
         ...mockCompleteDraft,
         family: null,
-        draft_data: { ...mockCompleteDraft.draft_data, lineage_is_orphan: true },
+        selected_origin_template: mockUpbringingUnknown,
+        family_path: 'none',
       });
 
       renderWithCharacterCreationProviders(
-        <ReviewStage draft={orphanDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        <ReviewStage
+          draft={unknownFamilyDraft}
+          isStaff={false}
+          onStageSelect={mockOnStageSelect}
+        />,
         { queryClient }
       );
 
-      expect(screen.getByText('Orphan / No Family')).toBeInTheDocument();
+      expect(screen.getByText('Unknown')).toBeInTheDocument();
     });
   });
 

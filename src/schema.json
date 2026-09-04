@@ -4541,6 +4541,14 @@ paths:
         name: has_open_positions
         schema:
           type: boolean
+      - in: query
+        name: kind
+        schema:
+          type: array
+          items:
+            type: integer
+        explode: true
+        style: form
       tags:
       - character-creation
       security:
@@ -4872,10 +4880,14 @@ paths:
     get:
       operationId: character_creation_origin_templates_list
       description: |-
-        List active origin-story templates for the CG guided flow (#2478).
+        Serialize with one batched ``claimable_kind_ids`` query, not one per row.
 
-        Filter by ``beginning`` to get templates available for a specific beginning.
-        Mirrors ``CGGlimpseTagViewSet``.
+        Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
+        so there is no ``page`` branch to preserve) but materializes the
+        queryset once and passes a template-id -> kind-id grouping into the
+        serializer context (no per-request memo on ``self`` - ADR-0260; the
+        grouping is a plain argument, not state stashed on the view or
+        serializer instance).
       parameters:
       - in: query
         name: beginning
@@ -4898,16 +4910,17 @@ paths:
     get:
       operationId: character_creation_origin_templates_retrieve
       description: |-
-        List active origin-story templates for the CG guided flow (#2478).
+        List active origin-story templates for the CG guided flow (#2478, #3617).
 
         Filter by ``beginning`` to get templates available for a specific beginning.
-        Mirrors ``CGGlimpseTagViewSet``.
+        Trust-gated: staff see every active row, everyone else only rows whose
+        ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
       parameters:
       - in: path
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this Origin Template.
+        description: A unique integer value identifying this Upbringing.
         required: true
       tags:
       - character-creation
@@ -5393,7 +5406,12 @@ paths:
   /api/character-sheets/{id}/set-origin-slot/:
     post:
       operationId: character_sheets_set_origin_slot_create
-      description: Set a character's origin-story slot answer (#2478).
+      description: |-
+        Set a character's origin-story slot answer (#2478, #3617).
+
+        A costed pick-list choice is set at character creation only; a non-staff
+        caller sending ``choice_id`` here is refused. A text-only write on a slot
+        that already carries a choice keeps that choice (write-ins never clear it).
       parameters:
       - in: path
         name: id
@@ -30442,6 +30460,14 @@ paths:
         name: has_open_positions
         schema:
           type: boolean
+      - in: query
+        name: kind
+        schema:
+          type: array
+          items:
+            type: integer
+        explode: true
+        style: form
       tags:
       - roster
       security:
@@ -39342,6 +39368,18 @@ components:
           nullable: true
       required:
       - character_sheet_id
+    AppliesToEnum:
+      enum:
+      - any
+      - claimed
+      - named
+      - none
+      type: string
+      description: |-
+        * `any` - Any path
+        * `claimed` - Claim a staff-authored family
+        * `named` - Name your own family
+        * `none` - No family
     ArcScopeEnum:
       enum:
       - global
@@ -41077,9 +41115,6 @@ components:
           description: Cloudinary URL sourced from art (#2408); key name kept for
             frontend compat.
           readOnly: true
-        family_known:
-          type: boolean
-          description: Whether family is selectable in Lineage stage (False = 'Unknown')
         allowed_species_ids:
           type: array
           items:
@@ -41131,9 +41166,6 @@ components:
           type: string
           minLength: 1
           description: Worldbuilding text shown to players
-        family_known:
-          type: boolean
-          description: Whether family is selectable in Lineage stage (False = 'Unknown')
         grants_species_languages:
           type: boolean
           description: If False, characters don't get species' racial language (Misbegotten)
@@ -42022,7 +42054,7 @@ components:
     CGOriginTemplate:
       type: object
       description: |-
-        Origin template for the CG guided flow (#2478).
+        Origin template for the CG guided flow (#2478, #3617).
 
         Backs ``GET /api/character-creation/origin-templates/``.
       properties:
@@ -42045,18 +42077,57 @@ components:
           type: integer
           readOnly: true
           description: Display order when multiple templates exist.
+        cg_point_cost:
+          type: integer
+          readOnly: true
+          description: Flat CG cost of this Upbringing (#3617). Negative refunds,
+            like a drawback.
+        trust_required:
+          type: integer
+          readOnly: true
+          description: Minimum trust to see/select this Upbringing (#3617).
+        allows_claim_family:
+          type: boolean
+          readOnly: true
+          description: Player may claim a staff-authored family (#3617).
+        allows_name_family:
+          type: boolean
+          readOnly: true
+          description: Player may name a new family with no authority (#3617).
+        allows_no_family:
+          type: boolean
+          readOnly: true
+          description: Player has no family; the tarot surname ritual applies (#3617).
+        claimable_kind_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        named_family_kind:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Kind a player-named family gets; required when naming is allowed
+            (#3617).
         slots:
           type: array
           items:
             $ref: '#/components/schemas/OriginTemplateSlot'
           readOnly: true
       required:
+      - allows_claim_family
+      - allows_name_family
+      - allows_no_family
+      - cg_point_cost
+      - claimable_kind_ids
       - frame_narrative
       - id
       - is_active
       - name
+      - named_family_kind
       - slots
       - sort_order
+      - trust_required
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -43495,6 +43566,21 @@ components:
           allOf:
           - $ref: '#/components/schemas/Family'
           readOnly: true
+        selected_origin_template:
+          allOf:
+          - $ref: '#/components/schemas/CGOriginTemplate'
+          readOnly: true
+        family_path:
+          description: |-
+            Chosen family path when the Upbringing allows more than one.
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+          oneOf:
+          - $ref: '#/components/schemas/FamilyPathEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         claimed_kin_slot:
           type: integer
           readOnly: true
@@ -43603,6 +43689,7 @@ components:
       - selected_area
       - selected_beginnings
       - selected_gender
+      - selected_origin_template
       - selected_path
       - selected_species
       - selected_tradition
@@ -43682,6 +43769,21 @@ components:
           type: integer
           writeOnly: true
           nullable: true
+        selected_origin_template_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        family_path:
+          description: |-
+            Chosen family path when the Upbringing allows more than one.
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+          oneOf:
+          - $ref: '#/components/schemas/FamilyPathEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         claimed_kin_slot_id:
           type: integer
           writeOnly: true
@@ -50401,15 +50503,17 @@ components:
           type: string
           description: Family/house name
           maxLength: 100
-        family_type:
+        kind:
           allOf:
-          - $ref: '#/components/schemas/FamilyTypeEnum'
-          description: |-
-            Whether this is a noble house, commoner family, or crime family
-
-            * `commoner` - Commoner
-            * `noble` - Noble
-            * `crime` - Crime
+          - $ref: '#/components/schemas/FamilyKind'
+          readOnly: true
+        influence:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: How much authority this family holds over the world (#3617).
+            0 = none; player-named families are always 0. The price base for claim-path
+            Upbringing choices (cost_per_influence x influence).
         description:
           type: string
           description: Brief description of the family
@@ -50433,8 +50537,40 @@ components:
       required:
       - born_particle
       - id
+      - kind
       - name
       - taken_in_particle
+    FamilyKind:
+      type: object
+      description: Serializer for a family's authored kind (#3617).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        styles_as_house:
+          type: boolean
+          readOnly: true
+          description: Orgs rooted in this kind are styled 'House <name>' and wear
+            particles.
+      required:
+      - id
+      - name
+      - styles_as_house
+    FamilyPathEnum:
+      enum:
+      - any
+      - claimed
+      - named
+      - none
+      type: string
+      description: |-
+        * `any` - Any path
+        * `claimed` - Claim a staff-authored family
+        * `named` - Name your own family
+        * `none` - No family
     FamilyRequest:
       type: object
       description: Serializer for family selection and display.
@@ -50444,15 +50580,13 @@ components:
           minLength: 1
           description: Family/house name
           maxLength: 100
-        family_type:
-          allOf:
-          - $ref: '#/components/schemas/FamilyTypeEnum'
-          description: |-
-            Whether this is a noble house, commoner family, or crime family
-
-            * `commoner` - Commoner
-            * `noble` - Noble
-            * `crime` - Crime
+        influence:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: How much authority this family holds over the world (#3617).
+            0 = none; player-named families are always 0. The price base for claim-path
+            Upbringing choices (cost_per_influence x influence).
         description:
           type: string
           description: Brief description of the family
@@ -50495,16 +50629,6 @@ components:
       - nodes
       - parentage
       - unions
-    FamilyTypeEnum:
-      enum:
-      - commoner
-      - noble
-      - crime
-      type: string
-      description: |-
-        * `commoner` - Commoner
-        * `noble` - Noble
-        * `crime` - Crime
     FashionJudgement:
       type: object
       description: |-
@@ -53465,10 +53589,9 @@ components:
           maxLength: 120
         description:
           type: string
-        family_type:
-          type: string
-          description: roster.Family.FamilyType the defined family gets.
-          maxLength: 20
+        kind:
+          type: integer
+          description: The kind the defined family gets (#3617).
         name_pattern:
           type: string
           description: Full-match regex the proposed house name must satisfy — the
@@ -53534,9 +53657,9 @@ components:
           readOnly: true
       required:
       - aspect_definitions
-      - family_type
       - features
       - id
+      - kind
       - name
     HouseTitle:
       type: object
@@ -60124,7 +60247,7 @@ components:
         * `player` - Player-built (never exported)
     OriginTemplateSlot:
       type: object
-      description: Slot prompt within an origin template (#2478).
+      description: 'Slot prompt within an origin template (#2478, #3617).'
       properties:
         id:
           type: integer
@@ -60148,12 +60271,69 @@ components:
           type: boolean
           readOnly: true
           description: Required slots are marked in the post-CG finish-later editor.
+        applies_to:
+          allOf:
+          - $ref: '#/components/schemas/AppliesToEnum'
+          readOnly: true
+          description: |-
+            Which family path shows this prompt; 'any' shows it always (#3617).
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+        allows_text:
+          type: boolean
+          readOnly: true
+          description: Player may write a free-text answer (the 'other' box on a pick-list)
+            (#3617).
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginTemplateSlotChoice'
+          readOnly: true
       required:
+      - allows_text
+      - applies_to
+      - choices
       - example
       - id
       - is_required
       - name
       - prompt
+      - sort_order
+    OriginTemplateSlotChoice:
+      type: object
+      description: One priced answer on a pick-list Upbringing prompt (#3617).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Choice label (part of natural key).
+        description:
+          type: string
+          readOnly: true
+          description: Player-facing blurb.
+        cg_point_cost:
+          type: integer
+          readOnly: true
+          description: Flat CG cost of this choice.
+        cost_per_influence:
+          type: integer
+          readOnly: true
+          description: CG cost per point of the claimed family's influence.
+        sort_order:
+          type: integer
+          readOnly: true
+      required:
+      - cg_point_cost
+      - cost_per_influence
+      - description
+      - id
+      - name
       - sort_order
     Outcome425Enum:
       enum:
@@ -65826,6 +66006,21 @@ components:
           type: integer
           writeOnly: true
           nullable: true
+        selected_origin_template_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        family_path:
+          description: |-
+            Chosen family path when the Upbringing allows more than one.
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+          oneOf:
+          - $ref: '#/components/schemas/FamilyPathEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         claimed_kin_slot_id:
           type: integer
           writeOnly: true

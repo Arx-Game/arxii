@@ -129,8 +129,10 @@ export async function getNamingRitualConfig(): Promise<NamingRitualConfig> {
   return res.json();
 }
 
-export async function getFamilies(areaId: number): Promise<Family[]> {
-  const res = await apiFetch(`${BASE_URL}/families/?area_id=${areaId}`);
+export async function getFamilies(areaId: number, kindIds: number[] = []): Promise<Family[]> {
+  const params = new URLSearchParams({ area_id: String(areaId) });
+  kindIds.forEach((id) => params.append('kind', String(id)));
+  const res = await apiFetch(`${BASE_URL}/families/?${params}`);
   if (!res.ok) {
     throw new Error('Failed to load families');
   }
