@@ -191,6 +191,18 @@ repos:
         entry: uv run python tools/check_migration_seed_data.py
         language: system
         pass_filenames: false
+      - id: migration-ddl-dml
+        name: Keep schema and data operations in separate migrations
+        entry: uv run python tools/lint_migration_ddl_dml.py
+        language: system
+        pass_filenames: false
+        # A migration runs in one transaction. PostgreSQL queues a deferred FK
+        # trigger event per row written and refuses ALTER TABLE while any are
+        # pending, so a RunPython followed by a schema operation aborts with
+        # "cannot ALTER TABLE ... because it has pending trigger events". It
+        # passes CI, where the data operation touches no rows, and fails on the
+        # production converge (0220_upbringings, 2026-09-04). Split them:
+        # expand, migrate, contract. See ADR-0237.
       - id: check-partition-sql-drift
         name: Detect drift between Interaction model and partition SQL
         entry: uv run python tools/check_partition_sql_drift.py

@@ -4,9 +4,26 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
 # Firewall + build prerequisites. iptables/ipset/dnsutils are required by
 # init-firewall.sh; build-essential for any source wheels.
+#
+# postgresql-client comes from the PostgreSQL project's own apt repo pinned to
+# MAJOR 17, matching the `postgres:17` db service in docker-compose.yml. Ubuntu
+# 24.04 ships client 16, and pg_dump refuses to run against a newer server
+# ("aborting because of server version mismatch") - which makes it impossible to
+# clone the production dump in `arxiidev` into a scratch database, the only way
+# to prove a migration against real rows before it converges on production. Bump
+# this in lockstep with the db service image.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y --no-install-recommends \
-      iptables ipset dnsutils jq postgresql-client git curl ca-certificates build-essential sudo \
+      iptables ipset dnsutils jq git curl ca-certificates build-essential sudo gnupg \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsS https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+ && . /etc/os-release \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc]" \
+      "https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-17 \
  && rm -rf /var/lib/apt/lists/*
 
 # Install our firewall script at a non-colliding path. The claude-code

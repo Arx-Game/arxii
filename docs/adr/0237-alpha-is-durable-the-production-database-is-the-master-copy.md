@@ -32,8 +32,10 @@ A destructive operation on an authored-content table is exactly one of three thi
 and the author must say which in the PR:
 
 1. **Restructure** - the information survives in a different shape (split, merge,
-   retarget). A `RunPython` in the *same* migration carries it across. Mandatory;
-   this is the case ADR-0013 used to wave through.
+   retarget). A `RunPython` in the *same PR* carries it across, in **its own
+   migration** - never the one holding the schema change. Mandatory; this is the
+   case ADR-0013 used to wave through. See the amendment below for why the
+   migration has to be separate.
 2. **Deliberate discard** - we have decided the data is not worth keeping. No
    backfill exists or is wanted. What makes this safe is that it was decided rather
    than defaulted into, and that the rows are recoverable from a backup taken before
@@ -47,6 +49,50 @@ is indistinguishable from a correct removal by reading the diff alone. Hence the
 declaration: the classifier can mechanically confirm that a `migrated` claim really
 does carry a `RunPython`, but "is this data worth keeping" is a human judgment and
 the gate's job is to force it to be stated and reviewed, never to compute it.
+
+## Amendment, 2026-09-04: the backfill goes in its own migration
+
+The original wording said "a `RunPython` in the *same* migration," and #3617's
+`0220_upbringings` followed it literally: a backfill that wrote `OriginTemplate`
+rows, then an `AddConstraint` on that same table. Django runs one migration in one
+transaction; PostgreSQL queues a deferred FK trigger event for every row a
+transaction writes and refuses `ALTER TABLE` on a table with events still pending.
+The deploy died on
+
+```
+psycopg.errors.ObjectInUse: cannot ALTER TABLE "arxii_origintemplate"
+because it has pending trigger events
+```
+
+after `migrate --noinput` had already applied 0213-0219, leaving production on a
+release whose code expected 0220's columns.
+
+Nothing catches this before production. A freshly migrated test database has no
+rows for the backfill to touch, so the trigger queue is empty and the `ALTER TABLE`
+succeeds; CI was green. The bug is only reachable with authored data present -
+which is to say, only on the one database this ADR exists to protect.
+
+So the requirement is now structural, and it is not conditional on whether *this*
+particular backfill looks like it writes enough rows to matter: **a migration is
+schema-only or data-only, never both.** Where data has to move, use
+expand/migrate/contract - add the new columns in one migration, copy in the next,
+drop in a third - so every `ALTER TABLE` gets a transaction with an empty trigger
+queue. Reverse migrations replay operations backwards, so schema-then-data is
+broken running down exactly as data-then-schema is running up; both are rejected.
+`tools/lint_migration_ddl_dml.py` (`migration-ddl-dml` pre-commit hook) enforces
+it, and its grandfather list records the eight already-applied migrations that
+mix the two and survived only because the rows they wrote happened to be absent.
+
+The ADR's own gate is unchanged in substance: a restructure still must carry the
+data across in the same PR, and the classifier can still confirm mechanically that
+the claim is backed by a real `RunPython`. It now looks for that `RunPython` in an
+adjacent migration rather than the same file.
+
+And check first whether there is data to carry at all. 0220's backfill turned out
+to be reading a column that held `True` on all 15 rows: a constant, not
+information, and therefore a column default (`AddField(default=True,
+preserve_default=False)`) rather than a data migration. A restructure backfill
+that carries a constant is not a restructure.
 
 This is not advisory. Deploy runs
 `python -m django migrate --noinput` unattended on every converge

@@ -251,6 +251,23 @@ exceptions. File only for something substantial enough to need its own PR
 human call), with the reason stated in the issue body. Overrides any skill step
 that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
 
+## Reviewer Agents — every production defect gets one
+
+**When a defect reaches `main` or production, the fix PR also adds a reviewer agent
+for its class** (`tools/agents/`, symlinked into `~/.claude/agents/` at container
+create; `.claude/` is gitignored, so `tools/agents/` is the tracked home). The test
+is recurrence shape, not severity: could an agent make this same mistake next week
+while following the rules as written. If yes, the rules are the problem and a
+reviewer that reads the actual diff is the fix. Pair it with a mechanical check
+where one exists — the agent catches the shape, the linter catches the instance.
+See `tools/agents/README.md`.
+
+**Migrations are the worked example and are non-optional: any migration generated
+or edited MUST be reviewed with the `reviewing-migrations` skill (or the
+`migration-reviewer` agent) before it is committed.** `migrate --noinput` runs
+unattended on every converge and CI only ever migrates an empty database, so the
+failures that matter are invisible to it.
+
 ## Database & Code Quality Invariants
 
 **The production database is durable and holds the only copy of our content.** As of
@@ -349,9 +366,22 @@ Code quality (always-on; full list in `django_notes.md`):
   instinct on a **model** is worse, not better: models are idmapper-shared, so a
   memo there outlives the request and answers every later one with the first
   request's result (`CharacterDraft.get_stage_validation_errors`, #3622).
+- **A migration is schema-only or data-only, never both.** Django runs one migration
+  in one transaction; PostgreSQL queues a deferred FK trigger event per row written
+  and refuses `ALTER TABLE` while any are pending, so a `RunPython` followed by a
+  schema operation dies with `cannot ALTER TABLE ... because it has pending trigger
+  events`. It passes CI (no rows to touch on a fresh database) and fails on the
+  production converge - `0220_upbringings` broke a deploy this way on 2026-09-04.
+  Where data has to move, use expand/migrate/contract: add columns in one migration,
+  copy in the next, drop in a third. Enforced by `tools/lint_migration_ddl_dml.py`
+  (`migration-ddl-dml` hook); its grandfather list is closed, so a new violation gets
+  split, never listed.
 - **Data migrations are required where authored content is at risk** — a `RunPython`
-  backfill accompanies any migration that drops or renames an authored-content column
-  (see ADR-0237, which supersedes ADR-0013). Play-state tables still need none.
+  backfill accompanies any migration that drops or renames an authored-content column,
+  in its own migration in the same PR (see ADR-0237, which supersedes ADR-0013).
+  Play-state tables still need none. First check there is anything to carry: a column
+  holding one value across every row is a constant, so it is an `AddField(default=...,
+  preserve_default=False)`, not a backfill.
 - **Preserve every database** — never drop/flush/destroy dev or production (see the
   durability invariant at the top of this section).
 - **PostgreSQL only (production)** — use PG features directly (CTEs, materialized
