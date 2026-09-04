@@ -515,6 +515,16 @@
   align-items: baseline;
   gap: 0.25rem 0.9rem;
 }
+.interview .entry-lead {
+  display: inline-flex;
+  margin-right: 0.5rem;
+  color: var(--cg-accent);
+  vertical-align: -0.15em;
+}
+.interview .entry-lead svg {
+  width: 1.1em;
+  height: 1.1em;
+}
 .interview .entry-name {
   font-family: 'Cinzel', serif;
   font-weight: 600;
@@ -650,6 +660,10 @@
 }
 .interview .choice-row button:hover {
   color: var(--cg-accent);
+}
+.interview .choice-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* the instruments: mechanical inputs, deliberately sans */
@@ -882,6 +896,8 @@
   margin-bottom: 0.45rem;
 }
 .interview .field input[type='text'],
+.interview .field input[type='number'],
+.interview .field select,
 .interview .field textarea {
   width: 100%;
   font-family: 'EB Garamond', Georgia, serif;
@@ -892,6 +908,11 @@
   border: none;
   border-bottom: 1px solid var(--cg-hairline-strong);
   padding: 0.35rem 0;
+}
+.interview .field select {
+  appearance: none;
+  cursor: pointer;
+  max-width: 100%;
 }
 .interview .field textarea {
   border: 1px solid var(--cg-hairline-strong);

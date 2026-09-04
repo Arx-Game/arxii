@@ -11,6 +11,8 @@ import {
   RecordRail,
   StatRow,
 } from '../folio';
+import { ChoiceRow } from '../folio/ChoiceRow';
+import { Field } from '../folio/Field';
 import { Stage } from '../types';
 
 describe('ChapterLeaf', () => {
@@ -100,5 +102,78 @@ describe('StatRow', () => {
     const plus = screen.getByRole('button', { name: /raise strength/i });
     expect(plus).toBeDisabled();
     expect(plus).toHaveAttribute('title', 'At 6, the most it can be');
+  });
+});
+
+describe('ChoiceRow', () => {
+  it('presses the chosen option and reports a change', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ChoiceRow
+        label="Gender"
+        options={[
+          { value: 1, label: 'Male' },
+          { value: 2, label: 'Female' },
+        ]}
+        value={1}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByRole('group', { name: 'Gender' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Male' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Female' }));
+    expect(onChange).toHaveBeenCalledWith(2);
+  });
+
+  it('clears only when clearable', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ChoiceRow
+        label="Build"
+        options={[{ value: 'a', label: 'A' }]}
+        value="a"
+        onChange={onChange}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'A' }));
+    expect(onChange).not.toHaveBeenCalled();
+    rerender(
+      <ChoiceRow
+        label="Build"
+        options={[{ value: 'a', label: 'A' }]}
+        value="a"
+        onChange={onChange}
+        clearable
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'A' }));
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+});
+
+describe('Field', () => {
+  it('labels its control and shows the hint', () => {
+    render(
+      <Field id="f" label="Concept" hint="One line.">
+        <input id="f" type="text" />
+      </Field>
+    );
+    expect(screen.getByLabelText('Concept')).toBeInTheDocument();
+    expect(screen.getByText('One line.')).toHaveClass('hint');
+  });
+});
+
+describe('Entry lead', () => {
+  it('renders the lead before the name, hidden from assistive tech', () => {
+    render(
+      <EntryList label="Paths">
+        <Entry name="Blade" tag="Valor" chosen={false} lead={<i data-testid="ico" />}>
+          <p>prose</p>
+        </Entry>
+      </EntryList>
+    );
+    expect(screen.getByTestId('ico').parentElement).toHaveAttribute('aria-hidden', 'true');
   });
 });

@@ -8,3 +8,5 @@ export { EntryList, Entry, EntryDoors } from './Entry';
 export { InstrumentFrame, InstrumentGroup, StatRow } from './InstrumentFrame';
 export { ConfirmDialog } from './ConfirmDialog';
 export { CodexWord } from './CodexWord';
+export { ChoiceRow } from './ChoiceRow';
+export { Field } from './Field';
