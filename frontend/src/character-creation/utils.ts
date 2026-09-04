@@ -67,3 +67,21 @@ export function composeFullName(
   if (!familyName) return firstName;
   return `${firstName} ${familyName}`;
 }
+
+/**
+ * Generate a gradient background color based on the area name.
+ * Creates a consistent but varied appearance for each area.
+ */
+export function getGradientColors(name: string): [string, string] {
+  // Simple hash function for consistent colors
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  // Generate two hue values for gradient
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 40) % 360; // Offset for second color
+
+  return [`hsl(${hue1}, 40%, 25%)`, `hsl(${hue2}, 50%, 35%)`];
+}

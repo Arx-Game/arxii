@@ -27,9 +27,6 @@ character-creation/
     ├── index.ts             # Component exports
     ├── OriginStage.tsx      # Stage 1: Area selection
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
-    ├── StartingAreaCard.tsx # Only its `getGradientColors` helper is still used, by
-    │                        #   HeritageStage; the card itself no longer renders
-    │                        #   anywhere (until Plan B removes it, see Task 9)
     ├── LineageStage.tsx     # Stage 3: Family selection
     ├── DistinctionsStage.tsx # Stage 4: Distinctions
     ├── PathStage.tsx        # Stage 5: Path selection

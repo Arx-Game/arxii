@@ -31,10 +31,10 @@ import {
 } from '../queries';
 import type { Beginnings, CharacterDraft, GenderOption, Species } from '../types';
 import { Stage, STAGE_LABELS } from '../types';
+import { getGradientColors } from '../utils';
 import { CGPointsWidget } from './CGPointsWidget';
 import { PerspectivesPanel } from './PerspectivesPanel';
 import { SpeciesCard } from './SpeciesCard';
-import { getGradientColors } from './StartingAreaCard';
 import { StatBonusBadges } from './StatBonusBadges';
 
 interface HeritageStageProps {
