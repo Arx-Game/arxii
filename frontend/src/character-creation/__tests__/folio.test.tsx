@@ -8,6 +8,7 @@ import {
   EntryList,
   InstrumentFrame,
   InstrumentGroup,
+  Paragraphs,
   RecordRail,
   StatRow,
 } from '../folio';
@@ -175,5 +176,13 @@ describe('Entry lead', () => {
       </EntryList>
     );
     expect(screen.getByTestId('ico').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('Paragraphs', () => {
+  it('splits blank-line-separated text into separate paragraphs', () => {
+    render(<Paragraphs text={'First paragraph.\n\nSecond paragraph.'} />);
+    expect(screen.getByText('First paragraph.').tagName).toBe('P');
+    expect(screen.getByText('Second paragraph.').tagName).toBe('P');
   });
 });

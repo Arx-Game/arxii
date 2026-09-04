@@ -25,7 +25,16 @@ import {
   Wand2,
   Zap,
 } from 'lucide-react';
-import { ChapterLeaf, Entry, EntryDoors, EntryList, Marginalia, Note, RecordRail } from '../folio';
+import {
+  ChapterLeaf,
+  Entry,
+  EntryDoors,
+  EntryList,
+  Marginalia,
+  Note,
+  Paragraphs,
+  RecordRail,
+} from '../folio';
 import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
 import { Stage } from '../types';
@@ -52,10 +61,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   wand2: Wand2,
   zap: Zap,
 };
-
-function paragraphs(text: string) {
-  return text.split(/\n\s*\n/).map((para, i) => <p key={i}>{para}</p>);
-}
 
 export function PathStage({ draft }: PathStageProps) {
   const { data: paths, isLoading, error } = usePaths();
@@ -111,18 +116,18 @@ export function PathStage({ draft }: PathStageProps) {
       )}
       <EntryList label="Paths">
         {paths?.map((p) => {
-          const Icon = ICON_MAP[p.icon_name];
+          const Icon = ICON_MAP[p.icon_name.toLowerCase()] ?? Sparkles;
           const isChosen = draft.selected_path?.id === p.id;
           return (
             <Entry
               key={p.id}
               name={p.name}
-              lead={Icon ? <Icon /> : undefined}
+              lead={<Icon />}
               tag={p.aspects.join(' · ') || 'Path'}
               chosen={isChosen}
               open={isChosen}
             >
-              {paragraphs(p.description)}
+              <Paragraphs text={p.description} />
               {p.skill_suggestions && p.skill_suggestions.length > 0 && (
                 <p className="ledger-line">
                   Suggested skills: {p.skill_suggestions.map((s) => s.skill_name).join(', ')}

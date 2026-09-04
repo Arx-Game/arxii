@@ -5,6 +5,7 @@ export { ChapterLeaf } from './ChapterLeaf';
 export { RecordRail, Marginalia, Note } from './RecordRail';
 export type { RecordRow } from './RecordRail';
 export { EntryList, Entry, EntryDoors } from './Entry';
+export { Paragraphs } from './Paragraphs';
 export { InstrumentFrame, InstrumentGroup, StatRow } from './InstrumentFrame';
 export { ConfirmDialog } from './ConfirmDialog';
 export { CodexWord } from './CodexWord';

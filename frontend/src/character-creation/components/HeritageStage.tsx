@@ -22,6 +22,7 @@ import {
   EntryList,
   Marginalia,
   Note,
+  Paragraphs,
   RecordRail,
 } from '../folio';
 import {
@@ -56,10 +57,6 @@ export function formatStatBonuses(bonuses: Record<string, number>): string {
     .filter(([, value]) => value !== 0)
     .map(([stat, value]) => `${value > 0 ? '+' : '−'}${Math.abs(value)} ${stat}`)
     .join(', ');
-}
-
-function paragraphs(text: string) {
-  return text.split(/\n\s*\n/).map((para, i) => <p key={i}>{para}</p>);
 }
 
 type SpeciesEntryItem =
@@ -163,7 +160,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         closed={overBudget}
         open={isChosen}
       >
-        {paragraphs(s.description)}
+        <Paragraphs text={s.description} />
         {s.codex_entry_id != null && (
           <p className="ledger-line">
             <CodexTerm entryId={s.codex_entry_id}>Codex: {s.name}</CodexTerm>
@@ -250,7 +247,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
               closed={closed}
               open={isChosen}
             >
-              {paragraphs(b.description)}
+              <Paragraphs text={b.description} />
               {!b.family_known && <p className="ledger-line">Family unknown at the start.</p>}
               {b.codex_entry_ids?.length > 0 && (
                 <p className="ledger-line">
