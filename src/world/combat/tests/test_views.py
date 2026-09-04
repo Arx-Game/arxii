@@ -14,6 +14,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import (
+    ActionCategory,
     DuelChallengeStatus,
     EncounterType,
     OpponentStatus,
@@ -24,6 +25,9 @@ from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    ComboDefinitionFactory,
+    ComboLearningFactory,
+    ComboSlotFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
@@ -35,6 +39,7 @@ from world.combat.models import (
 )
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
+from world.covenants.constants import RoleArchetype
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -1235,3 +1240,73 @@ class ResolveRoundRestViewClimacticMomentBlockTests(CombatEncounterViewSetTestBa
         response = client.post(f"/api/combat/{declaring_encounter.pk}/resolve_round/")
 
         self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+
+
+class AvailableCombosPayloadTest(CombatEncounterViewSetTestBase):
+    """GET /available_combos/ carries slot composition and the rider (#3553)."""
+
+    def test_payload_lists_every_slot_and_the_rider(self) -> None:
+        attack = EffectTypeFactory(name="Attack-Payload")
+        defense = EffectTypeFactory(name="Defense-Payload")
+        technique = TechniqueFactory(effect_type=attack, name="Firebolt-Payload")
+        combo = ComboDefinitionFactory(
+            name="Pincer-Payload",
+            discoverable_via_combat=False,
+            bonus_damage=7,
+            bypass_soak=False,
+        )
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=attack)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=defense,
+            required_archetype=RoleArchetype.SHIELD,
+        )
+        ComboLearningFactory(combo=combo, character_sheet=self.player_sheet)
+        CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=self.encounter.round_number,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.get(f"/api/combat/{self.encounter.pk}/available_combos/")
+
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            [
+                {
+                    "combo_id": combo.pk,
+                    "combo_name": "Pincer-Payload",
+                    "known_by_participant": True,
+                    "slot_count": 2,
+                    "filled_count": 1,
+                    "complete": False,
+                    "bonus_damage": 7,
+                    "bypass_soak": False,
+                    "slots": [
+                        {
+                            "slot_number": 1,
+                            "effect_type": "Attack-Payload",
+                            "resonance": None,
+                            "archetype": "",
+                            "participant_id": self.participant.pk,
+                            "character_name": "playerchar",
+                            "technique_name": "Firebolt-Payload",
+                        },
+                        {
+                            "slot_number": 2,
+                            "effect_type": "Defense-Payload",
+                            "resonance": None,
+                            "archetype": RoleArchetype.SHIELD.value,
+                            "participant_id": None,
+                            "character_name": None,
+                            "technique_name": None,
+                        },
+                    ],
+                }
+            ],
+        )

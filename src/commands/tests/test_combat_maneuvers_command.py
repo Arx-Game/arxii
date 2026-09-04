@@ -23,6 +23,7 @@ from world.combat.factories import (
     ThreatPoolFactory,
 )
 from world.combat.models import PendingOpponentAttack
+from world.combat.types import ComboSlotFill, ComboSlotMatch, RoundCombo
 
 _DISPATCH = "commands.command.dispatch_player_action"
 
@@ -373,3 +374,85 @@ class CmdCombatArgResolutionTests(TestCase):
         cmd = _make_cmd("disengage")
         cmd._subverb, cmd._rest = "disengage", ""
         self.assertEqual(cmd.resolve_action_args(), {})
+
+
+def _slot(number: int, label: str) -> MagicMock:
+    slot = MagicMock()
+    slot.slot_number = number
+    slot.requirement_label = label
+    return slot
+
+
+def _match(number: int, participant_pk: int, name: str, technique: str) -> ComboSlotMatch:
+    participant = MagicMock()
+    participant.pk = participant_pk
+    participant.character_sheet.character.db_key = name
+    action = MagicMock()
+    action.focused_action.name = technique
+    return ComboSlotMatch(slot_number=number, participant=participant, action=action)
+
+
+class CmdCombatCombosListingTests(TestCase):
+    """``combat combos`` lists every slot of every combo taking shape (#3553)."""
+
+    def _combo(self, name: str, *, bonus: int, bypass: bool) -> MagicMock:
+        combo = MagicMock()
+        combo.name = name
+        combo.bonus_damage = bonus
+        combo.bypass_soak = bypass
+        return combo
+
+    def test_lists_filled_and_open_slots_with_the_rider(self) -> None:
+        cmd = _make_cmd("combos")
+        participant = MagicMock()
+        participant.pk = 7
+        participant.encounter.round_number = 2
+        partial = RoundCombo(
+            combo=self._combo("Pincer", bonus=7, bypass=False),
+            slot_fills=[
+                ComboSlotFill(slot=_slot(1, "Attack"), match=_match(1, 7, "Kira", "Firebolt")),
+                ComboSlotFill(slot=_slot(2, "Defense (Shield role)"), match=None),
+            ],
+            known_by_participant=True,
+        )
+        complete = RoundCombo(
+            combo=self._combo("Tidewall", bonus=0, bypass=True),
+            slot_fills=[
+                ComboSlotFill(slot=_slot(1, "Attack"), match=_match(1, 7, "Kira", "Firebolt")),
+                ComboSlotFill(slot=_slot(2, "Attack"), match=_match(2, 9, "Bram", "Cleave")),
+            ],
+            known_by_participant=False,
+        )
+        with (
+            patch.object(cmd, "_combat_participant_or_none", return_value=participant),
+            patch(
+                "world.combat.services.scan_round_combos", return_value=[partial, complete]
+            ) as scan,
+        ):
+            cmd.func()
+        scan.assert_called_once_with(participant.encounter, 2)
+        text = cmd.caller.msg.call_args.args[0]
+        self.assertIn("Combos this round", text)
+        self.assertIn("Pincer (known): 1 of 2 slots filled; +7 damage", text)
+        self.assertIn("  1. Attack - you (Firebolt)", text)
+        self.assertIn("  2. Defense (Shield role) - open", text)
+        self.assertIn("Needs one more: Defense (Shield role)", text)
+        self.assertIn("Tidewall (not known): ready to chain; bypasses soak", text)
+        self.assertIn("  2. Attack - Bram (Cleave)", text)
+
+    def test_nothing_taking_shape(self) -> None:
+        cmd = _make_cmd("combos")
+        participant = MagicMock()
+        participant.encounter.round_number = 1
+        with (
+            patch.object(cmd, "_combat_participant_or_none", return_value=participant),
+            patch("world.combat.services.scan_round_combos", return_value=[]),
+        ):
+            cmd.func()
+        self.assertIn("No combos are taking shape", cmd.caller.msg.call_args.args[0])
+
+    def test_outside_combat(self) -> None:
+        cmd = _make_cmd("combos")
+        with patch.object(cmd, "_combat_participant_or_none", return_value=None):
+            cmd.func()
+        self.assertIn("not currently declaring in combat", cmd.caller.msg.call_args.args[0])

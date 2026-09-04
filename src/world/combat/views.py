@@ -75,6 +75,7 @@ from world.combat.serializers import (
     RemoveOpponentSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
+    RoundComboSerializer,
     ThreatPoolSerializer,
     UpgradeComboSerializer,
     UseItemSerializer,
@@ -87,7 +88,7 @@ from world.combat.services import (
     remove_opponent,
     remove_participant,
     resolve_round,
-    run_combo_detection,
+    scan_round_combos,
     update_encounter_settings,
 )
 from world.conditions.models import ConditionInstance
@@ -762,25 +763,21 @@ class CombatEncounterViewSet(ModelViewSet):
             return Response(None)
         return Response(RoundActionSerializer(action_obj).data)
 
+    @extend_schema(responses=RoundComboSerializer(many=True))
     @action(detail=True, methods=[HTTPMethod.GET])
     def available_combos(
         self,
         request: Request,
         pk: int | None = None,
     ) -> Response:
-        """Get available combos for the current round."""
+        """List the combos taking shape this round, slot by slot (#3553).
+
+        Complete fills are the upgrade candidates; partial fills of a known
+        combo show which slots are still open.
+        """
         encounter = self.get_object()
-        combos = run_combo_detection(encounter, encounter.round_number)
-        data = [
-            {
-                "combo_id": c.combo.pk,
-                "combo_name": c.combo.name,
-                "known_by_participant": c.known_by_participant,
-                "slot_count": len(c.slot_matches),
-            }
-            for c in combos
-        ]
-        return Response(data)
+        combos = scan_round_combos(encounter, encounter.round_number)
+        return Response(RoundComboSerializer(combos, many=True).data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def upgrade_combo(self, request: Request, pk: int | None = None) -> Response:

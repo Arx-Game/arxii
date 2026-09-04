@@ -27,8 +27,10 @@ from world.combat.models import (
 from world.combat.services import (
     detect_available_combos,
     revert_combo_upgrade,
+    scan_round_combos,
     upgrade_action_to_combo,
 )
+from world.covenants.constants import RoleArchetype
 from world.magic.factories import EffectTypeFactory, GiftFactory, ResonanceFactory, TechniqueFactory
 from world.scenes.constants import RoundStatus
 
@@ -620,3 +622,130 @@ class ResonanceMatchingTests(TestCase):
         available = detect_available_combos(encounter, 1)
         self.assertEqual(len(available), 1)
         self.assertEqual(available[0].combo, combo)
+
+
+class ComboSlotRequirementLabelTests(TestCase):
+    """``ComboSlot.requirement_label`` names what a slot asks for (#3553)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect_attack = EffectTypeFactory(name="Attack-Label")
+        cls.fire = ResonanceFactory(name="Fire-Label")
+
+    def test_effect_type_only(self) -> None:
+        slot = ComboSlotFactory(required_action_type=self.effect_attack)
+        self.assertEqual(slot.requirement_label, "Attack-Label")
+
+    def test_resonance_and_archetype(self) -> None:
+        slot = ComboSlotFactory(
+            required_action_type=self.effect_attack,
+            resonance_requirement=self.fire,
+            required_archetype=RoleArchetype.SHIELD,
+        )
+        self.assertEqual(slot.requirement_label, "Attack-Label (Fire-Label, Shield role)")
+
+
+class ScanRoundCombosTests(TestCase):
+    """``scan_round_combos`` lists every slot, filled or open (#3553)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect_attack = EffectTypeFactory(name="Attack-Scan", base_power=20)
+        cls.effect_defense = EffectTypeFactory(name="Defense-Scan", base_power=10)
+        cls.fire = ResonanceFactory(name="Fire-Scan")
+        cls.water = ResonanceFactory(name="Water-Scan")
+        cls.gift = GiftFactory()
+        cls.fire_gift = GiftFactory(name="FireGift-Scan")
+        cls.fire_gift.resonances.add(cls.fire)
+        cls.water_gift = GiftFactory(name="WaterGift-Scan")
+        cls.water_gift.resonances.add(cls.water)
+        cls.encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        cls.attacker = CombatParticipantFactory(encounter=cls.encounter)
+        cls.defender = CombatParticipantFactory(encounter=cls.encounter)
+        cls.attack_technique = TechniqueFactory(
+            gift=cls.gift, effect_type=cls.effect_attack, name="Firebolt-Scan"
+        )
+        cls.defense_technique = TechniqueFactory(gift=cls.gift, effect_type=cls.effect_defense)
+        cls.combo = ComboDefinitionFactory(
+            discoverable_via_combat=False, bonus_damage=7, bypass_soak=False
+        )
+        ComboSlotFactory(combo=cls.combo, slot_number=1, required_action_type=cls.effect_attack)
+        ComboSlotFactory(combo=cls.combo, slot_number=2, required_action_type=cls.effect_defense)
+
+    def _declare(self, participant, technique) -> CombatRoundAction:
+        return CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+        )
+
+    def test_known_partial_combo_lists_the_open_slot(self) -> None:
+        """A knower who has not declared yet still makes the combo visible."""
+        ComboLearningFactory(combo=self.combo, character_sheet=self.defender.character_sheet)
+        action = self._declare(self.attacker, self.attack_technique)
+
+        [round_combo] = scan_round_combos(self.encounter, 1)
+        self.assertEqual(round_combo.combo, self.combo)
+        self.assertTrue(round_combo.known_by_participant)
+        self.assertFalse(round_combo.complete)
+        first, second = round_combo.slot_fills
+        self.assertEqual(first.slot.slot_number, 1)
+        self.assertIsNotNone(first.match)
+        self.assertEqual(first.match.participant, self.attacker)
+        self.assertEqual(first.match.action, action)
+        self.assertEqual(second.slot.slot_number, 2)
+        self.assertIsNone(second.match)
+        self.assertEqual([slot.slot_number for slot in round_combo.open_slots], [2])
+        self.assertEqual(round_combo.filled_count, 1)
+        # A partial combo is never "available" to upgrade into.
+        self.assertEqual(detect_available_combos(self.encounter, 1), [])
+
+    def test_unknown_partial_combo_stays_hidden(self) -> None:
+        """Nobody in the encounter knows it: no hint leaks the hidden combo."""
+        self._declare(self.attacker, self.attack_technique)
+        self.assertEqual(scan_round_combos(self.encounter, 1), [])
+
+    def test_complete_combo_fills_every_slot(self) -> None:
+        ComboLearningFactory(combo=self.combo, character_sheet=self.attacker.character_sheet)
+        self._declare(self.attacker, self.attack_technique)
+        self._declare(self.defender, self.defense_technique)
+
+        [round_combo] = scan_round_combos(self.encounter, 1)
+        self.assertTrue(round_combo.complete)
+        self.assertEqual(round_combo.open_slots, [])
+        self.assertEqual(round_combo.filled_count, 2)
+        [available] = detect_available_combos(self.encounter, 1)
+        self.assertEqual(available.combo, self.combo)
+        self.assertEqual([m.slot_number for m in available.slot_matches], [1, 2])
+
+    def test_partial_fill_keeps_the_most_slots_filled(self) -> None:
+        """Slots [Attack, Attack+Fire, Defense] with Fire and Water attacks declared.
+
+        Greedy assignment would put the Fire attack in slot 1 and leave slot 2
+        unfillable; the scan finds the two-slot fill (Water -> 1, Fire -> 2).
+        """
+        combo = ComboDefinitionFactory(discoverable_via_combat=False)
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=self.effect_attack)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=self.effect_attack,
+            resonance_requirement=self.fire,
+        )
+        ComboSlotFactory(combo=combo, slot_number=3, required_action_type=self.effect_defense)
+        ComboLearningFactory(combo=combo, character_sheet=self.attacker.character_sheet)
+        fire_action = self._declare(
+            self.attacker, TechniqueFactory(gift=self.fire_gift, effect_type=self.effect_attack)
+        )
+        water_action = self._declare(
+            self.defender, TechniqueFactory(gift=self.water_gift, effect_type=self.effect_attack)
+        )
+
+        round_combos = {rc.combo.pk: rc for rc in scan_round_combos(self.encounter, 1)}
+        round_combo = round_combos[combo.pk]
+        self.assertEqual(round_combo.filled_count, 2)
+        first, second, third = round_combo.slot_fills
+        self.assertEqual(first.match.action, water_action)
+        self.assertEqual(second.match.action, fire_action)
+        self.assertIsNone(third.match)

@@ -22,6 +22,7 @@ from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
+    from world.combat.types import RoundCombo
 
 # subverb -> registry action key. ``yield`` reuses the existing YieldAction.
 _SUBVERBS: dict[str, str] = {
@@ -84,6 +85,11 @@ def _split_padded(text: str, separator: str) -> tuple[str, str] | None:
 
 
 _NOT_IN_ACTIVE_ROUND = "You are not in an active combat round."
+_NOT_DECLARING = "You are not currently declaring in combat."
+
+# Read-only listing subverb (#3553); not a dispatched action, so it lives
+# outside ``_SUBVERBS``.
+_COMBOS_SUBVERB = "combos"
 
 # ``_require_rest`` argument-description literal, shared by cover/succor/rally.
 _ARG_AN_ALLY = "an ally"
@@ -116,6 +122,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat join                 - join the fight in your room
         combat leave                - leave an open encounter between rounds
         combat ready                - toggle your declared action as ready
+        combat combos               - list the combos taking shape this round, slot by slot
         combat combo <name>         - chain your declared action into a combo
         combat revert               - undo a combo upgrade
         combat yield                - concede a duel
@@ -136,6 +143,9 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         parts = raw.split(maxsplit=1)
         self._subverb = parts[0].lower()
         self._rest = parts[1].strip() if len(parts) > 1 else ""
+        if self._subverb == _COMBOS_SUBVERB:
+            self._show_round_combos()
+            return
         if self._subverb not in _SUBVERBS:
             options = ", ".join(_SUBVERBS)
             self.msg(f"Unknown combat action '{self._subverb}'. Try: {options}.")
@@ -540,12 +550,12 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             "charge <opp> with <technique>, joust with <technique>, "
             "engage <opp>, disengage, "
             "join, leave, ready, "
-            "combo <name>, revert, yield"
+            "combos, combo <name>, revert, yield"
         ]
         participant = self._combat_participant_or_none()
         if participant is None:
             lines.extend(self._render_resource_state(participant, None))
-            lines.append("You are not currently declaring in combat.")
+            lines.append(_NOT_DECLARING)
         else:
             from world.combat.models import CombatRoundAction  # noqa: PLC0415
 
@@ -570,3 +580,54 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
                 self._render_windup_lines(participant, self._pending_windups(participant.encounter))
             )
         self.msg("\n".join(lines))
+
+    def _show_round_combos(self) -> None:
+        """List every combo taking shape this round, slot by slot (#3553).
+
+        Mirrors the web ``available_combos`` payload: each slot's requirement
+        and who fills it, the rider, and what a partial fill still needs.
+        """
+        participant = self._combat_participant_or_none()
+        if participant is None:
+            self.msg(_NOT_DECLARING)
+            return
+        from world.combat.services import scan_round_combos  # noqa: PLC0415
+
+        round_combos = scan_round_combos(participant.encounter, participant.encounter.round_number)
+        if not round_combos:
+            self.msg("No combos are taking shape this round.")
+            return
+        lines = ["|wCombos this round|n:"]
+        for round_combo in round_combos:
+            lines.extend(self._render_round_combo(round_combo, participant.pk))
+        self.msg("\n".join(lines))
+
+    @staticmethod
+    def _render_round_combo(round_combo: RoundCombo, own_participant_pk: int) -> list[str]:
+        """Render one combo: header with fill count and rider, then a line per slot."""
+        combo = round_combo.combo
+        known = "known" if round_combo.known_by_participant else "not known"
+        if round_combo.complete:
+            progress = "ready to chain"
+        else:
+            progress = f"{round_combo.filled_count} of {round_combo.slot_count} slots filled"
+        rider: list[str] = []
+        if combo.bonus_damage:
+            rider.append(f"+{combo.bonus_damage} damage")
+        if combo.bypass_soak:
+            rider.append("bypasses soak")
+        suffix = f"; {', '.join(rider)}" if rider else ""
+        lines = [f"  {combo.name} ({known}): {progress}{suffix}"]
+        for fill in round_combo.slot_fills:
+            if fill.match is None:
+                filler = "open"
+            else:
+                who = "you" if fill.participant_id == own_participant_pk else fill.character_name
+                filler = f"{who} ({fill.technique_name})"
+            lines.append(f"    {fill.slot.slot_number}. {fill.slot.requirement_label} - {filler}")
+        open_slots = round_combo.open_slots
+        if open_slots:
+            needs = ", ".join(slot.requirement_label for slot in open_slots)
+            count = "one more" if len(open_slots) == 1 else f"{len(open_slots)} more"
+            lines.append(f"    Needs {count}: {needs}")
+        return lines

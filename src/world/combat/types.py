@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         CombatParticipant,
         CombatRoundAction,
         ComboDefinition,
+        ComboSlot,
     )
     from world.conditions.models import DamageType
     from world.conditions.types import (
@@ -85,6 +86,71 @@ class AvailableCombo:
     combo: ComboDefinition
     slot_matches: list[ComboSlotMatch]
     known_by_participant: bool
+
+
+@dataclass(frozen=True)
+class ComboSlotFill:
+    """One slot of a combo as this round sees it: what it asks for, and who fills it (#3553).
+
+    ``match`` is None while the slot is still open. The name accessors exist so
+    the REST serializer and the telnet listing read the same thing.
+    """
+
+    slot: ComboSlot
+    match: ComboSlotMatch | None
+
+    @property
+    def participant_id(self) -> int | None:
+        return None if self.match is None else self.match.participant.pk
+
+    @property
+    def character_name(self) -> str | None:
+        if self.match is None:
+            return None
+        return self.match.participant.character_sheet.character.db_key
+
+    @property
+    def technique_name(self) -> str | None:
+        return None if self.match is None else self.match.action.focused_action.name
+
+
+@dataclass(frozen=True)
+class RoundCombo:
+    """A combo taking shape this round: every slot listed, filled or open (#3553).
+
+    Produced by ``scan_round_combos``. A complete fill is what ``AvailableCombo``
+    has always described; a partial fill is listed only when a PC in the
+    encounter already knows the combo, so hidden combos stay hidden until they
+    fire.
+    """
+
+    combo: ComboDefinition
+    slot_fills: list[ComboSlotFill]
+    known_by_participant: bool
+
+    @property
+    def complete(self) -> bool:
+        return all(fill.match is not None for fill in self.slot_fills)
+
+    @property
+    def slot_count(self) -> int:
+        return len(self.slot_fills)
+
+    @property
+    def filled_count(self) -> int:
+        return sum(1 for fill in self.slot_fills if fill.match is not None)
+
+    @property
+    def open_slots(self) -> list[ComboSlot]:
+        return [fill.slot for fill in self.slot_fills if fill.match is None]
+
+    def as_available(self) -> AvailableCombo:
+        """The complete-fill view; only meaningful when ``complete`` is True."""
+        return AvailableCombo(
+            combo=self.combo,
+            slot_matches=[fill.match for fill in self.slot_fills if fill.match is not None],
+            known_by_participant=self.known_by_participant,
+        )
 
 
 @dataclass(frozen=True)
