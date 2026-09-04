@@ -1,6 +1,7 @@
 """Staff-only world-builder read API (#2449 Task 4).
 
-Read-only surface behind ``IsAdminUser`` (``request.user.is_staff``): the area
+Read-only surface behind ``IsStaffOrGrantHolder`` (#3534 — staff, or any
+``AreaBuildGrant`` holder, scoped to their grant subtrees): the area
 tree (``GET /api/world-builder/areas/``) and the per-area manager payload
 (``GET /api/world-builder/areas/<id>/manager/``) the staff canvas renders —
 ALL RoomProfiles in the area (private included), unlike the player-facing
@@ -17,14 +18,15 @@ manager doesn't: occupant counts and cross-area exit destination areas.
 
 from __future__ import annotations
 
+import contextlib
+
 from django.db.models import Count, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from evennia.objects.models import ObjectDB
-from rest_framework import viewsets
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -32,10 +34,11 @@ from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.areas.constants import UNFINISHED_ROOM_DESC
 from world.areas.filters import AreaFilter
 from world.areas.grid_services import exits_from_rooms
-from world.areas.models import Area
+from world.areas.models import Area, AreaClosure
 from world.areas.serializers import (
     WorldBuilderAreaManagerSerializer,
     WorldBuilderAreaSerializer,
+    WorldBuilderGrantsSerializer,
     WorldBuilderRoomDetailSerializer,
     WorldBuilderRoomHitSerializer,
 )
@@ -276,13 +279,22 @@ def _authoring_catalogs() -> dict:
     from world.areas.positioning.models import PositionBlueprint  # noqa: PLC0415
     from world.buildings.constants import PermitEligibility  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.magic.models import Resonance  # noqa: PLC0415
     from world.npc_services.models import NPCRole  # noqa: PLC0415
     from world.realms.models import Realm  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
+    from world.societies.constants import FameTier  # noqa: PLC0415
     from world.societies.models import Society  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
     from world.weather.models import Climate  # noqa: PLC0415
 
     return {
+        # The ambient-condition editor's ref pick-lists (#3534).
+        "species": [{"id": s.pk, "name": s.name} for s in Species.objects.all()],
+        "resonances": [{"id": r.pk, "name": r.name} for r in Resonance.objects.all()],
+        "distinctions": [{"id": d.pk, "name": d.name} for d in Distinction.objects.all()],
+        "fame_tiers": [{"value": value, "label": label} for value, label in FameTier.choices],
         "realms": list(Realm.objects.values_list("name", flat=True)),
         "climates": list(Climate.objects.values_list("name", flat=True)),
         "societies": list(Society.objects.values_list("name", flat=True)),
@@ -396,10 +408,24 @@ def area_manager_payload(area: Area) -> dict:
         )
     )
 
+    from django.db import DatabaseError as _DatabaseError  # noqa: PLC0415
+
+    from world.magic.services.resonance_environment import (  # noqa: PLC0415
+        area_resonance_readings,
+    )
+
+    try:
+        resonances = [r._asdict() for r in area_resonance_readings(area)]
+    except _DatabaseError:
+        # areas_areaclosure is absent on the SQLite fast tier (known gap;
+        # CI's PG parity is the gate) — degrade to an empty panel.
+        resonances = []
+
     return {
         "area": area,
         "catalogs": _authoring_catalogs(),
         "rooms": rooms_data,
+        "resonances": resonances,
         "breadcrumb": _area_breadcrumb(area),
         "exits": [
             {
@@ -417,18 +443,71 @@ def area_manager_payload(area: Area) -> dict:
     }
 
 
+class IsStaffOrGrantHolder(permissions.BasePermission):
+    """Staff, or any account holding at least one ``AreaBuildGrant`` (#3534).
+
+    #3477 opened the WRITE side to warranted GMs (``BuildWarrantPrerequisite``)
+    but left every builder read behind ``IsAdminUser``, so a granted GM could
+    dispatch actions yet never load the atlas that reaches them. Reads open to
+    grant holders here; SCOPING to the grant subtree happens per-endpoint via
+    ``_covered_area_ids`` (this class only answers "may they read at all").
+    """
+
+    def has_permission(self, request: Request, view: object) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_staff:
+            return True
+        from world.gm.models import AreaBuildGrant  # noqa: PLC0415
+
+        return AreaBuildGrant.objects.filter(account=user).exists()
+
+
+def _covered_area_ids(request: Request) -> set[int] | None:
+    """The area ids the caller may read, or None for staff (unrestricted).
+
+    A grant covers its own area plus the ``AreaClosure`` subtree beneath it —
+    the read-side mirror of ``has_build_warrant``'s descent, level-blind
+    (reading is "inside your territory", the ceiling only gates writes). On
+    the SQLite fast tier (closure absent) this degrades to the grants' direct
+    areas; CI's PG parity is the gate.
+    """
+    if request.user.is_staff:
+        return None
+    from django.db import DatabaseError  # noqa: PLC0415
+
+    from world.gm.models import AreaBuildGrant  # noqa: PLC0415
+
+    grant_area_ids = set(
+        AreaBuildGrant.objects.filter(account=request.user).values_list("area_id", flat=True)
+    )
+    covered = set(grant_area_ids)
+    with contextlib.suppress(DatabaseError):
+        covered.update(
+            AreaClosure.objects.filter(ancestor_id__in=grant_area_ids).values_list(
+                "descendant_id", flat=True
+            )
+        )
+    return covered
+
+
 @extend_schema(tags=["world-builder"])
 class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
-    """Staff-only reads for the world-builder canvas (#2449)."""
+    """Builder reads for the atlas: staff, or warranted GMs scoped to their grants (#2449/#3534)."""
 
     serializer_class = WorldBuilderAreaSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrGrantHolder]
     filter_backends = [DjangoFilterBackend]
     filterset_class = AreaFilter
     pagination_class = WorldBuilderAreaPagination
 
     def get_queryset(self) -> QuerySet[Area]:
-        return Area.objects.annotate(children_count=Count("children")).order_by("name")
+        queryset = Area.objects.annotate(children_count=Count("children")).order_by("name")
+        covered = _covered_area_ids(self.request)
+        if covered is not None:
+            queryset = queryset.filter(pk__in=covered)
+        return queryset
 
     @extend_schema(responses={200: WorldBuilderRoomHitSerializer(many=True)})
     @action(detail=False, methods=["get"], url_path="room-search")
@@ -444,13 +523,13 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
         term = (request.query_params.get("search") or "").strip()  # noqa: USE_FILTERSET
         if not term:
             return Response([])
-        hits = list(
-            RoomProfile.objects.filter(
-                Q(objectdb__db_key__icontains=term) | Q(fixture_key__icontains=term)
-            )
-            .select_related("objectdb", "area")
-            .order_by("objectdb__db_key")[:50]
+        hit_qs = RoomProfile.objects.filter(
+            Q(objectdb__db_key__icontains=term) | Q(fixture_key__icontains=term)
         )
+        covered = _covered_area_ids(request)
+        if covered is not None:
+            hit_qs = hit_qs.filter(area_id__in=covered)
+        hits = list(hit_qs.select_related("objectdb", "area").order_by("objectdb__db_key")[:50])
         payload = [
             {
                 "id": p.objectdb_id,
@@ -479,6 +558,11 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             RoomProfile.objects.filter(objectdb_id=room_id or 0).select_related("objectdb").first()
         )
         if profile is None:
+            return Response({"detail": "No such room."}, status=404)
+        covered = _covered_area_ids(request)
+        if covered is not None and profile.area_id not in covered:
+            # Outside every grant subtree reads as absent, not forbidden — the
+            # same shape the scoped queryset gives the area endpoints.
             return Response({"detail": "No such room."}, status=404)
         from world.locations.services import (  # noqa: PLC0415
             comfort_summary,
@@ -563,6 +647,18 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             }
             for emit in AmbientEmit.objects.filter(room_profile=profile)
         ]
+        from world.magic.services.resonance_environment import (  # noqa: PLC0415
+            get_room_dominant_affinity,
+            room_resonance_readings,
+        )
+
+        try:
+            resonances = [r._asdict() for r in room_resonance_readings(room_obj)]
+            dominant = get_room_dominant_affinity(room_obj)
+        except DatabaseError:
+            # Same SQLite-tier closure degrade as the comfort block above.
+            resonances = []
+            dominant = None
         payload = {
             "id": profile.objectdb_id,
             "room": _room_rows([profile])[0],
@@ -572,8 +668,50 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             "comfort": comfort,
             "ambient_lines": ambient_lines,
             "ambient_emits": ambient_emits,
+            "resonances": resonances,
+            "dominant_affinity": dominant.name if dominant else None,
         }
         return Response(WorldBuilderRoomDetailSerializer(payload).data)
+
+    @extend_schema(responses={200: WorldBuilderGrantsSerializer})
+    @action(detail=False, methods=["get"], url_path="grants")
+    def grants(self, request: Request) -> Response:
+        """GET /api/world-builder/areas/grants/ — the caller's own warrant shape (#3534).
+
+        The atlas roots a GM's view at their grant, hides add-affordances past
+        the ceiling, and shows the room budget as used/total — this is the
+        read those honesty affordances hang on. Staff get ``is_staff: true``
+        and an empty list (their warrant is implicit and world-wide).
+        ``rooms_used`` counts the grant subtree's rooms — the same
+        creator-agnostic total ``has_room_budget_capacity`` enforces.
+        """
+        from django.db import DatabaseError  # noqa: PLC0415
+
+        from world.gm.models import AreaBuildGrant  # noqa: PLC0415
+
+        if request.user.is_staff:
+            return Response(WorldBuilderGrantsSerializer({"is_staff": True, "grants": []}).data)
+
+        rows = []
+        for grant in AreaBuildGrant.objects.filter(account=request.user).select_related("area"):
+            subtree_ids = {grant.area_id}
+            with contextlib.suppress(DatabaseError):
+                subtree_ids.update(
+                    AreaClosure.objects.filter(ancestor_id=grant.area_id).values_list(
+                        "descendant_id", flat=True
+                    )
+                )
+            rows.append(
+                {
+                    "area_id": grant.area_id,
+                    "area_name": grant.area.name,
+                    "area_level": grant.area.level,
+                    "max_level": grant.max_level,
+                    "room_budget": grant.room_budget,
+                    "rooms_used": RoomProfile.objects.filter(area_id__in=subtree_ids).count(),
+                }
+            )
+        return Response(WorldBuilderGrantsSerializer({"is_staff": False, "grants": rows}).data)
 
     @extend_schema(responses={200: WorldBuilderAreaManagerSerializer})
     @action(detail=True, methods=["get"], url_path="manager")

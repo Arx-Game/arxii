@@ -6,22 +6,25 @@
  * `onOpenArt`), Ownership, People, Ambience, Places & Things, Law & Danger,
  * Secrets & Story, and Resonance.
  *
- * Every panel but Exits is read-only display here (matching the brief's
- * explicit ruling for Ambience — "shows counts only," T7 builds its real
- * editor — generalized to the rest: none of these systems has a builder
- * action to wire from this task, so a ⊕ row here would be a dead button).
- * Ownership's Deed/Tenants are "not tracked yet" rather than invented —
- * the room payload has no tenancy fields at all yet, only `is_public`
- * (Listing). Resonance reads `room.stats` for anything resonance-shaped;
- * none exists in the current payload, so it always shows the honest
- * "unresonant ground" fallback today — this stays forward-compatible
- * without fabricating data that isn't there.
+ * #3534 makes the categories doors, per Dan's ruling ("every marginalia
+ * category is a door, not a label"): Ambience, People, Places & Things,
+ * Law & Danger, and Secrets & Story headers open their systems' editors
+ * (`onOpenDoor` — RoomDocument mounts the reused Phase B sections in a
+ * dialog). Ownership stays a label — the room payload still has no
+ * deed/tenancy fields, and a door onto nothing would be a dead button.
+ * Resonance renders the real cascade readings the detail payload now
+ * carries (`resonances`/`dominantAffinity`), read-only by design.
  */
 import type { ReactNode } from 'react';
 
 import { PlateHead } from '@/components/folio';
 
-import type { WorldBuilderComfort, WorldBuilderExitDetail, WorldBuilderRoom } from '../types';
+import type {
+  WorldBuilderComfort,
+  WorldBuilderExitDetail,
+  WorldBuilderResonanceReading,
+  WorldBuilderRoom,
+} from '../types';
 
 export interface MarginaliaProps {
   room: WorldBuilderRoom;
@@ -33,28 +36,55 @@ export interface MarginaliaProps {
   onAddExit: () => void;
   /** Opens the ArtDialog (#3535) — the second real door after Exits. */
   onOpenArt: () => void;
+  /** Opens a category's own editor (#3534 — categories are doors, not labels). */
+  onOpenDoor: (door: MarginaliaDoor) => void;
+  /** The room's resolved cascade resonances (#3534 — the panel's real data). */
+  resonances: WorldBuilderResonanceReading[];
+  dominantAffinity: string | null;
 }
+
+export type MarginaliaDoor = 'ambience' | 'people' | 'places' | 'law' | 'secrets';
 
 function Panel({
   label,
   count,
+  onOpen,
   children,
 }: {
   label: string;
   count?: number | string;
+  /** Present = the header is a door into this category's editor (#3534). */
+  onOpen?: () => void;
   children: ReactNode;
 }) {
+  const slug = label.toLowerCase().replace(/[^a-z]+/g, '-');
+  const head = (
+    <>
+      {label}
+      {onOpen && <span aria-hidden>✎</span>}
+      {count !== undefined && (
+        <span className="ml-auto font-normal tracking-normal text-muted-foreground">{count}</span>
+      )}
+    </>
+  );
   return (
-    <div
-      className="border-b pb-2 pt-2"
-      data-testid={`marginalia-panel-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`}
-    >
-      <PlateHead as="h4" className="mb-1 flex items-center gap-2">
-        {label}
-        {count !== undefined && (
-          <span className="ml-auto font-normal tracking-normal text-muted-foreground">{count}</span>
-        )}
-      </PlateHead>
+    <div className="border-b pb-2 pt-2" data-testid={`marginalia-panel-${slug}`}>
+      {onOpen ? (
+        <button
+          type="button"
+          className="w-full text-left hover:text-primary"
+          onClick={onOpen}
+          data-testid={`marginalia-door-${slug}`}
+        >
+          <PlateHead as="h4" className="mb-1 flex items-center gap-2">
+            {head}
+          </PlateHead>
+        </button>
+      ) : (
+        <PlateHead as="h4" className="mb-1 flex items-center gap-2">
+          {head}
+        </PlateHead>
+      )}
       {children}
     </div>
   );
@@ -78,8 +108,10 @@ export function Marginalia({
   onOpenExit,
   onAddExit,
   onOpenArt,
+  onOpenDoor,
+  resonances,
+  dominantAffinity,
 }: MarginaliaProps) {
-  const resonanceStat = room.stats.find((stat) => stat.key.startsWith('resonance'));
   const dangerStats = room.stats.filter((stat) => stat.key === 'crime' || stat.key === 'order');
   const placeNames = room.places.map((p) => p.name).join(', ') || 'none';
   const featureLabel = room.feature
@@ -120,13 +152,17 @@ export function Marginalia({
         <Kv term="Listing">{room.is_public ? 'public' : 'private'}</Kv>
       </Panel>
 
-      <Panel label="People" count={room.functionaries.length}>
+      <Panel label="People" count={room.functionaries.length} onOpen={() => onOpenDoor('people')}>
         <p className="font-body text-sm text-muted-foreground">
           {room.functionaries.length > 0 ? room.functionaries.join(', ') : 'none posted'}
         </p>
       </Panel>
 
-      <Panel label="Ambience" count={room.ambient_counts.lines + room.ambient_counts.emits}>
+      <Panel
+        label="Ambience"
+        count={room.ambient_counts.lines + room.ambient_counts.emits}
+        onOpen={() => onOpenDoor('ambience')}
+      >
         <Kv term="Entry lines">{room.ambient_counts.lines}</Kv>
         <Kv term="Linger emits">{room.ambient_counts.emits}</Kv>
         <Kv term="Comfort">
@@ -135,12 +171,12 @@ export function Marginalia({
         </Kv>
       </Panel>
 
-      <Panel label="Places & Things" count={room.places.length}>
+      <Panel label="Places & Things" count={room.places.length} onOpen={() => onOpenDoor('places')}>
         <Kv term="Places">{placeNames}</Kv>
         <Kv term="Feature slot">{featureLabel}</Kv>
       </Panel>
 
-      <Panel label="Law & Danger">
+      <Panel label="Law & Danger" onOpen={() => onOpenDoor('law')}>
         {dangerStats.length > 0 ? (
           dangerStats.map((stat) => (
             <Kv key={stat.key} term={stat.label}>
@@ -152,7 +188,11 @@ export function Marginalia({
         )}
       </Panel>
 
-      <Panel label="Secrets & Story" count={cluesCount + clueTriggersCount}>
+      <Panel
+        label="Secrets & Story"
+        count={cluesCount + clueTriggersCount}
+        onOpen={() => onOpenDoor('secrets')}
+      >
         <Kv term="Clues">{cluesCount}</Kv>
         <Kv term="Clue triggers">{clueTriggersCount}</Kv>
       </Panel>
@@ -179,10 +219,18 @@ export function Marginalia({
       </Panel>
 
       <Panel label="Resonance">
-        {resonanceStat ? (
-          <Kv term={resonanceStat.label}>{resonanceStat.effective}</Kv>
-        ) : (
+        {resonances.length === 0 ? (
           <p className="font-body text-sm text-muted-foreground">unresonant ground</p>
+        ) : (
+          <>
+            {dominantAffinity && <Kv term="Dominant">{dominantAffinity}</Kv>}
+            {resonances.map((reading) => (
+              <Kv key={reading.name} term={reading.name}>
+                {reading.magnitude}
+                {reading.affinity ? ` (${reading.affinity})` : ''}
+              </Kv>
+            ))}
+          </>
         )}
       </Panel>
     </aside>

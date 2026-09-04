@@ -23,7 +23,12 @@ import { Button } from '@/components/ui/button';
 import { Plate, PlateHead } from '@/components/folio';
 import { cn } from '@/lib/utils';
 
-import { useAreaManagerQuery, useWorldBuilderAction, useWorldBuilderAreasQuery } from '../queries';
+import {
+  useAreaManagerQuery,
+  useMyGrantsQuery,
+  useWorldBuilderAction,
+  useWorldBuilderAreasQuery,
+} from '../queries';
 import type { WorldBuilderActionKey, WorldBuilderArea, WorldBuilderRoom } from '../types';
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import { areaViewKind, BUILDING_LEVEL, childLevelOf } from './constants';
@@ -100,6 +105,14 @@ export function AreaPage({
   const childAreas = childrenPage?.results ?? [];
   const rooms = manager?.rooms ?? [];
 
+  const { data: myGrants } = useMyGrantsQuery();
+  // The broadest ceiling across the caller's grants (#3534) — the UI reads
+  // the most permissive one; per-target enforcement stays server-side.
+  const maxBuildLevel =
+    myGrants == null || myGrants.is_staff || myGrants.grants.length === 0
+      ? null
+      : Math.max(...myGrants.grants.map((grant) => grant.max_level));
+
   const characterId = useWorldBuilderActor();
   const { mutate: runMutation } = useWorldBuilderAction(characterId ?? 0, areaId);
   const runAction = (key: string, kwargs: Record<string, unknown>) => {
@@ -171,6 +184,7 @@ export function AreaPage({
           onOpen={handleLatticeOpen}
           runAction={runAction}
           childAreaLevel={isBuilding ? undefined : childLevelOf(area.level)}
+          maxBuildLevel={maxBuildLevel}
           highlightTileId={highlightRoomId}
         />
       </div>

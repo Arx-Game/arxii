@@ -31,6 +31,7 @@ import { AreaDocument } from '../document/AreaDocument';
 import { RoomDocument } from '../document/RoomDocument';
 import {
   useAreaManagerQuery,
+  useMyGrantsQuery,
   useRoomDetailQuery,
   useRoomSearchQuery,
   useWorldBuilderAreasQuery,
@@ -64,13 +65,22 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
   }, [highlightRoomId]);
 
   const { data: rootsPage } = useWorldBuilderAreasQuery({ hasParent: false });
+  const { data: myGrants } = useMyGrantsQuery();
   useEffect(() => {
     if (view != null) return;
+    // Warrant rooting (#3534, spec §1): a granted GM's atlas opens at the top
+    // of their warrant, not the world — for them the roots query is empty
+    // anyway (their subtree's root has a parent, and reads are scoped).
+    const grant = myGrants != null && !myGrants.is_staff ? myGrants.grants[0] : undefined;
+    if (grant) {
+      setView({ kind: areaViewKind(grant.area_level), id: grant.area_id }, grant.area_name);
+      return;
+    }
     const firstRoot = rootsPage?.results?.[0];
     if (firstRoot) {
       setView({ kind: areaViewKind(firstRoot.level), id: firstRoot.id }, firstRoot.name);
     }
-  }, [view, rootsPage, setView]);
+  }, [view, rootsPage, myGrants, setView]);
 
   const isRoomDoc = view?.kind === 'roomdoc';
   // 'areadoc' included: the area document is the area, so the manager query
@@ -141,7 +151,13 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
 
   return (
     <div className="grid h-screen grid-cols-[270px_1fr]" data-testid="atlas-page">
-      <IndexRail current={view} onSelect={handleSelect} pinned={pinned} recents={recents} />
+      <IndexRail
+        current={view}
+        onSelect={handleSelect}
+        pinned={pinned}
+        recents={recents}
+        grants={myGrants != null && !myGrants.is_staff ? myGrants.grants : []}
+      />
 
       <main className="overflow-y-auto">
         <FolioCrumb entries={crumbEntries} onSelect={(id) => handleSelect({ kind: 'area', id })}>

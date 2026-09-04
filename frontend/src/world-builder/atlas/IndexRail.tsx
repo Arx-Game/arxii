@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
 import { useAreaManagerQuery, useWorldBuilderAreasQuery } from '../queries';
-import type { WorldBuilderArea } from '../types';
+import type { WorldBuilderArea, WorldBuilderGrant } from '../types';
 import { areaViewKind, BUILDING_LEVEL } from './constants';
 import type { AtlasHistoryEntry, AtlasView } from './useAtlasState';
 
@@ -40,9 +40,11 @@ export interface IndexRailProps {
   onSelect: (view: AtlasView, name: string) => void;
   pinned: AtlasHistoryEntry[];
   recents: AtlasHistoryEntry[];
+  /** The caller's grants (#3534) — non-staff only; budgets render as used/total. */
+  grants?: WorldBuilderGrant[];
 }
 
-export function IndexRail({ current, onSelect, pinned, recents }: IndexRailProps) {
+export function IndexRail({ current, onSelect, pinned, recents, grants = [] }: IndexRailProps) {
   const account = useAccount();
   const { data: rootsPage, isLoading } = useWorldBuilderAreasQuery({ hasParent: false });
   const roots = rootsPage?.results ?? [];
@@ -71,6 +73,31 @@ export function IndexRail({ current, onSelect, pinned, recents }: IndexRailProps
             {renderAccount()}
           </p>
         </div>
+
+        {grants.length > 0 && (
+          <div className="border-b px-4 py-2" data-testid="index-warrant">
+            {grants.map((grant) => (
+              <button
+                key={grant.area_id}
+                type="button"
+                className="block w-full text-left text-xs hover:text-primary"
+                onClick={() =>
+                  onSelect(
+                    { kind: areaViewKind(grant.area_level), id: grant.area_id },
+                    grant.area_name
+                  )
+                }
+              >
+                <span className="theme-heading [font-variant:small-caps]">{grant.area_name}</span>
+                <span className="ml-1 font-body italic text-muted-foreground">
+                  {grant.room_budget != null
+                    ? `${grant.rooms_used} of ${grant.room_budget} rooms`
+                    : `${grant.rooms_used} rooms, uncounted`}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex-1 py-2" data-testid="index-tree">
           {isLoading && <p className="px-4 text-xs text-muted-foreground">Loading…</p>}

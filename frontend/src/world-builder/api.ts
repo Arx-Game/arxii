@@ -8,6 +8,7 @@ import type {
   WorldBuilderArea,
   WorldBuilderAreaManager,
   WorldBuilderRoomDetail,
+  WorldBuilderGrants,
   WorldBuilderRoomHit,
 } from './types';
 
@@ -69,4 +70,11 @@ export function dispatchWorldBuilder(
   kwargs: Record<string, unknown>
 ): Promise<DispatchResult> {
   return dispatchCanvasAction(characterId, registryKey, kwargs);
+}
+
+/** The caller's own warrant shape (#3534) — GET /api/world-builder/areas/grants/. */
+export async function fetchMyGrants(): Promise<WorldBuilderGrants> {
+  const res = await apiFetch('/api/world-builder/areas/grants/');
+  if (!res.ok) throw new Error('Failed to load build grants');
+  return res.json() as Promise<WorldBuilderGrants>;
 }

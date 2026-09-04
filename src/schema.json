@@ -38413,12 +38413,9 @@ paths:
   /api/world-builder/areas/:
     get:
       operationId: world_builder_areas_list
-      description: Staff-only reads for the world-builder canvas (#2449).
+      description: 'Builder reads for the atlas: staff, or warranted GMs scoped to
+        their grants (#2449/#3534).'
       parameters:
-      - in: query
-        name: has_parent
-        schema:
-          type: boolean
       - name: page
         required: false
         in: query
@@ -38431,14 +38428,6 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
-      - in: query
-        name: parent
-        schema:
-          type: number
-      - in: query
-        name: search
-        schema:
-          type: string
       tags:
       - world-builder
       security:
@@ -38453,13 +38442,13 @@ paths:
   /api/world-builder/areas/{id}/:
     get:
       operationId: world_builder_areas_retrieve
-      description: Staff-only reads for the world-builder canvas (#2449).
+      description: 'Builder reads for the atlas: staff, or warranted GMs scoped to
+        their grants (#2449/#3534).'
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Area.
+          type: string
         required: true
       tags:
       - world-builder
@@ -38485,8 +38474,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Area.
+          type: string
         required: true
       tags:
       - world-builder
@@ -38498,6 +38486,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorldBuilderAreaManager'
+          description: ''
+  /api/world-builder/areas/grants/:
+    get:
+      operationId: world_builder_areas_grants_retrieve
+      description: |-
+        GET /api/world-builder/areas/grants/ — the caller's own warrant shape (#3534).
+
+        The atlas roots a GM's view at their grant, hides add-affordances past
+        the ceiling, and shows the room budget as used/total — this is the
+        read those honesty affordances hang on. Staff get ``is_staff: true``
+        and an empty list (their warrant is implicit and world-wide).
+        ``rooms_used`` counts the grant subtree's rooms — the same
+        creator-agnostic total ``has_room_budget_capacity`` enforces.
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderGrants'
           description: ''
   /api/world-builder/areas/room-detail/:
     get:
@@ -38529,10 +38540,6 @@ paths:
         put the Traitor's Gate" seam for a 400-room grid, also feeding the
         link-rooms pickers.
       parameters:
-      - in: query
-        name: has_parent
-        schema:
-          type: boolean
       - name: page
         required: false
         in: query
@@ -38545,14 +38552,6 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
-      - in: query
-        name: parent
-        schema:
-          type: number
-      - in: query
-        name: search
-        schema:
-          type: string
       tags:
       - world-builder
       security:
@@ -76945,6 +76944,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StoryRoom'
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderResonanceReading'
         exits:
           type: array
           items:
@@ -76954,6 +76957,7 @@ components:
       - breadcrumb
       - catalogs
       - exits
+      - resonances
       - rooms
     StoryCreate:
       type: object
@@ -82148,6 +82152,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderRoom'
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderResonanceReading'
         exits:
           type: array
           items:
@@ -82157,6 +82165,7 @@ components:
       - breadcrumb
       - catalogs
       - exits
+      - resonances
       - rooms
     WorldBuilderBreadcrumb:
       type: object
@@ -82174,8 +82183,24 @@ components:
       - name
     WorldBuilderCatalogs:
       type: object
-      description: Panel pick-lists (#3269).
+      description: 'Panel pick-lists (#3269; condition-editor refs #3534).'
       properties:
+        species:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderIdName'
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderIdName'
+        distinctions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderIdName'
+        fame_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderChoice'
         realms:
           type: array
           items:
@@ -82220,13 +82245,28 @@ components:
       - beginnings
       - blueprints
       - climates
+      - distinctions
+      - fame_tiers
       - feature_kinds
       - npc_roles
       - permit_options
       - realms
+      - resonances
       - size_tiers
       - societies
+      - species
       - starting_areas
+    WorldBuilderChoice:
+      type: object
+      description: One TextChoices member as a pick-list row (#3534 — fame tiers).
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - value
     WorldBuilderClueTrigger:
       type: object
       description: One ClueTrigger placement, nested in a WorldBuilderRoom payload
@@ -82340,6 +82380,45 @@ components:
       - kind
       - name
       - to_room_id
+    WorldBuilderGrant:
+      type: object
+      description: One of the caller's own AreaBuildGrants, with its budget usage
+        (#3534).
+      properties:
+        area_id:
+          type: integer
+        area_name:
+          type: string
+        area_level:
+          type: integer
+        max_level:
+          type: integer
+        room_budget:
+          type: integer
+          nullable: true
+        rooms_used:
+          type: integer
+      required:
+      - area_id
+      - area_level
+      - area_name
+      - max_level
+      - room_budget
+      - rooms_used
+    WorldBuilderGrants:
+      type: object
+      description: 'The caller''s warrant shape: staff (implicit world-wide) or their
+        grants (#3534).'
+      properties:
+        is_staff:
+          type: boolean
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderGrant'
+      required:
+      - grants
+      - is_staff
     WorldBuilderIdName:
       type: object
       properties:
@@ -82381,6 +82460,22 @@ components:
       - fixture_key
       - id
       - kind_name
+      - name
+    WorldBuilderResonanceReading:
+      type: object
+      description: One resolved cascade resonance at a room or area (#3534 — the Resonance
+        panel).
+      properties:
+        name:
+          type: string
+        affinity:
+          type: string
+          nullable: true
+        magnitude:
+          type: integer
+      required:
+      - affinity
+      - magnitude
       - name
     WorldBuilderRoom:
       type: object
@@ -82588,14 +82683,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderAmbientEmit'
+        resonances:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderResonanceReading'
+        dominant_affinity:
+          type: string
+          nullable: true
       required:
       - ambient_emits
       - ambient_lines
       - breadcrumb
       - catalogs
       - comfort
+      - dominant_affinity
       - exits
       - id
+      - resonances
       - room
     WorldBuilderRoomFeature:
       type: object

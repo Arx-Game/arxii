@@ -23579,7 +23579,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Staff-only reads for the world-builder canvas (#2449). */
+    /** @description Builder reads for the atlas: staff, or warranted GMs scoped to their grants (#2449/#3534). */
     get: operations['world_builder_areas_list'];
     put?: never;
     post?: never;
@@ -23596,7 +23596,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Staff-only reads for the world-builder canvas (#2449). */
+    /** @description Builder reads for the atlas: staff, or warranted GMs scoped to their grants (#2449/#3534). */
     get: operations['world_builder_areas_retrieve'];
     put?: never;
     post?: never;
@@ -23621,6 +23621,32 @@ export interface paths {
      *     the canvas needs to see (and select) private rooms too.
      */
     get: operations['world_builder_areas_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/areas/grants/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/world-builder/areas/grants/ — the caller's own warrant shape (#3534).
+     *
+     *     The atlas roots a GM's view at their grant, hides add-affordances past
+     *     the ceiling, and shows the room budget as used/total — this is the
+     *     read those honesty affordances hang on. Staff get ``is_staff: true``
+     *     and an empty list (their warrant is implicit and world-wide).
+     *     ``rooms_used`` counts the grant subtree's rooms — the same
+     *     creator-agnostic total ``has_room_budget_capacity`` enforces.
+     */
+    get: operations['world_builder_areas_grants_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -43445,6 +43471,7 @@ export interface components {
       catalogs: components['schemas']['WorldBuilderCatalogs'];
       breadcrumb: components['schemas']['WorldBuilderBreadcrumb'][];
       rooms: components['schemas']['StoryRoom'][];
+      resonances: components['schemas']['WorldBuilderResonanceReading'][];
       exits: components['schemas']['WorldBuilderExit'][];
     };
     /** @description Serializer for creating stories */
@@ -46090,6 +46117,7 @@ export interface components {
       catalogs: components['schemas']['WorldBuilderCatalogs'];
       breadcrumb: components['schemas']['WorldBuilderBreadcrumb'][];
       rooms: components['schemas']['WorldBuilderRoom'][];
+      resonances: components['schemas']['WorldBuilderResonanceReading'][];
       exits: components['schemas']['WorldBuilderExit'][];
     };
     /** @description One ancestor link in the area hierarchy chain (#3283). */
@@ -46098,8 +46126,12 @@ export interface components {
       name: string;
       level_display: string;
     };
-    /** @description Panel pick-lists (#3269). */
+    /** @description Panel pick-lists (#3269; condition-editor refs #3534). */
     WorldBuilderCatalogs: {
+      species: components['schemas']['WorldBuilderIdName'][];
+      resonances: components['schemas']['WorldBuilderIdName'][];
+      distinctions: components['schemas']['WorldBuilderIdName'][];
+      fame_tiers: components['schemas']['WorldBuilderChoice'][];
       realms: string[];
       climates: string[];
       societies: string[];
@@ -46110,6 +46142,11 @@ export interface components {
       size_tiers: string[];
       starting_areas: components['schemas']['WorldBuilderIdName'][];
       beginnings: components['schemas']['WorldBuilderIdName'][];
+    };
+    /** @description One TextChoices member as a pick-list row (#3534 — fame tiers). */
+    WorldBuilderChoice: {
+      value: string;
+      label: string;
     };
     /** @description One ClueTrigger placement, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderClueTrigger: {
@@ -46155,6 +46192,20 @@ export interface components {
       is_open: boolean;
       aliases: string[];
     };
+    /** @description One of the caller's own AreaBuildGrants, with its budget usage (#3534). */
+    WorldBuilderGrant: {
+      area_id: number;
+      area_name: string;
+      area_level: number;
+      max_level: number;
+      room_budget: number | null;
+      rooms_used: number;
+    };
+    /** @description The caller's warrant shape: staff (implicit world-wide) or their grants (#3534). */
+    WorldBuilderGrants: {
+      is_staff: boolean;
+      grants: components['schemas']['WorldBuilderGrant'][];
+    };
     WorldBuilderIdName: {
       id: number;
       name: string;
@@ -46171,6 +46222,12 @@ export interface components {
       kind_name: string;
       name: string;
       fixture_key: string | null;
+    };
+    /** @description One resolved cascade resonance at a room or area (#3534 — the Resonance panel). */
+    WorldBuilderResonanceReading: {
+      name: string;
+      affinity: string | null;
+      magnitude: number;
     };
     /**
      * @description One RoomProfile in the staff area-manager payload (#2449).
@@ -46240,6 +46297,8 @@ export interface components {
       comfort: components['schemas']['WorldBuilderComfort'];
       ambient_lines: components['schemas']['WorldBuilderAmbientLine'][];
       ambient_emits: components['schemas']['WorldBuilderAmbientEmit'][];
+      resonances: components['schemas']['WorldBuilderResonanceReading'][];
+      dominant_affinity: string | null;
     };
     /** @description The room's active feature, if any (#3269). */
     WorldBuilderRoomFeature: {
@@ -78982,13 +79041,10 @@ export interface operations {
   world_builder_areas_list: {
     parameters: {
       query?: {
-        has_parent?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        parent?: number;
-        search?: string;
       };
       header?: never;
       path?: never;
@@ -79011,8 +79067,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -79033,8 +79088,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -79046,6 +79100,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorldBuilderAreaManager'];
+        };
+      };
+    };
+  };
+  world_builder_areas_grants_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderGrants'];
         };
       };
     };
@@ -79072,13 +79145,10 @@ export interface operations {
   world_builder_areas_room_search_list: {
     parameters: {
       query?: {
-        has_parent?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        parent?: number;
-        search?: string;
       };
       header?: never;
       path?: never;

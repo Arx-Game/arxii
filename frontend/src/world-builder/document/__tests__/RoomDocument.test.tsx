@@ -132,6 +132,10 @@ function makeDetail(room: WorldBuilderRoom): WorldBuilderRoomDetail {
     id: room.id,
     room,
     catalogs: {
+      species: [],
+      resonances: [],
+      distinctions: [],
+      fame_tiers: [],
       realms: [],
       climates: [],
       societies: [],
@@ -148,6 +152,8 @@ function makeDetail(room: WorldBuilderRoom): WorldBuilderRoomDetail {
     comfort: { level: 0, points: 0, amenity: 0, axes: [] },
     ambient_lines: [],
     ambient_emits: [],
+    resonances: [],
+    dominant_affinity: null,
   };
 }
 
@@ -174,6 +180,10 @@ function makeManager(rooms: WorldBuilderRoom[]): WorldBuilderAreaManager {
       permit_eligibility: 'open',
     },
     catalogs: {
+      species: [],
+      resonances: [],
+      distinctions: [],
+      fame_tiers: [],
       realms: [],
       climates: [],
       societies: [],
@@ -187,6 +197,7 @@ function makeManager(rooms: WorldBuilderRoom[]): WorldBuilderAreaManager {
     },
     breadcrumb: [],
     rooms,
+    resonances: [],
     exits: [],
   };
 }

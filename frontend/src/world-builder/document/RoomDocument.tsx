@@ -35,6 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { AddDialog, type AddDialogRealizePayload } from '../atlas/AddDialog';
 import { ArtDialog } from './ArtDialog';
+import { CategoryDoorDialog } from './CategoryDoorDialog';
 import {
   useAreaManagerQuery,
   useRoomDetailQuery,
@@ -49,7 +50,7 @@ import type {
 import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import { Compass } from './Compass';
 import { ExitEditorDialog } from './ExitEditorDialog';
-import { Marginalia } from './Marginalia';
+import { Marginalia, type MarginaliaDoor } from './Marginalia';
 import { PreviewDialog } from './PreviewDialog';
 import { useDraft } from './useDraft';
 import { VariantsPanel } from './VariantsPanel';
@@ -129,6 +130,7 @@ function RoomDocumentBody({
   const [exitDialogExit, setExitDialogExit] = useState<WorldBuilderExitDetail | null>(null);
   const [addExitOpen, setAddExitOpen] = useState(false);
   const [artOpen, setArtOpen] = useState(false);
+  const [openDoor, setOpenDoor] = useState<MarginaliaDoor | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [exitSearchTerm, setExitSearchTerm] = useState('');
   const { data: exitSearchHits } = useRoomSearchQuery(exitSearchTerm);
@@ -357,6 +359,9 @@ function RoomDocumentBody({
           onOpenExit={setExitDialogExit}
           onAddExit={() => setAddExitOpen(true)}
           onOpenArt={() => setArtOpen(true)}
+          onOpenDoor={setOpenDoor}
+          resonances={detail.resonances}
+          dominantAffinity={detail.dominant_affinity}
         />
       </div>
 
@@ -376,6 +381,14 @@ function RoomDocumentBody({
         onConfirm={handleExitConfirm}
         roomOptions={exitRoomOptions}
         onDestinationInput={setExitSearchTerm}
+      />
+
+      <CategoryDoorDialog
+        door={openDoor}
+        onClose={() => setOpenDoor(null)}
+        room={room}
+        catalogs={detail.catalogs}
+        runAction={runAction}
       />
 
       <ArtDialog

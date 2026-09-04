@@ -28,9 +28,17 @@ Art *authoring* landed in #3535: `art_id` on `staff_edit_room` (the room's
 `ObjectDisplayData.thumbnail`) and `edit_area` (`Area.art`) — falsy takes it
 down, absent leaves it untouched — with the `ArtDialog` door on both
 documents' marginalia (library + upload reuse the roster media machinery).
-Not built (later phases per the spec): marginalia category *editors* beyond
-exits and art (categories-are-doors ruling), the visitor lens, player
-permits, the Resonance panel's real data, warrant-budget display.
+Marginalia phase 2 (#3534) delivered the doors: Ambience (with the full
+condition editor), People, Places & Things, Law & Danger, and Secrets &
+Story headers open their systems' editors (the reused #3269 Phase B
+sections via `CategoryDoorDialog`); the Resonance panels carry real cascade
+readings (`room_resonance_readings`/`area_resonance_readings` +
+`dominant_affinity`); builder reads opened to grant holders scoped to their
+subtrees (`IsStaffOrGrantHolder` + `_covered_area_ids` + the `grants`
+endpoint) and the atlas wears the warrant (grant rooting, ceiling-absent
+planning, "3 of 8 rooms" budgets). Not built (later phases per the spec):
+the Ownership door (the payload still carries no deed/tenancy fields), the
+rest of the appendix gap-list burndown, the visitor lens, player permits.
 
 ## Built (2026-08-31, #3477 Task 2 — publish lifecycle)
 

@@ -11,6 +11,7 @@ vi.mock('../../queries', () => ({
   useAreaManagerQuery: vi.fn(),
   useWorldBuilderAreasQuery: vi.fn(),
   useWorldBuilderAction: vi.fn(() => ({ mutate: vi.fn() })),
+  useMyGrantsQuery: vi.fn(() => ({ data: { is_staff: true, grants: [] } })),
 }));
 
 vi.mock('../../useWorldBuilderActor', () => ({
@@ -103,6 +104,10 @@ function makeManager(
   return {
     area,
     catalogs: {
+      species: [],
+      resonances: [],
+      distinctions: [],
+      fame_tiers: [],
       realms: [],
       climates: [],
       societies: [],
@@ -116,6 +121,7 @@ function makeManager(
     },
     breadcrumb: [{ id: area.id, name: area.name, level_display: area.level_display }],
     rooms,
+    resonances: [],
     exits: [],
   };
 }
