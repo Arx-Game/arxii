@@ -310,6 +310,26 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    hit_narration = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-facing line for when this NPC attack lands on a target (#3554). Use "
+            "{actor} and {target}; both are required. The machine appends the damage "
+            "figure and any wound, knockout or defeat clause after it, so write the blow, "
+            "not the ledger: '{actor} rakes {target} with its claws'. Blank falls back to "
+            "the standard sentence. Plain register."
+        ),
+    )
+    miss_narration = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-facing line for when this NPC attack misses its target (#3554). Use "
+            "{actor} and {target}; both are required. Blank falls back to the standard "
+            "sentence. Plain register."
+        ),
+    )
     attack_category = models.CharField(
         max_length=20,
         choices=ActionCategory.choices,
@@ -484,6 +504,9 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
 
     def clean(self) -> None:
+        """Validate clash prerequisites and the authored outcome lines (#3554)."""
+        from world.magic.narration import validate_outcome_narration  # noqa: PLC0415
+
         super().clean()
         errors: dict[str, str] = {}
         if self.is_lock_applying and self.clash_break_free_force is None:
@@ -496,6 +519,8 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             )
         if errors:
             raise ValidationError(errors)
+        validate_outcome_narration(self.hit_narration, "hit_narration")
+        validate_outcome_narration(self.miss_narration, "miss_narration")
 
     class Meta:
         # Backs ``NaturalKeyConfig.fields = ["pool", "name"]`` — without it the
