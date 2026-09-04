@@ -1,5 +1,5 @@
 /**
- * Chapter the Seventh: Attributes & Skills (#3540).
+ * Stage 7: Attributes & Skills (#3540).
  *
  * Twelve statistics in a framed instrument with the purse at its head, then
  * the skills frame. A statistic's name is a door: pressing it writes what the
@@ -71,7 +71,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   if (isLoading)
     return (
       <p className="ledger-line" aria-busy="true">
-        Opening the record.
+        Loading statistics…
       </p>
     );
 
@@ -88,7 +88,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           { label: 'Tradition', value: draft.selected_tradition?.name },
           { label: 'Statistics', value: `${spent} of ${budget} spent` },
         ]}
-        ledger="Seven of eleven chapters begun."
+        ledger="Stage 7 of 11"
       />
       <Marginalia id="note-why">
         <span className="note" id="why-note" role="status">
@@ -97,9 +97,8 @@ export function AttributesStage({ draft }: AttributesStageProps) {
               <b className="capitalize">On {why}.</b> {descriptions[why] ?? ''}
             </>
           ) : (
-            // PLACEHOLDER: Apostate rewrite
             <>
-              <b>On the instruments.</b> Press a statistic’s name for what it governs.
+              <b>Statistics.</b> Select a statistic’s name to read what it governs.
             </>
           )}
         </span>

@@ -186,27 +186,18 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
     <>
       <ChapterLeaf
         stage={Stage.REVIEW}
-        title={copy?.review_heading ?? 'Your Testament'}
+        title={copy?.review_heading ?? 'Review and Submit'}
         intro={copy?.review_intro}
         className="review"
         aside={
           <Marginalia id="note-rite">
-            {/* PLACEHOLDER: Apostate rewrite */}
             <Note lead="Nothing is final">
-              until staff approve the testament. Any chapter may be reopened until then.
+              until staff approve the character. You can reopen any stage until then.
             </Note>
           </Marginalia>
         }
       >
-        {copy?.review_epigraph && (
-          <div className="epigraph">
-            <blockquote>
-              “<span>{copy.review_epigraph}</span>”
-            </blockquote>
-            <cite>The Ritual of the Durance</cite>
-          </div>
-        )}
-        <p className="plate-name">{fullName}</p>
+        <h2 className="plate-name">{fullName}</h2>
         <p className="plate-kicker">
           {[draft.selected_beginnings?.name, familyDisplay, draft.selected_area?.name]
             .filter(Boolean)
@@ -222,7 +213,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
                 “<span>{w.text}</span>”
               </blockquote>
               <button type="button" className="quiet-link" onClick={() => onStageSelect(w.stage)}>
-                Rewrite in {STAGE_LABELS[w.stage]}
+                Edit in {STAGE_LABELS[w.stage]}
               </button>
             </div>
           ))}
@@ -231,7 +222,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           className="record-frame"
           style={{ ['--rows' as string]: Math.ceil(record.length / 2) }}
         >
-          <h2>{copy?.review_record_heading ?? 'The Record'}</h2>
+          <h2>{copy?.review_record_heading ?? 'Summary'}</h2>
           <dl>
             {record.map((r) => (
               <div className="row" key={r.label}>
@@ -249,10 +240,9 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             ))}
           </dl>
           {hasUnspentPoints && (
-            // PLACEHOLDER: Apostate rewrite
             <p className="frame-ledger">
-              {cgRemaining} points remain unspent; they convert to {bonusXP} experience when the
-              testament is approved.
+              {cgRemaining} CG points remain unspent; they convert to {bonusXP} XP when the
+              character is approved.
             </p>
           )}
         </div>
@@ -263,7 +253,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             reason={
               firstIncomplete !== undefined ? (
                 <>
-                  One chapter is still unwritten:{' '}
+                  Finish this stage before submitting:{' '}
                   <button
                     type="button"
                     className="quiet-link"
@@ -354,7 +344,6 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           id="after"
           titleId="after-title"
           titleAs="h2"
-          eyebrow="The Durance · Submitted"
           title={getBannerMessage(
             appStatus!,
             application.data!.reviewer_name,
@@ -363,7 +352,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           )}
           imprint
           quiet={{
-            label: 'Read the testament again',
+            label: 'Review it again',
             onClick: () => {
               const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
               document
@@ -372,10 +361,9 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             },
           }}
         >
-          {/* PLACEHOLDER: Apostate rewrite */}
           <p className="plate-sub">
-            You will be told in the Hall when staff have read it. If they ask for revisions, the
-            chapters reopen.
+            Staff will read it and let you know in the Hall. If they ask for revisions, the stages
+            reopen.
           </p>
           <Link className="quiet-link" to="/characters/create/application">
             View the application thread
@@ -493,14 +481,14 @@ function NoApplicationActions({
   return (
     <>
       <div className="field">
-        <label htmlFor="submission-notes">A word to the staff</label>
+        <label htmlFor="submission-notes">Notes for staff (optional)</label>
         <textarea
           id="submission-notes"
           value={submissionNotes}
           onChange={(e) => onNotesChange(e.target.value)}
           rows={3}
         />
-        <span className="hint">Read by staff only. It does not enter the record.</span>
+        <span className="hint">Only staff see this. It is not part of the character.</span>
       </div>
 
       <div className="plate-door" id="door">
@@ -579,7 +567,7 @@ function SubmittedActions({
         </button>
       )}
       <button type="button" className="btn-quiet" disabled={withdrawPending} onClick={onWithdraw}>
-        {withdrawPending ? 'Withdrawing…' : 'Withdraw the testament'}
+        {withdrawPending ? 'Withdrawing…' : 'Withdraw the application'}
       </button>
     </div>
   );
@@ -609,22 +597,22 @@ function RevisionsActions({
   return (
     <>
       <div className="field">
-        <label htmlFor="resubmit-comment">A word to the staff</label>
+        <label htmlFor="resubmit-comment">Notes for staff (optional)</label>
         <textarea
           id="resubmit-comment"
           value={resubmitComment}
           onChange={(e) => onCommentChange(e.target.value)}
           rows={3}
         />
-        <span className="hint">Read by staff only. It does not enter the record.</span>
+        <span className="hint">Only staff see this. It is not part of the character.</span>
       </div>
 
       <div className="plate-door">
         <button type="button" className="btn" disabled={resubmitPending} onClick={onResubmit}>
-          {resubmitPending ? 'Resubmitting…' : 'Resubmit for Review'}
+          {resubmitPending ? 'Resubmitting…' : 'Resubmit for review'}
         </button>
         <button type="button" className="btn-quiet" disabled={withdrawPending} onClick={onWithdraw}>
-          {withdrawPending ? 'Withdrawing…' : 'Withdraw the testament'}
+          {withdrawPending ? 'Withdrawing…' : 'Withdraw the application'}
         </button>
       </div>
     </>

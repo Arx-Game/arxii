@@ -1,4 +1,4 @@
-export { ContentsRail, CHAPTERS, CHAPTER_ORDINALS } from './ContentsRail';
+export { ContentsRail, CHAPTERS, stageEyebrow } from './ContentsRail';
 export { PageTurn } from './PageTurn';
 export { NightPlate } from './NightPlate';
 export { ChapterLeaf } from './ChapterLeaf';
@@ -7,3 +7,4 @@ export type { RecordRow } from './RecordRail';
 export { EntryList, Entry, EntryDoors } from './Entry';
 export { InstrumentFrame, InstrumentGroup, StatRow } from './InstrumentFrame';
 export { ConfirmDialog } from './ConfirmDialog';
+export { CodexWord } from './CodexWord';

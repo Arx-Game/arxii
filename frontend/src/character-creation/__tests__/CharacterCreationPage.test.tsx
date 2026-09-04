@@ -125,11 +125,11 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /open the record/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^begin$/i })).toBeInTheDocument();
       });
     });
 
-    it('displays the arrival eyebrow and title', async () => {
+    it('displays the arrival title with no eyebrow', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
@@ -142,10 +142,12 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/one stands before us/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/creating a character and starting their story/i)
+        ).toBeInTheDocument();
       });
 
-      expect(screen.getByText(/the durance/i)).toBeInTheDocument();
+      expect(screen.queryByText(/the durance/i)).not.toBeInTheDocument();
     });
   });
 
@@ -165,13 +167,13 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('navigation', { name: /chapters of your character/i })
+          screen.getByRole('navigation', { name: /character creation stages/i })
         ).toBeInTheDocument();
       });
 
       // The contents rail lists every chapter. Origin's own record rail
       // (Task 4) also has a row labeled "Origin", so scope to the nav.
-      const nav = screen.getByRole('navigation', { name: /chapters of your character/i });
+      const nav = screen.getByRole('navigation', { name: /character creation stages/i });
       expect(within(nav).getByText('Origin')).toBeInTheDocument();
     });
 
@@ -212,10 +214,10 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^‹ back/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^back:/i })).toBeInTheDocument();
       });
 
-      expect(screen.getByRole('button', { name: /turn the page/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^next:/i })).toBeInTheDocument();
     });
 
     // Origin and Review are the first and last chapters; the shell renders no
@@ -240,12 +242,12 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('navigation', { name: /chapters of your character/i })
+          screen.getByRole('navigation', { name: /character creation stages/i })
         ).toBeInTheDocument();
       });
 
-      expect(screen.queryByRole('button', { name: /^‹ back/i })).not.toBeInTheDocument();
-      const forwardDoor = screen.getByRole('button', { name: /turn the page/i });
+      expect(screen.queryByRole('button', { name: /^back:/i })).not.toBeInTheDocument();
+      const forwardDoor = screen.getByRole('button', { name: /^next:/i });
       expect(forwardDoor).toHaveAttribute('aria-disabled', 'true');
     });
 
@@ -267,8 +269,8 @@ describe('CharacterCreationPage', () => {
         expect(screen.getByText('Review & Submit')).toBeInTheDocument();
       });
 
-      expect(screen.queryByRole('button', { name: /turn the page/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^‹ back/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^next:/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^back:/i })).not.toBeInTheDocument();
     });
   });
 
@@ -281,10 +283,12 @@ describe('CharacterCreationPage', () => {
         explanations: mockCGExplanations,
       });
       renderWithCharacterCreationProviders(<CharacterCreationPage />, { queryClient });
-      const plate = await screen.findByRole('region', { name: /the durance/i });
+      const plate = await screen.findByRole('region', {
+        name: /creating a character and starting their story/i,
+      });
       expect(plate).toHaveClass('plate-night');
-      expect(screen.getByText(mockCGExplanations.origin_lore_intro)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /open the record/i })).toBeInTheDocument();
+      expect(screen.getByText(mockCGExplanations.arrival_intro)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^begin$/i })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
     });
   });
@@ -360,7 +364,7 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('navigation', { name: /chapters of your character/i })
+          screen.getByRole('navigation', { name: /character creation stages/i })
         ).toBeInTheDocument();
       });
     });
