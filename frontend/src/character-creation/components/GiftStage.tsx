@@ -13,9 +13,9 @@
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ReactNode } from 'react';
-import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   ChapterLeaf,
+  CodexLine,
   Entry,
   EntryDoors,
   EntryList,
@@ -24,7 +24,14 @@ import {
   Note,
   RecordRail,
 } from '../folio';
-import { useCGExplanations, useCGGifts, useResonances, useUpdateDraft } from '../queries';
+import {
+  useCGExplanations,
+  useCGGifts,
+  useResonances,
+  useSkills,
+  useStatDefinitions,
+  useUpdateDraft,
+} from '../queries';
 import type { CharacterDraft } from '../types';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
@@ -102,6 +109,19 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const resonanceName = resonances.find((r) => r.id === selectedResonanceId)?.name;
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
 
+  // The Anima Check step's gloss and rail row need the names behind the two
+  // ids the draft stores, so read the same two catalogs AnimaCheckStep picks
+  // from. The step itself only mounts once unlocked; these lines have to read
+  // as a chosen value while it is closed.
+  const { data: statDefinitions } = useStatDefinitions();
+  const { data: skills } = useSkills();
+  const animaStatName = statDefinitions?.find(
+    (stat) => stat.id === draftData.anima_check_stat_id
+  )?.name;
+  const animaSkillName = skills?.find((skill) => skill.id === draftData.anima_check_skill_id)?.name;
+  const animaCheckLine =
+    animaStatName && animaSkillName ? `${animaStatName} + ${animaSkillName}` : undefined;
+
   const handleSelectResonance = (resonanceId: number) => {
     updateDraft.mutate({
       draftId: draft.id,
@@ -156,13 +176,14 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           { label: 'Gift', value: giftName },
           { label: 'Techniques', value: completion.gift ? techniqueCountLine : undefined },
           { label: 'Resonance', value: resonanceName },
+          { label: 'Anima check', value: animaCheckLine },
         ]}
         ledger="Stage 6 of 11"
       />
       <Marginalia id="note-gift">
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Techniques">
-          You may choose {picks} at this stage; the budget comes from your distinctions.
+          are capped at {picks} picks at this stage; the budget comes from your distinctions.
         </Note>
       </Marginalia>
     </>
@@ -239,13 +260,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
                   open={isSelected}
                 >
                   {resonance.description && <p>{resonance.description}</p>}
-                  {resonance.codex_entry_id != null && (
-                    <p className="ledger-line">
-                      <CodexTerm entryId={resonance.codex_entry_id}>
-                        Codex: {resonance.name}
-                      </CodexTerm>
-                    </p>
-                  )}
+                  <CodexLine entryId={resonance.codex_entry_id} name={resonance.name} />
                   <EntryDoors
                     chooseLabel={`Choose ${resonance.name}`}
                     onChoose={() => handleSelectResonance(resonance.id)}
@@ -260,6 +275,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         <FunnelStep
           n={5}
           name={copy?.anima_check_heading ?? 'Anima Check'}
+          value={animaCheckLine}
           done={completion.anima}
           gated={!completion.resonance}
           gateReason="Choose a resonance first"

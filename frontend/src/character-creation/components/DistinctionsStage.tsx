@@ -10,7 +10,6 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   useDistinctionCategories,
   useDistinctions,
@@ -21,6 +20,7 @@ import type { Distinction } from '@/types/distinctions';
 import {
   ChapterLeaf,
   ChoiceRow,
+  CodexLine,
   ConfirmDialog,
   InstrumentFrame,
   InstrumentGroup,
@@ -38,9 +38,26 @@ interface DistinctionsStageProps {
   onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
+/**
+ * The category row's first option: no category filter at all, so search
+ * reaches the whole catalog instead of one category's slice.
+ */
+const ALL_CATEGORIES = 'all';
+
 /** Format a cost value with a +/- prefix for display. */
 function formatCost(cost: number): string {
   return `${cost > 0 ? '+' : ''}${cost}`;
+}
+
+/**
+ * A row's sub-line: its cost, plus why it is locked when it is. The reason is
+ * the useful half, so it is visible here rather than only in the raise
+ * button's title; "locked" is the fallback for a lock with no stated reason.
+ */
+function subFor(distinction: Distinction): string {
+  const cost = `${formatCost(distinction.cost_per_rank)} per rank`;
+  if (!distinction.is_locked) return cost;
+  return `${cost} · ${distinction.lock_reason || 'locked'}`;
 }
 
 /** Why the raise button is disabled, if it is; `undefined` when it isn't. */
@@ -56,7 +73,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   const { data: cgBudget } = useCGPointBudget();
   const syncDistinctions = useSyncDistinctions(draft.id);
 
-  const [category, setCategory] = useState<string | null>(null);
+  const [category, setCategory] = useState<string>(ALL_CATEGORIES);
   const [search, setSearch] = useState('');
   const [why, setWhy] = useState<Distinction | null>(null);
   const [announce, setAnnounce] = useState('');
@@ -149,18 +166,15 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     return onRegisterBeforeLeave(saveBeforeLeave) ?? undefined;
   }, [onRegisterBeforeLeave, hasChanges, localSelections, syncDistinctions]);
 
-  // The category row defaults to the first category, as the tabs did before it.
-  const effectiveCategory = category ?? categories?.[0]?.slug ?? null;
-  const currentCategory = categories?.find((c) => c.slug === effectiveCategory);
+  // The category row opens on "All", so a search covers the whole catalog
+  // until the player narrows it.
+  const showingAll = category === ALL_CATEGORIES;
 
-  const { data: distinctions, isLoading: distinctionsLoading } = useDistinctions(
-    {
-      category: effectiveCategory ?? undefined,
-      search: search || undefined,
-      draftId: draft.id,
-    },
-    { enabled: !!effectiveCategory }
-  );
+  const { data: distinctions, isLoading: distinctionsLoading } = useDistinctions({
+    category: showingAll ? undefined : category,
+    search: search || undefined,
+    draftId: draft.id,
+  });
 
   // Calculate total cost from local selections
   const totalCost = useMemo(() => {
@@ -228,6 +242,57 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   }
 
   const list = distinctions ?? [];
+  const sortedCategories = [...(categories ?? [])].sort(
+    (a, b) => a.display_order - b.display_order
+  );
+  // One group per category under "All", one group under a named category.
+  // Empty groups are dropped rather than shown as furniture.
+  const groups = (
+    showingAll ? sortedCategories : sortedCategories.filter((c) => c.slug === category)
+  )
+    .map((c) => ({ category: c, rows: list.filter((d) => d.category_slug === c.slug) }))
+    .filter((group) => group.rows.length > 0);
+
+  /**
+   * What sits inside the instrument frame: one ledger line, or the groups.
+   * Written as a function rather than nested ternaries so each case reads on
+   * its own line.
+   */
+  const frameBody = () => {
+    if (sortedCategories.length === 0) return <p className="ledger-line">No categories yet.</p>;
+    if (distinctionsLoading) {
+      return (
+        <p className="ledger-line" aria-busy="true">
+          Loading distinctions…
+        </p>
+      );
+    }
+    if (groups.length === 0) return <p className="ledger-line">No distinctions match.</p>;
+    return groups.map((group) => (
+      <InstrumentGroup
+        key={group.category.slug}
+        title={group.category.name}
+        gloss={group.category.description || undefined}
+      >
+        {group.rows.map((d) => (
+          <StatRow
+            key={d.id}
+            id={`lbl-dist-${d.id}`}
+            name={d.name}
+            sub={subFor(d)}
+            value={rankOf(d.id)}
+            max={d.max_rank}
+            onChange={(v) => setRank(d, v)}
+            canDecrease={rankOf(d.id) > 0}
+            canIncrease={!d.is_locked && rankOf(d.id) < d.max_rank}
+            increaseTitle={increaseTitleFor(d, rankOf(d.id))}
+            onWhy={() => setWhy(d)}
+            whyOpen={why?.id === d.id}
+          />
+        ))}
+      </InstrumentGroup>
+    ));
+  };
 
   const rail = (
     <>
@@ -253,12 +318,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               ))}
               <br />
               Up to rank {why.max_rank}.
-              {why.codex_entry_ids.length > 0 && (
-                <>
-                  <br />
-                  <CodexTerm entryId={why.codex_entry_ids[0]}>Codex: {why.name}</CodexTerm>
-                </>
-              )}
+              <CodexLine entryId={why.codex_entry_ids?.[0]} name={why.name} />
             </>
           ) : (
             // PLACEHOLDER: Apostate rewrite
@@ -296,8 +356,11 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       </h2>
       <ChoiceRow
         label="Category"
-        options={(categories ?? []).map((c) => ({ value: c.slug, label: c.name }))}
-        value={effectiveCategory}
+        options={[
+          { value: ALL_CATEGORIES, label: 'All' },
+          ...sortedCategories.map((c) => ({ value: c.slug, label: c.name })),
+        ]}
+        value={category}
         onChange={(slug) => slug && setCategory(slug)}
       />
       <div className="instr-search">
@@ -307,10 +370,15 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
         <input
           id="dist-search"
           type="search"
-          placeholder="Search"
+          placeholder="Search by name, description, or effects"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        {search && (
+          <button type="button" className="btn-quiet" onClick={() => setSearch('')}>
+            Clear search
+          </button>
+        )}
       </div>
       <InstrumentFrame
         label="Distinctions"
@@ -325,38 +393,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
           over: starting - spent < 0,
         }}
       >
-        {distinctionsLoading ? (
-          <p className="ledger-line" aria-busy="true">
-            Loading distinctions…
-          </p>
-        ) : (
-          currentCategory && (
-            <InstrumentGroup
-              title={currentCategory.name}
-              gloss={currentCategory.description || undefined}
-            >
-              {list.map((d) => (
-                <StatRow
-                  key={d.id}
-                  id={`lbl-dist-${d.id}`}
-                  name={d.name}
-                  sub={`${formatCost(d.cost_per_rank)} per rank${d.is_locked ? ' · locked' : ''}`}
-                  value={rankOf(d.id)}
-                  max={d.max_rank}
-                  onChange={(v) => setRank(d, v)}
-                  canDecrease={rankOf(d.id) > 0}
-                  canIncrease={!d.is_locked && rankOf(d.id) < d.max_rank}
-                  increaseTitle={increaseTitleFor(d, rankOf(d.id))}
-                  onWhy={() => setWhy(d)}
-                  whyOpen={why?.id === d.id}
-                />
-              ))}
-            </InstrumentGroup>
-          )
-        )}
-        {!distinctionsLoading && list.length === 0 && (
-          <p className="ledger-line">No distinctions match.</p>
-        )}
+        {frameBody()}
       </InstrumentFrame>
       <p className="ledger-line">
         <button

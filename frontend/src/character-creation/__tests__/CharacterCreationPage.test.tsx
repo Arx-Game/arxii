@@ -54,6 +54,11 @@ vi.mock('../api', () => ({
   // GlimpseSection (#2427) calls useGlimpseTags() unconditionally as part of
   // the always-mounted Glimpse guided flow.
   getGlimpseTags: vi.fn().mockResolvedValue([]),
+  // GiftStage resolves the Anima Check step's stat + skill names from these
+  // two catalogs (#3630), for the step gloss and the record rail, whether or
+  // not that step is the one currently open.
+  getStatDefinitions: vi.fn().mockResolvedValue([]),
+  getSkillsWithSpecializations: vi.fn().mockResolvedValue([]),
 }));
 
 describe('CharacterCreationPage', () => {

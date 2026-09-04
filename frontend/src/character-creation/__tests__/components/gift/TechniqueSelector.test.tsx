@@ -133,8 +133,7 @@ describe('TechniqueSelector', () => {
     });
   });
 
-  it('caps additional picks at the budget — clicking an unselected card is a no-op', async () => {
-    const user = userEvent.setup();
+  it('caps additional picks at the budget: an over-budget technique offers no doors', () => {
     const draft = createMockDraft({
       id: 1,
       selected_tradition: mockTradition,
@@ -143,10 +142,11 @@ describe('TechniqueSelector', () => {
     });
     renderSelector(draft);
 
-    // Already at budget (1 of 1) — clicking a different, unselected technique's
-    // "Choose" door must not add it.
-    await user.click(screen.getByRole('button', { name: 'Choose Umbral Wall' }));
-
-    expect(updateDraftMock).not.toHaveBeenCalled();
+    // Already at budget (1 of 1). The unchosen technique stays readable and
+    // tagged, but carries no "Choose" door at all (matching Heritage) rather
+    // than a door that silently refuses.
+    expect(screen.queryByRole('button', { name: 'Choose Umbral Wall' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('Budget reached').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Choose Shadow Strike' })).toBeInTheDocument();
   });
 });

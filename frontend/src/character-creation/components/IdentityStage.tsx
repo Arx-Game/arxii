@@ -103,8 +103,9 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
         ledger="Stage 9 of 11"
       />
       <Marginalia id="note-identity">
+        {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Secret worship">
-          The truth behind the front. Choosing one mints a Secret others might uncover.
+          is the truth behind the front. Choosing one mints a Secret others might uncover.
         </Note>
       </Marginalia>
     </>
@@ -120,7 +121,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       <h2 className="section-h">{copy?.identity_name_heading ?? 'Name'}</h2>
       <Field
         id="first_name"
-        label="First Name"
+        label="First name"
         hint="2-20 characters, letters only, first letter will be capitalized."
       >
         <input
@@ -135,7 +136,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       <h2 className="section-h">{copy?.identity_concept_heading ?? 'Concept'}</h2>
       <Field
         id="concept"
-        label="Character Concept"
+        label="Character concept"
         hint="A brief archetype or tagline (e.g., “Ruthless pragmatist with a hidden heart”)."
       >
         <input
@@ -150,7 +151,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       <h2 className="section-h">{copy?.identity_quote_heading ?? 'Quote'}</h2>
       <Field
         id="quote"
-        label="Character Quote"
+        label="Character quote"
         hint="A saying, motto, or line that captures your character’s voice."
       >
         <input
@@ -165,7 +166,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       <h2 className="section-h">{copy?.identity_personality_heading ?? 'Personality'}</h2>
       <Field
         id="personality"
-        label="Personality Traits"
+        label="Personality traits"
         hint="How does your character think, feel, and behave?"
       >
         <textarea
@@ -192,7 +193,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
             )
           }
         >
-          <option value="">Unaffiliated</option>
+          <option value="">None</option>
           {(beings ?? []).map((being) => (
             <option key={being.id} value={being.id}>
               {being.name} ({being.tradition_name})
@@ -200,7 +201,11 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           ))}
         </select>
       </Field>
-      <Field id="secret_worship" label="Secret worship">
+      <Field
+        id="secret_worship"
+        label="Secret worship"
+        hint="The god, spirit, or power your character worships in private. Optional."
+      >
         <select
           id="secret_worship"
           value={draft.secret_worship?.id ?? ''}

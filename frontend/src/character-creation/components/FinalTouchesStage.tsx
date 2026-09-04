@@ -36,6 +36,19 @@ interface KeyedGoal {
 const BASE_GOAL_POINTS = 30;
 
 /**
+ * The in-code twin of the `finaltouches_how_note` copy key
+ * (`world/seeds/character_creation.py`). It states the mechanics a player
+ * cannot infer from the form: the pool, the invoke bonus, and the per-day
+ * cap. Keep the two identical.
+ */
+// PLACEHOLDER: Apostate rewrite
+const HOW_GOALS_WORK =
+  'Each goal takes points from a pool of thirty. During play a goal can be invoked to add ' +
+  'its point value as a bonus to a roll, up to twice your total goal points per day. Spend ' +
+  'more on the goals that matter most; a goal with no points is a note to yourself, not a ' +
+  'commitment.';
+
+/**
  * Announcer text for a point change. Deliberately worded differently from the
  * ledger's "Points remaining: N of 30, over by M" so the two don't collide
  * under a single `getByText` match in tests (both are visible to the DOM at
@@ -146,9 +159,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   }
 
   if (domainsError) {
-    return (
-      <p className="ledger-line">Unable to load goal domains. Please try refreshing the page.</p>
-    );
+    return <p className="ledger-line">The goal domains could not be read. Try again.</p>;
   }
 
   const rail = (
@@ -165,15 +176,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         ledger="Stage 10 of 11"
       />
       <Marginalia id="note-finaltouches">
-        <Note lead="How goals work">
-          {copy?.finaltouches_how_note ?? (
-            <>
-              Goals are optional but recommended. During play, you can invoke a goal when making a
-              check that relates to it. Your goal&apos;s point value adds as a bonus to the roll.
-              You can use goals up to twice your total points per day.
-            </>
-          )}
-        </Note>
+        <Note lead="Goals">{copy?.finaltouches_how_note ?? HOW_GOALS_WORK}</Note>
       </Marginalia>
     </>
   );

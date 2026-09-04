@@ -47,6 +47,8 @@ describe('GiftStage (folio)', () => {
     expect(steps).toBeInTheDocument();
     expect(screen.getByText('Step 1 of 5')).toBeInTheDocument();
     expect(screen.getByText('Choose a tradition first')).toBeInTheDocument();
+    // A gated step's picker never mounts, so it never fires its queries.
+    expect(screen.queryByRole('list', { name: 'Gifts' })).not.toBeInTheDocument();
   });
 
   it('offers the motif as a field', () => {

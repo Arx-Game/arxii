@@ -31,7 +31,7 @@ const distinctions = [
     name: 'Hunted',
     slug: 'hunted',
     description: 'Someone wants you.',
-    category_slug: 'background',
+    category_slug: 'flaw',
     cost_per_rank: -3,
     max_rank: 2,
     is_variant_parent: false,
@@ -46,7 +46,14 @@ const distinctions = [
 
 vi.mock('@/hooks/useDistinctions', () => ({
   useDistinctionCategories: () => ({ data: categories, isLoading: false }),
-  useDistinctions: () => ({ data: distinctions, isLoading: false }),
+  useDistinctions: (params?: { category?: string }) => ({
+    // The real hook filters server-side on the `category` param; "All" sends
+    // none, which is the behaviour under test here.
+    data: params?.category
+      ? distinctions.filter((d) => d.category_slug === params.category)
+      : distinctions,
+    isLoading: false,
+  }),
   useDraftDistinctions: () => ({
     data: [{ distinction_id: 10, distinction_slug: 'noble-blood', rank: 1, notes: '' }],
     isLoading: false,
@@ -82,6 +89,27 @@ describe('DistinctionsStage (folio)', () => {
     const raise = screen.getByRole('button', { name: 'Raise Hunted' });
     expect(raise).toBeDisabled();
     expect(raise).toHaveAttribute('title', 'Requires a Beginnings that allows it');
+    // The reason is visible on the row, not only in the button's title.
+    expect(
+      screen.getByText('-3 per rank · Requires a Beginnings that allows it')
+    ).toBeInTheDocument();
+  });
+
+  it('opens on All with a group per category, and narrows to one when a category is chosen', async () => {
+    const user = userEvent.setup();
+    renderWithCharacterCreationProviders(
+      <DistinctionsStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const groupTitles = () =>
+      Array.from(document.querySelectorAll('.instr-group-h')).map((el) => el.textContent?.trim());
+
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+    expect(groupTitles()).toEqual(['Background', 'Flaw']);
+
+    await user.click(screen.getByRole('button', { name: 'Flaw' }));
+
+    expect(groupTitles()).toEqual(['Flaw']);
+    expect(screen.queryByRole('button', { name: 'Raise Noble Blood' })).not.toBeInTheDocument();
   });
 
   it('writes what a distinction does into the margin when its name is pressed', async () => {

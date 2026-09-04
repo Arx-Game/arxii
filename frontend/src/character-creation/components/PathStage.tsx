@@ -7,7 +7,6 @@
  * lists the choices made so far; it explains nothing (Decision 8).
  */
 
-import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   BookOpen,
   Crown,
@@ -27,6 +26,7 @@ import {
 } from 'lucide-react';
 import {
   ChapterLeaf,
+  CodexLine,
   Entry,
   EntryDoors,
   EntryList,
@@ -133,11 +133,7 @@ export function PathStage({ draft }: PathStageProps) {
                   Suggested skills: {p.skill_suggestions.map((s) => s.skill_name).join(', ')}
                 </p>
               )}
-              {p.codex_entry_ids?.length > 0 && (
-                <p className="ledger-line">
-                  <CodexTerm entryId={p.codex_entry_ids[0]}>Codex: {p.name}</CodexTerm>
-                </p>
-              )}
+              <CodexLine entryId={p.codex_entry_ids?.[0]} name={p.name} />
               <EntryDoors
                 chooseLabel={`Choose ${p.name}`}
                 onChoose={() => choose(p)}

@@ -8,8 +8,7 @@
  */
 
 import { useEffect } from 'react';
-import { CodexTerm } from '@/codex/components/CodexTerm';
-import { Entry, EntryDoors, EntryList } from '../../folio';
+import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
 import { useCGGifts, useUpdateDraft } from '../../queries';
 import type { CharacterDraft } from '../../types';
 
@@ -92,11 +91,7 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
             open={isSelected}
           >
             <p>{gift.description}</p>
-            {gift.codex_entry_id != null && (
-              <p className="ledger-line">
-                <CodexTerm entryId={gift.codex_entry_id}>Codex: {gift.name}</CodexTerm>
-              </p>
-            )}
+            <CodexLine entryId={gift.codex_entry_id} name={gift.name} />
             <EntryDoors
               chooseLabel={`Choose ${gift.name}`}
               onChoose={() => handleSelect(gift.id)}

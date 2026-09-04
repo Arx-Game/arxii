@@ -13,10 +13,10 @@
  * auto-derived at finalization. Age is set in AppearanceStage.
  */
 
-import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   ChapterLeaf,
   ChoiceRow,
+  CodexLine,
   Entry,
   EntryDoors,
   EntryList,
@@ -52,7 +52,7 @@ function costTag(cost: number): string {
  * A species' stat bonuses as a gloss line (e.g. "+1 strength, −1 wits").
  * Empty when the species carries no bonuses.
  */
-export function formatStatBonuses(bonuses: Record<string, number>): string {
+function formatStatBonuses(bonuses: Record<string, number>): string {
   return Object.entries(bonuses)
     .filter(([, value]) => value !== 0)
     .map(([stat, value]) => `${value > 0 ? '+' : '−'}${Math.abs(value)} ${stat}`)
@@ -114,7 +114,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       <>
         <p className="ledger-line">Please select a starting area first.</p>
         <button type="button" className="btn-quiet" onClick={() => onStageSelect(Stage.ORIGIN)}>
-          Go to Origin selection
+          Go to Origin Selection
         </button>
       </>
     );
@@ -146,6 +146,13 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
     updateDraft.mutate({ draftId: draft.id, data: { selected_species_id: id } });
   };
 
+  // The same null the beginnings doors already write on a beginnings change,
+  // so the species pick has a Clear door of its own rather than being
+  // changeable only by picking a different species.
+  const clearSpecies = () => {
+    updateDraft.mutate({ draftId: draft.id, data: { selected_species_id: null } });
+  };
+
   const renderLeafSpecies = (s: Species) => {
     const isChosen = draft.selected_species?.id === s.id;
     const overBudget = remaining < 0 && !isChosen;
@@ -155,22 +162,19 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         key={s.id}
         name={s.name}
         gloss={gloss}
-        tag={overBudget ? 'No CG points remain' : 'Available'}
+        tag={overBudget ? 'CG points overspent' : 'Available'}
         chosen={isChosen}
         closed={overBudget}
         open={isChosen}
       >
         <Paragraphs text={s.description} />
-        {s.codex_entry_id != null && (
-          <p className="ledger-line">
-            <CodexTerm entryId={s.codex_entry_id}>Codex: {s.name}</CodexTerm>
-          </p>
-        )}
+        <CodexLine entryId={s.codex_entry_id} name={s.name} />
         {!overBudget && (
           <EntryDoors
             chooseLabel={`Choose ${s.name}`}
             onChoose={() => chooseSpecies(s.id)}
             chosen={isChosen}
+            onSetAside={clearSpecies}
           />
         )}
       </Entry>
@@ -179,10 +183,16 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
 
   const renderSpeciesEntry = (item: SpeciesEntryItem) => {
     if (item.kind === 'leaf') return renderLeafSpecies(item.species);
+    // A closed parent tells you which of its kinds you chose, so the pick is
+    // legible without opening the group.
+    const chosenChild = item.children.find(
+      (child) => child.id === draft.selected_species?.id
+    )?.name;
     return (
       <Entry
         key={`parent-${item.parentId}`}
         name={item.name}
+        gloss={chosenChild}
         tag={`${item.children.length} kinds`}
         chosen={false}
         closed
@@ -247,13 +257,11 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
               closed={closed}
               open={isChosen}
             >
+              {/* Decorative: the entry name beside it is the text. */}
+              {b.art_image && <img className="entry-art" src={b.art_image} alt="" />}
               <Paragraphs text={b.description} />
               {!b.family_known && <p className="ledger-line">Family unknown at the start.</p>}
-              {b.codex_entry_ids?.length > 0 && (
-                <p className="ledger-line">
-                  <CodexTerm entryId={b.codex_entry_ids[0]}>Codex: {b.name}</CodexTerm>
-                </p>
-              )}
+              <CodexLine entryId={b.codex_entry_ids?.[0]} name={b.name} />
               {!closed && (
                 <EntryDoors
                   chooseLabel={`Choose ${b.name}`}

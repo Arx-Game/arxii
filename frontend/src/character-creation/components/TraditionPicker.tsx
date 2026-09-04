@@ -8,8 +8,7 @@
  * the draft having a selected Beginning.
  */
 
-import { CodexTerm } from '@/codex/components/CodexTerm';
-import { Entry, EntryDoors, EntryList, Paragraphs } from '../folio';
+import { CodexLine, Entry, EntryDoors, EntryList, Paragraphs } from '../folio';
 import { useSelectTradition, useTraditionPerspectives, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
 import { PerspectivesPanel } from './PerspectivesPanel';
@@ -63,15 +62,13 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
           >
             <Paragraphs text={tradition.description} />
             {isChosen && perspectives && perspectives.length > 0 && (
-              <PerspectivesPanel perspectives={perspectives} />
+              // `.note` is scoped to `.note-group` in cg.css, so a bare panel
+              // here would render unstyled; this is Marginalia's own markup.
+              <div className="note-group">
+                <PerspectivesPanel perspectives={perspectives} />
+              </div>
             )}
-            {tradition.codex_entry_ids.length > 0 && (
-              <p className="ledger-line">
-                <CodexTerm entryId={tradition.codex_entry_ids[0]}>
-                  Codex: {tradition.name}
-                </CodexTerm>
-              </p>
-            )}
+            <CodexLine entryId={tradition.codex_entry_ids?.[0]} name={tradition.name} />
             <EntryDoors
               chooseLabel={`Choose ${tradition.name}`}
               onChoose={() => handleSelect(tradition.id)}

@@ -5,8 +5,11 @@ import type { PerspectiveEntry } from '../types';
  *
  * Content renders straight from the shop-window payload: these entries are
  * usually non-public pre-finalize, so linking into CodexModal would 404.
- * Mounted inside a `Marginalia` note-group (#3630), so it renders bare
- * `.note` spans rather than its own heading/frame.
+ * Renders bare `.note` spans rather than a heading or frame of its own
+ * (#3630), and so requires a `.note-group` ancestor: cg.css scopes `.note`
+ * to that class, and a panel mounted outside one renders unstyled. Heritage
+ * supplies it with `Marginalia`; TraditionPicker wraps the panel in a
+ * `.note-group` div of its own inside the chosen tradition's entry.
  */
 export function PerspectivesPanel({
   perspectives,

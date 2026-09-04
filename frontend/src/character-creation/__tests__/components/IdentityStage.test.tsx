@@ -190,19 +190,20 @@ describe('IdentityStage', () => {
   });
 
   describe('Folio markup', () => {
-    it('renders the five writing fields on the field idiom and the name in the rail', () => {
+    it('renders the four writing fields on the field idiom and the name in the rail', () => {
       const queryClient = createTestQueryClient();
       const draft = createMockDraft({ draft_data: { first_name: 'Sharlotte' } });
 
       renderWithCharacterCreationProviders(<IdentityStage draft={draft} />, { queryClient });
 
-      // Labels match the existing (pre-folio) tests above, not the brief's
-      // illustrative shorthand — those are what this file's other blocks query.
+      // Sentence case (#3630): interface chrome is plain, and only the first
+      // word is capitalised. The other blocks in this file query the same
+      // labels case-insensitively, so they are unaffected.
       for (const label of [
-        'First Name',
-        'Character Concept',
-        'Character Quote',
-        'Personality Traits',
+        'First name',
+        'Character concept',
+        'Character quote',
+        'Personality traits',
       ]) {
         expect(screen.getByLabelText(label).closest('.field')).not.toBeNull();
       }

@@ -19,6 +19,7 @@ import {
   useHeightBands,
   useUpdateDraft,
 } from '../queries';
+import { formatHeight } from '../utils';
 import { MarkingsEditor } from './MarkingsEditor';
 import { Stage } from '../types';
 import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
@@ -266,7 +267,7 @@ export function AppearanceStage({
             label: 'Height',
             value:
               draft.height_band && draft.height_inches !== null
-                ? `${draft.height_band.display_name}, ${draft.height_inches} in`
+                ? `${draft.height_band.display_name}, ${formatHeight(draft.height_inches)}`
                 : undefined,
           },
           { label: 'Build', value: draft.build?.display_name },
@@ -274,31 +275,42 @@ export function AppearanceStage({
         ledger="Stage 8 of 11"
       />
       <Marginalia id="note-appearance">
+        {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Age">
-          Age must be between {AGE_MIN} and {ageMax} years.
+          must be between {AGE_MIN} and {ageMax} years.
         </Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Birthday">
-          The day your character celebrates each year. Friends will see it coming up in the Town
-          Crier&apos;s tidings.
+          is the day your character celebrates each year. Friends will see it coming up in the Town
+          Crier’s tidings.
         </Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Height">
-          Select your height category, then fine-tune your exact height.
+          is a category first and an exact figure within it second.
           {draft.height_band && (
             <>
               {' '}
-              Other characters will see you as &quot;{draft.height_band.display_name}&quot; rather
-              than your exact height.
+              Other characters see you as “{draft.height_band.display_name}” rather than your exact
+              height.
             </>
           )}
         </Note>
-        <Note lead="Build">Select your body type.</Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Build">is your character’s body type.</Note>
         {draft.selected_species && (
-          <Note lead="Physical features">Select your character&apos;s physical features.</Note>
+          // PLACEHOLDER: Apostate rewrite
+          <Note lead="Physical features">
+            are drawn from the palette your species offers, plus anything a parent line passes down.
+          </Note>
         )}
-        <Note lead="Physical description">(Optional, appended to automatic descriptions)</Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Physical description">
+          is optional, and is appended to the automatic description.
+        </Note>
         {/* Moved from MarkingsEditor.tsx, which has no margin of its own. */}
+        {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Markings">
-          Tattoos, scars, brands, birthmarks: what your character&apos;s skin remembers. Clothing
+          are tattoos, scars, brands and birthmarks: what your character’s skin remembers. Clothing
           conceals a marking at the regions it covers; revealing garments and the in-game reveal
           bare it. Optional.
         </Note>
@@ -383,7 +395,9 @@ export function AppearanceStage({
         <Field
           id="height"
           label="Height in inches"
-          hint={`${draft.height_band.min_inches} to ${draft.height_band.max_inches}`}
+          hint={`${formatHeight(draft.height_band.min_inches)} to ${formatHeight(
+            draft.height_band.max_inches
+          )}`}
         >
           <input
             id="height"

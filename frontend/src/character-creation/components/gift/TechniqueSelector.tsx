@@ -9,9 +9,8 @@
  */
 
 import { useEffect } from 'react';
-import { CodexTerm } from '@/codex/components/CodexTerm';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
-import { Entry, EntryDoors, EntryList } from '../../folio';
+import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
 import { useCGTechniqueOptions, useUpdateDraft } from '../../queries';
 import type { CGTechniqueOption, CharacterDraft } from '../../types';
 
@@ -143,19 +142,18 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
                     summary={technique.effect_summary}
                     variant="full"
                   />
-                  {technique.codex_entry_id != null && (
-                    <p className="ledger-line">
-                      <CodexTerm entryId={technique.codex_entry_id}>
-                        Codex: {technique.name}
-                      </CodexTerm>
-                    </p>
+                  <CodexLine entryId={technique.codex_entry_id} name={technique.name} />
+                  {/* At budget and not chosen: no doors at all, as Heritage
+                      does for an unaffordable species. A "Choose" button that
+                      silently refuses is worse than no button. */}
+                  {!closed && (
+                    <EntryDoors
+                      chooseLabel={`Choose ${technique.name}`}
+                      onChoose={() => toggle(technique.id)}
+                      chosen={isSelected}
+                      onSetAside={() => toggle(technique.id)}
+                    />
                   )}
-                  <EntryDoors
-                    chooseLabel={`Choose ${technique.name}`}
-                    onChoose={() => toggle(technique.id)}
-                    chosen={isSelected}
-                    onSetAside={() => toggle(technique.id)}
-                  />
                 </Entry>
               );
             })}

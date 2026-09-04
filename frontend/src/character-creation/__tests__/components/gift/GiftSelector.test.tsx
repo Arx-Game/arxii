@@ -80,8 +80,8 @@ describe('GiftSelector', () => {
     });
     renderSelector(draft);
 
-    // Click the "Choose" door, not the gift name — the name is wrapped in a
-    // CodexTerm button (codex_entry_id 12) that opens the lore modal instead.
+    // Click the "Choose" door: the entry name is plain text, and the gift's
+    // codex link is a separate "Codex: ..." line in the entry body.
     await user.click(screen.getByRole('button', { name: 'Choose Whispers of Shadow' }));
 
     await waitFor(() => {

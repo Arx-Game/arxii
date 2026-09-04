@@ -74,6 +74,16 @@ export function MarkingsEditor() {
     onSuccess: () => void invalidate(),
   });
 
+  // The disabled door says why (accessibility floor, #3630). Only the name is
+  // required: kind and region always carry a default, and the description is
+  // optional.
+  let addTitle: string | undefined;
+  if (!form.name.trim()) {
+    addTitle = 'A name is required';
+  } else if (addMutation.isPending) {
+    addTitle = 'Saving';
+  }
+
   const regionLabel = (value: string) =>
     BODY_REGIONS.find((r) => r.value === value)?.label ?? value;
   const kindLabel = (value: string) => MARKING_KINDS.find((k) => k.value === value)?.label ?? value;
@@ -141,6 +151,7 @@ export function MarkingsEditor() {
           type="button"
           className="btn-small"
           disabled={!form.name.trim() || addMutation.isPending}
+          title={addTitle}
           onClick={() => addMutation.mutate({ ...form, name: form.name.trim() })}
         >
           Add marking
