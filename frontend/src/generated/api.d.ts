@@ -24042,6 +24042,31 @@ export interface components {
       probing_threshold?: number | null;
       position_id?: number | null;
     };
+    /** @description Schema-only shape of the beat line in an aftermath digest (#3551). */
+    AftermathBeat: {
+      outcome: string;
+      tier_name: string | null;
+      resolution_text: string;
+    };
+    /**
+     * @description Schema-only shape of ParticipantSerializer.aftermath (#3551).
+     *
+     *     Never instantiated for output.
+     */
+    AftermathDigest: {
+      outcome: string;
+      consequence: components['schemas']['ConsequenceOutcome'] | null;
+      conditions: components['schemas']['ConditionInstance'][];
+      legend: components['schemas']['AftermathLegend'][];
+      beat: components['schemas']['AftermathBeat'] | null;
+      peril_round_active: boolean;
+    };
+    /** @description Schema-only shape of one legend line in an aftermath digest (#3551). */
+    AftermathLegend: {
+      title: string;
+      description: string;
+      base_value: number;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -37576,6 +37601,7 @@ export interface components {
       /** @description Process-derived control bonus from the COMBAT engagement. */
       readonly control_modifier: number | null;
       readonly current_position: components['schemas']['PositionSummary'] | null;
+      readonly aftermath: components['schemas']['AftermathDigest'] | null;
     };
     /**
      * @description Read serializer for combat participants.
