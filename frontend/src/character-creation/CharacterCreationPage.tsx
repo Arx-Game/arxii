@@ -33,7 +33,7 @@ import {
   ReviewStage,
   StageErrorBoundary,
 } from './components';
-import { CHAPTERS, ContentsRail, NightPlate, PageTurn } from './folio';
+import { CHAPTERS, CodexWord, ContentsRail, NightPlate, PageTurn } from './folio';
 import {
   useCanCreateCharacter,
   useCGExplanations,
@@ -157,19 +157,24 @@ export function CharacterCreationPage() {
       <div className="interview">
         <NightPlate
           titleId="arrival-title"
-          eyebrow={copy?.arrival_eyebrow ?? 'The Durance · Chapter the First'}
-          title={copy?.arrival_title ?? 'One stands before us'}
+          title={copy?.arrival_title ?? 'Creating a Character and Starting their Story'}
           backgroundImage={backgroundUrl}
           door={{
-            label: createDraft.isPending
-              ? 'Opening the record…'
-              : (copy?.arrival_door ?? 'Open the record'),
+            label: createDraft.isPending ? 'Opening the record…' : (copy?.arrival_door ?? 'Begin'),
             onClick: () => createDraft.mutate(),
             disabled: createDraft.isPending,
           }}
-          quiet={{ label: copy?.arrival_quiet ?? 'or return to the Hall', to: '/' }}
+          quiet={{ label: copy?.arrival_quiet ?? 'Return to the Hall', to: '/' }}
         >
-          {copy?.origin_lore_intro && <p className="plate-sub">{copy.origin_lore_intro}</p>}
+          {copy?.arrival_intro ? (
+            <p className="plate-sub">{copy.arrival_intro}</p>
+          ) : (
+            <p className="plate-sub">
+              You will be creating one of the <CodexWord name="Gifted">Gifted</CodexWord>, those who
+              carry magic in their blood and have caught their first{' '}
+              <CodexWord name="Glimpse">Glimpse</CodexWord> of who one day they might become.
+            </p>
+          )}
         </NightPlate>
       </div>
     );
@@ -217,8 +222,7 @@ export function CharacterCreationPage() {
 
   const restartDoor = (
     <button type="button" onClick={() => setRestartDialogOpen(true)}>
-      {/* PLACEHOLDER: Apostate rewrite */}
-      Tear out these pages and begin again
+      Restart character creation
     </button>
   );
 
@@ -250,7 +254,7 @@ export function CharacterCreationPage() {
               next={
                 nextStage !== undefined
                   ? {
-                      label: `Turn the page: ${STAGE_LABELS[nextStage]}`,
+                      label: `Next: ${STAGE_LABELS[nextStage]}`,
                       onClick: () => handleStageSelect(nextStage),
                     }
                   : undefined
@@ -263,11 +267,10 @@ export function CharacterCreationPage() {
       <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
         <DialogContent className="rounded-none">
           <DialogHeader>
-            {/* PLACEHOLDER: Apostate rewrite */}
-            <DialogTitle className="theme-heading">Tear out these pages</DialogTitle>
+            <DialogTitle className="theme-heading">Restart character creation</DialogTitle>
             <DialogDescription>
-              {/* PLACEHOLDER: Apostate rewrite */}
-              Every chapter written so far is lost, and the record begins again at Origin.
+              This deletes everything you have chosen so far and starts a fresh character. This
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -276,7 +279,7 @@ export function CharacterCreationPage() {
               className="rounded-none"
               onClick={() => setRestartDialogOpen(false)}
             >
-              Keep what is written
+              Cancel
             </Button>
             <Button
               variant="destructive"
@@ -284,7 +287,7 @@ export function CharacterCreationPage() {
               onClick={handleRestart}
               disabled={deleteDraft.isPending || createDraft.isPending}
             >
-              {deleteDraft.isPending || createDraft.isPending ? 'Tearing out…' : 'Tear them out'}
+              {deleteDraft.isPending || createDraft.isPending ? 'Restarting…' : 'Restart'}
             </Button>
           </DialogFooter>
         </DialogContent>

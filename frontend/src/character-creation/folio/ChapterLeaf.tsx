@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Stage } from '../types';
-import { CHAPTER_ORDINALS } from './ContentsRail';
+import { stageEyebrow } from './ContentsRail';
 
 interface ChapterLeafProps {
   stage: Stage;
@@ -26,7 +26,7 @@ export function ChapterLeaf({
   return (
     <div className={['chapter', wide ? 'chapter-wide' : '', className ?? ''].join(' ').trim()}>
       <div className="chapter-main">
-        <span className="chapter-no">{CHAPTER_ORDINALS[stage]}</span>
+        <span className="chapter-no">{stageEyebrow(stage)}</span>
         <h1>{title}</h1>
         {intro && (
           <div className="leaf-body">

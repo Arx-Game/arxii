@@ -37,7 +37,7 @@ export function Entry({ name, gloss, tag, chosen, closed, open, children }: Entr
                 <span className="orn" aria-hidden="true">
                   ❧
                 </span>{' '}
-                Chosen
+                Selected
               </span>
             )}
           </span>
@@ -63,9 +63,9 @@ export function EntryDoors({ chooseLabel, onChoose, chosen, onSetAside, quiet }:
         {chooseLabel}
       </button>
       <span className="chosen-line">
-        Chosen.{' '}
+        Selected.{' '}
         <button type="button" onClick={onSetAside}>
-          Set it aside.
+          Clear
         </button>
       </span>
       {quiet && (

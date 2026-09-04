@@ -20,7 +20,7 @@ describe('ChapterLeaf', () => {
         <p>body</p>
       </ChapterLeaf>
     );
-    expect(screen.getByText('Chapter the First')).toHaveClass('chapter-no');
+    expect(screen.getByText('Stage 1 of 11')).toHaveClass('chapter-no');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('complementary', { name: /marginalia/i })).toHaveTextContent('note');
   });
@@ -34,7 +34,7 @@ describe('RecordRail', () => {
         ledger="One of eleven chapters begun."
       />
     );
-    expect(screen.getByRole('heading', { name: /the record, so far/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /your choices so far/i })).toBeInTheDocument();
     expect(screen.getByText('Perdition')).toBeInTheDocument();
     expect(screen.getByText('not yet chosen')).toHaveClass('unwritten');
     expect(screen.getByText('One of eleven chapters begun.')).toHaveClass('rail-ledger');

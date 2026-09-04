@@ -197,19 +197,20 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Checks that align with a goal earn a bonus, so pick what your character "
         "actually wants."
     ),
-    "review_heading": "Your Testament",
+    "review_heading": "Review and Submit",
     "review_intro": (
-        "You are preparing the testament your character will carry into the "
-        "Ritual of the Durance, the moment they stand before the assembly and "
-        "speak who they are. The words you choose here are what they will "
-        "present. The actual rite happens later, in play; for now, this is your "
-        "chance to see your character whole before submitting them for review."
+        "Read through everything you have chosen and written. You can go back "
+        "to any stage and change it. When you are ready, submit the character "
+        "for staff review."
     ),
+    # No longer rendered by the Review page (#3540 OOC sweep, ruling 2026-09-04):
+    # kept as authored content for other surfaces (e.g. telnet, an admin preview).
     "review_epigraph": ("One stands before us in Durance, speak thy name and testament."),
+    # No longer rendered anywhere (#3540 OOC sweep); kept as authored content.
     "review_testament_heading": "The Testament",
     "review_glimpse_label": "What your character would speak of themselves",
-    "review_record_heading": "The Record",
-    "review_banner_submitted": "Your testament has been submitted for review.",
+    "review_record_heading": "Summary",
+    "review_banner_submitted": "Your character has been submitted for review.",
     "review_approved_enter_world": "Enter the World",
     "origin_lore_intro": (
         "You are one of the Gifted, those who carry magic in their blood "
@@ -244,11 +245,18 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "stepping into their life, their trials, and their place in the "
         "world's thinning veil."
     ),
-    # Folio chapter copy (#3540). PLACEHOLDER: Apostate rewrite.
-    "arrival_eyebrow": "The Durance · Chapter the First",
-    "arrival_title": "One stands before us",
-    "arrival_door": "Open the record",
-    "arrival_quiet": "or return to the Hall",
+    # Folio chapter copy (#3540). Ruling 2026-09-04 (OOC sweep): interface
+    # chrome is plain OOC site language; in-character text is confined to
+    # realm/codex prose and the player's own words. arrival_eyebrow is
+    # retired: the arrival plate no longer renders an eyebrow.
+    "arrival_title": "Creating a Character and Starting their Story",
+    "arrival_intro": (
+        "You will be creating one of the Gifted, those who carry magic in "
+        "their blood and have caught their first Glimpse of who one day "
+        "they might become."
+    ),
+    "arrival_door": "Begin",
+    "arrival_quiet": "Return to the Hall",
 }
 
 

@@ -662,8 +662,8 @@ export const mockCGExplanations: Record<string, string> = {
   review_heading: 'Review & Submit',
   review_intro: 'Review your character before submitting for approval.',
   review_xp_explanation: 'Unspent CG points convert to bonus XP.',
-  arrival_eyebrow: 'The Durance · Chapter the First',
   arrival_title: 'One stands before us',
+  arrival_intro: 'You are one of the Gifted, arriving to begin your story.',
   arrival_door: 'Open the record',
   arrival_quiet: 'or return to the Hall',
 };

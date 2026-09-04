@@ -1,4 +1,4 @@
-/** The record, so far (#3540, Decision 8): chosen values only, never prose about the character. */
+/** Your choices so far (#3540, Decision 8; OOC sweep): chosen values only, never prose. */
 import type { ReactNode } from 'react';
 
 export interface RecordRow {
@@ -23,7 +23,7 @@ function RecordValue({ value, onEdit }: { value?: string | null; onEdit?: () => 
 export function RecordRail({ rows, ledger }: { rows: RecordRow[]; ledger?: string }) {
   return (
     <div className="record-rail">
-      <h2 className="rail-label">The record, so far</h2>
+      <h2 className="rail-label">Your choices so far</h2>
       <dl>
         {rows.map((row) => (
           <div className="row" key={row.label}>

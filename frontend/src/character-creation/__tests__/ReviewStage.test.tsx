@@ -158,7 +158,7 @@ describe('ReviewStage', () => {
         cg_points_spent: 85,
       });
       renderReview(draftWithUnspent);
-      expect(screen.getByText(/15 points remain unspent/i)).toBeInTheDocument();
+      expect(screen.getByText(/15 CG points remain unspent/i)).toBeInTheDocument();
     });
 
     it('does not show the ledger line when all CG points are spent', () => {

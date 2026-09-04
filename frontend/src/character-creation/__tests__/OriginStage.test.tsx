@@ -65,7 +65,7 @@ describe('OriginStage', () => {
     await userEvent.hover(await screen.findByText(first.name));
     expect(mutate).not.toHaveBeenCalled();
     await userEvent.click(
-      screen.getByRole('button', { name: new RegExp(`begin in ${first.name}`, 'i') })
+      screen.getByRole('button', { name: new RegExp(`choose ${first.name}`, 'i') })
     );
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -79,11 +79,11 @@ describe('OriginStage', () => {
     );
   });
 
-  it('keeps the turn-the-page door closed with a reason until a realm is chosen', async () => {
+  it('keeps the next door closed with a reason until a realm is chosen', async () => {
     renderOrigin();
-    const door = await screen.findByRole('button', { name: /turn the page/i });
+    const door = await screen.findByRole('button', { name: /^next:/i });
     expect(door).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByText(/choose a realm to turn the page/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose a starting realm to continue/i)).toBeInTheDocument();
   });
 
   it('asks before changing a chosen realm', async () => {
@@ -92,11 +92,11 @@ describe('OriginStage', () => {
       (a) => a.id !== mockDraftWithArea.selected_area!.id && a.is_accessible
     )!;
     await userEvent.click(
-      await screen.findByRole('button', { name: new RegExp(`begin in ${other.name}`, 'i') })
+      await screen.findByRole('button', { name: new RegExp(`choose ${other.name}`, 'i') })
     );
     expect(mutate).not.toHaveBeenCalled();
-    expect(screen.getByRole('heading', { name: /begin somewhere else/i })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /begin again there/i }));
+    expect(screen.getByRole('heading', { name: /change starting realm/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /change realm/i }));
     expect(mutate).toHaveBeenCalled();
   });
 
@@ -105,7 +105,7 @@ describe('OriginStage', () => {
     const closed = mockStartingAreas.find((a) => !a.is_accessible)!;
     const item = (await screen.findByText(closed.name)).closest('li')!;
     expect(item).toHaveClass('closed');
-    expect(within(item).queryByRole('button', { name: /begin in/i })).toBeNull();
+    expect(within(item).queryByRole('button', { name: /choose/i })).toBeNull();
   });
 
   it('shows the busy line while the record opens', () => {

@@ -93,14 +93,10 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         title={copy?.origin_heading ?? 'Where does the story begin?'}
         aside={
           <>
-            <RecordRail
-              rows={[{ label: 'Origin', value: chosen?.name }]}
-              ledger="One of eleven chapters begun."
-            />
+            <RecordRail rows={[{ label: 'Origin', value: chosen?.name }]} ledger="Stage 1 of 11" />
             <Marginalia id="note-change">
-              {/* PLACEHOLDER: Apostate rewrite */}
-              <Note lead="Choosing a different origin">
-                clears the chapters that depended on it. The record asks first.
+              <Note lead="Changing your starting realm">
+                clears the stages that depended on it. You will be asked first.
               </Note>
             </Marginalia>
           </>
@@ -115,8 +111,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
               <Entry
                 key={area.id}
                 name={area.name}
-                // PLACEHOLDER: Apostate rewrite
-                tag={closed ? `${realmName} · closed to you` : realmName}
+                tag={closed ? `${realmName} · not available to your account` : realmName}
                 chosen={isChosen}
                 closed={closed}
                 open={isChosen}
@@ -125,11 +120,13 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
                   <p key={i}>{para}</p>
                 ))}
                 {closed ? (
-                  // PLACEHOLDER: Apostate rewrite; the trust threshold is not on the serializer yet
-                  <p className="ledger-line">This door is closed to your account.</p>
+                  // The trust threshold that gates access is not on the serializer yet.
+                  <p className="ledger-line">
+                    This starting realm is not available to your account.
+                  </p>
                 ) : (
                   <EntryDoors
-                    chooseLabel={`Begin in ${area.name}`}
+                    chooseLabel={`Choose ${area.name}`}
                     onChoose={() => choose(area)}
                     chosen={isChosen}
                     onSetAside={() => apply(null)}
@@ -141,27 +138,26 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         </EntryList>
         <PageTurn
           next={{
-            label: `Turn the page: ${STAGE_LABELS[Stage.HERITAGE]}`,
+            label: `Next: ${STAGE_LABELS[Stage.HERITAGE]}`,
             onClick: () => onStageSelect(Stage.HERITAGE),
             disabled: !chosen,
-            reason: 'Choose a realm to turn the page.',
+            reason: 'Choose a starting realm to continue.',
           }}
         />
       </ChapterLeaf>
       <ConfirmDialog
         open={pending !== null}
-        title="Begin somewhere else"
-        confirmLabel="Begin again there"
-        cancelLabel="Keep what is written"
+        title="Change starting realm"
+        confirmLabel="Change realm"
+        cancelLabel="Keep current choice"
         onConfirm={() => {
           if (pending) apply(pending);
           setPending(null);
         }}
         onCancel={() => setPending(null)}
       >
-        {/* PLACEHOLDER: Apostate rewrite */}
-        The record has the story beginning in {chosen?.name}. Nothing written after Origin survives
-        a new beginning.
+        Changing your starting realm clears the stages that depended on it (Heritage, Lineage and
+        Species choices).
       </ConfirmDialog>
     </>
   );

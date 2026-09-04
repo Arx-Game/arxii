@@ -7,7 +7,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 interface NightPlateProps {
-  eyebrow: string;
+  /** Absent at both night moments now (#3540 OOC sweep): no in-character label on the plate. */
+  eyebrow?: string;
   title: string;
   /** `p` on a page that has its own h1 (arrival); `h2` after submission. */
   titleAs?: 'p' | 'h2';
@@ -34,7 +35,7 @@ export function NightPlate({
   titleId,
 }: NightPlateProps) {
   const Title = titleAs;
-  const eyebrowId = `${titleId}-eyebrow`;
+  const eyebrowId = eyebrow ? `${titleId}-eyebrow` : undefined;
   const style: CSSProperties | undefined = backgroundImage
     ? {
         backgroundImage: `linear-gradient(rgba(14,17,22,0.72), rgba(14,17,22,0.72)), url(${backgroundImage})`,
@@ -45,14 +46,16 @@ export function NightPlate({
   return (
     <section
       className="plate-night"
-      aria-labelledby={`${eyebrowId} ${titleId}`}
+      aria-labelledby={eyebrowId ? `${eyebrowId} ${titleId}` : titleId}
       id={id}
       style={style}
     >
       <div className="plate-inner">
-        <span className="plate-no" id={eyebrowId}>
-          {eyebrow}
-        </span>
+        {eyebrow && (
+          <span className="plate-no" id={eyebrowId}>
+            {eyebrow}
+          </span>
+        )}
         <Title className="plate-title" id={titleId} tabIndex={titleAs === 'h2' ? -1 : undefined}>
           {title}
         </Title>

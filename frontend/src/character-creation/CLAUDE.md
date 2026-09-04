@@ -60,7 +60,8 @@ character-creation/
 
 - **Free navigation**: All stages clickable, incomplete stages show warning badge
 - **Real-time validation**: Stage completion tracked, submit blocked until all required stages complete
-- Progress is a table of contents; the game never speaks for the player (#3540 Decisions 3 and 8)
+- Interface chrome is OOC and plain (stages, Next/Back, Selected); in-character text is confined to
+  realm/codex prose and the player's own words; the game never speaks for the player (#3540)
 - **Staff-only features**: "Add to Roster" button visible only to staff
 - **Player-GM direct-to-roster (#3268)**: a non-staff account that owns at least one active
   GM-role table sees a "Finalize for My Table" button beside Submit, gated by the same

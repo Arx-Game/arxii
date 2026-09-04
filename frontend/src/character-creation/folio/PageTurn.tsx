@@ -20,7 +20,7 @@ export function PageTurn({ back, next }: PageTurnProps) {
     <div className="page-turn">
       {back ? (
         <button type="button" className="btn-quiet" onClick={back.onClick}>
-          ‹ {back.label}
+          {back.label}
         </button>
       ) : (
         <span />

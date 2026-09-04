@@ -88,7 +88,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           { label: 'Tradition', value: draft.selected_tradition?.name },
           { label: 'Statistics', value: `${spent} of ${budget} spent` },
         ]}
-        ledger="Seven of eleven chapters begun."
+        ledger="Stage 7 of 11"
       />
       <Marginalia id="note-why">
         <span className="note" id="why-note" role="status">
@@ -97,9 +97,8 @@ export function AttributesStage({ draft }: AttributesStageProps) {
               <b className="capitalize">On {why}.</b> {descriptions[why] ?? ''}
             </>
           ) : (
-            // PLACEHOLDER: Apostate rewrite
             <>
-              <b>On the instruments.</b> Press a statistic’s name for what it governs.
+              <b>Statistics.</b> Select a statistic’s name to read what it governs.
             </>
           )}
         </span>
