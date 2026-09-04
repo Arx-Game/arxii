@@ -14,6 +14,7 @@ character-creation/
 │                              #   pinned to Arx (#3540)
 ├── CharacterCreationPage.tsx # Main page component
 ├── folio/                   # Folio chassis primitives (#3540), realm-agnostic
+│   ├── index.ts             # Barrel re-export
 │   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper
 │   ├── PageTurn.tsx         # Back/next doors between chapters
 │   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)

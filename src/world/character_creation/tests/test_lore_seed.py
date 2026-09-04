@@ -58,3 +58,4 @@ class TestLoreOnboardingSeed(TestCase):
             assert key in CG_EXPLANATION_COPY, f"{key} missing from CG_EXPLANATION_COPY"
         for key, text in CG_EXPLANATION_COPY.items():
             assert "—" not in text, f"{key} carries an em-dash"
+            assert "–" not in text, f"{key} carries an en-dash"
