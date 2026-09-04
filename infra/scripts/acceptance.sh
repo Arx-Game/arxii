@@ -629,6 +629,15 @@ chk   "settings.py guards sentry_sdk.init() behind a non-empty SENTRY_DSN" \
   "grep -q 'if SENTRY_DSN:' src/server/conf/settings.py && grep -q 'sentry_sdk.init(' src/server/conf/settings.py"
 chk   "settings.py disables Sentry PII capture (send_default_pii=False)" \
   "grep -q 'send_default_pii=False' src/server/conf/settings.py"
+# server_name is sentry_sdk's socket.gethostname() fallback. An unnamed box
+# reports every event as "localhost", which is useless attribution the moment
+# there is more than one host — so base must name it, and must write the
+# /etc/hosts mapping first or sudo warns for the rest of the converge.
+chk   "base names the box (sentry_sdk's server_name is socket.gethostname())" \
+  "has_code 'ansible.builtin.hostname' infra/ansible/roles/base/tasks/main.yml && has_code 'base_hostname' infra/ansible/roles/base/defaults/main.yml"
+assert_before "base maps the hostname in /etc/hosts BEFORE renaming the host" \
+  'name: Map the hostname in /etc/hosts' 'name: Set the box hostname' \
+  infra/ansible/roles/base/tasks/main.yml
 
 echo "== #3320 / ADR-0232 (Arx I archive behind Arx II accounts) =="
 # The URL prefix is a cross-file contract with no single source of truth:

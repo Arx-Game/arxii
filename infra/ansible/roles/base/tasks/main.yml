@@ -12,6 +12,33 @@
       run via standup.sh.
     quiet: true
 
+# Name the box. Nothing ever set a hostname, so the Linode kept the image's
+# `localhost`: sentry_sdk's server_name tag defaults to socket.gethostname(),
+# so every production event was attributed to "localhost" — worthless the
+# moment there is more than one host. journald, the shell prompt and
+# arx1-freeze.sh's provenance line all read the same value.
+#
+# /etc/hosts FIRST, then the rename: sudo resolves the current hostname on
+# every invocation and warns "unable to resolve host <name>" for the rest of
+# the converge if it has no entry. Writing the mapping before the rename
+# leaves no window where the name is unresolvable. 127.0.1.1 is Debian's
+# convention for a hostname with no real FQDN, and the regexp is anchored to
+# it so the image's own `127.0.0.1 localhost` line — and the extra
+# `127.0.0.1 <fqdn>` line rehearse.sh appends on the stage box — are left
+# alone.
+- name: Map the hostname in /etc/hosts (before the rename, so sudo can resolve it)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s'
+    line: "127.0.1.1 {{ base_hostname }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Set the box hostname
+  ansible.builtin.hostname:
+    name: "{{ base_hostname }}"
+
 # SSH admin login user — BEFORE anything else that could fail. First
 # converge connects as root (Linode injects the key there); this creates
 # the user ansible reconnects as on every later run.
