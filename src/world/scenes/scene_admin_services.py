@@ -16,7 +16,8 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from world.fatigue.tasks import process_deferred_fatigue_resets
 from world.progression.services.scene_rewards import on_scene_finished
-from world.scenes.constants import SceneAction
+from world.scenes.clock_services import close_scene_clocks
+from world.scenes.constants import SceneAction, SceneClockClosedReason
 from world.scenes.models import Scene, SceneParticipation
 from world.scenes.services import broadcast_scene_message
 
@@ -176,6 +177,11 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
         return
 
     scene.finish_scene()
+
+    # #3567: clocks opened in this scene stop with it; a battle scene running the
+    # same beat has its own row and keeps the GM scene's clock alive.
+    close_scene_clocks(scene, SceneClockClosedReason.SCENE_ENDED)
+
     if scene.running_beat_id is not None:
         # #3425: a beat's session-prep run pointer only lives for the scene's
         # duration -- clear it so a later ``story beats`` listing / #3433 header

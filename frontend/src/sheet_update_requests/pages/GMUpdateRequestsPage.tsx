@@ -35,6 +35,12 @@ function RequestCard({ request }: { request: TableUpdateRequest }) {
 
   const prose = request.profile_text_details;
   const distinction = request.distinction_details;
+  const distinctionName = distinction?.distinction_name ?? distinction?.held_distinction_name ?? '';
+  const distinctionVerb = distinction?.action === DISTINCTION_ACTIONS.REMOVE ? 'shed' : 'gain';
+  const summary =
+    request.kind === REQUEST_KINDS.PROFILE_TEXT
+      ? `Profile: ${prose?.field ?? ''}`
+      : `Distinction: ${distinctionName} (${distinctionVerb})`;
   const isPending = request.status === REQUEST_STATUSES.PENDING;
 
   return (
@@ -42,12 +48,7 @@ function RequestCard({ request }: { request: TableUpdateRequest }) {
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2 text-base">
           <span>
-            {request.persona_name} · {request.table_name} ·{' '}
-            {request.kind === REQUEST_KINDS.PROFILE_TEXT
-              ? `Profile: ${prose?.field ?? ''}`
-              : `Distinction: ${
-                  distinction?.distinction_name ?? distinction?.held_distinction_name ?? ''
-                } (${distinction?.action === DISTINCTION_ACTIONS.REMOVE ? 'shed' : 'gain'})`}
+            {request.persona_name} · {request.table_name} · {summary}
           </span>
           <Badge variant="outline">{request.status}</Badge>
         </CardTitle>
@@ -115,6 +116,26 @@ export function GMUpdateRequestsPage() {
   const { data, isLoading } = useUpdateRequestsQuery({ role: 'gm', status: statusFilter });
   const requests = data?.results ?? [];
 
+  const renderRequests = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (requests.length === 0) {
+      return <p className="py-8 text-center text-muted-foreground">No requests here.</p>;
+    }
+    return (
+      <div className="space-y-4">
+        {requests.map((request) => (
+          <RequestCard key={request.id} request={request} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-2 text-2xl font-bold">Sheet Update Requests</h1>
@@ -137,19 +158,7 @@ export function GMUpdateRequestsPage() {
         ))}
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : requests.length === 0 ? (
-        <p className="py-8 text-center text-muted-foreground">No requests here.</p>
-      ) : (
-        <div className="space-y-4">
-          {requests.map((request) => (
-            <RequestCard key={request.id} request={request} />
-          ))}
-        </div>
-      )}
+      {renderRequests()}
     </div>
   );
 }

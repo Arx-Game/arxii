@@ -8,10 +8,14 @@ Character creation is a multi-stage process that guides players through creating
 
 1. **Origin** - Select starting area (city), which gates heritage options
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
-3. **Lineage** - Family selection (or "Unknown" for special heritage); kin-slot
-   claim/mint/defer, plus invented parents (#2815: names/genders in draft_data,
-   `second_parent_species` for a cross-species parent — unlocks that line's
-   colors in Appearance; finalize creates the nodes and pins back-inference)
+3. **Lineage** - Choose an Upbringing (`OriginTemplate`) for the beginning, then its
+   family path: claim a staff-authored family, name a new one, or none (tarot
+   surname ritual); typed prompts with costed pick-list choices priced by the
+   claimed family's influence (#3617, see `docs/systems/character_creation.md`'s
+   Lineage step section). Plus kin-slot claim/mint/defer and invented parents
+   (#2815: names/genders in draft_data, `second_parent_species` for a
+   cross-species parent, unlocks that line's colors in Appearance; finalize
+   creates the nodes and pins back-inference)
 4. **Distinctions** - Advantages and disadvantages
 5. **Path** - Class/path selection
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
@@ -32,27 +36,29 @@ Character creation is a multi-stage process that guides players through creating
 - Access control: all players, trust-required, or staff-only
 
 ### Beginnings
-- Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten —
+- Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten -
   canonical prose and gates in the lore repo's `beginnings/arx.md`)
 - Controls which species are available (allows_all_species or specific species_options)
-- Sets whether family is known (family_known=False for Sleeper/Misbegotten)
+- Family paths are gated per-Upbringing instead, on `OriginTemplate` (#3617); Beginnings
+  itself carries no family-known flag
 - Can override starting room (e.g., Sleeper Wake Room)
 - Has CG point cost and trust requirements
 
-### OriginTemplate / OriginTemplateSlot (#2478)
-- Authored origin-story frames (content models, lore-repo via `CONTENT_MODELS`).
-  Multiple templates per Beginning allowed; today one active template auto-assigns.
-- `OriginTemplate.frame_narrative` fixes the narrative frame (e.g. "escape from
-  Salvation"); `OriginTemplateSlot` carries authored slot prompts the player fills in.
-- No slug fields — natural keys from FK + `name` (mirroring `Beginnings`).
-- `CharacterOriginSlot` is instance data (FK→`CharacterSheet`, FK→`OriginTemplateSlot`).
-- At CG finalize, slot answers are assembled into `Profile.background` prose via
-  `assemble_origin_prose()` (pure concatenation, no LLM). The structured rows are
-  queryable for future GM/story tools.
-- Not required at CG submit (mirrors #2427 Glimpse — no validation gate). Finish-later
-  via `OriginStoryEditorDialog` on the character sheet (`set-origin-slot` /
-  `clear-origin-slot` sheet API actions).
-- `CharacterSheet.origin_story_state` caches NOT_STARTED/SLOTS_ONLY/COMPLETE.
+### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617)
+Full model shape, family-path resolution, pricing, and the authoring recipes live in
+`docs/systems/character_creation.md`'s Lineage step section and
+`docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" in
+CG copy) is the authored content row a player picks within a Beginning, carrying a CG
+point cost, a trust gate, and which family paths it allows (claim/name/none);
+`OriginTemplateSlot` is an authored prompt scoped to a path (`applies_to`), and
+`OriginTemplateSlotChoice` is a priced pick-list answer (`cost_for(influence)`).
+`CharacterOriginSlot` is instance data (FK->`CharacterSheet`, FK->`OriginTemplateSlot`,
+nullable FK->`OriginTemplateSlotChoice`); at CG finalize its answers assemble into
+`Profile.background` prose via `assemble_origin_prose()` (pure concatenation, no LLM).
+Not required at CG submit (mirrors #2427 Glimpse); finish-later via
+`OriginStoryEditorDialog` (`set-origin-slot`/`clear-origin-slot` sheet API actions -
+`choice_id` there is staff-only, since a costed pick is set at character creation).
+`CharacterSheet.origin_story_state` caches NOT_STARTED/SLOTS_ONLY/COMPLETE.
 
 ### CGExplanation
 - Key-value table: each row has `key`, `text`, and `help_text` fields
@@ -176,3 +182,12 @@ Checks if account can create characters (verified, positive trust, under limit).
 - Staff bypass all access restrictions and limits
 - Navigation between stages is free; incomplete stages are highlighted but not blocked
 - Submit is blocked until all required stages are complete
+- **Stage completion is computed per call, never cached on the draft.**
+  `get_stage_validation_errors()` / `get_stage_completion()` back both the stepper
+  badges (`stage_completion`/`stage_errors` on `CharacterDraftSerializer`) and the
+  `can_submit()` gate. `CharacterDraft` is a `SharedMemoryModel`, so a memo on the
+  instance is process-wide, not per-request: it froze the first request's verdict
+  and every later response replayed it, which read to the player as finished stages
+  still flagged incomplete and a complete draft refused at submit. Each response
+  therefore runs the validator pass twice (once per field); if that cost ever
+  matters, make the validators cheaper rather than caching their result on the draft.

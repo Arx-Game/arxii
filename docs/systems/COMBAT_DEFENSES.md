@@ -75,6 +75,10 @@ buffer.
 - **Content seed:** `ensure_force_field_content()` in
   `world/magic/effect_palette_content.py` (Aegis Field).
 - **Scope:** SELF — the trigger filter fires when `payload.target == bearer`.
+- **Cost:** flat `reactive_anima_cost` billed to the applier (ADR-0118 reactive-costs); an
+  instance with `soulfray_consented` (#3573) pays into deficit through `deduct_anima` and
+  accrues Soulfray on every fire, so a caster can hold a ward for an ally past zero anima
+  at their own soul's expense.
 
 ## Mitigation (armor soak + thread DR)
 

@@ -34,7 +34,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [companions](src/world/companions/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
-- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md)
+- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step
+  terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
+  Kind, Influence. Character Creation has no glossary file of its own.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
@@ -128,6 +130,27 @@ contributes typed **Effects** (handlers in `actions/effects/`) that modify how t
 resolves. _Avoid_: buff, modifier (Effect is the action-layer term; Modifier is the
 mechanics-layer term).
 
+## Stories & missions: the scenario graph (#3565)
+
+**Scenario / Scenario Graph**:
+`world.missions`' authored option -> check -> tier -> consequence -> next node graph
+(`MissionTemplate`/`MissionNode`/`MissionOption`/`MissionOptionRoute`) is a shared
+primitive, not owned by either app (ADR-0258). **Scenario** is the GM-facing name used on
+the stories side (a story beat's "Design scenario" action, the scene's Scenario Card/rail);
+**scenario graph** is the code and glossary term for the primitive itself, used whether the
+wrapper is a story beat (`StoryScenario`, see the stories glossary) or a mission (below).
+_Avoid_: GM choice (the runtime transition-picking mode this work retires - see Beat
+Outcome Key in the stories glossary and `docs/adr/0258-story-beats-reuse-the-mission-
+scenario-graph.md`), option engine (there is exactly one, shared by both wrappers).
+
+**Mission** (as a wrapper):
+A scenario graph in its **quest** wrapper - the giver economy (`MissionTemplate`'s
+cooldown, draw weight, era replacement, visibility) plus contract bookkeeping
+(`MissionInstance`'s report style, ransom target). See the missions glossary's Mission
+entry and the stories glossary's StoryScenario entry for the sibling story-beat wrapper.
+_Avoid_: scenario (a mission with a giver is not what "scenario" names - reserve that word
+for the graph wrapped in a story beat).
+
 ## Identity
 
 **Persona**:
@@ -152,6 +175,24 @@ The bridge record linking one character (ObjectDB) to its Roster. _Avoid_: membe
 **RosterTenure**:
 A player↔character relationship over a span of time, carrying anonymity (player number)
 and approval data; `end_date` null means current. _Avoid_: ownership record.
+
+**Two-factor authentication (2FA)**:
+The player-facing name for an account's second sign-in factor (TOTP plus recovery
+codes), opt-in and never required (#3591, ADR-0266). `MFA` is allauth's code-level
+name for the same feature and stays in code (`MFA_ADAPTER`, `MFA_SECRETS_KEY`,
+`allauth.mfa`); player-facing copy always says 2FA. _Avoid_: "MFA" in copy.
+
+**Reauthentication**:
+allauth's recent-sign-in window: a sensitive account change (adding an email,
+enrolling or disabling 2FA) is refused with a 401 until the player re-proves
+identity with their password or a 2FA code, inside a five-minute window of their
+last sign-in (#3591). _Avoid_: confirm password, sudo mode.
+
+**Pending email change**:
+The unverified second `EmailAddress` row that exists between a player changing
+their email and verifying the new address, under `ACCOUNT_CHANGE_EMAIL`; it
+promotes to primary and replaces the old address on verification, and there is
+never more than one on an account (#3591). _Avoid_: secondary email.
 
 ## Resolution
 

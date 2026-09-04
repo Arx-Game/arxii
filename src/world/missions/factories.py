@@ -30,6 +30,7 @@ from world.missions.models import (
     MissionNodeSnapshot,
     MissionNodeSupportOption,
     MissionOption,
+    MissionOptionOpponentLine,
     MissionOptionRoute,
     MissionOptionRouteCandidate,
     MissionOptionRouteReward,
@@ -37,6 +38,7 @@ from world.missions.models import (
     MissionRewardQueue,
     MissionSupportDeclaration,
     MissionTemplate,
+    MissionTrackProgress,
 )
 
 # SubFactory import path, extracted to satisfy S1192.
@@ -136,6 +138,18 @@ class MissionOptionFactory(DjangoModelFactory):
     required_act = ""
 
 
+class MissionOptionOpponentLineFactory(DjangoModelFactory):
+    """Factory for MissionOptionOpponentLine, an ENCOUNTER option's opponent roster (#3565)."""
+
+    class Meta:
+        model = MissionOptionOpponentLine
+
+    option = factory.SubFactory(MissionOptionFactory)
+    creature_template = factory.SubFactory("world.combat.factories.CreatureTemplateFactory")
+    count = 1
+    order = 0
+
+
 class MissionOptionRouteFactory(DjangoModelFactory):
     """Factory for MissionOptionRoute. Defaults to a terminal BRANCH route."""
 
@@ -199,6 +213,18 @@ class MissionNodeSnapshotFactory(DjangoModelFactory):
     instance = factory.SubFactory(MissionInstanceFactory)
     node = factory.SubFactory(MissionNodeFactory)
     participant = factory.SubFactory(MissionParticipantFactory)
+
+
+class MissionTrackProgressFactory(DjangoModelFactory):
+    """Factory for MissionTrackProgress (#3568)."""
+
+    class Meta:
+        model = MissionTrackProgress
+
+    instance = factory.SubFactory(MissionInstanceFactory)
+    node = factory.SubFactory(MissionNodeFactory)
+    successes = 0
+    failures = 0
 
 
 class MissionDeedRecordFactory(DjangoModelFactory):

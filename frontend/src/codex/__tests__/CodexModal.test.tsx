@@ -250,3 +250,22 @@ describe('CodexModal navigation', () => {
     expect(screen.queryByText('As told by', { exact: false })).not.toBeInTheDocument();
   });
 });
+
+describe('CodexModal when the entry cannot be loaded', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('says which entry is unavailable instead of throwing to the page boundary', async () => {
+    // play.arx2.com 2026-09-02: a heritage card linked an entry the viewer had
+    // no knowledge row for, the 404 threw out of the modal, and the whole
+    // character-creation stage was replaced by "Stage Error".
+    vi.mocked(api.getEntry).mockRejectedValue(new Error('Failed to load entry'));
+    render(<CodexModal entryId={106} open onOpenChange={() => {}} />, {
+      wrapper: createWrapper(),
+    });
+    const notice = await screen.findByRole('alert');
+    expect(notice.textContent).toMatch(/entry 106/i);
+    expect(notice.textContent).toMatch(/not available/i);
+  });
+});

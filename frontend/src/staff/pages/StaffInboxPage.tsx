@@ -121,6 +121,77 @@ export function StaffInboxPage() {
     setPage(1);
   }
 
+  const renderItems = () => {
+    if (isLoading) {
+      return <p className="text-muted-foreground">Loading...</p>;
+    }
+    if (!items.length) {
+      return <p className="text-muted-foreground">No open items.</p>;
+    }
+    return (
+      <>
+        <div className="space-y-3">
+          {items.map((item) => (
+            <Link key={`${item.source_type}-${item.source_pk}`} to={detailPath(item)}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${categoryColor(item.source_type)}`}
+                    >
+                      {categoryLabel(item.source_type)}
+                    </span>
+                    <div>
+                      <p className="font-medium">{item.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {item.reporter_summary} &middot; {timeAgo(item.created_at)}
+                        {item.sender_context && (
+                          <span className="ml-2 text-xs">
+                            kudos {item.sender_context.kudos_total} &middot; actioned{' '}
+                            {item.sender_context.actioned_count} &middot; dismissed{' '}
+                            {item.sender_context.dismissed_count}
+                            {item.sender_context.is_ignored && (
+                              <span className="ml-1 font-semibold text-destructive">ignored</span>
+                            )}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        {data && data.num_pages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {data.current_page} of {data.num_pages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= data.num_pages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Staff Inbox</h1>
@@ -159,72 +230,7 @@ export function StaffInboxPage() {
       </div>
 
       {/* Items list */}
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : !items.length ? (
-        <p className="text-muted-foreground">No open items.</p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {items.map((item) => (
-              <Link key={`${item.source_type}-${item.source_pk}`} to={detailPath(item)}>
-                <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${categoryColor(item.source_type)}`}
-                      >
-                        {categoryLabel(item.source_type)}
-                      </span>
-                      <div>
-                        <p className="font-medium">{item.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.reporter_summary} &middot; {timeAgo(item.created_at)}
-                          {item.sender_context && (
-                            <span className="ml-2 text-xs">
-                              kudos {item.sender_context.kudos_total} &middot; actioned{' '}
-                              {item.sender_context.actioned_count} &middot; dismissed{' '}
-                              {item.sender_context.dismissed_count}
-                              {item.sender_context.is_ignored && (
-                                <span className="ml-1 font-semibold text-destructive">ignored</span>
-                              )}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {data && data.num_pages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {data.current_page} of {data.num_pages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= data.num_pages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+      {renderItems()}
     </div>
   );
 }

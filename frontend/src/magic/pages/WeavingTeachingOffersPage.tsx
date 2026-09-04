@@ -36,6 +36,35 @@ export function WeavingTeachingOffersPage() {
     }
   };
 
+  const renderOffers = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-3" data-testid="teaching-offers-loading">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-lg" />
+          ))}
+        </div>
+      );
+    }
+    if (offers.length === 0) {
+      return (
+        <div
+          className="rounded-lg border border-dashed px-6 py-12 text-center"
+          data-testid="teaching-offers-empty"
+        >
+          <p className="text-muted-foreground">No teaching offers available right now.</p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-3" data-testid="teaching-offers-list">
+        {offers.map((offer) => (
+          <TeachingOfferCard key={offer.id} offer={offer} onAccept={handleAccept} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto space-y-6 px-4 py-8">
       {/* Header */}
@@ -50,26 +79,7 @@ export function WeavingTeachingOffersPage() {
       </div>
 
       {/* Content */}
-      {isLoading ? (
-        <div className="space-y-3" data-testid="teaching-offers-loading">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-lg" />
-          ))}
-        </div>
-      ) : offers.length === 0 ? (
-        <div
-          className="rounded-lg border border-dashed px-6 py-12 text-center"
-          data-testid="teaching-offers-empty"
-        >
-          <p className="text-muted-foreground">No teaching offers available right now.</p>
-        </div>
-      ) : (
-        <div className="space-y-3" data-testid="teaching-offers-list">
-          {offers.map((offer) => (
-            <TeachingOfferCard key={offer.id} offer={offer} onAccept={handleAccept} />
-          ))}
-        </div>
-      )}
+      {renderOffers()}
 
       {/* Accept Offer dialog */}
       {selectedOffer && (

@@ -302,7 +302,7 @@ def _complete_duel(
     return encounter
 
 
-def resolve_duel_end(  # noqa: PLR0911 - distinct duel end conditions read clearest as guards
+def resolve_duel_end(
     encounter: CombatEncounter,
 ) -> CombatEncounter | None:
     """Complete a DUEL encounter if an end condition is met; else return None.

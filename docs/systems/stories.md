@@ -6,6 +6,60 @@ Structured narrative campaign management: task-gated episode progression, multi-
 
 **Authoring backbone + authoring API/UI shipped.** The non-linear maturity sketchpad (per-node `maturity`, `StoryScope.UNASSIGNED`, `Episode.resting_conclusion`/`is_ending`, `Beat.kind`/`advances`/`risk`, the WAITING_FOR_GM/RESTING frontier, the per-story `StoryNote` ledger) and the authoring/run-control API + minimal UI are in: `Story.summary` ("The Story So Far"), the GM↔player visibility contract, `POST /api/episodes/{id}/promote/`, `POST /api/stories/{id}/assign-to-scope/`, query-bounded `gm-queue`/`staff-workload`, and the `StoryAuthorPage` run-control surface (promote/assign dialogs, GM Notes panel, inline progress-state banner, nimble +Beat/+Branch). See the Visibility Contract and API sections below.
 
+**`BeatFormDialog` reached parity with `BeatSerializer` (#3562).** Every
+field `BeatSerializer` accepts is now on the form: all nine predicate types
+(`faction_standing_at_least` included), `target_level`, the three
+consequence pools via `ConsequencePoolPicker` (with a resolved-entries
+preview), `required_mission` (SITUATION/TASK, kind-gated), and `risk` up to
+the caller's own `GMLevelCap.max_beat_risk` rather than staff-only. Edit
+mode adds a `GET /api/beats/{id}/readiness/` strip
+(`is_ready`/`problems`/`advisories`/`effective_risk`) and a lock banner when
+an open stakes-contract activation locks `risk`/`target_level`/the three
+consequence pools against further edits. `StoryFormDialog` gained the
+matching `privacy` select. See the `Beat` model table and "StoryScenario"
+below, and [stakes.md](stakes.md)'s "Readiness (GM-facing, #3562)" section,
+for the field-by-field detail.
+
+**Battle prep toggle (#3569).** For an ENCOUNTER beat, `BeatFormDialog` mounts
+an Opponents/Battle toggle (`prepMode`) above the session-prep rows: Opponents
+mounts the pre-existing freeform `OpponentLinesEditor`; Battle mounts
+`BattlePrepEditor` (blueprint + region + name + party side + unit lines,
+`frontend/src/stories/components/BattlePrepEditor.tsx`). The two are mutually
+exclusive on submit, mirroring the server XOR: Battle mode sends
+`staged_battle` populated and `opponent_lines: []`; Opponents mode sends
+`opponent_lines` populated and, only when the beat already had a staged
+battle, an explicit `staged_battle: null` to delete it. `prepMode` seeds from
+whichever the beat already carries (`beat?.staged_battle ? 'battle' :
+'opponents'`) so re-opening the form on an existing beat lands on the right
+tab.
+
+**Stakes editor on the beat (#3561).** A stakes-contract engine has existed
+since #1770 with no web surface at all - only the Django admin could author a
+`Stake`. `StakesPanel` now mounts under the beat in two places: expanded
+inline in `StoryAuthorTree`'s collapsible "Stakes" chevron, and again in
+`BeatFormDialog`'s edit mode after the Scenario section. It carries the
+header (declared/effective risk, target level, readiness verdict, lock
+banner), the beat's `Stake` rows (`StakeRow` - template, `SubjectRefFields`
+subject picker now including an ASSET case, severity, player summary), and
+each stake's WIN/LOSS/WITHDRAWAL `BranchColumns` (pool, escalation, narrative
+summary, and the writer fields the subject kind allows - item forfeit, NPC
+lifecycle/standing/regard, faction standing, or the ASSET status transition;
+WIN branches also mount `RewardLinesEditor` for money/resonance payouts).
+Every write goes straight through the existing `Stake`/`StakeResolution`/
+`StakeRewardLine` CRUD endpoints - no new write surface. "Add stake" reads
+from the `StakeTemplate` catalog banded to the beat's risk; a custom stake is
+offered only when the caller's `GMLevelCap.allow_custom_stakes` (or staff)
+permits it. The form disables under an open activation, same lock the
+serializers already enforce. See [stakes.md](stakes.md)'s "Resolution"
+section for how a named branch is now selected (by authored key, not a GM
+pick after the fact) and the "API" table for the editor's endpoints.
+`TransitionFormDialog`'s `AddRoutingRow` gained a routing mode toggle
+alongside the existing beat-outcome mode: "stake column" picks one of the
+beat's stakes and a `StakeResolutionColumn`, producing a
+`TransitionRequiredOutcome` row with `stake` + `required_stake_column` set
+instead of `required_outcome` - see the `TransitionRequiredOutcome` model
+entry below.
+
 **Source:** `src/world/stories/`
 **API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`, `/api/story-notes/`
 
@@ -31,13 +85,13 @@ from world.stories.constants import (
                             # honest terminal state for a run still in flight when its
                             # story concludes; a nullable resolved_at/resolved_by
                             # annotation marks a staff wrap-up layered on top.
-    BeatPredicateType,      # GM_MARKED, CHARACTER_LEVEL_AT_LEAST, ACHIEVEMENT_HELD,
-                            # CONDITION_HELD, CODEX_ENTRY_UNLOCKED, STORY_AT_MILESTONE,
-                            # AGGREGATE_THRESHOLD
+    BeatPredicateType,      # OUTCOME_TIER (default, #3565), GM_MARKED,
+                            # CHARACTER_LEVEL_AT_LEAST, ACHIEVEMENT_HELD, CONDITION_HELD,
+                            # CODEX_ENTRY_UNLOCKED, STORY_AT_MILESTONE, AGGREGATE_THRESHOLD,
+                            # FACTION_STANDING_AT_LEAST
     StoryMilestoneType,     # STORY_RESOLVED, CHAPTER_REACHED, EPISODE_REACHED
-    BeatOutcome,            # UNSATISFIED, SUCCESS, FAILURE, EXPIRED, PENDING_GM_REVIEW
+    BeatOutcome,            # UNSATISFIED, SUCCESS, FAILURE, EXPIRED
     BeatVisibility,         # HINTED, SECRET, VISIBLE
-    TransitionMode,         # AUTO, GM_CHOICE
     AssistantClaimStatus,   # REQUESTED, APPROVED, REJECTED, CANCELLED, COMPLETED
     SessionRequestStatus,   # OPEN, SCHEDULED, RESOLVED, CANCELLED
     ImpactTier,             # TABLE (default) / REGIONAL / WORLD — story-side canon
@@ -133,6 +187,8 @@ a **player-facing** lens, enforced server-side in two independent places.
 | `description` | GM/staff only | The internal authoring "pitch"/intent text. Stripped from the serialized payload for any non-privileged viewer |
 | `consequences` (Chapter, Episode) | GM/staff only | Stripped from the serialized payload for any non-privileged viewer (absent on the Story serializer — the pop is a safe no-op there) |
 | `summary` | Player-facing | "The Story So Far" running recap. Visible to players, **but blanked to `""` while the node's `maturity == PITCH`** so an unfinished node leaks nothing |
+| `Transition.required_outcomes` | GM/staff only | Nested routing rules (beat- and stake-level predicates, #3563). Stripped for non-privileged viewers by `TransitionSerializer.to_representation` |
+| `Episode.routing_problems` | GM/staff only | The routing report's dead-end and ambiguity lines (list and detail, #3563). Stripped by `_gm_text_gate` |
 
 There is **no dedicated `pitch` field** — by design: `description` *is* the GM
 pitch, `summary` *is* the player recap. (Resolves design follow-up I-2.)
@@ -140,15 +196,22 @@ pitch, `summary` *is* the player recap. (Resolves design follow-up I-2.)
 **Enforcement point 1 — detail serializers.** `StoryDetailSerializer`,
 `ChapterDetailSerializer`, and `EpisodeDetailSerializer` each override
 `to_representation()` to call the shared `_gm_text_gate(serializer, data, story,
-node_maturity)` helper (in `serializers.py`). The helper resolves the viewer's
-story-log role via `classify_story_log_viewer_role(user, story)`. If the role is
-**not** `VIEWER_ROLE_STAFF` or `VIEWER_ROLE_LEAD_GM` (i.e. player, no_access, or
-**no request in context**), it pops `description`/`consequences` and blanks
-`summary` when `node_maturity == PITCH`. **Default-deny:** with no request/user
-in context the most-restrictive (player) treatment is applied, so GM text never
-leaks by default (locked by tests; see `test_views_*` default-deny coverage).
-The Chapter gate is keyed on `instance.story`; the Episode gate on
-`instance.chapter.story`.
+node_maturity)` helper (in `serializers.py`). The helper's role test is
+`_viewer_may_see_gm_text(serializer, story)`, the one predicate behind every
+GM-only field, wrapping `can_view_story_gm_text(user, story)`: authenticated AND
+one of staff, the Lead GM of `story.primary_table`, or an owner of the story. If
+that test fails (player, anonymous, or **no request in context**), the gate pops
+`description`/`consequences` and blanks `summary` when `node_maturity == PITCH`.
+**Default-deny:** with no request/user in context the most-restrictive (player)
+treatment is applied, so GM text never leaks by default (locked by tests; see
+`test_views_*` default-deny coverage). The Chapter gate is keyed on
+`instance.story`; the Episode gate on `instance.chapter.story`. The same
+`_viewer_may_see_gm_text` test also gates `Transition.required_outcomes` and
+`Episode.routing_problems`, applied directly in `TransitionSerializer` and
+folded into `_gm_text_gate` for Episode (#3563) rather than reusing
+`classify_story_log_viewer_role`, which is a separate role classifier that
+drives `serialize_story_log` beat-visibility instead (owners are privileged for
+GM text but not for that log).
 
 **Enforcement point 2 — `serialize_story_log`.** Independently, the per-beat
 story log (`services/story_log.py::serialize_story_log`) gates GM-only beat
@@ -210,12 +273,48 @@ First-class directed edge in the episode DAG.
 |-------|------|-------|
 | `source_episode` | FK → Episode | `related_name="outbound_transitions"` |
 | `target_episode` | FK → Episode (nullable) | Null = authoring frontier |
-| `mode` | TransitionMode | AUTO fires automatically; GM_CHOICE requires explicit pick |
 | `connection_type` | ConnectionType | THEREFORE / BUT narrative flavor |
 | `connection_summary` | TextField | Short narrative description |
 | `order` | PositiveIntegerField | Tie-breaker for eligibility ordering |
 
 `transition.required_outcomes` — reverse from TransitionRequiredOutcome.transition.
+
+**Routing is fully automatic (#3565, retiring `TransitionMode.GM_CHOICE`).** Zero
+eligible outbound transitions is the authoring frontier (`resolve_frontier`); one
+eligible transition fires; several fire the lowest `(order, pk)` edge, never a
+runtime GM pick - the GM's judgment call is when they author the `order` values,
+not after the party has already played the beat.
+
+`services/routing.py::routing_report(episode)` / `routing_reports_for_episodes(ids)`
+build a `RoutingReport` before any of that plays out. Dead ends: a beat's FAILURE,
+its EXPIRED when it has a deadline, or a stake's LOSS that no outbound transition
+accepts, each tested with `rule_accepts` over a hypothetical outcome map where
+anything unpinned counts as satisfiable. Ambiguities: pairs of outbound transitions
+whose requirement sets never contradict (`_contradict`) - that pair is a silent
+authoring mistake, since the lowest `(order, pk)` one always wins. The report is
+advisory only, it never blocks saving or resolving. An episode with no outbound
+transitions gets an empty report (that is the authoring frontier by design, not a
+dead end), and a rule that references another episode's beat is never counted
+toward a dead end. It surfaces as `routing_problems` on `EpisodeListSerializer` and
+`EpisodeDetailSerializer` (the list view preloads one report per episode on the
+page via `routing_reports_for_episodes`) and as `routing_ambiguous` on detail. The
+payload's `required_outcomes` rows carry `beat_title` and `stake_summary` so the
+graph and the author tree can render the rule without a second fetch.
+
+`Transition.cached_required_outcomes` is a `cached_property`, and the identity map
+means the same Python `Transition` instance can be handed back across unrelated
+calls in one process, so a stale cached list survives past the write that changed
+it. Every writer of `TransitionRequiredOutcome` rows (`save_transition.py`'s
+`save_transition_with_outcomes`, and `TransitionRequiredOutcomeViewSet.perform_create` /
+`perform_update` / `perform_destroy`) pops `cached_required_outcomes` from the
+transition's `__dict__` right after writing, so the next read re-queries instead of
+reusing the pre-write list. New code that loads rules for many transitions at once
+(the way `routing_reports_for_episodes` does for a page of episodes) should follow
+that function's plain filtered query keyed by `transition_id__in=...`, not a
+`Prefetch(..., to_attr="cached_required_outcomes")`: Django's `to_attr` prefetch
+decides whether it already ran via `hasattr(instance, to_attr)`, so it silently
+no-ops on an instance the identity map already populated once, which is exactly the
+same staleness bug in different clothes.
 
 ---
 
@@ -240,6 +339,9 @@ Per-transition routing predicate. All rows on a given transition must be satisfi
 | `transition` | FK → Transition | `related_name="required_outcomes"` |
 | `beat` | FK → Beat | |
 | `required_outcome` | BeatOutcome | |
+| `required_outcome_key` | CharField (blank) | Beat-level rows only (`clean()` rejects it on episode-level rows); also requires `Beat.outcome_key` to equal this value, in addition to the outcome match above. Routes on which scenario option ended the run (#3565) - e.g. "negotiate" vs "fight" - the same shape `StakeResolution.outcome_key` used first (#1760) |
+| `stake` | FK → `stories.Stake` (null) | Stake-level routing instead of beat-level (see [stakes.md](stakes.md)'s "`TransitionRequiredOutcome.stake` + `required_stake_column`" section). Exactly one predicate shape per row: `stake` set requires `required_stake_column` and forbids `required_outcome` (both enforced in `clean()`); `stake` null requires `required_outcome`. Authored via `TransitionFormDialog`'s `AddRoutingRow` stake-column mode (#3561) |
+| `required_stake_column` | `StakeResolutionColumn` (blank) | With `stake` set: satisfied iff that stake's `StakeOutcome.column` equals this value |
 
 ---
 
@@ -254,17 +356,38 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `episode` | FK → Episode | `related_name="beats"` |
 | `predicate_type` | BeatPredicateType | See below for per-type config fields |
 | `outcome` | BeatOutcome | Current state; history in BeatCompletion |
+| `outcome_key` | CharField (blank) | `MissionOption.key` of the scenario option that ended the run which resolved this beat (#3565), denormalised from `BeatCompletion.outcome_key`; blank for combat, battle, decisive-check and GM-marked completions. `TransitionRequiredOutcome.required_outcome_key` routes on it |
 | `visibility` | BeatVisibility | HINTED (default) / SECRET / VISIBLE |
 | `internal_description` | TextField | Author/staff view |
 | `player_hint` | TextField | Shown while active (HINTED or VISIBLE) |
 | `player_resolution_text` | TextField | Shown in story log after completion |
-| `deadline` | DateTimeField (nullable) | Expiry triggers EXPIRED outcome via `expire_overdue_beats` |
+| `deadline` | DateTimeField (nullable) | When it passes, the beat resolves EXPIRED as a real completion (#3558) - see "Expiry" below |
+| `clock_size` | PositiveSmallIntegerField (default 0) | Scene clock size in ticks (#3567); 0 means no clock. `RunBeatAction` opens a `SceneClock` of this size when the beat runs; combat round starts and the GM's `advance_clock` gesture fill it. A full clock resolves the beat EXPIRED - see the Run Beat section's "Scene clock" below |
 | `agm_eligible` | BooleanField | True = AGM may claim this beat |
 | `order` | PositiveIntegerField | |
 | `kind` | BeatKind | SITUATION / ENCOUNTER / TASK (default) / REQUIREMENT — what the beat *is*; resolution still flows through `predicate_type` |
 | `advances` | BooleanField | Default True; False = Tangent (recorded for history, never gates a transition) |
-| `risk` | CharField (RenownRisk choices) | Default NONE. The stakes-wager declaration (ADR-0067) — how life-threatening/consequential this beat is, backing a full stakes contract (`Stake`/`StakeResolution`/`StakeContractActivation`, #1770). Drives Legend award magnitude on SUCCESS via `RISK_LEGEND_AWARDS`, scaled by the beat's effective risk. Authoring trust-gated in `BeatSerializer` — only staff may author `risk != NONE`. See [stakes.md](stakes.md) for the full contract model, chain rule, and effective-risk formula |
+| `risk` | CharField (RenownRisk choices) | Default NONE. The stakes-wager declaration (ADR-0067), how life-threatening/consequential this beat is, backing a full stakes contract (`Stake`/`StakeResolution`/`StakeContractActivation`, #1770). Drives Legend award magnitude on SUCCESS via `RISK_LEGEND_AWARDS`, scaled by the beat's effective risk. Authoring trust-gated in `BeatSerializer`: staff may author any value; a non-staff GM is capped to their own `GMLevelCap.max_beat_risk` (`world.gm.services.gm_max_risk`), not staff-only (#3562). While an open `StakeContractActivation` exists on the beat, `risk` is locked against any change (staff included; see [stakes.md](stakes.md)'s beat-side lock). See [stakes.md](stakes.md) for the full contract model, chain rule, and effective-risk formula |
 | `target_level` | PositiveSmallIntegerField (nullable) | The character level this beat's stakes are declared against (e.g. "EXTREME at level 4"). Required (via readiness validation, not `clean()`) when `risk != NONE`. Compared against the actual party's average level at activation to compute effective risk — see [stakes.md](stakes.md) |
+
+**Expiry (#3558):** a past-deadline beat resolves through `expire_beat` /
+`complete_beat_expired` (`world.stories.services.beats`), the same completion tail
+every other beat resolution uses - it is not a bare field flip. Four sites call
+`complete_beat_expired`, each per-beat inside its own savepoint (`_expire_each`) so
+one beat's failure never aborts the sweep: the cron sweep `expire_overdue_beats`, the
+two lazy sites that fire when a progress record checks its transitions
+(`_expire_overdue_beats_for_episode` in `transitions.py`,
+`_expire_overdue_beats_for_episodes` in `views.py`) - all three reach it through
+`expire_beat`, which locks the beat and re-checks the deadline first - and the scene
+clock fill (`world.scenes.clock_services._complete_filled_clock_beat`, #3567), which
+calls `complete_beat_expired` directly, after the filling transaction commits, under
+its own lock-then-check rather than `expire_beat`'s deadline check (a clock has no
+deadline field to re-check). Expiry fires
+the beat's `expired_consequences` pool with every effect type except `LEGEND_AWARD`
+skipped (expiry earns no legend, ADR-0066), grades any open stakes LOSS, and closes the
+open `StakeContractActivation` - see [stakes.md](stakes.md). For a GROUP-scope story the
+credited participants are the GM table's current members (`GMTableMembership` rows with
+`left_at__isnull=True`), not whoever satisfied the predicate. See ADR-0256.
 
 **Per-predicate config fields (exactly one set should be non-null per predicate type):**
 
@@ -276,18 +399,26 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `CODEX_ENTRY_UNLOCKED` | `required_codex_entry` FK → codex.CodexEntry |
 | `STORY_AT_MILESTONE` | `referenced_story` FK → Story, `referenced_milestone_type` (StoryMilestoneType), `referenced_chapter` FK → Chapter (nullable), `referenced_episode` FK → Episode (nullable) |
 | `AGGREGATE_THRESHOLD` | `required_points` PositiveIntegerField |
-| `GM_MARKED` | (no config fields) |
+| `FACTION_STANDING_AT_LEAST` | one of `required_society` FK → Society or `required_organization` FK → Organization, plus `required_standing` IntegerField (-1000..1000) |
+| `NPC_REGARD_AT_LEAST` | `required_npc_sheet` FK → CharacterSheet (the NPC), plus `required_standing` IntegerField (-1000..1000, shared with `FACTION_STANDING_AT_LEAST`) - a named NPC's regard for the character (#3570) |
+| `OUTCOME_TIER` | (no config fields; the default, #3565) - graded by a scenario run, an encounter, a battle, or a decisive check, never authored config |
+| `GM_MARKED` | (no config fields; no longer the default - authored only for an out-of-band fact a machine grader cannot see, #3565) |
 
 **Scope behaviour for auto-evaluation (`evaluate_auto_beats`):**
 - CHARACTER scope: all predicate types evaluated against `progress.character_sheet`.
 - GROUP / GLOBAL scope: predicates that require a CharacterSheet (ACHIEVEMENT_HELD, CONDITION_HELD, CODEX_ENTRY_UNLOCKED, CHARACTER_LEVEL_AT_LEAST) are skipped — the GM must mark these manually. STORY_AT_MILESTONE is evaluated without a sheet.
 - AGGREGATE_THRESHOLD is write-path triggered (via `record_aggregate_contribution`), not evaluated by `evaluate_auto_beats`.
 
-#### Session prep: `BeatOpponentLine` / `BeatStagedTemplate` (#3425)
+#### Session prep: `BeatOpponentLine` / `BeatStagedTemplate` / `BeatStagedBattle` (#3425, #3569)
 
 A GM authors, ahead of the session, exactly what an ENCOUNTER or SITUATION beat
 stages in the room — child rows on the `Beat`, no standalone reusable prep
-object (copy-beat tooling is a deferred follow-up).
+object (copy-beat tooling is a deferred follow-up). An ENCOUNTER beat stages
+either a freeform opponent roster (`BeatOpponentLine`) or a whole pre-built
+battle (`BeatStagedBattle`), never both - the first kind-vs-prep XOR rule in
+the app, enforced on both sides: `BeatStagedBattle.clean()` refuses to save
+while the beat has any `opponent_lines`, and `BeatOpponentLine.clean()`
+refuses to save while the beat has a `staged_battle`.
 
 **`BeatOpponentLine`** (`related_name="opponent_lines"`, ENCOUNTER beats):
 
@@ -312,30 +443,129 @@ Exactly one of `situation_template`/`challenge_template` is set per row —
 enforced by a DB `CheckConstraint` (`beatstagedtemplate_exactly_one_template`)
 plus a mirroring `clean()`.
 
-`BeatSerializer` exposes both as nested read-write child lists
-(`opponent_lines`/`staged_templates`), including the update path: a custom
-`update()` diffs incoming rows against the beat's existing children **by id**
-(an id present + matching an existing row = edit; no id, or an id not
-found = create; an existing row whose id is absent from the payload =
-delete). Omitting the field entirely from a PATCH leaves the rows untouched;
-an explicit empty list clears them.
+**`BeatStagedBattle`** (`related_name="staged_battle"`, one per ENCOUNTER beat, #3569):
 
-#### Run Beat (#3425)
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | O2O → Beat | CASCADE; one staged battle per beat |
+| `blueprint` | FK → battles.BattleMapBlueprint | PROTECT; the map this beat's battle is cloned from at run time |
+| `name` | CharField (blank) | Battle name; blank uses the first line of the beat's `internal_description` |
+| `region` | FK → areas.Area (nullable) | SET_NULL; optional region the battle is set in (`Battle.region`) |
+| `party_side_role` | CharField (`BattleSideRole`) | Default DEFENDER; which side the running scene's party is enlisted on |
+
+**`BeatStagedBattleUnit`** (`related_name="unit_lines"` on `BeatStagedBattle`, #3569):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `staged_battle` | FK → BeatStagedBattle | CASCADE |
+| `template` | FK → battles.BattleUnitTemplate | PROTECT |
+| `side_role` | CharField (`BattleSideRole`) | Default ATTACKER |
+| `place_name` | CharField (blank) | Blueprint place name to spawn at; blank spawns unplaced |
+| `count` | PositiveSmallIntegerField | Default 1, min 1 |
+| `order` | PositiveIntegerField | |
+
+`BeatSerializer` exposes `opponent_lines`/`staged_templates` as nested
+read-write child lists, and `staged_battle` as a single nested object
+(`BeatStagedBattleSerializer`, with `unit_lines` nested inside it), including
+the update path: a custom `update()` diffs incoming rows against the beat's
+existing children **by id** (an id present + matching an existing row = edit;
+no id, or an id not found = create; an existing row whose id is absent from
+the payload = delete). Omitting `opponent_lines`/`staged_templates` entirely
+from a PATCH leaves the rows untouched; an explicit empty list clears them.
+`staged_battle` follows the same "omitted = untouched" rule but distinguishes
+it from deletion by sentinel rather than by emptiness - omitting the key
+entirely leaves the staged battle untouched, while `{"staged_battle": null}`
+explicitly deletes it (`None` is itself a legal payload value there, unlike
+an empty list). `validate()` mirrors the XOR/ENCOUNTER-only invariants as a
+400 before either write lands, including on a kind change away from
+ENCOUNTER while a staged battle already exists.
+
+#### Run Beat (#3425, #3569)
 
 `RunBeatAction` (`run_beat`, `actions/definitions/gm_story.py`) instantiates
 a beat's authored session prep into the GM's live scene in one call: sets
-`Scene.running_beat`, and for `kind=ENCOUNTER` creates a `CombatEncounter`
+`Scene.running_beat`, and for `kind=ENCOUNTER` branches on whether the beat
+has a `BeatStagedBattle`. With no staged battle it creates a `CombatEncounter`
 (`story_beat=beat`, `risk_level` mapped from `Beat.risk` — see below) and
-spawns each opponent line via `spawn_from_creature_template` (position looked
-up by name against the room's `Position` set; an unresolvable name spawns
-without position rather than refusing the line); for `kind=SITUATION`,
-instantiates each staged template via `instantiate_situation`/
-`instantiate_challenge` exactly as `SetSituationAction`/`PlaceChallengeAction`
-do. Each line runs in its own DB savepoint — a failing line is logged and
-skipped, never aborting the whole run; `result.data` reports a per-line
-outcome. TASK/REQUIREMENT kinds are refused (nothing to stage); re-running
-the same beat while it is already the scene's `running_beat` is an idempotent
-no-op; running a *different* beat while one is already running is refused.
+spawns each opponent line via `spawn_opponent_lines`
+(`world.combat.encounter_prep`; position looked up by name against the room's
+`Position` set, an unresolvable name spawns without position rather than
+refusing the line); for `kind=SITUATION`, instantiates each staged template
+via `instantiate_situation`/`instantiate_challenge` exactly as
+`SetSituationAction`/`PlaceChallengeAction` do. Each line runs in its own DB
+savepoint - a failing line is logged and skipped, never aborting the whole
+run; `result.data` reports a per-line outcome. REQUIREMENT kinds are refused
+(nothing to run); re-running the same beat while it is already the scene's
+`running_beat` is an idempotent no-op; running a *different* beat while one is
+already running is refused.
+
+**One running scene per beat (#3567).** Before writing a new `running_beat`,
+`RunBeatAction` also refuses when a *different* active `Scene` already runs this
+same beat, so a clock never couples two tables to one countdown. A battle this
+beat staged runs the same beat on its own private scene by design (see the
+Battle arm below) and is excluded from that check - the GM's table scene and
+its spun-off battle scene both legitimately run the beat at once; any other
+second scene is refused.
+
+**Scene clock (#3567).** When `beat.clock_size > 0`, `RunBeatAction` opens a
+`SceneClock` of that size via `start_scene_clock` (`world.scenes.clock_services`)
+- keyed by beat, so the battle scene above shares the same clock as the GM's
+table scene rather than getting its own. Re-running an already-running beat
+reuses the open clock instead of opening a second one. Combat round starts
+(`begin_declaration_phase`, `world.combat.services`) and the GM's
+`AdvanceClockAction` (`advance_clock`, telnet `story clock [n]`) each spend one
+or more ticks (`tick_scene_clock`); battle rounds never call
+`begin_declaration_phase`, so a staged battle's own rounds do not tick the
+clock - only combat encounters and the GM gesture do. A full clock stamps the
+`SceneClock` FILLED and resolves the beat EXPIRED through `complete_beat_expired`
+after the ticking transaction commits (ADR-0264). The clock also closes -
+without completing the beat - when the beat completes by any other route
+(`close_open_clock_for_beat`) or when the scene that opened it ends
+(`close_scene_clocks(scene, SCENE_ENDED)`, called from `finish_scene_full`, which
+closes only the clocks opened in *that* scene - a battle scene's own clock row
+survives its GM table scene finishing, and vice versa). A re-run of the beat
+after its clock closed opens a fresh one. The scene detail payload's `clock`
+field (`{size, filled}`, every viewer - see [scenes.md](scenes.md)) is the
+open clock on the scene's `running_beat`, not the beat's authored `clock_size`.
+
+**Battle arm (#3569).** With a `BeatStagedBattle`, `_run_battle_beat` stages a
+`Battle` instead of a `CombatEncounter`: an already-running, unconcluded
+`Battle(story_beat=beat)` is returned as-is (`already_staged=True` - a GM
+pressing Run twice never spawns a second battle); otherwise it calls
+`stage_battle(name, risk_level, blueprint=staged.blueprint,
+campaign_story=beat.episode.chapter.story, region=staged.region,
+location=scene.location)` (`world.battles.staging`), sets
+`battle.story_beat = beat` (so `activate_stakes_for_battle` and
+`resolve_battle_beats` scope to this one beat - see battles.md's "Stakes /
+Beat Wiring"), links the battle's scene to the beat's episode via
+`EpisodeScene`, and grants the running GM `is_gm` on that scene (mirroring
+`CreateBattleAction`). `name` falls back to the first line of the beat's
+`internal_description`, then to `f"Beat #{beat.pk}"`, when
+`staged.name` is blank. Every authored `BeatStagedBattleUnit` line then spawns
+via `spawn_units_from_template` onto the matching `BattleSide`, at the named
+blueprint place when one is given (an unknown place name logs and spawns the
+unit unplaced) - each line runs in its own savepoint, log-and-continue on
+failure, same as the opponent-line loop. Finally, every active non-GM
+participant of the *running scene* who is physically present in the scene's
+room (an account's off-scene alts are not swept in) is enlisted on
+`staged.party_side_role` via `enlist_participant`. `result.data` carries
+`battle_id`, `battle_scene_id`, `risk_level`, `units`, `enlisted`, and
+`already_staged`. The web Run Beat tab (below) navigates to
+`/scenes/{battle_scene_id}/battle` on a successful dispatch.
+
+**Scenario start (#3565).** A SITUATION or TASK beat carrying a scenario
+(`Beat.required_mission` set) also starts that scenario for the scene's
+whole party via `start_scenario_for_scene(beat, scene)` -
+`world.missions.services.run` - reusing an already-ACTIVE run for the same
+beat (including one `gm_assign_mission` started earlier for a single
+character) rather than duplicating it; the run/rejoin id surfaces in
+`result.data["scenario_instance_id"]`. A SITUATION beat keeps placing its
+staged templates too, in the same call. ENCOUNTER beats are unchanged by
+this; an ENCOUNTER beat's `required_mission`, if any, is ignored by the run
+and reported through the assign path as before. `GMListRunnableBeatsAction`
+(`gm_list_runnable_beats`) rows carry `has_scenario` (`required_mission_id is
+not None`) so the GM panel can show which runnable beats have a scenario
+prepped before the GM presses Run.
 
 Gated by `IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite(JUNIOR)`, plus
 a re-check in `execute()` that the acting GM actually runs the beat's story:
@@ -352,14 +582,106 @@ adjusts it afterward via the existing `UpdateEncounterSettingsAction`.
 lists ENCOUNTER/SITUATION beats on the episode currently active (per
 `get_active_progress_for_story`) on stories the acting GM runs — staff see
 every table-assigned story, a non-staff GM only stories where they are the
-Lead GM. Feeds the web `GMAdjudicationPanel`'s Run Beat tab.
+Lead GM. Each row's `staged_battle_name` names the `BeatStagedBattle`'s
+blueprint when an ENCOUNTER beat has one, else `None` - one query across all
+rows, never per-row (#3569). Each row also carries `clock_size` (#3567), the
+beat's authored scene clock size (0 = no clock). Feeds the web `GMAdjudicationPanel`'s Run Beat
+tab, which shows a "Start siege" button (instead of the plain "Run" button)
+for a `staged_battle_name`-carrying row and navigates the GM to
+`/scenes/{battle_scene_id}/battle` on a successful run.
+
+`AdvanceClockAction` (`advance_clock`, #3567) spends ticks on the acting GM's
+scene's running beat's open clock: kwarg `by` (default 1, a whole number ≥ 1),
+gated `IsSceneGMPrerequisite` + `MinimumGMLevelPrerequisite(JUNIOR)` - the same
+gate as `RunBeatAction`. Wraps `tick_scene_clock`; refuses (`_NO_CLOCK`) when
+the scene runs no beat or the beat has no open clock. `result.data` carries
+`{size, filled, filled_now}` - `filled_now` is true exactly when this call
+closed the clock. Telnet: `story clock [n]` (`commands/story.py`); web: the GM
+story rail's Advance button (see [scenes.md](scenes.md)'s GM story rail
+section).
 
 `Scene.running_beat` (FK → `arxii.Beat`, nullable, `SET_NULL`,
 `related_name="running_scenes"`, string-FK form matching
 `CombatEncounter.story_beat`) is the first-class "this scene is running this
 beat" pointer, written only by `RunBeatAction` and cleared by
-`finish_scene_full`. Exposed on the scene serializers as `running_beat`
-(id + risk only) for GM/staff viewers — never beat internals.
+`finish_scene_full`. Exposed on `SceneListSerializer` (inherited by the detail
+serializer) as `running_beat` (`{id, risk, clock_size}`) for GM/staff viewers - never
+beat internals.
+
+#### Objective-first grading (#3559)
+
+An OUTCOME_TIER beat never waits on a GM ruling to close. Three replacements
+for the old "park it and let a GM review" path, all deleted along with
+`BeatOutcome.PENDING_GM_REVIEW`:
+
+- **Scope:** `beat_for_scene_conclusion(scene, explicit_beat)`
+  (`world.stories.services.beats`) is the single seam a concluded fight or
+  battle asks "which beat do I grade." An explicitly linked beat
+  (`CombatEncounter.story_beat` / `Battle.story_beat`) wins when it's still
+  UNSATISFIED OUTCOME_TIER; otherwise the scene's `running_beat` wins under
+  the same condition **and only when its `kind` is ENCOUNTER** (a GM declared
+  the fight itself as the objective). Anything else grades nothing - a brawl
+  during a heist never closes the heist, and combat/battle grading each touch
+  at most one beat, never every beat sharing the scene.
+- **Outlier clamp:** a roll that lands above or below every authored tier no
+  longer parks the beat - `clamp_tier_to_pool` (`world.checks
+  .consequence_resolution`) fires the best authored tier of the same polarity
+  that doesn't exceed the roll (an exact match fires itself); `beat.outcome`
+  still records the true rolled tier via `record_outcome_tier_completion`.
+- **Withdrawal:** a fled or abandoned encounter never grades the beat at all
+  - `resolve_stakes_for_withdrawal` (`world.stories.services.stake_resolution`)
+  resolves the open stakes contract's WITHDRAWAL branches structurally and
+  leaves the beat `UNSATISFIED`, open for a future attempt. See
+  [stakes.md](stakes.md#resolution-pr2).
+- **Missing tier row is content, not a pause:** `EncounterOutcomeMapping` and
+  `BattleOutcomeMapping` rows are required, non-null content now - a missing
+  (outcome, risk) pair or outcome logs an error and leaves the beat open
+  rather than falling back to a pending state. Tracked on the admin
+  required-content sentinel (`web.admin.tuning.required_content`, #3444).
+
+---
+
+### StoryScenario (#3565)
+
+A story beat's body is the mission scenario graph (`MissionNode` /
+`MissionOption` / `MissionOptionRoute` / route candidates - see the
+Missions & Living Grid section of [INDEX.md](INDEX.md)) - not a second,
+story-local option engine.
+`StoryScenario` is the thin ownership link on the stories side that says
+which story a scenario belongs to, so `world.missions` never imports `Story`
+(ADR-0010, ADR-0258): ownership is read through the reverse relation
+`template.story_scenario.story`, never the other way.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | FK → Story | `related_name="scenarios"`, CASCADE |
+| `template` | O2O → missions.MissionTemplate | `related_name="story_scenario"`, CASCADE |
+| `created_at` | DateTimeField (auto_now_add) | |
+
+A story-owned template is created RESTRICTED with an empty `availability_rule`
+and `base_weight=0`; the board and opportunity querysets exclude any
+template with `story_scenario__isnull=False`, so a GM's scenario never
+appears as a public quest offer. The link is immutable after creation - a
+scenario is never re-parented to another story. See the Missions & Living
+Grid section of [INDEX.md](INDEX.md) for the authoring gate, permission
+class, and the ENCOUNTER option kind.
+
+`Beat.required_mission` (FK → missions.MissionTemplate, nullable) is the
+beat's pointer to its scenario's template, catalog or story-owned alike -
+unchanged by this work. `BeatSerializer.scenario` surfaces the linked
+template's id and name (or null) so the story author page can show "Design
+scenario" vs "Open canvas".
+
+`required_mission` is authored directly on `BeatFormDialog` (SITUATION/TASK
+beats only, #3562) via an `EntitySearchField` over
+`listMissionTemplates`/`getMissionTemplate` - the catalog-mission
+alternative to the `/scenario/` bespoke-graph action above. `BeatSerializer.
+validate` caps a non-staff GM's write to `scenario_scope_q(user)`
+(`world.missions.permissions`, the same scope the Missions Studio API
+enforces, #3565) whenever the value is set and changing; an untouched
+existing value (e.g. authored by staff) is left alone. Switching a beat's
+`kind` away from SITUATION/TASK in the form clears the picker's state so the
+payload never silently carries a stale FK the form no longer shows.
 
 ---
 
@@ -535,21 +857,39 @@ All services in `src/world/stories/services/`.
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `evaluate_auto_beats` | `(progress: AnyStoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats; flips UNSATISFIED beats whose predicate is now met; writes BeatCompletion rows; calls `maybe_create_session_request` on exit |
-| `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="", participants=None, extra_participants=None, resolved_by=None) -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome. `resolved_by` (#2123) — the marking GM's `GMProfile` (Lead GM or an approved Assistant GM); when set and the outcome is SUCCESS/FAILURE, credits GM Story Reward XP via `world.stories.services.gm_rewards.credit_gm_story_reward` after commit. `None` (the default, and always the case from the machine-graded `record_outcome_tier_completion`) skips the award |
+| `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="", participants=None, extra_participants=None, resolved_by=None, outcome_key="") -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome. `resolved_by` (#2123) - the marking GM's `GMProfile` (Lead GM or an approved Assistant GM); when set and the outcome is SUCCESS/FAILURE, credits GM Story Reward XP via `world.stories.services.gm_rewards.credit_gm_story_reward` after commit. `None` (the default, and always the case from the machine-graded `record_outcome_tier_completion`) skips the award |
 | `record_aggregate_contribution` | `(*, beat, character_sheet, points, source_note="") -> AggregateBeatContribution` | Records contribution, re-evaluates beat atomically, flips to SUCCESS if threshold crossed |
-| `expire_overdue_beats` | `(now=None) -> int` | Idempotent bulk sweep; flips UNSATISFIED past-deadline beats to EXPIRED; returns count |
+| `record_outcome_tier_completion` | `(*, progress, beat, outcome_tier, participants=None, gm_notes="") -> BeatCompletion` | Machine-graded outcome on an OUTCOME_TIER beat (#3559): `success_level > 0` is SUCCESS, else FAILURE; the pool fires at the best authored tier not exceeding the roll (`clamp_tier_to_pool`), the completion records the true tier. A fled or abandoned fight never reaches this - see `resolve_stakes_for_withdrawal` |
+| `record_scenario_outcome` | `(*, progress, beat, outcome, outcome_tier, outcome_key, participants=None) -> BeatCompletion` | Records a scenario run's ending on an OUTCOME_TIER beat (#3565, closes #3560); called from `world.missions.services.beat.on_mission_complete_for_beat` via `beat_outcome_for_route`. `outcome` is SUCCESS or FAILURE only - the scenario graph already decided it (the terminal route's authored `beat_outcome`, or the tier's sign, or SUCCESS for a tier-less BRANCH terminal). `outcome_tier` is the graded tier for a CHECK/ENCOUNTER terminal (fires the tier-aware pool) or `None` for a BRANCH terminal (fires the coarse pool). `outcome_key` is the `MissionOption.key` that ended the run, written to `BeatCompletion.outcome_key` and denormalised onto `Beat.outcome_key` for `TransitionRequiredOutcome.required_outcome_key` to route on |
+| `beat_for_scene_conclusion` | `(scene, explicit_beat) -> Beat \| None` | The one beat a concluded fight or battle may grade (#3559) - see [Objective-first grading](#objective-first-grading-3559) above |
+| `expire_overdue_beats` | `(now=None) -> int` | Cron sweep; completes every UNSATISFIED past-deadline beat via `expire_beat` (#3558), one savepoint per beat (`_expire_each`); returns the count of beats whose outcome changed. Idempotent |
+| `complete_beat_expired` | `(beat: Beat) -> BeatCompletion \| None` | Resolves a beat EXPIRED as a real completion (#3558): fires `expired_consequences` with `LEGEND_AWARD` skipped, grades open stakes LOSS, closes the contract, writes the ledger row. `None` when the story has no active progress to credit (outcome still flips). Called by `expire_beat` (deadline path) and, directly, by `world.scenes.clock_services._complete_filled_clock_beat` (scene clock fill, #3567, ADR-0264) |
+| `expire_beat` | `(beat: Beat, *, now=None) -> BeatCompletion \| None` | Locks the beat row, no-ops if not UNSATISFIED or the deadline hasn't passed, else delegates to `complete_beat_expired`. Idempotent; the per-beat entry point every deadline-based expiry site calls (the scene clock fill calls `complete_beat_expired` directly instead - see above) |
 
 ### transitions.py
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `get_eligible_transitions` | `(progress: AnyStoryProgress) -> list[Transition]` | Returns eligible outbound transitions; lazily expires overdue beats; raises `ProgressionRequirementNotMetError` if any gate is unmet |
+| `get_eligible_transitions` | `(progress: AnyStoryProgress) -> list[Transition]` | Returns eligible outbound transitions ordered `(order, pk)`; lazily expires overdue beats; raises `ProgressionRequirementNotMetError` if any gate is unmet |
+
+### routing.py (#3563)
+
+Authoring-time routing report; see the Transition section above for the full
+write-up.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `routing_report` | `(episode: Episode) -> RoutingReport` | One episode's dead ends and ambiguities |
+| `routing_reports_for_episodes` | `(episode_ids: Iterable[int]) -> dict[int, RoutingReport]` | Same report for any number of episodes, in four queries |
+| `rule_accepts` | `(req, beat_outcomes, stake_columns) -> bool` | Whether one requirement could be met under a hypothetical outcome map; unpinned counts as satisfiable |
+| `beat_title` | `(beat: Beat) -> str` | First line of the beat's internal description, capped for labels |
 
 ### episodes.py
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `resolve_episode` | `(*, progress, chosen_transition=None, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects/validates transition, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` or `AmbiguousTransitionError` on bad state. Now reconciles progress.status after advancing (`_reconcile_status_after_advance`): a non-PLOT target routes through `resolve_frontier` (WAITING_FOR_GM / RESTING), a PLOT target clears a stale frontier status back to ACTIVE, a None target is left untouched. Distinguishes a genuine authoring frontier (current episode has *no* outbound transitions → `resolve_frontier`) from a transient routing block (outbound transitions exist but none routable yet → status stays ACTIVE) before re-raising `NoEligibleTransitionError`. When `resolved_by` is set: stamps `touch_gm_activity` (#2004) *and* credits GM Story Reward XP (#2123) via `gm_rewards.credit_gm_story_reward` |
+| `_select_transition` | `(progress: AnyStoryProgress) -> Transition` | The transition that fires now (#3565): zero eligible edges is a genuine frontier (routes through `resolve_frontier`) or raises `NoEligibleTransitionError`; several eligible edges fire the lowest `(order, pk)` - routing is decided when the episode is authored, never by a GM after the players act |
+| `resolve_episode` | `(*, progress, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects the transition via `_select_transition`, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` on bad state (`AmbiguousTransitionError` is retired along with `TransitionMode.GM_CHOICE` - routing is fully automatic). Now reconciles progress.status after advancing (`_reconcile_status_after_advance`): a non-PLOT target routes through `resolve_frontier` (WAITING_FOR_GM / RESTING), a PLOT target clears a stale frontier status back to ACTIVE, a None target is left untouched. Distinguishes a genuine authoring frontier (current episode has *no* outbound transitions → `resolve_frontier`) from a transient routing block (outbound transitions exist but none routable yet → status stays ACTIVE) before re-raising `NoEligibleTransitionError`. When `resolved_by` is set: stamps `touch_gm_activity` (#2004) *and* credits GM Story Reward XP (#2123) via `gm_rewards.credit_gm_story_reward` |
 | `_reconcile_status_after_advance` | `(progress: AnyStoryProgress) -> None` | Internal; called by `resolve_episode` after the atomic advance — see above |
 
 ### completion.py
@@ -607,11 +947,11 @@ Maturity-promotion validation. Forward promotion is gated by minimal per-node co
 
 ### reactivity.py (Phase 3)
 
-External-facing entry points called by achievements, conditions, codex, and (future) progression services after mutations. Each hook invalidates the relevant `CharacterSheet` cache and re-evaluates auto-beats across the character's active stories across all three scopes (CHARACTER via `StoryProgress`; GROUP via `GMTableMembership.left_at__isnull=True`; GLOBAL via active `StoryParticipation`).
+External-facing entry points called by achievements, conditions, codex, and progression services after mutations. Each hook invalidates the relevant `CharacterSheet` cache and re-evaluates auto-beats across the character's active stories across all three scopes (CHARACTER via `StoryProgress`; GROUP via `GMTableMembership.left_at__isnull=True`; GLOBAL via active `StoryParticipation`).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `on_character_state_changed` | `(sheet) -> None` | General-purpose re-evaluation entry point; called by the specific hooks below |
+| `on_character_state_changed` | `(sheet) -> None` | General-purpose re-evaluation entry point; called by the specific hooks below, and directly by two new writers so an `NPC_REGARD_AT_LEAST`/`FACTION_STANDING_AT_LEAST` beat can flip in the same request (#3570): `world.npc_services.regard.record_npc_regard_event` (inside its transaction, after the relationships-track mirror call) and `world.societies.renown.bump_society_reputation`/`bump_organization_reputation` (after a non-zero reputation write; a zero delta is a no-op that skips the call) |
 | `on_character_level_changed` | `(sheet) -> None` | Called by progression after `CharacterClassLevel` mutation; invalidates class-level cache |
 | `on_achievement_earned` | `(sheet, achievement) -> None` | Called by `achievements.services.grant_achievement`; invalidates achievement cache |
 | `on_condition_applied` | `(sheet, condition_instance) -> None` | Called by `conditions.services.apply_condition` after instance creation |
@@ -679,8 +1019,7 @@ Called from all three BeatCompletion creation sites (`_evaluate_and_record_beat`
 from world.stories.exceptions import (
     StoryError,                         # Base; has user_message property
     BeatNotResolvableError,             # Wrong predicate type or invalid outcome
-    NoEligibleTransitionError,          # No eligible transitions; or chosen_transition not valid
-    AmbiguousTransitionError,           # Multiple eligible; or GM_CHOICE without explicit pick
+    NoEligibleTransitionError,          # No eligible outbound transition (frontier or blocked)
     ProgressionRequirementNotMetError,  # Episode-level gate not satisfied
     BeatNotAGMEligibleError,            # beat.agm_eligible is False
     ClaimStateTransitionError,          # Claim not in expected state for transition
@@ -705,7 +1044,6 @@ Never pass `str(exc)` to API responses — use `exc.user_message`.
 | GET | `/api/stories/my-active/` | Authenticated | Player's active CHARACTER-scope stories |
 | GET | `/api/stories/gm-queue/` | GMProfile required | Lead GM's episodes-ready-to-run dashboard. Response includes `episodes_ready_to_run`, `pending_agm_claims`, `assigned_session_requests`, and `waiting_for_gm` (active progress rows parked at `ProgressStatus.WAITING_FOR_GM` — no eligible transition yet, a dropped ball — each with `last_advanced_at` + `days_waiting`). **Query-bounded** (follow-up #2/#3 resolved): `_collect_gm_queue` hoists every per-story lookup into a batched pass keyed on candidate episodes via the `GMQueueBuckets` / `_GMQueueInputs` dataclasses, so total query count is a small constant independent of how many stories the GM leads. Locked by `assertNumQueries` in `tests/test_views_gm_queue.py`. Response shape/values/order unchanged from the pre-bounding loop |
 | GET | `/api/stories/staff-workload/` | Staff | Cross-story metrics: per-GM queue depth, `stale_stories`, `stories_at_frontier`, and `stories_waiting_for_gm` (WAITING_FOR_GM progress across all three scopes, any age, with `days_waiting`). **Query-bounded** (follow-up #2 resolved): per-GM queue depth assembled from batched inputs via the `_StaffPerGMInputs` dataclass (one query per map, zero per-GM/per-story queries); the stale / waiting / frontier sections are one `.values()` scan per progress model (fixed three queries each), not per-row. Locked by `assertNumQueries` in `tests/test_views_staff_workload.py`. **Per-GM membership is status-agnostic**: the per-GM section iterates the full `GMProfile.objects.filter(tables__primary_stories__isnull=False).distinct()` set (a GM whose only primary story is non-active still appears with `episodes_ready=0` + their status-agnostic `pending_claims`) — preserved/restored after the C2 bounding refactor briefly narrowed it to active-lead-story GMs |
-| POST | `/api/stories/{pk}/resolve-episode/` | Story owner or staff | Fire `resolve_episode`; body: `{chosen_transition?}` |
 | POST | `/api/stories/expire-beats/` | Staff | Trigger `expire_overdue_beats` |
 | POST | `/api/stories/{pk}/assign-to-scope/` | Lead GM of `story.primary_table` or staff (`IsLeadGMOnStoryOrStaff`) | Lift a story out of UNASSIGNED. Body: `{scope, character_sheet?, gm_table?}`. Sets `Story.scope` and creates the scope-appropriate progress record atomically (CHARACTER → also sets `story.character_sheet` + `create_character_progress`; GROUP → `create_group_progress`; GLOBAL → `create_global_progress`). Returns the updated `StoryDetailSerializer`. **400 if the story is not currently UNASSIGNED** (re-assignment is rejected by `AssignStoryInputSerializer.validate()` — would otherwise 500 on a duplicate progress row or silently corrupt scope). **400 on a scope↔target invariant violation** (CHARACTER requires `character_sheet` and forbids `gm_table`; GROUP requires `gm_table` and forbids `character_sheet`; GLOBAL forbids both; UNASSIGNED is not an accepted input scope — excluded from the ChoiceField) |
 
@@ -714,6 +1052,7 @@ Never pass `str(exc)` to API responses — use `exc.user_message`.
 | Method | URL | Permission | Description |
 |--------|-----|------------|-------------|
 | POST | `/api/episodes/{pk}/promote/` | Lead GM of `story.primary_table` or staff (`IsLeadGMOnStoryOrStaff`) | Set the episode's authoring maturity. Body: `{target}` (a `StoryMaturity` value). Calls `promote_episode_maturity`; returns the updated `EpisodeDetailSerializer`. The **PLOT-gate** is mirrored in `PromoteEpisodeInputSerializer.validate()` so a violation surfaces as a clean **400** (`MaturityPromotionError().user_message`) instead of a service-raised 500. The gate fires **only** on an upward move *to* PLOT (lateral moves and demotions are unvalidated by design — non-linear sketchpad); it requires a non-empty `resting_conclusion` AND (≥ 1 outbound transition OR `is_ending`) |
+| POST | `/api/episodes/{pk}/resolve/` | Lead GM of `story.primary_table` or staff | Fire `resolve_episode`. Body: `{progress_id?, gm_notes?}` - no `chosen_transition` (#3565): routing is automatic, the lowest-order eligible edge fires. Returns 201 with the `EpisodeResolution`; a 400 with `NoEligibleTransitionError().user_message` when nothing is routable yet |
 
 ### Beat Actions
 
@@ -721,12 +1060,26 @@ Never pass `str(exc)` to API responses — use `exc.user_message`.
 |--------|-----|------------|-------------|
 | POST | `/api/beats/{pk}/mark/` | Story owner (GM) | `record_gm_marked_outcome`; body: `{outcome, gm_notes?}` |
 | POST | `/api/beats/{pk}/contribute/` | Story participant | `record_aggregate_contribution`; body: `{points, source_note?}` |
+| POST | `/api/beats/{pk}/scenario/` | Lead GM or staff (`CanAssignMissionToBeat`) | GM authors a scenario graph as this beat's body (#3565). Body: `{name, summary, risk_tier}`; creates the `MissionTemplate` (one entry node) plus its `StoryScenario` ownership row via `create_scenario_for_beat`, sets `beat.required_mission`, returns the `MissionTemplateSerializer` payload. Idempotent (200, not 201) when the beat already has a story-owned scenario; 400 when `required_mission` already points at a staff catalog template (a GM cannot take ownership of catalog content) |
 
 Session prep (#3425) has no bespoke ViewSet action — `run_beat`/
 `gm_list_runnable_beats` ride the generic REGISTRY action-dispatch seam
 (`POST /api/actions/characters/{id}/dispatch/`, `useDispatchPlayerAction` on
 the web, `GMAdjudicationPanel`'s Run Beat tab), the same seam every other
 `gm_*` adjudication verb uses. See "Run Beat (#3425)" above.
+
+**`GET /api/scenes/{id}/scenario/`** (#3565, `world.scenes.views` +
+`world.scenes.scenario_services.build_scene_scenario_payload`) is the scene's
+read of the mission scenario it is running - the party's node and the GM's
+ballots - not a stories-app endpoint, but the run-time counterpart to
+`POST /api/beats/{id}/scenario/` above. A read-only, no-writes composition:
+for the caller's own participating character, the current group beat (the
+same shape as `journal/{instance}/group-beat/`); for staff or a viewer with
+standing on the running story (`viewer_has_story_standing`, mirroring
+#3434's `GMStoryRail` gate), additionally every participant's ballot, the
+current node, and the last resolved deed. Picks, votes and resolution stay
+on the existing `journal/{instance}/group-pick|group-vote|resolve` actions,
+unchanged.
 
 ### AGM Claim Lifecycle
 
@@ -863,6 +1216,12 @@ be performed by an approved Assistant GM for that beat.
 `GMProfile` and pass it through as `resolved_by`/credit the GM whose `primary_table`
 owns the story — so an approved Assistant GM who marks a beat is credited with GM
 Story Reward XP directly, never silently the Lead GM (#2123).
+
+`story clock [n]` (`advance_clock`, #3567) is gated differently from the table above -
+scene-GM standing on the acting GM's current scene (`IsSceneGMPrerequisite`), not the
+story's Lead GM - since it paces the running beat's scene clock, not the story itself.
+Spends `n` ticks (default 1) via `AdvanceClockAction`; see "Scene clock" in the Run Beat
+section above.
 
 ## Player→GM recruitment loop (#2119)
 

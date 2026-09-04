@@ -721,6 +721,71 @@ class EvaluateFactionStandingAtLeastTests(EvenniaTestCase):
         self.assertEqual(_evaluate_predicate(beat, progress), BeatOutcome.UNSATISFIED)
 
 
+class EvaluateNpcRegardAtLeastTests(EvenniaTestCase):
+    """Tests for NPC_REGARD_AT_LEAST predicate evaluation (#3570)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sheet = CharacterSheetFactory()
+        self.npc_sheet = CharacterSheetFactory()
+        self.beat = BeatFactory(
+            predicate_type=BeatPredicateType.NPC_REGARD_AT_LEAST,
+            required_npc_sheet=self.npc_sheet,
+            required_standing=10,
+        )
+        self.progress = StoryProgressFactory(
+            story=self.beat.episode.chapter.story,
+            character_sheet=self.sheet,
+            current_episode=self.beat.episode,
+        )
+
+    def _regard(self, value: int) -> None:
+        from world.npc_services.factories import NpcRegardFactory
+
+        NpcRegardFactory(
+            holder_persona=self.npc_sheet.primary_persona,
+            target_persona=self.sheet.primary_persona,
+            value=value,
+        )
+
+    def test_success_at_the_threshold(self) -> None:
+        self._regard(10)
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.SUCCESS)
+
+    def test_unsatisfied_below_the_threshold(self) -> None:
+        self._regard(9)
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.UNSATISFIED)
+
+    def test_missing_row_counts_as_zero(self) -> None:
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.UNSATISFIED)
+        self.beat.required_standing = 0
+        self.beat.save()
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.SUCCESS)
+
+    def test_npc_without_a_primary_persona_is_unsatisfied(self) -> None:
+        lonely = CharacterSheetFactory(primary_persona=False)
+        self.beat.required_npc_sheet = lonely
+        self.beat.save()
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.UNSATISFIED)
+
+    def test_nulled_npc_sheet_is_unsatisfied(self) -> None:
+        self.beat.required_npc_sheet = None
+        self.beat.save()
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.UNSATISFIED)
+
+    def test_other_targets_do_not_count(self) -> None:
+        # A regard held toward a different persona is a different memory.
+        from world.npc_services.factories import NpcRegardFactory
+
+        other = CharacterSheetFactory()
+        NpcRegardFactory(
+            holder_persona=self.npc_sheet.primary_persona,
+            target_persona=other.primary_persona,
+            value=50,
+        )
+        self.assertEqual(_evaluate_predicate(self.beat, self.progress), BeatOutcome.UNSATISFIED)
+
+
 class RecordGmMarkedOutcomeTests(EvenniaTestCase):
     """Tests for record_gm_marked_outcome."""
 
@@ -786,13 +851,12 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
             )
 
     def test_record_gm_marked_outcome_rejects_invalid_outcome(self):
-        """ValueError raised for UNSATISFIED, EXPIRED, PENDING_GM_REVIEW (defensive guard)."""
+        """ValueError raised for UNSATISFIED, EXPIRED (defensive guard)."""
         progress, beat, _sheet = self._make_gm_beat_and_progress()
 
         for bad_outcome in (
             BeatOutcome.UNSATISFIED,
             BeatOutcome.EXPIRED,
-            BeatOutcome.PENDING_GM_REVIEW,
         ):
             with self.subTest(outcome=bad_outcome):
                 with self.assertRaises(ValueError):
@@ -1211,19 +1275,19 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
                 progress=self.progress, beat=gm_marked_beat, outcome_tier=self.decisive
             )
 
-    def test_outlier_success_level_with_no_matching_tier_routes_to_pending_gm_review(self) -> None:
-        """success_level>=8 with no authored Consequence at that tier defers to a GM."""
+    def test_outlier_success_level_clamps_to_best_authored_tier(self) -> None:
+        """success_level 9 with rows only at 6: SUCCESS, the tier-6 pool fires, tier 9 recorded."""
         outlier_tier = CheckOutcomeFactory(name="Outlier Unauthored RTC", success_level=9)
 
         completion = record_outcome_tier_completion(
             progress=self.progress, beat=self.beat, outcome_tier=outlier_tier
         )
 
-        assert completion.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert completion.outcome == BeatOutcome.SUCCESS
         assert completion.outcome_tier_id == outlier_tier.pk
         self.beat.refresh_from_db()
-        assert self.beat.outcome == BeatOutcome.PENDING_GM_REVIEW
-        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
+        assert self.beat.outcome == BeatOutcome.SUCCESS
+        assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
 
     def test_outlier_success_level_with_matching_tier_resolves_success_normally(self) -> None:
         """success_level>=8 with an authored matching Consequence stays SUCCESS, pool fires."""
@@ -1309,46 +1373,3 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
         event = LegendEvent.objects.order_by("-pk").first()
         assert event is not None
         assert event.base_value == 10
-
-    def test_force_outcome_pending_gm_review_no_pool(self) -> None:
-        """force_outcome=PENDING_GM_REVIEW resolves the beat without firing a pool.
-
-        Machine-detected non-success/failure terminal outcomes (a fled/abandoned
-        encounter) route here: the beat flips to PENDING_GM_REVIEW and no
-        consequence pool fires — a GM adjudicates later.
-        """
-        beat = BeatFactory(
-            episode=self.beat.episode,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        completion = record_outcome_tier_completion(
-            progress=self.progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
-        assert completion.outcome == BeatOutcome.PENDING_GM_REVIEW
-        assert completion.outcome_tier_id is None
-        beat.refresh_from_db()
-        assert beat.outcome == BeatOutcome.PENDING_GM_REVIEW
-        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
-
-    def test_force_outcome_rejects_non_pending(self) -> None:
-        """force_outcome only accepts PENDING_GM_REVIEW in this PR."""
-        beat = BeatFactory(
-            episode=self.beat.episode,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        with self.assertRaises(ValueError):
-            record_outcome_tier_completion(
-                progress=self.progress, beat=beat, force_outcome=BeatOutcome.SUCCESS
-            )
-
-    def test_neither_outcome_tier_nor_force_outcome_raises(self) -> None:
-        """Without force_outcome, outcome_tier is still required."""
-        beat = BeatFactory(
-            episode=self.beat.episode,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-        )
-        with self.assertRaises(ValueError):
-            record_outcome_tier_completion(progress=self.progress, beat=beat)

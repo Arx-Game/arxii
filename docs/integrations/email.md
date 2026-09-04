@@ -21,12 +21,37 @@ Required environment variables in `src/.env`:
 ```env
 RESEND_API_KEY=re_your-resend-api-key
 DEFAULT_FROM_EMAIL=noreply@arx2.com
-SITE_URL=https://arx2.com
+SITE_URL=https://play.arx2.com
 ```
 
 `DEFAULT_FROM_EMAIL` must be an address on a domain Resend has verified for sending —
 Resend rejects a send whose From domain it does not recognize. `arx2.com` is the
 verified sending domain in production.
+
+### Sender name and subject prefix
+
+Gmail and most other clients show a From address that has no display name as just
+its mailbox, so a bare `noreply@arx2.com` arrived as "noreply". `settings.py` wraps a
+bare `DEFAULT_FROM_EMAIL` as `Arx II <addr>`; a value that already carries a display
+name (`Name <addr>`) is kept as given. Every sender in this codebase goes through
+`DEFAULT_FROM_EMAIL`, so the domain services and allauth's mail all get the name.
+
+allauth's own mail (verification, password reset) is also pinned to the game's name
+rather than Django's `sites` table:
+
+- `ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Arx II] "` (`settings.py`). Without it allauth
+  falls back to `[<Site.name>] `, and the only row in the `sites` table is the
+  framework default `example.com`, which is what players saw.
+- `src/web/templates/account/email/base_message.txt` and
+  `email_confirmation_message.txt` override allauth's stock templates, which greet
+  the reader with `current_site.name` / `current_site.domain` (again `example.com`).
+  `src/web/templates` is first in `TEMPLATES[0]["DIRS"]`, so it wins over allauth's
+  app templates. The password-reset body extends the overridden base and needs no
+  copy of its own.
+
+The `sites` row itself is left alone: nothing user-facing reads it any more, and a
+fresh database would only recreate the placeholder.
+`world.registration.tests.test_account_mail` pins the sender name and the body.
 
 Optional staff notification settings:
 ```env
@@ -70,18 +95,20 @@ caller in this codebase sends one today.
 ### Django Integration
 - **Backend**: `world.roster.email_backend.ResendAPIEmailBackend`, configured in
   `settings.py`
-- **Templates**: HTML and plain text versions in `templates/roster/email/`
+- **Templates**: HTML and plain text versions in `src/world/templates/roster/email/`
 - **Security**: Uses Django's built-in token system for password resets
 
 ### Email Templates
-Templates are located in `src/templates/roster/email/`:
+Templates are located in `src/world/templates/roster/email/`:
 - `application_confirmation.html` - Application receipt confirmation
 - `application_approved.html` - Approval notification
 - `application_denied.html` - Rejection notification
 - `staff_notification.html` - Staff alert for new applications
 - `password_reset.html` - Secure password reset link
 
-Registration invites use `src/templates/registration/email/account_invite.html`.
+Registration invites use `src/world/templates/registration/email/account_invite.html`;
+allauth's verification / password-reset bodies come from
+`src/web/templates/account/email/` (see "Sender name and subject prefix").
 
 ### Automatic Triggers
 Emails are sent via explicit service-function calls (never Django signals — see

@@ -31,6 +31,7 @@ from world.mechanics.types import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.types import PendingActionResolution
     from world.checks.types import CheckResult
     from world.mechanics.models import (
         ChallengeApproach,
@@ -306,6 +307,52 @@ def _select_consequence(
     return fallback, ResolutionType.PERSONAL
 
 
+def _outcome_of_pending(
+    pending: PendingActionResolution,
+) -> tuple[Consequence, CheckResult | None]:
+    """The consequence a finished pipeline landed on, and the check behind it.
+
+    A pipeline that selected a real consequence hands back the saved row. One
+    that did not — a gate-only resolution, or a main step with no consequence —
+    gets an unsaved stand-in labelled from the outcome tier, falling back to the
+    last gate's check result and finally to "Unknown" when nothing rolled at all.
+    """
+    main = pending.main_result
+    if main and main.consequence_id:
+        return Consequence.objects.get(pk=main.consequence_id), main.check_result
+    if main:
+        check_result = main.check_result
+    elif pending.gate_results:
+        check_result = pending.gate_results[-1].check_result
+    else:
+        check_result = None
+    outcome = check_result.outcome if check_result else None
+    consequence = Consequence(
+        outcome_tier=outcome,
+        label=str(outcome.name) if outcome else "Unknown",
+        weight=1,
+        character_loss=False,
+    )
+    return consequence, check_result
+
+
+def _resolution_type_for(
+    challenge_instance: ChallengeInstance, consequence: Consequence
+) -> ResolutionType:
+    """What this consequence does to the challenge, per the template's own links.
+
+    PERSONAL unless the template says otherwise — which is also the answer for an
+    unsaved stand-in consequence, since nothing can be linked to it.
+    """
+    if not consequence.pk:
+        return ResolutionType.PERSONAL
+    link = ChallengeTemplateConsequence.objects.filter(
+        challenge_template=challenge_instance.template,
+        consequence=consequence,
+    ).first()
+    return link.resolution_type if link else ResolutionType.PERSONAL
+
+
 def _resolve_via_template(
     character: ObjectDB,
     challenge_instance: ChallengeInstance,
@@ -329,39 +376,10 @@ def _resolve_via_template(
         context=context,
     )
 
-    main = pending.main_result
-    check_result: CheckResult | None
-    consequence: Consequence
-    if main and main.consequence_id:
-        consequence = Consequence.objects.get(pk=main.consequence_id)
-        check_result = main.check_result
-    else:
-        check_result = (
-            main.check_result
-            if main
-            else (pending.gate_results[-1].check_result if pending.gate_results else None)
-        )
-        outcome = check_result.outcome if check_result else None
-        consequence = Consequence(
-            outcome_tier=outcome,
-            label=str(outcome.name) if outcome else "Unknown",
-            weight=1,
-            character_loss=False,
-        )
+    consequence, check_result = _outcome_of_pending(pending)
+    resolution_type = _resolution_type_for(challenge_instance, consequence)
 
-    # Determine challenge deactivation — check template-level resolution type for this consequence
     challenge_deactivated = False
-    resolution_type = ResolutionType.PERSONAL
-    if consequence.pk:
-        template_links = list(
-            ChallengeTemplateConsequence.objects.filter(
-                challenge_template=challenge_instance.template,
-                consequence=consequence,
-            )
-        )
-        if template_links:
-            resolution_type = template_links[0].resolution_type
-
     if resolution_type == ResolutionType.DESTROY:
         challenge_instance.is_active = False
         challenge_instance.save()

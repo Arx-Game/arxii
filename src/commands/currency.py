@@ -10,13 +10,13 @@ This module holds the remaining new commands: ``deposit``, ``steal``, ``secure``
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from actions.definitions.currency import DepositCoinsAction
 from actions.definitions.items import SetContainerPolicyAction, StealAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from commands.utils.argsplit import split_on_keyword
 
 _SECURE_USAGE = "Usage: secure <container>=<open|friends|owner_only>"
 _DEFAULT_LOCKS = "cmd:all()"
@@ -54,10 +54,9 @@ class CmdSteal(ArxCommand):
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = self.require_args("Steal what?")
-        match = re.match(r"^(.+?)\s+from\s+(.+)$", args, flags=re.IGNORECASE)
-        if match:
-            item_name = match.group(1).strip()
-            container_name = match.group(2).strip()
+        split = split_on_keyword(args, "from")
+        if split:
+            item_name, container_name = split
             container = self.search_or_raise(container_name)
             target = self.search_or_raise(
                 item_name,

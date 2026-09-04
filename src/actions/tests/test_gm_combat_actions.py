@@ -49,12 +49,14 @@ from world.combat.models import (
     DramaticSurgeRecord,
 )
 from world.gm.constants import GMLevel
-from world.gm.factories import GMProfileFactory
+from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.stories.constants import BeatPredicateType
+from world.stories.factories import BeatFactory, ChapterFactory, EpisodeFactory, StoryFactory
 
 
 def _make_room(label: str = "Room") -> object:
@@ -801,6 +803,74 @@ class CreateEncounterActionTests(TestCase):
         self.assertTrue(result.success, result.message)
         encounter = CombatEncounter.objects.get(scene=self.scene)
         self.assertEqual(encounter.pace_mode, PaceMode.READY)
+
+    def test_lead_gm_may_route_beat_id(self) -> None:
+        """The story's own non-staff Lead GM may route the new encounter onto their beat (#3559)."""
+        lead_gm_account = AccountFactory(username="createtestleadonlygm", is_staff=False)
+        lead_gm_actor, _ = _make_actor_with_account(
+            "create_lead_gm_actor", self.room, lead_gm_account
+        )
+        SceneParticipationFactory(scene=self.scene, account=lead_gm_account, is_gm=True)
+
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+        gm_profile = GMProfileFactory(account=lead_gm_account)
+        table = GMTableFactory(gm=gm_profile)
+        story.primary_table = table
+        story.save()
+
+        result = CreateEncounterAction().run(lead_gm_actor, beat_id=beat.pk)
+
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertEqual(encounter.story_beat_id, beat.pk)
+
+    def test_staff_may_route_beat_id_for_any_story(self) -> None:
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+
+        result = CreateEncounterAction().run(self.gm_actor, beat_id=beat.pk)
+
+        self.assertTrue(result.success, result.message)
+        encounter = CombatEncounter.objects.get(scene=self.scene)
+        self.assertEqual(encounter.story_beat_id, beat.pk)
+
+    def test_non_lead_gm_denied_beat_id_and_creates_nothing(self) -> None:
+        """A GM who isn't this beat's story's Lead GM cannot route onto it."""
+        scene_gm_account = AccountFactory(username="createtestscenegm", is_staff=False)
+        scene_gm_actor, _ = _make_actor_with_account(
+            "create_scene_gm_actor", self.room, scene_gm_account
+        )
+        SceneParticipationFactory(scene=self.scene, account=scene_gm_account, is_gm=True)
+
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+        other_account = AccountFactory(username="createtestleadgm", is_staff=False)
+        other_gm_profile = GMProfileFactory(account=other_account)
+        table = GMTableFactory(gm=other_gm_profile)
+        story.primary_table = table
+        story.save()
+
+        result = CreateEncounterAction().run(scene_gm_actor, beat_id=beat.pk)
+
+        self.assertFalse(result.success)
+        self.assertFalse(CombatEncounter.objects.filter(scene=self.scene).exists())
+
+    def test_malformed_beat_id_rejected(self) -> None:
+        result = CreateEncounterAction().run(self.gm_actor, beat_id="")
+        self.assertFalse(result.success)
+        self.assertFalse(CombatEncounter.objects.filter(scene=self.scene).exists())
+
+    def test_missing_beat_id_rejected(self) -> None:
+        result = CreateEncounterAction().run(self.gm_actor, beat_id=999999)
+        self.assertFalse(result.success)
+        self.assertFalse(CombatEncounter.objects.filter(scene=self.scene).exists())
 
 
 class RegistryCompletenessSmokeTest(TestCase):

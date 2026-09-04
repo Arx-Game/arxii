@@ -66,6 +66,17 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: template-comment
+        name: Reject multi-line {# #} comments in Django templates
+        entry: uv run python tools/lint_template_comment.py
+        language: system
+        pass_filenames: true
+        types: [html]
+        # Django's `{# #}` is single-line only — the lexer never joins lines, so
+        # an opening `{#` whose `#}` is on a later line is not a comment and every
+        # character of it renders to the page. Three of these shipped visible
+        # comment prose into the production admin index, the FormTraitOption
+        # change list and the tuning economy panel. `{% comment %}` spans lines.
       - id: identifier-dashes
         name: Reject em-dashes in names, keys and slugs (lookup bug)
         entry: uv run python tools/lint_identifier_dashes.py
@@ -136,6 +147,35 @@ repos:
         # shape is narrow enough not to need the expand-one-app-at-a-time
         # rollout objectdb-param uses). Suppress with
         # `# noqa: IDMAPPER_MUTATE_ORDER` plus a stated reason.
+      - id: lint-only-defer
+        name: Reject .only()/.defer() on identity-mapped models
+        entry: uv run python tools/lint_only_defer.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
+        # Sentry ARX2-9 (2026-09-03): the idmapper hands back the resident
+        # instance for a pk and never refreshes its columns, so a row whose
+        # first load went through .only()/.defer() stays narrowed for the
+        # process and the next full read raises KeyError from Django's
+        # deferred-attribute getter. Nothing is saved by narrowing a row the
+        # identity map loads once. See ADR-0261 and django_notes.md. Suppress
+        # with `# noqa: IDMAPPER_ONLY` plus a reason, only for a model that is
+        # not a SharedMemoryModel.
+      - id: view-memo
+        name: Reject per-request memos on views and serializers
+        entry: uv run python tools/lint_view_memo.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*(/(views|serializers)/.*|(views|serializers)[^/]*)\.py$
+        # #3597 / ADR-0260 (2026-09-03): a `_thing: T | None = None` class
+        # attribute filled during a request is a memo the ruling rejects, and so is
+        # the lazy `hasattr(self, "_thing")` / `self._thing = ...` spelling of it
+        # inside a method. Account data is a cached_property on the Account
+        # typeclass; request data is an explicit argument (serializer `context=`,
+        # or `validated_data`) or middleware. Suppress with `# noqa: VIEW_MEMO`
+        # plus a reason, only for constant configuration that defaults to None.
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
@@ -151,6 +191,18 @@ repos:
         entry: uv run python tools/check_migration_seed_data.py
         language: system
         pass_filenames: false
+      - id: migration-ddl-dml
+        name: Keep schema and data operations in separate migrations
+        entry: uv run python tools/lint_migration_ddl_dml.py
+        language: system
+        pass_filenames: false
+        # A migration runs in one transaction. PostgreSQL queues a deferred FK
+        # trigger event per row written and refuses ALTER TABLE while any are
+        # pending, so a RunPython followed by a schema operation aborts with
+        # "cannot ALTER TABLE ... because it has pending trigger events". It
+        # passes CI, where the data operation touches no rows, and fails on the
+        # production converge (0220_upbringings, 2026-09-04). Split them:
+        # expand, migrate, contract. See ADR-0237.
       - id: check-partition-sql-drift
         name: Detect drift between Interaction model and partition SQL
         entry: uv run python tools/check_partition_sql_drift.py
@@ -162,6 +214,17 @@ repos:
         entry: uv run python tools/check_standalone_sql_wiring.py
         language: system
         pass_filenames: false
+      # tools/tests/ is pytest, not Django, so `arx test`'s app labels never
+      # reach it and nothing else in CI ran it - the unit tests guarding
+      # compare_schemas.py, check_standalone_sql_wiring.py and the sonarcloud
+      # helpers were inert (found while fixing #3544, whose own regression pins
+      # live there). Whole suite is ~0.5s, so it runs on every commit.
+      - id: tools-tests
+        name: Unit tests for tools/ helper scripts
+        entry: uv run pytest tools/tests -q
+        language: system
+        pass_filenames: false
+        files: ^tools/
       - id: ty
         name: ty
         entry: uv run ty check --no-progress

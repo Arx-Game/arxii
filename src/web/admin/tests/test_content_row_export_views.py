@@ -83,6 +83,32 @@ class TestContentRowExportViewsConfigured(TestCase):
                 reverse("admin_content_export_row_diff"), {"model": model_label, "pk": pk}
             )
 
+    def _seed_corpus(self) -> None:
+        """Put the current DB corpus on ``origin/main``, so later rows are updates.
+
+        ``allow_additions=True`` is load-bearing, not decoration. The #2890
+        addition gate (``export_to_content_repo``'s default) *withholds* any row
+        whose natural key the corpus file doesn't already carry - written
+        nowhere, listed in ``result.withheld``. It bypasses the gate for a
+        fixture file that doesn't exist yet, which is the only reason a
+        gate-defaulted seed writes anything here at all.
+
+        Relying on that bypass makes the two ``is_addition = False`` assertions
+        below silently order-of-operations-dependent: seed against any content
+        root that already has ``fixtures/magic/effecttype.json`` (the real lore
+        checkout has one) and the row is withheld, never reaches ``HEAD``, and
+        ``row_is_addition_at_head`` - which fails *closed* - reports an addition.
+        Both tests then fail with ``is_addition`` True where they want False.
+        Seeding is the authoring path, so it says so explicitly.
+        """
+        from core_management.content_export import export_to_content_repo
+
+        with self._env():
+            export_to_content_repo(self.root, allow_additions=True)
+        run_git(self.root, "add", ".")
+        run_git(self.root, "commit", "-m", "seed corpus")
+        run_git(self.root, "push", "-u", "origin", "main")
+
     def test_export_row_writes_working_tree_and_redirects_to_diff(self) -> None:
         effect = EffectTypeFactory(name="Row View Export")
 
@@ -180,14 +206,8 @@ class TestContentRowExportViewsConfigured(TestCase):
         self.assertFalse(trait_path.exists())
 
     def test_diff_page_shows_git_diff_and_addition_checkbox_only_for_additions(self) -> None:
-        from core_management.content_export import export_to_content_repo
-
         seeded = EffectTypeFactory(name="Row Diff Seeded", description="Original")
-        with self._env():
-            export_to_content_repo(self.root)
-        run_git(self.root, "add", ".")
-        run_git(self.root, "commit", "-m", "seed corpus")
-        run_git(self.root, "push", "-u", "origin", "main")
+        self._seed_corpus()
 
         seeded.description = "Updated"
         seeded.save()
@@ -398,14 +418,8 @@ class TestContentRowExportViewsConfigured(TestCase):
         """
         from django.test import Client
 
-        from core_management.content_export import export_to_content_repo
-
         seeded = EffectTypeFactory(name="Row Second Browser Update", description="Original")
-        with self._env():
-            export_to_content_repo(self.root)
-        run_git(self.root, "add", ".")
-        run_git(self.root, "commit", "-m", "seed corpus")
-        run_git(self.root, "push", "-u", "origin", "main")
+        self._seed_corpus()
 
         seeded.description = "Updated"
         seeded.save()

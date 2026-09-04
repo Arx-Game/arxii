@@ -60,67 +60,75 @@ export function GroupStoryRequestPanel({
     if (openRequest) withdrawGM.mutate(openRequest.id);
   }
 
+  const renderOpenRequest = () => {
+    if (openRequest) {
+      return (
+        <div className="space-y-2" data-testid="open-gm-request">
+          <p className="text-sm text-muted-foreground">
+            An open ask for a GM has been posted
+            {openRequest.message ? `: "${openRequest.message}"` : '.'}
+          </p>
+          {viewerCapabilities.can_request_gm && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleWithdraw}
+              disabled={withdrawGM.isPending}
+              data-testid="withdraw-gm-request-button"
+            >
+              {withdrawGM.isPending ? 'Withdrawing…' : 'Withdraw'}
+            </Button>
+          )}
+        </div>
+      );
+    }
+    if (showForm) {
+      return (
+        <div className="space-y-2">
+          <label htmlFor="gm-request-message" className="sr-only">
+            Message to prospective GMs
+          </label>
+          <Textarea
+            id="gm-request-message"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Pitch your covenant to prospective GMs (visible to the GM pool)…"
+            rows={3}
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={requestGM.isPending || actorCharacterId === null}
+              data-testid="submit-gm-request-button"
+            >
+              {requestGM.isPending ? 'Posting…' : 'Post Request'}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <Button
+        size="sm"
+        onClick={() => setShowForm(true)}
+        disabled={actorCharacterId === null}
+        data-testid="request-gm-button"
+      >
+        Request a GM
+      </Button>
+    );
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Recruiting a GM</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {openRequest ? (
-          <div className="space-y-2" data-testid="open-gm-request">
-            <p className="text-sm text-muted-foreground">
-              An open ask for a GM has been posted
-              {openRequest.message ? `: "${openRequest.message}"` : '.'}
-            </p>
-            {viewerCapabilities.can_request_gm && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleWithdraw}
-                disabled={withdrawGM.isPending}
-                data-testid="withdraw-gm-request-button"
-              >
-                {withdrawGM.isPending ? 'Withdrawing…' : 'Withdraw'}
-              </Button>
-            )}
-          </div>
-        ) : showForm ? (
-          <div className="space-y-2">
-            <label htmlFor="gm-request-message" className="sr-only">
-              Message to prospective GMs
-            </label>
-            <Textarea
-              id="gm-request-message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Pitch your covenant to prospective GMs (visible to the GM pool)…"
-              rows={3}
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={requestGM.isPending || actorCharacterId === null}
-                data-testid="submit-gm-request-button"
-              >
-                {requestGM.isPending ? 'Posting…' : 'Post Request'}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            size="sm"
-            onClick={() => setShowForm(true)}
-            disabled={actorCharacterId === null}
-            data-testid="request-gm-button"
-          >
-            Request a GM
-          </Button>
-        )}
-      </CardContent>
+      <CardContent className="space-y-3">{renderOpenRequest()}</CardContent>
     </Card>
   );
 }

@@ -443,6 +443,7 @@ class _ApplyConditionParams:
     source_technique: "Technique | None" = None
     source_description: str = ""
     source_vow: "CovenantRole | None" = None
+    soulfray_consented: bool = False
 
 
 @dataclass
@@ -739,6 +740,7 @@ def _create_instance_from_context(
         source_technique=params.source_technique,
         source_description=params.source_description,
         source_vow=params.source_vow,
+        soulfray_consented=params.soulfray_consented,
     )
 
     return ApplyConditionResult(
@@ -982,6 +984,7 @@ def _bulk_apply_one(  # noqa: PLR0913
     source_technique: "Technique | None",
     source_description: str,
     source_vow: "CovenantRole | None",
+    soulfray_consented: bool,
 ) -> ApplyConditionResult:
     """Apply one BulkConditionApplication within a bulk_apply_conditions batch.
 
@@ -1031,6 +1034,7 @@ def _bulk_apply_one(  # noqa: PLR0913
         source_technique=source_technique,
         source_description=source_description,
         source_vow=source_vow,
+        soulfray_consented=soulfray_consented,
     )
     result = _apply_single(app.target, app.template, params, ctx)
 
@@ -1163,6 +1167,7 @@ def bulk_apply_conditions(
     source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
     source_technique: "Technique | None" = None,
     source_description: str = "",
+    soulfray_consented: bool = False,
 ) -> list[ApplyConditionResult]:
     """Apply multiple conditions in a single transaction with batched queries.
 
@@ -1191,7 +1196,13 @@ def bulk_apply_conditions(
 
     return [
         _bulk_apply_one(
-            app, ctx, source_character, source_technique, source_description, source_vow
+            app,
+            ctx,
+            source_character,
+            source_technique,
+            source_description,
+            source_vow,
+            soulfray_consented,
         )
         for app in applications
     ]
@@ -2631,6 +2642,26 @@ def _process_round_tick(
     return result
 
 
+def _advance_stage(instance: ConditionInstance, result: RoundTickResult) -> None:
+    """Count the instance's current stage down a round, advancing it when it runs out.
+
+    A progressive condition with no stage left to reach simply stops counting and
+    stays at its final stage.
+    """
+    if instance.stage_rounds_remaining is None:
+        return
+    instance.stage_rounds_remaining -= 1
+    if instance.stage_rounds_remaining > 0:
+        return
+    next_stage = _get_next_stage(instance)
+    if next_stage is None:
+        instance.stage_rounds_remaining = None
+        return
+    instance.current_stage = next_stage
+    instance.stage_rounds_remaining = next_stage.rounds_to_next
+    result.progressed_conditions.append(instance)
+
+
 def _process_duration_and_progression(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     result: RoundTickResult,
@@ -2651,20 +2682,7 @@ def _process_duration_and_progression(
                 _clear_unseen_observer_if_concealing(target, expired_condition)
                 continue
 
-        # Stage progression
-        if instance.stage_rounds_remaining is not None:
-            instance.stage_rounds_remaining -= 1
-            if instance.stage_rounds_remaining <= 0:
-                # Progress to next stage
-                next_stage = _get_next_stage(instance)
-                if next_stage:
-                    instance.current_stage = next_stage
-                    instance.stage_rounds_remaining = next_stage.rounds_to_next
-                    result.progressed_conditions.append(instance)
-                else:
-                    # No next stage - condition may end or stay at final stage
-                    instance.stage_rounds_remaining = None
-
+        _advance_stage(instance, result)
         instance.save()
 
 
@@ -3885,9 +3903,11 @@ def _treatment_gate_parent_match(
     if treatment.target_kind == TreatmentTargetKind.PRIMARY:
         if target_effect.condition_id != treatment.target_condition_id:
             raise TreatmentParentMismatch
-    elif treatment.target_kind == TreatmentTargetKind.AFTERMATH:
-        if target_effect.condition.parent_condition_id != treatment.target_condition_id:
-            raise TreatmentParentMismatch
+    elif (
+        treatment.target_kind == TreatmentTargetKind.AFTERMATH
+        and target_effect.condition.parent_condition_id != treatment.target_condition_id
+    ):
+        raise TreatmentParentMismatch
     # PENDING_ALTERATION: no parent-match check per spec §5.2 step 2.
 
 

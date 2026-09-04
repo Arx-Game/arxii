@@ -45,6 +45,7 @@ from world.societies.types import ReputationTier
 # Cross-app FK string constants (SonarCloud python:S1192 duplicate-literal).
 PERSONA_MODEL = "arxii.Persona"
 SCENE_MODEL = "arxii.Scene"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 _PROJECT_MODEL = "arxii.Project"
 
@@ -1059,16 +1060,15 @@ class SocietyReputation(SharedMemoryModel):
         """
         super().clean()
 
-        if self.persona_id:
-            if not self.persona.is_established_or_primary:
-                raise ValidationError(
-                    {
-                        "persona": (
-                            "Only primary identities or established personas can have "
-                            "society reputations."
-                        )
-                    }
-                )
+        if self.persona_id and not self.persona.is_established_or_primary:
+            raise ValidationError(
+                {
+                    "persona": (
+                        "Only primary identities or established personas can have "
+                        "society reputations."
+                    )
+                }
+            )
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
@@ -1137,16 +1137,15 @@ class OrganizationReputation(SharedMemoryModel):
         """
         super().clean()
 
-        if self.persona_id:
-            if not self.persona.is_established_or_primary:
-                raise ValidationError(
-                    {
-                        "persona": (
-                            "Only primary identities or established personas can have "
-                            "organization reputations."
-                        )
-                    }
-                )
+        if self.persona_id and not self.persona.is_established_or_primary:
+            raise ValidationError(
+                {
+                    "persona": (
+                        "Only primary identities or established personas can have "
+                        "organization reputations."
+                    )
+                }
+            )
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
@@ -1914,7 +1913,7 @@ class LegendContribution(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="legend_contributions",
         help_text="Who acted.",
@@ -2017,7 +2016,7 @@ class CharacterLegendSummary(SharedMemoryModel):
     # State-only retarget (#2608): unmanaged matview, PK-shared with the sheet —
     # no SQL change.
     character = models.OneToOneField(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.DO_NOTHING,
         primary_key=True,
         related_name="+",
@@ -2598,7 +2597,7 @@ class OrganizationObligation(SharedMemoryModel):
     """
 
     debtor = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="org_obligations",
         help_text="The character who owes the Hare.",

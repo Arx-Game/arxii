@@ -9,7 +9,7 @@ membership, progression) is future work.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -19,6 +19,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.battles.constants import BattleActionKind
 from world.contributors.models import CreditedContent
 from world.covenants.constants import (
@@ -702,7 +703,7 @@ class CovenantRank(SharedMemoryModel):
         return f"{self.name} (tier {self.tier}) — {self.covenant.name}"
 
 
-class CharacterCovenantRole(SharedMemoryModel):
+class CharacterCovenantRole(RelatedCacheClearingMixin, SharedMemoryModel):
     """Per-character record of a covenant role assignment.
 
     Slice A §3.3, §3.6. A character may hold the same CovenantRole across
@@ -743,6 +744,12 @@ class CharacterCovenantRole(SharedMemoryModel):
     (``CovenantRole.parent_role`` — see the covenants glossary's "Secondary
     Vow" entry).
     """
+
+    # Joining, leaving, a rank change: each saves this row and must clear the
+    # playing account's ``cached_covenant_memberships`` (#3597).
+    related_cache_fields: ClassVar[list[str]] = [
+        "character_sheet.roster_entry.current_tenure.player_data.account"
+    ]
 
     character_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
@@ -847,22 +854,23 @@ class CharacterCovenantRole(SharedMemoryModel):
                     ),
                 }
             )
-        if self.covenant_role.command_tier == CommandTier.SUPREME:
-            if self._another_engaged_supreme_exists():
-                raise ValidationError(
-                    {
-                        "engaged": (
-                            "Another engaged Supreme Commander already exists for this covenant."
-                        ),
-                    }
-                )
-        if self.covenant_role.is_champion_role:
-            if self._another_engaged_champion_exists():
-                raise ValidationError(
-                    {
-                        "engaged": ("Another engaged Champion already exists for this covenant."),
-                    }
-                )
+        if (
+            self.covenant_role.command_tier == CommandTier.SUPREME
+            and self._another_engaged_supreme_exists()
+        ):
+            raise ValidationError(
+                {
+                    "engaged": (
+                        "Another engaged Supreme Commander already exists for this covenant."
+                    ),
+                }
+            )
+        if self.covenant_role.is_champion_role and self._another_engaged_champion_exists():
+            raise ValidationError(
+                {
+                    "engaged": ("Another engaged Champion already exists for this covenant."),
+                }
+            )
 
     def _another_same_type_engaged_exists(self) -> bool:
         """True if another active engaged membership of the same covenant type AND

@@ -8,7 +8,7 @@
  * - Permission checks
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { distinctionKeys } from '@/hooks/useDistinctions';
 import { CharacterCreationPage } from '../CharacterCreationPage';
@@ -54,6 +54,11 @@ vi.mock('../api', () => ({
   // GlimpseSection (#2427) calls useGlimpseTags() unconditionally as part of
   // the always-mounted Glimpse guided flow.
   getGlimpseTags: vi.fn().mockResolvedValue([]),
+  // GiftStage resolves the Anima Check step's stat + skill names from these
+  // two catalogs (#3630), for the step gloss and the record rail, whether or
+  // not that step is the one currently open.
+  getStatDefinitions: vi.fn().mockResolvedValue([]),
+  getSkillsWithSpecializations: vi.fn().mockResolvedValue([]),
 }));
 
 describe('CharacterCreationPage', () => {
@@ -111,8 +116,25 @@ describe('CharacterCreationPage', () => {
     });
   });
 
-  describe('No Draft - Start Screen', () => {
-    it('shows start character creation button when no draft exists', async () => {
+  describe('No Draft - Arrival Plate', () => {
+    it('shows the open-the-record door when no draft exists', async () => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: null,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^begin$/i })).toBeInTheDocument();
+      });
+    });
+
+    it('displays the arrival title with no eyebrow', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
@@ -126,33 +148,16 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: /start character creation/i })
+          screen.getByText(/creating a character and starting their story/i)
         ).toBeInTheDocument();
       });
-    });
 
-    it('displays welcome message', async () => {
-      const queryClient = createTestQueryClient();
-      seedCharacterCreationQueries(queryClient, {
-        canCreate: mockCanCreateYes,
-        draft: null,
-      });
-
-      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
-        queryClient,
-        account: mockPlayerAccount,
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Create a New Character')).toBeInTheDocument();
-      });
-
-      expect(screen.getByText(/begin your journey by creating a character/i)).toBeInTheDocument();
+      expect(screen.queryByText(/the durance/i)).not.toBeInTheDocument();
     });
   });
 
   describe('Existing Draft - Stage Display', () => {
-    it('shows stage stepper when draft exists', async () => {
+    it('shows the contents rail when draft exists', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
@@ -166,11 +171,15 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Character Creation')).toBeInTheDocument();
+        expect(
+          screen.getByRole('navigation', { name: /character creation stages/i })
+        ).toBeInTheDocument();
       });
 
-      // Stage stepper should show stages
-      expect(screen.getByText('Origin')).toBeInTheDocument();
+      // The contents rail lists every chapter. Origin's own record rail
+      // (Task 4) also has a row labeled "Origin", so scope to the nav.
+      const nav = screen.getByRole('navigation', { name: /character creation stages/i });
+      expect(within(nav).getByText('Origin')).toBeInTheDocument();
     });
 
     it('renders the current stage component', async () => {
@@ -189,16 +198,19 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         // Origin stage should be displayed (Stage 1)
-        expect(screen.getByText('Choose Your Origin')).toBeInTheDocument();
+        expect(screen.getByText('Where does the story begin?')).toBeInTheDocument();
       });
     });
 
-    it('shows navigation buttons', async () => {
+    it('shows the page-turn doors on a mid-flow chapter', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
-        draft: mockDraftWithArea,
+        // Stage.GIFT: neither Origin nor Review, so the shell's PageTurn renders
+        // (those two chapters own their own page-turn from Task 2 onward).
+        draft: { ...mockDraftWithArea, current_stage: Stage.GIFT },
         startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
       });
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {
@@ -207,18 +219,25 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^back:/i })).toBeInTheDocument();
       });
 
-      expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^next:/i })).toBeInTheDocument();
     });
 
-    it('disables Previous button on first stage', async () => {
+    // Origin and Review are the first and last chapters; the shell renders no
+    // generic PageTurn for either (each owns its own door, per the brief -
+    // Origin/Review get theirs in Task 2). This replaces the old
+    // disabled-button-at-the-edges behavior from the stepper/footer design.
+    // Origin's own door (Task 4) has no back door (nothing precedes it) and
+    // a forward door disabled until a realm is chosen.
+    it('renders no page-turn back door on the first chapter (Origin)', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
-        draft: mockEmptyDraft, // Stage 1
+        draft: mockEmptyDraft, // Stage.ORIGIN
         startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
       });
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {
@@ -227,17 +246,23 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        const prevButton = screen.getByRole('button', { name: /previous/i });
-        expect(prevButton).toBeDisabled();
+        expect(
+          screen.getByRole('navigation', { name: /character creation stages/i })
+        ).toBeInTheDocument();
       });
+
+      expect(screen.queryByRole('button', { name: /^back:/i })).not.toBeInTheDocument();
+      const forwardDoor = screen.getByRole('button', { name: /^next:/i });
+      expect(forwardDoor).toHaveAttribute('aria-disabled', 'true');
     });
 
-    it('disables Next button on last stage', async () => {
+    it('renders no page-turn forward door on the last chapter (Review)', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
-        draft: mockCompleteDraft, // Stage 8 (Review)
+        draft: mockCompleteDraft, // Stage.REVIEW
         startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
       });
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {
@@ -246,9 +271,30 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        const nextButton = screen.getByRole('button', { name: /next/i });
-        expect(nextButton).toBeDisabled();
+        expect(screen.getByText('Review & Submit')).toBeInTheDocument();
       });
+
+      expect(screen.queryByRole('button', { name: /^next:/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^back:/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Arrival', () => {
+    it('opens on the night plate with one door that creates the draft', async () => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: null,
+        explanations: mockCGExplanations,
+      });
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, { queryClient });
+      const plate = await screen.findByRole('region', {
+        name: /creating a character and starting their story/i,
+      });
+      expect(plate).toHaveClass('plate-night');
+      expect(screen.getByText(mockCGExplanations.arrival_intro)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^begin$/i })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
     });
   });
 
@@ -273,12 +319,15 @@ describe('CharacterCreationPage', () => {
 
       // The funnel's Anima Check step label always renders, independent of
       // any catalog data loading — a reliable signal GiftStage (not the old
-      // MagicStage cantrip UI) is what's mounted.
+      // MagicStage cantrip UI) is what's mounted. Scoped to the funnel's own
+      // entry list — the record rail also carries "Tradition" and
+      // "Techniques" rows (#3630), so an unscoped query is ambiguous.
       await waitFor(() => {
         expect(screen.getByText('Anima Check')).toBeInTheDocument();
       });
-      expect(screen.getByText('Tradition')).toBeInTheDocument();
-      expect(screen.getByText('Techniques')).toBeInTheDocument();
+      const funnel = screen.getByRole('list', { name: 'Gift steps' });
+      expect(within(funnel).getByText('Tradition')).toBeInTheDocument();
+      expect(within(funnel).getByText('Techniques')).toBeInTheDocument();
     });
   });
 
@@ -308,7 +357,7 @@ describe('CharacterCreationPage', () => {
   });
 
   describe('Page Header', () => {
-    it('displays page title', async () => {
+    it('displays the chapters-of-your-character contents rail', async () => {
       const queryClient = createTestQueryClient();
       seedCharacterCreationQueries(queryClient, {
         canCreate: mockCanCreateYes,
@@ -322,7 +371,9 @@ describe('CharacterCreationPage', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Character Creation')).toBeInTheDocument();
+        expect(
+          screen.getByRole('navigation', { name: /character creation stages/i })
+        ).toBeInTheDocument();
       });
     });
   });

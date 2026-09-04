@@ -1002,7 +1002,7 @@ def ally_sent_flying(ctx: SituationContext, params: SituationParams) -> bool:  #
 
 
 @register(Situation.ENEMY_HELD_BY_ALLY)
-def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001, PLR0911
+def enemy_held_by_ally(ctx: SituationContext, params: SituationParams) -> bool:  # noqa: ARG001
     """A covenant-mate of the holder holds an active EngagementLock on the
     opponent the subject is attacking this round.
 

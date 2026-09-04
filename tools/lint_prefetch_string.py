@@ -94,12 +94,11 @@ def find_prefetch_without_to_attr(node: ast.Call) -> list[ast.Call]:
     Returns:
         List of Prefetch call nodes that lack to_attr.
     """
-    missing = []
-    for arg in node.args:
-        if isinstance(arg, ast.Call) and is_prefetch_constructor(arg):
-            if not has_to_attr(arg):
-                missing.append(arg)
-    return missing
+    return [
+        arg
+        for arg in node.args
+        if isinstance(arg, ast.Call) and is_prefetch_constructor(arg) and not has_to_attr(arg)
+    ]
 
 
 class PrefetchStringVisitor(ast.NodeVisitor):

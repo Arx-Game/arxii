@@ -436,10 +436,13 @@ class CharacterRelationship(SharedMemoryModel):
         if self.source_id is not None and self.source_id == self.target_id:
             msg = "A character cannot have a relationship with themselves."
             raise ValidationError(msg)
-        if self.displayed_tier_id and self.displayed_track_id:
-            if self.displayed_tier.track_id != self.displayed_track_id:
-                msg = "Displayed tier must belong to displayed track."
-                raise ValidationError(msg)
+        if (
+            self.displayed_tier_id
+            and self.displayed_track_id
+            and self.displayed_tier.track_id != self.displayed_track_id
+        ):
+            msg = "Displayed tier must belong to displayed track."
+            raise ValidationError(msg)
 
     @property
     def cached_track_progress(self) -> list[RelationshipTrackProgress]:

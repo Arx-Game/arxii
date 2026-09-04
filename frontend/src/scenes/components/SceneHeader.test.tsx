@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { SceneHeader } from './SceneHeader';
 import type { SceneDetail } from '../types';
@@ -13,6 +13,16 @@ vi.mock('@/combat/queries', () => ({
   useEncounterForScene: () => mockUseEncounterForScene(),
   useDispatchPlayerAction: () => mockUseDispatchPlayerAction(),
 }));
+
+const mockUseSceneStakesSummaryQuery = vi.fn();
+vi.mock('../queries', async () => {
+  const actual = await vi.importActual<typeof import('../queries')>('../queries');
+  return {
+    ...actual,
+    useSceneStakesSummaryQuery: (...args: [string, boolean]) =>
+      mockUseSceneStakesSummaryQuery(...args),
+  };
+});
 
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: () => ({
@@ -40,6 +50,7 @@ const SCENE = {
   is_owner: false,
   participants: [],
   active_round: null,
+  clock: null,
 } as unknown as SceneDetail;
 
 function renderWrapped(scene: SceneDetail = SCENE) {
@@ -53,6 +64,10 @@ function renderWrapped(scene: SceneDetail = SCENE) {
   }
   return render(<SceneHeader scene={scene} />, { wrapper: Wrapper });
 }
+
+beforeEach(() => {
+  mockUseSceneStakesSummaryQuery.mockReturnValue({ data: undefined, isLoading: false });
+});
 
 describe('SceneHeader combat badge', () => {
   it('shows an In Combat badge (not a link — combat renders in-scene, #2197) when the scene has an active encounter', () => {
@@ -88,6 +103,7 @@ const BASE_SCENE: SceneDetail = {
   persona_positions: [],
   active_round: null,
   declared_risk: null,
+  clock: null,
 } as unknown as SceneDetail;
 
 describe('SceneHeader round-state badge (#2158)', () => {
@@ -203,5 +219,162 @@ describe('SceneHeader declared-risk badge (#3433)', () => {
     renderWrapped({ ...BASE_SCENE, declared_risk: null });
 
     expect(screen.queryByTestId('scene-header-risk-badge')).not.toBeInTheDocument();
+  });
+});
+
+describe('SceneHeader stakes-summary opt-in panel (#3561)', () => {
+  it('is closed by default and does not fetch the summary', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    expect(screen.queryByTestId('scene-header-stakes-panel')).not.toBeInTheDocument();
+    expect(mockUseSceneStakesSummaryQuery).toHaveBeenCalledWith('1', false);
+  });
+
+  it('opens the panel on click and shows each stake plus the effective risk', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: {
+        declared_risk: 'high',
+        effective_risk: 'extreme',
+        is_ready: true,
+        stakes: [
+          {
+            id: 11,
+            player_summary: 'A dueling scar, worn for all to see.',
+            severity: 4,
+            severity_label: 'Dire',
+            reward_kinds: [],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    await user.click(screen.getByTestId('scene-header-risk-badge'));
+
+    const panel = await screen.findByTestId('scene-header-stakes-panel');
+    expect(panel).toHaveTextContent('What is wagered');
+    expect(panel).toHaveTextContent('A dueling scar, worn for all to see.');
+    expect(panel).toHaveTextContent('Dire');
+    expect(panel).toHaveTextContent('extreme');
+    expect(mockUseSceneStakesSummaryQuery).toHaveBeenCalledWith('1', true);
+  });
+
+  it('renders the reward kinds line when a stake has reward_kinds (#3566)', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: {
+        declared_risk: 'high',
+        effective_risk: 'high',
+        is_ready: true,
+        stakes: [
+          {
+            id: 12,
+            player_summary: 'A treasured heirloom, at risk.',
+            severity: 2,
+            severity_label: 'Costly',
+            reward_kinds: ['item', 'knowledge'],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    await user.click(screen.getByTestId('scene-header-risk-badge'));
+
+    const rewardLine = await screen.findByTestId('stake-reward-kinds');
+    expect(rewardLine).toHaveTextContent('Rewards: item, knowledge');
+  });
+
+  it('renders no reward kinds line when a stake has none', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: {
+        declared_risk: 'high',
+        effective_risk: 'high',
+        is_ready: true,
+        stakes: [
+          {
+            id: 13,
+            player_summary: 'A minor grudge.',
+            severity: 1,
+            severity_label: 'Setback',
+            reward_kinds: [],
+          },
+        ],
+      },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    await user.click(screen.getByTestId('scene-header-risk-badge'));
+
+    await screen.findByTestId('scene-header-stakes-panel');
+    expect(screen.queryByTestId('stake-reward-kinds')).not.toBeInTheDocument();
+  });
+
+  it('shows a locked message when the scene runs no beat (empty stakes)', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: { declared_risk: null, effective_risk: null, is_ready: true, stakes: [] },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    await user.click(screen.getByTestId('scene-header-risk-badge'));
+
+    const panel = await screen.findByTestId('scene-header-stakes-panel');
+    expect(panel).toHaveTextContent('Locked while the scene runs.');
+    expect(screen.queryByTestId('scene-header-stakes-list')).not.toBeInTheDocument();
+  });
+
+  it('toggles the panel closed on a second click', async () => {
+    const user = userEvent.setup();
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+    mockUseSceneStakesSummaryQuery.mockReturnValue({
+      data: { declared_risk: 'high', effective_risk: 'high', is_ready: true, stakes: [] },
+      isLoading: false,
+    });
+
+    renderWrapped({ ...BASE_SCENE, declared_risk: 'high' });
+
+    const badge = screen.getByTestId('scene-header-risk-badge');
+    await user.click(badge);
+    expect(await screen.findByTestId('scene-header-stakes-panel')).toBeInTheDocument();
+
+    await user.click(badge);
+    expect(screen.queryByTestId('scene-header-stakes-panel')).not.toBeInTheDocument();
+  });
+});
+
+describe('SceneHeader scene clock pips (#3567)', () => {
+  it('shows the clock with one filled pip when the scene carries one', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, clock: { size: 3, filled: 1 } });
+
+    const clock = screen.getByTestId('scene-clock');
+    expect(clock).toHaveAttribute('aria-label', 'Clock 1 of 3');
+    expect(screen.getAllByTestId('scene-clock-pip-filled')).toHaveLength(1);
+  });
+
+  it('does not render the clock when the scene carries none', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, clock: null });
+
+    expect(screen.queryByTestId('scene-clock')).not.toBeInTheDocument();
   });
 });

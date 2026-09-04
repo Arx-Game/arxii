@@ -120,8 +120,11 @@ function slugify(value: string): string {
   const slug = value
     .trim()
     .toLowerCase()
+    // The collapse above leaves at most one dash at each end, so these match a
+    // single character rather than a run - no quantifier left to backtrack.
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-/, '')
+    .replace(/-$/, '');
   return slug || 'area';
 }
 
@@ -143,8 +146,55 @@ interface PendingLink {
   exit: AddDialogConnection | null;
 }
 
+/**
+ * Wire a freshly-dug room to whatever the add dialog asked for.
+ *
+ * When both ends name the same room the pair collapses into one two-way link,
+ * so the entrance and exit names land on opposite sides of a single exit rather
+ * than producing two links between the same two rooms.
+ */
+function linkPendingRoom(
+  newRoomId: number,
+  pending: PendingLink,
+  runAction: (key: string, params: Record<string, unknown>) => void
+): void {
+  const { entrance, exit } = pending;
+  if (entrance && exit && entrance.roomId === exit.roomId) {
+    runAction('staff_link_rooms', {
+      room_a_id: newRoomId,
+      room_b_id: entrance.roomId,
+      name_ab: exit.exitName,
+      name_ba: entrance.exitName,
+    });
+    return;
+  }
+  if (entrance) {
+    runAction('staff_link_rooms', {
+      room_a_id: entrance.roomId,
+      room_b_id: newRoomId,
+      name_ab: entrance.exitName,
+      name_ba: entrance.exitName,
+    });
+  }
+  if (exit) {
+    runAction('staff_link_rooms', {
+      room_a_id: newRoomId,
+      room_b_id: exit.roomId,
+      name_ab: exit.exitName,
+      name_ba: exit.exitName,
+    });
+  }
+}
+
 function pendingLinkKey(x: number, y: number, floor: number): string {
   return `${x},${y}@${floor}`;
+}
+
+/** What clicking a lattice square will do, as a hover hint. */
+function squareHint(state: string): string {
+  if (state === 'planned') return 'planned square — click to add';
+  if (state === 'void') return 'carved out — right-click to restore';
+  return 'empty ground — click to plan';
 }
 
 export function Lattice({
@@ -347,32 +397,7 @@ export function Lattice({
           t.floor === pending.floor
       );
       if (!newRoom) continue;
-      const { entrance, exit } = pending;
-      if (entrance && exit && entrance.roomId === exit.roomId) {
-        runAction('staff_link_rooms', {
-          room_a_id: newRoom.id,
-          room_b_id: entrance.roomId,
-          name_ab: exit.exitName,
-          name_ba: entrance.exitName,
-        });
-      } else {
-        if (entrance) {
-          runAction('staff_link_rooms', {
-            room_a_id: entrance.roomId,
-            room_b_id: newRoom.id,
-            name_ab: entrance.exitName,
-            name_ba: entrance.exitName,
-          });
-        }
-        if (exit) {
-          runAction('staff_link_rooms', {
-            room_a_id: newRoom.id,
-            room_b_id: exit.roomId,
-            name_ab: exit.exitName,
-            name_ba: exit.exitName,
-          });
-        }
-      }
+      linkPendingRoom(newRoom.id, pending, runAction);
       pendingLinksRef.current.delete(key);
     }
     for (const [name, pending] of pendingAreaPlacementsRef.current) {
@@ -504,15 +529,23 @@ export function Lattice({
     }
   }
 
+  const renderConnecting = () => {
+    if (connecting) {
+      return connectSrc
+        ? `now click the room to join ${connectSrc.name} to…`
+        : 'click the first room…';
+    }
+    return 'click it, then click two rooms to join them — or add exits from inside any room';
+  };
+
   return (
     <div data-testid="lattice" data-mode={mode}>
       {mode === 'rooms' && (
-        <div
+        <fieldset
           className="mb-2 flex flex-wrap items-center gap-1"
-          role="group"
-          aria-label="Floors of this build"
           data-testid="lattice-floor-rail"
         >
+          <legend className="sr-only">Floors of this build</legend>
           <button
             type="button"
             className="px-1 font-body text-xs italic text-muted-foreground hover:text-primary"
@@ -546,7 +579,7 @@ export function Lattice({
           >
             ⊕
           </button>
-        </div>
+        </fieldset>
       )}
 
       <div className="flex justify-center">
@@ -621,13 +654,7 @@ export function Lattice({
                   data-cell-key={key}
                   data-testid={`lattice-cell-${x}-${y}`}
                   data-cell-state={state}
-                  aria-label={
-                    state === 'planned'
-                      ? 'planned square — click to add'
-                      : state === 'void'
-                        ? 'carved out — right-click to restore'
-                        : 'empty ground — click to plan'
-                  }
+                  aria-label={squareHint(state)}
                   className={cn(
                     'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
                     state === 'empty' && 'border-dotted text-muted-foreground',
@@ -640,9 +667,8 @@ export function Lattice({
                   {state === 'planned' && (
                     <>
                       <span className="italic">planned</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         aria-label="unplan this square"
                         title="remove from the plan"
                         className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
@@ -650,16 +676,10 @@ export function Lattice({
                           event.stopPropagation();
                           updateSketch((prev) => unplanCell(prev, key));
                         }}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return;
-                          event.preventDefault();
-                          event.stopPropagation();
-                          updateSketch((prev) => unplanCell(prev, key));
-                        }}
                         data-testid={`lattice-unplan-${x}-${y}`}
                       >
                         ✕
-                      </span>
+                      </button>
                     </>
                   )}
                   {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
@@ -718,11 +738,7 @@ export function Lattice({
             className="font-body text-xs italic text-muted-foreground"
             data-testid="lattice-connect-note"
           >
-            {connecting
-              ? connectSrc
-                ? `now click the room to join ${connectSrc.name} to…`
-                : 'click the first room…'
-              : 'click it, then click two rooms to join them — or add exits from inside any room'}
+            {renderConnecting()}
           </span>
         )}
       </div>

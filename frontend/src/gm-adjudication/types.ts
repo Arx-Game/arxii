@@ -59,19 +59,38 @@ export interface RoomTrapEntry {
 
 /**
  * One row of `gm_list_runnable_beats`'s result data (#3425) — an
- * ENCOUNTER/SITUATION beat on the acting GM's currently-active episode, ready
- * to run into the scene. Same non-ViewSet shape as `RoomTrapEntry` — see
- * `GMListRunnableBeatsAction`, `actions/definitions/gm_story.py`.
+ * ENCOUNTER/SITUATION beat, or a TASK beat carrying a scenario
+ * (`has_scenario`, #3565), on the acting GM's currently-active episode, ready
+ * to run into the scene. `staged_battle_name` (#3569) names the blueprint an
+ * ENCOUNTER beat will stage a battle from, or null when it stages none. Same
+ * non-ViewSet shape as `RoomTrapEntry`; see `GMListRunnableBeatsAction`,
+ * `actions/definitions/gm_story.py`.
  */
 export interface RunnableBeatEntry {
   id: number;
   story_title: string;
   episode_title: string;
-  kind: 'encounter' | 'situation';
+  kind: 'encounter' | 'situation' | 'task';
   risk: string;
   opponent_line_count: number;
   staged_template_count: number;
+  has_scenario: boolean;
+  staged_battle_name: string | null;
+  clock_size: number;
 }
+
+/**
+ * GM discovery catalog browse (#3564), GET /api/gm/discovery/?q=&risk=.
+ * Same search as telnet `setsituation find`; kinds above the caller's
+ * tier never appear.
+ */
+export type DiscoveryResult = components['schemas']['DiscoveryResult'];
+export type DiscoveryKind = components['schemas']['DiscoveryKind'];
+export type DiscoveryTemplate = components['schemas']['DiscoveryTemplate'];
+export type DiscoveryChallenge = components['schemas']['DiscoveryChallenge'];
+export type DiscoveryCheckFit = components['schemas']['DiscoveryCheckFit'];
+export type DiscoveryDifficultyGuide = components['schemas']['DiscoveryDifficultyGuide'];
+export type DiscoveryPoolGuide = components['schemas']['DiscoveryPoolGuide'];
 
 /** Mirrors `world.scenes.action_constants.DifficultyChoice` — the only bands
  *  `gm_invoke_check` accepts (never a free integer). */

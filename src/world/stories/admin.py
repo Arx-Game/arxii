@@ -197,7 +197,7 @@ class TransitionInline(admin.TabularInline):
     model = Transition
     fk_name = "source_episode"
     extra = 0
-    fields = ["order", "target_episode", "mode", "connection_type", "connection_summary"]
+    fields = ["order", "target_episode", "connection_type", "connection_summary"]
 
 
 class BeatInline(admin.TabularInline):
@@ -270,11 +270,22 @@ class TransitionRequiredOutcomeInline(admin.TabularInline):
 
 @admin.register(Transition)
 class TransitionAdmin(admin.ModelAdmin):
-    list_display = ("source_episode", "target_episode", "mode", "connection_type", "order")
-    list_filter = ("mode", "connection_type")
+    list_display = ("source_episode", "target_episode", "connection_type", "order")
+    list_filter = ("connection_type",)
     search_fields = ("source_episode__title", "target_episode__title", "connection_summary")
     ordering = ("source_episode", "order")
     inlines = [TransitionRequiredOutcomeInline]
+
+    def save_related(self, request, form, formsets, change):
+        """Invalidate the cached_required_outcomes prefetch cache (#3563).
+
+        Django skips a to_attr prefetch once the identity-mapped instance
+        already carries the attribute in __dict__, so an admin inline edit
+        to the routing rules would otherwise leave a stale rule set behind
+        for the rest of the process.
+        """
+        super().save_related(request, form, formsets, change)
+        form.instance.__dict__.pop("cached_required_outcomes", None)
 
 
 class BeatOpponentLineInline(admin.TabularInline):
@@ -296,6 +307,7 @@ class BeatAdmin(admin.ModelAdmin):
     search_fields = ("internal_description", "player_hint", "episode__title")
     ordering = ("episode", "order")
     readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ["required_npc_sheet"]
     inlines = [BeatOpponentLineInline, BeatStagedTemplateInline]
 
 

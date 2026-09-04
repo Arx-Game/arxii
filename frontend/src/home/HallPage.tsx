@@ -60,16 +60,19 @@ export function HallPage() {
   const account = useAccount();
   const isGMOrStaff = !!account?.is_gm || !!account?.is_staff;
 
-  return (
-    <div className="container mx-auto space-y-4 px-4 py-6">
-      {isLoading ? (
+  const renderCharactersBand = () => {
+    if (isLoading) {
+      return (
         <Plate className="p-4">
           <PlateHead as="h2" className="mb-3">
             Your Characters
           </PlateHead>
           <CharactersLoadingSkeleton />
         </Plate>
-      ) : characters.length === 0 ? (
+      );
+    }
+    if (characters.length === 0) {
+      return (
         <>
           <Plate className="p-4">
             <PlateHead as="h2" className="mb-3">
@@ -80,9 +83,14 @@ export function HallPage() {
           {/* GM/staff zero-character exception — see header doc comment. */}
           {isGMOrStaff && <CharactersBand characters={characters} />}
         </>
-      ) : (
-        <CharactersBand characters={characters} />
-      )}
+      );
+    }
+    return <CharactersBand characters={characters} />;
+  };
+
+  return (
+    <div className="container mx-auto space-y-4 px-4 py-6">
+      {renderCharactersBand()}
 
       <OffscreenActsPlate characters={characters} />
 

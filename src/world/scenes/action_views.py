@@ -340,7 +340,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             " no row is created, no error occurred (#2540 slice 3)."
         ),
     )
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:  # noqa: PLR0911
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new action request."""
         serializer = SceneActionRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -568,7 +568,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
 
     @extend_schema(request=ConsentResponseSerializer)
     @action(detail=True, methods=[HTTPMethod.POST], url_path="respond")
-    def respond(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
+    def respond(self, request: Request, pk: int | None = None) -> Response:
         """Respond to a pending action request (accept/deny).
 
         When ``target_persona_id`` is present in the payload the caller is
@@ -689,7 +689,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         responses={201: SceneActionRequestSerializer},
     )
     @action(detail=False, methods=[HTTPMethod.POST], url_path="cast")
-    def cast(self, request: Request) -> Response:  # noqa: PLR0911
+    def cast(self, request: Request) -> Response:
         """Submit a standalone technique cast.
 
         Routes per the consent/combat/immediate matrix:
@@ -761,6 +761,14 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
 
         use_base_form: bool = vd.get("use_base_form", False)
         cast_openly: bool = vd.get("cast_openly", False)
+        # #3573: the caster's explicit consent to hold a ward-bearing cast's
+        # protective condition alive past zero anima via Soulfray. Passed as an
+        # explicit bool (never omitted) into request_technique_cast's
+        # soulfray_consented kwarg - the web cast path's confirm_soulfray_risk
+        # defaults True below (must never halt on the caster's own soulfray
+        # warning, unlike telnet), so without this the derived soulfray_consented
+        # would default True too and silently consent every web-cast ward.
+        soulfray_consented: bool = vd.get("soulfray_consented", False)
 
         # #2901: which form to work. Telnet has had `variant=<resonance>` since
         # #1619; this is its web counterpart, so the `forms` list the cast API
@@ -782,6 +790,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 use_base_form=use_base_form,
                 preferred_resonance=preferred_resonance,
                 cast_openly=cast_openly,
+                soulfray_consented=soulfray_consented,
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to process cast."]

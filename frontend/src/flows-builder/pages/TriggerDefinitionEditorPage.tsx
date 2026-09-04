@@ -27,6 +27,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { flattenErrorMessage } from '@/missions/api';
@@ -95,6 +96,111 @@ function fromServer(td: TriggerDefinition): EditorState {
   };
 }
 
+/**
+ * Everything wrong with the current draft, filter problems included.
+ *
+ * Collects all of them rather than stopping at the first, so the editor can
+ * show the whole list at once.
+ */
+function collectErrors(
+  state: EditorState,
+  priority: number,
+  filterOps: readonly string[]
+): string[] {
+  const errors = validateFilter(state.baseFilterCondition, filterOps);
+  if (!state.name.trim()) errors.push('Name is required.');
+  if (!state.eventName) errors.push('Event is required.');
+  if (state.flowDefinition === null) errors.push('Flow is required.');
+  if (Number.isNaN(priority)) errors.push('Priority must be a number.');
+  return errors;
+}
+
+/** The validation errors collected by the last save attempt, if any. */
+function ValidationErrors({ errors }: { errors: string[] }) {
+  if (errors.length === 0) return null;
+  return (
+    <div className="space-y-1 rounded border border-destructive/40 bg-destructive/5 p-3">
+      {errors.map((err) => (
+        <p key={err} className="text-sm text-destructive">
+          {err}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Whatever the server said about a failed save. */
+function MutationError({ error }: { error: unknown }) {
+  if (!error) return null;
+  const message =
+    error instanceof ApiValidationError
+      ? flattenErrorMessage(error.fieldErrors)
+      : 'Could not save the trigger definition.';
+  return <p className="text-sm text-destructive">{message}</p>;
+}
+
+interface SaveArgs {
+  state: EditorState;
+  isCreate: boolean;
+  tdId: number | undefined;
+  catalog: ReturnType<typeof useDslCatalog>['data'];
+  createTd: ReturnType<typeof useCreateTriggerDefinition>;
+  updateTd: ReturnType<typeof useUpdateTriggerDefinition>;
+  navigate: ReturnType<typeof useNavigate>;
+  setState: Dispatch<SetStateAction<EditorState>>;
+  setSavedSnapshot: Dispatch<SetStateAction<string>>;
+  setValidationErrors: Dispatch<SetStateAction<string[]>>;
+}
+
+/** Validate the editor state and send it, as a create or an update. */
+function runSave({
+  state,
+  isCreate,
+  tdId,
+  catalog,
+  createTd,
+  updateTd,
+  navigate,
+  setState,
+  setSavedSnapshot,
+  setValidationErrors,
+}: SaveArgs) {
+  if (!catalog) return;
+  const priority = parseInt(state.priority, 10);
+  const errors = collectErrors(state, priority, catalog.filter_ops);
+  setValidationErrors(errors);
+  if (errors.length > 0) return;
+
+  const nextState: EditorState = { ...state, priority: String(priority) };
+  const payload: TriggerDefinitionWritePayload = {
+    name: nextState.name.trim(),
+    event_name: nextState.eventName,
+    flow_definition: nextState.flowDefinition as number,
+    priority,
+    description: nextState.description,
+    base_filter_condition: nextState.baseFilterCondition,
+  };
+  if (isCreate) {
+    createTd.mutate(payload, {
+      onSuccess: (result) => navigate(`/staff/flows-builder/trigger-definitions/${result.id}`),
+    });
+    return;
+  }
+  if (tdId === undefined) return;
+  updateTd.mutate(
+    { id: tdId, payload },
+    {
+      // Mark clean with the exact payload just sent — mirrors FlowEditorPage's
+      // save() so the resync effect accepts the invalidation-triggered refetch
+      // that follows.
+      onSuccess: () => {
+        setState(nextState);
+        setSavedSnapshot(serialize(nextState));
+      },
+    }
+  );
+}
+
 export function TriggerDefinitionEditorPage() {
   const { tdId: tdIdParam } = useParams<{ tdId: string }>();
   const navigate = useNavigate();
@@ -161,45 +267,23 @@ export function TriggerDefinitionEditorPage() {
     navigate('/staff/flows-builder');
   };
 
-  const save = () => {
-    if (!catalog) return;
-    const priority = parseInt(state.priority, 10);
-    const errors = validateFilter(state.baseFilterCondition, catalog.filter_ops);
-    if (!state.name.trim()) errors.push('Name is required.');
-    if (!state.eventName) errors.push('Event is required.');
-    if (state.flowDefinition === null) errors.push('Flow is required.');
-    if (Number.isNaN(priority)) errors.push('Priority must be a number.');
-    setValidationErrors(errors);
-    if (errors.length > 0) return;
+  const save = () =>
+    runSave({
+      state,
+      isCreate,
+      tdId,
+      catalog,
+      createTd,
+      updateTd,
+      navigate,
+      setState,
+      setSavedSnapshot,
+      setValidationErrors,
+    });
 
-    const nextState: EditorState = { ...state, priority: String(priority) };
-    const payload: TriggerDefinitionWritePayload = {
-      name: nextState.name.trim(),
-      event_name: nextState.eventName,
-      flow_definition: nextState.flowDefinition as number,
-      priority,
-      description: nextState.description,
-      base_filter_condition: nextState.baseFilterCondition,
-    };
-    if (isCreate) {
-      createTd.mutate(payload, {
-        onSuccess: (result) => navigate(`/staff/flows-builder/trigger-definitions/${result.id}`),
-      });
-    } else if (tdId !== undefined) {
-      updateTd.mutate(
-        { id: tdId, payload },
-        {
-          // Mark clean with the exact payload just sent — mirrors
-          // FlowEditorPage's save() so the resync effect above accepts the
-          // invalidation-triggered refetch that follows.
-          onSuccess: () => {
-            setState(nextState);
-            setSavedSnapshot(serialize(nextState));
-          },
-        }
-      );
-    }
-  };
+  // The three install surfaces all mean the same thing: an existing row being
+  // edited. Named once so the condition is not re-derived at each of them.
+  const editingId = !isCreate && tdId !== undefined ? tdId : null;
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-6">
@@ -296,49 +380,35 @@ export function TriggerDefinitionEditorPage() {
         </CardContent>
       </Card>
 
-      {validationErrors.length > 0 ? (
-        <div className="space-y-1 rounded border border-destructive/40 bg-destructive/5 p-3">
-          {validationErrors.map((err) => (
-            <p key={err} className="text-sm text-destructive">
-              {err}
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {mutationError ? (
-        <p className="text-sm text-destructive">
-          {mutationError instanceof ApiValidationError
-            ? flattenErrorMessage(mutationError.fieldErrors)
-            : 'Could not save the trigger definition.'}
-        </p>
-      ) : null}
+      <ValidationErrors errors={validationErrors} />
+      <MutationError error={mutationError} />
 
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={!state.name.trim() || busy || !catalog}>
           {busy ? 'Saving…' : 'Save trigger definition'}
         </Button>
-        {!isCreate && tdId !== undefined ? (
+        {editingId !== null && (
           <Button variant="outline" onClick={() => setInstallOpen(true)}>
             Install on an object…
           </Button>
-        ) : null}
+        )}
       </div>
 
-      {!isCreate && tdId !== undefined && state.flowDefinition !== null ? (
+      {editingId !== null && state.flowDefinition !== null && (
         <InstallingTemplatesCard
-          triggerDefinitionId={tdId}
+          triggerDefinitionId={editingId}
           flowId={state.flowDefinition}
           interactions={flowDetailQuery.data?.interactions}
         />
-      ) : null}
+      )}
 
-      {!isCreate && tdId !== undefined ? (
+      {editingId !== null && (
         <TriggerInstallDialog
           open={installOpen}
           onOpenChange={setInstallOpen}
-          fixedTriggerDefinitionId={tdId}
+          fixedTriggerDefinitionId={editingId}
         />
-      ) : null}
+      )}
     </div>
   );
 }

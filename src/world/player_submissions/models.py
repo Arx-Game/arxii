@@ -13,6 +13,10 @@ from world.player_submissions.constants import (
 
 PERSONA_MODEL = "arxii.Persona"
 SCENE_MODEL = "arxii.Scene"
+ACCOUNT_MODEL = "accounts.AccountDB"
+OBJECTDB_MODEL = "objects.ObjectDB"
+
+SUBMITTING_ACCOUNT_HELP = "The account that submitted this."
 
 
 class PlayerFeedback(SharedMemoryModel):
@@ -23,10 +27,10 @@ class PlayerFeedback(SharedMemoryModel):
     """
 
     reporter_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
-        help_text="The account that submitted this.",
+        help_text=SUBMITTING_ACCOUNT_HELP,
     )
     reporter_persona = models.ForeignKey(
         PERSONA_MODEL,
@@ -38,7 +42,7 @@ class PlayerFeedback(SharedMemoryModel):
     # ObjectDB by design (#2608): an audit stamp of raw `character.location` — no
     # Room typeclass guarantee, so no RoomProfile to point at.
     location = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -65,10 +69,10 @@ class BugReport(SharedMemoryModel):
     """
 
     reporter_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
-        help_text="The account that submitted this.",
+        help_text=SUBMITTING_ACCOUNT_HELP,
     )
     reporter_persona = models.ForeignKey(
         PERSONA_MODEL,
@@ -79,7 +83,7 @@ class BugReport(SharedMemoryModel):
     # ObjectDB by design (#2608): audit stamp of raw `character.location` (see
     # BugReport.location).
     location = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -121,13 +125,13 @@ class PlayerReport(SharedMemoryModel):
     """
 
     reporter_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
-        help_text="The account that submitted this.",
+        help_text=SUBMITTING_ACCOUNT_HELP,
     )
     reported_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text=(
@@ -185,7 +189,7 @@ class PlayerReport(SharedMemoryModel):
     # ObjectDB by design (#2608): audit stamp of raw `character.location` (see
     # BugReport.location).
     location = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -276,9 +280,7 @@ class Petition(SharedMemoryModel):
     record as feedback (SubmitterStanding).
     """
 
-    account = models.ForeignKey(
-        "accounts.AccountDB", on_delete=models.CASCADE, related_name="petitions"
-    )
+    account = models.ForeignKey(ACCOUNT_MODEL, on_delete=models.CASCADE, related_name="petitions")
     category = models.CharField(max_length=30, choices=PetitionCategory.choices)
     scene = models.ForeignKey(
         SCENE_MODEL,
@@ -340,7 +342,7 @@ class CheckProposal(SharedMemoryModel):
     """
 
     submitted_by_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="check_proposals",
         help_text="OOC authoring, not IC -- mirrors PlayerFeedback.reporter_account.",
@@ -385,7 +387,7 @@ class CheckProposal(SharedMemoryModel):
         db_index=True,
     )
     reviewer = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -413,7 +415,7 @@ class SubmitterStanding(SharedMemoryModel):
     """
 
     account = models.OneToOneField(
-        "accounts.AccountDB", on_delete=models.CASCADE, related_name="submitter_standing"
+        ACCOUNT_MODEL, on_delete=models.CASCADE, related_name="submitter_standing"
     )
     actioned_count = models.PositiveIntegerField(default=0)
     dismissed_count = models.PositiveIntegerField(default=0)

@@ -2,7 +2,7 @@
  * Staff Inbox API functions
  */
 
-import { apiFetch } from '@/evennia_replacements/api';
+import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import type { PaginatedResponse } from '@/shared/types';
 import type {
   AccountHistory,
@@ -56,7 +56,7 @@ export async function getStaffInbox(
     params.append('page_size', pageSize.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${INBOX_URL}/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${INBOX_URL}/`, qs));
   if (!res.ok) throw new Error('Failed to load staff inbox');
   return res.json();
 }
@@ -96,7 +96,7 @@ export async function getFeedbackList(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${SUBMISSIONS_URL}/feedback/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${SUBMISSIONS_URL}/feedback/`, qs));
   if (!res.ok) throw new Error('Failed to load feedback list');
   return res.json();
 }
@@ -135,7 +135,7 @@ export async function getBugReportList(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${SUBMISSIONS_URL}/bug-reports/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${SUBMISSIONS_URL}/bug-reports/`, qs));
   if (!res.ok) throw new Error('Failed to load bug report list');
   return res.json();
 }
@@ -196,7 +196,7 @@ export async function getPlayerReportList(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${SUBMISSIONS_URL}/player-reports/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${SUBMISSIONS_URL}/player-reports/`, qs));
   if (!res.ok) throw new Error('Failed to load player report list');
   return res.json();
 }
@@ -235,7 +235,7 @@ export async function getSystemErrorList(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${SUBMISSIONS_URL}/system-errors/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${SUBMISSIONS_URL}/system-errors/`, qs));
   if (!res.ok) throw new Error('Failed to load system error list');
   return res.json();
 }
@@ -274,7 +274,7 @@ export async function getGMApplicationList(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${GM_URL}/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${GM_URL}/`, qs));
   if (!res.ok) throw new Error('Failed to load GM application list');
   return res.json();
 }
@@ -313,7 +313,7 @@ export async function getAccountInviteList(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${INVITES_URL}/${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch(withQuery(`${INVITES_URL}/`, qs));
   if (!res.ok) throw new Error('Failed to load invite list');
   return res.json();
 }

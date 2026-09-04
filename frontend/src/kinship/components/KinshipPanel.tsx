@@ -79,6 +79,26 @@ function SelectedKinDetail({ characterId, node }: SelectedKinDetailProps) {
   const relatableSheetId = node.sheet_id != null && !isSelf ? node.sheet_id : undefined;
   const { data: relationship } = useKinRelationship(characterId, relatableSheetId);
 
+  const renderSelf = () => {
+    if (isSelf) {
+      return <p className="text-xs text-muted-foreground">This is the character you're viewing.</p>;
+    }
+    if (relatableSheetId == null) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          No linked character record for this person - relatedness can't be checked from here.
+        </p>
+      );
+    }
+    return (
+      <p className="text-sm">
+        {relationship?.label
+          ? `Relationship: ${relationship.label.replace(/_/g, ' ')}`
+          : 'No determinable relationship on record.'}
+      </p>
+    );
+  };
+
   return (
     <div className="space-y-1 rounded-md border p-3">
       <div className="flex items-center justify-between gap-2">
@@ -86,19 +106,7 @@ function SelectedKinDetail({ characterId, node }: SelectedKinDetailProps) {
         <span className="text-xs text-muted-foreground">{node.tier.replace(/_/g, ' ')}</span>
       </div>
       {node.description && <p className="text-sm text-muted-foreground">{node.description}</p>}
-      {isSelf ? (
-        <p className="text-xs text-muted-foreground">This is the character you're viewing.</p>
-      ) : relatableSheetId == null ? (
-        <p className="text-xs text-muted-foreground">
-          No linked character record for this person - relatedness can't be checked from here.
-        </p>
-      ) : (
-        <p className="text-sm">
-          {relationship?.label
-            ? `Relationship: ${relationship.label.replace(/_/g, ' ')}`
-            : 'No determinable relationship on record.'}
-        </p>
-      )}
+      {renderSelf()}
     </div>
   );
 }

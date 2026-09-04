@@ -49,6 +49,13 @@ interface MissionCanvasProps {
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 60;
 
+/** How a mission-graph edge is drawn: a random set, a tiered outcome, or a plain branch. */
+function nodeKind(r: { is_random_set?: boolean; outcome_tier?: number | null }): string {
+  if (r.is_random_set) return 'random';
+  if (r.outcome_tier !== null && r.outcome_tier !== undefined) return `t${r.outcome_tier}`;
+  return 'branch';
+}
+
 export function MissionCanvas({ templateId }: MissionCanvasProps) {
   if (!templateId) {
     return (
@@ -177,7 +184,12 @@ export function computeLayout(
     return {
       id: String(n.id),
       position: { x, y },
-      data: { label: n.key + (n.is_entry ? ' (entry)' : '') },
+      data: {
+        label:
+          n.key +
+          (n.is_entry ? ' (entry)' : '') +
+          ((n.track_successes ?? 0) > 0 ? ` [track ${n.track_successes}/${n.track_failures}]` : ''),
+      },
       style: {
         width: NODE_WIDTH,
         background: n.is_entry ? 'hsl(var(--primary) / 0.15)' : undefined,
@@ -195,11 +207,7 @@ export function computeLayout(
     .map((r) => {
       const opt = optionMap.get(r.option);
       const source = opt ? opt.node : 0;
-      const label = r.is_random_set
-        ? 'random'
-        : r.outcome_tier !== null && r.outcome_tier !== undefined
-          ? `t${r.outcome_tier}`
-          : 'branch';
+      const label = nodeKind(r);
       return {
         id: `r${r.id}`,
         source: String(source),

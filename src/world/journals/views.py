@@ -29,6 +29,9 @@ from world.journals.services import (
     exclude_blocked_and_muted_authors,
 )
 
+_NO_CHARACTER_DETAIL = "No character found."
+_NOT_FOUND_DETAIL = "Not found."
+
 
 class JournalEntryPagination(PageNumberPagination):
     """Pagination for journal entries."""
@@ -139,7 +142,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         sheet = self.get_character_sheet(request)
         if not sheet:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -175,7 +178,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             )
         except JournalEntry.DoesNotExist:
             return Response(
-                {"detail": "Not found."},
+                {"detail": _NOT_FOUND_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -185,7 +188,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             is_own = sheet is not None and entry.author_id == sheet.pk
             if not is_own and not entry_visible_via_bequest(entry, sheet):
                 return Response(
-                    {"detail": "Not found."},
+                    {"detail": _NOT_FOUND_DETAIL},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
@@ -218,7 +221,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         character = self._get_character(request)
         if not character:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -250,7 +253,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         character = self._get_character(request)
         if not character:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -258,7 +261,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             sheet = character.sheet_data
         except CharacterSheet.DoesNotExist:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -266,7 +269,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             entry = JournalEntry.objects.get(pk=pk, author_id=sheet.pk)
         except JournalEntry.DoesNotExist:
             return Response(
-                {"detail": "Not found."},
+                {"detail": _NOT_FOUND_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -295,7 +298,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         character = self._get_character(request)
         if not character:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -303,7 +306,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             character.sheet_data  # noqa: B018
         except CharacterSheet.DoesNotExist:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -311,7 +314,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             parent = JournalEntry.objects.select_related("author").get(pk=pk)
         except JournalEntry.DoesNotExist:
             return Response(
-                {"detail": "Not found."},
+                {"detail": _NOT_FOUND_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -347,7 +350,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         sheet = self.get_character_sheet(request)
         if not sheet:
             return Response(
-                {"detail": "No character found."},
+                {"detail": _NO_CHARACTER_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
 

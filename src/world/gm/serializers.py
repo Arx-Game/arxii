@@ -31,7 +31,13 @@ from world.gm.models import (
     TableUpdateRequest,
 )
 from world.instances.models import InstancedRoom
+from world.mechanics.serializers import (
+    ChallengeTemplateListSerializer,
+    SituationTemplateListSerializer,
+)
 from world.roster.models.applications import RosterApplication
+from world.scenes.action_constants import DifficultyChoice
+from world.societies.constants import RenownRisk
 
 
 class GMApplicationCreateSerializer(serializers.ModelSerializer):
@@ -154,14 +160,49 @@ class GMProfileSerializer(serializers.ModelSerializer):
 
 
 class GMProfileMineSerializer(serializers.ModelSerializer):
-    """The requesting GM's own profile: operational fields are writable (#3478)."""
+    """The requesting GM's own profile: operational fields are writable (#3478).
+
+    ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+    GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+    options from the same ceiling the API enforces, instead of a client-side
+    guess. Staff get the top of each scale regardless of any cap row.
+    """
 
     level_display = serializers.CharField(source="get_level_display", read_only=True)
+    max_beat_risk = serializers.SerializerMethodField()
+    allow_custom_stakes = serializers.SerializerMethodField()
 
     class Meta:
         model = GMProfile
-        fields = ["id", "level", "level_display", "contact_times", "ooc_info"]
+        fields = [
+            "id",
+            "level",
+            "level_display",
+            "contact_times",
+            "ooc_info",
+            "max_beat_risk",
+            "allow_custom_stakes",
+        ]
         read_only_fields = ["id", "level", "level_display"]
+
+    def get_max_beat_risk(self, obj: GMProfile) -> str:
+        """RenownRisk ceiling: "extreme" for staff, else the caller's GMLevelCap."""
+        from world.gm.services import cap_for_profile  # noqa: PLC0415
+        from world.societies.constants import RenownRisk  # noqa: PLC0415
+
+        if self.context["request"].user.is_staff:
+            return RenownRisk.EXTREME
+        cap = cap_for_profile(obj)
+        return cap.max_beat_risk if cap else RenownRisk.NONE
+
+    def get_allow_custom_stakes(self, obj: GMProfile) -> bool:
+        """Whether this GM may author custom (template=null) stakes: True for staff."""
+        from world.gm.services import cap_for_profile  # noqa: PLC0415
+
+        if self.context["request"].user.is_staff:
+            return True
+        cap = cap_for_profile(obj)
+        return bool(cap and cap.allow_custom_stakes)
 
 
 class MintGMCharacterRequestSerializer(serializers.Serializer):
@@ -864,3 +905,73 @@ class GMSummonOfferSerializer(serializers.Serializer):
 
     def get_scene_title(self, obj: GMSummonOffer) -> str | None:
         return obj.scene.name if obj.scene_id else None
+
+
+# ---------------------------------------------------------------------------
+# Catalog discovery (#3564) - the wire shape of DiscoveryResult/KindResult.
+# ---------------------------------------------------------------------------
+
+
+class DiscoveryQuerySerializer(serializers.Serializer):
+    q = serializers.CharField(required=False, allow_blank=True, default="")
+    risk = serializers.ChoiceField(choices=RenownRisk.choices, required=False, allow_blank=True)
+
+
+class DiscoveryTemplateSerializer(SituationTemplateListSerializer):
+    class Meta(SituationTemplateListSerializer.Meta):
+        fields = [*SituationTemplateListSerializer.Meta.fields, "description_template"]
+
+
+class DiscoveryChallengeSerializer(ChallengeTemplateListSerializer):
+    class Meta(ChallengeTemplateListSerializer.Meta):
+        fields = [*ChallengeTemplateListSerializer.Meta.fields, "description_template", "goal"]
+
+
+class DiscoveryCheckTypeSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class DiscoveryCheckFitSerializer(serializers.Serializer):
+    check_type = DiscoveryCheckTypeSerializer()
+    fit_notes = serializers.CharField()
+
+
+class DiscoveryDifficultyGuideSerializer(serializers.Serializer):
+    risk = serializers.ChoiceField(choices=RenownRisk.choices)
+    recommended_difficulty = serializers.ChoiceField(choices=DifficultyChoice.choices)
+    guidance_text = serializers.CharField()
+
+
+class DiscoveryPoolSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class DiscoveryPoolGuideSerializer(serializers.Serializer):
+    pool = DiscoveryPoolSerializer()
+    selection_criteria = serializers.CharField()
+    is_default = serializers.BooleanField()
+
+
+class DiscoveryKindSerializer(serializers.Serializer):
+    """One KindResult on the wire (#3564)."""
+
+    id = serializers.IntegerField(source="kind.id")
+    name = serializers.CharField(source="kind.name")
+    description = serializers.CharField(source="kind.description")
+    minimum_gm_level = serializers.ChoiceField(
+        choices=GMLevel.choices, source="kind.minimum_gm_level"
+    )
+    check_fits = DiscoveryCheckFitSerializer(many=True)
+    difficulty_guide = DiscoveryDifficultyGuideSerializer(allow_null=True)
+    all_guides = DiscoveryDifficultyGuideSerializer(many=True)
+    pool_guides = DiscoveryPoolGuideSerializer(many=True)
+
+
+class DiscoveryResultSerializer(serializers.Serializer):
+    """DiscoveryResult on the wire (#3564); the GMEvidenceSummary pattern."""
+
+    templates = DiscoveryTemplateSerializer(many=True)
+    challenges = DiscoveryChallengeSerializer(many=True)
+    kinds = DiscoveryKindSerializer(many=True)

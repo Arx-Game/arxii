@@ -134,6 +134,32 @@ export function GMNotesPanel({ storyId }: GMNotesPanelProps) {
     );
   }
 
+  const renderNotes = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-2" data-testid="gm-notes-loading">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      );
+    }
+    if (notes.length === 0) {
+      return (
+        <p className="text-sm italic text-muted-foreground" data-testid="gm-notes-empty">
+          No GM notes yet. Add the first one below.
+        </p>
+      );
+    }
+    return (
+      <ul className="space-y-2" data-testid="gm-notes-list">
+        {notes.map((note) => (
+          <NoteRow key={note.id} note={note} />
+        ))}
+      </ul>
+    );
+  };
+
   return (
     <div className="space-y-4" data-testid="gm-notes-panel">
       <p className="text-sm text-muted-foreground">
@@ -142,23 +168,7 @@ export function GMNotesPanel({ storyId }: GMNotesPanelProps) {
       </p>
 
       {/* Notes list */}
-      {isLoading ? (
-        <div className="space-y-2" data-testid="gm-notes-loading">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </div>
-      ) : notes.length === 0 ? (
-        <p className="text-sm italic text-muted-foreground" data-testid="gm-notes-empty">
-          No GM notes yet. Add the first one below.
-        </p>
-      ) : (
-        <ul className="space-y-2" data-testid="gm-notes-list">
-          {notes.map((note) => (
-            <NoteRow key={note.id} note={note} />
-          ))}
-        </ul>
-      )}
+      {renderNotes()}
 
       {/* Append form */}
       <form onSubmit={handleSubmit} className="space-y-2" data-testid="gm-note-form">

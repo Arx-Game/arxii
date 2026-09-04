@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useCastGroupVote, useGroupBeat, useSubmitGroupPick } from '../queries';
 import type { GroupBeatView, ResolvedBeat } from '../types';
+import { BeatTrack } from './BeatTrack';
 import { InvitePicker } from './InvitePicker';
 
 interface GroupBeatCardProps {
@@ -24,6 +25,13 @@ interface GroupBeatCardProps {
   roomKey: string;
   /** Whether the viewer is the contract holder (shows the invite affordance). */
   isContractHolder?: boolean;
+}
+
+/** Where a group beat is in its lifecycle, for the badge. */
+function beatPhaseLabel(expired: boolean, phase: string): string {
+  if (expired) return 'expired';
+  if (phase === 'vote') return 'voting';
+  return 'picking';
 }
 
 export function GroupBeatCard({
@@ -103,7 +111,7 @@ function GroupBeatView({
   const castVote = useCastGroupVote();
   const { expired, secondsLeft } = useCountdown(beat.expires_at);
 
-  const phaseLabel = expired ? 'expired' : beat.phase === 'vote' ? 'voting' : 'picking';
+  const phaseLabel = beatPhaseLabel(expired, beat.phase);
 
   return (
     <div className="space-y-2 rounded border bg-card p-3" data-testid="group-beat-card">
@@ -119,6 +127,8 @@ function GroupBeatView({
       </div>
 
       {beat.flavor_text ? <p className="whitespace-pre-wrap text-sm">{beat.flavor_text}</p> : null}
+
+      <BeatTrack track={beat.track} />
 
       <ParticipantRow beat={beat} />
 

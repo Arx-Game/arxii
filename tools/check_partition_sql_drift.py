@@ -22,6 +22,7 @@ column-name check catches 95% of the drift incidents in practice
 
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 import re
@@ -82,6 +83,11 @@ def _setup_django() -> None:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
     os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
     os.environ.setdefault("SECRET_KEY", "arxii-placeholder-secret-key")
+    # settings.py requires a Fernet key (#3591, ADR-0267) and the startup check refuses
+    # the all-zero placeholder, so mint a throwaway one; this hook only reads model metadata.
+    os.environ.setdefault(
+        "MFA_SECRETS_KEY", base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+    )
     django.setup()
 
 

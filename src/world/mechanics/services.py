@@ -139,6 +139,59 @@ def _flat_source_contributions(
     return sources, total, blocked_count
 
 
+def _amplifiers_and_immunity(distinction_mods: list) -> tuple[list[tuple[int, int]], bool]:
+    """The (modifier_id, bonus) pairs that amplify others, and whether anything grants immunity.
+
+    Both live on the distinction effect, so only distinction-sourced rows are read.
+    """
+    amplifiers: list[tuple[int, int]] = []
+    has_immunity = False
+    for mod in distinction_mods:
+        effect = mod.source.distinction_effect
+        if effect.amplifies_sources_by:
+            amplifiers.append((mod.id, effect.amplifies_sources_by))
+        if effect.grants_immunity_to_negative:
+            has_immunity = True
+    return amplifiers, has_immunity
+
+
+def _distinction_contributions(
+    distinction_mods: list,
+    amplifiers: list[tuple[int, int]],
+    *,
+    has_immunity: bool,
+) -> tuple[list[ModifierSourceDetail], int, int]:
+    """Each distinction source's detail row, the running total, and the blocked count.
+
+    A source is amplified by every OTHER amplifier, never by itself. Immunity
+    blocks a source whose amplified value ends up negative — it is still reported,
+    with `blocked_by_immunity` set, but contributes nothing to the total.
+    """
+    sources: list[ModifierSourceDetail] = []
+    total = 0
+    negatives_blocked = 0
+    for mod in distinction_mods:
+        effect = mod.source.distinction_effect
+        amplification = sum(bonus for amp_id, bonus in amplifiers if amp_id != mod.id)
+        final_value = mod.value + amplification
+        blocked = has_immunity and final_value < 0
+        if blocked:
+            negatives_blocked += 1
+        else:
+            total += final_value
+        sources.append(
+            ModifierSourceDetail(
+                source_name=effect.distinction.name,
+                base_value=mod.value,
+                amplification=amplification,
+                final_value=final_value,
+                is_amplifier=bool(effect.amplifies_sources_by),
+                blocked_by_immunity=blocked,
+            )
+        )
+    return sources, total, negatives_blocked
+
+
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
     """
     Get detailed breakdown of all modifiers for a target.
@@ -184,53 +237,10 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
             negatives_blocked=0,
         )
 
-    # Collect amplifiers and check for immunity (distinction sources only).
-    amplifiers: list[tuple[int, int]] = []  # (modifier_id, amplify_bonus)
-    has_immunity = False
-
-    for mod in distinction_mods:
-        effect = mod.source.distinction_effect
-        if effect.amplifies_sources_by:
-            amplifiers.append((mod.id, effect.amplifies_sources_by))
-        if effect.grants_immunity_to_negative:
-            has_immunity = True
-
-    # Calculate each source's contribution
-    sources: list[ModifierSourceDetail] = []
-    total = 0
-    negatives_blocked = 0
-
-    for mod in distinction_mods:
-        effect = mod.source.distinction_effect
-        base_value = mod.value
-        is_amplifier = bool(effect.amplifies_sources_by)
-
-        # Calculate amplification from OTHER sources
-        amplification = 0
-        for amp_id, amp_bonus in amplifiers:
-            if amp_id != mod.id:
-                amplification += amp_bonus
-
-        final_value = base_value + amplification
-
-        # Check if blocked by immunity
-        blocked = has_immunity and final_value < 0
-
-        if blocked:
-            negatives_blocked += 1
-        else:
-            total += final_value
-
-        sources.append(
-            ModifierSourceDetail(
-                source_name=effect.distinction.name,
-                base_value=base_value,
-                amplification=amplification,
-                final_value=final_value,
-                is_amplifier=is_amplifier,
-                blocked_by_immunity=blocked,
-            )
-        )
+    amplifiers, has_immunity = _amplifiers_and_immunity(distinction_mods)
+    sources, total, negatives_blocked = _distinction_contributions(
+        distinction_mods, amplifiers, has_immunity=has_immunity
+    )
 
     # Non-distinction sources are flat addends (outside the amplification graph).
     flat_sources, flat_total, flat_blocked = _flat_source_contributions(other_mods, has_immunity)
@@ -1850,13 +1860,17 @@ def _source_meets_effect_requirements(
     source: CapabilitySource,
 ) -> bool:
     """Check if a source meets the effect property requirements of app and approach."""
-    if app.required_effect_property_id:
-        if app.required_effect_property_id not in source.effect_property_ids:
-            return False
+    if (
+        app.required_effect_property_id
+        and app.required_effect_property_id not in source.effect_property_ids
+    ):
+        return False
 
-    if approach.required_effect_property_id:
-        if approach.required_effect_property_id not in source.effect_property_ids:
-            return False
+    if (
+        approach.required_effect_property_id
+        and approach.required_effect_property_id not in source.effect_property_ids
+    ):
+        return False
 
     return True
 

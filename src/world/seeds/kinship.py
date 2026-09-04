@@ -15,13 +15,15 @@ MARRIAGE_KIND_NAME = "Marriage"
 
 def seed_kinship_demo() -> None:
     """Seed the PLACEHOLDER ducal tree (idempotent)."""
+    from world.roster.constants import NOBLE_KIND_NAME  # noqa: PLC0415
     from world.roster.models import Family, UnionKind  # noqa: PLC0415
+    from world.roster.seeds import ensure_family_kinds  # noqa: PLC0415
     from world.roster.services import kinship  # noqa: PLC0415
 
     family, created = Family.objects.get_or_create(
         name=DUCAL_HOUSE_NAME,
         defaults={
-            "family_type": Family.FamilyType.NOBLE,
+            "kind": ensure_family_kinds()[NOBLE_KIND_NAME],
             "description": "PLACEHOLDER — a ducal house awaiting its authored prose.",
             "is_playable": True,
         },

@@ -1699,13 +1699,12 @@ class BeginningsRawFixtureRoundTripTests(TestCase):
 
     def test_partial_row_upserts_without_touching_other_fields(self) -> None:
         """A partial fixture row (natural key + starting_languages only) must
-        not reset description/cg_point_cost/family_known on an existing row."""
+        not reset description/cg_point_cost on an existing row."""
         existing = BeginningsFactory(
             starting_area=self.area,
             name="Partial Update Beginning",
             description="Hand-authored description.",
             cg_point_cost=7,
-            family_known=False,
         )
         LanguageFactory(name="Partial Update Tongue")
         _write(
@@ -1731,7 +1730,6 @@ class BeginningsRawFixtureRoundTripTests(TestCase):
         existing.refresh_from_db()
         assert existing.description == "Hand-authored description."
         assert existing.cg_point_cost == 7
-        assert existing.family_known is False
         assert [lang.name for lang in existing.starting_languages.all()] == [
             "Partial Update Tongue"
         ]

@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+  '/api/account/security-settings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the signed-in account. */
+    get: operations['account_security_settings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description ``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the signed-in account. */
+    patch: operations['account_security_settings_partial_update'];
+    trace?: never;
+  };
   '/api/achievements/achievements/': {
     parameters: {
       query?: never;
@@ -586,7 +604,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets + introduce action. */
+    /**
+     * @description Read endpoints for the player's own promoted assets + introduce action.
+     *
+     *     Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+     *     search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+     *     per-player private content (name, role_context, status, created_at), so
+     *     that widening is scoped narrowly: a non-staff GM only sees assets
+     *     promoted by a character who participates in a story that GM LEADS, never
+     *     every asset in the game (#3561 review fix - the first cut let any
+     *     GMProfile holder, unrelated to the asset's owner, list every player's
+     *     private assets, which was a privacy leak).
+     */
     get: operations['assets_list'];
     put?: never;
     post?: never;
@@ -603,7 +632,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own promoted assets + introduce action. */
+    /**
+     * @description Read endpoints for the player's own promoted assets + introduce action.
+     *
+     *     Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+     *     search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+     *     per-player private content (name, role_context, status, created_at), so
+     *     that widening is scoped narrowly: a non-staff GM only sees assets
+     *     promoted by a character who participates in a story that GM LEADS, never
+     *     every asset in the game (#3561 review fix - the first cut let any
+     *     GMProfile holder, unrelated to the asset's owner, list every player's
+     *     private assets, which was a privacy leak).
+     */
     get: operations['assets_retrieve'];
     put?: never;
     post?: never;
@@ -1208,6 +1248,61 @@ export interface paths {
      *     Wraps record_gm_marked_outcome. Returns 201 with BeatCompletion on success.
      */
     post: operations['beats_mark_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/beats/{id}/readiness/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{id}/readiness/ - GM readiness dashboard for this beat (#3562).
+     *
+     *     Unlike ``stakes-summary`` (player-safe, pillar 9), this surfaces the
+     *     raw ``problems`` list - GM planning detail, like
+     *     ``internal_description`` - so it is gated to the Lead GM or staff via
+     *     ``CanAssignMissionToBeat`` rather than the broader stakes-summary
+     *     audience.
+     */
+    get: operations['beats_readiness_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/beats/{id}/scenario/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/beats/{id}/scenario/ - GM authors a scenario graph as this beat's body.
+     *
+     *     #3565. Reuses ``CanAssignMissionToBeat`` (Lead GM or staff - the same gate
+     *     ``assign_mission`` above uses) since authoring a beat's mission body
+     *     is the same GM-tier gesture as assigning one. POST body:
+     *     ``{"name", "summary", "risk_tier"}``. 201 + the new
+     *     MissionTemplateSerializer payload on first call; 200 with the same
+     *     payload on a repeat call (idempotent - ``create_scenario_for_beat``
+     *     returns the existing template rather than erroring or duplicating).
+     *     400 ``{"required_mission": [...]}`` when the beat already uses a
+     *     catalog (non-scenario) template; 400 ``{"name": [...]}`` on a name
+     *     collision.
+     */
+    post: operations['beats_scenario_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2162,7 +2257,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Get all episodes for a chapter */
+    /**
+     * @description Get all episodes for a chapter.
+     *
+     *     Carries the request in the serializer context (#3563) so
+     *     EpisodeListSerializer's GM-only routing_problems field can resolve
+     *     the viewer instead of default-denying every caller, and preloads one
+     *     routing report per episode on the page the way EpisodeViewSet.list
+     *     does, so this action does not pay four queries per episode.
+     */
     get: operations['chapters_episodes_retrieve'];
     put?: never;
     post?: never;
@@ -3111,10 +3214,14 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List active origin-story templates for the CG guided flow (#2478).
+     * @description Serialize with one batched ``claimable_kind_ids`` query, not one per row.
      *
-     *     Filter by ``beginning`` to get templates available for a specific beginning.
-     *     Mirrors ``CGGlimpseTagViewSet``.
+     *     Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
+     *     so there is no ``page`` branch to preserve) but materializes the
+     *     queryset once and passes a template-id -> kind-id grouping into the
+     *     serializer context (no per-request memo on ``self`` - ADR-0260; the
+     *     grouping is a plain argument, not state stashed on the view or
+     *     serializer instance).
      */
     get: operations['character_creation_origin_templates_list'];
     put?: never;
@@ -3133,10 +3240,11 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List active origin-story templates for the CG guided flow (#2478).
+     * @description List active origin-story templates for the CG guided flow (#2478, #3617).
      *
      *     Filter by ``beginning`` to get templates available for a specific beginning.
-     *     Mirrors ``CGGlimpseTagViewSet``.
+     *     Trust-gated: staff see every active row, everyone else only rows whose
+     *     ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
      */
     get: operations['character_creation_origin_templates_retrieve'];
     put?: never;
@@ -3492,7 +3600,13 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Clear a character's origin-story slot answer (#2478). */
+    /**
+     * @description Clear a character's origin-story slot answer (#2478, #3617).
+     *
+     *     A slot holding a costed choice was set at character creation; a
+     *     non-staff caller clearing it here would erase a priced pick for free,
+     *     so that combination is refused the same way setting one is.
+     */
     post: operations['character_sheets_clear_origin_slot_create'];
     delete?: never;
     options?: never;
@@ -3552,7 +3666,13 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Set a character's origin-story slot answer (#2478). */
+    /**
+     * @description Set a character's origin-story slot answer (#2478, #3617).
+     *
+     *     A costed pick-list choice is set at character creation only; a non-staff
+     *     caller sending ``choice_id`` here is refused. A text-only write on a slot
+     *     that already carries a choice keeps that choice (write-ins never clear it).
+     */
     post: operations['character_sheets_set_origin_slot_create'];
     delete?: never;
     options?: never;
@@ -4125,6 +4245,31 @@ export interface paths {
      *     ``character_sheet`` filter simply returns nothing (no existence leak).
      */
     get: operations['clues_held_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clues/search/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM-only clue search for the stake reward picker (#3566).
+     *
+     *     Only clues whose target kind ``AUTOMATIC`` resolution can actually deliver on its
+     *     own (``RESOLVABLE_CLUE_TARGET_KINDS``) are searchable: an ITEM-target clue is a
+     *     bare pointer, not a coherent reward payload. Rows are further filtered through
+     *     ``clue_target_kind_allowed`` so a GM never sees a clue whose target they aren't
+     *     permitted to author (SECRET targets stay staff-only).
+     */
+    get: operations['clues_search_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -7341,10 +7486,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Episode model.
-     *     Manages story episodes with narrative connection tracking.
-     */
+    /** @description Preload one routing report per episode on the page (#3563). */
     get: operations['episodes_list'];
     put?: never;
     /**
@@ -7426,14 +7568,14 @@ export interface paths {
     /**
      * @description POST /api/episodes/{id}/resolve/ — resolve the current progress for an episode.
      *
-     *     Lead GM or staff posts {progress_id?, chosen_transition?, gm_notes?} to
-     *     advance the story's progress record past the current episode. Returns 201 on success.
+     *     Lead GM or staff posts {progress_id?, gm_notes?} to advance the story's
+     *     progress record past the current episode. Returns 201 on success.
+     *     Routing is automatic (#3565): the transition fires by authored order.
      *
-     *     Note: NoEligibleTransitionError and AmbiguousTransitionError can fire from
-     *     resolve_episode() for cases the serializer cannot pre-validate without
-     *     duplicating get_eligible_transitions() logic. These are caught here and
-     *     surfaced as 400 responses. They are genuine runtime errors, not
-     *     user-input-validation errors.
+     *     Note: NoEligibleTransitionError can fire from resolve_episode() for cases
+     *     the serializer cannot pre-validate without duplicating
+     *     get_eligible_transitions() logic. It is caught here and surfaced as a 400
+     *     response. This is a genuine runtime error, not a user-input-validation error.
      */
     post: operations['episodes_resolve_create'];
     delete?: never;
@@ -8706,6 +8848,27 @@ export interface paths {
      *     ``demand_ransom_project`` service backs the telnet ``demandransom`` command.
      */
     post: operations['gm_demand_ransom_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/discovery/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/gm/discovery/?q=&risk=: the catalog browse the web GM panel
+     *     and the beat form use (#3564). Same search as telnet ``setsituation find``;
+     *     kinds above the caller's tier never appear. Read-only, never writes a pool.
+     */
+    get: operations['gm_discovery_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -11906,6 +12069,14 @@ export interface paths {
      *     resolve_cast_action_template enforces the same split at submit/finalize
      *     time. The technique builder's category-agnostic picker keeps the flat
      *     union by passing no param.
+     *
+     *     **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+     *     every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+     *     isn't limited to the technique-cast catalog. ``retrieve`` is always
+     *     unfiltered (any pool, not just a catalog member) and returns
+     *     ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+     *     inheritance + own entries minus exclusions) the beat form's pool picker
+     *     needs to preview a pool before selecting it.
      */
     get: operations['magic_consequence_pool_catalog_list'];
     put?: never;
@@ -11934,6 +12105,14 @@ export interface paths {
      *     resolve_cast_action_template enforces the same split at submit/finalize
      *     time. The technique builder's category-agnostic picker keeps the flat
      *     union by passing no param.
+     *
+     *     **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+     *     every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+     *     isn't limited to the technique-cast catalog. ``retrieve`` is always
+     *     unfiltered (any pool, not just a catalog member) and returns
+     *     ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+     *     inheritance + own entries minus exclusions) the beat form's pool picker
+     *     needs to preview a pool before selecting it.
      */
     get: operations['magic_consequence_pool_catalog_retrieve'];
     put?: never;
@@ -14348,11 +14527,12 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Staff-only browse of seeded MissionCategory rows.
+     * @description Browse of seeded MissionCategory rows -- staff or any GM (#3565).
      *
      *     Categories are managed via fixture/admin — no authoring endpoints.
-     *     The Mission Studio uses this to populate the category multi-select
-     *     on the create page and the edit-categories dialog.
+     *     Read-only, so there is nothing here to scope by ownership; a GM authoring
+     *     their own scenario needs the same category list staff use for the
+     *     multi-select on the create page and the edit-categories dialog.
      */
     get: operations['missions_categories_list'];
     put?: never;
@@ -14371,11 +14551,12 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Staff-only browse of seeded MissionCategory rows.
+     * @description Browse of seeded MissionCategory rows -- staff or any GM (#3565).
      *
      *     Categories are managed via fixture/admin — no authoring endpoints.
-     *     The Mission Studio uses this to populate the category multi-select
-     *     on the create page and the edit-categories dialog.
+     *     Read-only, so there is nothing here to scope by ownership; a GM authoring
+     *     their own scenario needs the same category list staff use for the
+     *     multi-select on the create page and the edit-categories dialog.
      */
     get: operations['missions_categories_retrieve'];
     put?: never;
@@ -15032,10 +15213,22 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    /**
+     * @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+     *
+     *     The parent template lives behind an XOR FK (route OR candidate), so
+     *     ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+     *     using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+     */
     get: operations['missions_route_rewards_list'];
     put?: never;
-    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    /**
+     * @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+     *
+     *     The parent template lives behind an XOR FK (route OR candidate), so
+     *     ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+     *     using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+     */
     post: operations['missions_route_rewards_create'];
     delete?: never;
     options?: never;
@@ -15050,16 +15243,40 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    /**
+     * @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+     *
+     *     The parent template lives behind an XOR FK (route OR candidate), so
+     *     ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+     *     using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+     */
     get: operations['missions_route_rewards_retrieve'];
-    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    /**
+     * @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+     *
+     *     The parent template lives behind an XOR FK (route OR candidate), so
+     *     ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+     *     using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+     */
     put: operations['missions_route_rewards_update'];
     post?: never;
-    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    /**
+     * @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+     *
+     *     The parent template lives behind an XOR FK (route OR candidate), so
+     *     ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+     *     using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+     */
     delete: operations['missions_route_rewards_destroy'];
     options?: never;
     head?: never;
-    /** @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent). */
+    /**
+     * @description Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+     *
+     *     The parent template lives behind an XOR FK (route OR candidate), so
+     *     ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+     *     using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
+     */
     patch: operations['missions_route_rewards_partial_update'];
     trace?: never;
   };
@@ -15109,10 +15326,15 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     * @description Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
      *
      *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-     *     by primary key for stable pagination.
+     *     by primary key for stable pagination. Non-staff callers are scoped by
+     *     ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+     *     plus anything OPEN and within their GM-level risk ceiling; template
+     *     CREATE stays staff-only -- a scenario template is only ever minted
+     *     through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+     *     is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
      *
      *     Detail (D1.3, pending): returns the §5 footprint — lifetime
      *     completions + currently-active MissionInstance rows + their current
@@ -15125,10 +15347,15 @@ export interface paths {
     get: operations['missions_templates_list'];
     put?: never;
     /**
-     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     * @description Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
      *
      *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-     *     by primary key for stable pagination.
+     *     by primary key for stable pagination. Non-staff callers are scoped by
+     *     ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+     *     plus anything OPEN and within their GM-level risk ceiling; template
+     *     CREATE stays staff-only -- a scenario template is only ever minted
+     *     through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+     *     is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
      *
      *     Detail (D1.3, pending): returns the §5 footprint — lifetime
      *     completions + currently-active MissionInstance rows + their current
@@ -15153,10 +15380,15 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     * @description Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
      *
      *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-     *     by primary key for stable pagination.
+     *     by primary key for stable pagination. Non-staff callers are scoped by
+     *     ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+     *     plus anything OPEN and within their GM-level risk ceiling; template
+     *     CREATE stays staff-only -- a scenario template is only ever minted
+     *     through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+     *     is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
      *
      *     Detail (D1.3, pending): returns the §5 footprint — lifetime
      *     completions + currently-active MissionInstance rows + their current
@@ -15168,10 +15400,15 @@ export interface paths {
      */
     get: operations['missions_templates_retrieve'];
     /**
-     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     * @description Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
      *
      *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-     *     by primary key for stable pagination.
+     *     by primary key for stable pagination. Non-staff callers are scoped by
+     *     ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+     *     plus anything OPEN and within their GM-level risk ceiling; template
+     *     CREATE stays staff-only -- a scenario template is only ever minted
+     *     through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+     *     is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
      *
      *     Detail (D1.3, pending): returns the §5 footprint — lifetime
      *     completions + currently-active MissionInstance rows + their current
@@ -15184,10 +15421,15 @@ export interface paths {
     put: operations['missions_templates_update'];
     post?: never;
     /**
-     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     * @description Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
      *
      *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-     *     by primary key for stable pagination.
+     *     by primary key for stable pagination. Non-staff callers are scoped by
+     *     ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+     *     plus anything OPEN and within their GM-level risk ceiling; template
+     *     CREATE stays staff-only -- a scenario template is only ever minted
+     *     through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+     *     is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
      *
      *     Detail (D1.3, pending): returns the §5 footprint — lifetime
      *     completions + currently-active MissionInstance rows + their current
@@ -15201,10 +15443,15 @@ export interface paths {
     options?: never;
     head?: never;
     /**
-     * @description Staff-only browse + edit endpoint for MissionTemplate rows.
+     * @description Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
      *
      *     List: paginated, filterable (see MissionTemplateFilterSet), ordered
-     *     by primary key for stable pagination.
+     *     by primary key for stable pagination. Non-staff callers are scoped by
+     *     ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+     *     plus anything OPEN and within their GM-level risk ceiling; template
+     *     CREATE stays staff-only -- a scenario template is only ever minted
+     *     through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+     *     is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
      *
      *     Detail (D1.3, pending): returns the §5 footprint — lifetime
      *     completions + currently-active MissionInstance rows + their current
@@ -19195,14 +19442,19 @@ export interface paths {
      * @description GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
      *     material, protected subjects, and room clue placements, gated per-viewer.
      *
-     *     Composed read only -- no writes, no models, no migration. View-level gate
-     *     (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
-     *     the scene owner and is too broad -- see the #3434 spec's anti-reinvention
-     *     ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
-     *     (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
-     *     ``CharacterVitalsView``, the scene itself is already visible through the
-     *     plain detail endpoint, so this gate is refusing a sub-resource, not hiding
-     *     the scene's existence.
+     *     Composed read only -- no writes, no models, no migration. Scene-level gate
+     *     via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+     *     ``ReadOnlyOrSceneParticipant`` -- a viewer must be able to see the scene at
+     *     all (``Scene.is_viewable_by``) before this action's own body runs; this was
+     *     previously missing (a PRIVATE/EPHEMERAL scene's story rail leaked to any
+     *     authenticated account, #3565 fix round 1 CRITICAL). On top of that,
+     *     view-level gate (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff``
+     *     includes the scene owner and is too broad -- see the #3434 spec's
+     *     anti-reinvention ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+     *     (``viewer_qualifies_for_rail``). Denial there is 403 (not 404) -- unlike
+     *     ``CharacterVitalsView``, a viewer who can see the scene at all (the gate
+     *     above) already knows it exists, so this second gate is refusing a
+     *     sub-resource, not hiding the scene's existence.
      *
      *     Payload sections are gated further, per-viewer, inside
      *     ``build_gm_story_rail_payload``: the beat summary for any qualifying
@@ -19272,6 +19524,39 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/scenes/{id}/scenario/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/scenes/{id}/scenario/ (#3565) - the mission scenario this scene is
+     *     currently running, gated per-viewer.
+     *
+     *     Composed read only -- no writes, no models, no migration. Scene-level gate
+     *     via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+     *     ``ReadOnlyOrSceneParticipant`` -- a viewer must be authenticated AND able to
+     *     see the scene at all (``Scene.is_viewable_by`` -- public, staff, or a scene
+     *     participant) before this action's own body ever runs. Past that gate: any
+     *     such viewer gets 200, ``instance_id`` null when the scene runs no scenario.
+     *     Sub-sections are gated inside ``build_scene_scenario_payload``: ``group_beat``
+     *     (the same shape as ``journal/{id}/group-beat/``) only for a viewer playing a
+     *     participant on the run; ``gm`` (current node, every ballot, the last deed,
+     *     the running beat's outcome) only for staff or viewers with standing on the
+     *     running story (``viewer_has_story_standing`` -- the same #3434 leak
+     *     invariant). A bystander with neither gets both null but still 200.
+     */
+    get: operations['scenes_scenario_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/scenes/{id}/set-round-mode/': {
     parameters: {
       query?: never;
@@ -19290,6 +19575,47 @@ export interface paths {
      *     telnet and web converge on the same ``action.run()`` seam.
      */
     post: operations['scenes_set_round_mode_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/scenes/{id}/stakes-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/scenes/{id}/stakes-summary/ (#3561) - what the scene's running beat
+     *     wagers, for the party's opt-in prompt.
+     *
+     *     Composed read only -- no writes, no models, no migration. Scene-level gate via
+     *     ``get_permissions``: ``IsAuthenticated`` + ``ReadOnlyOrSceneParticipant`` -- the
+     *     same participant/staff floor ``scenario``/``gm-rail`` use (``Scene.is_viewable_by``).
+     *
+     *     Exists because a player never receives the running beat id from any scene
+     *     payload (``SceneListSerializer``/``SceneDetailSerializer`` deliberately omit
+     *     ``running_beat`` -- see the #3562 leak rule this preserves): the beat-scoped
+     *     ``GET /api/beats/{id}/stakes-summary/`` (``BeatViewSet.stakes_summary``) is
+     *     unreachable to a player who was never handed a beat id, so this resolves
+     *     ``scene.running_beat`` server-side and delegates to the identical
+     *     ``stakes_summary_for_beat`` builder -- one payload shape, two entry points.
+     *     Leaks only ``player_summary``/``severity`` per stake, plus declared/effective
+     *     risk and readiness (#1770 pillar 9); branch contents (``StakeResolution`` rows)
+     *     are never included.
+     *
+     *     When the scene runs no beat, returns the same shape with ``declared_risk``/
+     *     ``effective_risk`` null and an empty ``stakes`` list, built by hand rather than
+     *     through ``StakesSummarySerializer`` (whose ``declared_risk``/``effective_risk``
+     *     ``CharField``s forbid null) -- there is no beat to build a
+     *     ``StakesSummarySerializer``-shaped instance from.
+     */
+    get: operations['scenes_stakes_summary_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -21260,38 +21586,6 @@ export interface paths {
     patch: operations['stakes_partial_update'];
     trace?: never;
   };
-  '/api/stakes/{id}/resolve/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
-     *
-     *     Lead GM, staff, or an AGM with an approved claim on the stake's beat
-     *     picks one of the stake's AUTHORED resolution columns; the branch fires
-     *     exactly like the machine path (pool + writers) and the StakeOutcome
-     *     audit row records method=GM_PICK with the GM and notes. Optional
-     *     ``participants`` / ``extra_participants`` carry the personas the
-     *     branch's pool and affection writer credit (MarkBeat semantics).
-     *     Returns 201 with the StakeOutcome.
-     *
-     *     The LEGEND_AWARD participant guards fire inside the service's pool
-     *     walk — pre-validating them in the serializer would duplicate
-     *     resolve_pool_consequences; they are surfaced as 400 here (same
-     *     exception-block carve-out as EpisodeViewSet.resolve).
-     */
-    post: operations['stakes_resolve_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/stories/': {
     parameters: {
       query?: never;
@@ -22980,11 +23274,11 @@ export interface paths {
      *         {
      *             "source_episode": <int>,
      *             "target_episode": <int | null>,
-     *             "mode": "auto" | "gm_choice",
      *             "connection_type": "" | "therefore" | "but",
      *             "connection_summary": "<str>",
      *             "order": <int>,
-     *             "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+     *             "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired",
+     *                           "required_outcome_key": "<str>"},
      *                          {"beat": <int>, "stake": <int>,
      *                           "required_stake_column": "win" | "loss" | "withdrawal"},
      *                          ...],
@@ -23572,6 +23866,10 @@ export interface components {
        */
       expires_at: string;
     };
+    /** @description The account's own security switches (#3591). One field for now. */
+    AccountSecuritySettings: {
+      block_telnet_login_with_2fa: boolean;
+    };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
       readonly id: number;
@@ -23791,6 +24089,7 @@ export interface components {
       readonly has_combat_profile: boolean;
       readonly has_techniques: boolean;
       readonly resonance_name: string | null;
+      /** @description Whether this is the alternate self the character is currently wearing. */
       readonly is_active: boolean;
     };
     /**
@@ -23822,6 +24121,14 @@ export interface components {
       target_persona_id?: number | null;
       scene_id?: number | null;
     };
+    /**
+     * @description * `any` - Any path
+     *     * `claimed` - Claim a staff-authored family
+     *     * `named` - Name your own family
+     *     * `none` - No family
+     * @enum {string}
+     */
+    AppliesToEnum: 'any' | 'claimed' | 'named' | 'none';
     /**
      * @description * `global` - Global
      *     * `org` - Organization
@@ -24132,14 +24439,7 @@ export interface components {
        *     — dispatch remains gated by the unchanged service-layer check.
        */
       readonly is_champion: boolean;
-      /**
-       * @description Whether this participant already has a declaration in the CURRENT round (#3389).
-       *
-       *     Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
-       *     against ``current_round_id`` stashed once by
-       *     ``BattleDetailSerializer.to_representation`` — never a per-participant
-       *     query, so this stays flat regardless of roster size.
-       */
+      /** @description Whether this participant already has a declaration in the CURRENT round (#3389). */
       readonly declared_this_round: boolean;
     };
     /**
@@ -24250,7 +24550,7 @@ export interface components {
       readonly chapter_title: string;
       readonly story_id: number;
       readonly story_title: string;
-      /** @default gm_marked */
+      /** @default outcome_tier */
       predicate_type: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
@@ -24259,9 +24559,8 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeD50Enum'];
+      outcome?: components['schemas']['Outcome425Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -24315,15 +24614,19 @@ export interface components {
       required_society?: number | null;
       /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
       required_organization?: number | null;
-      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      /** @description For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the minimum raw value (-1000..1000). */
       required_standing?: number | null;
+      /** @description For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character is read (NpcRegard from the NPC's primary persona toward the character's primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD pool effect write). Not the functionary standing (NPCStanding.affection) and not the relationships affection track. */
+      required_npc_sheet?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
        * Format: date-time
-       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
+      /** @description Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens a SceneClock of this size; combat rounds and the GM's advance gesture fill it, and a full clock resolves the beat EXPIRED. */
+      clock_size?: number;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
       success_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves FAILURE. */
@@ -24347,8 +24650,21 @@ export interface components {
        *     BeatViewSet.queryset already includes this chain.
        */
       readonly can_mark: boolean;
+      /**
+       * @description Read-only GM view of this beat's scenario graph (#3565).
+       *
+       *     None when the beat has no ``required_mission``, when that template
+       *     isn't a story-owned scenario (a catalog mission the GM merely
+       *     assigned), or when the viewer lacks ``can_view_story_gm_text`` (same
+       *     gate as ``internal_description`` above) -- node/option keys are GM
+       *     planning detail, not player-visible.
+       */
+      readonly scenario: {
+        [key: string]: unknown;
+      } | null;
       opponent_lines?: components['schemas']['BeatOpponentLine'][];
       staged_templates?: components['schemas']['BeatStagedTemplate'][];
+      staged_battle?: components['schemas']['BeatStagedBattle'] | null;
     };
     /**
      * @description * `situation` - Situation
@@ -24405,10 +24721,37 @@ export interface components {
       check_type_name: string | null;
       base_risk: number;
     };
+    /**
+     * @description * `success` - Success
+     *     * `failure` - Failure
+     * @enum {string}
+     */
+    BeatOutcomeEnum: 'success' | 'failure';
+    /**
+     * @description GM readiness dashboard payload for a beat (#3562).
+     *
+     *     Read-only wire shape; build the payload via
+     *     ``world.stories.services.stakes.beat_readiness_payload``. Unlike
+     *     ``StakesSummarySerializer`` below, ``problems`` is GM planning detail
+     *     (readiness reasons) rather than a player-safe summary, so the readiness
+     *     endpoint gates on ``CanAssignMissionToBeat`` (Lead GM or staff), not the
+     *     broader stakes-summary audience.
+     */
+    BeatReadiness: {
+      readonly is_staked: boolean;
+      readonly is_ready: boolean;
+      readonly problems: string[];
+      readonly advisories: string[];
+      readonly declared_risk: string;
+      readonly effective_risk: string;
+      readonly locked: boolean;
+      /** Format: date-time */
+      readonly locked_at: string | null;
+    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     BeatRequest: {
       episode: number;
-      /** @default gm_marked */
+      /** @default outcome_tier */
       predicate_type: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
@@ -24417,9 +24760,8 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeD50Enum'];
+      outcome?: components['schemas']['Outcome425Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description: string;
@@ -24473,15 +24815,19 @@ export interface components {
       required_society?: number | null;
       /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
       required_organization?: number | null;
-      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      /** @description For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the minimum raw value (-1000..1000). */
       required_standing?: number | null;
+      /** @description For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character is read (NpcRegard from the NPC's primary persona toward the character's primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD pool effect write). Not the functionary standing (NPCStanding.affection) and not the relationships affection track. */
+      required_npc_sheet?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
        * Format: date-time
-       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
+      /** @description Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens a SceneClock of this size; combat rounds and the GM's advance gesture fill it, and a full clock resolves the beat EXPIRED. */
+      clock_size?: number;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
       success_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves FAILURE. */
@@ -24492,11 +24838,90 @@ export interface components {
       required_mission?: number | null;
       opponent_lines?: components['schemas']['BeatOpponentLineRequest'][];
       staged_templates?: components['schemas']['BeatStagedTemplateRequest'][];
+      staged_battle?: components['schemas']['BeatStagedBattleRequest'] | null;
     };
     /** @description POST body for the #885 resolve endpoint. */
     BeatResolveRequestRequest: {
       option_id: number;
       approach_id?: number | null;
+    };
+    /**
+     * @description Nested battle prep on a beat (#3569); written through BeatSerializer only.
+     *
+     *     Not registered as a standalone router endpoint -- a staged battle only
+     *     exists attached to its beat, so it is read/written exclusively via
+     *     ``BeatSerializer.staged_battle``.
+     */
+    BeatStagedBattle: {
+      readonly id: number;
+      /** @description The map this beat's battle is cloned from at run time. */
+      blueprint: number;
+      readonly blueprint_name: string;
+      /** @description Battle name; blank uses the first line of the beat's internal description. */
+      name?: string;
+      /** @description Optional region the battle is set in (Battle.region). */
+      region?: number | null;
+      /**
+       * @description Which side the running scene's party is enlisted on.
+       *
+       *     * `attacker` - Attacker
+       *     * `defender` - Defender
+       */
+      party_side_role?: components['schemas']['PartySideRoleEnum'];
+      unit_lines?: components['schemas']['BeatStagedBattleUnit'][];
+    };
+    /**
+     * @description Nested battle prep on a beat (#3569); written through BeatSerializer only.
+     *
+     *     Not registered as a standalone router endpoint -- a staged battle only
+     *     exists attached to its beat, so it is read/written exclusively via
+     *     ``BeatSerializer.staged_battle``.
+     */
+    BeatStagedBattleRequest: {
+      /** @description The map this beat's battle is cloned from at run time. */
+      blueprint: number;
+      /** @description Battle name; blank uses the first line of the beat's internal description. */
+      name?: string;
+      /** @description Optional region the battle is set in (Battle.region). */
+      region?: number | null;
+      /**
+       * @description Which side the running scene's party is enlisted on.
+       *
+       *     * `attacker` - Attacker
+       *     * `defender` - Defender
+       */
+      party_side_role?: components['schemas']['PartySideRoleEnum'];
+      unit_lines?: components['schemas']['BeatStagedBattleUnitRequest'][];
+    };
+    /**
+     * @description One unit line of a staged battle (#3569).
+     *
+     *     ``id`` is writable-but-optional, the same diff-by-id convention as
+     *     ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+     */
+    BeatStagedBattleUnit: {
+      id?: number;
+      template: number;
+      side_role?: components['schemas']['SideRoleEnum'];
+      /** @description Blueprint place name to spawn at; blank spawns unplaced. */
+      place_name?: string;
+      count?: number;
+      order?: number;
+    };
+    /**
+     * @description One unit line of a staged battle (#3569).
+     *
+     *     ``id`` is writable-but-optional, the same diff-by-id convention as
+     *     ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+     */
+    BeatStagedBattleUnitRequest: {
+      id?: number;
+      template: number;
+      side_role?: components['schemas']['SideRoleEnum'];
+      /** @description Blueprint place name to spawn at; blank spawns unplaced. */
+      place_name?: string;
+      count?: number;
+      order?: number;
     };
     /**
      * @description One authored situation/challenge template on a SITUATION beat (#3425).
@@ -24533,6 +24958,8 @@ export interface components {
       node_key: string;
       flavor_text: string;
       options: components['schemas']['BeatOption'][];
+      is_paused: boolean;
+      track: components['schemas']['TrackView'] | null;
     };
     /**
      * @description * `hinted` - Hinted
@@ -24550,8 +24977,6 @@ export interface components {
       description: string;
       /** @description Cloudinary URL sourced from art (#2408); key name kept for frontend compat. */
       readonly art_image: string | null;
-      /** @description Whether family is selectable in Lineage stage (False = 'Unknown') */
-      family_known?: boolean;
       /**
        * @description Get IDs of species available for this Beginnings, expanding parents to children.
        *
@@ -24575,8 +25000,6 @@ export interface components {
       name: string;
       /** @description Worldbuilding text shown to players */
       description: string;
-      /** @description Whether family is selectable in Lineage stage (False = 'Unknown') */
-      family_known?: boolean;
       /** @description If False, characters don't get species' racial language (Misbegotten) */
       grants_species_languages?: boolean;
       /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */
@@ -25033,7 +25456,7 @@ export interface components {
       readonly name: string;
     };
     /**
-     * @description Origin template for the CG guided flow (#2478).
+     * @description Origin template for the CG guided flow (#2478, #3617).
      *
      *     Backs ``GET /api/character-creation/origin-templates/``.
      */
@@ -25047,6 +25470,19 @@ export interface components {
       readonly is_active: boolean;
       /** @description Display order when multiple templates exist. */
       readonly sort_order: number;
+      /** @description Flat CG cost of this Upbringing (#3617). Negative refunds, like a drawback. */
+      readonly cg_point_cost: number;
+      /** @description Minimum trust to see/select this Upbringing (#3617). */
+      readonly trust_required: number;
+      /** @description Player may claim a staff-authored family (#3617). */
+      readonly allows_claim_family: boolean;
+      /** @description Player may name a new family with no authority (#3617). */
+      readonly allows_name_family: boolean;
+      /** @description Player has no family; the tarot surname ritual applies (#3617). */
+      readonly allows_no_family: boolean;
+      readonly claimable_kind_ids: number[];
+      /** @description Kind a player-named family gets; required when naming is allowed (#3617). */
+      readonly named_family_kind: number | null;
       readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
     /** @description Serializer for CG point budget configuration. */
@@ -25199,6 +25635,14 @@ export interface components {
       } | null;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
       readonly forms: components['schemas']['TechniqueForm'][];
+      /**
+       * @description Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
+       *
+       *     One protective_condition_and_flavor call per row - same traversal
+       *     actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
+       *     authored field.
+       */
+      readonly reactive_anima_cost: number | null;
     };
     /**
      * @description For staff triaging GM scenario-catalog suggestions (#2127).
@@ -25677,6 +26121,16 @@ export interface components {
       /** @description Day of month of the celebrated birthday / waking day. */
       birthday_day?: number | null;
       readonly family: components['schemas']['Family'];
+      readonly selected_origin_template: components['schemas']['CGOriginTemplate'];
+      /**
+       * @description Chosen family path when the Upbringing allows more than one.
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       readonly claimed_kin_slot: number;
       readonly claimed_kin_pool: number;
       defer_parents?: boolean;
@@ -25757,6 +26211,16 @@ export interface components {
       /** @description Day of month of the celebrated birthday / waking day. */
       birthday_day?: number | null;
       family_id?: number | null;
+      selected_origin_template_id?: number | null;
+      /**
+       * @description Chosen family path when the Upbringing allows more than one.
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
       defer_parents?: boolean;
@@ -26199,6 +26663,17 @@ export interface components {
       /** @description Stable content-pipeline identifier (#2451). NULL for ad hoc/test clues. */
       clue: string | null;
     };
+    /**
+     * @description One row of the GM clue search picker (#3566): id, name, and target_kind only.
+     *
+     *     No description or target FK: the picker is for choosing which clue a stake reward
+     *     line grants, not for browsing clue content.
+     */
+    ClueSearchResult: {
+      readonly id: number;
+      readonly name: string;
+      readonly target_kind: string;
+    };
     CodexCategory: {
       readonly id: number;
       /** @description Name of this category. */
@@ -26564,7 +27039,7 @@ export interface components {
     ConsentResponseRequest: {
       decision: components['schemas']['DecisionEnum'];
       target_persona_id?: number;
-      difficulty?: components['schemas']['DifficultyEnum'];
+      difficulty?: components['schemas']['DifficultyChoiceEnum'];
       /** @default  */
       resist_effort: components['schemas']['ResistEffortEnum'] | components['schemas']['BlankEnum'];
       /** @default false */
@@ -26647,6 +27122,42 @@ export interface components {
       name: string;
       /** @description GM authoring context for this pool. */
       description?: string;
+    };
+    /**
+     * @description Detail view of any ``ConsequencePool``'s resolved consequences (#3562), the
+     *     beat-authoring picker's pool preview. ``entries`` is built from
+     *     ``resolve_pool_consequences`` (parent inheritance plus the pool's own entries,
+     *     minus anything excluded), not straight from ``ConsequencePoolEntry`` rows, so
+     *     it matches what actually fires when the pool is applied.
+     */
+    ConsequencePoolDetail: {
+      readonly id: number;
+      /** @description Human-readable pool name (e.g., 'Wild Magic Surge'). */
+      name: string;
+      /** @description GM authoring context for this pool. */
+      description?: string;
+      readonly entries: components['schemas']['ConsequencePoolEntry'][];
+    };
+    /**
+     * @description One resolved Consequence row in a ConsequencePoolDetailSerializer's ``entries``
+     *     list (#3562); schema typing only. See ``get_entries`` below for the builder.
+     */
+    ConsequencePoolEntry: {
+      consequence_id: number;
+      name: string;
+      outcome_tier: components['schemas']['ConsequencePoolEntryOutcomeTier'] | null;
+      effect_types: string[];
+      character_loss: boolean;
+    };
+    /**
+     * @description The outcome-tier triple embedded in a ConsequencePoolDetailSerializer entry
+     *     (#3562); schema typing only. ConsequencePoolDetailSerializer builds the dict
+     *     directly rather than instantiating this serializer.
+     */
+    ConsequencePoolEntryOutcomeTier: {
+      id: number;
+      name: string;
+      success_level: number;
     };
     /** @description Read-only serializer for the staff-authored content theme catalog. */
     ContentTheme: {
@@ -27338,16 +27849,6 @@ export interface components {
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
     /**
-     * @description * `trivial` - Trivial
-     *     * `easy` - Easy
-     *     * `normal` - Normal
-     *     * `hard` - Hard
-     *     * `daunting` - Daunting
-     *     * `harrowing` - Harrowing
-     * @enum {string}
-     */
-    DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
-    /**
      * @description * `favor` - Favor
      *     * `disfavor` - Disfavor
      * @enum {string}
@@ -27379,6 +27880,67 @@ export interface components {
        *     ``discovered_by_tenure`` here.
        */
       readonly shared: boolean;
+    };
+    /** @description Lightweight serializer for challenge template list views. */
+    DiscoveryChallenge: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
+      severity?: number;
+      challenge_type?: components['schemas']['ChallengeTypeEnum'];
+      discovery_type?: components['schemas']['DiscoveryTypeEnum'];
+      /** @description Template string with {variables} for instance-specific text. */
+      description_template?: string;
+      goal?: string;
+    };
+    DiscoveryCheckFit: {
+      check_type: components['schemas']['DiscoveryCheckType'];
+      fit_notes: string;
+    };
+    DiscoveryCheckType: {
+      id: number;
+      name: string;
+    };
+    DiscoveryDifficultyGuide: {
+      risk: components['schemas']['RiskEnum'];
+      recommended_difficulty: components['schemas']['DifficultyChoiceEnum'];
+      guidance_text: string;
+    };
+    /** @description One KindResult on the wire (#3564). */
+    DiscoveryKind: {
+      id: number;
+      name: string;
+      description: string;
+      minimum_gm_level: components['schemas']['MinimumGmLevelEnum'];
+      check_fits: components['schemas']['DiscoveryCheckFit'][];
+      difficulty_guide: components['schemas']['DiscoveryDifficultyGuide'] | null;
+      all_guides: components['schemas']['DiscoveryDifficultyGuide'][];
+      pool_guides: components['schemas']['DiscoveryPoolGuide'][];
+    };
+    DiscoveryPool: {
+      id: number;
+      name: string;
+    };
+    DiscoveryPoolGuide: {
+      pool: components['schemas']['DiscoveryPool'];
+      selection_criteria: string;
+      is_default: boolean;
+    };
+    /** @description DiscoveryResult on the wire (#3564); the GMEvidenceSummary pattern. */
+    DiscoveryResult: {
+      templates: components['schemas']['DiscoveryTemplate'][];
+      challenges: components['schemas']['DiscoveryChallenge'][];
+      kinds: components['schemas']['DiscoveryKind'][];
+    };
+    /** @description Lightweight serializer for situation template list views. */
+    DiscoveryTemplate: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      description_template?: string;
     };
     /**
      * @description * `obvious` - Obvious (visible if capability met)
@@ -28006,6 +28568,7 @@ export interface components {
       readonly is_gm: boolean;
       readonly clashes: components['schemas']['ClashState'][];
       readonly engagement_locks: components['schemas']['EngagementLock'][];
+      readonly pending_attacks: components['schemas']['PendingAttack'][];
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
@@ -28075,6 +28638,15 @@ export interface components {
       /** @description Return opponent count, preferring cached list. */
       readonly opponent_count: number;
     };
+    /**
+     * @description * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     *     * `lethal` - Lethal
+     * @enum {string}
+     */
+    EncounterRiskLevelEnum: 'low' | 'moderate' | 'high' | 'extreme' | 'lethal';
     /**
      * @description * `party_combat` - Party Combat
      *     * `open_encounter` - Open Encounter
@@ -28164,6 +28736,9 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
+      /** @description Whether any pair of this episode's outbound transitions is ambiguous (#3565). */
+      readonly routing_ambiguous: boolean;
+      readonly routing_problems: string[];
     };
     /** @description Full serializer for episode details */
     EpisodeDetailRequest: {
@@ -28193,6 +28768,7 @@ export interface components {
       readonly scenes_count: number;
       /** Format: date-time */
       completed_at?: string | null;
+      readonly routing_problems: string[];
     };
     /**
      * @description Full serializer for EpisodeProgressionRequirement.
@@ -28759,14 +29335,9 @@ export interface components {
       readonly id: number;
       /** @description Family/house name */
       name: string;
-      /**
-       * @description Whether this is a noble house, commoner family, or crime family
-       *
-       *     * `commoner` - Commoner
-       *     * `noble` - Noble
-       *     * `crime` - Crime
-       */
-      family_type?: components['schemas']['FamilyTypeEnum'];
+      readonly kind: components['schemas']['FamilyKind'];
+      /** @description How much authority this family holds over the world (#3617). 0 = none; player-named families are always 0. The price base for claim-path Upbringing choices (cost_per_influence x influence). */
+      influence?: number;
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
@@ -28778,18 +29349,27 @@ export interface components {
       /** @description Particle a married/adopted/legitimized member wears; '' when none. */
       readonly taken_in_particle: string;
     };
+    /** @description Serializer for a family's authored kind (#3617). */
+    FamilyKind: {
+      readonly id: number;
+      readonly name: string;
+      /** @description Orgs rooted in this kind are styled 'House <name>' and wear particles. */
+      readonly styles_as_house: boolean;
+    };
+    /**
+     * @description * `any` - Any path
+     *     * `claimed` - Claim a staff-authored family
+     *     * `named` - Name your own family
+     *     * `none` - No family
+     * @enum {string}
+     */
+    FamilyPathEnum: 'any' | 'claimed' | 'named' | 'none';
     /** @description Serializer for family selection and display. */
     FamilyRequest: {
       /** @description Family/house name */
       name: string;
-      /**
-       * @description Whether this is a noble house, commoner family, or crime family
-       *
-       *     * `commoner` - Commoner
-       *     * `noble` - Noble
-       *     * `crime` - Crime
-       */
-      family_type?: components['schemas']['FamilyTypeEnum'];
+      /** @description How much authority this family holds over the world (#3617). 0 = none; player-named families are always 0. The price base for claim-path Upbringing choices (cost_per_influence x influence). */
+      influence?: number;
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
@@ -28809,13 +29389,6 @@ export interface components {
       parentage: components['schemas']['ParentageEdge'][];
       unions: components['schemas']['UnionEdge'][];
     };
-    /**
-     * @description * `commoner` - Commoner
-     *     * `noble` - Noble
-     *     * `crime` - Crime
-     * @enum {string}
-     */
-    FamilyTypeEnum: 'commoner' | 'noble' | 'crime';
     /**
      * @description Serializer for judging a fashion presentation (#514).
      *
@@ -29228,7 +29801,7 @@ export interface components {
     /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
     GMEvidenceSummary: {
       profile_id: number;
-      level: components['schemas']['NewLevelEnum'];
+      level: components['schemas']['LevelE58Enum'];
       /** Format: date-time */
       approved_at: string;
       /** Format: date-time */
@@ -29244,7 +29817,7 @@ export interface components {
     GMLevelChange: {
       readonly id: number;
       readonly profile: number;
-      readonly old_level: components['schemas']['NewLevelEnum'];
+      readonly old_level: components['schemas']['OldLevelEnum'];
       readonly old_level_display: string;
       readonly new_level: components['schemas']['NewLevelEnum'];
       readonly new_level_display: string;
@@ -29261,7 +29834,7 @@ export interface components {
       readonly id: number;
       readonly account: number;
       readonly account_username: string;
-      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level: components['schemas']['LevelE58Enum'];
       readonly level_display: string;
       /**
        * Format: date-time
@@ -29269,15 +29842,26 @@ export interface components {
        */
       readonly approved_at: string;
     };
-    /** @description The requesting GM's own profile: operational fields are writable (#3478). */
+    /**
+     * @description The requesting GM's own profile: operational fields are writable (#3478).
+     *
+     *     ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+     *     GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+     *     options from the same ceiling the API enforces, instead of a client-side
+     *     guess. Staff get the top of each scale regardless of any cap row.
+     */
     GMProfileMine: {
       readonly id: number;
-      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level: components['schemas']['LevelE58Enum'];
       readonly level_display: string;
       /** @description When players can reach this GM (freeform, shown on their GM card). */
       contact_times?: string;
       /** @description OOC information for players: style, expectations, boundaries. */
       ooc_info?: string;
+      /** @description RenownRisk ceiling: "extreme" for staff, else the caller's GMLevelCap. */
+      readonly max_beat_risk: string;
+      /** @description Whether this GM may author custom (template=null) stakes: True for staff. */
+      readonly allow_custom_stakes: boolean;
     };
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
@@ -29314,6 +29898,18 @@ export interface components {
       protected_subjects: components['schemas']['StoryProtectedSubject'][];
       clue_placements: components['schemas']['GMStoryRailClue'][];
       participants: components['schemas']['GMStoryRailParticipant'][];
+      stakes: components['schemas']['GMStoryRailStake'][];
+      activation: components['schemas']['GMStoryRailActivation'] | null;
+    };
+    /**
+     * @description The running beat's lock state: the open activation, or the most recent
+     *     resolved one when none is open.
+     */
+    GMStoryRailActivation: {
+      /** Format: date-time */
+      locked_at: string;
+      effective_risk: string;
+      is_ready: boolean;
     };
     /** @description The running beat's authored state, gated per-field by story standing. */
     GMStoryRailBeat: {
@@ -29322,12 +29918,14 @@ export interface components {
       risk: string;
       outcome: string;
       predicate_type: string;
+      clock_size: number;
       success_consequences_authored: boolean;
       failure_consequences_authored: boolean;
       expired_consequences_authored: boolean;
       internal_description: string | null;
       opponent_lines: components['schemas']['BeatOpponentLine'][] | null;
       staged_templates: components['schemas']['BeatStagedTemplate'][] | null;
+      staged_battle: components['schemas']['GMStoryRailStagedBattle'] | null;
     };
     /** @description One room clue placement - staff viewers only. */
     GMStoryRailClue: {
@@ -29340,6 +29938,27 @@ export interface components {
     GMStoryRailParticipant: {
       character_sheet_id: number;
       name: string;
+    };
+    /** @description The running beat's staged battle, story-standing viewers only (#3569). */
+    GMStoryRailStagedBattle: {
+      blueprint_name: string;
+      name: string;
+      party_side_role: components['schemas']['PartySideRoleEnum'];
+      unit_line_count: number;
+    };
+    /** @description One stake on the running beat's contract, story-standing viewers only. */
+    GMStoryRailStake: {
+      id: number;
+      player_summary: string;
+      severity: number;
+      subject_kind: string;
+      outcome: components['schemas']['GMStoryRailStakeOutcome'] | null;
+    };
+    /** @description The fired branch for one stake, if the contract has resolved it. */
+    GMStoryRailStakeOutcome: {
+      column: string;
+      outcome_key: string;
+      resolution_summary: string;
     };
     /**
      * @description Read-only payload for a pending GM summon offer (#3071).
@@ -29846,6 +30465,8 @@ export interface components {
       options: components['schemas']['BeatOption'][];
       ballots: components['schemas']['GroupBallotState'][];
       expires_at: string | null;
+      is_paused: boolean;
+      track: components['schemas']['TrackView'] | null;
     };
     /** @description POST body for the #1036 group-pick endpoint. */
     GroupPickRequestRequest: {
@@ -30139,8 +30760,8 @@ export interface components {
       readonly id: number;
       name: string;
       description?: string;
-      /** @description roster.Family.FamilyType the defined family gets. */
-      family_type: string;
+      /** @description The kind the defined family gets (#3617). */
+      kind: number;
       /** @description Full-match regex the proposed house name must satisfy — the realm's naming conventions as an automated gate. PLACEHOLDER. */
       name_pattern?: string;
       mercy_min?: number;
@@ -31128,6 +31749,15 @@ export interface components {
      * @enum {integer}
      */
     LevelC97Enum: 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90;
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    LevelE58Enum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description Read-only serializer for library browse cards. */
     LibraryEntry: {
       readonly id: number;
@@ -31370,10 +32000,9 @@ export interface components {
     };
     /**
      * @description * `machine` - Machine
-     *     * `gm_pick` - GM pick
      * @enum {string}
      */
-    MethodEnum: 'machine' | 'gm_pick';
+    MethodEnum: 'machine';
     /**
      * @description * `allure` - Allure
      *     * `menace` - Menace
@@ -31389,6 +32018,15 @@ export interface components {
      * @enum {string}
      */
     MinRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    MinimumGmLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description POST body for the #3478 GM-character mint (moved from world-builder, #3283). */
     MintGMCharacterRequestRequest: {
       name: string;
@@ -31565,7 +32203,10 @@ export interface components {
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
      *     sibling are both editable. ``location_mode``/``locations``/``target_area``
-     *     round-trip the node's location gate (#885, #888).
+     *     round-trip the node's location gate (#885, #888). ``track_successes``/
+     *     ``track_failures``/``track_success_target``/``track_failure_target``/
+     *     ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+     *     progress track (#3568): 0/0 = not a track.
      */
     MissionNode: {
       readonly id: number;
@@ -31622,6 +32263,16 @@ export interface components {
       locations?: number[];
       /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
       target_area?: number | null;
+      track_successes?: number;
+      track_failures?: number;
+      track_success_target?: number | null;
+      track_failure_target?: number | null;
+      track_success_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      track_failure_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for MissionNode rows.
@@ -31630,7 +32281,10 @@ export interface components {
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
      *     sibling are both editable. ``location_mode``/``locations``/``target_area``
-     *     round-trip the node's location gate (#885, #888).
+     *     round-trip the node's location gate (#885, #888). ``track_successes``/
+     *     ``track_failures``/``track_success_target``/``track_failure_target``/
+     *     ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+     *     progress track (#3568): 0/0 = not a track.
      */
     MissionNodeRequest: {
       template: number;
@@ -31686,6 +32340,16 @@ export interface components {
       locations?: number[];
       /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
       target_area?: number | null;
+      track_successes?: number;
+      track_failures?: number;
+      track_success_target?: number | null;
+      track_failure_target?: number | null;
+      track_success_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      track_failure_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -31744,15 +32408,40 @@ export interface components {
      *     Both source_kind values are editable; consumer code distinguishes via
      *     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
      *     rides through; the predicate-tree builder API (D5) is what authors
-     *     actually use to write it.
+     *     actually use to write it. ``key`` is the stable per-node authoring key
+     *     (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+     *     ``encounter_risk_level`` is required for ENCOUNTER options (model
+     *     ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+     *     child list -- create()/update() diff-sync it against the option's
+     *     existing rows by id (add/edit/delete), same pattern as
+     *     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+     *     ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+     *     the authored opposition whose passive level term adds to the difficulty.
      */
     MissionOption: {
       readonly id: number;
       node: number;
       /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
       order: number;
+      /**
+       * @description Stable per-node authoring key (unique within the node), independent of order — reordering options for display must never change their identity. Required for real authored content; the '' default only exists so this schema migration doesn't need a data backfill.
+       * @default
+       */
+      key: string;
       option_kind: components['schemas']['OptionKindEnum'];
       source_kind: components['schemas']['MissionOptionSourceKindEnum'];
+      /**
+       * @description ENCOUNTER options only: the spawned encounter's risk level (#3565).
+       *
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       *     * `lethal` - Lethal
+       */
+      encounter_risk_level?:
+        | components['schemas']['EncounterRiskLevelEnum']
+        | components['schemas']['BlankEnum'];
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -31766,6 +32455,38 @@ export interface components {
       branch_target?: number | null;
       /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
       challenge?: number | null;
+      opponent_lines?: components['schemas']['MissionOptionOpponentLine'][];
+      /** @description The character this sheet belongs to */
+      opposition_sheet?: number | null;
+      opposition_check_type?: number | null;
+    };
+    /**
+     * @description One authored opponent line on an ENCOUNTER option (#3565).
+     *
+     *     ``id`` is writable-but-optional so ``MissionOptionSerializer.update()``
+     *     can diff incoming rows against the option's existing lines by id --
+     *     mirrors ``BeatOpponentLineSerializer`` (stories/serializers.py).
+     */
+    MissionOptionOpponentLine: {
+      id?: number;
+      creature_template: number;
+      count?: number;
+      position_name?: string;
+      order?: number;
+    };
+    /**
+     * @description One authored opponent line on an ENCOUNTER option (#3565).
+     *
+     *     ``id`` is writable-but-optional so ``MissionOptionSerializer.update()``
+     *     can diff incoming rows against the option's existing lines by id --
+     *     mirrors ``BeatOpponentLineSerializer`` (stories/serializers.py).
+     */
+    MissionOptionOpponentLineRequest: {
+      id?: number;
+      creature_template: number;
+      count?: number;
+      position_name?: string;
+      order?: number;
     };
     /**
      * @description Editor CRUD for MissionOption rows (authored or challenge-sourced).
@@ -31773,14 +32494,39 @@ export interface components {
      *     Both source_kind values are editable; consumer code distinguishes via
      *     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
      *     rides through; the predicate-tree builder API (D5) is what authors
-     *     actually use to write it.
+     *     actually use to write it. ``key`` is the stable per-node authoring key
+     *     (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+     *     ``encounter_risk_level`` is required for ENCOUNTER options (model
+     *     ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+     *     child list -- create()/update() diff-sync it against the option's
+     *     existing rows by id (add/edit/delete), same pattern as
+     *     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+     *     ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+     *     the authored opposition whose passive level term adds to the difficulty.
      */
     MissionOptionRequest: {
       node: number;
       /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
       order: number;
+      /**
+       * @description Stable per-node authoring key (unique within the node), independent of order — reordering options for display must never change their identity. Required for real authored content; the '' default only exists so this schema migration doesn't need a data backfill.
+       * @default
+       */
+      key: string;
       option_kind: components['schemas']['OptionKindEnum'];
       source_kind: components['schemas']['MissionOptionSourceKindEnum'];
+      /**
+       * @description ENCOUNTER options only: the spawned encounter's risk level (#3565).
+       *
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       *     * `lethal` - Lethal
+       */
+      encounter_risk_level?:
+        | components['schemas']['EncounterRiskLevelEnum']
+        | components['schemas']['BlankEnum'];
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -31794,8 +32540,21 @@ export interface components {
       branch_target?: number | null;
       /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
       challenge?: number | null;
+      opponent_lines?: components['schemas']['MissionOptionOpponentLineRequest'][];
+      /** @description The character this sheet belongs to */
+      opposition_sheet?: number | null;
+      opposition_check_type?: number | null;
     };
-    /** @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option). */
+    /**
+     * @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+     *
+     *     ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+     *     story beat records when the run ends here. Without it in this field
+     *     list the Studio API could author a terminal route but never actually set
+     *     the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+     *     an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+     *     silently fall back to the tier-less-terminal default of SUCCESS.
+     */
     MissionOptionRoute: {
       readonly id: number;
       option: number;
@@ -31811,6 +32570,13 @@ export interface components {
       outcome_text?: string;
       /** @description The copy service sets True on cloned text; the editor serializer clears it when the text is rewritten (#941). NOT cleared automatically at the model layer — service/serializer responsibility. */
       outcome_text_needs_rewrite?: boolean;
+      /**
+       * @description Terminal routes only (#3565, closes #3560): what the linked story beat records when the run ends here. Blank = derive from the tier's success_level, or SUCCESS for a tier-less terminal.
+       *
+       *     * `success` - Success
+       *     * `failure` - Failure
+       */
+      beat_outcome?: components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
     };
     /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
     MissionOptionRouteCandidate: {
@@ -31837,7 +32603,16 @@ export interface components {
       /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
       outcome_text_needs_rewrite?: boolean;
     };
-    /** @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option). */
+    /**
+     * @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+     *
+     *     ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+     *     story beat records when the run ends here. Without it in this field
+     *     list the Studio API could author a terminal route but never actually set
+     *     the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+     *     an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+     *     silently fall back to the tier-less-terminal default of SUCCESS.
+     */
     MissionOptionRouteRequest: {
       option: number;
       /** @description Resolved outcome tier; null = the single BRANCH route. */
@@ -31852,6 +32627,13 @@ export interface components {
       outcome_text?: string;
       /** @description The copy service sets True on cloned text; the editor serializer clears it when the text is rewritten (#941). NOT cleared automatically at the model layer — service/serializer responsibility. */
       outcome_text_needs_rewrite?: boolean;
+      /**
+       * @description Terminal routes only (#3565, closes #3560): what the linked story beat records when the run ends here. Blank = derive from the tier's success_level, or SUCCESS for a tier-less terminal.
+       *
+       *     * `success` - Success
+       *     * `failure` - Failure
+       */
+      beat_outcome?: components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for reward lines attached to a route OR a candidate (XOR).
@@ -32006,6 +32788,14 @@ export interface components {
      *     template whose rule admits no PC simply IS staff-only, a valid
      *     emergent state. ``availability_rule`` IS validated (well-formedness;
      *     a malformed tree would crash every later availability check).
+     *
+     *     ``story_id`` (#3565) is read-only: null for a catalog template, the
+     *     owning Story's pk when this template is a GM's StoryScenario. Non-staff
+     *     writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
+     *     author can never author above their GM level's risk ceiling, flip
+     *     ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+     *     weight into the front door (``base_weight``): a scenario is reached only
+     *     through its beat, never the quest board.
      */
     MissionTemplate: {
       readonly id: number;
@@ -32053,6 +32843,7 @@ export interface components {
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
+      readonly story_id: number | null;
     };
     /**
      * @description Detail response: list fields + §5 footprint.
@@ -32112,6 +32903,7 @@ export interface components {
       categories?: number[];
       /** @description Phase 0 predicate tree gating front-door availability for this template. */
       availability_rule?: unknown;
+      readonly story_id: number | null;
       readonly lifetime_completions: number;
       /**
        * @description Flatten ACTIVE runs into the response — one row per instance.
@@ -32137,6 +32929,14 @@ export interface components {
      *     template whose rule admits no PC simply IS staff-only, a valid
      *     emergent state. ``availability_rule`` IS validated (well-formedness;
      *     a malformed tree would crash every later availability check).
+     *
+     *     ``story_id`` (#3565) is read-only: null for a catalog template, the
+     *     owning Story's pk when this template is a GM's StoryScenario. Non-staff
+     *     writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
+     *     author can never author above their GM level's risk ceiling, flip
+     *     ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+     *     weight into the front door (``base_weight``): a scenario is reached only
+     *     through its beat, never the quest board.
      */
     MissionTemplateRequest: {
       name: string;
@@ -32897,6 +33697,15 @@ export interface components {
      */
     OfferSummonsStatusEnum: 'pending' | 'accepted' | 'declined' | 'expired';
     /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    OldLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+    /**
      * @description Read serializer for combat opponents.
      *
      *     Soak value and probing threshold are GM-only — players discover
@@ -33033,9 +33842,11 @@ export interface components {
      * @description * `branch` - Branch
      *     * `check` - Check
      *     * `external_act` - External Act
+     *     * `encounter` - Encounter
+     *     * `contest` - Contest
      * @enum {string}
      */
-    OptionKindEnum: 'branch' | 'check' | 'external_act';
+    OptionKindEnum: 'branch' | 'check' | 'external_act' | 'encounter' | 'contest';
     /**
      * @description Read serializer for an appeal to an organization (#3293).
      *
@@ -33393,7 +34204,7 @@ export interface components {
      * @enum {string}
      */
     OriginEnum: 'authored' | 'story' | 'player';
-    /** @description Slot prompt within an origin template (#2478). */
+    /** @description Slot prompt within an origin template (#2478, #3617). */
     OriginTemplateSlot: {
       readonly id: number;
       /** @description Slot name (part of natural key). */
@@ -33405,7 +34216,40 @@ export interface components {
       readonly sort_order: number;
       /** @description Required slots are marked in the post-CG finish-later editor. */
       readonly is_required: boolean;
+      /**
+       * @description Which family path shows this prompt; 'any' shows it always (#3617).
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      readonly applies_to: components['schemas']['AppliesToEnum'];
+      /** @description Player may write a free-text answer (the 'other' box on a pick-list) (#3617). */
+      readonly allows_text: boolean;
+      readonly choices: components['schemas']['OriginTemplateSlotChoice'][];
     };
+    /** @description One priced answer on a pick-list Upbringing prompt (#3617). */
+    OriginTemplateSlotChoice: {
+      readonly id: number;
+      /** @description Choice label (part of natural key). */
+      readonly name: string;
+      /** @description Player-facing blurb. */
+      readonly description: string;
+      /** @description Flat CG cost of this choice. */
+      readonly cg_point_cost: number;
+      /** @description CG cost per point of the claimed family's influence. */
+      readonly cost_per_influence: number;
+      readonly sort_order: number;
+    };
+    /**
+     * @description * `unsatisfied` - Unsatisfied
+     *     * `success` - Success
+     *     * `failure` - Failure
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    Outcome425Enum: 'unsatisfied' | 'success' | 'failure' | 'expired';
     /**
      * @description * `unresolved` - Unresolved
      *     * `attacker_decisive` - Attacker — decisive
@@ -33428,15 +34272,6 @@ export interface components {
      * @enum {string}
      */
     Outcome88eEnum: 'victory' | 'defeat' | 'fled' | 'abandoned';
-    /**
-     * @description * `unsatisfied` - Unsatisfied
-     *     * `success` - Success
-     *     * `failure` - Failure
-     *     * `expired` - Expired
-     *     * `pending_gm_review` - Pending GM review
-     * @enum {string}
-     */
-    OutcomeD50Enum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
     OutcomeDetail: {
       action_interaction_id: number;
       effects: components['schemas']['EffectRow'][];
@@ -36755,6 +37590,16 @@ export interface components {
      * @enum {string}
      */
     ParticipationRuleEnum: 'SINGLE_ACTOR' | 'FORMATION' | 'INDUCTION' | 'BILATERAL';
+    /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    PartySideRoleEnum: 'attacker' | 'defender';
+    /** @description The account's own security switches (#3591). One field for now. */
+    PatchedAccountSecuritySettingsRequest: {
+      block_telnet_login_with_2fa?: boolean;
+    };
     /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
     PatchedAuthoredSecretRequest: {
       /** @description The character this secret is about — and its sole owner. */
@@ -36780,7 +37625,7 @@ export interface components {
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {
       episode?: number;
-      /** @default gm_marked */
+      /** @default outcome_tier */
       predicate_type: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
@@ -36789,9 +37634,8 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
-      outcome?: components['schemas']['OutcomeD50Enum'];
+      outcome?: components['schemas']['Outcome425Enum'];
       visibility?: components['schemas']['BeatVisibilityEnum'];
       /** @description Author/Lead GM/staff view: real predicate + meaning. */
       internal_description?: string;
@@ -36845,15 +37689,19 @@ export interface components {
       required_society?: number | null;
       /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
       required_organization?: number | null;
-      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      /** @description For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates: the minimum raw value (-1000..1000). */
       required_standing?: number | null;
+      /** @description For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for the character is read (NpcRegard from the NPC's primary persona toward the character's primary persona, the row the stake npc_regard_delta and the SHIFT_NPC_REGARD pool effect write). Not the functionary standing (NPCStanding.affection) and not the relationships affection track. */
+      required_npc_sheet?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
        * Format: date-time
-       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       * @description Optional wall-clock deadline. When it passes, the beat resolves EXPIRED: the expired consequence pool fires and stakes grade LOSS.
        */
       deadline?: string | null;
+      /** @description Scene clock size in ticks (#3567); 0 means no clock. Running the beat opens a SceneClock of this size; combat rounds and the GM's advance gesture fill it, and a full clock resolves the beat EXPIRED. */
+      clock_size?: number;
       /** @description ConsequencePool to fire when this beat resolves SUCCESS. */
       success_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves FAILURE. */
@@ -36864,6 +37712,7 @@ export interface components {
       required_mission?: number | null;
       opponent_lines?: components['schemas']['BeatOpponentLineRequest'][];
       staged_templates?: components['schemas']['BeatStagedTemplateRequest'][];
+      staged_battle?: components['schemas']['BeatStagedBattleRequest'] | null;
     };
     PatchedBequestRequest: {
       will?: number;
@@ -36974,6 +37823,16 @@ export interface components {
       /** @description Day of month of the celebrated birthday / waking day. */
       birthday_day?: number | null;
       family_id?: number | null;
+      selected_origin_template_id?: number | null;
+      /**
+       * @description Chosen family path when the Upbringing allows more than one.
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
       defer_parents?: boolean;
@@ -37171,7 +38030,14 @@ export interface components {
       staff_response?: string;
       status?: components['schemas']['StatusBa9Enum'];
     };
-    /** @description The requesting GM's own profile: operational fields are writable (#3478). */
+    /**
+     * @description The requesting GM's own profile: operational fields are writable (#3478).
+     *
+     *     ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+     *     GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+     *     options from the same ceiling the API enforces, instead of a client-side
+     *     guess. Staff get the top of each scale regardless of any cap row.
+     */
     PatchedGMProfileMineRequest: {
       /** @description When players can reach this GM (freeform, shown on their GM card). */
       contact_times?: string;
@@ -37258,7 +38124,10 @@ export interface components {
      *     authoring UI passes them through unchanged). Editor layout fields
      *     (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
      *     sibling are both editable. ``location_mode``/``locations``/``target_area``
-     *     round-trip the node's location gate (#885, #888).
+     *     round-trip the node's location gate (#885, #888). ``track_successes``/
+     *     ``track_failures``/``track_success_target``/``track_failure_target``/
+     *     ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+     *     progress track (#3568): 0/0 = not a track.
      */
     PatchedMissionNodeRequest: {
       template?: number;
@@ -37314,6 +38183,16 @@ export interface components {
       locations?: number[];
       /** @description Target area for AREA location_mode. A room matches when its RoomProfile.area is this area or any descendant via AreaClosure. */
       target_area?: number | null;
+      track_successes?: number;
+      track_failures?: number;
+      track_success_target?: number | null;
+      track_failure_target?: number | null;
+      track_success_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      track_failure_beat_outcome?:
+        | components['schemas']['BeatOutcomeEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Staff CRUD for mission-kind offer details (#728).
@@ -37345,14 +38224,39 @@ export interface components {
      *     Both source_kind values are editable; consumer code distinguishes via
      *     the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
      *     rides through; the predicate-tree builder API (D5) is what authors
-     *     actually use to write it.
+     *     actually use to write it. ``key`` is the stable per-node authoring key
+     *     (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+     *     ``encounter_risk_level`` is required for ENCOUNTER options (model
+     *     ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+     *     child list -- create()/update() diff-sync it against the option's
+     *     existing rows by id (add/edit/delete), same pattern as
+     *     ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+     *     ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+     *     the authored opposition whose passive level term adds to the difficulty.
      */
     PatchedMissionOptionRequest: {
       node?: number;
       /** @description Display/evaluation order within the node (no Meta.ordering — callers order explicitly). */
       order?: number;
+      /**
+       * @description Stable per-node authoring key (unique within the node), independent of order — reordering options for display must never change their identity. Required for real authored content; the '' default only exists so this schema migration doesn't need a data backfill.
+       * @default
+       */
+      key: string;
       option_kind?: components['schemas']['OptionKindEnum'];
       source_kind?: components['schemas']['MissionOptionSourceKindEnum'];
+      /**
+       * @description ENCOUNTER options only: the spawned encounter's risk level (#3565).
+       *
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       *     * `lethal` - Lethal
+       */
+      encounter_risk_level?:
+        | components['schemas']['EncounterRiskLevelEnum']
+        | components['schemas']['BlankEnum'];
       /** @description Phase 0 predicate tree gating this option's visibility. */
       visibility_rule?: unknown;
       /** @description AUTHORED+CHECK: the check resolved by this option. */
@@ -37366,6 +38270,10 @@ export interface components {
       branch_target?: number | null;
       /** @description CHALLENGE source: the challenge whose approaches fan out into this option's challenge-contributed options at runtime. on_delete=PROTECT — detach all referencing options before deleting the challenge. */
       challenge?: number | null;
+      opponent_lines?: components['schemas']['MissionOptionOpponentLineRequest'][];
+      /** @description The character this sheet belongs to */
+      opposition_sheet?: number | null;
+      opposition_check_type?: number | null;
     };
     /** @description Editor CRUD for MissionOptionRouteCandidate (random-set rolls). */
     PatchedMissionOptionRouteCandidateRequest: {
@@ -37379,7 +38287,16 @@ export interface components {
       /** @description Phase-D copy service sets True; the Phase-D edit service clears it on save. NOT cleared automatically at the model layer — service responsibility. */
       outcome_text_needs_rewrite?: boolean;
     };
-    /** @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option). */
+    /**
+     * @description Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+     *
+     *     ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+     *     story beat records when the run ends here. Without it in this field
+     *     list the Studio API could author a terminal route but never actually set
+     *     the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+     *     an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+     *     silently fall back to the tier-less-terminal default of SUCCESS.
+     */
     PatchedMissionOptionRouteRequest: {
       option?: number;
       /** @description Resolved outcome tier; null = the single BRANCH route. */
@@ -37394,6 +38311,13 @@ export interface components {
       outcome_text?: string;
       /** @description The copy service sets True on cloned text; the editor serializer clears it when the text is rewritten (#941). NOT cleared automatically at the model layer — service/serializer responsibility. */
       outcome_text_needs_rewrite?: boolean;
+      /**
+       * @description Terminal routes only (#3565, closes #3560): what the linked story beat records when the run ends here. Blank = derive from the tier's success_level, or SUCCESS for a tier-less terminal.
+       *
+       *     * `success` - Success
+       *     * `failure` - Failure
+       */
+      beat_outcome?: components['schemas']['BeatOutcomeEnum'] | components['schemas']['BlankEnum'];
     };
     /**
      * @description Editor CRUD for reward lines attached to a route OR a candidate (XOR).
@@ -37454,6 +38378,14 @@ export interface components {
      *     template whose rule admits no PC simply IS staff-only, a valid
      *     emergent state. ``availability_rule`` IS validated (well-formedness;
      *     a malformed tree would crash every later availability check).
+     *
+     *     ``story_id`` (#3565) is read-only: null for a catalog template, the
+     *     owning Story's pk when this template is a GM's StoryScenario. Non-staff
+     *     writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
+     *     author can never author above their GM level's risk ceiling, flip
+     *     ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+     *     weight into the front door (``base_weight``): a scenario is reached only
+     *     through its beat, never the quest board.
      */
     PatchedMissionTemplateRequest: {
       name?: string;
@@ -37856,6 +38788,8 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
+      /** @description For ASSET subjects. Nulls if the asset is deleted. */
+      subject_asset?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
@@ -37900,6 +38834,8 @@ export interface components {
       forfeits_subject_item?: boolean;
       /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
       subject_standing_delta?: number;
+      /** @description Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row. */
+      npc_regard_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -37914,7 +38850,7 @@ export interface components {
         | components['schemas']['SetsSubjectLifecycleEnum']
         | components['schemas']['BlankEnum'];
       /**
-       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
        *
        *     * `ALIVE` - Alive
        *     * `CAPTURED` - Captured
@@ -37926,6 +38862,8 @@ export interface components {
       machine_match_lifecycle_state?:
         | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
+      /** @description On fire, transition the stake's subject_asset to this AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct asset transition (use the consequence_pool for check-gated transitions instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes. */
+      transitions_subject_asset?: string;
     };
     /**
      * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
@@ -37933,8 +38871,14 @@ export interface components {
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
      *     open-activation lock, the completed-beat refusal, the WIN-column-only
-     *     rule, and the sink/resonance shape rule (resonance required iff
-     *     sink=RESONANCE; amount >= 1 rides the model validator).
+     *     rule, and the per-sink FK shape rule generalised over
+     *     ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+     *     every other sink field must stay null, mirroring the model's ``clean()``).
+     *     Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+     *     the template's value (never author-supplied) and is refused for a
+     *     non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+     *     refused for a non-resolvable target kind or a target kind the author's
+     *     clue-authoring policy (``clue_target_kind_allowed``) does not permit.
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
      *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -37942,10 +38886,15 @@ export interface components {
     PatchedStakeRewardLineRequest: {
       resolution?: number;
       sink?: components['schemas']['StakeRewardLineSinkEnum'];
-      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
       amount?: number;
       /** @description Required when sink=RESONANCE; must be null otherwise. */
       resonance?: number | null;
+      /** @description Required when sink=ITEM; must be null otherwise. */
+      item_template?: number | null;
+      /** @description Required when sink=CLUE; must be null otherwise. */
+      clue?: number | null;
+      /** @description Required when sink=CODEX; must be null otherwise. */
+      codex_entry?: number | null;
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -38209,18 +39158,14 @@ export interface components {
      *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
      *     provide context for the Wave 9 author editor without requiring extra lookups;
      *     they are served free via TransitionViewSet.queryset.select_related.
+     *
+     *     ``required_outcomes`` is GM text: stripped for viewers who fail
+     *     ``can_view_story_gm_text`` (#3563).
      */
     PatchedTransitionRequest: {
       source_episode?: number;
       /** @description May be null when next episode is unauthored (frontier pause). */
       target_episode?: number | null;
-      /**
-       * @description AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
-       *
-       *     * `auto` - Auto
-       *     * `gm_choice` - GM Choice
-       */
-      mode?: components['schemas']['TransitionModeEnum'];
       /**
        * @description Narrative flavor: THEREFORE / BUT.
        *
@@ -38254,11 +39199,12 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
       required_outcome?:
         | components['schemas']['RequiredOutcomeEnum']
         | components['schemas']['BlankEnum'];
+      /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
+      required_outcome_key?: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       stake?: number | null;
       /**
@@ -38593,6 +39539,29 @@ export interface components {
      * @enum {string}
      */
     PendingAlterationStatusEnum: 'open' | 'resolved' | 'staff_cleared';
+    /**
+     * @description Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+     *
+     *     Never instantiated for serialization (same idiom as EngagementLockSerializer):
+     *     exists so drf-spectacular emits a concrete component. Threat-entry internals
+     *     (damage, defense check, cooldown) are deliberately absent; the row carries only
+     *     what the telegraph already announced plus the downgrade state.
+     */
+    PendingAttack: {
+      id: number;
+      opponent_id: number;
+      opponent_name: string;
+      target_participant_id: number | null;
+      target_name: string | null;
+      declared_round: number;
+      resolves_round: number;
+      rounds_until_landing: number;
+      downgrades: number;
+      called_out: boolean;
+      /** Format: double */
+      damage_scale: number;
+      cancelled: boolean;
+    };
     /**
      * @description Player-facing view of a pending Audere Majora (Crossing) offer (#543). Read-only.
      *
@@ -38987,6 +39956,7 @@ export interface components {
         | null;
       readonly reach: string | null;
       readonly protective_flavor: string | null;
+      readonly reactive_anima_cost: number | null;
       readonly position_target_shape: string;
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
@@ -39440,6 +40410,7 @@ export interface components {
      *     * `aggregate_threshold` - Aggregate threshold reached
      *     * `outcome_tier` - Outcome tier (machine-graded)
      *     * `faction_standing_at_least` - Faction standing at least
+     *     * `npc_regard_at_least` - NPC regard at least
      * @enum {string}
      */
     PredicateTypeEnum:
@@ -39451,7 +40422,8 @@ export interface components {
       | 'story_at_milestone'
       | 'aggregate_threshold'
       | 'outcome_tier'
-      | 'faction_standing_at_least';
+      | 'faction_standing_at_least'
+      | 'npc_regard_at_least';
     /**
      * @description * `public` - Public
      *     * `private` - Private
@@ -40091,10 +41063,9 @@ export interface components {
      *     * `success` - Success
      *     * `failure` - Failure
      *     * `expired` - Expired
-     *     * `pending_gm_review` - Pending GM review
      * @enum {string}
      */
-    RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired';
     /**
      * @description * `win` - Win
      *     * `loss` - Loss
@@ -40944,6 +41915,11 @@ export interface components {
     SceneActivity: {
       readonly band: string;
     };
+    /** @description The player-visible scene clock (#3567): size and fill, nothing about the beat. */
+    SceneClock: {
+      size: number;
+      filled?: number;
+    };
     /** @description Full scene representation with personas */
     SceneDetail: {
       readonly id: number;
@@ -40990,6 +41966,7 @@ export interface components {
        *     ``RenownRisk.NONE`` renders nothing: undeclared risk is not "safe".
        */
       readonly declared_risk: string | null;
+      readonly clock: components['schemas']['SceneClock'] | null;
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {
@@ -41077,6 +42054,42 @@ export interface components {
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
       readonly is_danger: boolean;
+    };
+    /**
+     * @description Mirror of ``world.scenes.scenario_services.build_scene_scenario_payload`` (#3565).
+     *
+     *     ``group_beat``/``gm`` use ``SerializerMethodField`` because DRF nested
+     *     ``to_representation`` rejects None (see ``GroupBeatResultSerializer``).
+     */
+    SceneScenario: {
+      instance_id: number | null;
+      is_paused: boolean;
+      viewer_is_participant: boolean;
+      readonly group_beat: components['schemas']['GroupBeatResult'] | null;
+      readonly gm: components['schemas']['SceneScenarioGM'] | null;
+    };
+    /**
+     * @description The GM-only scenario view: current node, every ballot, the last deed (#3565).
+     *
+     *     Mirror of ``world.scenes.scenario_services._gm_payload``'s dict shape - staff or
+     *     viewers with standing on the running story only (see
+     *     ``world.scenes.scenario_services.build_scene_scenario_payload``).
+     */
+    SceneScenarioGM: {
+      node_key: string;
+      flavor_text: string;
+      conflict_mode: string;
+      phase: string;
+      is_paused: boolean;
+      ballots: components['schemas']['GroupBallotState'][];
+      readonly last_deed: components['schemas']['SceneScenarioLastDeed'] | null;
+      beat_outcome: string;
+      beat_outcome_key: string;
+    };
+    /** @description The GM scenario view's most recent deed - ``{option_key, outcome_name}`` (#3565). */
+    SceneScenarioLastDeed: {
+      option_key: string;
+      outcome_name: string | null;
     };
     SceneSummaryRevision: {
       readonly id: number;
@@ -41353,6 +42366,12 @@ export interface components {
       readonly base_cargo_capacity: number;
     };
     /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    SideRoleEnum: 'attacker' | 'defender';
+    /**
      * @description * `positive` - Positive
      *     * `negative` - Negative
      * @enum {string}
@@ -41445,7 +42464,6 @@ export interface components {
       challenge_template: number;
       readonly challenge_template_name: string;
       display_order?: number;
-      depends_on?: number | null;
     };
     /** @description Serializer for situation instances. */
     SituationInstance: {
@@ -41886,6 +42904,8 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
+      /** @description For ASSET subjects. Nulls if the asset is deleted. */
+      subject_asset?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
@@ -41935,9 +42955,15 @@ export interface components {
       /** @description The authored branch that fired; null = no branch authored for the column. */
       readonly resolution: number | null;
       readonly column: components['schemas']['ColumnEnum'];
+      /**
+       * @description Always MACHINE (#3561 retired the GM constrained pick).
+       *
+       *     * `machine` - Machine
+       */
       readonly method: components['schemas']['MethodEnum'];
-      /** @description The GM who picked the column (GM_PICK only; null for MACHINE). */
+      /** @description Historical audit field from before #3561 retired the GM constrained pick: the GM who picked the column, on rows resolved that way. Always null on rows resolved since. */
       readonly resolved_by: number | null;
+      /** @description Historical audit field from before #3561 retired the GM constrained pick: the deciding GM's notes, on rows resolved that way. Always blank on rows resolved since. */
       readonly gm_notes: string;
       /** Format: date-time */
       readonly created_at: string;
@@ -41969,6 +42995,8 @@ export interface components {
       subject_society?: number | null;
       /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
+      /** @description For ASSET subjects. Nulls if the asset is deleted. */
+      subject_asset?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
@@ -42014,6 +43042,8 @@ export interface components {
       forfeits_subject_item?: boolean;
       /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
       subject_standing_delta?: number;
+      /** @description Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row. */
+      npc_regard_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -42028,7 +43058,7 @@ export interface components {
         | components['schemas']['SetsSubjectLifecycleEnum']
         | components['schemas']['BlankEnum'];
       /**
-       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
        *
        *     * `ALIVE` - Alive
        *     * `CAPTURED` - Captured
@@ -42040,6 +43070,8 @@ export interface components {
       machine_match_lifecycle_state?:
         | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
+      /** @description On fire, transition the stake's subject_asset to this AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct asset transition (use the consequence_pool for check-gated transitions instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes. */
+      transitions_subject_asset?: string;
       readonly reward_lines: components['schemas']['StakeRewardLine'][];
     };
     /**
@@ -42081,6 +43113,8 @@ export interface components {
       forfeits_subject_item?: boolean;
       /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
       subject_standing_delta?: number;
+      /** @description Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row. */
+      npc_regard_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -42095,7 +43129,7 @@ export interface components {
         | components['schemas']['SetsSubjectLifecycleEnum']
         | components['schemas']['BlankEnum'];
       /**
-       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
        *
        *     * `ALIVE` - Alive
        *     * `CAPTURED` - Captured
@@ -42107,6 +43141,8 @@ export interface components {
       machine_match_lifecycle_state?:
         | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
+      /** @description On fire, transition the stake's subject_asset to this AssetStatus (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct asset transition (use the consequence_pool for check-gated transitions instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes. */
+      transitions_subject_asset?: string;
     };
     /**
      * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
@@ -42114,8 +43150,14 @@ export interface components {
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
      *     open-activation lock, the completed-beat refusal, the WIN-column-only
-     *     rule, and the sink/resonance shape rule (resonance required iff
-     *     sink=RESONANCE; amount >= 1 rides the model validator).
+     *     rule, and the per-sink FK shape rule generalised over
+     *     ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+     *     every other sink field must stay null, mirroring the model's ``clean()``).
+     *     Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+     *     the template's value (never author-supplied) and is refused for a
+     *     non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+     *     refused for a non-resolvable target kind or a target kind the author's
+     *     clue-authoring policy (``clue_target_kind_allowed``) does not permit.
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
      *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -42124,10 +43166,18 @@ export interface components {
       readonly id: number;
       resolution: number;
       sink: components['schemas']['StakeRewardLineSinkEnum'];
-      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
-      amount: number;
+      amount?: number;
       /** @description Required when sink=RESONANCE; must be null otherwise. */
       resonance?: number | null;
+      /** @description Required when sink=ITEM; must be null otherwise. */
+      item_template?: number | null;
+      /** @description Required when sink=CLUE; must be null otherwise. */
+      clue?: number | null;
+      /** @description Required when sink=CODEX; must be null otherwise. */
+      codex_entry?: number | null;
+      readonly item_template_name: string;
+      readonly clue_name: string;
+      readonly codex_entry_name: string;
     };
     /**
      * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
@@ -42135,8 +43185,14 @@ export interface components {
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
      *     open-activation lock, the completed-beat refusal, the WIN-column-only
-     *     rule, and the sink/resonance shape rule (resonance required iff
-     *     sink=RESONANCE; amount >= 1 rides the model validator).
+     *     rule, and the per-sink FK shape rule generalised over
+     *     ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+     *     every other sink field must stay null, mirroring the model's ``clean()``).
+     *     Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+     *     the template's value (never author-supplied) and is refused for a
+     *     non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+     *     refused for a non-resolvable target kind or a target kind the author's
+     *     clue-authoring policy (``clue_target_kind_allowed``) does not permit.
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
      *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -42144,23 +43200,35 @@ export interface components {
     StakeRewardLineRequest: {
       resolution: number;
       sink: components['schemas']['StakeRewardLineSinkEnum'];
-      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
-      amount: number;
+      amount?: number;
       /** @description Required when sink=RESONANCE; must be null otherwise. */
       resonance?: number | null;
+      /** @description Required when sink=ITEM; must be null otherwise. */
+      item_template?: number | null;
+      /** @description Required when sink=CLUE; must be null otherwise. */
+      clue?: number | null;
+      /** @description Required when sink=CODEX; must be null otherwise. */
+      codex_entry?: number | null;
     };
     /**
      * @description * `money` - Money
      *     * `resonance` - Resonance
+     *     * `item` - Item
+     *     * `clue` - Clue
+     *     * `codex` - Codex Entry
      * @enum {string}
      */
-    StakeRewardLineSinkEnum: 'money' | 'resonance';
+    StakeRewardLineSinkEnum: 'money' | 'resonance' | 'item' | 'clue' | 'codex';
     /**
      * @description Player-visible summary of one Stake (#1770 pillar 9).
      *
      *     What is wagered is visible; branch contents stay hidden — resolutions
      *     (consequence pools, escalations, narrative) are deliberately NOT fields
-     *     here and must never be added.
+     *     here and must never be added. ``reward_kinds`` is the one exception in
+     *     spirit only: it names the WIN branch's payout *categories*
+     *     (money/resonance/item/knowledge), never an amount, template, clue or
+     *     codex entry, so it carries none of the branch content the rule above
+     *     forbids (#3566).
      */
     StakeSummary: {
       readonly id: number;
@@ -42168,6 +43236,8 @@ export interface components {
       readonly player_summary: string;
       readonly severity: components['schemas']['SeverityEnum'];
       readonly severity_label: string;
+      /** @description Sorted, deduped reward-kind labels across the stake's WIN branch(es). */
+      readonly reward_kinds: string[];
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -43395,6 +44465,8 @@ export interface components {
       preferred_resonance_id?: number | null;
       /** @default false */
       cast_openly: boolean;
+      /** @default false */
+      soulfray_consented: boolean;
     };
     /**
      * @description What a technique does — the ONE shape every technique surface shares (#2898).
@@ -43836,6 +44908,19 @@ export interface components {
      * @enum {string}
      */
     TitleSuffixEnum: 'none' | 'primary' | 'all';
+    /**
+     * @description Read-only mirror of :class:`world.missions.types.TrackView` (#3568).
+     *
+     *     Counts only - no opposition sheet, no check type, no difficulty number
+     *     reaches the player payload (the leak boundary is enforced upstream in
+     *     ``services.play._track_view``, not here).
+     */
+    TrackView: {
+      successes: number;
+      needed: number;
+      failures: number;
+      allowed: number;
+    };
     TradeItemStake: {
       readonly id: number;
       readonly item_instance: number;
@@ -44002,6 +45087,9 @@ export interface components {
      *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
      *     provide context for the Wave 9 author editor without requiring extra lookups;
      *     they are served free via TransitionViewSet.queryset.select_related.
+     *
+     *     ``required_outcomes`` is GM text: stripped for viewers who fail
+     *     ``can_view_story_gm_text`` (#3563).
      */
     Transition: {
       readonly id: number;
@@ -44011,13 +45099,6 @@ export interface components {
       target_episode?: number | null;
       /** @description Return target episode title, or None when target is null (frontier). */
       readonly target_episode_title: string | null;
-      /**
-       * @description AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
-       *
-       *     * `auto` - Auto
-       *     * `gm_choice` - GM Choice
-       */
-      mode?: components['schemas']['TransitionModeEnum'];
       /**
        * @description Narrative flavor: THEREFORE / BUT.
        *
@@ -44032,31 +45113,22 @@ export interface components {
       order?: number;
       /** Format: date-time */
       readonly created_at: string;
+      readonly required_outcomes: components['schemas']['TransitionRoutingRule'][];
     };
-    /**
-     * @description * `auto` - Auto
-     *     * `gm_choice` - GM Choice
-     * @enum {string}
-     */
-    TransitionModeEnum: 'auto' | 'gm_choice';
     /**
      * @description Full serializer for Transition — guarded episode graph edges.
      *
      *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
      *     provide context for the Wave 9 author editor without requiring extra lookups;
      *     they are served free via TransitionViewSet.queryset.select_related.
+     *
+     *     ``required_outcomes`` is GM text: stripped for viewers who fail
+     *     ``can_view_story_gm_text`` (#3563).
      */
     TransitionRequest: {
       source_episode: number;
       /** @description May be null when next episode is unauthored (frontier pause). */
       target_episode?: number | null;
-      /**
-       * @description AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
-       *
-       *     * `auto` - Auto
-       *     * `gm_choice` - GM Choice
-       */
-      mode?: components['schemas']['TransitionModeEnum'];
       /**
        * @description Narrative flavor: THEREFORE / BUT.
        *
@@ -44091,11 +45163,12 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
       required_outcome?:
         | components['schemas']['RequiredOutcomeEnum']
         | components['schemas']['BlankEnum'];
+      /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
+      required_outcome_key?: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       stake?: number | null;
       /**
@@ -44129,11 +45202,12 @@ export interface components {
        *     * `success` - Success
        *     * `failure` - Failure
        *     * `expired` - Expired
-       *     * `pending_gm_review` - Pending GM review
        */
       required_outcome?:
         | components['schemas']['RequiredOutcomeEnum']
         | components['schemas']['BlankEnum'];
+      /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
+      required_outcome_key?: string;
       /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       stake?: number | null;
       /**
@@ -44144,6 +45218,29 @@ export interface components {
        *     * `withdrawal` - Withdrawal
        */
       required_stake_column?:
+        | components['schemas']['RequiredStakeColumnEnum']
+        | components['schemas']['BlankEnum'];
+    };
+    /**
+     * @description One routing rule as the graph and the author tree read it (#3563).
+     *
+     *     Read-only. Rows are written through ``TransitionRequiredOutcomeSerializer``
+     *     and ``save_with_outcomes``; this nested view adds the beat title and the
+     *     stake's player summary so the rule renders without a second fetch.
+     */
+    TransitionRoutingRule: {
+      readonly id: number;
+      readonly beat: number;
+      readonly beat_title: string;
+      readonly required_outcome:
+        | components['schemas']['RequiredOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Beat-level rows only: also require Beat.outcome_key to equal this MissionOption.key (#3565). Blank = any key. */
+      readonly required_outcome_key: string;
+      /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
+      readonly stake: number | null;
+      readonly stake_summary: string;
+      readonly required_stake_column:
         | components['schemas']['RequiredStakeColumnEnum']
         | components['schemas']['BlankEnum'];
     };
@@ -45456,6 +46553,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  account_security_settings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountSecuritySettings'];
+        };
+      };
+    };
+  };
+  account_security_settings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedAccountSecuritySettingsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountSecuritySettings'];
+        };
+      };
+    };
+  };
   achievements_achievements_list: {
     parameters: {
       query?: {
@@ -46099,6 +47238,7 @@ export interface operations {
   assets_list: {
     parameters: {
       query?: {
+        name?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
       };
@@ -46810,6 +47950,54 @@ export interface operations {
     };
   };
   beats_mark_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_readiness_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BeatReadiness'];
+        };
+      };
+    };
+  };
+  beats_scenario_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -49046,6 +50234,7 @@ export interface operations {
       query?: {
         area_id?: string;
         has_open_positions?: boolean;
+        kind?: number[];
       };
       header?: never;
       path?: never;
@@ -49380,7 +50569,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Origin Template. */
+        /** @description A unique integer value identifying this Upbringing. */
         id: number;
       };
       cookie?: never;
@@ -50387,6 +51576,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedHeldClueList'];
+        };
+      };
+    };
+  };
+  clues_search_list: {
+    parameters: {
+      query?: {
+        q?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClueSearchResult'][];
         };
       };
     };
@@ -57058,6 +58268,35 @@ export interface operations {
       };
     };
   };
+  gm_discovery_retrieve: {
+    parameters: {
+      query?: {
+        q?: string;
+        /**
+         * @description * `none` - None
+         *     * `low` - Low
+         *     * `moderate` - Moderate
+         *     * `high` - High
+         *     * `extreme` - Extreme
+         */
+        risk?: 'none' | 'low' | 'moderate' | 'high' | 'extreme' | '';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DiscoveryResult'];
+        };
+      };
+    };
+  };
   gm_invites_list: {
     parameters: {
       query?: {
@@ -61103,6 +62342,11 @@ export interface operations {
     parameters: {
       query?: {
         action_category?: string;
+        /**
+         * @description * `technique` - Technique
+         *     * `beat` - Beat
+         */
+        scope?: 'beat' | 'technique';
       };
       header?: never;
       path?: never;
@@ -61137,7 +62381,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ConsequencePoolCatalog'];
+          'application/json': components['schemas']['ConsequencePoolDetail'];
         };
       };
     };
@@ -66265,7 +67509,7 @@ export interface operations {
           'application/json': components['schemas']['InteractionState'];
         };
       };
-      /** @description No puppeted character or no role was provided. */
+      /** @description No selected character or no role was provided. */
       400: {
         headers: {
           [name: string]: unknown;
@@ -71056,6 +72300,7 @@ export interface operations {
       query?: {
         area_id?: string;
         has_open_positions?: boolean;
+        kind?: number[];
       };
       header?: never;
       path?: never;
@@ -72167,6 +73412,28 @@ export interface operations {
       };
     };
   };
+  scenes_scenario_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneScenario'];
+        };
+      };
+    };
+  };
   scenes_set_round_mode_create: {
     parameters: {
       query?: never;
@@ -72189,6 +73456,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  scenes_stakes_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakesSummary'];
         };
       };
     };
@@ -74793,32 +76082,6 @@ export interface operations {
       };
     };
   };
-  stakes_resolve_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this stake. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['StakeRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Stake'];
-        };
-      };
-    };
-  };
   stories_list: {
     parameters: {
       query?: {
@@ -77284,7 +78547,6 @@ export interface operations {
   transitions_list: {
     parameters: {
       query?: {
-        mode?: string;
         /** @description Which field to use when ordering the results. */
         ordering?: string;
         /** @description A page number within the paginated result set. */

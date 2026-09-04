@@ -148,7 +148,7 @@ function TierStrip({
   return (
     <div
       className="flex items-center gap-1.5"
-      role="group"
+      role="radiogroup"
       aria-label={`Tier selection for thread ${threadId}`}
     >
       <span className="mr-1 text-xs text-muted-foreground">Tier</span>
@@ -172,6 +172,8 @@ function TierStrip({
           <button
             key={tier}
             type="button"
+            role="radio"
+            aria-checked={isSelected}
             onClick={() => {
               if (!isUnaffordable) onSelectTier(tier);
             }}
@@ -181,13 +183,7 @@ function TierStrip({
             className={cn(
               'min-w-[28px] rounded border px-2 py-0.5 text-xs font-medium transition-colors',
               'disabled:cursor-not-allowed',
-              isTier0 && isSelected
-                ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300'
-                : isUnaffordable
-                  ? 'border-muted bg-muted/30 text-muted-foreground opacity-60'
-                  : isSelected
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+              pullChipClass(isTier0, isSelected, isUnaffordable)
             )}
           >
             {String(tier)}
@@ -334,6 +330,18 @@ function InapplicableRow({ thread, applicabilityRow }: InapplicableRowProps) {
 // ThreadPullPicker
 // ---------------------------------------------------------------------------
 
+/**
+ * How a pull chip reads: a free tier-0 pick, one you cannot afford, one you have
+ * taken, or one still on offer. Order matters - a selected tier-0 chip is styled
+ * as such before affordability is considered, since it costs nothing.
+ */
+function pullChipClass(isTier0: boolean, isSelected: boolean, isUnaffordable: boolean): string {
+  if (isTier0 && isSelected) return 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300';
+  if (isUnaffordable) return 'border-muted bg-muted/30 text-muted-foreground opacity-60';
+  if (isSelected) return 'border-primary bg-primary/10 text-primary';
+  return 'border-border bg-background text-muted-foreground hover:border-primary/40';
+}
+
 export function ThreadPullPicker({
   characterSheetId,
   actionContext,
@@ -446,6 +454,35 @@ export function ThreadPullPicker({
   const pulledCount = Object.values(selectedPulls).filter((t) => t > 0).length;
   const passiveCount = Object.values(selectedPulls).filter((t) => t === 0).length;
 
+  const renderFilteredApplicable = () => {
+    if (isLoading) {
+      return <p className="text-xs text-muted-foreground">Loading threads…</p>;
+    }
+    if (filteredApplicable.length === 0) {
+      return (
+        <p className="text-xs italic text-muted-foreground" data-testid="no-applicable-threads">
+          No applicable threads.
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-2" data-testid="applicable-rows">
+        {filteredApplicable.map((thread) => (
+          <ApplicableRow
+            key={thread.id}
+            thread={thread}
+            selectedTier={selectedPulls[thread.id] ?? 0}
+            onSelectTier={(tier) => handleSelectTier(thread.id, tier)}
+            characterSheetId={characterSheetId}
+            balanceByResonanceId={balanceByResonanceId}
+            onOpenDetails={handleOpenDetails}
+            targetPersonaId={actionContext.target_persona_id}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-3" data-testid="thread-pull-picker">
       {/* Header */}
@@ -491,28 +528,7 @@ export function ThreadPullPicker({
       </div>
 
       {/* Applicable rows */}
-      {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading threads…</p>
-      ) : filteredApplicable.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground" data-testid="no-applicable-threads">
-          No applicable threads.
-        </p>
-      ) : (
-        <div className="space-y-2" data-testid="applicable-rows">
-          {filteredApplicable.map((thread) => (
-            <ApplicableRow
-              key={thread.id}
-              thread={thread}
-              selectedTier={selectedPulls[thread.id] ?? 0}
-              onSelectTier={(tier) => handleSelectTier(thread.id, tier)}
-              characterSheetId={characterSheetId}
-              balanceByResonanceId={balanceByResonanceId}
-              onOpenDetails={handleOpenDetails}
-              targetPersonaId={actionContext.target_persona_id}
-            />
-          ))}
-        </div>
-      )}
+      {renderFilteredApplicable()}
 
       {/* Inapplicable rows — under a divider when toggled */}
       {showInapplicable && filteredInapplicable.length > 0 && (

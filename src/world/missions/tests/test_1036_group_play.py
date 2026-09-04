@@ -17,7 +17,12 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import (
     GROUP_VOTE_TIMEOUT_SECONDS,
@@ -40,6 +45,7 @@ from world.missions.services.play import (
     submit_group_pick,
 )
 from world.missions.services.run import share_mission, staff_assign_mission
+from world.narrative.models import AmbientStirLine
 
 
 def _pc():
@@ -105,6 +111,21 @@ class GroupVoteFlowTests(TestCase):
         self.assertEqual(instance.current_node_id, dest_a.pk)
         # Ballots cleared after resolution.
         self.assertFalse(MissionGroupBallot.objects.filter(instance=instance).exists())
+
+    def test_resolution_stirs_the_anchor_room(self):
+        """The ambient stir reaches the anchor room's ObjectDB (a RoomProfile has no contents)."""
+        instance, holder, p2, opt_a, _opt_b, dest_a, _ = _group("stir")
+        room = ObjectDBFactory(db_key="StirRoom", db_typeclass_path="typeclasses.rooms.Room")
+        instance.anchor_room = RoomProfileFactory(objectdb=room)
+        instance.save(update_fields=["anchor_room"])
+        AmbientStirLine.objects.create(body="Something stirs here.", is_active=True)
+        submit_group_pick(instance, holder, option_id=opt_a.pk)
+        submit_group_pick(instance, p2, option_id=opt_a.pk)
+        cast_group_vote(instance, holder, option_id=opt_a.pk)
+        res = cast_group_vote(instance, p2, option_id=opt_a.pk)
+        self.assertIsNotNone(res.resolved)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node_id, dest_a.pk)
 
     def test_vote_before_all_picked_is_rejected(self):
         instance, holder, _p2, opt_a, _opt_b, _da, _db = _group("early")
@@ -175,7 +196,7 @@ class GroupVoteApiTests(TestCase):
         self.client.force_authenticate(self.account)
 
     def _as(self, character):
-        return mock.patch("world.missions.views._puppet_character", return_value=character)
+        return mock.patch("world.missions.views._acting_character", return_value=character)
 
     def _url(self, action):
         return f"/api/missions/journal/{self.instance.pk}/{action}/"

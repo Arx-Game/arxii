@@ -51,10 +51,10 @@
  * setting `Scene.running_beat` (`actions/definitions/gm_story.py`).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useNavigate } from 'react-router-dom';
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import type { DispatchResult } from '@/combat/types';
@@ -63,6 +63,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { SituationFinder } from '@/gm-adjudication/SituationFinder';
 import type { SceneDetail, ScenePersona } from '../types';
 import {
   useCheckTypeCatalog,
@@ -133,12 +134,38 @@ interface TabProps {
   targetCharacterId: number | null;
 }
 
-function CallCheckTab({ characterId, targetCharacterId }: TabProps) {
+/**
+ * Toggle button for the collapsible catalog browser (#3564) - each host
+ * keeps its own open/closed state so the tab doesn't grow by default.
+ */
+function FinderToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      data-testid="finder-toggle"
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      {open ? 'Hide the catalog' : 'Browse the catalog'}
+    </Button>
+  );
+}
+
+function CallCheckTab({
+  characterId,
+  targetCharacterId,
+  runningRisk,
+}: TabProps & {
+  runningRisk: string | null;
+}) {
   const [search, setSearch] = useState('');
   const [checkTypeId, setCheckTypeId] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<DifficultyBand>('normal');
   const [shiftKind, setShiftKind] = useState<'' | 'edge' | 'setback'>('');
   const [shiftReason, setShiftReason] = useState('');
+  const [finderOpen, setFinderOpen] = useState(false);
   const { data: checkTypes = [] } = useCheckTypeCatalog(search, true);
   const dispatch = useDispatchPlayerAction(characterId);
 
@@ -161,6 +188,25 @@ function CallCheckTab({ characterId, targetCharacterId }: TabProps) {
 
   return (
     <div className="space-y-3" data-testid="gm-adjudication-check-tab">
+      <FinderToggle open={finderOpen} onToggle={() => setFinderOpen((v) => !v)} />
+      {finderOpen && (
+        <SituationFinder
+          risk={runningRisk}
+          characterId={characterId}
+          actions={{
+            check: {
+              label: 'Use this check',
+              onSelect: (check, band) => {
+                setCheckTypeId(check.id);
+                setSearch(check.name);
+                if (band && DIFFICULTY_BANDS.some((b) => b.value === band)) {
+                  setDifficulty(band as DifficultyBand);
+                }
+              },
+            },
+          }}
+        />
+      )}
       <div className="space-y-1">
         <Label htmlFor="gm-check-search">Check</Label>
         <Input
@@ -672,13 +718,20 @@ function ConditionTab({ characterId, targetCharacterId }: TabProps) {
 // Situation / Challenge placement tab — acts on the GM's own room, no target
 // ---------------------------------------------------------------------------
 
-function SituationTab({ characterId }: { characterId: number }) {
+function SituationTab({
+  characterId,
+  runningRisk,
+}: {
+  characterId: number;
+  runningRisk: string | null;
+}) {
   const [placementKind, setPlacementKind] = useState<'situation' | 'challenge'>('situation');
   const [situationId, setSituationId] = useState<number | null>(null);
   const [challengeId, setChallengeId] = useState<number | null>(null);
   const [targetObjectName, setTargetObjectName] = useState('');
   const [shiftKind, setShiftKind] = useState<'' | 'edge' | 'setback'>('');
   const [shiftReason, setShiftReason] = useState('');
+  const [finderOpen, setFinderOpen] = useState(false);
   const { data: situations = [] } = useSituationTemplateCatalog(placementKind === 'situation');
   const { data: challenges = [] } = useChallengeTemplateCatalog(placementKind === 'challenge');
   const dispatch = useDispatchPlayerAction(characterId);
@@ -689,20 +742,21 @@ function SituationTab({ characterId }: { characterId: number }) {
       ? situationId !== null
       : challengeId !== null && targetObjectName.trim() !== '');
 
-  function handleSubmit() {
-    if (!canSubmit) return;
-    if (placementKind === 'situation') {
-      dispatch
-        .mutateAsync({
-          ref: { backend: 'registry', registry_key: 'set_situation' },
-          kwargs: { situation_template_id: situationId },
-        })
-        .then((result) => reportResult(result, 'Situation placed.'))
-        .catch(() => toast.error('Could not place the situation.'));
-      return;
-    }
+  function placeSituation(id: number | null) {
+    if (id === null || dispatch.isPending) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'set_situation' },
+        kwargs: { situation_template_id: id },
+      })
+      .then((result) => reportResult(result, 'Situation placed.'))
+      .catch(() => toast.error('Could not place the situation.'));
+  }
+
+  function placeChallenge(id: number | null) {
+    if (id === null || dispatch.isPending) return;
     const kwargs: Record<string, unknown> = {
-      challenge_template_id: challengeId,
+      challenge_template_id: id,
       target_object_name: targetObjectName.trim(),
     };
     if (shiftKind === 'edge') kwargs.edge_reason = shiftReason;
@@ -713,8 +767,52 @@ function SituationTab({ characterId }: { characterId: number }) {
       .catch(() => toast.error('Could not place the challenge.'));
   }
 
+  function handleSubmit() {
+    if (!canSubmit) return;
+    if (placementKind === 'situation') {
+      placeSituation(situationId);
+      return;
+    }
+    placeChallenge(challengeId);
+  }
+
+  const renderDispatch = () => {
+    if (dispatch.isPending) {
+      return 'Placing…';
+    }
+    if (placementKind === 'situation') {
+      return 'Place Situation';
+    }
+    return 'Place Challenge';
+  };
+
   return (
     <div className="space-y-3" data-testid="gm-adjudication-situation-tab">
+      <FinderToggle open={finderOpen} onToggle={() => setFinderOpen((v) => !v)} />
+      {finderOpen && (
+        <SituationFinder
+          risk={runningRisk}
+          characterId={characterId}
+          actions={{
+            template: {
+              label: 'Place',
+              onSelect: (t) => {
+                setPlacementKind('situation');
+                setSituationId(t.id);
+                placeSituation(t.id);
+              },
+            },
+            challenge: {
+              label: 'Place',
+              onSelect: (c) => {
+                setPlacementKind('challenge');
+                setChallengeId(c.id);
+                placeChallenge(c.id);
+              },
+            },
+          }}
+        />
+      )}
       <div className="space-y-1">
         <Label htmlFor="gm-placement-kind">Placement kind</Label>
         <select
@@ -796,11 +894,7 @@ function SituationTab({ characterId }: { characterId: number }) {
         </>
       )}
       <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-situation-submit">
-        {dispatch.isPending
-          ? 'Placing…'
-          : placementKind === 'situation'
-            ? 'Place Situation'
-            : 'Place Challenge'}
+        {renderDispatch()}
       </Button>
     </div>
   );
@@ -998,6 +1092,16 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
       .catch(() => toast.error('Could not stage the property.'));
   }
 
+  const renderDispatch2 = () => {
+    if (dispatch.isPending) {
+      return 'Staging…';
+    }
+    if (mode === 'prop') {
+      return 'Stage Prop';
+    }
+    return 'Stage Property';
+  };
+
   return (
     <div className="space-y-3" data-testid="gm-adjudication-stage-tab">
       <div className="space-y-1">
@@ -1064,7 +1168,7 @@ function StageTab({ characterId, targetCharacterId }: TabProps) {
         </>
       )}
       <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-stage-submit">
-        {dispatch.isPending ? 'Staging…' : mode === 'prop' ? 'Stage Prop' : 'Stage Property'}
+        {renderDispatch2()}
       </Button>
     </div>
   );
@@ -1184,6 +1288,7 @@ function RunBeatTab({ characterId }: { characterId: number }) {
   const [loading, setLoading] = useState(false);
   const [runningId, setRunningId] = useState<number | null>(null);
   const dispatch = useDispatchPlayerAction(characterId);
+  const navigate = useNavigate();
 
   function loadBeats() {
     setLoading(true);
@@ -1217,7 +1322,12 @@ function RunBeatTab({ characterId }: { characterId: number }) {
         ref: { backend: 'registry', registry_key: 'run_beat' },
         kwargs: { beat_id: beatId },
       })
-      .then((result) => reportResult(result, 'Beat is now running in this scene.'))
+      .then((result) => {
+        reportResult(result, 'Beat is now running in this scene.');
+        if (!isDispatchFailure(result) && typeof result.data?.battle_scene_id === 'number') {
+          navigate(`/scenes/${result.data.battle_scene_id}/battle`);
+        }
+      })
       .catch(() => toast.error('Could not run that beat.'))
       .finally(() => setRunningId(null));
   }
@@ -1240,28 +1350,45 @@ function RunBeatTab({ characterId }: { characterId: number }) {
         {beats.length === 0 && (
           <p className="text-xs text-muted-foreground">No runnable beats at your tables.</p>
         )}
-        {beats.map((beat) => (
-          <div
-            key={beat.id}
-            className="flex items-center justify-between gap-2 rounded-md border p-2"
-            data-testid={`gm-runbeat-row-${beat.id}`}
-          >
-            <span className="text-sm">
-              {beat.story_title} / {beat.episode_title} ({beat.kind}, risk={beat.risk})
-              {beat.kind === 'encounter'
-                ? ` — ${beat.opponent_line_count} opponent line(s)`
-                : ` — ${beat.staged_template_count} staged template(s)`}
-            </span>
-            <Button
-              size="sm"
-              disabled={dispatch.isPending}
-              onClick={() => runBeat(beat.id)}
-              data-testid={`gm-runbeat-run-${beat.id}`}
+        {beats.map((beat) => {
+          let descriptor: string;
+          if (beat.staged_battle_name) {
+            descriptor = ` - battle: ${beat.staged_battle_name}`;
+          } else if (beat.kind === 'encounter') {
+            descriptor = ` - ${beat.opponent_line_count} opponent line(s)`;
+          } else {
+            descriptor = ` - ${beat.staged_template_count} staged template(s)`;
+          }
+          if (beat.clock_size > 0) descriptor += ` - clock ${beat.clock_size}`;
+          let runLabel: string;
+          if (runningId === beat.id) {
+            runLabel = 'Running…';
+          } else if (beat.staged_battle_name) {
+            runLabel = 'Start siege';
+          } else {
+            runLabel = 'Run';
+          }
+          return (
+            <div
+              key={beat.id}
+              className="flex items-center justify-between gap-2 rounded-md border p-2"
+              data-testid={`gm-runbeat-row-${beat.id}`}
             >
-              {runningId === beat.id ? 'Running…' : 'Run'}
-            </Button>
-          </div>
-        ))}
+              <span className="text-sm">
+                {beat.story_title} / {beat.episode_title} ({beat.kind}, risk={beat.risk})
+                {descriptor}
+              </span>
+              <Button
+                size="sm"
+                disabled={dispatch.isPending}
+                onClick={() => runBeat(beat.id)}
+                data-testid={`gm-runbeat-run-${beat.id}`}
+              >
+                {runLabel}
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1276,12 +1403,7 @@ interface GMAdjudicationPanelProps {
 }
 
 export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const characterId = useActiveCharacterId();
   const [targetCharacterId, setTargetCharacterId] = useState<number | null>(null);
 
   if (!scene?.viewer_can_gm || characterId === null) {
@@ -1289,6 +1411,7 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
   }
 
   const personas = scene.personas ?? [];
+  const runningRisk = scene.running_beat?.risk ?? null;
 
   return (
     <Card data-testid="gm-adjudication-panel">
@@ -1338,7 +1461,11 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="check">
-            <CallCheckTab characterId={characterId} targetCharacterId={targetCharacterId} />
+            <CallCheckTab
+              characterId={characterId}
+              targetCharacterId={targetCharacterId}
+              runningRisk={runningRisk}
+            />
           </TabsContent>
           <TabsContent value="callforcheck">
             <CallForCheckTab characterId={characterId} personas={personas} />
@@ -1350,7 +1477,7 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <ConditionTab characterId={characterId} targetCharacterId={targetCharacterId} />
           </TabsContent>
           <TabsContent value="situation">
-            <SituationTab characterId={characterId} />
+            <SituationTab characterId={characterId} runningRisk={runningRisk} />
           </TabsContent>
           <TabsContent value="dramaticbeat">
             <DramaticBeatTab characterId={characterId} targetCharacterId={targetCharacterId} />

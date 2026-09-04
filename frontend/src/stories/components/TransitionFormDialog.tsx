@@ -9,8 +9,15 @@
  * sent together with the transition fields in one request.  If the server
  * rolls back (e.g. DB integrity error), no partial state is left behind.
  *
- * Fields: target_episode (optional), mode, connection_type, connection_summary,
- * order, and a routing predicate list (beat + required_outcome pairs).
+ * #3565: GM-choice transitions are retired; every transition now fires
+ * automatically once its routing predicate is satisfied, so there is no
+ * `mode` field left to author. A beat-level routing row may additionally
+ * pin a scenario option key (e.g. "negotiate") when the picked beat runs a
+ * scenario graph, narrowing the row to that specific branch; blank means
+ * any option satisfies the row.
+ *
+ * Fields: target_episode (optional), connection_type, connection_summary,
+ * order, and a routing predicate list (beat + required_outcome[+ option key] pairs).
  */
 
 import { useState, useEffect } from 'react';
@@ -27,15 +34,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   useSaveTransitionWithOutcomes,
   useTransitionRequiredOutcomes,
   useEpisodeList,
   useBeatList,
+  useStakes,
 } from '../queries';
 import type { Transition } from '../types';
+import { formSubmitLabel } from '../formSubmitLabel';
+import { COLUMN_OPTIONS } from './stakes/constants';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -44,7 +54,6 @@ import type { Transition } from '../types';
 interface DRFFieldErrors {
   source_episode?: string[];
   target_episode?: string[];
-  mode?: string[];
   connection_type?: string[];
   connection_summary?: string[];
   order?: string[];
@@ -63,12 +72,28 @@ interface RoutingRow {
   beatId: number;
   outcome: string;
   beatLabel: string;
+  /**
+   * #3565: the scenario option key this row additionally requires (e.g.
+   * "negotiate"), when the beat runs a scenario graph. Undefined/blank
+   * means any option satisfies this row. Beat-level rows only.
+   */
+  optionKey?: string;
   /** Stake-level routing rows (#1770 PR2): set when the requirement routes on
-   * a StakeOutcome column instead of the beat outcome. Authored via the
-   * stakes editor / API; this dialog preserves them through the bulk-save
-   * round-trip but only adds beat-level rows. */
+   * a StakeOutcome column instead of the beat outcome. This dialog's
+   * AddRoutingRow can author these directly ("Stake column" option) as well
+   * as preserve rows authored via the stakes editor / API through the
+   * bulk-save round-trip. */
   stakeId?: number;
   stakeColumn?: string;
+}
+
+/** One-line summary of a routing predicate: a stake column, or a beat outcome. */
+function routingRowLabel(row: RoutingRow): string {
+  if (row.stakeId != null) {
+    return `${row.beatLabel}: stake #${row.stakeId} ${row.stakeColumn ?? ''}`;
+  }
+  const optionSuffix = row.optionKey ? ` (${row.optionKey})` : '';
+  return `${row.beatLabel}: ${row.outcome}${optionSuffix}`;
 }
 
 let rowCounter = 0;
@@ -80,11 +105,6 @@ function nextKey(): string {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const MODE_OPTIONS = [
-  { value: 'auto', label: 'Auto; fires automatically when eligibility is satisfied' },
-  { value: 'gm_choice', label: 'GM Choice; Lead GM picks from the eligible set' },
-];
 
 const CONNECTION_TYPE_OPTIONS = [
   { value: '', label: '(none)' },
@@ -111,14 +131,50 @@ interface AddRoutingRowProps {
 function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
   const [beatId, setBeatId] = useState('');
   const [outcome, setOutcome] = useState('success');
+  const [optionKey, setOptionKey] = useState('');
+  // #3561: a row may route on the beat's own outcome, or on a StakeOutcome
+  // column fired by the beat's stakes contract. The two are mutually
+  // exclusive per row.
+  const [routeOn, setRouteOn] = useState<'outcome' | 'stake'>('outcome');
+  const [stakeId, setStakeId] = useState('');
+  const [stakeColumn, setStakeColumn] = useState<string>(COLUMN_OPTIONS[0].value);
   const [adding, setAdding] = useState(false);
 
   const { data: beatsData } = useBeatList({ episode: episodeId, page_size: 100 });
-  const beatOptions =
-    beatsData?.results.map((b) => ({
-      value: String(b.id),
-      label: `#${b.id}: ${b.internal_description?.slice(0, 50) ?? '(no description)'}`,
-    })) ?? [];
+  const beats = beatsData?.results ?? [];
+  const beatOptions = beats.map((b) => ({
+    value: String(b.id),
+    label: `#${b.id}: ${b.internal_description?.slice(0, 50) ?? '(no description)'}`,
+  }));
+
+  // #3565: when the selected beat runs a scenario graph, offer its option
+  // keys so the row can pin a specific branch. "" ("Any option") is always
+  // the first entry; blank means the row is satisfied by any option.
+  const selectedBeat = beats.find((b) => String(b.id) === beatId);
+  const scenarioOptionKeys = selectedBeat?.scenario?.option_keys ?? [];
+  const optionKeyOptions = [
+    { value: '', label: 'Any option' },
+    ...scenarioOptionKeys.map((key) => ({ value: key, label: key })),
+  ];
+
+  // #3561: the selected beat's stakes, for the stake-column routing mode.
+  const numericBeatId = beatId ? Number(beatId) : 0;
+  const { data: stakesData } = useStakes(numericBeatId, routeOn === 'stake' && numericBeatId > 0);
+  const stakes = stakesData?.results ?? [];
+  const stakeOptions = stakes.map((s) => ({
+    value: String(s.id),
+    label: `#${s.id} ${s.player_summary.slice(0, 50)}`,
+  }));
+
+  function resetAndClose() {
+    setBeatId('');
+    setOutcome('success');
+    setOptionKey('');
+    setRouteOn('outcome');
+    setStakeId('');
+    setStakeColumn(COLUMN_OPTIONS[0].value);
+    setAdding(false);
+  }
 
   if (!adding) {
     return (
@@ -147,21 +203,88 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
         <Combobox
           items={beatOptions}
           value={beatId}
-          onValueChange={setBeatId}
+          onValueChange={(v) => {
+            setBeatId(v);
+            setOptionKey('');
+            setStakeId('');
+          }}
           placeholder="Select beat…"
           searchPlaceholder="Search beats…"
           emptyMessage="No beats found."
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Required Outcome</Label>
-        <Combobox
-          items={OUTCOME_OPTIONS}
-          value={outcome}
-          onValueChange={setOutcome}
-          placeholder="Select outcome…"
-        />
+        <Label className="text-xs">Route On</Label>
+        <RadioGroup
+          value={routeOn}
+          onValueChange={(v) => {
+            setRouteOn(v as 'outcome' | 'stake');
+            setStakeId('');
+          }}
+          className="flex gap-4"
+          data-testid="routing-row-route-on"
+        >
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="outcome" id="routing-row-route-on-outcome" />
+            <span>Beat outcome</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="stake" id="routing-row-route-on-stake" />
+            <span>Stake column</span>
+          </label>
+        </RadioGroup>
       </div>
+      {routeOn === 'outcome' ? (
+        <>
+          <div className="space-y-1">
+            <Label className="text-xs">Required Outcome</Label>
+            <Combobox
+              items={OUTCOME_OPTIONS}
+              value={outcome}
+              onValueChange={setOutcome}
+              placeholder="Select outcome…"
+            />
+          </div>
+          {selectedBeat?.scenario != null && (
+            <div className="space-y-1">
+              <Label className="text-xs">Option</Label>
+              <Combobox
+                items={optionKeyOptions}
+                value={optionKey}
+                onValueChange={setOptionKey}
+                placeholder="Any option"
+                data-testid="routing-row-option-key"
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <Label className="text-xs">Stake</Label>
+            <Combobox
+              items={stakeOptions}
+              value={stakeId}
+              onValueChange={setStakeId}
+              placeholder={beatId ? 'Select stake…' : 'Select a beat first'}
+              searchPlaceholder="Search stakes…"
+              emptyMessage="No stakes found."
+              disabled={!beatId}
+              data-testid="routing-row-stake"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Column</Label>
+            <Combobox
+              items={COLUMN_OPTIONS}
+              value={stakeColumn}
+              onValueChange={setStakeColumn}
+              placeholder="Select column…"
+              data-testid="routing-row-stake-column"
+            />
+          </div>
+        </>
+      )}
       <div className="flex gap-2">
         <Button
           type="button"
@@ -170,12 +293,26 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
             if (!beatId) return;
             const beatLabel =
               beatOptions.find((o) => o.value === beatId)?.label ?? `Beat #${beatId}`;
-            onAdd({ beatId: Number(beatId), outcome, beatLabel });
-            setBeatId('');
-            setOutcome('success');
-            setAdding(false);
+            if (routeOn === 'stake') {
+              if (!stakeId) return;
+              onAdd({
+                beatId: Number(beatId),
+                outcome: '',
+                beatLabel,
+                stakeId: Number(stakeId),
+                stakeColumn,
+              });
+            } else {
+              onAdd({
+                beatId: Number(beatId),
+                outcome,
+                beatLabel,
+                optionKey: optionKey || undefined,
+              });
+            }
+            resetAndClose();
           }}
-          disabled={!beatId}
+          disabled={!beatId || (routeOn === 'stake' && !stakeId)}
           data-testid="confirm-routing-row"
         >
           Add
@@ -222,13 +359,8 @@ export function TransitionFormDialog({
   const isEdit = transition !== undefined;
 
   const [targetEpisode, setTargetEpisode] = useState<string>(
-    transition?.target_episode != null
-      ? String(transition.target_episode)
-      : defaultTargetEpisodeId != null
-        ? String(defaultTargetEpisodeId)
-        : ''
+    String(transition?.target_episode ?? defaultTargetEpisodeId ?? '')
   );
-  const [mode, setMode] = useState<string>(transition?.mode ?? 'auto');
   const [connectionType, setConnectionType] = useState<string>(transition?.connection_type ?? '');
   const [connectionSummary, setConnectionSummary] = useState(transition?.connection_summary ?? '');
   const [order, setOrder] = useState<string>(
@@ -260,6 +392,7 @@ export function TransitionFormDialog({
         beatId: row.beat,
         outcome: row.required_outcome ?? '',
         beatLabel: `Beat #${row.beat}`,
+        optionKey: row.required_outcome_key || undefined,
         stakeId: row.stake ?? undefined,
         stakeColumn: row.required_stake_column ?? undefined,
       }));
@@ -272,14 +405,7 @@ export function TransitionFormDialog({
   const isPending = saveMutation.isPending;
 
   function resetForm() {
-    setTargetEpisode(
-      transition?.target_episode != null
-        ? String(transition.target_episode)
-        : defaultTargetEpisodeId != null
-          ? String(defaultTargetEpisodeId)
-          : ''
-    );
-    setMode(transition?.mode ?? 'auto');
+    setTargetEpisode(String(transition?.target_episode ?? defaultTargetEpisodeId ?? ''));
     setConnectionType(transition?.connection_type ?? '');
     setConnectionSummary(transition?.connection_summary ?? '');
     setOrder(transition?.order !== undefined ? String(transition.order) : '0');
@@ -325,7 +451,6 @@ export function TransitionFormDialog({
       {
         source_episode: sourceEpisodeId,
         target_episode: targetEpisode ? Number(targetEpisode) : null,
-        mode,
         connection_type: connectionType,
         connection_summary: connectionSummary.trim(),
         order: Number(order),
@@ -339,6 +464,7 @@ export function TransitionFormDialog({
             : {
                 beat: r.beatId,
                 required_outcome: r.outcome,
+                required_outcome_key: r.optionKey ?? '',
               }
         ),
         existing_id: isEdit && transition ? transition.id : null,
@@ -399,25 +525,6 @@ export function TransitionFormDialog({
               </p>
               {fieldErrors.target_episode && (
                 <p className="text-xs text-destructive">{fieldErrors.target_episode.join(' ')}</p>
-              )}
-            </div>
-
-            {/* Mode */}
-            <div className="space-y-2">
-              <Label>Mode</Label>
-              <RadioGroup value={mode} onValueChange={setMode} className="flex flex-col gap-1">
-                {MODE_OPTIONS.map(({ value, label }) => (
-                  <label
-                    key={value}
-                    className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-accent"
-                  >
-                    <RadioGroupItem value={value} id={`mode-${value}`} />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </RadioGroup>
-              {fieldErrors.mode && (
-                <p className="text-xs text-destructive">{fieldErrors.mode.join(' ')}</p>
               )}
             </div>
 
@@ -490,11 +597,7 @@ export function TransitionFormDialog({
                       className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                       data-testid="routing-predicate-row"
                     >
-                      <span>
-                        {row.stakeId != null
-                          ? `${row.beatLabel}: stake #${row.stakeId} ${row.stakeColumn ?? ''}`
-                          : `${row.beatLabel}: ${row.outcome}`}
-                      </span>
+                      <span>{routingRowLabel(row)}</span>
                       <Button
                         type="button"
                         variant="ghost"
@@ -535,13 +638,7 @@ export function TransitionFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? isEdit
-                  ? 'Saving…'
-                  : 'Creating…'
-                : isEdit
-                  ? 'Save Transition'
-                  : 'Create Transition'}
+              {formSubmitLabel(isPending, isEdit, 'Transition')}
             </Button>
           </DialogFooter>
         </form>

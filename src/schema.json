@@ -4,6 +4,42 @@ info:
   version: 0.1.0
   description: API for the Arx web interface
 paths:
+  /api/account/security-settings/:
+    get:
+      operationId: account_security_settings_retrieve
+      description: '``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the
+        signed-in account.'
+      tags:
+      - account
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSecuritySettings'
+          description: ''
+    patch:
+      operationId: account_security_settings_partial_update
+      description: '``GET`` / ``PATCH`` ``/api/account/security-settings/`` for the
+        signed-in account.'
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountSecuritySettingsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSecuritySettings'
+          description: ''
   /api/achievements/achievements/:
     get:
       operationId: achievements_achievements_list
@@ -853,9 +889,22 @@ paths:
   /api/assets/:
     get:
       operationId: assets_list
-      description: Read endpoints for the player's own promoted assets + introduce
-        action.
+      description: |-
+        Read endpoints for the player's own promoted assets + introduce action.
+
+        Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+        search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+        per-player private content (name, role_context, status, created_at), so
+        that widening is scoped narrowly: a non-staff GM only sees assets
+        promoted by a character who participates in a story that GM LEADS, never
+        every asset in the game (#3561 review fix - the first cut let any
+        GMProfile holder, unrelated to the asset's owner, list every player's
+        private assets, which was a privacy leak).
       parameters:
+      - in: query
+        name: name
+        schema:
+          type: string
       - name: page
         required: false
         in: query
@@ -876,8 +925,17 @@ paths:
   /api/assets/{id}/:
     get:
       operationId: assets_retrieve
-      description: Read endpoints for the player's own promoted assets + introduce
-        action.
+      description: |-
+        Read endpoints for the player's own promoted assets + introduce action.
+
+        Also backs the stakes-editor ASSET subject picker (#3561, `?name=`
+        search) - see `get_queryset`'s staff/GM widening below. An NPCAsset is
+        per-player private content (name, role_context, status, created_at), so
+        that widening is scoped narrowly: a non-staff GM only sees assets
+        promoted by a character who participates in a story that GM LEADS, never
+        every asset in the game (#3561 review fix - the first cut let any
+        GMProfile holder, unrelated to the asset's owner, list every player's
+        private assets, which was a privacy leak).
       parameters:
       - in: path
         name: id
@@ -1731,6 +1789,75 @@ paths:
 
         Lead GM, staff, or an AGM with an approved claim on this beat may call this.
         Wraps record_gm_marked_outcome. Returns 201 with BeatCompletion on success.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeatRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beat'
+          description: ''
+  /api/beats/{id}/readiness/:
+    get:
+      operationId: beats_readiness_retrieve
+      description: |-
+        GET /api/beats/{id}/readiness/ - GM readiness dashboard for this beat (#3562).
+
+        Unlike ``stakes-summary`` (player-safe, pillar 9), this surfaces the
+        raw ``problems`` list - GM planning detail, like
+        ``internal_description`` - so it is gated to the Lead GM or staff via
+        ``CanAssignMissionToBeat`` rather than the broader stakes-summary
+        audience.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeatReadiness'
+          description: ''
+  /api/beats/{id}/scenario/:
+    post:
+      operationId: beats_scenario_create
+      description: |-
+        POST /api/beats/{id}/scenario/ - GM authors a scenario graph as this beat's body.
+
+        #3565. Reuses ``CanAssignMissionToBeat`` (Lead GM or staff - the same gate
+        ``assign_mission`` above uses) since authoring a beat's mission body
+        is the same GM-tier gesture as assigning one. POST body:
+        ``{"name", "summary", "risk_tier"}``. 201 + the new
+        MissionTemplateSerializer payload on first call; 200 with the same
+        payload on a repeat call (idempotent - ``create_scenario_for_beat``
+        returns the existing template rather than erroring or duplicating).
+        400 ``{"required_mission": [...]}`` when the beat already uses a
+        catalog (non-scenario) template; 400 ``{"name": [...]}`` on a name
+        collision.
       parameters:
       - in: path
         name: id
@@ -3389,7 +3516,14 @@ paths:
   /api/chapters/{id}/episodes/:
     get:
       operationId: chapters_episodes_retrieve
-      description: Get all episodes for a chapter
+      description: |-
+        Get all episodes for a chapter.
+
+        Carries the request in the serializer context (#3563) so
+        EpisodeListSerializer's GM-only routing_problems field can resolve
+        the viewer instead of default-denying every caller, and preloads one
+        routing report per episode on the page the way EpisodeViewSet.list
+        does, so this action does not pay four queries per episode.
       parameters:
       - in: path
         name: id
@@ -4407,6 +4541,14 @@ paths:
         name: has_open_positions
         schema:
           type: boolean
+      - in: query
+        name: kind
+        schema:
+          type: array
+          items:
+            type: integer
+        explode: true
+        style: form
       tags:
       - character-creation
       security:
@@ -4738,10 +4880,14 @@ paths:
     get:
       operationId: character_creation_origin_templates_list
       description: |-
-        List active origin-story templates for the CG guided flow (#2478).
+        Serialize with one batched ``claimable_kind_ids`` query, not one per row.
 
-        Filter by ``beginning`` to get templates available for a specific beginning.
-        Mirrors ``CGGlimpseTagViewSet``.
+        Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
+        so there is no ``page`` branch to preserve) but materializes the
+        queryset once and passes a template-id -> kind-id grouping into the
+        serializer context (no per-request memo on ``self`` - ADR-0260; the
+        grouping is a plain argument, not state stashed on the view or
+        serializer instance).
       parameters:
       - in: query
         name: beginning
@@ -4764,16 +4910,17 @@ paths:
     get:
       operationId: character_creation_origin_templates_retrieve
       description: |-
-        List active origin-story templates for the CG guided flow (#2478).
+        List active origin-story templates for the CG guided flow (#2478, #3617).
 
         Filter by ``beginning`` to get templates available for a specific beginning.
-        Mirrors ``CGGlimpseTagViewSet``.
+        Trust-gated: staff see every active row, everyone else only rows whose
+        ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
       parameters:
       - in: path
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this Origin Template.
+        description: A unique integer value identifying this Upbringing.
         required: true
       tags:
       - character-creation
@@ -5190,7 +5337,12 @@ paths:
   /api/character-sheets/{id}/clear-origin-slot/:
     post:
       operationId: character_sheets_clear_origin_slot_create
-      description: Clear a character's origin-story slot answer (#2478).
+      description: |-
+        Clear a character's origin-story slot answer (#2478, #3617).
+
+        A slot holding a costed choice was set at character creation; a
+        non-staff caller clearing it here would erase a priced pick for free,
+        so that combination is refused the same way setting one is.
       parameters:
       - in: path
         name: id
@@ -5259,7 +5411,12 @@ paths:
   /api/character-sheets/{id}/set-origin-slot/:
     post:
       operationId: character_sheets_set_origin_slot_create
-      description: Set a character's origin-story slot answer (#2478).
+      description: |-
+        Set a character's origin-story slot answer (#2478, #3617).
+
+        A costed pick-list choice is set at character creation only; a non-staff
+        caller sending ``choice_id`` here is refused. A text-only write on a slot
+        that already carries a choice keeps that choice (write-ins never clear it).
       parameters:
       - in: path
         name: id
@@ -5986,6 +6143,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedHeldClueList'
+          description: ''
+  /api/clues/search/:
+    get:
+      operationId: clues_search_list
+      description: |-
+        GM-only clue search for the stake reward picker (#3566).
+
+        Only clues whose target kind ``AUTOMATIC`` resolution can actually deliver on its
+        own (``RESOLVABLE_CLUE_TARGET_KINDS``) are searchable: an ITEM-target clue is a
+        bare pointer, not a coherent reward payload. Rows are further filtered through
+        ``clue_target_kind_allowed`` so a GM never sees a clue whose target they aren't
+        permitted to author (SECRET targets stay staff-only).
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+      tags:
+      - clues
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClueSearchResult'
           description: ''
   /api/codex/categories/:
     get:
@@ -10891,9 +11077,7 @@ paths:
   /api/episodes/:
     get:
       operationId: episodes_list
-      description: |-
-        ViewSet for Episode model.
-        Manages story episodes with narrative connection tracking.
+      description: Preload one routing report per episode on the page (#3563).
       parameters:
       - in: query
         name: chapter
@@ -11112,14 +11296,14 @@ paths:
       description: |-
         POST /api/episodes/{id}/resolve/ — resolve the current progress for an episode.
 
-        Lead GM or staff posts {progress_id?, chosen_transition?, gm_notes?} to
-        advance the story's progress record past the current episode. Returns 201 on success.
+        Lead GM or staff posts {progress_id?, gm_notes?} to advance the story's
+        progress record past the current episode. Returns 201 on success.
+        Routing is automatic (#3565): the transition fires by authored order.
 
-        Note: NoEligibleTransitionError and AmbiguousTransitionError can fire from
-        resolve_episode() for cases the serializer cannot pre-validate without
-        duplicating get_eligible_transitions() logic. These are caught here and
-        surfaced as 400 responses. They are genuine runtime errors, not
-        user-input-validation errors.
+        Note: NoEligibleTransitionError can fire from resolve_episode() for cases
+        the serializer cannot pre-validate without duplicating
+        get_eligible_transitions() logic. It is caught here and surfaced as a 400
+        response. This is a genuine runtime error, not a user-input-validation error.
       parameters:
       - in: path
         name: id
@@ -13932,6 +14116,47 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/gm/discovery/:
+    get:
+      operationId: gm_discovery_retrieve
+      description: |-
+        GET /api/gm/discovery/?q=&risk=: the catalog browse the web GM panel
+        and the beat form use (#3564). Same search as telnet ``setsituation find``;
+        kinds above the caller's tier never appear. Read-only, never writes a pool.
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+          default: ''
+      - in: query
+        name: risk
+        schema:
+          enum:
+          - none
+          - low
+          - moderate
+          - high
+          - extreme
+          - ''
+          type: string
+        description: |-
+          * `none` - None
+          * `low` - Low
+          * `moderate` - Moderate
+          * `high` - High
+          * `extreme` - Extreme
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResult'
+          description: ''
   /api/gm/invites/:
     get:
       operationId: gm_invites_list
@@ -18587,11 +18812,29 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
+
+        **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+        every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+        isn't limited to the technique-cast catalog. ``retrieve`` is always
+        unfiltered (any pool, not just a catalog member) and returns
+        ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+        inheritance + own entries minus exclusions) the beat form's pool picker
+        needs to preview a pool before selecting it.
       parameters:
       - in: query
         name: action_category
         schema:
           type: string
+      - in: query
+        name: scope
+        schema:
+          type: string
+          enum:
+          - beat
+          - technique
+        description: |-
+          * `technique` - Technique
+          * `beat` - Beat
       tags:
       - magic
       security:
@@ -18619,6 +18862,14 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
+
+        **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+        every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+        isn't limited to the technique-cast catalog. ``retrieve`` is always
+        unfiltered (any pool, not just a catalog member) and returns
+        ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+        inheritance + own entries minus exclusions) the beat form's pool picker
+        needs to preview a pool before selecting it.
       parameters:
       - in: path
         name: id
@@ -18635,7 +18886,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConsequencePoolCatalog'
+                $ref: '#/components/schemas/ConsequencePoolDetail'
           description: ''
   /api/magic/crossing/pending/:
     get:
@@ -21953,11 +22204,12 @@ paths:
     get:
       operationId: missions_categories_list
       description: |-
-        Staff-only browse of seeded MissionCategory rows.
+        Browse of seeded MissionCategory rows -- staff or any GM (#3565).
 
         Categories are managed via fixture/admin — no authoring endpoints.
-        The Mission Studio uses this to populate the category multi-select
-        on the create page and the edit-categories dialog.
+        Read-only, so there is nothing here to scope by ownership; a GM authoring
+        their own scenario needs the same category list staff use for the
+        multi-select on the create page and the edit-categories dialog.
       parameters:
       - name: page
         required: false
@@ -21986,11 +22238,12 @@ paths:
     get:
       operationId: missions_categories_retrieve
       description: |-
-        Staff-only browse of seeded MissionCategory rows.
+        Browse of seeded MissionCategory rows -- staff or any GM (#3565).
 
         Categories are managed via fixture/admin — no authoring endpoints.
-        The Mission Studio uses this to populate the category multi-select
-        on the create page and the edit-categories dialog.
+        Read-only, so there is nothing here to scope by ownership; a GM authoring
+        their own scenario needs the same category list staff use for the
+        multi-select on the create page and the edit-categories dialog.
       parameters:
       - in: path
         name: id
@@ -23284,8 +23537,12 @@ paths:
   /api/missions/route-rewards/:
     get:
       operationId: missions_route_rewards_list
-      description: Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate
-        parent).
+      description: |-
+        Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+        The parent template lives behind an XOR FK (route OR candidate), so
+        ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+        using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
       parameters:
       - in: query
         name: candidate
@@ -23328,8 +23585,12 @@ paths:
           description: ''
     post:
       operationId: missions_route_rewards_create
-      description: Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate
-        parent).
+      description: |-
+        Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+        The parent template lives behind an XOR FK (route OR candidate), so
+        ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+        using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
       tags:
       - missions
       requestBody:
@@ -23350,8 +23611,12 @@ paths:
   /api/missions/route-rewards/{id}/:
     get:
       operationId: missions_route_rewards_retrieve
-      description: Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate
-        parent).
+      description: |-
+        Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+        The parent template lives behind an XOR FK (route OR candidate), so
+        ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+        using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
       parameters:
       - in: path
         name: id
@@ -23373,8 +23638,12 @@ paths:
           description: ''
     put:
       operationId: missions_route_rewards_update
-      description: Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate
-        parent).
+      description: |-
+        Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+        The parent template lives behind an XOR FK (route OR candidate), so
+        ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+        using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
       parameters:
       - in: path
         name: id
@@ -23402,8 +23671,12 @@ paths:
           description: ''
     patch:
       operationId: missions_route_rewards_partial_update
-      description: Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate
-        parent).
+      description: |-
+        Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+        The parent template lives behind an XOR FK (route OR candidate), so
+        ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+        using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
       parameters:
       - in: path
         name: id
@@ -23430,8 +23703,12 @@ paths:
           description: ''
     delete:
       operationId: missions_route_rewards_destroy
-      description: Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate
-        parent).
+      description: |-
+        Editor CRUD for MissionOptionRouteReward rows (XOR route/candidate parent).
+
+        The parent template lives behind an XOR FK (route OR candidate), so
+        ``get_queryset`` ORs ``scenario_scope_q`` over both prefixes instead of
+        using ``ScenarioScopedQuerysetMixin``'s single ``template_prefix``.
       parameters:
       - in: path
         name: id
@@ -23617,10 +23894,15 @@ paths:
     get:
       operationId: missions_templates_list
       description: |-
-        Staff-only browse + edit endpoint for MissionTemplate rows.
+        Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
         List: paginated, filterable (see MissionTemplateFilterSet), ordered
-        by primary key for stable pagination.
+        by primary key for stable pagination. Non-staff callers are scoped by
+        ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+        plus anything OPEN and within their GM-level risk ceiling; template
+        CREATE stays staff-only -- a scenario template is only ever minted
+        through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+        is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
         Detail (D1.3, pending): returns the §5 footprint — lifetime
         completions + currently-active MissionInstance rows + their current
@@ -23714,10 +23996,15 @@ paths:
     post:
       operationId: missions_templates_create
       description: |-
-        Staff-only browse + edit endpoint for MissionTemplate rows.
+        Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
         List: paginated, filterable (see MissionTemplateFilterSet), ordered
-        by primary key for stable pagination.
+        by primary key for stable pagination. Non-staff callers are scoped by
+        ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+        plus anything OPEN and within their GM-level risk ceiling; template
+        CREATE stays staff-only -- a scenario template is only ever minted
+        through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+        is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
         Detail (D1.3, pending): returns the §5 footprint — lifetime
         completions + currently-active MissionInstance rows + their current
@@ -23747,10 +24034,15 @@ paths:
     get:
       operationId: missions_templates_retrieve
       description: |-
-        Staff-only browse + edit endpoint for MissionTemplate rows.
+        Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
         List: paginated, filterable (see MissionTemplateFilterSet), ordered
-        by primary key for stable pagination.
+        by primary key for stable pagination. Non-staff callers are scoped by
+        ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+        plus anything OPEN and within their GM-level risk ceiling; template
+        CREATE stays staff-only -- a scenario template is only ever minted
+        through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+        is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
         Detail (D1.3, pending): returns the §5 footprint — lifetime
         completions + currently-active MissionInstance rows + their current
@@ -23780,10 +24072,15 @@ paths:
     put:
       operationId: missions_templates_update
       description: |-
-        Staff-only browse + edit endpoint for MissionTemplate rows.
+        Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
         List: paginated, filterable (see MissionTemplateFilterSet), ordered
-        by primary key for stable pagination.
+        by primary key for stable pagination. Non-staff callers are scoped by
+        ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+        plus anything OPEN and within their GM-level risk ceiling; template
+        CREATE stays staff-only -- a scenario template is only ever minted
+        through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+        is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
         Detail (D1.3, pending): returns the §5 footprint — lifetime
         completions + currently-active MissionInstance rows + their current
@@ -23819,10 +24116,15 @@ paths:
     patch:
       operationId: missions_templates_partial_update
       description: |-
-        Staff-only browse + edit endpoint for MissionTemplate rows.
+        Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
         List: paginated, filterable (see MissionTemplateFilterSet), ordered
-        by primary key for stable pagination.
+        by primary key for stable pagination. Non-staff callers are scoped by
+        ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+        plus anything OPEN and within their GM-level risk ceiling; template
+        CREATE stays staff-only -- a scenario template is only ever minted
+        through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+        is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
         Detail (D1.3, pending): returns the §5 footprint — lifetime
         completions + currently-active MissionInstance rows + their current
@@ -23857,10 +24159,15 @@ paths:
     delete:
       operationId: missions_templates_destroy
       description: |-
-        Staff-only browse + edit endpoint for MissionTemplate rows.
+        Staff + scenario-owner browse/edit endpoint for MissionTemplate rows (#3565).
 
         List: paginated, filterable (see MissionTemplateFilterSet), ordered
-        by primary key for stable pagination.
+        by primary key for stable pagination. Non-staff callers are scoped by
+        ``ScenarioScopedQuerysetMixin`` to templates their own StoryScenario owns
+        plus anything OPEN and within their GM-level risk ceiling; template
+        CREATE stays staff-only -- a scenario template is only ever minted
+        through ``POST /api/beats/{id}/scenario/`` (``scenario_owner_can_create``
+        is False here, so ``IsStaffOrScenarioOwner`` 403s a non-staff POST).
 
         Detail (D1.3, pending): returns the §5 footprint — lifetime
         completions + currently-active MissionInstance rows + their current
@@ -24671,7 +24978,7 @@ paths:
                 $ref: '#/components/schemas/InteractionState'
           description: ''
         '400':
-          description: No puppeted character or no role was provided.
+          description: No selected character or no role was provided.
         '404':
           description: NPC role or persona was not found.
         '409':
@@ -30158,6 +30465,14 @@ paths:
         name: has_open_positions
         schema:
           type: boolean
+      - in: query
+        name: kind
+        schema:
+          type: array
+          items:
+            type: integer
+        explode: true
+        style: form
       tags:
       - roster
       security:
@@ -31251,14 +31566,19 @@ paths:
         GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
         material, protected subjects, and room clue placements, gated per-viewer.
 
-        Composed read only -- no writes, no models, no migration. View-level gate
-        (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
-        the scene owner and is too broad -- see the #3434 spec's anti-reinvention
-        ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
-        (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
-        ``CharacterVitalsView``, the scene itself is already visible through the
-        plain detail endpoint, so this gate is refusing a sub-resource, not hiding
-        the scene's existence.
+        Composed read only -- no writes, no models, no migration. Scene-level gate
+        via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+        ``ReadOnlyOrSceneParticipant`` -- a viewer must be able to see the scene at
+        all (``Scene.is_viewable_by``) before this action's own body runs; this was
+        previously missing (a PRIVATE/EPHEMERAL scene's story rail leaked to any
+        authenticated account, #3565 fix round 1 CRITICAL). On top of that,
+        view-level gate (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff``
+        includes the scene owner and is too broad -- see the #3434 spec's
+        anti-reinvention ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+        (``viewer_qualifies_for_rail``). Denial there is 403 (not 404) -- unlike
+        ``CharacterVitalsView``, a viewer who can see the scene at all (the gate
+        above) already knows it exists, so this second gate is refusing a
+        sub-resource, not hiding the scene's existence.
 
         Payload sections are gated further, per-viewer, inside
         ``build_gm_story_rail_payload``: the beat summary for any qualifying
@@ -31276,7 +31596,6 @@ paths:
       - scenes
       security:
       - cookieAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -31346,6 +31665,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/scenes/{id}/scenario/:
+    get:
+      operationId: scenes_scenario_retrieve
+      description: |-
+        GET /api/scenes/{id}/scenario/ (#3565) - the mission scenario this scene is
+        currently running, gated per-viewer.
+
+        Composed read only -- no writes, no models, no migration. Scene-level gate
+        via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+        ``ReadOnlyOrSceneParticipant`` -- a viewer must be authenticated AND able to
+        see the scene at all (``Scene.is_viewable_by`` -- public, staff, or a scene
+        participant) before this action's own body ever runs. Past that gate: any
+        such viewer gets 200, ``instance_id`` null when the scene runs no scenario.
+        Sub-sections are gated inside ``build_scene_scenario_payload``: ``group_beat``
+        (the same shape as ``journal/{id}/group-beat/``) only for a viewer playing a
+        participant on the run; ``gm`` (current node, every ballot, the last deed,
+        the running beat's outcome) only for staff or viewers with standing on the
+        running story (``viewer_has_story_standing`` -- the same #3434 leak
+        invariant). A bystander with neither gets both null but still 200.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneScenario'
+          description: ''
   /api/scenes/{id}/set-round-mode/:
     post:
       operationId: scenes_set_round_mode_create
@@ -31378,6 +31734,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
+          description: ''
+  /api/scenes/{id}/stakes-summary/:
+    get:
+      operationId: scenes_stakes_summary_retrieve
+      description: |-
+        GET /api/scenes/{id}/stakes-summary/ (#3561) - what the scene's running beat
+        wagers, for the party's opt-in prompt.
+
+        Composed read only -- no writes, no models, no migration. Scene-level gate via
+        ``get_permissions``: ``IsAuthenticated`` + ``ReadOnlyOrSceneParticipant`` -- the
+        same participant/staff floor ``scenario``/``gm-rail`` use (``Scene.is_viewable_by``).
+
+        Exists because a player never receives the running beat id from any scene
+        payload (``SceneListSerializer``/``SceneDetailSerializer`` deliberately omit
+        ``running_beat`` -- see the #3562 leak rule this preserves): the beat-scoped
+        ``GET /api/beats/{id}/stakes-summary/`` (``BeatViewSet.stakes_summary``) is
+        unreachable to a player who was never handed a beat id, so this resolves
+        ``scene.running_beat`` server-side and delegates to the identical
+        ``stakes_summary_for_beat`` builder -- one payload shape, two entry points.
+        Leaks only ``player_summary``/``severity`` per stake, plus declared/effective
+        risk and readiness (#1770 pillar 9); branch contents (``StakeResolution`` rows)
+        are never included.
+
+        When the scene runs no beat, returns the same shape with ``declared_risk``/
+        ``effective_risk`` null and an empty ``stakes`` list, built by hand rather than
+        through ``StakesSummarySerializer`` (whose ``declared_risk``/``effective_risk``
+        ``CharField``s forbid null) -- there is no beat to build a
+        ``StakesSummarySerializer``-shaped instance from.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakesSummary'
           description: ''
   /api/scenes/{id}/truncate-precapture/:
     post:
@@ -34512,48 +34913,6 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/stakes/{id}/resolve/:
-    post:
-      operationId: stakes_resolve_create
-      description: |-
-        POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
-
-        Lead GM, staff, or an AGM with an approved claim on the stake's beat
-        picks one of the stake's AUTHORED resolution columns; the branch fires
-        exactly like the machine path (pool + writers) and the StakeOutcome
-        audit row records method=GM_PICK with the GM and notes. Optional
-        ``participants`` / ``extra_participants`` carry the personas the
-        branch's pool and affection writer credit (MarkBeat semantics).
-        Returns 201 with the StakeOutcome.
-
-        The LEGEND_AWARD participant guards fire inside the service's pool
-        walk — pre-validating them in the serializer would duplicate
-        resolve_pool_consequences; they are surfaced as 400 here (same
-        exception-block carve-out as EpisodeViewSet.resolve).
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this stake.
-        required: true
-      tags:
-      - stakes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StakeRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Stake'
-          description: ''
   /api/stories/:
     get:
       operationId: stories_list
@@ -37456,10 +37815,6 @@ paths:
         The source episode's story is resolved via source_episode -> chapter -> story ->
         primary_table.gm.
       parameters:
-      - in: query
-        name: mode
-        schema:
-          type: string
       - name: ordering
         required: false
         in: query
@@ -37665,11 +38020,11 @@ paths:
             {
                 "source_episode": <int>,
                 "target_episode": <int | null>,
-                "mode": "auto" | "gm_choice",
                 "connection_type": "" | "therefore" | "but",
                 "connection_summary": "<str>",
                 "order": <int>,
-                "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+                "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired",
+                              "required_outcome_key": "<str>"},
                              {"beat": <int>, "stake": <int>,
                               "required_stake_column": "win" | "loss" | "withdrawal"},
                              ...],
@@ -38499,6 +38854,14 @@ components:
       required:
       - email
       - expires_at
+    AccountSecuritySettings:
+      type: object
+      description: The account's own security switches (#3591). One field for now.
+      properties:
+        block_telnet_login_with_2fa:
+          type: boolean
+      required:
+      - block_telnet_login_with_2fa
     Achievement:
       type: object
       description: Full serializer for achievement detail view.
@@ -38945,6 +39308,8 @@ components:
           readOnly: true
         is_active:
           type: boolean
+          description: Whether this is the alternate self the character is currently
+            wearing.
           readOnly: true
       required:
       - form_name
@@ -39007,6 +39372,18 @@ components:
           nullable: true
       required:
       - character_sheet_id
+    AppliesToEnum:
+      enum:
+      - any
+      - claimed
+      - named
+      - none
+      type: string
+      description: |-
+        * `any` - Any path
+        * `claimed` - Claim a staff-authored family
+        * `named` - Name your own family
+        * `none` - No family
     ArcScopeEnum:
       enum:
       - global
@@ -39650,13 +40027,8 @@ components:
           readOnly: true
         declared_this_round:
           type: boolean
-          description: |-
-            Whether this participant already has a declaration in the CURRENT round (#3389).
-
-            Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
-            against ``current_round_id`` stashed once by
-            ``BattleDetailSerializer.to_representation`` — never a per-participant
-            query, so this stays flat regardless of roster size.
+          description: Whether this participant already has a declaration in the CURRENT
+            round (#3389).
           readOnly: true
       required:
       - character_sheet_id
@@ -39943,10 +40315,10 @@ components:
         predicate_type:
           allOf:
           - $ref: '#/components/schemas/PredicateTypeEnum'
-          default: gm_marked
+          default: outcome_tier
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeD50Enum'
+          - $ref: '#/components/schemas/Outcome425Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -39954,7 +40326,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
         visibility:
           $ref: '#/components/schemas/BeatVisibilityEnum'
         internal_description:
@@ -40055,8 +40426,16 @@ components:
           maximum: 2147483647
           minimum: -2147483648
           nullable: true
-          description: For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value
-            (-1000..1000).
+          description: 'For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates:
+            the minimum raw value (-1000..1000).'
+        required_npc_sheet:
+          type: integer
+          description: 'For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for
+            the character is read (NpcRegard from the NPC''s primary persona toward
+            the character''s primary persona, the row the stake npc_regard_delta and
+            the SHIFT_NPC_REGARD pool effect write). Not the functionary standing
+            (NPCStanding.affection) and not the relationships affection track.'
+          nullable: true
         agm_eligible:
           type: boolean
           description: Lead GM may flag this beat to be claimable by Assistant GMs.
@@ -40064,8 +40443,15 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
+        clock_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Scene clock size in ticks (#3567); 0 means no clock. Running
+            the beat opens a SceneClock of this size; combat rounds and the GM's advance
+            gesture fill it, and a full clock resolves the beat EXPIRED.
         success_consequences:
           type: integer
           nullable: true
@@ -40104,6 +40490,19 @@ components:
             'episode__chapter__story__primary_table' to avoid N+1 on list endpoints.
             BeatViewSet.queryset already includes this chain.
           readOnly: true
+        scenario:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Read-only GM view of this beat's scenario graph (#3565).
+
+            None when the beat has no ``required_mission``, when that template
+            isn't a story-owned scenario (a catalog mission the GM merely
+            assigned), or when the viewer lacks ``can_view_story_gm_text`` (same
+            gate as ``internal_description`` above) -- node/option keys are GM
+            planning detail, not player-visible.
+          readOnly: true
         opponent_lines:
           type: array
           items:
@@ -40112,6 +40511,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatStagedTemplate'
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/BeatStagedBattle'
+          nullable: true
       required:
       - can_mark
       - chapter_title
@@ -40120,6 +40523,7 @@ components:
       - episode_title
       - id
       - internal_description
+      - scenario
       - story_id
       - story_title
       - updated_at
@@ -40224,6 +40628,65 @@ components:
       - kind
       - label
       - option_id
+    BeatOutcomeEnum:
+      enum:
+      - success
+      - failure
+      type: string
+      description: |-
+        * `success` - Success
+        * `failure` - Failure
+    BeatReadiness:
+      type: object
+      description: |-
+        GM readiness dashboard payload for a beat (#3562).
+
+        Read-only wire shape; build the payload via
+        ``world.stories.services.stakes.beat_readiness_payload``. Unlike
+        ``StakesSummarySerializer`` below, ``problems`` is GM planning detail
+        (readiness reasons) rather than a player-safe summary, so the readiness
+        endpoint gates on ``CanAssignMissionToBeat`` (Lead GM or staff), not the
+        broader stakes-summary audience.
+      properties:
+        is_staked:
+          type: boolean
+          readOnly: true
+        is_ready:
+          type: boolean
+          readOnly: true
+        problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        advisories:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        declared_risk:
+          type: string
+          readOnly: true
+        effective_risk:
+          type: string
+          readOnly: true
+        locked:
+          type: boolean
+          readOnly: true
+        locked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - advisories
+      - declared_risk
+      - effective_risk
+      - is_ready
+      - is_staked
+      - locked
+      - locked_at
+      - problems
     BeatRequest:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
@@ -40234,10 +40697,10 @@ components:
         predicate_type:
           allOf:
           - $ref: '#/components/schemas/PredicateTypeEnum'
-          default: gm_marked
+          default: outcome_tier
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeD50Enum'
+          - $ref: '#/components/schemas/Outcome425Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -40245,7 +40708,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
         visibility:
           $ref: '#/components/schemas/BeatVisibilityEnum'
         internal_description:
@@ -40347,8 +40809,16 @@ components:
           maximum: 2147483647
           minimum: -2147483648
           nullable: true
-          description: For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value
-            (-1000..1000).
+          description: 'For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates:
+            the minimum raw value (-1000..1000).'
+        required_npc_sheet:
+          type: integer
+          description: 'For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for
+            the character is read (NpcRegard from the NPC''s primary persona toward
+            the character''s primary persona, the row the stake npc_regard_delta and
+            the SHIFT_NPC_REGARD pool effect write). Not the functionary standing
+            (NPCStanding.affection) and not the relationships affection track.'
+          nullable: true
         agm_eligible:
           type: boolean
           description: Lead GM may flag this beat to be claimable by Assistant GMs.
@@ -40356,8 +40826,15 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
+        clock_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Scene clock size in ticks (#3567); 0 means no clock. Running
+            the beat opens a SceneClock of this size; combat rounds and the GM's advance
+            gesture fill it, and a full clock resolves the beat EXPIRED.
         success_consequences:
           type: integer
           nullable: true
@@ -40384,6 +40861,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatStagedTemplateRequest'
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/BeatStagedBattleRequest'
+          nullable: true
       required:
       - episode
       - internal_description
@@ -40400,6 +40881,140 @@ components:
           nullable: true
       required:
       - option_id
+    BeatStagedBattle:
+      type: object
+      description: |-
+        Nested battle prep on a beat (#3569); written through BeatSerializer only.
+
+        Not registered as a standalone router endpoint -- a staged battle only
+        exists attached to its beat, so it is read/written exclusively via
+        ``BeatSerializer.staged_battle``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        blueprint:
+          type: integer
+          description: The map this beat's battle is cloned from at run time.
+        blueprint_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          description: Battle name; blank uses the first line of the beat's internal
+            description.
+          maxLength: 100
+        region:
+          type: integer
+          nullable: true
+          description: Optional region the battle is set in (Battle.region).
+        party_side_role:
+          allOf:
+          - $ref: '#/components/schemas/PartySideRoleEnum'
+          description: |-
+            Which side the running scene's party is enlisted on.
+
+            * `attacker` - Attacker
+            * `defender` - Defender
+        unit_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedBattleUnit'
+      required:
+      - blueprint
+      - blueprint_name
+      - id
+    BeatStagedBattleRequest:
+      type: object
+      description: |-
+        Nested battle prep on a beat (#3569); written through BeatSerializer only.
+
+        Not registered as a standalone router endpoint -- a staged battle only
+        exists attached to its beat, so it is read/written exclusively via
+        ``BeatSerializer.staged_battle``.
+      properties:
+        blueprint:
+          type: integer
+          description: The map this beat's battle is cloned from at run time.
+        name:
+          type: string
+          description: Battle name; blank uses the first line of the beat's internal
+            description.
+          maxLength: 100
+        region:
+          type: integer
+          nullable: true
+          description: Optional region the battle is set in (Battle.region).
+        party_side_role:
+          allOf:
+          - $ref: '#/components/schemas/PartySideRoleEnum'
+          description: |-
+            Which side the running scene's party is enlisted on.
+
+            * `attacker` - Attacker
+            * `defender` - Defender
+        unit_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/BeatStagedBattleUnitRequest'
+      required:
+      - blueprint
+    BeatStagedBattleUnit:
+      type: object
+      description: |-
+        One unit line of a staged battle (#3569).
+
+        ``id`` is writable-but-optional, the same diff-by-id convention as
+        ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        template:
+          type: integer
+        side_role:
+          $ref: '#/components/schemas/SideRoleEnum'
+        place_name:
+          type: string
+          description: Blueprint place name to spawn at; blank spawns unplaced.
+          maxLength: 100
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - template
+    BeatStagedBattleUnitRequest:
+      type: object
+      description: |-
+        One unit line of a staged battle (#3569).
+
+        ``id`` is writable-but-optional, the same diff-by-id convention as
+        ``BeatOpponentLineSerializer`` -- see ``BeatSerializer._sync_children``.
+      properties:
+        id:
+          type: integer
+        template:
+          type: integer
+        side_role:
+          $ref: '#/components/schemas/SideRoleEnum'
+        place_name:
+          type: string
+          description: Blueprint place name to spawn at; blank spawns unplaced.
+          maxLength: 100
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - template
     BeatStagedTemplate:
       type: object
       description: |-
@@ -40460,12 +41075,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatOption'
+        is_paused:
+          type: boolean
+        track:
+          allOf:
+          - $ref: '#/components/schemas/TrackView'
+          nullable: true
       required:
       - flavor_text
       - instance_id
+      - is_paused
       - node_key
       - options
       - template_name
+      - track
     BeatVisibilityEnum:
       enum:
       - hinted
@@ -40496,9 +41119,6 @@ components:
           description: Cloudinary URL sourced from art (#2408); key name kept for
             frontend compat.
           readOnly: true
-        family_known:
-          type: boolean
-          description: Whether family is selectable in Lineage stage (False = 'Unknown')
         allowed_species_ids:
           type: array
           items:
@@ -40550,9 +41170,6 @@ components:
           type: string
           minLength: 1
           description: Worldbuilding text shown to players
-        family_known:
-          type: boolean
-          description: Whether family is selectable in Lineage stage (False = 'Unknown')
         grants_species_languages:
           type: boolean
           description: If False, characters don't get species' racial language (Misbegotten)
@@ -41441,7 +42058,7 @@ components:
     CGOriginTemplate:
       type: object
       description: |-
-        Origin template for the CG guided flow (#2478).
+        Origin template for the CG guided flow (#2478, #3617).
 
         Backs ``GET /api/character-creation/origin-templates/``.
       properties:
@@ -41464,18 +42081,57 @@ components:
           type: integer
           readOnly: true
           description: Display order when multiple templates exist.
+        cg_point_cost:
+          type: integer
+          readOnly: true
+          description: Flat CG cost of this Upbringing (#3617). Negative refunds,
+            like a drawback.
+        trust_required:
+          type: integer
+          readOnly: true
+          description: Minimum trust to see/select this Upbringing (#3617).
+        allows_claim_family:
+          type: boolean
+          readOnly: true
+          description: Player may claim a staff-authored family (#3617).
+        allows_name_family:
+          type: boolean
+          readOnly: true
+          description: Player may name a new family with no authority (#3617).
+        allows_no_family:
+          type: boolean
+          readOnly: true
+          description: Player has no family; the tarot surname ritual applies (#3617).
+        claimable_kind_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        named_family_kind:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Kind a player-named family gets; required when naming is allowed
+            (#3617).
         slots:
           type: array
           items:
             $ref: '#/components/schemas/OriginTemplateSlot'
           readOnly: true
       required:
+      - allows_claim_family
+      - allows_name_family
+      - allows_no_family
+      - cg_point_cost
+      - claimable_kind_ids
       - frame_narrative
       - id
       - is_active
       - name
+      - named_family_kind
       - slots
       - sort_order
+      - trust_required
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -41798,6 +42454,16 @@ components:
           items:
             $ref: '#/components/schemas/TechniqueForm'
           readOnly: true
+        reactive_anima_cost:
+          type: integer
+          nullable: true
+          description: |-
+            Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
+
+            One protective_condition_and_flavor call per row - same traversal
+            actions.player_interface uses for PlayerAction.reactive_anima_cost, no new
+            authored field.
+          readOnly: true
       required:
       - anima_cost
       - control
@@ -41809,6 +42475,7 @@ components:
       - intensity
       - name
       - reach
+      - reactive_anima_cost
       - target_spec
       - target_type
       - tier
@@ -42903,6 +43570,21 @@ components:
           allOf:
           - $ref: '#/components/schemas/Family'
           readOnly: true
+        selected_origin_template:
+          allOf:
+          - $ref: '#/components/schemas/CGOriginTemplate'
+          readOnly: true
+        family_path:
+          description: |-
+            Chosen family path when the Upbringing allows more than one.
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+          oneOf:
+          - $ref: '#/components/schemas/FamilyPathEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         claimed_kin_slot:
           type: integer
           readOnly: true
@@ -43011,6 +43693,7 @@ components:
       - selected_area
       - selected_beginnings
       - selected_gender
+      - selected_origin_template
       - selected_path
       - selected_species
       - selected_tradition
@@ -43090,6 +43773,21 @@ components:
           type: integer
           writeOnly: true
           nullable: true
+        selected_origin_template_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        family_path:
+          description: |-
+            Chosen family path when the Upbringing allows more than one.
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+          oneOf:
+          - $ref: '#/components/schemas/FamilyPathEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         claimed_kin_slot_id:
           type: integer
           writeOnly: true
@@ -44086,6 +44784,27 @@ components:
       required:
       - clue
       - offer
+    ClueSearchResult:
+      type: object
+      description: |-
+        One row of the GM clue search picker (#3566): id, name, and target_kind only.
+
+        No description or target FK: the picker is for choosing which clue a stake reward
+        line grants, not for browsing clue content.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - target_kind
     CodexCategory:
       type: object
       properties:
@@ -44950,7 +45669,7 @@ components:
         target_persona_id:
           type: integer
         difficulty:
-          $ref: '#/components/schemas/DifficultyEnum'
+          $ref: '#/components/schemas/DifficultyChoiceEnum'
         resist_effort:
           default: ''
           oneOf:
@@ -45106,6 +45825,77 @@ components:
       required:
       - id
       - name
+    ConsequencePoolDetail:
+      type: object
+      description: |-
+        Detail view of any ``ConsequencePool``'s resolved consequences (#3562), the
+        beat-authoring picker's pool preview. ``entries`` is built from
+        ``resolve_pool_consequences`` (parent inheritance plus the pool's own entries,
+        minus anything excluded), not straight from ``ConsequencePoolEntry`` rows, so
+        it matches what actually fires when the pool is applied.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Human-readable pool name (e.g., 'Wild Magic Surge').
+          maxLength: 100
+        description:
+          type: string
+          description: GM authoring context for this pool.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsequencePoolEntry'
+          readOnly: true
+      required:
+      - entries
+      - id
+      - name
+    ConsequencePoolEntry:
+      type: object
+      description: |-
+        One resolved Consequence row in a ConsequencePoolDetailSerializer's ``entries``
+        list (#3562); schema typing only. See ``get_entries`` below for the builder.
+      properties:
+        consequence_id:
+          type: integer
+        name:
+          type: string
+        outcome_tier:
+          allOf:
+          - $ref: '#/components/schemas/ConsequencePoolEntryOutcomeTier'
+          nullable: true
+        effect_types:
+          type: array
+          items:
+            type: string
+        character_loss:
+          type: boolean
+      required:
+      - character_loss
+      - consequence_id
+      - effect_types
+      - name
+      - outcome_tier
+    ConsequencePoolEntryOutcomeTier:
+      type: object
+      description: |-
+        The outcome-tier triple embedded in a ConsequencePoolDetailSerializer entry
+        (#3562); schema typing only. ConsequencePoolDetailSerializer builds the dict
+        directly rather than instantiating this serializer.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        success_level:
+          type: integer
+      required:
+      - id
+      - name
+      - success_level
     ContentTheme:
       type: object
       description: Read-only serializer for the staff-authored content theme catalog.
@@ -46538,22 +47328,6 @@ components:
         * `hard` - Hard
         * `daunting` - Daunting
         * `harrowing` - Harrowing
-    DifficultyEnum:
-      enum:
-      - trivial
-      - easy
-      - normal
-      - hard
-      - daunting
-      - harrowing
-      type: string
-      description: |-
-        * `trivial` - Trivial
-        * `easy` - Easy
-        * `normal` - Normal
-        * `hard` - Hard
-        * `daunting` - Daunting
-        * `harrowing` - Harrowing
     DirectionEnum:
       enum:
       - favor
@@ -46598,6 +47372,178 @@ components:
       - discovered_at
       - discoverer_names
       - shared
+    DiscoveryChallenge:
+      type: object
+      description: Lightweight serializer for challenge template list views.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        category:
+          type: integer
+        category_name:
+          type: string
+          readOnly: true
+        severity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: 'Authored difficulty in DIFFICULTY_VALUES points (15 Trivial
+            .. 90 Harrowing), passed straight to perform_check''s target_difficulty.
+            NOT a 1-5 rating: the old default of 1 resolved every authored challenge
+            at the bottom rank (#2865).'
+        challenge_type:
+          $ref: '#/components/schemas/ChallengeTypeEnum'
+        discovery_type:
+          $ref: '#/components/schemas/DiscoveryTypeEnum'
+        description_template:
+          type: string
+          description: Template string with {variables} for instance-specific text.
+        goal:
+          type: string
+      required:
+      - category
+      - category_name
+      - id
+      - name
+    DiscoveryCheckFit:
+      type: object
+      properties:
+        check_type:
+          $ref: '#/components/schemas/DiscoveryCheckType'
+        fit_notes:
+          type: string
+      required:
+      - check_type
+      - fit_notes
+    DiscoveryCheckType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DiscoveryDifficultyGuide:
+      type: object
+      properties:
+        risk:
+          $ref: '#/components/schemas/RiskEnum'
+        recommended_difficulty:
+          $ref: '#/components/schemas/DifficultyChoiceEnum'
+        guidance_text:
+          type: string
+      required:
+      - guidance_text
+      - recommended_difficulty
+      - risk
+    DiscoveryKind:
+      type: object
+      description: One KindResult on the wire (#3564).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        minimum_gm_level:
+          $ref: '#/components/schemas/MinimumGmLevelEnum'
+        check_fits:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryCheckFit'
+        difficulty_guide:
+          allOf:
+          - $ref: '#/components/schemas/DiscoveryDifficultyGuide'
+          nullable: true
+        all_guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryDifficultyGuide'
+        pool_guides:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryPoolGuide'
+      required:
+      - all_guides
+      - check_fits
+      - description
+      - difficulty_guide
+      - id
+      - minimum_gm_level
+      - name
+      - pool_guides
+    DiscoveryPool:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DiscoveryPoolGuide:
+      type: object
+      properties:
+        pool:
+          $ref: '#/components/schemas/DiscoveryPool'
+        selection_criteria:
+          type: string
+        is_default:
+          type: boolean
+      required:
+      - is_default
+      - pool
+      - selection_criteria
+    DiscoveryResult:
+      type: object
+      description: DiscoveryResult on the wire (#3564); the GMEvidenceSummary pattern.
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryTemplate'
+        challenges:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryChallenge'
+        kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryKind'
+      required:
+      - challenges
+      - kinds
+      - templates
+    DiscoveryTemplate:
+      type: object
+      description: Lightweight serializer for situation template list views.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        category:
+          type: integer
+        category_name:
+          type: string
+          readOnly: true
+        description_template:
+          type: string
+      required:
+      - category
+      - category_name
+      - id
+      - name
     DiscoveryTypeEnum:
       enum:
       - obvious
@@ -48010,6 +48956,11 @@ components:
           items:
             $ref: '#/components/schemas/EngagementLock'
           readOnly: true
+        pending_attacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAttack'
+          readOnly: true
         resolution_order:
           type: array
           items:
@@ -48092,6 +49043,7 @@ components:
       - opponents
       - outcome
       - participants
+      - pending_attacks
       - position_adjacency
       - position_edges
       - position_nodes
@@ -48192,6 +49144,20 @@ components:
       - outcome
       - participant_count
       - scene
+    EncounterRiskLevelEnum:
+      enum:
+      - low
+      - moderate
+      - high
+      - extreme
+      - lethal
+      type: string
+      description: |-
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
+        * `lethal` - Lethal
     EncounterTypeEnum:
       enum:
       - party_combat
@@ -48374,11 +49340,23 @@ components:
           type: string
           format: date-time
           readOnly: true
+        routing_ambiguous:
+          type: boolean
+          description: Whether any pair of this episode's outbound transitions is
+            ambiguous (#3565).
+          readOnly: true
+        routing_problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - chapter
       - created_at
       - id
       - order
+      - routing_ambiguous
+      - routing_problems
       - title
       - updated_at
     EpisodeDetailRequest:
@@ -48446,10 +49424,16 @@ components:
           type: string
           format: date-time
           nullable: true
+        routing_problems:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - chapter
       - id
       - order
+      - routing_problems
       - scenes_count
       - title
     EpisodeProgressionRequirement:
@@ -49523,15 +50507,17 @@ components:
           type: string
           description: Family/house name
           maxLength: 100
-        family_type:
+        kind:
           allOf:
-          - $ref: '#/components/schemas/FamilyTypeEnum'
-          description: |-
-            Whether this is a noble house, commoner family, or crime family
-
-            * `commoner` - Commoner
-            * `noble` - Noble
-            * `crime` - Crime
+          - $ref: '#/components/schemas/FamilyKind'
+          readOnly: true
+        influence:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: How much authority this family holds over the world (#3617).
+            0 = none; player-named families are always 0. The price base for claim-path
+            Upbringing choices (cost_per_influence x influence).
         description:
           type: string
           description: Brief description of the family
@@ -49555,8 +50541,40 @@ components:
       required:
       - born_particle
       - id
+      - kind
       - name
       - taken_in_particle
+    FamilyKind:
+      type: object
+      description: Serializer for a family's authored kind (#3617).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        styles_as_house:
+          type: boolean
+          readOnly: true
+          description: Orgs rooted in this kind are styled 'House <name>' and wear
+            particles.
+      required:
+      - id
+      - name
+      - styles_as_house
+    FamilyPathEnum:
+      enum:
+      - any
+      - claimed
+      - named
+      - none
+      type: string
+      description: |-
+        * `any` - Any path
+        * `claimed` - Claim a staff-authored family
+        * `named` - Name your own family
+        * `none` - No family
     FamilyRequest:
       type: object
       description: Serializer for family selection and display.
@@ -49566,15 +50584,13 @@ components:
           minLength: 1
           description: Family/house name
           maxLength: 100
-        family_type:
-          allOf:
-          - $ref: '#/components/schemas/FamilyTypeEnum'
-          description: |-
-            Whether this is a noble house, commoner family, or crime family
-
-            * `commoner` - Commoner
-            * `noble` - Noble
-            * `crime` - Crime
+        influence:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: How much authority this family holds over the world (#3617).
+            0 = none; player-named families are always 0. The price base for claim-path
+            Upbringing choices (cost_per_influence x influence).
         description:
           type: string
           description: Brief description of the family
@@ -49617,16 +50633,6 @@ components:
       - nodes
       - parentage
       - unions
-    FamilyTypeEnum:
-      enum:
-      - commoner
-      - noble
-      - crime
-      type: string
-      description: |-
-        * `commoner` - Commoner
-        * `noble` - Noble
-        * `crime` - Crime
     FashionJudgement:
       type: object
       description: |-
@@ -50439,7 +51445,7 @@ components:
         profile_id:
           type: integer
         level:
-          $ref: '#/components/schemas/NewLevelEnum'
+          $ref: '#/components/schemas/LevelE58Enum'
         approved_at:
           type: string
           format: date-time
@@ -50482,7 +51488,7 @@ components:
           readOnly: true
         old_level:
           allOf:
-          - $ref: '#/components/schemas/NewLevelEnum'
+          - $ref: '#/components/schemas/OldLevelEnum'
           readOnly: true
         old_level_display:
           type: string
@@ -50535,7 +51541,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/NewLevelEnum'
+          - $ref: '#/components/schemas/LevelE58Enum'
           readOnly: true
         level_display:
           type: string
@@ -50554,15 +51560,20 @@ components:
       - level_display
     GMProfileMine:
       type: object
-      description: 'The requesting GM''s own profile: operational fields are writable
-        (#3478).'
+      description: |-
+        The requesting GM's own profile: operational fields are writable (#3478).
+
+        ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+        GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+        options from the same ceiling the API enforces, instead of a client-side
+        guess. Staff get the top of each scale regardless of any cap row.
       properties:
         id:
           type: integer
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/NewLevelEnum'
+          - $ref: '#/components/schemas/LevelE58Enum'
           readOnly: true
         level_display:
           type: string
@@ -50574,10 +51585,22 @@ components:
         ooc_info:
           type: string
           description: 'OOC information for players: style, expectations, boundaries.'
+        max_beat_risk:
+          type: string
+          description: 'RenownRisk ceiling: "extreme" for staff, else the caller''s
+            GMLevelCap.'
+          readOnly: true
+        allow_custom_stakes:
+          type: boolean
+          description: 'Whether this GM may author custom (template=null) stakes:
+            True for staff.'
+          readOnly: true
       required:
+      - allow_custom_stakes
       - id
       - level
       - level_display
+      - max_beat_risk
     GMRosterInvite:
       type: object
       description: For GM create/list operations on invites for their own characters.
@@ -50669,11 +51692,38 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GMStoryRailParticipant'
+        stakes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMStoryRailStake'
+        activation:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailActivation'
+          nullable: true
       required:
+      - activation
       - beat
       - clue_placements
       - participants
       - protected_subjects
+      - stakes
+    GMStoryRailActivation:
+      type: object
+      description: |-
+        The running beat's lock state: the open activation, or the most recent
+        resolved one when none is open.
+      properties:
+        locked_at:
+          type: string
+          format: date-time
+        effective_risk:
+          type: string
+        is_ready:
+          type: boolean
+      required:
+      - effective_risk
+      - is_ready
+      - locked_at
     GMStoryRailBeat:
       type: object
       description: The running beat's authored state, gated per-field by story standing.
@@ -50688,6 +51738,8 @@ components:
           type: string
         predicate_type:
           type: string
+        clock_size:
+          type: integer
         success_consequences_authored:
           type: boolean
         failure_consequences_authored:
@@ -50707,7 +51759,12 @@ components:
           items:
             $ref: '#/components/schemas/BeatStagedTemplate'
           nullable: true
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailStagedBattle'
+          nullable: true
       required:
+      - clock_size
       - expired_consequences_authored
       - failure_consequences_authored
       - id
@@ -50717,6 +51774,7 @@ components:
       - outcome
       - predicate_type
       - risk
+      - staged_battle
       - staged_templates
       - success_consequences_authored
     GMStoryRailClue:
@@ -50747,6 +51805,60 @@ components:
       required:
       - character_sheet_id
       - name
+    GMStoryRailStagedBattle:
+      type: object
+      description: The running beat's staged battle, story-standing viewers only (#3569).
+      properties:
+        blueprint_name:
+          type: string
+        name:
+          type: string
+        party_side_role:
+          $ref: '#/components/schemas/PartySideRoleEnum'
+        unit_line_count:
+          type: integer
+      required:
+      - blueprint_name
+      - name
+      - party_side_role
+      - unit_line_count
+    GMStoryRailStake:
+      type: object
+      description: One stake on the running beat's contract, story-standing viewers
+        only.
+      properties:
+        id:
+          type: integer
+        player_summary:
+          type: string
+        severity:
+          type: integer
+        subject_kind:
+          type: string
+        outcome:
+          allOf:
+          - $ref: '#/components/schemas/GMStoryRailStakeOutcome'
+          nullable: true
+      required:
+      - id
+      - outcome
+      - player_summary
+      - severity
+      - subject_kind
+    GMStoryRailStakeOutcome:
+      type: object
+      description: The fired branch for one stake, if the contract has resolved it.
+      properties:
+        column:
+          type: string
+        outcome_key:
+          type: string
+        resolution_summary:
+          type: string
+      required:
+      - column
+      - outcome_key
+      - resolution_summary
     GMSummonOffer:
       type: object
       description: |-
@@ -51769,15 +52881,23 @@ components:
         expires_at:
           type: string
           nullable: true
+        is_paused:
+          type: boolean
+        track:
+          allOf:
+          - $ref: '#/components/schemas/TrackView'
+          nullable: true
       required:
       - ballots
       - conflict_mode
       - expires_at
       - flavor_text
       - instance_id
+      - is_paused
       - node_key
       - options
       - phase
+      - track
     GroupPickRequestRequest:
       type: object
       description: 'POST body for the #1036 group-pick endpoint.'
@@ -52473,10 +53593,9 @@ components:
           maxLength: 120
         description:
           type: string
-        family_type:
-          type: string
-          description: roster.Family.FamilyType the defined family gets.
-          maxLength: 20
+        kind:
+          type: integer
+          description: The kind the defined family gets (#3617).
         name_pattern:
           type: string
           description: Full-match regex the proposed house name must satisfy — the
@@ -52542,9 +53661,9 @@ components:
           readOnly: true
       required:
       - aspect_definitions
-      - family_type
       - features
       - id
+      - kind
       - name
     HouseTitle:
       type: object
@@ -54404,6 +55523,20 @@ components:
         * `70` - Continent
         * `80` - World
         * `90` - Plane
+    LevelE58Enum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     LibraryEntry:
       type: object
       description: Read-only serializer for library browse cards.
@@ -54931,11 +56064,8 @@ components:
     MethodEnum:
       enum:
       - machine
-      - gm_pick
       type: string
-      description: |-
-        * `machine` - Machine
-        * `gm_pick` - GM pick
+      description: '* `machine` - Machine'
     MetricEnum:
       enum:
       - allure
@@ -54958,6 +56088,20 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    MinimumGmLevelEnum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     MintGMCharacterRequestRequest:
       type: object
       description: 'POST body for the #3478 GM-character mint (moved from world-builder,
@@ -55304,7 +56448,10 @@ components:
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
         sibling are both editable. ``location_mode``/``locations``/``target_area``
-        round-trip the node's location gate (#885, #888).
+        round-trip the node's location gate (#885, #888). ``track_successes``/
+        ``track_failures``/``track_success_target``/``track_failure_target``/
+        ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+        progress track (#3568): 0/0 = not a track.
       properties:
         id:
           type: integer
@@ -55404,6 +56551,28 @@ components:
           nullable: true
           description: Target area for AREA location_mode. A room matches when its
             RoomProfile.area is this area or any descendant via AreaClosure.
+        track_successes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_failures:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_success_target:
+          type: integer
+          nullable: true
+        track_failure_target:
+          type: integer
+          nullable: true
+        track_success_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        track_failure_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - conflict_mode
       - id
@@ -55418,7 +56587,10 @@ components:
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
         sibling are both editable. ``location_mode``/``locations``/``target_area``
-        round-trip the node's location gate (#885, #888).
+        round-trip the node's location gate (#885, #888). ``track_successes``/
+        ``track_failures``/``track_success_target``/``track_failure_target``/
+        ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+        progress track (#3568): 0/0 = not a track.
       properties:
         template:
           type: integer
@@ -55516,6 +56688,28 @@ components:
           nullable: true
           description: Target area for AREA location_mode. A room matches when its
             RoomProfile.area is this area or any descendant via AreaClosure.
+        track_successes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_failures:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_success_target:
+          type: integer
+          nullable: true
+        track_failure_target:
+          type: integer
+          nullable: true
+        track_success_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        track_failure_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - conflict_mode
       - key
@@ -55650,7 +56844,15 @@ components:
         Both source_kind values are editable; consumer code distinguishes via
         the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
         rides through; the predicate-tree builder API (D5) is what authors
-        actually use to write it.
+        actually use to write it. ``key`` is the stable per-node authoring key
+        (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+        ``encounter_risk_level`` is required for ENCOUNTER options (model
+        ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+        child list -- create()/update() diff-sync it against the option's
+        existing rows by id (add/edit/delete), same pattern as
+        ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+        ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+        the authored opposition whose passive level term adds to the difficulty.
       properties:
         id:
           type: integer
@@ -55663,10 +56865,31 @@ components:
           minimum: 0
           description: Display/evaluation order within the node (no Meta.ordering
             — callers order explicitly).
+        key:
+          type: string
+          default: ''
+          description: Stable per-node authoring key (unique within the node), independent
+            of order — reordering options for display must never change their identity.
+            Required for real authored content; the '' default only exists so this
+            schema migration doesn't need a data backfill.
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
         option_kind:
           $ref: '#/components/schemas/OptionKindEnum'
         source_kind:
           $ref: '#/components/schemas/MissionOptionSourceKindEnum'
+        encounter_risk_level:
+          description: |-
+            ENCOUNTER options only: the spawned encounter's risk level (#3565).
+
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+            * `lethal` - Lethal
+          oneOf:
+          - $ref: '#/components/schemas/EncounterRiskLevelEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -55699,12 +56922,75 @@ components:
           description: 'CHALLENGE source: the challenge whose approaches fan out into
             this option''s challenge-contributed options at runtime. on_delete=PROTECT
             — detach all referencing options before deleting the challenge.'
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionOptionOpponentLine'
+        opposition_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          nullable: true
+        opposition_check_type:
+          type: integer
+          nullable: true
       required:
       - id
       - node
       - option_kind
       - order
       - source_kind
+    MissionOptionOpponentLine:
+      type: object
+      description: |-
+        One authored opponent line on an ENCOUNTER option (#3565).
+
+        ``id`` is writable-but-optional so ``MissionOptionSerializer.update()``
+        can diff incoming rows against the option's existing lines by id --
+        mirrors ``BeatOpponentLineSerializer`` (stories/serializers.py).
+      properties:
+        id:
+          type: integer
+        creature_template:
+          type: integer
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        position_name:
+          type: string
+          maxLength: 100
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - creature_template
+    MissionOptionOpponentLineRequest:
+      type: object
+      description: |-
+        One authored opponent line on an ENCOUNTER option (#3565).
+
+        ``id`` is writable-but-optional so ``MissionOptionSerializer.update()``
+        can diff incoming rows against the option's existing lines by id --
+        mirrors ``BeatOpponentLineSerializer`` (stories/serializers.py).
+      properties:
+        id:
+          type: integer
+        creature_template:
+          type: integer
+        count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        position_name:
+          type: string
+          maxLength: 100
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - creature_template
     MissionOptionRequest:
       type: object
       description: |-
@@ -55713,7 +56999,15 @@ components:
         Both source_kind values are editable; consumer code distinguishes via
         the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
         rides through; the predicate-tree builder API (D5) is what authors
-        actually use to write it.
+        actually use to write it. ``key`` is the stable per-node authoring key
+        (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+        ``encounter_risk_level`` is required for ENCOUNTER options (model
+        ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+        child list -- create()/update() diff-sync it against the option's
+        existing rows by id (add/edit/delete), same pattern as
+        ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+        ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+        the authored opposition whose passive level term adds to the difficulty.
       properties:
         node:
           type: integer
@@ -55723,10 +57017,32 @@ components:
           minimum: 0
           description: Display/evaluation order within the node (no Meta.ordering
             — callers order explicitly).
+        key:
+          type: string
+          minLength: 1
+          default: ''
+          description: Stable per-node authoring key (unique within the node), independent
+            of order — reordering options for display must never change their identity.
+            Required for real authored content; the '' default only exists so this
+            schema migration doesn't need a data backfill.
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
         option_kind:
           $ref: '#/components/schemas/OptionKindEnum'
         source_kind:
           $ref: '#/components/schemas/MissionOptionSourceKindEnum'
+        encounter_risk_level:
+          description: |-
+            ENCOUNTER options only: the spawned encounter's risk level (#3565).
+
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+            * `lethal` - Lethal
+          oneOf:
+          - $ref: '#/components/schemas/EncounterRiskLevelEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -55759,6 +57075,17 @@ components:
           description: 'CHALLENGE source: the challenge whose approaches fan out into
             this option''s challenge-contributed options at runtime. on_delete=PROTECT
             — detach all referencing options before deleting the challenge.'
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionOptionOpponentLineRequest'
+        opposition_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          nullable: true
+        opposition_check_type:
+          type: integer
+          nullable: true
       required:
       - node
       - option_kind
@@ -55766,8 +57093,15 @@ components:
       - source_kind
     MissionOptionRoute:
       type: object
-      description: Editor CRUD for MissionOptionRoute rows (one per outcome tier per
-        option).
+      description: |-
+        Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+
+        ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+        story beat records when the run ends here. Without it in this field
+        list the Studio API could author a terminal route but never actually set
+        the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+        an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+        silently fall back to the tier-less-terminal default of SUCCESS.
       properties:
         id:
           type: integer
@@ -55801,6 +57135,15 @@ components:
           description: The copy service sets True on cloned text; the editor serializer
             clears it when the text is rewritten (#941). NOT cleared automatically
             at the model layer — service/serializer responsibility.
+        beat_outcome:
+          description: |-
+            Terminal routes only (#3565, closes #3560): what the linked story beat records when the run ends here. Blank = derive from the tier's success_level, or SUCCESS for a tier-less terminal.
+
+            * `success` - Success
+            * `failure` - Failure
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - id
       - option
@@ -55868,8 +57211,15 @@ components:
       - target_node
     MissionOptionRouteRequest:
       type: object
-      description: Editor CRUD for MissionOptionRoute rows (one per outcome tier per
-        option).
+      description: |-
+        Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+
+        ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+        story beat records when the run ends here. Without it in this field
+        list the Studio API could author a terminal route but never actually set
+        the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+        an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+        silently fall back to the tier-less-terminal default of SUCCESS.
       properties:
         option:
           type: integer
@@ -55900,6 +57250,15 @@ components:
           description: The copy service sets True on cloned text; the editor serializer
             clears it when the text is rewritten (#941). NOT cleared automatically
             at the model layer — service/serializer responsibility.
+        beat_outcome:
+          description: |-
+            Terminal routes only (#3565, closes #3560): what the linked story beat records when the run ends here. Blank = derive from the tier's success_level, or SUCCESS for a tier-less terminal.
+
+            * `success` - Success
+            * `failure` - Failure
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
       required:
       - option
     MissionOptionRouteReward:
@@ -56150,6 +57509,14 @@ components:
         template whose rule admits no PC simply IS staff-only, a valid
         emergent state. ``availability_rule`` IS validated (well-formedness;
         a malformed tree would crash every later availability check).
+
+        ``story_id`` (#3565) is read-only: null for a catalog template, the
+        owning Story's pk when this template is a GM's StoryScenario. Non-staff
+        writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
+        author can never author above their GM level's risk ceiling, flip
+        ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+        weight into the front door (``base_weight``): a scenario is reached only
+        through its beat, never the quest board.
       properties:
         id:
           type: integer
@@ -56229,6 +57596,10 @@ components:
         availability_rule:
           description: Phase 0 predicate tree gating front-door availability for this
             template.
+        story_id:
+          type: integer
+          nullable: true
+          readOnly: true
       required:
       - arc_scope
       - cooldown
@@ -56237,6 +57608,7 @@ components:
       - level_band_min
       - name
       - risk_tier
+      - story_id
       - summary
     MissionTemplateDetail:
       type: object
@@ -56330,6 +57702,10 @@ components:
         availability_rule:
           description: Phase 0 predicate tree gating front-door availability for this
             template.
+        story_id:
+          type: integer
+          nullable: true
+          readOnly: true
         lifetime_completions:
           type: integer
           readOnly: true
@@ -56355,6 +57731,7 @@ components:
       - lifetime_completions
       - name
       - risk_tier
+      - story_id
       - summary
     MissionTemplateRequest:
       type: object
@@ -56371,6 +57748,14 @@ components:
         template whose rule admits no PC simply IS staff-only, a valid
         emergent state. ``availability_rule`` IS validated (well-formedness;
         a malformed tree would crash every later availability check).
+
+        ``story_id`` (#3565) is read-only: null for a catalog template, the
+        owning Story's pk when this template is a GM's StoryScenario. Non-staff
+        writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
+        author can never author above their GM level's risk ceiling, flip
+        ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+        weight into the front door (``base_weight``): a scenario is reached only
+        through its beat, never the quest board.
       properties:
         name:
           type: string
@@ -57750,6 +59135,20 @@ components:
         * `accepted` - Accepted
         * `declined` - Declined
         * `expired` - Expired
+    OldLevelEnum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     Opponent:
       type: object
       description: |-
@@ -58052,11 +59451,15 @@ components:
       - branch
       - check
       - external_act
+      - encounter
+      - contest
       type: string
       description: |-
         * `branch` - Branch
         * `check` - Check
         * `external_act` - External Act
+        * `encounter` - Encounter
+        * `contest` - Contest
     OrgAppeal:
       type: object
       description: |-
@@ -58848,7 +60251,7 @@ components:
         * `player` - Player-built (never exported)
     OriginTemplateSlot:
       type: object
-      description: Slot prompt within an origin template (#2478).
+      description: 'Slot prompt within an origin template (#2478, #3617).'
       properties:
         id:
           type: integer
@@ -58872,13 +60275,82 @@ components:
           type: boolean
           readOnly: true
           description: Required slots are marked in the post-CG finish-later editor.
+        applies_to:
+          allOf:
+          - $ref: '#/components/schemas/AppliesToEnum'
+          readOnly: true
+          description: |-
+            Which family path shows this prompt; 'any' shows it always (#3617).
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+        allows_text:
+          type: boolean
+          readOnly: true
+          description: Player may write a free-text answer (the 'other' box on a pick-list)
+            (#3617).
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginTemplateSlotChoice'
+          readOnly: true
       required:
+      - allows_text
+      - applies_to
+      - choices
       - example
       - id
       - is_required
       - name
       - prompt
       - sort_order
+    OriginTemplateSlotChoice:
+      type: object
+      description: One priced answer on a pick-list Upbringing prompt (#3617).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Choice label (part of natural key).
+        description:
+          type: string
+          readOnly: true
+          description: Player-facing blurb.
+        cg_point_cost:
+          type: integer
+          readOnly: true
+          description: Flat CG cost of this choice.
+        cost_per_influence:
+          type: integer
+          readOnly: true
+          description: CG cost per point of the claimed family's influence.
+        sort_order:
+          type: integer
+          readOnly: true
+      required:
+      - cg_point_cost
+      - cost_per_influence
+      - description
+      - id
+      - name
+      - sort_order
+    Outcome425Enum:
+      enum:
+      - unsatisfied
+      - success
+      - failure
+      - expired
+      type: string
+      description: |-
+        * `unsatisfied` - Unsatisfied
+        * `success` - Success
+        * `failure` - Failure
+        * `expired` - Expired
     Outcome5d6Enum:
       enum:
       - unresolved
@@ -58905,20 +60377,6 @@ components:
         * `defeat` - Defeat
         * `fled` - Fled
         * `abandoned` - Abandoned
-    OutcomeD50Enum:
-      enum:
-      - unsatisfied
-      - success
-      - failure
-      - expired
-      - pending_gm_review
-      type: string
-      description: |-
-        * `unsatisfied` - Unsatisfied
-        * `success` - Success
-        * `failure` - Failure
-        * `expired` - Expired
-        * `pending_gm_review` - Pending GM review
     OutcomeDetail:
       type: object
       properties:
@@ -64132,6 +65590,20 @@ components:
         * `FORMATION` - Formation (all must accept, ≥2)
         * `INDUCTION` - Induction (majority of respondents)
         * `BILATERAL` - Bilateral (exactly 2, both must accept)
+    PartySideRoleEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
+    PatchedAccountSecuritySettingsRequest:
+      type: object
+      description: The account's own security switches (#3591). One field for now.
+      properties:
+        block_telnet_login_with_2fa:
+          type: boolean
     PatchedAuthoredSecretRequest:
       type: object
       description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
@@ -64177,10 +65649,10 @@ components:
         predicate_type:
           allOf:
           - $ref: '#/components/schemas/PredicateTypeEnum'
-          default: gm_marked
+          default: outcome_tier
         outcome:
           allOf:
-          - $ref: '#/components/schemas/OutcomeD50Enum'
+          - $ref: '#/components/schemas/Outcome425Enum'
           description: |-
             The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
 
@@ -64188,7 +65660,6 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
         visibility:
           $ref: '#/components/schemas/BeatVisibilityEnum'
         internal_description:
@@ -64290,8 +65761,16 @@ components:
           maximum: 2147483647
           minimum: -2147483648
           nullable: true
-          description: For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value
-            (-1000..1000).
+          description: 'For FACTION_STANDING_AT_LEAST and NPC_REGARD_AT_LEAST predicates:
+            the minimum raw value (-1000..1000).'
+        required_npc_sheet:
+          type: integer
+          description: 'For NPC_REGARD_AT_LEAST predicates: the NPC whose regard for
+            the character is read (NpcRegard from the NPC''s primary persona toward
+            the character''s primary persona, the row the stake npc_regard_delta and
+            the SHIFT_NPC_REGARD pool effect write). Not the functionary standing
+            (NPCStanding.affection) and not the relationships affection track.'
+          nullable: true
         agm_eligible:
           type: boolean
           description: Lead GM may flag this beat to be claimable by Assistant GMs.
@@ -64299,8 +65778,15 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Optional wall-clock deadline. Expiry handling deferred to Phase
-            3+.
+          description: 'Optional wall-clock deadline. When it passes, the beat resolves
+            EXPIRED: the expired consequence pool fires and stakes grade LOSS.'
+        clock_size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Scene clock size in ticks (#3567); 0 means no clock. Running
+            the beat opens a SceneClock of this size; combat rounds and the GM's advance
+            gesture fill it, and a full clock resolves the beat EXPIRED.
         success_consequences:
           type: integer
           nullable: true
@@ -64327,6 +65813,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BeatStagedTemplateRequest'
+        staged_battle:
+          allOf:
+          - $ref: '#/components/schemas/BeatStagedBattleRequest'
+          nullable: true
     PatchedBequestRequest:
       type: object
       properties:
@@ -64520,6 +66010,21 @@ components:
           type: integer
           writeOnly: true
           nullable: true
+        selected_origin_template_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        family_path:
+          description: |-
+            Chosen family path when the Upbringing allows more than one.
+
+            * `any` - Any path
+            * `claimed` - Claim a staff-authored family
+            * `named` - Name your own family
+            * `none` - No family
+          oneOf:
+          - $ref: '#/components/schemas/FamilyPathEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         claimed_kin_slot_id:
           type: integer
           writeOnly: true
@@ -64868,8 +66373,13 @@ components:
           $ref: '#/components/schemas/StatusBa9Enum'
     PatchedGMProfileMineRequest:
       type: object
-      description: 'The requesting GM''s own profile: operational fields are writable
-        (#3478).'
+      description: |-
+        The requesting GM's own profile: operational fields are writable (#3478).
+
+        ``max_beat_risk`` and ``allow_custom_stakes`` surface the caller's own
+        GMLevelCap (#3562) so the beat-authoring form can build its risk/stakes
+        options from the same ceiling the API enforces, instead of a client-side
+        guess. Staff get the top of each scale regardless of any cap row.
       properties:
         contact_times:
           type: string
@@ -65013,7 +66523,10 @@ components:
         authoring UI passes them through unchanged). Editor layout fields
         (editor_x / editor_y) round-trip; flavor_text and its needs_rewrite
         sibling are both editable. ``location_mode``/``locations``/``target_area``
-        round-trip the node's location gate (#885, #888).
+        round-trip the node's location gate (#885, #888). ``track_successes``/
+        ``track_failures``/``track_success_target``/``track_failure_target``/
+        ``track_success_beat_outcome``/``track_failure_beat_outcome`` author a
+        progress track (#3568): 0/0 = not a track.
       properties:
         template:
           type: integer
@@ -65111,6 +66624,28 @@ components:
           nullable: true
           description: Target area for AREA location_mode. A room matches when its
             RoomProfile.area is this area or any descendant via AreaClosure.
+        track_successes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_failures:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        track_success_target:
+          type: integer
+          nullable: true
+        track_failure_target:
+          type: integer
+          nullable: true
+        track_success_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        track_failure_beat_outcome:
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
     PatchedMissionOfferDetailsRequest:
       type: object
       description: |-
@@ -65172,7 +66707,15 @@ components:
         Both source_kind values are editable; consumer code distinguishes via
         the kind field (BRANCH vs CHECK). visibility_rule is a JSONField that
         rides through; the predicate-tree builder API (D5) is what authors
-        actually use to write it.
+        actually use to write it. ``key`` is the stable per-node authoring key
+        (#3565: also read by ``BeatSerializer.scenario.option_keys``).
+        ``encounter_risk_level`` is required for ENCOUNTER options (model
+        ``clean()`` enforces this). ``opponent_lines`` is a nested read-write
+        child list -- create()/update() diff-sync it against the option's
+        existing rows by id (add/edit/delete), same pattern as
+        ``BeatSerializer.opponent_lines`` (stories/serializers.py:1011-1300).
+        ``opposition_sheet``/``opposition_check_type`` (#3568) are CONTEST-only:
+        the authored opposition whose passive level term adds to the difficulty.
       properties:
         node:
           type: integer
@@ -65182,10 +66725,32 @@ components:
           minimum: 0
           description: Display/evaluation order within the node (no Meta.ordering
             — callers order explicitly).
+        key:
+          type: string
+          minLength: 1
+          default: ''
+          description: Stable per-node authoring key (unique within the node), independent
+            of order — reordering options for display must never change their identity.
+            Required for real authored content; the '' default only exists so this
+            schema migration doesn't need a data backfill.
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
         option_kind:
           $ref: '#/components/schemas/OptionKindEnum'
         source_kind:
           $ref: '#/components/schemas/MissionOptionSourceKindEnum'
+        encounter_risk_level:
+          description: |-
+            ENCOUNTER options only: the spawned encounter's risk level (#3565).
+
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+            * `lethal` - Lethal
+          oneOf:
+          - $ref: '#/components/schemas/EncounterRiskLevelEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         visibility_rule:
           description: Phase 0 predicate tree gating this option's visibility.
         authored_check_type:
@@ -65218,6 +66783,17 @@ components:
           description: 'CHALLENGE source: the challenge whose approaches fan out into
             this option''s challenge-contributed options at runtime. on_delete=PROTECT
             — detach all referencing options before deleting the challenge.'
+        opponent_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionOptionOpponentLineRequest'
+        opposition_sheet:
+          type: integer
+          description: The character this sheet belongs to
+          nullable: true
+        opposition_check_type:
+          type: integer
+          nullable: true
     PatchedMissionOptionRouteCandidateRequest:
       type: object
       description: Editor CRUD for MissionOptionRouteCandidate (random-set rolls).
@@ -65246,8 +66822,15 @@ components:
             it on save. NOT cleared automatically at the model layer — service responsibility.
     PatchedMissionOptionRouteRequest:
       type: object
-      description: Editor CRUD for MissionOptionRoute rows (one per outcome tier per
-        option).
+      description: |-
+        Editor CRUD for MissionOptionRoute rows (one per outcome tier per option).
+
+        ``beat_outcome`` (#3560, #3565) is terminal-routes-only: what a linked
+        story beat records when the run ends here. Without it in this field
+        list the Studio API could author a terminal route but never actually set
+        the field ``world.missions.services.beat.beat_outcome_for_route`` reads --
+        an authored FAILURE terminal (e.g. a BRANCH "fight" ending) would
+        silently fall back to the tier-less-terminal default of SUCCESS.
       properties:
         option:
           type: integer
@@ -65278,6 +66861,15 @@ components:
           description: The copy service sets True on cloned text; the editor serializer
             clears it when the text is rewritten (#941). NOT cleared automatically
             at the model layer — service/serializer responsibility.
+        beat_outcome:
+          description: |-
+            Terminal routes only (#3565, closes #3560): what the linked story beat records when the run ends here. Blank = derive from the tier's success_level, or SUCCESS for a tier-less terminal.
+
+            * `success` - Success
+            * `failure` - Failure
+          oneOf:
+          - $ref: '#/components/schemas/BeatOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
     PatchedMissionOptionRouteRewardRequest:
       type: object
       description: |-
@@ -65366,6 +66958,14 @@ components:
         template whose rule admits no PC simply IS staff-only, a valid
         emergent state. ``availability_rule`` IS validated (well-formedness;
         a malformed tree would crash every later availability check).
+
+        ``story_id`` (#3565) is read-only: null for a catalog template, the
+        owning Story's pk when this template is a GM's StoryScenario. Non-staff
+        writers are additionally bounded in ``validate()`` - a JUNIOR/GM-level
+        author can never author above their GM level's risk ceiling, flip
+        ``visibility`` to OPEN, set a non-empty ``availability_rule``, or draw
+        weight into the front door (``base_weight``): a scenario is reached only
+        through its beat, never the quest board.
       properties:
         name:
           type: string
@@ -66021,6 +67621,10 @@ components:
           nullable: true
           description: For FACTION subjects (organization-level). Nulls if the org
             is deleted.
+        subject_asset:
+          type: integer
+          nullable: true
+          description: For ASSET subjects. Nulls if the asset is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -66089,6 +67693,12 @@ components:
             or OrganizationReputation (whichever of subject_society/subject_organization
             is set) — previously a dead FK (subject_society/subject_organization were
             never read); this is the fix.'
+        npc_regard_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind
+            is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row.
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -66104,7 +67714,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -66115,6 +67725,13 @@ components:
           oneOf:
           - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        transitions_subject_asset:
+          type: string
+          description: On fire, transition the stake's subject_asset to this AssetStatus
+            (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct
+            asset transition (use the consequence_pool for check-gated transitions
+            instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes.
+          maxLength: 20
     PatchedStakeRewardLineRequest:
       type: object
       description: |-
@@ -66123,8 +67740,14 @@ components:
         Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
         walk via resolution.stake.beat (create-path enforcement), the two-sided
         open-activation lock, the completed-beat refusal, the WIN-column-only
-        rule, and the sink/resonance shape rule (resonance required iff
-        sink=RESONANCE; amount >= 1 rides the model validator).
+        rule, and the per-sink FK shape rule generalised over
+        ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+        every other sink field must stay null, mirroring the model's ``clean()``).
+        Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+        the template's value (never author-supplied) and is refused for a
+        non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+        refused for a non-resolvable target kind or a target kind the author's
+        clue-authoring policy (``clue_target_kind_allowed``) does not permit.
         Banding against the tier's reward floor/ceiling is deliberately NOT
         rejected here — out-of-band rewards make the contract UNREADY instead
         (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -66135,14 +67758,23 @@ components:
           $ref: '#/components/schemas/StakeRewardLineSinkEnum'
         amount:
           type: integer
-          maximum: 2147483647
           minimum: 1
-          description: Money-equivalent scalar paid to EACH participant (banded by
-            calibration).
         resonance:
           type: integer
           nullable: true
           description: Required when sink=RESONANCE; must be null otherwise.
+        item_template:
+          type: integer
+          nullable: true
+          description: Required when sink=ITEM; must be null otherwise.
+        clue:
+          type: integer
+          nullable: true
+          description: Required when sink=CLUE; must be null otherwise.
+        codex_entry:
+          type: integer
+          nullable: true
+          description: Required when sink=CODEX; must be null otherwise.
     PatchedStakeTemplateRequest:
       type: object
       description: |-
@@ -66595,6 +68227,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         source_episode:
           type: integer
@@ -66602,14 +68237,6 @@ components:
           type: integer
           nullable: true
           description: May be null when next episode is unauthored (frontier pause).
-        mode:
-          allOf:
-          - $ref: '#/components/schemas/TransitionModeEnum'
-          description: |-
-            AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
-
-            * `auto` - Auto
-            * `gm_choice` - GM Choice
         connection_type:
           description: |-
             Narrative flavor: THEREFORE / BUT.
@@ -66650,10 +68277,14 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
           oneOf:
           - $ref: '#/components/schemas/RequiredOutcomeEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        required_outcome_key:
+          type: string
+          description: 'Beat-level rows only: also require Beat.outcome_key to equal
+            this MissionOption.key (#3565). Blank = any key.'
+          maxLength: 100
         stake:
           type: integer
           nullable: true
@@ -67203,6 +68834,56 @@ components:
         * `open` - Open
         * `resolved` - Resolved
         * `staff_cleared` - Staff Cleared
+    PendingAttack:
+      type: object
+      description: |-
+        Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+
+        Never instantiated for serialization (same idiom as EngagementLockSerializer):
+        exists so drf-spectacular emits a concrete component. Threat-entry internals
+        (damage, defense check, cooldown) are deliberately absent; the row carries only
+        what the telegraph already announced plus the downgrade state.
+      properties:
+        id:
+          type: integer
+        opponent_id:
+          type: integer
+        opponent_name:
+          type: string
+        target_participant_id:
+          type: integer
+          nullable: true
+        target_name:
+          type: string
+          nullable: true
+        declared_round:
+          type: integer
+        resolves_round:
+          type: integer
+        rounds_until_landing:
+          type: integer
+        downgrades:
+          type: integer
+        called_out:
+          type: boolean
+        damage_scale:
+          type: number
+          format: double
+        cancelled:
+          type: boolean
+      required:
+      - called_out
+      - cancelled
+      - damage_scale
+      - declared_round
+      - downgrades
+      - id
+      - opponent_id
+      - opponent_name
+      - resolves_round
+      - rounds_until_landing
+      - target_name
+      - target_participant_id
     PendingAudereMajoraOffer:
       type: object
       description: |-
@@ -68068,6 +69749,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        reactive_anima_cost:
+          type: integer
+          readOnly: true
+          nullable: true
         position_target_shape:
           type: string
           readOnly: true
@@ -68102,6 +69787,7 @@ components:
       - prerequisite_reasons
       - protective_flavor
       - reach
+      - reactive_anima_cost
       - ref
       - soulfray_warning
       - strain
@@ -68990,6 +70676,7 @@ components:
       - aggregate_threshold
       - outcome_tier
       - faction_standing_at_least
+      - npc_regard_at_least
       type: string
       description: |-
         * `gm_marked` - GM-marked
@@ -69001,6 +70688,7 @@ components:
         * `aggregate_threshold` - Aggregate threshold reached
         * `outcome_tier` - Outcome tier (machine-graded)
         * `faction_standing_at_least` - Faction standing at least
+        * `npc_regard_at_least` - NPC regard at least
     PrivacyEnum:
       enum:
       - public
@@ -70352,14 +72040,12 @@ components:
       - success
       - failure
       - expired
-      - pending_gm_review
       type: string
       description: |-
         * `unsatisfied` - Unsatisfied
         * `success` - Success
         * `failure` - Failure
         * `expired` - Expired
-        * `pending_gm_review` - Pending GM review
     RequiredStakeColumnEnum:
       enum:
       - win
@@ -72100,6 +73786,21 @@ components:
           readOnly: true
       required:
       - band
+    SceneClock:
+      type: object
+      description: 'The player-visible scene clock (#3567): size and fill, nothing
+        about the beat.'
+      properties:
+        size:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        filled:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - size
     SceneDetail:
       type: object
       description: Full scene representation with personas
@@ -72198,8 +73899,14 @@ components:
             which stay on the GM/staff-gated ``running_beat`` field above.
             ``RenownRisk.NONE`` renders nothing: undeclared risk is not "safe".
           readOnly: true
+        clock:
+          allOf:
+          - $ref: '#/components/schemas/SceneClock'
+          nullable: true
+          readOnly: true
       required:
       - active_round
+      - clock
       - date_started
       - declared_risk
       - id
@@ -72394,6 +74101,92 @@ components:
           readOnly: true
       required:
       - is_danger
+    SceneScenario:
+      type: object
+      description: |-
+        Mirror of ``world.scenes.scenario_services.build_scene_scenario_payload`` (#3565).
+
+        ``group_beat``/``gm`` use ``SerializerMethodField`` because DRF nested
+        ``to_representation`` rejects None (see ``GroupBeatResultSerializer``).
+      properties:
+        instance_id:
+          type: integer
+          nullable: true
+        is_paused:
+          type: boolean
+        viewer_is_participant:
+          type: boolean
+        group_beat:
+          allOf:
+          - $ref: '#/components/schemas/GroupBeatResult'
+          nullable: true
+          readOnly: true
+        gm:
+          allOf:
+          - $ref: '#/components/schemas/SceneScenarioGM'
+          nullable: true
+          readOnly: true
+      required:
+      - gm
+      - group_beat
+      - instance_id
+      - is_paused
+      - viewer_is_participant
+    SceneScenarioGM:
+      type: object
+      description: |-
+        The GM-only scenario view: current node, every ballot, the last deed (#3565).
+
+        Mirror of ``world.scenes.scenario_services._gm_payload``'s dict shape - staff or
+        viewers with standing on the running story only (see
+        ``world.scenes.scenario_services.build_scene_scenario_payload``).
+      properties:
+        node_key:
+          type: string
+        flavor_text:
+          type: string
+        conflict_mode:
+          type: string
+        phase:
+          type: string
+        is_paused:
+          type: boolean
+        ballots:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupBallotState'
+        last_deed:
+          allOf:
+          - $ref: '#/components/schemas/SceneScenarioLastDeed'
+          nullable: true
+          readOnly: true
+        beat_outcome:
+          type: string
+        beat_outcome_key:
+          type: string
+      required:
+      - ballots
+      - beat_outcome
+      - beat_outcome_key
+      - conflict_mode
+      - flavor_text
+      - is_paused
+      - last_deed
+      - node_key
+      - phase
+    SceneScenarioLastDeed:
+      type: object
+      description: The GM scenario view's most recent deed - ``{option_key, outcome_name}``
+        (#3565).
+      properties:
+        option_key:
+          type: string
+        outcome_name:
+          type: string
+          nullable: true
+      required:
+      - option_key
+      - outcome_name
     SceneSummaryRevision:
       type: object
       properties:
@@ -72940,6 +74733,14 @@ components:
       - description
       - id
       - name
+    SideRoleEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
     SignEnum:
       enum:
       - positive
@@ -73151,9 +74952,6 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-        depends_on:
-          type: integer
-          nullable: true
       required:
       - challenge_template
       - challenge_template_name
@@ -74133,6 +75931,10 @@ components:
           nullable: true
           description: For FACTION subjects (organization-level). Nulls if the org
             is deleted.
+        subject_asset:
+          type: integer
+          nullable: true
+          description: For ASSET subjects. Nulls if the asset is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -74253,14 +76055,23 @@ components:
           allOf:
           - $ref: '#/components/schemas/MethodEnum'
           readOnly: true
+          description: |-
+            Always MACHINE (#3561 retired the GM constrained pick).
+
+            * `machine` - Machine
         resolved_by:
           type: integer
           readOnly: true
           nullable: true
-          description: The GM who picked the column (GM_PICK only; null for MACHINE).
+          description: 'Historical audit field from before #3561 retired the GM constrained
+            pick: the GM who picked the column, on rows resolved that way. Always
+            null on rows resolved since.'
         gm_notes:
           type: string
           readOnly: true
+          description: 'Historical audit field from before #3561 retired the GM constrained
+            pick: the deciding GM''s notes, on rows resolved that way. Always blank
+            on rows resolved since.'
         created_at:
           type: string
           format: date-time
@@ -74322,6 +76133,10 @@ components:
           nullable: true
           description: For FACTION subjects (organization-level). Nulls if the org
             is deleted.
+        subject_asset:
+          type: integer
+          nullable: true
+          description: For ASSET subjects. Nulls if the asset is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -74396,6 +76211,12 @@ components:
             or OrganizationReputation (whichever of subject_society/subject_organization
             is set) — previously a dead FK (subject_society/subject_organization were
             never read); this is the fix.'
+        npc_regard_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind
+            is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row.
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -74411,7 +76232,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -74422,6 +76243,13 @@ components:
           oneOf:
           - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        transitions_subject_asset:
+          type: string
+          description: On fire, transition the stake's subject_asset to this AssetStatus
+            (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct
+            asset transition (use the consequence_pool for check-gated transitions
+            instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes.
+          maxLength: 20
         reward_lines:
           type: array
           items:
@@ -74492,6 +76320,12 @@ components:
             or OrganizationReputation (whichever of subject_society/subject_organization
             is set) — previously a dead FK (subject_society/subject_organization were
             never read); this is the fix.'
+        npc_regard_delta:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+          description: Pre-authored NpcRegard delta applied on resolution, when stake.subject_kind
+            is NPC_FATE (#2039). Fires via record_npc_regard_event, citing this row.
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -74507,7 +76341,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
         machine_match_lifecycle_state:
           description: |-
-            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760, generalizing the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only; blank means no machine-match, so the branch keyed to the completion's outcome_key resolves, else the plain column default (#3561: never a GM pick).
 
             * `ALIVE` - Alive
             * `CAPTURED` - Captured
@@ -74518,6 +76352,13 @@ components:
           oneOf:
           - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        transitions_subject_asset:
+          type: string
+          description: On fire, transition the stake's subject_asset to this AssetStatus
+            (COMPROMISED/LOST/DISMISSED). ASSET stakes only — blank means no direct
+            asset transition (use the consequence_pool for check-gated transitions
+            instead). Mirrors sets_subject_lifecycle for NPC_FATE stakes.
+          maxLength: 20
       required:
       - column
       - stake
@@ -74529,8 +76370,14 @@ components:
         Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
         walk via resolution.stake.beat (create-path enforcement), the two-sided
         open-activation lock, the completed-beat refusal, the WIN-column-only
-        rule, and the sink/resonance shape rule (resonance required iff
-        sink=RESONANCE; amount >= 1 rides the model validator).
+        rule, and the per-sink FK shape rule generalised over
+        ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+        every other sink field must stay null, mirroring the model's ``clean()``).
+        Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+        the template's value (never author-supplied) and is refused for a
+        non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+        refused for a non-resolvable target kind or a target kind the author's
+        clue-authoring policy (``clue_target_kind_allowed``) does not permit.
         Banding against the tier's reward floor/ceiling is deliberately NOT
         rejected here — out-of-band rewards make the contract UNREADY instead
         (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -74544,17 +76391,37 @@ components:
           $ref: '#/components/schemas/StakeRewardLineSinkEnum'
         amount:
           type: integer
-          maximum: 2147483647
           minimum: 1
-          description: Money-equivalent scalar paid to EACH participant (banded by
-            calibration).
         resonance:
           type: integer
           nullable: true
           description: Required when sink=RESONANCE; must be null otherwise.
+        item_template:
+          type: integer
+          nullable: true
+          description: Required when sink=ITEM; must be null otherwise.
+        clue:
+          type: integer
+          nullable: true
+          description: Required when sink=CLUE; must be null otherwise.
+        codex_entry:
+          type: integer
+          nullable: true
+          description: Required when sink=CODEX; must be null otherwise.
+        item_template_name:
+          type: string
+          readOnly: true
+        clue_name:
+          type: string
+          readOnly: true
+        codex_entry_name:
+          type: string
+          readOnly: true
       required:
-      - amount
+      - clue_name
+      - codex_entry_name
       - id
+      - item_template_name
       - resolution
       - sink
     StakeRewardLineRequest:
@@ -74565,8 +76432,14 @@ components:
         Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
         walk via resolution.stake.beat (create-path enforcement), the two-sided
         open-activation lock, the completed-beat refusal, the WIN-column-only
-        rule, and the sink/resonance shape rule (resonance required iff
-        sink=RESONANCE; amount >= 1 rides the model validator).
+        rule, and the per-sink FK shape rule generalised over
+        ``StakeRewardLine.SINK_FIELDS`` (exactly the sink's field is required;
+        every other sink field must stay null, mirroring the model's ``clean()``).
+        Two sinks carry extra authoring gates (#3566): ITEM pins ``amount`` to
+        the template's value (never author-supplied) and is refused for a
+        non-staff GM whose ``GMLevelCap.allow_item_rewards`` is unset; CLUE is
+        refused for a non-resolvable target kind or a target kind the author's
+        clue-authoring policy (``clue_target_kind_allowed``) does not permit.
         Banding against the tier's reward floor/ceiling is deliberately NOT
         rejected here — out-of-band rewards make the contract UNREADY instead
         (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
@@ -74577,26 +76450,40 @@ components:
           $ref: '#/components/schemas/StakeRewardLineSinkEnum'
         amount:
           type: integer
-          maximum: 2147483647
           minimum: 1
-          description: Money-equivalent scalar paid to EACH participant (banded by
-            calibration).
         resonance:
           type: integer
           nullable: true
           description: Required when sink=RESONANCE; must be null otherwise.
+        item_template:
+          type: integer
+          nullable: true
+          description: Required when sink=ITEM; must be null otherwise.
+        clue:
+          type: integer
+          nullable: true
+          description: Required when sink=CLUE; must be null otherwise.
+        codex_entry:
+          type: integer
+          nullable: true
+          description: Required when sink=CODEX; must be null otherwise.
       required:
-      - amount
       - resolution
       - sink
     StakeRewardLineSinkEnum:
       enum:
       - money
       - resonance
+      - item
+      - clue
+      - codex
       type: string
       description: |-
         * `money` - Money
         * `resonance` - Resonance
+        * `item` - Item
+        * `clue` - Clue
+        * `codex` - Codex Entry
     StakeSummary:
       type: object
       description: |-
@@ -74604,7 +76491,11 @@ components:
 
         What is wagered is visible; branch contents stay hidden — resolutions
         (consequence pools, escalations, narrative) are deliberately NOT fields
-        here and must never be added.
+        here and must never be added. ``reward_kinds`` is the one exception in
+        spirit only: it names the WIN branch's payout *categories*
+        (money/resonance/item/knowledge), never an amount, template, clue or
+        codex entry, so it carries none of the branch content the rule above
+        forbids (#3566).
       properties:
         id:
           type: integer
@@ -74620,9 +76511,16 @@ components:
         severity_label:
           type: string
           readOnly: true
+        reward_kinds:
+          type: array
+          items:
+            type: string
+          description: Sorted, deduped reward-kind labels across the stake's WIN branch(es).
+          readOnly: true
       required:
       - id
       - player_summary
+      - reward_kinds
       - severity
       - severity_label
     StakeTemplate:
@@ -77157,6 +79055,9 @@ components:
         cast_openly:
           type: boolean
           default: false
+        soulfray_consented:
+          type: boolean
+          default: false
       required:
       - initiator_persona
       - scene
@@ -78010,6 +79911,28 @@ components:
         * `none` - No Titles
         * `primary` - Primary Title
         * `all` - All Titles
+    TrackView:
+      type: object
+      description: |-
+        Read-only mirror of :class:`world.missions.types.TrackView` (#3568).
+
+        Counts only - no opposition sheet, no check type, no difficulty number
+        reaches the player payload (the leak boundary is enforced upstream in
+        ``services.play._track_view``, not here).
+      properties:
+        successes:
+          type: integer
+        needed:
+          type: integer
+        failures:
+          type: integer
+        allowed:
+          type: integer
+      required:
+      - allowed
+      - failures
+      - needed
+      - successes
     TradeItemStake:
       type: object
       properties:
@@ -78328,6 +80251,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         id:
           type: integer
@@ -78346,14 +80272,6 @@ components:
           nullable: true
           description: Return target episode title, or None when target is null (frontier).
           readOnly: true
-        mode:
-          allOf:
-          - $ref: '#/components/schemas/TransitionModeEnum'
-          description: |-
-            AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
-
-            * `auto` - Auto
-            * `gm_choice` - GM Choice
         connection_type:
           description: |-
             Narrative flavor: THEREFORE / BUT.
@@ -78374,20 +80292,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        required_outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitionRoutingRule'
+          readOnly: true
       required:
       - created_at
       - id
+      - required_outcomes
       - source_episode
       - source_episode_title
       - target_episode_title
-    TransitionModeEnum:
-      enum:
-      - auto
-      - gm_choice
-      type: string
-      description: |-
-        * `auto` - Auto
-        * `gm_choice` - GM Choice
     TransitionRequest:
       type: object
       description: |-
@@ -78396,6 +80312,9 @@ components:
         Read-only breadcrumb fields (source_episode_title, target_episode_title)
         provide context for the Wave 9 author editor without requiring extra lookups;
         they are served free via TransitionViewSet.queryset.select_related.
+
+        ``required_outcomes`` is GM text: stripped for viewers who fail
+        ``can_view_story_gm_text`` (#3563).
       properties:
         source_episode:
           type: integer
@@ -78403,14 +80322,6 @@ components:
           type: integer
           nullable: true
           description: May be null when next episode is unauthored (frontier pause).
-        mode:
-          allOf:
-          - $ref: '#/components/schemas/TransitionModeEnum'
-          description: |-
-            AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
-
-            * `auto` - Auto
-            * `gm_choice` - GM Choice
         connection_type:
           description: |-
             Narrative flavor: THEREFORE / BUT.
@@ -78456,10 +80367,14 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
           oneOf:
           - $ref: '#/components/schemas/RequiredOutcomeEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        required_outcome_key:
+          type: string
+          description: 'Beat-level rows only: also require Beat.outcome_key to equal
+            this MissionOption.key (#3565). Blank = any key.'
+          maxLength: 100
         stake:
           type: integer
           nullable: true
@@ -78503,10 +80418,14 @@ components:
             * `success` - Success
             * `failure` - Failure
             * `expired` - Expired
-            * `pending_gm_review` - Pending GM review
           oneOf:
           - $ref: '#/components/schemas/RequiredOutcomeEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        required_outcome_key:
+          type: string
+          description: 'Beat-level rows only: also require Beat.outcome_key to equal
+            this MissionOption.key (#3565). Blank = any key.'
+          maxLength: 100
         stake:
           type: integer
           nullable: true
@@ -78525,6 +80444,57 @@ components:
       required:
       - beat
       - transition
+    TransitionRoutingRule:
+      type: object
+      description: |-
+        One routing rule as the graph and the author tree read it (#3563).
+
+        Read-only. Rows are written through ``TransitionRequiredOutcomeSerializer``
+        and ``save_with_outcomes``; this nested view adds the beat title and the
+        stake's player summary so the rule renders without a second fetch.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        beat:
+          type: integer
+          readOnly: true
+        beat_title:
+          type: string
+          readOnly: true
+        required_outcome:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RequiredOutcomeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        required_outcome_key:
+          type: string
+          readOnly: true
+          description: 'Beat-level rows only: also require Beat.outcome_key to equal
+            this MissionOption.key (#3565). Blank = any key.'
+        stake:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: When set, this requirement routes on the stake's StakeOutcome
+            column instead of the beat's outcome.
+        stake_summary:
+          type: string
+          readOnly: true
+        required_stake_column:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RequiredStakeColumnEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - beat
+      - beat_title
+      - id
+      - required_outcome
+      - required_outcome_key
+      - required_stake_column
+      - stake
+      - stake_summary
     Trap:
       type: object
       description: |-

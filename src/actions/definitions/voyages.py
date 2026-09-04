@@ -69,7 +69,7 @@ class StartVoyageAction(Action):
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"destination_id"})
 
-    def execute(  # noqa: C901, PLR0911
+    def execute(  # noqa: C901
         self,
         actor: Any,
         context: ActionContext | None = None,

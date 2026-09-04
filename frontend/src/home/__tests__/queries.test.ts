@@ -66,7 +66,6 @@ const mockBeginnings: Beginnings = {
   name: 'Noble Birth',
   description: 'Born to a great house.',
   art_image: null,
-  family_known: true,
   allowed_species_ids: [],
   grants_species_languages: true,
   cg_point_cost: 0,

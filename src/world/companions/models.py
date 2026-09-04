@@ -178,10 +178,9 @@ class CompanionAbility(NaturalKeyMixin, SharedMemoryModel):
             if not self.attack_category:
                 msg = "ATTACK abilities must set attack_category."
                 raise ValidationError(msg)
-        elif self.ability_kind == CompanionAbilityKind.UTILITY:
-            if self.grants_property is None:
-                msg = "UTILITY abilities must set grants_property."
-                raise ValidationError(msg)
+        elif self.ability_kind == CompanionAbilityKind.UTILITY and self.grants_property is None:
+            msg = "UTILITY abilities must set grants_property."
+            raise ValidationError(msg)
 
 
 class CompanionAbilityFunctionTag(SharedMemoryModel):

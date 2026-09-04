@@ -9,7 +9,7 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 
 ## Models (`world/societies/houses/models.py`)
 
-- **`NobiliaryParticle`** — realm × family-type × tier-band → born/taken-in
+- **`NobiliaryParticle`**: realm x `kind` (FK `roster.FamilyKind`, #3617) x tier-band, to born/taken-in
   particle pair (#3261, canon vocabulary ratified 2026-08-17 and seeded by realm
   theme in `world/seeds/houses.py`). `tier_floor` (blank = default band) bands a
   realm's particles by the house's highest held title — Luxen wears `du` at
@@ -122,9 +122,10 @@ CG-only (Apostate ruling): a claim defines the house *retroactively* — the
 character has always been its representative. Founding a brand-new house in
 play (ennoblement, new lands) is a separate future loop.
 
-- **`HouseTemplate`** — realm recipe: name-pattern regex (the realm's naming
-  conventions as an automated gate), per-axis principle ranges, society,
-  liege, succession law, holdings package, `starting_kin_slots`.
+- **`HouseTemplate`**: realm recipe, name-pattern regex (the realm's naming
+  conventions as an automated gate), `kind` (FK `roster.FamilyKind`, #3617; the
+  kind the founded family gets), per-axis principle ranges, society, liege,
+  succession law, holdings package, `starting_kin_slots`.
 - **`HouseClaim`** — rides the `CharacterDraft` (dies with it); automated
   thematic gates run at `submit_house_claim` (claimable title, realm match,
   one live claim per title, name pattern + collision, backstory present,
@@ -146,7 +147,9 @@ play (ennoblement, new lands) is a separate future loop.
 ## Regional flavor: aspects + features (#2079)
 
 Two deliberately distinct concepts give each realm's (and each noble-type's)
-houses a unique creation experience (ADR-0101):
+houses a unique creation experience (ADR-0101). Staff authoring a culture-specific
+family fact off the CG claim path (a quiddity, a Letter of Marque) follows the same
+two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
 
 - **Aspect** — a required, normalized CHOICE. `HouseAspectDefinition` (name,
   player-facing prompt, `min_picks`/`max_picks`) attaches to templates via

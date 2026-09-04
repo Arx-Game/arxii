@@ -61,6 +61,89 @@ export function ThreadHubPage() {
     setWizardOpen(true);
   };
 
+  const renderThreads = () => {
+    if (threadsLoading) {
+      return (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-lg" />
+          ))}
+        </div>
+      );
+    }
+    if (threads.length === 0) {
+      return (
+        <div className="rounded-lg border border-dashed px-6 py-12 text-center">
+          <p className="text-muted-foreground">
+            You have no threads yet &mdash; weave one with{' '}
+            <button
+              type="button"
+              className="font-medium underline underline-offset-2"
+              onClick={handleWeaveNew}
+            >
+              Weave New
+            </button>
+            .
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-6">
+        {nonEmptyKinds.map((kind) => (
+          <div key={kind}>
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {kind}
+            </h2>
+            <div className="space-y-2">
+              {threadsByKind[kind].map((thread) =>
+                summary ? (
+                  <ThreadCard
+                    key={thread.id}
+                    thread={thread}
+                    summary={summary}
+                    onClick={handleThreadClick}
+                  />
+                ) : null
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderBalances = () => {
+    if (balancesLoading) {
+      return (
+        <div className="flex flex-wrap gap-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 w-32 rounded-lg" />
+          ))}
+        </div>
+      );
+    }
+    if (!summary || summary.balances.length === 0) {
+      return <p className="text-sm text-muted-foreground">No resonances claimed yet.</p>;
+    }
+    return (
+      <div className="flex flex-wrap gap-3">
+        {summary.balances.map((balance) => {
+          const characterResonance = characterResonances?.find(
+            (cr) => cr.resonance === balance.resonance_id
+          );
+          return (
+            <ResonanceBalanceCard
+              key={balance.resonance_id}
+              balance={balance}
+              characterResonance={characterResonance}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto space-y-8 px-4 py-8">
       {/* Weave Thread Wizard modal */}
@@ -89,78 +172,11 @@ export function ThreadHubPage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Resonance Balances
         </h2>
-        {balancesLoading ? (
-          <div className="flex flex-wrap gap-3">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 w-32 rounded-lg" />
-            ))}
-          </div>
-        ) : !summary || summary.balances.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No resonances claimed yet.</p>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {summary.balances.map((balance) => {
-              const characterResonance = characterResonances?.find(
-                (cr) => cr.resonance === balance.resonance_id
-              );
-              return (
-                <ResonanceBalanceCard
-                  key={balance.resonance_id}
-                  balance={balance}
-                  characterResonance={characterResonance}
-                />
-              );
-            })}
-          </div>
-        )}
+        {renderBalances()}
       </section>
 
       {/* Thread list grouped by target_kind */}
-      <section aria-label="Threads">
-        {threadsLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : threads.length === 0 ? (
-          <div className="rounded-lg border border-dashed px-6 py-12 text-center">
-            <p className="text-muted-foreground">
-              You have no threads yet &mdash; weave one with{' '}
-              <button
-                type="button"
-                className="font-medium underline underline-offset-2"
-                onClick={handleWeaveNew}
-              >
-                Weave New
-              </button>
-              .
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {nonEmptyKinds.map((kind) => (
-              <div key={kind}>
-                <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  {kind}
-                </h2>
-                <div className="space-y-2">
-                  {threadsByKind[kind].map((thread) =>
-                    summary ? (
-                      <ThreadCard
-                        key={thread.id}
-                        thread={thread}
-                        summary={summary}
-                        onClick={handleThreadClick}
-                      />
-                    ) : null
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <section aria-label="Threads">{renderThreads()}</section>
     </div>
   );
 }

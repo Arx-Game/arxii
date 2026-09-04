@@ -21,7 +21,7 @@ from server.conf.serversession import ServerSession
 from world.areas.constants import GridOrigin
 from world.contributors.models import CreditedContent
 from world.game_clock.constants import Season, TimePhase
-from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
+from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication, RosterEntry
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]
@@ -37,6 +37,18 @@ class MediaType(models.TextChoices):
     GALLERY = "gallery", "Gallery Image"
     BACKGROUND = "background", "Background"
     ILLUSTRATION = "illustration", "Illustration"
+
+
+def is_available_roster_entry(entry: RosterEntry) -> bool:
+    """Active roster and not retired (#2287): the one definition of "available".
+
+    Shared by ``PlayerData.get_available_roster_entries`` (tenure-scoped, one
+    query) and ``Account.get_available_roster_entries`` (identity-mapped,
+    zero queries after the first) so the two never drift apart (#3597).
+    """
+    from world.vitals.services import is_retired  # noqa: PLC0415
+
+    return entry.roster.is_active and not is_retired(entry.character_sheet)
 
 
 class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
@@ -88,6 +100,20 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     rollmod = models.SmallIntegerField(default=0)
     hide_from_watch = models.BooleanField(default=False)
     private_mode = models.BooleanField(default=False)
+
+    # Opt-in telnet block (#3591, ADR-0266). Two-factor authentication is itself
+    # opt-in and never required; this second switch is the player's choice to
+    # refuse password-only telnet sign-in while 2FA is enrolled, because telnet
+    # cannot take a second factor. Read by Account.authenticate; inert while the
+    # account has no authenticator. Written only by the account's own
+    # /api/account/security-settings/ PATCH.
+    block_telnet_login_with_2fa = models.BooleanField(
+        default=False,
+        help_text=(
+            "When on and two-factor authentication is enrolled, password sign-in over "
+            "telnet is refused with a message pointing at the web client."
+        ),
+    )
 
     # Looking-for-table flag (#2431) — persistent profile flag a player sets
     # so GMs browsing for players can find them. Auto-clears on GMTable join.
@@ -172,21 +198,22 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         """List of currently active tenures for this player (uses cached data)."""
         return [tenure for tenure in self.cached_tenures if tenure.is_current]
 
-    def get_available_characters(self):
-        """Return characters this player is actively playing using cached data.
+    def get_available_roster_entries(self):
+        """Roster entries this player is actively playing, using cached tenures.
 
-        #2287: retired (released) dead characters are excluded — the ghost
+        #2287: retired (released) dead characters are excluded; the ghost
         interlude ends at retire, and the character can never be logged into
         again. Dead-but-unretired characters stay available (spectator ghost).
         """
-        from world.vitals.services import is_retired  # noqa: PLC0415
-
         return [
-            tenure.roster_entry.character_sheet.character
+            tenure.roster_entry
             for tenure in self.cached_active_tenures
-            if tenure.roster_entry.roster.is_active
-            and not is_retired(tenure.roster_entry.character_sheet)
+            if is_available_roster_entry(tenure.roster_entry)
         ]
+
+    def get_available_characters(self):
+        """Return characters this player is actively playing using cached data."""
+        return [entry.character_sheet.character for entry in self.get_available_roster_entries()]
 
     def get_seance_manifestable_characters(self):
         """Retired characters this player can manifest via an accepted, open seance (#2393).

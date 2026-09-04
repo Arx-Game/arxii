@@ -103,6 +103,7 @@ from world.magic.serializers import (
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
     ConsequencePoolCatalogSerializer,
+    ConsequencePoolDetailSerializer,
     CrossingRespondSerializer,
     CrossingResultSerializer,
     CrossXPLockResponseSerializer,
@@ -222,7 +223,16 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     only offer flavors the technique can legally keep —
     resolve_cast_action_template enforces the same split at submit/finalize
     time. The technique builder's category-agnostic picker keeps the flat
-    union by passing no param."""
+    union by passing no param.
+
+    **Beat-authoring parity (#3562):** ``?scope=beat`` widens the listing to
+    every authored ``ConsequencePool``, since a GM authoring a beat's stakes
+    isn't limited to the technique-cast catalog. ``retrieve`` is always
+    unfiltered (any pool, not just a catalog member) and returns
+    ``ConsequencePoolDetailSerializer``, the resolved entries list (parent
+    inheritance + own entries minus exclusions) the beat form's pool picker
+    needs to preview a pool before selecting it.
+    """
 
     serializer_class = ConsequencePoolCatalogSerializer
     permission_classes = [IsAuthenticated]
@@ -234,6 +244,13 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     # the schema. Declaring the default here keeps get_queryset's guard a plain
     # attribute read rather than a getattr with a literal name.
     swagger_fake_view = False
+
+    def get_serializer_class(self):
+        """Detail responses resolve a pool's entries; list responses stay the
+        lightweight id/name/description row (#3562)."""
+        if self.action == "retrieve":
+            return ConsequencePoolDetailSerializer
+        return ConsequencePoolCatalogSerializer
 
     def get_queryset(self):
         from actions.models import ConsequencePool  # noqa: PLC0415
@@ -252,10 +269,21 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
         if self.swagger_fake_view:
             return ConsequencePool.objects.none()
 
+        if self.action == "retrieve":
+            # Beat authoring (#3562) can point at any pool, not just a curated
+            # catalog member, so retrieve stays unfiltered by the narrow-list
+            # rule below (and by ?scope=, since it's a no-op unless applied).
+            # No prefetch here: ConsequencePoolDetailSerializer.get_entries
+            # (#3562 review) bulk-loads outcome tiers and effects itself,
+            # since resolve_pool_consequences() runs its own select_related
+            # queries that would bypass anything prefetched on this queryset.
+            return ConsequencePool.objects.all().order_by("name")
+
         # checks.CheckType is content-repo-owned (#2698) — get_melee_offense_pool()
         # is None when the 'Melee Attack' CheckType isn't authored; drop it
         # rather than passing None into __in (which would wrongly also match
-        # every top-level, parent-less pool).
+        # every top-level, parent-less pool). ?scope=beat (#3562) widens this
+        # back out to every pool via the filterset's filter_scope method.
         base_pools = [
             pool
             for pool in (get_standalone_cast_pool(), get_melee_offense_pool())
@@ -1194,6 +1222,54 @@ class RitualPerformView(APIView):
         kwargs["tradition"] = tradition
         return None
 
+    def _resolve_primitive_kwargs(
+        self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict, *, imbuing: bool
+    ) -> Response | None:
+        """Turn the primitive-only kwargs surface into the objects the action wants.
+
+        Imbuing takes a Thread and carries ``thread_id``; ghost-tutor summoning takes
+        a Tradition and carries ``tradition_id`` (#2460). Returns an error Response
+        when either cannot be resolved, or None when the kwargs are ready.
+        """
+        if imbuing:
+            error = self._resolve_imbuing_kwargs(sheet, kwargs)
+            if error is not None:
+                return error
+        if is_ghost_tutor_ritual(
+            name=ritual.name, service_function_path=ritual.service_function_path
+        ):
+            return self._resolve_ghost_tutor_kwargs(sheet, kwargs)
+        return None
+
+    def _run_imbue_finisher(self, sheet: CharacterSheet, ritual: Ritual, kwargs: dict) -> Response:
+        """Fuse the telnet ``imbue`` finisher onto a web-hosted Rite of Imbuing.
+
+        The canonical rite is CEREMONY-kind: performing it only mints the
+        PendingRitualEffect the telnet finisher consumes. The web is the
+        "specialized host UI" (Ritual.client_hosted) and sends one POST, so the
+        finisher runs here -- without it the pending effect was created and the
+        imbue silently never happened (2026-07 audit).
+        """
+        from actions.definitions.imbue import ImbueAction  # noqa: PLC0415
+
+        finisher_result = ImbueAction().run(
+            actor=sheet.character, thread=kwargs["thread"], amount=kwargs["amount"]
+        )
+        if not finisher_result.success:
+            return Response({"detail": finisher_result.message}, status=status.HTTP_400_BAD_REQUEST)
+        imbue_result = finisher_result.data.get("result")
+        return Response(
+            {
+                "ritual_id": ritual.pk,
+                "execution_kind": ritual.execution_kind,
+                "result": (
+                    asdict(imbue_result) if dataclasses.is_dataclass(imbue_result) else imbue_result
+                ),
+                "message": finisher_result.message,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     def post(self, request: Request) -> Response:
         """Validate, resolve, and dispatch the ritual; return a result payload."""
         serializer = RitualPerformRequestSerializer(
@@ -1214,19 +1290,9 @@ class RitualPerformView(APIView):
         imbuing = is_imbuing_ritual(
             name=ritual.name, service_function_path=ritual.service_function_path
         )
-        if imbuing:
-            error = self._resolve_imbuing_kwargs(sheet, kwargs)
-            if error is not None:
-                return error
-
-        # Ghost-tutor summoning takes a Tradition. The primitive-only kwargs
-        # surface carries ``tradition_id``; resolve here (#2460).
-        if is_ghost_tutor_ritual(
-            name=ritual.name, service_function_path=ritual.service_function_path
-        ):
-            error = self._resolve_ghost_tutor_kwargs(sheet, kwargs)
-            if error is not None:
-                return error
+        error = self._resolve_primitive_kwargs(sheet, ritual, kwargs, imbuing=imbuing)
+        if error is not None:
+            return error
 
         from actions.definitions.ritual import PerformRitualAction  # noqa: PLC0415
 
@@ -1253,32 +1319,7 @@ class RitualPerformView(APIView):
         # (2026-07 audit: without this the pending effect was created and the
         # imbue silently never happened).
         if imbuing and ritual.execution_kind == RitualExecutionKind.CEREMONY:
-            from actions.definitions.imbue import ImbueAction  # noqa: PLC0415
-
-            finisher_result = ImbueAction().run(
-                actor=sheet.character,
-                thread=kwargs["thread"],
-                amount=kwargs["amount"],
-            )
-            if not finisher_result.success:
-                return Response(
-                    {"detail": finisher_result.message},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            imbue_result = finisher_result.data.get("result")
-            return Response(
-                {
-                    "ritual_id": ritual.pk,
-                    "execution_kind": ritual.execution_kind,
-                    "result": (
-                        asdict(imbue_result)
-                        if dataclasses.is_dataclass(imbue_result)
-                        else imbue_result
-                    ),
-                    "message": finisher_result.message,
-                },
-                status=status.HTTP_200_OK,
-            )
+            return self._run_imbue_finisher(sheet, ritual, kwargs)
 
         result = action_result.data.get("result")
         payload: dict = {
@@ -2414,7 +2455,6 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
         session's id so the frontend can navigate to its detail page.
         """
         from world.magic.exceptions import (  # noqa: PLC0415
-            ParticipantCountError,
             RitualSessionError,
         )
 
@@ -2424,7 +2464,7 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
 
         try:
             self.perform_create(serializer)
-        except (RitualSessionError, ParticipantCountError) as exc:
+        except RitualSessionError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         except CovenantError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)

@@ -54,6 +54,35 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         # Match the typed key (#2728), never the display label.
         self.assertEqual(entry.roster.roster_type, RosterType.AVAILABLE)
 
+    def test_named_family_surname_used_in_gm_finalized_character(self) -> None:
+        """The NAMED-path family is created before the name is built here too (#3617).
+
+        Mirrors ``finalize_character``'s equivalent test: ``finalize_gm_character``
+        must call ``_ensure_named_family`` before ``_build_character_full_name`` too.
+        """
+        from evennia.objects.models import ObjectDB
+
+        from world.character_creation.factories import OriginTemplateFactory
+        from world.roster.models import Family
+
+        template = OriginTemplateFactory(beginning=self.beginnings)
+        draft = self._draft(new_family_name="The Cisternwrights")
+        draft.selected_origin_template = template
+        draft.draft_data.pop("tarot_card_name", None)
+        draft.save()
+        self.client.force_authenticate(user=self.gm.account)
+        response = self.client.post(
+            self._url(draft),
+            {"target_table": self.table.pk, "story_title": "The Grand Design"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        entry = RosterEntry.objects.get(pk=response.data["roster_entry_id"])
+        family = Family.objects.get(name="The Cisternwrights")
+        character = ObjectDB.objects.get(pk=entry.character_sheet.pk)
+        self.assertEqual(character.db_key, "Aurelius The Cisternwrights")
+        self.assertEqual(entry.character_sheet.family, family)
+
     def test_non_owner_of_the_table_is_forbidden(self) -> None:
         other_gm = GMProfileFactory()
         draft = self._draft(account=other_gm.account)
@@ -93,6 +122,7 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
             account=self.gm.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             age=25,
@@ -103,7 +133,6 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
             build=self.build,
             draft_data={
                 "first_name": "Half Finished",
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,

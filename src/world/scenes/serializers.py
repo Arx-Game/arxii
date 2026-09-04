@@ -12,6 +12,7 @@ from world.areas.positioning.serializers import (
 )
 from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
+from world.missions.serializers import GroupBallotStateSerializer, GroupBeatResultSerializer
 from world.scenes.constants import (
     ScenePrivacyMode,
     SceneRoundMode,
@@ -21,6 +22,7 @@ from world.scenes.models import (
     Persona,
     PersonaType,
     Scene,
+    SceneClock,
     SceneParticipation,
     SceneRound,
     SceneSummaryRevision,
@@ -310,15 +312,28 @@ class SceneListSerializer(serializers.ModelSerializer):
     def get_running_beat(self, obj: Scene) -> dict[str, object] | None:
         """The Beat this scene is currently running (#3425), GM/staff viewers only.
 
-        Only id + risk tier -- beat internals (internal_description, player
-        hints, etc.) never ride this payload (see the #3425 spec's leak
-        table); #3433 decides the separate player-visible slice.
+        Only id, risk tier and authored clock size -- beat internals
+        (internal_description, player hints, etc.) never ride this payload
+        (see the #3425 spec's leak table); #3433 decides the separate
+        player-visible slice.
         """
         if obj.running_beat_id is None:
             return None
         if not self.get_viewer_can_gm(obj):
             return None
-        return {"id": obj.running_beat_id, "risk": obj.running_beat.risk}
+        return {
+            "id": obj.running_beat_id,
+            "risk": obj.running_beat.risk,
+            "clock_size": obj.running_beat.clock_size,
+        }
+
+
+class SceneClockSerializer(serializers.ModelSerializer):
+    """The player-visible scene clock (#3567): size and fill, nothing about the beat."""
+
+    class Meta:
+        model = SceneClock
+        fields = ["size", "filled"]
 
 
 class SceneRoundSerializer(serializers.ModelSerializer):
@@ -353,6 +368,7 @@ class SceneDetailSerializer(SceneListSerializer):
     persona_positions = serializers.SerializerMethodField()
     active_round = serializers.SerializerMethodField()
     declared_risk = serializers.SerializerMethodField()
+    clock = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -369,6 +385,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "persona_positions",
             "active_round",
             "declared_risk",
+            "clock",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -468,6 +485,18 @@ class SceneDetailSerializer(SceneListSerializer):
         rnd = active_round_for_room(obj.location)
         return SceneRoundSerializer(rnd).data if rnd is not None else None
 
+    @extend_schema_field(SceneClockSerializer(allow_null=True))
+    def get_clock(self, obj: Scene) -> dict | None:
+        """The running beat's open clock, visible to every viewer (#3567 Decision 4)."""
+        from world.scenes.beat_selectors import running_beat_for_scene  # noqa: PLC0415
+        from world.scenes.clock_services import open_clock_for_beat  # noqa: PLC0415
+
+        beat = running_beat_for_scene(obj)
+        if beat is None:
+            return None
+        clock = open_clock_for_beat(beat)
+        return SceneClockSerializer(clock).data if clock is not None else None
+
     def get_declared_risk(self, obj: Scene) -> str | None:
         """Player-visible declared risk tier for the scene header badge (#3433).
 
@@ -553,6 +582,61 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
         fields = ["id", "scene", "persona", "persona_name", "content", "action", "timestamp"]
         read_only_fields = ["timestamp"]
 
+    def _validate_persona_is_the_requester(self, persona: Persona) -> None:
+        """The revision must be signed with a face the requesting account actually wears."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return
+        roster_entry = persona.character_sheet.roster_entry_or_none
+        if roster_entry is None:
+            raise serializers.ValidationError(
+                {"persona": "Persona's character has no roster entry."}
+            )
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        owns_character = RosterTenure.objects.filter(
+            roster_entry=roster_entry,
+            player_data__account=request.user,
+            end_date__isnull=True,
+        ).exists()
+        if not owns_character:
+            raise serializers.ValidationError(
+                {"persona": "You can only submit revisions as your own persona."}
+            )
+
+    def _validate_persona_was_there(self, scene: Scene, persona: Persona) -> None:
+        """The signing persona's account must be a participant of the scene being summarized.
+
+        A persona with no roster entry, or whose character has no active tenure,
+        has no account to check against and is left to the ownership check above.
+        """
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        # Audit fix (was getattr(...character, "roster_entry", None)): the reverse
+        # OneToOne lives on the SHEET — the old receiver was the ObjectDB character,
+        # so this always resolved None and the participant check silently never ran.
+        roster_entry = persona.character_sheet.roster_entry_or_none
+        if not roster_entry:
+            return
+        active_tenure = (
+            RosterTenure.objects.filter(
+                roster_entry=roster_entry,
+                end_date__isnull=True,
+            )
+            .select_related("player_data")
+            .first()
+        )
+        if not active_tenure:
+            return
+        is_participant = SceneParticipation.objects.filter(
+            scene=scene,
+            account=active_tenure.player_data.account,
+        ).exists()
+        if not is_participant:
+            raise serializers.ValidationError(
+                {"persona": "Persona must belong to a participant of this scene."}
+            )
+
     def validate(self, attrs: dict) -> dict:
         scene = attrs.get("scene")
         persona = attrs.get("persona")
@@ -561,55 +645,10 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"scene": "Summary revisions can only be submitted for ephemeral scenes."}
             )
-
         if persona:
-            request = self.context.get("request")
-            if request and request.user.is_authenticated:
-                # Check the requesting user owns the character behind this persona
-                roster_entry = persona.character_sheet.roster_entry_or_none
-                if roster_entry is None:
-                    raise serializers.ValidationError(
-                        {"persona": "Persona's character has no roster entry."}
-                    )
-                from world.roster.models import RosterTenure  # noqa: PLC0415
-
-                owns_character = RosterTenure.objects.filter(
-                    roster_entry=roster_entry,
-                    player_data__account=request.user,
-                    end_date__isnull=True,
-                ).exists()
-                if not owns_character:
-                    raise serializers.ValidationError(
-                        {"persona": "You can only submit revisions as your own persona."}
-                    )
-
+            self._validate_persona_is_the_requester(persona)
         if scene and persona:
-            # Check that persona's character's account is a scene participant
-            from world.roster.models import RosterTenure  # noqa: PLC0415
-
-            # Audit fix (was getattr(...character, "roster_entry", None)): the reverse
-            # OneToOne lives on the SHEET — the old receiver was the ObjectDB character,
-            # so this always resolved None and the participant check silently never ran.
-            roster_entry = persona.character_sheet.roster_entry_or_none
-            if roster_entry:
-                active_tenure = (
-                    RosterTenure.objects.filter(
-                        roster_entry=roster_entry,
-                        end_date__isnull=True,
-                    )
-                    .select_related("player_data")
-                    .first()
-                )
-                if active_tenure:
-                    is_participant = SceneParticipation.objects.filter(
-                        scene=scene,
-                        account=active_tenure.player_data.account,
-                    ).exists()
-                    if not is_participant:
-                        raise serializers.ValidationError(
-                            {"persona": "Persona must belong to a participant of this scene."}
-                        )
-
+            self._validate_persona_was_there(scene, persona)
         return attrs
 
 
@@ -681,3 +720,57 @@ class TruncatePrecaptureRequestSerializer(serializers.Serializer):
     """
 
     interaction_id = serializers.IntegerField()
+
+
+class SceneScenarioLastDeedSerializer(serializers.Serializer):
+    """The GM scenario view's most recent deed - ``{option_key, outcome_name}`` (#3565)."""
+
+    option_key = serializers.CharField()
+    outcome_name = serializers.CharField(allow_null=True)
+
+
+class SceneScenarioGMSerializer(serializers.Serializer):
+    """The GM-only scenario view: current node, every ballot, the last deed (#3565).
+
+    Mirror of ``world.scenes.scenario_services._gm_payload``'s dict shape - staff or
+    viewers with standing on the running story only (see
+    ``world.scenes.scenario_services.build_scene_scenario_payload``).
+    """
+
+    node_key = serializers.CharField(allow_blank=True)
+    flavor_text = serializers.CharField(allow_blank=True)
+    conflict_mode = serializers.CharField(allow_blank=True)
+    phase = serializers.CharField()
+    is_paused = serializers.BooleanField()
+    ballots = GroupBallotStateSerializer(many=True)
+    last_deed = serializers.SerializerMethodField()
+    beat_outcome = serializers.CharField()
+    beat_outcome_key = serializers.CharField(allow_blank=True)
+
+    @extend_schema_field(SceneScenarioLastDeedSerializer(allow_null=True))
+    def get_last_deed(self, obj: dict) -> dict | None:
+        return obj["last_deed"] if isinstance(obj, dict) else obj.last_deed
+
+
+class SceneScenarioSerializer(serializers.Serializer):
+    """Mirror of ``world.scenes.scenario_services.build_scene_scenario_payload`` (#3565).
+
+    ``group_beat``/``gm`` use ``SerializerMethodField`` because DRF nested
+    ``to_representation`` rejects None (see ``GroupBeatResultSerializer``).
+    """
+
+    instance_id = serializers.IntegerField(allow_null=True)
+    is_paused = serializers.BooleanField()
+    viewer_is_participant = serializers.BooleanField()
+    group_beat = serializers.SerializerMethodField()
+    gm = serializers.SerializerMethodField()
+
+    @extend_schema_field(GroupBeatResultSerializer(allow_null=True))
+    def get_group_beat(self, obj: dict) -> dict | None:
+        result = obj["group_beat"] if isinstance(obj, dict) else obj.group_beat
+        return GroupBeatResultSerializer(result).data if result is not None else None
+
+    @extend_schema_field(SceneScenarioGMSerializer(allow_null=True))
+    def get_gm(self, obj: dict) -> dict | None:
+        gm = obj["gm"] if isinstance(obj, dict) else obj.gm
+        return SceneScenarioGMSerializer(gm).data if gm is not None else None

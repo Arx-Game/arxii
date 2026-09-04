@@ -7,7 +7,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.gm.models import GMLevelChange
+    from world.gm.models import (
+        CheckTypeSituationFit,
+        ConsequencePoolGuide,
+        GMLevelChange,
+        SituationDifficultyGuide,
+        SituationKind,
+    )
+    from world.mechanics.models import ChallengeTemplate, SituationTemplate
 
 
 @dataclass(frozen=True)
@@ -36,3 +43,29 @@ class GMEvidenceSummary:
     beats_completed_by_risk: dict[str, int]
     feedback_by_category: list[CategoryFeedback]
     level_changes: list[GMLevelChange]
+
+
+@dataclass(frozen=True)
+class KindResult:
+    """One situation kind with everything the catalog says about it (#3564).
+
+    ``difficulty_guide`` is the guide for the requested risk (None when no
+    risk was given or the kind has no guide for it); ``all_guides`` is every
+    guide, ordered by risk, so a browse with no risk still shows the ladder.
+    """
+
+    kind: SituationKind
+    check_fits: list[CheckTypeSituationFit]
+    difficulty_guide: SituationDifficultyGuide | None
+    all_guides: list[SituationDifficultyGuide]
+    pool_guides: list[ConsequencePoolGuide]
+
+
+@dataclass(frozen=True)
+class DiscoveryResult:
+    """What ``find_situations`` found: the shape both the telnet action and
+    ``GET /api/gm/discovery/`` render (#3564)."""
+
+    templates: list[SituationTemplate]
+    challenges: list[ChallengeTemplate]
+    kinds: list[KindResult]

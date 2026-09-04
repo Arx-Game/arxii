@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.test import TestCase, override_settings
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.factories import make_unknown_upbringing
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_creation.services import finalize_character
 from world.character_sheets.factories import CharacterSheetFactory
@@ -153,9 +154,10 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
             starting_area=area,
             trust_required=0,
             is_active=True,
-            family_known=False,
         )
         beginnings.allowed_species.add(species)
+        # (#3617) An amnesiac Upbringing stands in for the retired orphan flag.
+        unknown_upbringing = make_unknown_upbringing(beginnings)
         height_band = HeightBand.objects.create(
             name="pc_band",
             display_name="ProvisionCheck Band",
@@ -193,6 +195,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
 
         cls.area = area
         cls.beginnings = beginnings
+        cls.unknown_upbringing = unknown_upbringing
         cls.species = species
         cls.gender = gender
         cls.tarot = tarot
@@ -217,6 +220,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
             account=account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -231,7 +235,6 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
                 "first_name": "ProvCheck",
                 "description": "A test character",
                 "stats": _PROVISION_STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
@@ -299,9 +302,10 @@ class GetCharacterCastCheckTests(TestCase):
             starting_area=area,
             trust_required=0,
             is_active=True,
-            family_known=False,
         )
         beginnings.allowed_species.add(species)
+        # (#3617) An amnesiac Upbringing stands in for the retired orphan flag.
+        unknown_upbringing = make_unknown_upbringing(beginnings)
         height_band = HeightBand.objects.create(
             name="cc_band",
             display_name="CastCheck Band",
@@ -337,6 +341,7 @@ class GetCharacterCastCheckTests(TestCase):
 
         cls.area = area
         cls.beginnings = beginnings
+        cls.unknown_upbringing = unknown_upbringing
         cls.species = species
         cls.gender = gender
         cls.tarot = tarot
@@ -367,6 +372,7 @@ class GetCharacterCastCheckTests(TestCase):
             account=account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -381,7 +387,6 @@ class GetCharacterCastCheckTests(TestCase):
                 "first_name": "CastCheck",
                 "description": "A test character",
                 "stats": _PROVISION_STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
                 "traits_complete": True,

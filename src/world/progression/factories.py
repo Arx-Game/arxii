@@ -31,6 +31,9 @@ from world.progression.models import (
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 
+_CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
+_TRAIT_FACTORY = "world.traits.factories.TraitFactory"
+
 # Module path imported lazily inside LazyFunctions to fetch the current game week;
 # extracted to a single constant to satisfy S1192.
 _WEEK_SERVICES_MODULE = "world.game_clock.week_services"
@@ -73,8 +76,8 @@ class DevelopmentPointsFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = DevelopmentPoints
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    trait = factory.SubFactory("world.traits.factories.TraitFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    trait = factory.SubFactory(_TRAIT_FACTORY)
     total_earned = factory.Faker("random_int", min=0, max=100)
 
 
@@ -84,8 +87,8 @@ class DevelopmentTransactionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = DevelopmentTransaction
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    trait = factory.SubFactory("world.traits.factories.TraitFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    trait = factory.SubFactory(_TRAIT_FACTORY)
     source = factory.Faker(
         "random_element",
         elements=[choice[0] for choice in DevelopmentSource.choices],
@@ -104,7 +107,7 @@ class CharacterUnlockFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterUnlock
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     character_class = factory.SubFactory(
         "world.classes.factories.CharacterClassFactory",
     )
@@ -118,7 +121,7 @@ class CharacterPathHistoryFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterPathHistory
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     path = factory.SubFactory(PATH_FACTORY)
 
 
@@ -182,7 +185,7 @@ class CharacterXPFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterXP
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     total_earned = factory.Faker("random_int", min=0, max=500)
     total_spent = factory.LazyAttribute(
         lambda obj: random.randint(0, obj.total_earned),  # noqa: S311
@@ -196,7 +199,7 @@ class CharacterXPTransactionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = CharacterXPTransaction
 
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     amount = factory.Faker("random_int", min=1, max=100)
     reason = ProgressionReason.SYSTEM_AWARD
     description = factory.Faker("sentence")
@@ -209,8 +212,8 @@ class WeeklySkillUsageFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = WeeklySkillUsage
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    trait = factory.SubFactory("world.traits.factories.TraitFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    trait = factory.SubFactory(_TRAIT_FACTORY)
     game_week = factory.LazyFunction(
         lambda: __import__(
             _WEEK_SERVICES_MODULE, fromlist=["get_current_game_week"]
@@ -283,7 +286,7 @@ class PathIntentFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = PathIntent
 
-    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     intended_path = factory.SubFactory(PATH_FACTORY)
 
 
@@ -294,7 +297,7 @@ class DuranceTrainingSiteFactory(factory_django.DjangoModelFactory):
         model = DuranceTrainingSite
 
     room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
-    officiant = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    officiant = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     is_active = True
 
 

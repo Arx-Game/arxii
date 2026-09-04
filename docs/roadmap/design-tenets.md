@@ -195,6 +195,15 @@ failure, not a feature. Always route through `perform_check` with the
 appropriate CheckType — character stats, conditions, buffs, relationships
 all influence the outcome.
 
+**GM choice happens while designing, never after the players act** (ruling
+2026-09-01, #3565, ADR-0258): the runtime GM-choice transition mode is
+retired - two eligible episode transitions fire by authored order, never a
+post-hoc GM pick, and a story beat's body is the same authored
+option -> check -> tier -> consequence graph missions already run, playable
+in the scene instead of adjudicated after the fact. Pausing at the frontier
+to author what comes next is still a GM's job; picking among outcomes once
+the party has already rolled is not.
+
 ### Visibility = eligibility (no greyed-out locked options)
 
 For any gated player-facing surface (NPC service menus, crafting recipes,

@@ -164,6 +164,23 @@ class JournalEntry:
 
 
 @dataclass(frozen=True)
+class TrackView:
+    """A track node's progress as the party sees it (#3568): counts only.
+
+    Built by ``services.play._track_view`` off ``MissionNode.track_successes``/
+    ``track_failures`` (the thresholds) and ``MissionTrackProgress`` (the
+    per-run counter, 0/0 when the run hasn't logged a deed here yet). The
+    leak boundary is deliberate: no opposition sheet, no check type, no
+    difficulty number - the party sees pips, not the math behind them.
+    """
+
+    successes: int
+    needed: int
+    failures: int
+    allowed: int
+
+
+@dataclass(frozen=True)
 class BeatOption:
     """One actionable option on the current beat, as the player sees it (#885).
 
@@ -187,7 +204,9 @@ class BeatView:
     ``options`` carries only the LIVE options (location conjunct ∧
     visibility predicate already applied) — visibility=eligibility, never
     a greyed-out entry. Empty options with an active node means "nothing
-    you can do HERE" (the journal compass says where to go).
+    you can do HERE" (the journal compass says where to go). ``is_paused``
+    (#3565) is true while a scenario ENCOUNTER option's fight is in
+    progress - no option is pickable until it resolves.
     """
 
     instance_id: int
@@ -195,6 +214,8 @@ class BeatView:
     node_key: str
     flavor_text: str
     options: tuple[BeatOption, ...]
+    is_paused: bool
+    track: TrackView | None = None
 
 
 @dataclass(frozen=True)
@@ -231,7 +252,8 @@ class GroupBeatView:
     ``options`` is the UNION group option list (every participant's live
     options, owner-tagged). ``phase`` is ``"pick"`` until every participant
     has picked, then ``"vote"``. ``expires_at`` is the ISO deadline (None
-    until the first pick opens the window).
+    until the first pick opens the window). ``is_paused`` (#3565) is true
+    while a scenario ENCOUNTER option's fight is in progress.
     """
 
     instance_id: int
@@ -242,8 +264,10 @@ class GroupBeatView:
     options: tuple[BeatOption, ...]
     ballots: tuple[GroupBallotState, ...]
     expires_at: str | None
+    is_paused: bool
     support_moves: tuple[SupportMove, ...] = ()
     declared_supports: tuple[SupportDeclarationView, ...] = ()
+    track: TrackView | None = None
 
 
 @dataclass(frozen=True)

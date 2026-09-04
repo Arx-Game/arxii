@@ -1,5 +1,6 @@
 import type { GameMessage, GameMessageType, IncomingMessage } from './types';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
+import { toDisplayString } from '@/lib/displayValue';
 
 export function parseGameMessage(parsed: IncomingMessage): GameMessage {
   if (Array.isArray(parsed) && parsed.length >= 2) {
@@ -21,7 +22,7 @@ export function parseGameMessage(parsed: IncomingMessage): GameMessage {
     } else if (msgType === WS_MESSAGE_TYPE.LOGGED_IN) {
       content = 'Successfully logged in!';
     } else if (msgType === WS_MESSAGE_TYPE.VN_MESSAGE) {
-      content = String((kwargs as Record<string, unknown>).text ?? '');
+      content = toDisplayString((kwargs as Record<string, unknown>).text);
       messageType = GAME_MESSAGE_TYPE.ACTION;
     } else if (msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION) {
       content = JSON.stringify(kwargs);

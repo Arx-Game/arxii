@@ -27,9 +27,11 @@ import type {
 } from '@/actions/types';
 import type { PlayerAction, SoulfrayWarningData } from '@/scenes/actionTypes';
 import { MovementActions } from '../components/MovementActions';
+import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
 import { ThreadPullDialog, type PullSelection } from '@/magic/components/threads/ThreadPullDialog';
+import { useCharacterAnima } from '@/magic/queries';
 import {
   Select,
   SelectContent,
@@ -224,6 +226,10 @@ interface RoundScopedState {
   guardAllyId: string;
   guardTechniqueId: string;
   guardDestination: string;
+  /** Guardian's consent (#3573) to keep a technique-guardian's ward alive
+   *  past zero anima by drawing on Soulfray. Reset to false whenever
+   *  guardTechniqueId switches to mundane (no protective technique). */
+  guardSoulfrayAccepted: boolean;
   // #3381 additions — rally/succor ally pickers, use-item declaration,
   // charge/joust mini-panel. Each control's own error is tracked separately
   // from `maneuverError` since these render outside the Maneuvers cluster
@@ -263,6 +269,7 @@ function initialRoundState(): RoundScopedState {
     guardAllyId: GUARD_ANYONE_VALUE,
     guardTechniqueId: GUARD_NO_TECHNIQUE_VALUE,
     guardDestination: GUARD_DESTINATION_AWAY,
+    guardSoulfrayAccepted: false,
     rallyAllyId: '',
     succorAllyId: '',
     useItemInstanceId: '',
@@ -298,6 +305,13 @@ type DispatchJob = () => Promise<DispatchResult>;
  * Shape-aware per the selected action's `position_target_shape` — a
  * "none"/undefined-shape technique never gets `position_params`, even if
  * stale castPosition state is present (#2206 review finding).
+ *
+ * `isWardBearing` (#3573) - true when the selected technique carries a
+ * protective ward (`reactive_anima_cost != null`). `confirm_soulfray_risk` is
+ * sent when `soulfrayAccepted` is true AND either a Soulfray warning is active
+ * OR the cast is ward-bearing - the lighter ward-cast toggle (rendered when no
+ * warning is present) reuses the same `soulfrayAccepted` state as the
+ * SoulfrayAcceptGate.
  */
 function buildFocusedJob(
   focusedContext: ActionContext,
@@ -309,7 +323,8 @@ function buildFocusedJob(
   furyTierId: number | null,
   furyAnchorId: number | null,
   castPosition: CastPosition,
-  positionTargetShape: PositionTargetShape
+  positionTargetShape: PositionTargetShape,
+  isWardBearing: boolean
 ): DispatchJob | null {
   if (focusedContext.techniqueId === undefined) return null;
 
@@ -333,7 +348,9 @@ function buildFocusedJob(
   if (furyTierId !== null) furyKwargs.fury_commitment_id = furyTierId;
   if (furyAnchorId !== null) furyKwargs.fury_anchor_id = furyAnchorId;
   const soulfrayKwarg =
-    soulfrayWarning !== null && soulfrayAccepted ? { confirm_soulfray_risk: true } : {};
+    soulfrayAccepted && (soulfrayWarning !== null || isWardBearing)
+      ? { confirm_soulfray_risk: true }
+      : {};
 
   // Strain (#3446): the push-yourself anima overcommit on an ordinary declared
   // cast — the non-clash sibling of the per-clash strain slider below.
@@ -596,6 +613,564 @@ function submitBlockReason(args: {
   return null;
 }
 
+type Opponent = NonNullable<EncounterDetail['opponents']>[number];
+type InventoryItem = NonNullable<ReturnType<typeof useInventory>['data']>[number];
+
+interface UseItemSectionProps {
+  usableItems: InventoryItem[];
+  coverableAllies: Participant[];
+  activeOpponents: Opponent[];
+  instanceId: string;
+  targetValue: string;
+  error: string | null;
+  /** Every control is inert: locked, out of the declaring phase, or mid-dispatch. */
+  disabled: boolean;
+  /** Locked or out of phase, ignoring dispatch — drives the confirm button's styling. */
+  inactive: boolean;
+  pending: boolean;
+  onInstanceChange: (value: string) => void;
+  onTargetChange: (value: string) => void;
+  onConfirm: () => void;
+}
+
+/**
+ * Declare a held on-use item as this round's action (#3381, #2023/#2120).
+ *
+ * A primary maneuver, mutually exclusive with the focused technique slot.
+ */
+function UseItemSection({
+  usableItems,
+  coverableAllies,
+  activeOpponents,
+  instanceId,
+  targetValue,
+  error,
+  disabled,
+  inactive,
+  pending,
+  onInstanceChange,
+  onTargetChange,
+  onConfirm,
+}: UseItemSectionProps) {
+  if (usableItems.length === 0) return null;
+  return (
+    <div
+      className="space-y-1.5 rounded border border-border bg-card/60 p-2"
+      data-testid="use-item-section"
+    >
+      <p
+        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        title="Use a held item as your round action, optionally against an ally or opponent."
+      >
+        Use Item
+      </p>
+      <Select value={instanceId} onValueChange={onInstanceChange} disabled={disabled}>
+        <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
+          <SelectValue placeholder="Choose an item…" />
+        </SelectTrigger>
+        <SelectContent>
+          {usableItems.map((item) => (
+            <SelectItem key={item.id} value={String(item.id)}>
+              {item.display_name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={targetValue} onValueChange={onTargetChange} disabled={disabled}>
+        <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
+          <SelectValue placeholder="Target" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
+          {coverableAllies.map((ally) => (
+            <SelectItem
+              key={`use-item-ally-${ally.id}`}
+              value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
+            >
+              {ally.character_name}
+            </SelectItem>
+          ))}
+          {activeOpponents.map((opponent) => (
+            <SelectItem
+              key={`use-item-opponent-${opponent.id}`}
+              value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
+            >
+              {opponent.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <button
+        type="button"
+        disabled={disabled || instanceId === ''}
+        onClick={onConfirm}
+        data-testid="use-item-confirm-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          inactive || instanceId === ''
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+        )}
+      >
+        {pending ? 'Using item…' : 'Use Item'}
+      </button>
+      {error !== null && (
+        <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface MountedManeuversProps {
+  activeOpponents: Opponent[];
+  physicalTechniques: PlayerAction[];
+  chargeOpponentId: string;
+  chargeTechniqueId: string;
+  chargeError: string | null;
+  joustTechniqueId: string;
+  joustError: string | null;
+  /** Joust is offered only in a duel. */
+  isDuelEncounter: boolean;
+  /** Every control is inert: locked, out of the declaring phase, or mid-dispatch. */
+  disabled: boolean;
+  /** Locked or out of phase, ignoring dispatch — drives the buttons' styling. */
+  inactive: boolean;
+  pending: boolean;
+  onChargeOpponentChange: (value: string) => void;
+  onChargeTechniqueChange: (value: string) => void;
+  onJoustTechniqueChange: (value: string) => void;
+  onCharge: () => void;
+  onJoust: () => void;
+}
+
+/**
+ * Mounted-only declarations: close distance with a Charge, or Joust a duel
+ * opponent (#3381, #1843).
+ *
+ * Backend-trusting per Decision 4: no client-side reach or Lance re-validation.
+ * A rejected declaration surfaces the backend's own message inline.
+ */
+function MountedManeuvers({
+  activeOpponents,
+  physicalTechniques,
+  chargeOpponentId,
+  chargeTechniqueId,
+  chargeError,
+  joustTechniqueId,
+  joustError,
+  isDuelEncounter,
+  disabled,
+  inactive,
+  pending,
+  onChargeOpponentChange,
+  onChargeTechniqueChange,
+  onJoustTechniqueChange,
+  onCharge,
+  onJoust,
+}: MountedManeuversProps) {
+  return (
+    <div
+      className="space-y-2 rounded border border-border bg-card/60 p-2"
+      data-testid="mounted-maneuvers-section"
+    >
+      <p
+        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        title="Mounted-only declarations — close distance with a Charge, or Joust your duel opponent."
+      >
+        Mounted Maneuvers
+      </p>
+
+      {/* Charge — close distance to an opponent, then attack with the chosen technique. */}
+      <div className="space-y-1.5" data-testid="charge-control">
+        <Select value={chargeOpponentId} onValueChange={onChargeOpponentChange} disabled={disabled}>
+          <SelectTrigger data-testid="charge-opponent-select" className="h-8 text-xs">
+            <SelectValue placeholder="Charge which opponent…" />
+          </SelectTrigger>
+          <SelectContent>
+            {activeOpponents.map((opponent) => (
+              <SelectItem key={opponent.id} value={String(opponent.id)}>
+                {opponent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={chargeTechniqueId}
+          onValueChange={onChargeTechniqueChange}
+          disabled={disabled}
+        >
+          <SelectTrigger data-testid="charge-technique-select" className="h-8 text-xs">
+            <SelectValue placeholder="With which technique…" />
+          </SelectTrigger>
+          <SelectContent>
+            {physicalTechniques.map((action) => (
+              <SelectItem
+                key={action.ref.technique_id ?? action.display_name}
+                value={String(action.ref.technique_id)}
+              >
+                {action.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button
+          type="button"
+          disabled={disabled || chargeOpponentId === '' || chargeTechniqueId === ''}
+          onClick={onCharge}
+          data-testid="charge-confirm-btn"
+          className={cn(
+            'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            inactive || chargeOpponentId === '' || chargeTechniqueId === ''
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+          )}
+        >
+          {pending ? 'Charging…' : 'Charge'}
+        </button>
+        {chargeError !== null && (
+          <p role="alert" className="text-sm text-destructive" data-testid="charge-error">
+            {chargeError}
+          </p>
+        )}
+      </div>
+
+      {/* Joust — duel-only, opponent implied by the 2-participant duel. */}
+      {isDuelEncounter && (
+        <div className="space-y-1.5" data-testid="joust-control">
+          <Select
+            value={joustTechniqueId}
+            onValueChange={onJoustTechniqueChange}
+            disabled={disabled}
+          >
+            <SelectTrigger data-testid="joust-technique-select" className="h-8 text-xs">
+              <SelectValue placeholder="Joust with which technique…" />
+            </SelectTrigger>
+            <SelectContent>
+              {physicalTechniques.map((action) => (
+                <SelectItem
+                  key={action.ref.technique_id ?? action.display_name}
+                  value={String(action.ref.technique_id)}
+                >
+                  {action.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            disabled={disabled || joustTechniqueId === ''}
+            onClick={onJoust}
+            data-testid="joust-confirm-btn"
+            className={cn(
+              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              inactive || joustTechniqueId === ''
+                ? 'border-border bg-muted text-muted-foreground'
+                : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+            )}
+          >
+            {pending ? 'Jousting…' : 'Joust'}
+          </button>
+          {joustError !== null && (
+            <p role="alert" className="text-sm text-destructive" data-testid="joust-error">
+              {joustError}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** What this round's already-declared maneuver is, when there is one. */
+function DeclaredManeuverBadge({
+  declaredManeuver,
+  coveredAllyName,
+  guardedAllyName,
+}: {
+  declaredManeuver: string | null;
+  coveredAllyName: string | null | undefined;
+  guardedAllyName: string | null | undefined;
+}) {
+  if (declaredManeuver === 'flee') {
+    return (
+      <div
+        className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+        data-testid="flee-declared-badge"
+      >
+        Fleeing: resolves at end of round
+      </div>
+    );
+  }
+  if (declaredManeuver === 'cover') {
+    return (
+      <div
+        className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-300"
+        data-testid="cover-declared-badge"
+      >
+        Covering {coveredAllyName ?? 'ally'}
+      </div>
+    );
+  }
+  if (declaredManeuver === 'interpose') {
+    return (
+      <div
+        className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
+        data-testid="guard-declared-badge"
+      >
+        Guarding {guardedAllyName ?? 'any ally hit this round'}
+      </div>
+    );
+  }
+  return null;
+}
+
+interface CoverControlProps {
+  declaredManeuver: string | null;
+  coverableAllies: Participant[];
+  coverAllyId: string;
+  coverPending: boolean;
+  isLocked: boolean;
+  isDeclaringPhase: boolean;
+  setCoverAllyId: (value: string) => void;
+  handleCover: () => void;
+}
+
+/** Cover an ally, taking hits aimed at them. Hidden once cover is declared. */
+function CoverControl({
+  declaredManeuver,
+  coverableAllies,
+  coverAllyId,
+  coverPending,
+  isLocked,
+  isDeclaringPhase,
+  setCoverAllyId,
+  handleCover,
+}: CoverControlProps) {
+  if (declaredManeuver === 'cover') return null;
+  return (
+    <div className="space-y-1.5" data-testid="cover-control">
+      <Select
+        value={coverAllyId}
+        onValueChange={setCoverAllyId}
+        disabled={isLocked || !isDeclaringPhase || coverPending}
+      >
+        <SelectTrigger data-testid="cover-ally-select" className="h-8 text-xs">
+          <SelectValue placeholder="Cover an ally…" />
+        </SelectTrigger>
+        <SelectContent>
+          {coverableAllies.map((ally) => (
+            <SelectItem key={ally.id} value={String(ally.id)}>
+              {ally.character_name}
+            </SelectItem>
+          ))}
+          {coverableAllies.length === 0 && (
+            <SelectItem value="__none__" disabled>
+              No allies available
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      <button
+        type="button"
+        disabled={isLocked || !isDeclaringPhase || coverPending || coverAllyId === ''}
+        onClick={handleCover}
+        data-testid="cover-confirm-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          isLocked || !isDeclaringPhase || coverAllyId === ''
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
+        )}
+      >
+        {coverPending ? 'Declaring cover…' : 'Confirm Cover'}
+      </button>
+    </div>
+  );
+}
+
+interface GuardControlProps {
+  declaredManeuver: string | null;
+  encounter: EncounterDetail | null | undefined;
+  guardControlRef: React.RefObject<HTMLDivElement>;
+  coverableAllies: Participant[];
+  protectiveTechniques: PlayerAction[];
+  selectedGuardTechnique: PlayerAction | undefined;
+  isRedirectGuardTechnique: boolean;
+  guardAllyId: string;
+  guardTechniqueId: string;
+  guardDestination: string;
+  guardSoulfrayAccepted: boolean;
+  animaCurrent: number | null;
+  guardPending: boolean;
+  isLocked: boolean;
+  isDeclaringPhase: boolean;
+  setGuardAllyId: (value: string) => void;
+  setGuardTechniqueId: (value: string) => void;
+  setGuardDestination: (value: string) => void;
+  setGuardSoulfrayAccepted: (value: boolean) => void;
+  handleGuard: () => void;
+}
+
+/**
+ * Guard an ally with your body or a protective technique (#2207).
+ *
+ * Hidden once a guard is already declared this round; the declared state shows
+ * in the cluster's badge instead.
+ */
+function GuardControl({
+  declaredManeuver,
+  encounter,
+  guardControlRef,
+  coverableAllies,
+  protectiveTechniques,
+  selectedGuardTechnique,
+  isRedirectGuardTechnique,
+  guardAllyId,
+  guardTechniqueId,
+  guardDestination,
+  guardSoulfrayAccepted,
+  animaCurrent,
+  guardPending,
+  isLocked,
+  isDeclaringPhase,
+  setGuardAllyId,
+  setGuardTechniqueId,
+  setGuardDestination,
+  setGuardSoulfrayAccepted,
+  handleGuard,
+}: GuardControlProps) {
+  if (declaredManeuver === 'interpose') return null;
+  return (
+    <div className="space-y-1.5" data-testid="guard-control" ref={guardControlRef}>
+      <Select
+        value={guardAllyId}
+        onValueChange={setGuardAllyId}
+        disabled={isLocked || !isDeclaringPhase || guardPending}
+      >
+        <SelectTrigger data-testid="guard-ally-select" className="h-8 text-xs">
+          <SelectValue placeholder="Guard anyone…" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={GUARD_ANYONE_VALUE}>Anyone (guard whoever is hit)</SelectItem>
+          {coverableAllies.map((ally) => (
+            <SelectItem key={ally.id} value={String(ally.id)}>
+              {ally.character_name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {protectiveTechniques.length > 0 && (
+        <Select
+          value={guardTechniqueId}
+          onValueChange={(value) => {
+            setGuardTechniqueId(value);
+            // Switching back to mundane clears any prior Soulfray
+            // consent - there's no protective ward left to hold (#3573).
+            if (value === GUARD_NO_TECHNIQUE_VALUE) setGuardSoulfrayAccepted(false);
+          }}
+          disabled={isLocked || !isDeclaringPhase || guardPending}
+        >
+          <SelectTrigger data-testid="guard-technique-select" className="h-8 text-xs">
+            <SelectValue placeholder="No protective technique" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={GUARD_NO_TECHNIQUE_VALUE}>
+              No protective technique (mundane)
+            </SelectItem>
+            {protectiveTechniques.map((action) => (
+              <SelectItem
+                key={action.ref.technique_id ?? action.display_name}
+                value={String(action.ref.technique_id)}
+              >
+                {action.display_name}
+                {action.protective_flavor != null
+                  ? ` (${PROTECTIVE_FLAVOR_LABELS[action.protective_flavor] ?? action.protective_flavor})`
+                  : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {selectedGuardTechnique != null && (
+        <label
+          className="flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs"
+          data-testid="guard-soulfray-gate"
+        >
+          <input
+            type="checkbox"
+            data-testid="guard-soulfray-toggle"
+            checked={guardSoulfrayAccepted}
+            onChange={(e) => setGuardSoulfrayAccepted(e.target.checked)}
+            disabled={isLocked || !isDeclaringPhase || guardPending}
+          />
+          <span>
+            Hold the line into Soulfray
+            {animaCurrent != null && selectedGuardTechnique.reactive_anima_cost != null
+              ? ` (anima ${animaCurrent} / fee ${selectedGuardTechnique.reactive_anima_cost})`
+              : ''}
+          </span>
+        </label>
+      )}
+
+      {isRedirectGuardTechnique && (
+        <Select
+          value={guardDestination}
+          onValueChange={setGuardDestination}
+          disabled={isLocked || !isDeclaringPhase || guardPending}
+        >
+          <SelectTrigger data-testid="guard-redirect-destination-select" className="h-8 text-xs">
+            <SelectValue placeholder="Redirect destination" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={GUARD_DESTINATION_AWAY}>Away (default)</SelectItem>
+            {(encounter?.opponents ?? []).map((opponent) => (
+              <SelectItem
+                key={`opp-${opponent.id}`}
+                value={`${GUARD_DESTINATION_OPPONENT_PREFIX}${opponent.id}`}
+              >
+                {opponent.name}
+              </SelectItem>
+            ))}
+            {(encounter?.volatile_objects ?? []).map((volatileObject) => (
+              <SelectItem
+                key={`obj-${volatileObject.id}`}
+                value={`${GUARD_DESTINATION_OBJECT_PREFIX}${volatileObject.id}`}
+              >
+                {volatileObject.name}
+                {volatileObject.position_name != null ? ` (${volatileObject.position_name})` : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      <button
+        type="button"
+        disabled={isLocked || !isDeclaringPhase || guardPending}
+        onClick={handleGuard}
+        data-testid="guard-confirm-btn"
+        className={cn(
+          'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          isLocked || !isDeclaringPhase
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-violet-500/60 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+        )}
+      >
+        {guardPending ? 'Declaring guard…' : 'Guard'}
+      </button>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // YourTurn
 // ---------------------------------------------------------------------------
@@ -638,6 +1213,7 @@ export function YourTurn({
     guardAllyId,
     guardTechniqueId,
     guardDestination,
+    guardSoulfrayAccepted,
     rallyAllyId,
     succorAllyId,
     useItemInstanceId,
@@ -687,6 +1263,7 @@ export function YourTurn({
   const setGuardAllyId = useMemo(() => makeFieldSetter('guardAllyId'), []);
   const setGuardTechniqueId = useMemo(() => makeFieldSetter('guardTechniqueId'), []);
   const setGuardDestination = useMemo(() => makeFieldSetter('guardDestination'), []);
+  const setGuardSoulfrayAccepted = useMemo(() => makeFieldSetter('guardSoulfrayAccepted'), []);
   const setRallyAllyId = useMemo(() => makeFieldSetter('rallyAllyId'), []);
   const setSuccorAllyId = useMemo(() => makeFieldSetter('succorAllyId'), []);
   const setUseItemInstanceId = useMemo(() => makeFieldSetter('useItemInstanceId'), []);
@@ -907,6 +1484,12 @@ export function YourTurn({
 
   // Soulfray + fury descriptor for the currently selected focused cast (#1543).
   const soulfrayWarning = focusedCastDescriptor?.soulfray_warning ?? null;
+  // Whether the selected focused technique carries a protective ward (#3573) -
+  // consent must ALWAYS be offered for a ward-bearing cast, not just when an
+  // active Soulfray warning is already in effect. When a warning IS present,
+  // the SoulfrayAcceptGate below is the only control; its acceptance already
+  // covers the ward (see the soulfrayKwarg logic in buildFocusedJob).
+  const isWardBearingCast = focusedCastDescriptor?.reactive_anima_cost != null;
   const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
   const furyAnchors = focusedCastDescriptor?.eligible_fury_anchors ?? [];
   const furyOverCap =
@@ -944,6 +1527,12 @@ export function YourTurn({
     (a) => String(a.ref.technique_id) === guardTechniqueId
   );
   const isRedirectGuardTechnique = selectedGuardTechnique?.protective_flavor === 'redirect';
+
+  // Current anima, shown next to the Guard Soulfray toggle's fee readout
+  // (#3573) and the ward-cast toggle below, so the guardian/caster can see
+  // what they're spending before consenting.
+  const { data: characterAnima } = useCharacterAnima(characterId);
+  const animaCurrent = characterAnima?.current ?? null;
 
   // Usable held items for the Use Item control (#3381) — filters the same
   // inventory query the wardrobe/inventory panel uses, no new endpoint.
@@ -1013,7 +1602,8 @@ export function YourTurn({
       furyTierId,
       furyAnchorId,
       castPosition,
-      focusedTechniquePositionShape
+      focusedTechniquePositionShape,
+      isWardBearingCast
     );
     const passiveJobs = buildPassiveJobs(
       visiblePassiveSlots,
@@ -1106,6 +1696,18 @@ export function YourTurn({
     });
   }
 
+  // Pending-attacks strip prefills (#3572) - Guard the wind-up's target, or
+  // steer the focused declaration at the opponent still winding it up.
+  const guardControlRef = useRef<HTMLDivElement | null>(null);
+  function handlePrefillGuard(targetParticipantId: number) {
+    setGuardAllyId(String(targetParticipantId));
+    guardControlRef.current?.scrollIntoView({ block: 'nearest' });
+  }
+  function handlePrefillStrike(opponentId: number) {
+    setSubmitError(null);
+    setFocusedContext((prev) => ({ ...prev, targetKind: 'opponent', targetId: opponentId }));
+  }
+
   function handleGuard() {
     setManeuverError(null);
     const allyParticipantId =
@@ -1124,7 +1726,13 @@ export function YourTurn({
         parseInt(guardDestination.slice(GUARD_DESTINATION_OBJECT_PREFIX.length), 10) || null;
     }
     declareGuard(
-      { allyParticipantId, techniqueId, redirectOpponentTargetId, redirectObjectTargetId },
+      {
+        allyParticipantId,
+        techniqueId,
+        redirectOpponentTargetId,
+        redirectObjectTargetId,
+        confirmSoulfrayRisk: techniqueId != null && guardSoulfrayAccepted,
+      },
       {
         onSuccess: (result) => {
           // The generic dispatch endpoint always resolves 200 — a business-rule
@@ -1275,8 +1883,25 @@ export function YourTurn({
 
   const isLocked = readOnly || submitted || serverReady;
 
+  const renderDispatch = () => {
+    if (dispatchPending) {
+      return 'Submitting…';
+    }
+    if (encounter?.pace_mode === 'ready') {
+      return 'Submit declarations · mark ready';
+    }
+    return 'Submit declarations';
+  };
+
   return (
     <div className="space-y-4" data-testid="your-turn-section">
+      <PendingAttacks
+        attacks={encounter?.pending_attacks ?? []}
+        viewerParticipantId={myParticipantId}
+        onGuard={readOnly ? undefined : handlePrefillGuard}
+        onStrike={readOnly ? undefined : handlePrefillStrike}
+      />
+
       {/* Submitted / ready badge */}
       {(submitted || serverReady) && (
         <div
@@ -1323,6 +1948,24 @@ export function YourTurn({
             onAcceptChange={setSoulfrayAccepted}
             disabled={isLocked}
           />
+        )}
+        {soulfrayWarning === null && isWardBearingCast && (
+          <label
+            className="mt-1.5 flex items-center gap-2 rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs"
+            data-testid="cast-ward-soulfray-gate"
+          >
+            <input
+              type="checkbox"
+              data-testid="cast-ward-soulfray-toggle"
+              checked={soulfrayAccepted}
+              onChange={(e) => setSoulfrayAccepted(e.target.checked)}
+              disabled={isLocked}
+            />
+            <span>
+              Hold this ward into Soulfray (fee {focusedCastDescriptor?.reactive_anima_cost} anima
+              per fire)
+            </span>
+          </label>
         )}
         {furyTiers.length > 0 && (
           <FuryDeclaration
@@ -1454,226 +2097,46 @@ export function YourTurn({
         </button>
       )}
 
-      {/* Use Item — declare using a held on-use item as this round's action
-          (#3381, #2023/#2120). A primary maneuver, mutually exclusive with the
-          focused technique slot above. */}
-      {usableItems.length > 0 && (
-        <div
-          className="space-y-1.5 rounded border border-border bg-card/60 p-2"
-          data-testid="use-item-section"
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Use a held item as your round action, optionally against an ally or opponent."
-          >
-            Use Item
-          </p>
-          <Select
-            value={useItemInstanceId}
-            onValueChange={setUseItemInstanceId}
-            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-          >
-            <SelectTrigger data-testid="use-item-select" className="h-8 text-xs">
-              <SelectValue placeholder="Choose an item…" />
-            </SelectTrigger>
-            <SelectContent>
-              {usableItems.map((item) => (
-                <SelectItem key={item.id} value={String(item.id)}>
-                  {item.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={useItemTargetValue}
-            onValueChange={setUseItemTargetValue}
-            disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-          >
-            <SelectTrigger data-testid="use-item-target-select" className="h-8 text-xs">
-              <SelectValue placeholder="Target" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={USE_ITEM_TARGET_SELF}>Self / no target</SelectItem>
-              {coverableAllies.map((ally) => (
-                <SelectItem
-                  key={`use-item-ally-${ally.id}`}
-                  value={`${USE_ITEM_TARGET_ALLY_PREFIX}${ally.id}`}
-                >
-                  {ally.character_name}
-                </SelectItem>
-              ))}
-              {activeOpponents.map((opponent) => (
-                <SelectItem
-                  key={`use-item-opponent-${opponent.id}`}
-                  value={`${USE_ITEM_TARGET_OPPONENT_PREFIX}${opponent.id}`}
-                >
-                  {opponent.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <button
-            type="button"
-            disabled={
-              isLocked || !isDeclaringPhase || maneuverDispatchPending || useItemInstanceId === ''
-            }
-            onClick={() => {
-              handleUseItem().catch(() => {});
-            }}
-            data-testid="use-item-confirm-btn"
-            className={cn(
-              'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-              'disabled:cursor-not-allowed disabled:opacity-50',
-              isLocked || !isDeclaringPhase || useItemInstanceId === ''
-                ? 'border-border bg-muted text-muted-foreground'
-                : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
-            )}
-          >
-            {maneuverDispatchPending ? 'Using item…' : 'Use Item'}
-          </button>
-          {useItemError !== null && (
-            <p role="alert" className="text-sm text-destructive" data-testid="use-item-error">
-              {useItemError}
-            </p>
-          )}
-        </div>
-      )}
+      <UseItemSection
+        usableItems={usableItems}
+        coverableAllies={coverableAllies}
+        activeOpponents={activeOpponents}
+        instanceId={useItemInstanceId}
+        targetValue={useItemTargetValue}
+        error={useItemError}
+        disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+        inactive={isLocked || !isDeclaringPhase}
+        pending={maneuverDispatchPending}
+        onInstanceChange={setUseItemInstanceId}
+        onTargetChange={setUseItemTargetValue}
+        onConfirm={() => {
+          handleUseItem().catch(() => {});
+        }}
+      />
 
-      {/* Mounted Maneuvers — Charge / Joust, gated on the viewer's own Mounted
-          condition (#3381, #1843). Backend-trusting per Decision 4: no client-
-          side reach/Lance re-validation; a rejected declaration surfaces the
-          backend's own message inline. */}
       {isMounted && (
-        <div
-          className="space-y-2 rounded border border-border bg-card/60 p-2"
-          data-testid="mounted-maneuvers-section"
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Mounted-only declarations — close distance with a Charge, or Joust your duel opponent."
-          >
-            Mounted Maneuvers
-          </p>
-
-          {/* Charge — close distance to an opponent, then attack with the chosen technique. */}
-          <div className="space-y-1.5" data-testid="charge-control">
-            <Select
-              value={chargeOpponentId}
-              onValueChange={setChargeOpponentId}
-              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-            >
-              <SelectTrigger data-testid="charge-opponent-select" className="h-8 text-xs">
-                <SelectValue placeholder="Charge which opponent…" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeOpponents.map((opponent) => (
-                  <SelectItem key={opponent.id} value={String(opponent.id)}>
-                    {opponent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={chargeTechniqueId}
-              onValueChange={setChargeTechniqueId}
-              disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-            >
-              <SelectTrigger data-testid="charge-technique-select" className="h-8 text-xs">
-                <SelectValue placeholder="With which technique…" />
-              </SelectTrigger>
-              <SelectContent>
-                {physicalTechniques.map((action) => (
-                  <SelectItem
-                    key={action.ref.technique_id ?? action.display_name}
-                    value={String(action.ref.technique_id)}
-                  >
-                    {action.display_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <button
-              type="button"
-              disabled={
-                isLocked ||
-                !isDeclaringPhase ||
-                maneuverDispatchPending ||
-                chargeOpponentId === '' ||
-                chargeTechniqueId === ''
-              }
-              onClick={() => {
-                handleCharge().catch(() => {});
-              }}
-              data-testid="charge-confirm-btn"
-              className={cn(
-                'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
-                isLocked || !isDeclaringPhase || chargeOpponentId === '' || chargeTechniqueId === ''
-                  ? 'border-border bg-muted text-muted-foreground'
-                  : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
-              )}
-            >
-              {maneuverDispatchPending ? 'Charging…' : 'Charge'}
-            </button>
-            {chargeError !== null && (
-              <p role="alert" className="text-sm text-destructive" data-testid="charge-error">
-                {chargeError}
-              </p>
-            )}
-          </div>
-
-          {/* Joust — duel-only, opponent implied by the 2-participant duel. */}
-          {isDuelEncounter && (
-            <div className="space-y-1.5" data-testid="joust-control">
-              <Select
-                value={joustTechniqueId}
-                onValueChange={setJoustTechniqueId}
-                disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
-              >
-                <SelectTrigger data-testid="joust-technique-select" className="h-8 text-xs">
-                  <SelectValue placeholder="Joust with which technique…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {physicalTechniques.map((action) => (
-                    <SelectItem
-                      key={action.ref.technique_id ?? action.display_name}
-                      value={String(action.ref.technique_id)}
-                    >
-                      {action.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                disabled={
-                  isLocked ||
-                  !isDeclaringPhase ||
-                  maneuverDispatchPending ||
-                  joustTechniqueId === ''
-                }
-                onClick={() => {
-                  handleJoust().catch(() => {});
-                }}
-                data-testid="joust-confirm-btn"
-                className={cn(
-                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked || !isDeclaringPhase || joustTechniqueId === ''
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-orange-500/60 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
-                )}
-              >
-                {maneuverDispatchPending ? 'Jousting…' : 'Joust'}
-              </button>
-              {joustError !== null && (
-                <p role="alert" className="text-sm text-destructive" data-testid="joust-error">
-                  {joustError}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+        <MountedManeuvers
+          activeOpponents={activeOpponents}
+          physicalTechniques={physicalTechniques}
+          chargeOpponentId={chargeOpponentId}
+          chargeTechniqueId={chargeTechniqueId}
+          chargeError={chargeError}
+          joustTechniqueId={joustTechniqueId}
+          joustError={joustError}
+          isDuelEncounter={isDuelEncounter}
+          disabled={isLocked || !isDeclaringPhase || maneuverDispatchPending}
+          inactive={isLocked || !isDeclaringPhase}
+          pending={maneuverDispatchPending}
+          onChargeOpponentChange={setChargeOpponentId}
+          onChargeTechniqueChange={setChargeTechniqueId}
+          onJoustTechniqueChange={setJoustTechniqueId}
+          onCharge={() => {
+            handleCharge().catch(() => {});
+          }}
+          onJoust={() => {
+            handleJoust().catch(() => {});
+          }}
+        />
       )}
 
       {/* Thread Pull row — inline pull selection for combat cast/clash dispatch */}
@@ -1739,31 +2202,11 @@ export function YourTurn({
             Maneuvers
           </p>
 
-          {/* Declared-state display */}
-          {declaredManeuver === 'flee' && (
-            <div
-              className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
-              data-testid="flee-declared-badge"
-            >
-              Fleeing: resolves at end of round
-            </div>
-          )}
-          {declaredManeuver === 'cover' && (
-            <div
-              className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-300"
-              data-testid="cover-declared-badge"
-            >
-              Covering {coveredAllyName ?? 'ally'}
-            </div>
-          )}
-          {declaredManeuver === 'interpose' && (
-            <div
-              className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
-              data-testid="guard-declared-badge"
-            >
-              Guarding {guardedAllyName ?? 'any ally hit this round'}
-            </div>
-          )}
+          <DeclaredManeuverBadge
+            declaredManeuver={declaredManeuver}
+            coveredAllyName={coveredAllyName}
+            guardedAllyName={guardedAllyName}
+          />
 
           {/* Flee button — only when not already declared a flee maneuver */}
           {declaredManeuver !== 'flee' && (
@@ -1784,151 +2227,40 @@ export function YourTurn({
             </button>
           )}
 
-          {/* Cover control — ally picker + confirm button */}
-          {declaredManeuver !== 'cover' && (
-            <div className="space-y-1.5" data-testid="cover-control">
-              <Select
-                value={coverAllyId}
-                onValueChange={setCoverAllyId}
-                disabled={isLocked || !isDeclaringPhase || coverPending}
-              >
-                <SelectTrigger data-testid="cover-ally-select" className="h-8 text-xs">
-                  <SelectValue placeholder="Cover an ally…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {coverableAllies.map((ally) => (
-                    <SelectItem key={ally.id} value={String(ally.id)}>
-                      {ally.character_name}
-                    </SelectItem>
-                  ))}
-                  {coverableAllies.length === 0 && (
-                    <SelectItem value="__none__" disabled>
-                      No allies available
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                disabled={isLocked || !isDeclaringPhase || coverPending || coverAllyId === ''}
-                onClick={handleCover}
-                data-testid="cover-confirm-btn"
-                className={cn(
-                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked || !isDeclaringPhase || coverAllyId === ''
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-sky-500/60 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'
-                )}
-              >
-                {coverPending ? 'Declaring cover…' : 'Confirm Cover'}
-              </button>
-            </div>
-          )}
+          <CoverControl
+            declaredManeuver={declaredManeuver}
+            coverableAllies={coverableAllies}
+            coverAllyId={coverAllyId}
+            coverPending={coverPending}
+            isLocked={isLocked}
+            isDeclaringPhase={isDeclaringPhase}
+            setCoverAllyId={setCoverAllyId}
+            handleCover={handleCover}
+          />
 
           {/* Guard control — ward picker + optional protective-technique select + confirm (#2207) */}
-          {declaredManeuver !== 'interpose' && (
-            <div className="space-y-1.5" data-testid="guard-control">
-              <Select
-                value={guardAllyId}
-                onValueChange={setGuardAllyId}
-                disabled={isLocked || !isDeclaringPhase || guardPending}
-              >
-                <SelectTrigger data-testid="guard-ally-select" className="h-8 text-xs">
-                  <SelectValue placeholder="Guard anyone…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GUARD_ANYONE_VALUE}>Anyone (guard whoever is hit)</SelectItem>
-                  {coverableAllies.map((ally) => (
-                    <SelectItem key={ally.id} value={String(ally.id)}>
-                      {ally.character_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {protectiveTechniques.length > 0 && (
-                <Select
-                  value={guardTechniqueId}
-                  onValueChange={setGuardTechniqueId}
-                  disabled={isLocked || !isDeclaringPhase || guardPending}
-                >
-                  <SelectTrigger data-testid="guard-technique-select" className="h-8 text-xs">
-                    <SelectValue placeholder="No protective technique" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GUARD_NO_TECHNIQUE_VALUE}>
-                      No protective technique (mundane)
-                    </SelectItem>
-                    {protectiveTechniques.map((action) => (
-                      <SelectItem
-                        key={action.ref.technique_id ?? action.display_name}
-                        value={String(action.ref.technique_id)}
-                      >
-                        {action.display_name}
-                        {action.protective_flavor != null
-                          ? ` (${PROTECTIVE_FLAVOR_LABELS[action.protective_flavor] ?? action.protective_flavor})`
-                          : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {isRedirectGuardTechnique && (
-                <Select
-                  value={guardDestination}
-                  onValueChange={setGuardDestination}
-                  disabled={isLocked || !isDeclaringPhase || guardPending}
-                >
-                  <SelectTrigger
-                    data-testid="guard-redirect-destination-select"
-                    className="h-8 text-xs"
-                  >
-                    <SelectValue placeholder="Redirect destination" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GUARD_DESTINATION_AWAY}>Away (default)</SelectItem>
-                    {(encounter?.opponents ?? []).map((opponent) => (
-                      <SelectItem
-                        key={`opp-${opponent.id}`}
-                        value={`${GUARD_DESTINATION_OPPONENT_PREFIX}${opponent.id}`}
-                      >
-                        {opponent.name}
-                      </SelectItem>
-                    ))}
-                    {(encounter?.volatile_objects ?? []).map((volatileObject) => (
-                      <SelectItem
-                        key={`obj-${volatileObject.id}`}
-                        value={`${GUARD_DESTINATION_OBJECT_PREFIX}${volatileObject.id}`}
-                      >
-                        {volatileObject.name}
-                        {volatileObject.position_name != null
-                          ? ` (${volatileObject.position_name})`
-                          : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              <button
-                type="button"
-                disabled={isLocked || !isDeclaringPhase || guardPending}
-                onClick={handleGuard}
-                data-testid="guard-confirm-btn"
-                className={cn(
-                  'w-full rounded-md border px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
-                  isLocked || !isDeclaringPhase
-                    ? 'border-border bg-muted text-muted-foreground'
-                    : 'border-violet-500/60 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-                )}
-              >
-                {guardPending ? 'Declaring guard…' : 'Guard'}
-              </button>
-            </div>
-          )}
+          <GuardControl
+            declaredManeuver={declaredManeuver}
+            encounter={encounter}
+            guardControlRef={guardControlRef}
+            coverableAllies={coverableAllies}
+            protectiveTechniques={protectiveTechniques}
+            selectedGuardTechnique={selectedGuardTechnique}
+            isRedirectGuardTechnique={isRedirectGuardTechnique}
+            guardAllyId={guardAllyId}
+            guardTechniqueId={guardTechniqueId}
+            guardDestination={guardDestination}
+            guardSoulfrayAccepted={guardSoulfrayAccepted}
+            animaCurrent={animaCurrent}
+            guardPending={guardPending}
+            isLocked={isLocked}
+            isDeclaringPhase={isDeclaringPhase}
+            setGuardAllyId={setGuardAllyId}
+            setGuardTechniqueId={setGuardTechniqueId}
+            setGuardDestination={setGuardDestination}
+            setGuardSoulfrayAccepted={setGuardSoulfrayAccepted}
+            handleGuard={handleGuard}
+          />
 
           {/* Rally control — ally picker + confirm button (#3381) */}
           <div className="space-y-1.5" data-testid="rally-control">
@@ -2049,11 +2381,7 @@ export function YourTurn({
             : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
         )}
       >
-        {dispatchPending
-          ? 'Submitting…'
-          : encounter?.pace_mode === 'ready'
-            ? 'Submit declarations · mark ready'
-            : 'Submit declarations'}
+        {renderDispatch()}
       </button>
 
       {/* Inline submit error — shown when a dispatch rejects */}

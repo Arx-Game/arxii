@@ -14,12 +14,13 @@ from world.character_creation.constants import (
     REQUIRED_STATS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    FamilyPath,
     Stage,
 )
 from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
-    from world.character_creation.models import CharacterDraft
+    from world.character_creation.models import CharacterDraft, OriginTemplate
 
 
 def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
@@ -138,27 +139,102 @@ def _get_heredity_species_errors(draft: CharacterDraft) -> list[str]:
 
 
 def get_lineage_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Lineage stage."""
+    """Return validation errors for the Lineage stage (#3617).
+
+    Upbringing chosen and accessible -> family path resolved -> path-specific
+    completion -> every required prompt on that path answered.
+    """
     errors: list[str] = []
-    # A declared cross-species parent must actually be named (#2815).
     if (
         draft.second_parent_species is not None
         and not str(draft.draft_data.get("other_parent_name", "")).strip()
     ):
         errors.append("Name the parent whose species you selected")
     errors.extend(_get_heredity_species_errors(draft))
-    # Family chosen completes lineage (family provides surname)
-    if draft.family is not None:
+
+    template = draft.selected_origin_template
+    if template is None:
+        errors.append("Choose your upbringing")
         return errors
-    # Familyless characters (orphan or unknown origins) need a tarot card
-    is_familyless = (
-        draft.selected_beginnings and not draft.selected_beginnings.family_known
-    ) or draft.draft_data.get("lineage_is_orphan", False)
-    if is_familyless:
-        if not draft.draft_data.get("tarot_card_name"):
-            errors.append("Select a tarot card for your surname")
+    wrong_beginning = (
+        draft.selected_beginnings_id is not None
+        and template.beginning_id != draft.selected_beginnings_id
+    )
+    if wrong_beginning:
+        errors.append("Your upbringing does not belong to your beginning")
         return errors
-    errors.append("Select a family")
+    if not template.is_accessible_by(draft.account):
+        errors.append("That upbringing is not available to you")
+    path = draft.resolve_family_path()
+    if not path:
+        errors.append("Choose how your family fits your upbringing")
+        return errors
+    errors.extend(_get_family_path_errors(draft, path))
+    errors.extend(_get_prompt_errors(draft, template, path))
+    return errors
+
+
+def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
+    from world.character_creation.services import family_name_is_taken  # noqa: PLC0415
+
+    template = draft.selected_origin_template
+    if path == FamilyPath.NONE:
+        if draft.draft_data.get("tarot_card_name"):
+            return []
+        return ["Select a tarot card for your surname"]
+    if path == FamilyPath.NAMED:
+        name = str(draft.draft_data.get("new_family_name", "")).strip()
+        if not name:
+            return ["Name your family"]
+        if family_name_is_taken(name):
+            return ["A family by that name already exists"]
+        return []
+    family = draft.family
+    if family is None:
+        return ["Select a family"]
+    if not family.is_playable:
+        return ["That family is not open to this upbringing"]
+    kinds = list(template.claimable_kinds.all())
+    if kinds and family.kind not in kinds:
+        return ["That family is not open to this upbringing"]
+    area_realm = draft.selected_area.realm if draft.selected_area else None
+    realm_mismatch = (
+        family.origin_realm is not None
+        and area_realm is not None
+        and family.origin_realm != area_realm
+    )
+    if realm_mismatch:
+        return ["That family is not from your starting area"]
+    return []
+
+
+def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate, path: str) -> list[str]:
+    from collections import defaultdict  # noqa: PLC0415
+
+    from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+
+    errors: list[str] = []
+    texts = draft.draft_data.get("origin_slots") or {}
+    picks = draft.draft_data.get("origin_choices") or {}
+    slots = list(template.slots.order_by("sort_order"))
+    choices_by_slot: dict[int, list] = defaultdict(list)
+    for choice in OriginTemplateSlotChoice.objects.filter(slot__template=template, is_active=True):
+        choices_by_slot[choice.slot_id].append(choice)
+    for slot in slots:
+        if slot.applies_to not in (FamilyPath.ANY, path):
+            continue
+        active_choices = choices_by_slot.get(slot.id, [])
+        choice_id = picks.get(str(slot.id))
+        text = str(texts.get(str(slot.id), "")).strip()
+        picked = None
+        if choice_id is not None:
+            picked = next((c for c in active_choices if c.id == int(choice_id)), None)
+            if picked is None:
+                errors.append(f"Invalid choice for {slot.name}")
+                continue
+        answered = picked is not None or (slot.allows_text and bool(text))
+        if slot.is_required and not answered:
+            errors.append(f"{slot.name} is required")
     return errors
 
 
@@ -320,7 +396,7 @@ def get_identity_errors(draft: CharacterDraft) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: PLR0911
+def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     """Compute validation errors for the Magic stage (Gift/technique picks, #2426).
 
     Gift-stage validation, in order (return-first style):

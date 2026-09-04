@@ -24,6 +24,7 @@ from django.test import TestCase
 from evennia import create_object
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.factories import make_unknown_upbringing
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_creation.services import finalize_character
 from world.character_sheets.models import CharacterSheet, Gender
@@ -113,9 +114,10 @@ class CastUsesPerCharacterCheckTests(TestCase):
             starting_area=cls.area,
             trust_required=0,
             is_active=True,
-            family_known=False,
         )
         cls.beginnings.allowed_species.add(cls.species)
+        # (#3617) An amnesiac Upbringing stands in for the retired orphan flag.
+        cls.unknown_upbringing = make_unknown_upbringing(cls.beginnings)
         cls.height_band = HeightBand.objects.create(
             name="castpc_band",
             display_name="CastPC Band",
@@ -170,6 +172,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
             account=account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -184,7 +187,6 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 "first_name": "CastPC",
                 "description": "A test character",
                 "stats": _STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
                 "traits_complete": True,

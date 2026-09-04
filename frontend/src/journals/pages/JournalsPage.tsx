@@ -63,29 +63,37 @@ function MyJournalSection() {
   const { data, isLoading } = useMyJournalEntries(page);
   const entries = data?.results ?? [];
 
+  const renderEntries = () => {
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading…</p>;
+    }
+    if (entries.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground">You haven&apos;t written anything yet.</p>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {entries.map((entry) => (
+          <EntryRow
+            key={entry.id}
+            entry={entry}
+            expanded={expandedId === entry.id}
+            onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+            showResponseForm={false}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <section className="space-y-3" data-testid="my-journal-section">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-lg font-medium">My Journal</h2>
         <PosthumousDispositionPicker />
       </div>
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">You haven&apos;t written anything yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {entries.map((entry) => (
-            <EntryRow
-              key={entry.id}
-              entry={entry}
-              expanded={expandedId === entry.id}
-              onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-              showResponseForm={false}
-            />
-          ))}
-        </div>
-      )}
+      {renderEntries()}
       <PaginationControls
         page={page}
         onPrev={() => setPage((p) => Math.max(1, p - 1))}
@@ -148,6 +156,28 @@ function PublicJournalsSection() {
   const { data, isLoading } = useJournalEntries({ page, author, tag: tag || undefined });
   const entries = data?.results ?? [];
 
+  const renderEntries2 = () => {
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading…</p>;
+    }
+    if (entries.length === 0) {
+      return <p className="text-sm text-muted-foreground">No public entries found.</p>;
+    }
+    return (
+      <div className="space-y-2">
+        {entries.map((entry) => (
+          <EntryRow
+            key={entry.id}
+            entry={entry}
+            expanded={expandedId === entry.id}
+            onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+            showResponseForm
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <section className="space-y-3" data-testid="public-journals-section">
       <h2 className="text-lg font-medium">Public Journals</h2>
@@ -179,23 +209,7 @@ function PublicJournalsSection() {
           />
         </div>
       </div>
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No public entries found.</p>
-      ) : (
-        <div className="space-y-2">
-          {entries.map((entry) => (
-            <EntryRow
-              key={entry.id}
-              entry={entry}
-              expanded={expandedId === entry.id}
-              onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-              showResponseForm
-            />
-          ))}
-        </div>
-      )}
+      {renderEntries2()}
       <PaginationControls
         page={page}
         onPrev={() => setPage((p) => Math.max(1, p - 1))}

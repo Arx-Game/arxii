@@ -58,7 +58,9 @@ describe('IdentityStage', () => {
         queryClient,
       });
 
-      expect(screen.getByText(/full name:/i)).toBeInTheDocument();
+      // The preview moved from an inline "Full name:" paragraph to the record
+      // rail's "Name" row (#3630); the rail lists chosen values only.
+      expect(screen.getByText('Name', { selector: 'dt' })).toBeInTheDocument();
       expect(screen.getByText('Testchar Valardin')).toBeInTheDocument();
     });
 
@@ -67,7 +69,6 @@ describe('IdentityStage', () => {
       const orphanDraft = createMockDraft({
         ...mockCompleteDraft,
         family: null,
-        draft_data: { ...mockCompleteDraft.draft_data, lineage_is_orphan: true },
       });
 
       renderWithCharacterCreationProviders(<IdentityStage draft={orphanDraft} />, { queryClient });
@@ -106,29 +107,6 @@ describe('IdentityStage', () => {
 
       const textarea = screen.getByLabelText(/personality traits/i) as HTMLTextAreaElement;
       expect(textarea.value).toBe('Bold and adventurous.');
-    });
-  });
-
-  describe('Background Section', () => {
-    it('displays background textarea', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      expect(screen.getByLabelText(/character history/i)).toBeInTheDocument();
-    });
-
-    it('shows current background value', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
-        queryClient,
-      });
-
-      const textarea = screen.getByLabelText(/character history/i) as HTMLTextAreaElement;
-      expect(textarea.value).toBe('Born to humble origins but destined for greatness.');
     });
   });
 
@@ -208,6 +186,29 @@ describe('IdentityStage', () => {
 
       expect(screen.getByText('Identity')).toBeInTheDocument();
       expect(screen.getByText(/define your character.*s name and story/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Folio markup', () => {
+    it('renders the four writing fields on the field idiom and the name in the rail', () => {
+      const queryClient = createTestQueryClient();
+      const draft = createMockDraft({ draft_data: { first_name: 'Sharlotte' } });
+
+      renderWithCharacterCreationProviders(<IdentityStage draft={draft} />, { queryClient });
+
+      // Sentence case (#3630): interface chrome is plain, and only the first
+      // word is capitalised. The other blocks in this file query the same
+      // labels case-insensitively, so they are unaffected.
+      for (const label of [
+        'First name',
+        'Character concept',
+        'Character quote',
+        'Personality traits',
+      ]) {
+        expect(screen.getByLabelText(label).closest('.field')).not.toBeNull();
+      }
+      expect(screen.getByRole('heading', { name: 'Your choices so far' })).toBeInTheDocument();
+      expect(screen.getByText('Sharlotte')).toBeInTheDocument();
     });
   });
 });

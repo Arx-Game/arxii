@@ -270,7 +270,72 @@ def _dispatch_action_effects(
     action_obj.dispatch_effects(actor, target)
 
 
-def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrator
+def _validate_request_preconditions(  # noqa: PLR0913 - mirrors create_action_request
+    *,
+    initiator_persona: Persona,
+    target_persona: Persona | None,
+    action_key: str,
+    technique: Technique | None,
+    delivery: str,
+    boon: BoonAsk | None,
+) -> None:
+    """Every refusal that must land BEFORE any row exists.
+
+    An ineligible ask (uncoverable amount, item not held, vault stub) must not
+    leave an orphan request behind (#2540), so the boon checks run here rather
+    than after the create.
+
+    The two boon guards mirror each other: a boon payload riding a non-boon
+    action key would attach silently, ride that action's own consent category,
+    phantom-shift NPC difficulty via ``npc_boon_tier_shift``, and strand an
+    unfulfillable Boon row (only the boon resolver fires ``fulfill_boon``); a
+    boon action key with no payload has nothing to ask for. Both are rejected
+    at this one dispatch orchestrator, so every entry path (API, telnet) is
+    covered rather than just the ones that remember to pass ``boon=``.
+
+    ``check_boon_availability`` is the #2540 slice 3 honest-unavailability
+    short-circuit: a well-formed MATERIAL ask against an empty bucket raises
+    ``BoonUnavailable`` for NPC and piloted targets alike, so it never reaches a
+    piloted target's consent queue — no roll, no consent burn, no affection drain.
+
+    Only the EXPLICIT delivery override is validated here. The template default
+    is resolved at resolution time (the template FK is attached later in the
+    pipeline), where a placeless TABLE_TALK default falls back to POSE.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    if technique is not None:
+        _validate_technique_enhancement(
+            technique=technique,
+            action_key=action_key,
+            character_id=initiator_persona.character_sheet_id,
+        )
+
+    if boon is not None:
+        from world.scenes.boon_services import (  # noqa: PLC0415
+            check_boon_availability,
+            validate_boon_ask,
+        )
+
+        if action_key not in BOON_ACTION_KEYS:
+            msg = "PLACEHOLDER: that request cannot carry a boon."
+            raise ValidationError(msg)
+        validate_boon_ask(
+            ask=boon,
+            target_persona=target_persona,
+            asker_sheet=initiator_persona.character_sheet,
+        )
+        check_boon_availability(ask=boon, target_persona=target_persona)
+    elif action_key in BOON_ACTION_KEYS:
+        msg = "This ask needs a boon payload."
+        raise ValidationError(msg)
+
+    if delivery == ActionDelivery.TABLE_TALK and _current_place_for(initiator_persona) is None:
+        msg = "Table-talk delivery requires you to be at a place."
+        raise ValidationError(msg)
+
+
+def create_action_request(  # noqa: PLR0913 - the one dispatch orchestrator
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -365,59 +430,14 @@ def create_action_request(  # noqa: PLR0913, C901 - the one dispatch orchestrato
             target's bucket holds none of (#2540 slice 3 honest unavailability —
             NOT a validation error; no row is created either way).
     """
-    if technique is not None:
-        _validate_technique_enhancement(
-            technique=technique,
-            action_key=action_key,
-            character_id=initiator_persona.character_sheet_id,
-        )
-
-    # #2540: validate the boon ask BEFORE creating any rows — an ineligible ask
-    # (uncoverable amount, item not held, vault stub) must not leave an orphan request.
-    if boon is not None:
-        from django.core.exceptions import ValidationError  # noqa: PLC0415
-
-        from world.scenes.boon_services import (  # noqa: PLC0415
-            check_boon_availability,
-            validate_boon_ask,
-        )
-
-        # Final-review fix (#2540): the mirror of the elif guard below — a boon
-        # payload riding a non-boon action key (e.g. "flirt") must not silently
-        # attach: it would ride that action's own consent category, phantom-shift
-        # NPC difficulty via npc_boon_tier_shift, and strand an unfulfillable Boon
-        # row (nothing resolves it — only the boon resolver fires fulfill_boon).
-        if action_key not in BOON_ACTION_KEYS:
-            msg = "PLACEHOLDER: that request cannot carry a boon."
-            raise ValidationError(msg)
-
-        validate_boon_ask(
-            ask=boon,
-            target_persona=target_persona,
-            asker_sheet=initiator_persona.character_sheet,
-        )
-        # #2540 slice 3 honest-unavailability short-circuit: a well-formed MATERIAL ask
-        # against an empty bucket raises BoonUnavailable here, BEFORE any row exists —
-        # for both NPC and piloted targets alike, so it never reaches a piloted target's
-        # consent queue (no roll, no consent burn, no affection drain).
-        check_boon_availability(ask=boon, target_persona=target_persona)
-    elif action_key in BOON_ACTION_KEYS:
-        # #2540 fold-in: a boon request (any ask flavor) with no payload has nothing
-        # to ask for — reject at the single dispatch orchestrator so every entry path
-        # (API, telnet) is covered, not just the ones that remember to pass boon=....
-        from django.core.exceptions import ValidationError  # noqa: PLC0415
-
-        msg = "This ask needs a boon payload."
-        raise ValidationError(msg)
-
-    # Validate only the EXPLICIT override here — the template default is
-    # resolved at resolution time (the template FK is attached later in the
-    # pipeline), where a placeless TABLE_TALK default falls back to POSE.
-    if delivery == ActionDelivery.TABLE_TALK and _current_place_for(initiator_persona) is None:
-        from django.core.exceptions import ValidationError  # noqa: PLC0415
-
-        msg = "Table-talk delivery requires you to be at a place."
-        raise ValidationError(msg)
+    _validate_request_preconditions(
+        initiator_persona=initiator_persona,
+        target_persona=target_persona,
+        action_key=action_key,
+        technique=technique,
+        delivery=delivery,
+        boon=boon,
+    )
 
     snapshot_kwargs: dict[str, object] = {}
     if ritual_id is not None:

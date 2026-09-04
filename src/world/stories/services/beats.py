@@ -17,32 +17,66 @@ Public API:
 
     record_outcome_tier_completion(*, progress, beat, outcome_tier, participants,
         gm_notes) — machine-graded completion for an OUTCOME_TIER beat from a known
-        CheckOutcome (combat/mission/scene auto-wire); fires only the pool's
+        CheckOutcome (combat/battle/decisive-check auto-wire; a scenario run
+        reports through record_scenario_outcome instead); fires only the pool's
         consequences matching that tier.
 
-    expire_overdue_beats(now) — flips UNSATISFIED beats with past deadlines to
-        EXPIRED outcome. Idempotent; safe for a cron hook.
+    record_scenario_outcome(*, progress, beat, outcome, outcome_tier, outcome_key,
+        participants) - completion for an OUTCOME_TIER beat whose run played out
+        on a mission scenario graph (#3560, #3565): the graph already decided
+        SUCCESS/FAILURE and which MissionOption ended the run, so this records
+        both rather than re-deriving them from a tier.
+
+    beat_for_scene_conclusion(scene, explicit_beat) - the one beat a concluded
+        fight or battle may grade (#3559): an explicit routed beat wins,
+        otherwise the scene's running beat when the GM declared the fight
+        itself as the objective (kind ENCOUNTER), else None.
+
+    expire_overdue_beats(now) - completes every UNSATISFIED beat with a past
+        deadline via expire_beat (#3558), one savepoint per beat. Returns the
+        count of beats whose outcome changed. Idempotent; safe for a cron hook.
+
+    complete_beat_expired(beat) - resolves a beat EXPIRED as a real completion
+        (#3558): fires the authored expired pool (LEGEND_AWARD skipped), grades
+        open stakes LOSS, closes the contract, and writes the ledger row.
+
+    expire_beat(beat, now=None) - locks the beat, checks the deadline, and
+        delegates to complete_beat_expired. Idempotent; the cron sweep's and
+        lazy-expiry sites' per-beat entry point.
 """
 
 from __future__ import annotations
 
+import functools
+import logging
 from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
-from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
+from world.stories.constants import (
+    BeatKind,
+    BeatOutcome,
+    BeatPredicateType,
+    StoryMilestoneType,
+    StoryScope,
+)
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import AnyStoryProgress, StoryStatus
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
+    from evennia.objects.models import ObjectDB
+
     from actions.models.consequence_pools import ConsequencePool
+    from world.checks.types import ResolutionContext
     from world.gm.models import GMProfile
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene as SceneModel
     from world.stories.models import Episode, Story
     from world.traits.models import CheckOutcome
 
@@ -103,6 +137,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
     participants: list[Persona] | None = None,
     extra_participants: list[Persona] | None = None,
     resolved_by: GMProfile | None = None,
+    outcome_key: str = "",
 ) -> BeatCompletion:
     """Record a GM's manual outcome on a GM_MARKED beat.
 
@@ -124,6 +159,10 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         the outcome resolves SUCCESS/FAILURE. ``None`` skips the award (no
         GM identity resolved by the caller, or a machine-graded completion
         via ``record_outcome_tier_completion``, which never passes this).
+
+    ``outcome_key`` - the MissionOption.key that ended a mission-scenario run,
+        when this GM_MARKED beat completed via the mission→beat seam (#3560).
+        Blank for an actual GM manual call.
 
     Defensive assertions (programmer errors — the API serializer validates these
     for user-facing calls; assertions guard direct service callers):
@@ -155,6 +194,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         gm_notes=gm_notes,
         progress=progress,
         scope=scope,
+        outcome_key=outcome_key,
     )
     return _create_completion_and_fire_pool(
         beat=beat,
@@ -164,6 +204,7 @@ def record_gm_marked_outcome(  # noqa: PLR0913
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else extra_participants,
         resolved_by=resolved_by,
+        outcome_key=outcome_key,
     )
 
 
@@ -176,15 +217,22 @@ def _scope_completion_kwargs(  # noqa: PLR0913
     progress: AnyStoryProgress,
     scope: str,
     outcome_tier: CheckOutcome | None = None,
+    outcome_key: str = "",
 ) -> dict:
     """Build BeatCompletion.objects.create() kwargs for the given story scope.
 
-    Shared by record_gm_marked_outcome and record_outcome_tier_completion — both
-    write the same scope-aware FK shape (character_sheet+roster_entry for CHARACTER,
-    gm_table for GROUP, neither for GLOBAL); only the machine-driven path also
-    carries outcome_tier.
+    Shared by record_gm_marked_outcome, record_outcome_tier_completion and
+    record_scenario_outcome - all write the same scope-aware FK shape
+    (character_sheet+roster_entry for CHARACTER, gm_table for GROUP, neither
+    for GLOBAL); the machine-driven paths also carry outcome_tier/outcome_key.
     """
-    kwargs: dict = {"beat": beat, "outcome": outcome, "era": era, "gm_notes": gm_notes}
+    kwargs: dict = {
+        "beat": beat,
+        "outcome": outcome,
+        "era": era,
+        "gm_notes": gm_notes,
+        "outcome_key": outcome_key,
+    }
     if outcome_tier is not None:
         kwargs["outcome_tier"] = outcome_tier
     if scope == StoryScope.CHARACTER:
@@ -210,27 +258,51 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None,
     outcome_tier: CheckOutcome | None = None,
-    withdrawal: bool = False,
+    outcome_key: str = "",
     resolved_by: GMProfile | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
+    defer_notify: bool = False,
 ) -> BeatCompletion:
     """Persist the outcome, create the BeatCompletion, and fire its consequence pool.
 
     Shared atomic-transaction tail for record_gm_marked_outcome and
     record_outcome_tier_completion: flips beat.outcome in-place, creates the
     BeatCompletion row, fires the matching consequence pool (tier-aware when
-    outcome_tier is set), resolves the beat's stakes (#1770 PR2 — per-stake
-    machine grading, or WITHDRAWAL branches when ``withdrawal`` is set), closes
+    outcome_tier is set), resolves the beat's stakes (#1770 PR2 - per-stake
+    machine grading), closes
     the open stake activation, and opens a SessionRequest if the episode is now
-    ready-to-run. Notifies post-commit (outside the atomic block) so a
-    notify failure can't roll back the completion.
+    ready-to-run. Notifies after the ``with transaction.atomic():`` block above
+    exits so a notify failure can't roll back the completion.
 
-    ``resolved_by`` (#2123) — only ever passed by record_gm_marked_outcome
+    ``defer_notify`` - False (default) calls ``_notify_beat_completion``
+    directly, exactly as before this flag existed. record_gm_marked_outcome and
+    record_outcome_tier_completion are NOT themselves atomic, so their calls
+    land after the real commit already; a global switch to
+    ``transaction.on_commit`` would silently drop the notification in every
+    existing narrative test, because Django's ``TestCase`` wraps each test in a
+    transaction it rolls back rather than commits, and on_commit callbacks
+    never run without an explicit commit or
+    ``captureOnCommitCallbacks(execute=True)``. Pass ``defer_notify=True`` only
+    from a caller that itself wraps this whole tail in a further
+    ``@transaction.atomic`` (currently just complete_beat_expired via
+    expire_beat/expire_overdue_beats, #3558): there, the block below is merely
+    a savepoint, so a direct call would run inside the still-open outer
+    transaction - a notify failure would roll back the whole completion, and
+    the real-time push could reach a client before the commit. Deferring via
+    ``transaction.on_commit`` schedules the notify for when the OUTER
+    transaction actually commits.
+
+    ``resolved_by`` (#2123) - only ever passed by record_gm_marked_outcome
     (never by the machine-graded record_outcome_tier_completion, which is
     OUTCOME_TIER-only and excluded from GM Story Reward by construction).
     Credits GM Story Reward XP after commit when the outcome is SUCCESS or
     FAILURE (EXPIRED is system-caused, not GM effort, and never reaches this
-    path via record_gm_marked_outcome anyway — _GM_MARKED_VALID_OUTCOMES
+    path via record_gm_marked_outcome anyway - _GM_MARKED_VALID_OUTCOMES
     excludes it).
+
+    A withdrawal (combat FLED/ABANDONED) never reaches this function - it
+    resolves through the separate resolve_stakes_for_withdrawal instead,
+    leaving the beat's own outcome untouched (#3559).
     """
     from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
     from world.stories.services.stake_resolution import (  # noqa: PLC0415
@@ -239,7 +311,8 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
 
     with transaction.atomic():
         beat.outcome = outcome
-        beat.save(update_fields=["outcome", "updated_at"])
+        beat.outcome_key = outcome_key
+        beat.save(update_fields=["outcome", "outcome_key", "updated_at"])
 
         completion = BeatCompletion.objects.create(**completion_kwargs)
 
@@ -249,6 +322,7 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
+            skip_effect_types=skip_effect_types,
         )
 
         resolve_stakes_for_completion(
@@ -259,18 +333,27 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
-            withdrawal=withdrawal,
+            outcome_key=completion.outcome_key,
         )
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
 
         resolve_open_activation(beat)
 
+        from world.scenes.clock_services import close_open_clock_for_beat  # noqa: PLC0415
+        from world.scenes.constants import SceneClockClosedReason  # noqa: PLC0415
+
+        # #3567: a clock that filled is already closed FILLED; any other route closes it.
+        close_open_clock_for_beat(beat, SceneClockClosedReason.COMPLETED)
+
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Idempotent — safe to call unconditionally.
         maybe_create_session_request(progress)
 
-    _notify_beat_completion(completion, progress)
+    if defer_notify:
+        transaction.on_commit(functools.partial(_notify_beat_completion, completion, progress))
+    else:
+        _notify_beat_completion(completion, progress)
 
     if resolved_by is not None and outcome in _GM_MARKED_VALID_OUTCOMES:
         from world.gm.models import GMRewardConfig  # noqa: PLC0415
@@ -292,172 +375,43 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     return completion
 
 
-_OUTLIER_SUCCESS_LEVEL_THRESHOLD = 8
+def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> BeatOutcome:
+    """Derive the coarse BeatOutcome for a graded CheckOutcome: the plain sign rule.
+
+    success_level > 0 -> SUCCESS; success_level <= 0 -> FAILURE. A roll beyond
+    every authored tier no longer defers to PENDING_GM_REVIEW (#3559) - the
+    caller fires whatever the pool has at or below the rolled tier via
+    ``clamp_tier_to_pool`` (see ``_fire_pool_with_context``); ``beat`` is
+    unused now but kept for call-site stability.
+    """
+    del beat
+    return BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
 
 
-def _validate_outcome_tier_args(
-    beat: Beat, withdrawal: bool, force_outcome: BeatOutcome | None
-) -> None:
-    """Raise ValueError for a malformed record_outcome_tier_completion call."""
+def record_outcome_tier_completion(
+    *,
+    progress: AnyStoryProgress,
+    beat: Beat,
+    outcome_tier: CheckOutcome,
+    participants: list[Persona] | None = None,
+    gm_notes: str = "",
+) -> BeatCompletion:
+    """Record a machine-graded outcome on an OUTCOME_TIER beat.
+
+    success_level > 0 is SUCCESS, otherwise FAILURE. The pool fires at the
+    best authored tier not exceeding the roll (clamp_tier_to_pool, #3559); the
+    completion records the true tier. A fled or abandoned fight never comes
+    here: it resolves the stakes through resolve_stakes_for_withdrawal and
+    leaves the beat open.
+    """
     if beat.predicate_type != BeatPredicateType.OUTCOME_TIER:
         msg = (
             f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
             "only OUTCOME_TIER beats can be resolved via record_outcome_tier_completion."
         )
         raise ValueError(msg)
-    if withdrawal and force_outcome != BeatOutcome.PENDING_GM_REVIEW:
-        msg = (
-            f"Beat {beat.pk}: withdrawal=True is only legal with "
-            "force_outcome=PENDING_GM_REVIEW (the beat pends; withdrawal-authored "
-            "stakes fire their WITHDRAWAL branch)."
-        )
-        raise ValueError(msg)
-
-
-def _record_forced_review_completion(  # noqa: PLR0913
-    *,
-    beat: Beat,
-    progress: AnyStoryProgress,
-    scope: StoryScope,
-    gm_notes: str,
-    participants: list[Persona] | None,
-    withdrawal: bool,
-    force_outcome: BeatOutcome,
-) -> BeatCompletion:
-    """Resolve a machine-detected non-success/failure beat to PENDING_GM_REVIEW.
-
-    Fires no consequence pool - the beat sits in PENDING_GM_REVIEW for a GM to
-    adjudicate. Only PENDING_GM_REVIEW is accepted; any other force_outcome raises.
-    """
-    if force_outcome != BeatOutcome.PENDING_GM_REVIEW:
-        msg = (
-            f"force_outcome {force_outcome!r} is not valid; only "
-            "PENDING_GM_REVIEW is accepted by the machine-driven path."
-        )
-        raise ValueError(msg)
-    completion_kwargs = _scope_completion_kwargs(
-        beat=beat,
-        outcome=BeatOutcome.PENDING_GM_REVIEW,
-        era=Era.objects.get_active(),
-        gm_notes=gm_notes,
-        progress=progress,
-        scope=scope,
-        outcome_tier=None,
-    )
-    return _create_completion_and_fire_pool(
-        beat=beat,
-        outcome=BeatOutcome.PENDING_GM_REVIEW,
-        completion_kwargs=completion_kwargs,
-        progress=progress,
-        scope=scope,
-        explicit_participants=participants if scope == StoryScope.GROUP else None,
-        outcome_tier=None,
-        withdrawal=withdrawal,
-    )
-
-
-def _derive_outcome_tier_outcome(beat: Beat, outcome_tier: CheckOutcome) -> BeatOutcome:
-    """Derive the coarse BeatOutcome for a graded CheckOutcome, honoring the outlier-crit gate.
-
-    Outlier-crit: when outcome_tier.success_level is at or above
-    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has no
-    Consequence row at that exact tier, the outcome resolves to PENDING_GM_REVIEW
-    instead of SUCCESS (the pool does not fire for this call).
-    """
-    outcome = BeatOutcome.SUCCESS if outcome_tier.success_level > 0 else BeatOutcome.FAILURE
-    is_outlier_crit = outcome_tier.success_level >= _OUTLIER_SUCCESS_LEVEL_THRESHOLD
-    if outcome != BeatOutcome.SUCCESS or not is_outlier_crit:
-        return outcome
-
-    pool = _pool_for_outcome(beat, BeatOutcome.SUCCESS)
-    has_authored_tier = False
-    if pool is not None:
-        from world.checks.consequence_resolution import (  # noqa: PLC0415
-            resolve_pool_consequences,
-        )
-
-        has_authored_tier = any(
-            c.outcome_tier_id == outcome_tier.pk for c in resolve_pool_consequences(pool)
-        )
-    return outcome if has_authored_tier else BeatOutcome.PENDING_GM_REVIEW
-
-
-def record_outcome_tier_completion(  # noqa: PLR0913
-    *,
-    progress: AnyStoryProgress,
-    beat: Beat,
-    outcome_tier: CheckOutcome | None = None,
-    participants: list[Persona] | None = None,
-    gm_notes: str = "",
-    force_outcome: BeatOutcome | None = None,
-    withdrawal: bool = False,
-) -> BeatCompletion:
-    """Record a machine-graded outcome on an OUTCOME_TIER beat.
-
-    Called by the combat/mission/scene auto-wire once they've resolved a graded
-    CheckOutcome for a linked beat (PR2-PR4). Works across all three story scopes,
-    same as record_gm_marked_outcome.
-
-    Derives the coarse BeatOutcome from outcome_tier.success_level:
-      - success_level > 0  -> SUCCESS
-      - success_level <= 0 -> FAILURE
-
-    Outlier-crit path: when outcome_tier.success_level is at or above
-    _OUTLIER_SUCCESS_LEVEL_THRESHOLD and the beat's success_consequences pool has
-    no Consequence row at that exact tier, the outcome resolves to
-    PENDING_GM_REVIEW instead of SUCCESS and the pool does not fire — the win is
-    real but exceeded what was authored, so it's held for a GM to write up (and
-    later resolved via the existing record_gm_marked_outcome, same as any other
-    PENDING_GM_REVIEW beat).
-
-    ``force_outcome`` — when set to PENDING_GM_REVIEW, skips the success_level
-        derivation entirely and resolves the beat to PENDING_GM_REVIEW without
-        firing a consequence pool. Used by the combat auto-wire for
-        fled/abandoned encounters (machine-detected non-success/failure terminal
-        outcomes that need a GM's adjudication). Only PENDING_GM_REVIEW is
-        accepted here; any other value raises ValueError. When ``force_outcome``
-        is set, ``outcome_tier`` is ignored (and may be omitted).
-
-    ``participants`` — same semantics as record_gm_marked_outcome: explicit Persona
-        list for GROUP-scope LEGEND_AWARD pools.
-
-    ``withdrawal`` — the party walked away from the wager (combat FLED/ABANDONED,
-        #1770 PR2). Only legal with force_outcome=PENDING_GM_REVIEW: the beat
-        still pends for GM adjudication, but stakes with an authored WITHDRAWAL
-        resolution fire it immediately; unauthored stakes pend with the beat.
-
-    Defensive assertions (programmer error — callers own building the right
-    outcome_tier for their domain; there is no user-facing serializer for this path
-    since it's machine-driven, not authored):
-        - beat.predicate_type == OUTCOME_TIER
-
-    Flips beat.outcome in-place, creates and returns a BeatCompletion row.
-    """
-    _validate_outcome_tier_args(beat, withdrawal, force_outcome)
 
     scope = progress.story.scope
-
-    # Forced-review path: a machine-detected non-success/failure terminal outcome
-    # (e.g. a fled/abandoned encounter). Skips success_level derivation; fires no
-    # consequence pool — the beat sits in PENDING_GM_REVIEW for a GM to adjudicate.
-    if force_outcome is not None:
-        return _record_forced_review_completion(
-            beat=beat,
-            progress=progress,
-            scope=scope,
-            gm_notes=gm_notes,
-            participants=participants,
-            withdrawal=withdrawal,
-            force_outcome=force_outcome,
-        )
-
-    if outcome_tier is None:
-        msg = (
-            f"Beat {beat.pk}: outcome_tier is required (or pass "
-            "force_outcome=PENDING_GM_REVIEW for a machine-detected review)."
-        )
-        raise ValueError(msg)
-
     outcome = _derive_outcome_tier_outcome(beat, outcome_tier)
 
     completion_kwargs = _scope_completion_kwargs(
@@ -476,8 +430,82 @@ def record_outcome_tier_completion(  # noqa: PLR0913
         progress=progress,
         scope=scope,
         explicit_participants=participants if scope == StoryScope.GROUP else None,
-        outcome_tier=outcome_tier if outcome != BeatOutcome.PENDING_GM_REVIEW else None,
+        outcome_tier=outcome_tier,
     )
+
+
+def record_scenario_outcome(  # noqa: PLR0913
+    *,
+    progress: AnyStoryProgress,
+    beat: Beat,
+    outcome: BeatOutcome,
+    outcome_tier: CheckOutcome | None,
+    outcome_key: str,
+    participants: list[Persona] | None = None,
+) -> BeatCompletion:
+    """Record a scenario run's ending on an OUTCOME_TIER beat (#3565, closes #3560).
+
+    The scenario graph already decided the outcome: the terminal route's
+    authored ``beat_outcome``, or the tier's sign when it left that blank, or
+    SUCCESS for a tier-less terminal (see missions.services.beat). ``outcome_tier``
+    is the graded tier when the terminal was a CHECK or ENCOUNTER route, so the
+    tier-aware pool fires; a BRANCH terminal passes None and fires the coarse
+    pool. ``outcome_key`` is the MissionOption.key that ended the run, which
+    TransitionRequiredOutcome.required_outcome_key routes on.
+    """
+    if beat.predicate_type != BeatPredicateType.OUTCOME_TIER:
+        msg = (
+            f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
+            "a scenario run can only resolve an OUTCOME_TIER beat here."
+        )
+        raise ValueError(msg)
+    if outcome not in _GM_MARKED_VALID_OUTCOMES:
+        msg = f"Outcome {outcome!r} is not a scenario ending; must be SUCCESS or FAILURE."
+        raise ValueError(msg)
+    scope = progress.story.scope
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=outcome,
+        era=Era.objects.get_active(),
+        gm_notes="",
+        progress=progress,
+        scope=scope,
+        outcome_tier=outcome_tier,
+        outcome_key=outcome_key,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=outcome,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=participants if scope == StoryScope.GROUP else None,
+        outcome_tier=outcome_tier,
+        outcome_key=outcome_key,
+    )
+
+
+def beat_for_scene_conclusion(scene: SceneModel | None, explicit_beat: Beat | None) -> Beat | None:
+    """The one beat a concluded fight or battle may grade (#3559, objective-first).
+
+    An explicitly linked beat wins; otherwise the scene's running beat, and only
+    when the GM declared the fight itself as the objective (kind ENCOUNTER).
+    Anything else grades nothing: a brawl during a heist never closes the heist.
+    """
+
+    def _gradable(beat: Beat | None) -> bool:
+        return (
+            beat is not None
+            and beat.predicate_type == BeatPredicateType.OUTCOME_TIER
+            and beat.outcome == BeatOutcome.UNSATISFIED
+        )
+
+    if _gradable(explicit_beat):
+        return explicit_beat
+    running = scene.running_beat if scene is not None else None
+    if _gradable(running) and running.kind == BeatKind.ENCOUNTER:
+        return running
+    return None
 
 
 def record_aggregate_contribution(
@@ -634,33 +662,112 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
         _notify_beat_completion(aggregate_completion, agg_progress)
 
 
+def _expire_each(beats: list[Beat], *, now: datetime) -> int:
+    """Expire every beat in ``beats`` in its own savepoint; count outcomes that changed.
+
+    Log-and-continue (ADR-0256): one beat's failure never aborts the
+    sweep or the request that triggered a lazy expiry.
+    """
+    count = 0
+    for beat in beats:
+        try:
+            with transaction.atomic():
+                before = beat.outcome
+                expire_beat(beat, now=now)
+                beat.refresh_from_db(fields=["outcome"])
+                if beat.outcome != before:
+                    count += 1
+        except Exception:
+            logger.exception("Expiring beat %s failed; continuing the sweep.", beat.pk)
+    return count
+
+
 def expire_overdue_beats(now: datetime | None = None) -> int:
-    """Flip outcome to EXPIRED for every UNSATISFIED beat whose deadline has passed.
+    """Complete every UNSATISFIED beat whose deadline has passed as EXPIRED (#3558).
 
-    Returns count of beats expired. Idempotent — repeated calls do nothing
-    to already-expired beats. Safe for a cron hook.
-
-    No BeatCompletion row is created — expiry is system-caused and not
-    attributable to a specific character. The beat's updated_at timestamp
-    records when the flip happened.
+    Returns the count of beats whose outcome changed. Idempotent and safe for
+    a cron hook; each beat runs in its own savepoint.
     """
     from django.utils import timezone  # noqa: PLC0415
 
     if now is None:
         now = timezone.now()
-
-    overdue_qs = Beat.objects.filter(
-        outcome=BeatOutcome.UNSATISFIED,
-        deadline__isnull=False,
-        deadline__lt=now,
+    overdue = Beat.objects.filter(
+        outcome=BeatOutcome.UNSATISFIED, deadline__isnull=False, deadline__lt=now
     )
-    count = 0
-    with transaction.atomic():
-        for beat in overdue_qs:
-            beat.outcome = BeatOutcome.EXPIRED
-            beat.save(update_fields=["outcome", "updated_at"])
-            count += 1
-    return count
+    return _expire_each(list(overdue), now=now)
+
+
+_EXPIRY_NOTE = "Deadline passed."
+
+
+@transaction.atomic
+def complete_beat_expired(beat: Beat) -> BeatCompletion | None:
+    """Resolve ``beat`` EXPIRED as a real completion (#3558).
+
+    Fires the authored expired pool (every row, LEGEND_AWARD skipped: expiry
+    earns no legend), grades open stakes LOSS, closes the contract, writes the
+    ledger row and notifies once this function's own ``@transaction.atomic``
+    actually commits (``defer_notify=True`` — this is the only caller of
+    ``_create_completion_and_fire_pool`` that wraps the tail in its own
+    transaction, so a direct notify would run inside a savepoint instead of
+    after the real commit). A story with no active progress cannot be
+    completed for anyone: the outcome still flips so routing sees it, and
+    ``None`` is returned. No deadline check here; ``expire_beat`` guards the
+    deadline and the scene clock (#3567) calls this directly when it fills.
+    """
+    from world.checks.constants import EffectType  # noqa: PLC0415
+    from world.stories.services.progress import (  # noqa: PLC0415
+        get_active_progress_for_story,
+    )
+
+    story = beat.episode.chapter.story
+    progress = get_active_progress_for_story(story)
+    if progress is None:
+        logger.debug("Beat %s expired with no active progress; flipping only.", beat.pk)
+        beat.outcome = BeatOutcome.EXPIRED
+        beat.save(update_fields=["outcome", "updated_at"])
+        return None
+
+    scope = story.scope
+    completion_kwargs = _scope_completion_kwargs(
+        beat=beat,
+        outcome=BeatOutcome.EXPIRED,
+        era=Era.objects.get_active(),
+        gm_notes=_EXPIRY_NOTE,
+        progress=progress,
+        scope=scope,
+        outcome_tier=None,
+    )
+    return _create_completion_and_fire_pool(
+        beat=beat,
+        outcome=BeatOutcome.EXPIRED,
+        completion_kwargs=completion_kwargs,
+        progress=progress,
+        scope=scope,
+        explicit_participants=_expiry_participants(progress, scope),
+        outcome_tier=None,
+        skip_effect_types=frozenset({EffectType.LEGEND_AWARD}),
+        defer_notify=True,
+    )
+
+
+@transaction.atomic
+def expire_beat(beat: Beat, *, now: datetime | None = None) -> BeatCompletion | None:
+    """Lock, check the deadline, then complete the beat EXPIRED.
+
+    Lock-then-check closes the race between the cron sweep and a lazy
+    transition-time expiry. Idempotent: an already-resolved beat or an
+    unexpired deadline returns ``None`` untouched.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    if now is None:
+        now = timezone.now()
+    beat = Beat.objects.select_for_update().get(pk=beat.pk)
+    if beat.outcome != BeatOutcome.UNSATISFIED or beat.deadline is None or beat.deadline >= now:
+        return None
+    return complete_beat_expired(beat)
 
 
 # ---------------------------------------------------------------------------
@@ -841,9 +948,7 @@ def _members_for_beat(
                     continue
 
 
-def _evaluate_predicate(  # noqa: PLR0911 — match dispatch, each case a distinct predicate type
-    beat: Beat, progress: StoryProgress
-) -> BeatOutcome:
+def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
     """Dispatch on beat.predicate_type and return the current outcome.
 
     Returns UNSATISFIED when the predicate is not yet met or the type is
@@ -869,6 +974,8 @@ def _evaluate_predicate(  # noqa: PLR0911 — match dispatch, each case a distin
             return _evaluate_story_at_milestone(beat)
         case BeatPredicateType.FACTION_STANDING_AT_LEAST:
             return _evaluate_faction_standing_at_least(beat, sheet)
+        case BeatPredicateType.NPC_REGARD_AT_LEAST:
+            return _evaluate_npc_regard_at_least(beat, sheet)
         case _:
             # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
             return BeatOutcome.UNSATISFIED
@@ -917,6 +1024,36 @@ def _evaluate_faction_standing_at_least(beat: Beat, sheet: CharacterSheet) -> Be
     else:
         return BeatOutcome.UNSATISFIED
 
+    value = row.value if row is not None else 0
+    return BeatOutcome.SUCCESS if value >= beat.required_standing else BeatOutcome.UNSATISFIED
+
+
+def _evaluate_npc_regard_at_least(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """A named NPC's regard for this character meets the threshold (#3570).
+
+    Reads ``NpcRegard`` from the NPC's primary persona toward the character's
+    primary persona, the row ``record_npc_regard_event`` writes for the stake
+    ``npc_regard_delta`` and the ``SHIFT_NPC_REGARD`` pool effect. A missing row
+    is 0. A nulled NPC, a missing persona on either side, or a null threshold
+    leaves the beat waiting (UNSATISFIED, never FAILURE).
+    """
+    from world.npc_services.constants import RegardTargetType  # noqa: PLC0415
+    from world.npc_services.models import NpcRegard  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if beat.required_standing is None or beat.required_npc_sheet_id is None:
+        return BeatOutcome.UNSATISFIED
+    try:
+        pc_persona = sheet.primary_persona
+        npc_persona = beat.required_npc_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return BeatOutcome.UNSATISFIED
+    row = NpcRegard.objects.filter(
+        holder_persona=npc_persona,
+        target_type=RegardTargetType.PERSONA,
+        target_persona=pc_persona,
+        ended_at__isnull=True,
+    ).first()
     value = row.value if row is not None else 0
     return BeatOutcome.SUCCESS if value >= beat.required_standing else BeatOutcome.UNSATISFIED
 
@@ -1147,6 +1284,29 @@ def _group_scope_participants(
     return []
 
 
+def _expiry_participants(progress: AnyStoryProgress, scope: str) -> list[Persona]:
+    """Who an expiry credits: the character, or the table's present members.
+
+    GROUP scope has no completing character to derive from, so the table's
+    members whose membership is still open stand in (#3558 Decision 7).
+    GLOBAL scope credits nobody. CHARACTER scope returns [] deliberately:
+    _character_scope_participants already prepends progress.character_sheet
+    .primary_persona itself, so returning it here too would double it in the
+    resolved participant list (stake writers/reward lines iterate participants
+    and would double-apply, e.g. subject_standing_delta).
+    """
+    if scope == StoryScope.CHARACTER:
+        return []
+    if scope == StoryScope.GROUP:
+        from world.gm.models import GMTableMembership  # noqa: PLC0415
+
+        memberships = GMTableMembership.objects.filter(
+            table=progress.gm_table, left_at__isnull=True
+        ).select_related("persona")
+        return [m.persona for m in memberships]
+    return []
+
+
 def _derive_aggregate_participants(beat: Beat) -> list[Persona]:
     """Map every distinct contributing character sheet to its PRIMARY persona.
 
@@ -1171,13 +1331,14 @@ def _derive_aggregate_participants(beat: Beat) -> list[Persona]:
     return derived
 
 
-def _maybe_fire_pool_on_completion(
+def _maybe_fire_pool_on_completion(  # noqa: PLR0913
     *,
     completion: BeatCompletion,
     progress: AnyStoryProgress | None,
     scope: str,
     explicit_participants: list[Persona] | None = None,
     outcome_tier: CheckOutcome | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> None:
     """Fire the consequence pool matching the completion's outcome, if any.
 
@@ -1193,11 +1354,14 @@ def _maybe_fire_pool_on_completion(
             - CHARACTER: extra personas to credit alongside the primary persona.
             - GROUP: the explicit participant list (required for LEGEND_AWARD pools).
             - GLOBAL: ignored.
-        outcome_tier: When set, filters the pool to only Consequence rows matching
-            this CheckOutcome via apply_pool_for_tier (graded completion path). When
-            None (the existing GM-marked / auto-evaluated / aggregate paths), every
-            row in the pool fires via apply_pool_deterministically — unchanged
+        outcome_tier: When set, fires the pool at the best authored tier not
+            exceeding this CheckOutcome via apply_pool_for_tier and
+            clamp_tier_to_pool (graded completion path, #3559). When None (the
+            existing GM-marked / auto-evaluated / aggregate paths), every row
+            in the pool fires via apply_pool_deterministically - unchanged
             behavior.
+        skip_effect_types: forwarded to _fire_pool_with_context (an expiry
+            completion passes {EffectType.LEGEND_AWARD}: expiry earns no legend).
     """
     pool = _pool_for_outcome(completion.beat, completion.outcome)
     if pool is None:
@@ -1216,7 +1380,83 @@ def _maybe_fire_pool_on_completion(
         scope=scope,
         participants=participants,
         outcome_tier=outcome_tier,
+        skip_effect_types=skip_effect_types,
     )
+
+
+def _check_legend_award_guards(
+    *, pool: ConsequencePool, scope: str, participants: list[Persona], skipping_legend: bool
+) -> None:
+    """Refuse a pool whose LEGEND_AWARD could not be attributed to anyone.
+
+    Skipped wholesale when LEGEND_AWARD is being skipped anyway: the effect will
+    not fire, so there is nothing for the guards to protect.
+    """
+    from world.societies.exceptions import (  # noqa: PLC0415
+        LegendAwardParticipantMissingError,
+        LegendAwardScopeError,
+    )
+
+    if skipping_legend or not _pool_has_legend_award(pool):
+        return
+    if scope == StoryScope.GLOBAL:
+        raise LegendAwardScopeError
+    if not participants:
+        raise LegendAwardParticipantMissingError
+
+
+def _resolution_character(
+    *, scope: str, progress: AnyStoryProgress | None, participants: list[Persona]
+) -> ObjectDB:
+    """The character a ResolutionContext hangs off.
+
+    CHARACTER scope uses the sheet driving the progress; GROUP and GLOBAL fall
+    back to the first participant's. When neither resolves we hand back an
+    unsaved stub: ResolutionContext requires a non-None character, and this path
+    is only reached for pools with no character-targeted effects (LEGEND_AWARD is
+    participant-targeted), so the stub is never read for identity.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    character = None
+    if scope == StoryScope.CHARACTER and progress is not None:
+        character = progress.character_sheet.character
+    elif participants and participants[0].character_sheet_id:
+        character = participants[0].character_sheet.character
+    return character if character is not None else ObjectDB()
+
+
+def _apply_pool(
+    *,
+    pool: ConsequencePool,
+    context: ResolutionContext,
+    beat: Beat,
+    outcome_tier: CheckOutcome | None,
+    skip_effect_types: frozenset[str],
+) -> None:
+    """Fire the pool: clamped to the rolled tier, or deterministically when untiered."""
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_pool_deterministically,
+        apply_pool_for_tier,
+        clamp_tier_to_pool,
+    )
+
+    if outcome_tier is None:
+        apply_pool_deterministically(
+            pool=pool, context=context, skip_effect_types=skip_effect_types
+        )
+        return
+    fired = clamp_tier_to_pool(pool, outcome_tier)
+    if fired is None:
+        logger.info(
+            "Pool %s has no %s-polarity row for tier %s on beat %s; nothing fires.",
+            pool.pk,
+            "success" if outcome_tier.success_level > 0 else "failure",
+            outcome_tier.pk,
+            beat.pk,
+        )
+        return
+    apply_pool_for_tier(pool=pool, outcome_tier=fired, context=context)
 
 
 def _fire_pool_with_context(  # noqa: PLR0913
@@ -1227,6 +1467,7 @@ def _fire_pool_with_context(  # noqa: PLR0913
     scope: str,
     participants: list[Persona],
     outcome_tier: CheckOutcome | None = None,
+    skip_effect_types: frozenset[str] = frozenset(),
 ) -> None:
     """Guard, contextualize, and fire one consequence pool for a beat.
 
@@ -1234,57 +1475,31 @@ def _fire_pool_with_context(  # noqa: PLR0913
     per-stake resolution (world.stories.services.stake_resolution) fires a
     StakeResolution's pool with exactly the same guards, ResolutionContext
     construction, and tier-aware application as the beat-level pools.
+
+    ``skip_effect_types``: effect types to leave unfired (an expiry completion
+    passes ``{EffectType.LEGEND_AWARD}``: expiry earns no legend, ADR-0066).
     """
-    from world.checks.consequence_resolution import (  # noqa: PLC0415
-        apply_pool_deterministically,
-        apply_pool_for_tier,
-    )
+    from world.checks.constants import EffectType  # noqa: PLC0415
     from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.societies.exceptions import (  # noqa: PLC0415
-        LegendAwardParticipantMissingError,
-        LegendAwardScopeError,
+
+    _check_legend_award_guards(
+        pool=pool,
+        scope=scope,
+        participants=participants,
+        skipping_legend=EffectType.LEGEND_AWARD in skip_effect_types,
     )
-
-    # Guard: GLOBAL scope cannot fire LEGEND_AWARD effects.
-    if scope == StoryScope.GLOBAL and _pool_has_legend_award(pool):
-        raise LegendAwardScopeError
-
-    # Guard: non-GLOBAL scopes require at least one participant for LEGEND_AWARD.
-    if not participants and _pool_has_legend_award(pool):
-        raise LegendAwardParticipantMissingError
-
-    # Resolve the "resolving character" for the context:
-    # - CHARACTER scope: the character whose sheet drives the progress.
-    # - GROUP/GLOBAL: use the first participant's character_sheet (if any); the
-    #   LEGEND_AWARD handler only reads context.participants, but ResolutionContext
-    #   requires a non-None character for other effect types.
-    character = None
-    if scope == StoryScope.CHARACTER and progress is not None:
-        character = progress.character_sheet.character
-    elif participants:
-        character = (
-            participants[0].character_sheet.character
-            if participants[0].character_sheet_id
-            else None
-        )
-
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
-    if character is None:
-        # Fallback: create a transient stub only when no real character is resolvable.
-        # This path is only reached for pools containing no character-targeted effects
-        # (e.g., LEGEND_AWARD is participant-targeted, not character-targeted).
-        character = ObjectDB()  # unsaved stub — only identity-safe for non-character effects
-
     context = ResolutionContext(
-        character=character,
+        character=_resolution_character(scope=scope, progress=progress, participants=participants),
         beat=beat,
         story=beat.episode.chapter.story,
         scene=None,
         participants=participants,
         outcome_tier=outcome_tier,
     )
-    if outcome_tier is not None:
-        apply_pool_for_tier(pool=pool, outcome_tier=outcome_tier, context=context)
-    else:
-        apply_pool_deterministically(pool=pool, context=context)
+    _apply_pool(
+        pool=pool,
+        context=context,
+        beat=beat,
+        outcome_tier=outcome_tier,
+        skip_effect_types=skip_effect_types,
+    )

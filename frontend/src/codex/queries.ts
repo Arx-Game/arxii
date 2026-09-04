@@ -30,6 +30,7 @@ export const codexKeys = {
     [...codexKeys.all, 'entry', id, characterId ?? null] as const,
   search: (query: string, characterId?: number) =>
     [...codexKeys.all, 'search', query, characterId ?? null] as const,
+  entryByName: (name: string) => [...codexKeys.all, 'entry-by-name', name] as const,
 };
 
 export function useCodexTree(characterId?: number) {
@@ -58,12 +59,21 @@ export function useFeaturedCodexEntries() {
   });
 }
 
-export function useCodexEntry(id: number, characterId?: number) {
+/**
+ * `throwOnError` defaults to the app-wide convention (route error boundary).
+ * An overlay such as `CodexModal` passes `false` so a missing or hidden entry
+ * is reported inside the dialog instead of replacing the page behind it.
+ */
+export function useCodexEntry(
+  id: number,
+  characterId?: number,
+  options: { throwOnError?: boolean } = {}
+) {
   return useQuery({
     queryKey: codexKeys.entry(id, characterId),
     queryFn: () => getEntry(id, characterId),
     enabled: id > 0,
-    throwOnError: true,
+    throwOnError: options.throwOnError ?? true,
   });
 }
 
@@ -74,6 +84,32 @@ export function useCodexSearch(query: string, characterId?: number) {
     enabled: query.length >= 2,
     staleTime: 30 * 1000, // 30 seconds
     throwOnError: true,
+  });
+}
+
+/**
+ * Exact-name lookup (case-insensitive, with or without a leading "The ") for
+ * a single in-world term named in plain OOC copy (`CodexWord`, #3540 OOC
+ * sweep). `throwOnError: false` and a `null` result on no match: a missing
+ * entry falls back to plain text rather than surfacing an error.
+ */
+function normalizeEntryName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/^the\s+/, '');
+}
+
+export function useCodexEntryByName(name: string) {
+  return useQuery({
+    queryKey: codexKeys.entryByName(name),
+    queryFn: async () => {
+      const results = await searchEntries(name);
+      const target = normalizeEntryName(name);
+      return results.find((entry) => normalizeEntryName(entry.name) === target) ?? null;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    throwOnError: false,
   });
 }
 

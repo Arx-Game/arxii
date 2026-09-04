@@ -28,7 +28,6 @@ from world.stories.constants import (
     BeatPredicateType,
     StoryMilestoneType,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
@@ -66,7 +65,6 @@ class Phase3EndToEndTests(EvenniaTestCase):
         TransitionFactory(
             source_episode=char_ep1,
             target_episode=char_ep2,
-            mode=TransitionMode.AUTO,
             connection_summary="Therefore, you advance to chapter 2.",
         )
         defender_achievement = AchievementFactory(slug="defender")

@@ -49,7 +49,7 @@ _OBJECTDB_MODEL_PATHS_LOWER = frozenset(p.lower() for p in _OBJECTDB_MODEL_PATHS
 _OBJECTDB_NAME = "ObjectDB"
 
 
-def _annotation_is_objectdb(node: ast.expr | None) -> bool:  # noqa: PLR0911
+def _annotation_is_objectdb(node: ast.expr | None) -> bool:
     """Return True if the annotation refers to ObjectDB.
 
     Handles:

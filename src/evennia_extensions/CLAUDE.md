@@ -29,6 +29,20 @@ Extends Evennia's functionality with additional models and data handlers while p
 - Adaptation layer between Evennia and Arx II systems
 - Integration utilities for data conversion
 
+### `mfa_adapter.py`
+- **`ArxMFAAdapter`**: `MFA_ADAPTER` (#3591, ADR-0267) - encrypts what allauth
+  stores in `Authenticator.data` (TOTP secret, recovery-code seed) under
+  `MFA_SECRETS_KEY` via `cryptography.fernet.MultiFernet`
+- `fernet_from_setting`, `split_keys` - parse the comma-separated key list,
+  first key current, shared with the system check and the `mfa-secrets-key`
+  sentinel probe
+
+### `checks.py`
+- `check_mfa_secrets_key` (`evennia_extensions.E001`, #3591) - Django system
+  check that every key in `MFA_SECRETS_KEY` is a valid Fernet key and none is
+  the all-zero placeholder, run at `migrate`/`check` time so a bad key fails
+  the converge, not a player's sign-in
+
 ### `typeclass_hook_guard.py`
 - Guards Evennia's server reload/shutdown lifecycle hooks (`at_server_reload`,
   `at_server_shutdown`, `unpuppet_all`, `_pause_task`) against a cached `ObjectDB`,

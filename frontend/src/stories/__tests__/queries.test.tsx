@@ -121,7 +121,7 @@ const mockGMQueueResponse = {
       episode_title: 'The Final Push',
       progress_type: 'group' as const,
       progress_id: 3,
-      eligible_transitions: [{ transition_id: 7, mode: 'auto' as const }],
+      eligible_transitions: [{ transition_id: 7 }],
       open_session_request_id: 12,
     },
   ],
@@ -320,13 +320,13 @@ describe('Stories Query Hooks', () => {
         await result.current.mutateAsync({
           episodeId: 20,
           storyId: 5,
-          chosen_transition: 7,
+          progress_id: 9,
           gm_notes: 'Great session.',
         });
       });
 
       expect(api.resolveEpisode).toHaveBeenCalledWith(20, {
-        chosen_transition: 7,
+        progress_id: 9,
         gm_notes: 'Great session.',
       });
       expect(invalidateSpy).toHaveBeenCalledWith(

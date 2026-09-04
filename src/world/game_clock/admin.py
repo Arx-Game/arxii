@@ -1,19 +1,39 @@
 """Admin interface for the game clock system."""
 
 from django.contrib import admin
+from django.http import HttpRequest
+from django.utils import timezone
 
 from world.game_clock.models import GameClock, GameClockHistory, ScheduledTaskRecord
 
 
 @admin.register(GameClock)
 class GameClockAdmin(admin.ModelAdmin):
-    """Admin for the game clock singleton."""
+    """Admin for the game clock singleton.
+
+    Seeding happens here: a fresh database has no clock, and this Add form is
+    the sanctioned way to create it (the alternative is the staff-only
+    `POST /api/clock/adjust/`). Re-anchoring an existing clock goes through
+    `set_clock()` so it lands in `GameClockHistory`; the anchors are read-only
+    on the change form for that reason.
+    """
 
     list_display = ["__str__", "anchor_ic_time", "time_ratio", "paused"]
-    readonly_fields = ["anchor_real_time", "anchor_ic_time"]
+
+    def get_readonly_fields(self, _request: HttpRequest, obj: GameClock | None = None) -> list[str]:
+        """Creating asks for the IC anchor; the real half is stamped at save."""
+        if obj is None:
+            return ["anchor_real_time"]
+        return ["anchor_real_time", "anchor_ic_time"]
+
+    def save_model(self, request: HttpRequest, obj: GameClock, form: object, change: bool) -> None:
+        """Anchor a new clock to the moment it was created."""
+        if not change:
+            obj.anchor_real_time = timezone.now()
+        super().save_model(request, obj, form, change)
 
     def has_add_permission(self, _request):
-        """Prevent adding via admin — use set_clock() service."""
+        """The clock is a singleton: Add is available only until it exists."""
         return not GameClock.objects.exists()
 
     def has_delete_permission(self, _request, _obj=None):

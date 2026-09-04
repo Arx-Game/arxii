@@ -110,6 +110,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.startingarea",
         "character_creation.origintemplate",
         "character_creation.origintemplateslot",
+        "character_creation.origintemplateslotchoice",
         # character_sheets
         "character_sheets.gender",
         # #2994: internal declared-mood states ("feel <state>"); ships empty in

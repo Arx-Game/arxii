@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from world.character_creation.factories import make_unknown_upbringing
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_sheets.models import Gender
 from world.classes.factories import PathFactory
@@ -98,9 +99,10 @@ class FinalizationTestMixin:
             starting_area=target.area,
             trust_required=0,
             is_active=True,
-            family_known=False,
         )
         target.beginnings.allowed_species.add(target.species)
+        # (#3617) An amnesiac Upbringing stands in for the retired orphan flag.
+        target.unknown_upbringing = make_unknown_upbringing(target.beginnings)
         target.height_band = HeightBand.objects.create(
             name=f"{slug}_band",
             display_name=f"{prefix} Band",
@@ -167,7 +169,6 @@ class FinalizationTestMixin:
             "first_name": first_name,
             "description": "A test character",
             "stats": DEFAULT_STATS,
-            "lineage_is_orphan": True,
             "tarot_card_name": self.tarot_card.name,
             "tarot_reversed": False,
             "traits_complete": True,
@@ -178,6 +179,7 @@ class FinalizationTestMixin:
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,

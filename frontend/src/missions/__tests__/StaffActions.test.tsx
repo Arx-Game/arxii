@@ -27,6 +27,7 @@ const FAKE_TEMPLATE: MissionTemplate = {
   arc_scope: 'global',
   visibility: 'restricted',
   categories: [],
+  story_id: null,
 } as MissionTemplate;
 
 const patchMutate = vi.fn();

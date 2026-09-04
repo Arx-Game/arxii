@@ -218,6 +218,22 @@ export function StaffInvitesPage() {
   const { data, isLoading } = useAccountInviteList(statusFilter);
   const invites = data?.results;
 
+  const renderInvites = () => {
+    if (isLoading) {
+      return <p className="text-muted-foreground">Loading...</p>;
+    }
+    if (!invites?.length) {
+      return <p className="text-muted-foreground">No invites found.</p>;
+    }
+    return (
+      <div className="space-y-3">
+        {invites.map((invite) => (
+          <InviteRow key={invite.id} invite={invite} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Account Invites</h1>
@@ -238,17 +254,7 @@ export function StaffInvitesPage() {
         ))}
       </div>
 
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : !invites?.length ? (
-        <p className="text-muted-foreground">No invites found.</p>
-      ) : (
-        <div className="space-y-3">
-          {invites.map((invite) => (
-            <InviteRow key={invite.id} invite={invite} />
-          ))}
-        </div>
-      )}
+      {renderInvites()}
     </div>
   );
 }

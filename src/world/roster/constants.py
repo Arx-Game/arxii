@@ -2,6 +2,11 @@
 
 from django.db import models
 
+# Canonical FamilyKind rows created by migration 0219 (#3617). Staff add more in admin.
+COMMONER_KIND_NAME = "Commoner"
+NOBLE_KIND_NAME = "Noble"
+CRIME_KIND_NAME = "Crime"
+
 
 class RelationshipType(models.TextChoices):
     """Relationship labels returned by the kinship derivation walk (#2062).

@@ -69,6 +69,13 @@ _STRAIN_PREFIX = "strain="
 _POSITION_PREFIX = "position="
 # Keyword prefix used to parse variant=<resonance> from cast command args (#1619).
 _VARIANT_PREFIX = "variant="
+# Trailing consent keyword (#3573): a standalone "soulfray" token on `cast`/`declare`
+# pre-consents to hold a ward-bearing cast's protective condition alive past zero
+# anima via Soulfray, skipping the two-step "accept soulfray"/"decline soulfray"
+# offer prompt (world.magic.offer_handlers.SoulfrayPendingHandler) that would
+# otherwise gate a cast made while the caster has an active Soulfray stage. Mirrors
+# `combat interpose ... soulfray` (commands/combat_maneuvers.py, #3573 Task 1).
+_SOULFRAY_KEYWORD = "soulfray"
 # Below this many reachable forms, the bare-`cast` listing says nothing about them
 # (#2901) — naming a single option is no help, and the list is already dense.
 _MIN_FORMS_WORTH_LISTING = 2
@@ -152,8 +159,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     Usage:
         cast
-        cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]
-        declare <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]
+        cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly] [soulfray]
+        declare <technique> [at <target>] [effort=<level>] [secondary] [base] [openly] [soulfray]
 
     Bare ``cast`` lists everything you can cast, with what each one does.
 
@@ -171,6 +178,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     Use ``openly`` to waive your Path style's cast concealment for this one
     cast, a one-way choice: it can only remove concealment a subtle style
     already imposes, never add concealment to an overt one.
+
+    Use ``soulfray`` to consent up front to holding this cast's protective
+    ward alive past zero anima by drawing on Soulfray, skipping the separate
+    ``accept soulfray`` prompt that would otherwise gate a cast made while you
+    have an active Soulfray stage.
     """
 
     key = "cast"
@@ -199,6 +211,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     _use_base_form: bool = False
     # Cast-concealment waiver (#2710 Task 6).
     _cast_openly: bool = False
+    # Soulfray pre-consent (#3573) - see _SOULFRAY_KEYWORD above.
+    _confirm_soulfray: bool = False
     # #1619: Variant resonance selection for multi-resonance characters.
     _variant_resonance_str: str | None = None
 
@@ -223,7 +237,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         if not raw:
             msg = (
                 "Usage: cast <technique> [at <target>] [effort=<level>] "
-                "[strain=<n>] [secondary] [base] [openly]"
+                "[strain=<n>] [secondary] [base] [openly] [soulfray]"
             )
             raise CommandError(msg)
 
@@ -269,11 +283,13 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
                 raise CommandError(msg)
             effort_str = effort_val
 
-        # Strip standalone trailing "secondary", "base", and "openly" keywords
-        # (case-insensitive, whole word).  Must come after effort= stripping so the
-        # remaining raw is clean.  All three keywords can coexist on the same
-        # command line in any order.
-        raw, secondary, use_base_form, cast_openly = self._strip_cast_mode_keywords(raw)
+        # Strip standalone trailing "secondary", "base", "openly", and "soulfray"
+        # keywords (case-insensitive, whole word).  Must come after effort=
+        # stripping so the remaining raw is clean.  All four keywords can coexist
+        # on the same command line in any order.
+        raw, secondary, use_base_form, cast_openly, confirm_soulfray = (
+            self._strip_cast_mode_keywords(raw)
+        )
 
         # Split on the first " at " (case-insensitive) to separate technique from
         # the optional target. A literal search avoids a backtracking-prone regex.
@@ -287,7 +303,8 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
         if not self._technique_name:
             msg = (
-                "Usage: cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]"
+                "Usage: cast <technique> [at <target>] [effort=<level>] "
+                "[secondary] [base] [openly] [soulfray]"
             )
             raise CommandError(msg)
 
@@ -295,6 +312,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         self._secondary = secondary
         self._use_base_form = use_base_form
         self._cast_openly = cast_openly
+        self._confirm_soulfray = confirm_soulfray
         self._pull_thread_str = pull_thread_str
         self._pull_resonance_str = resonance_str
         self._pull_tier = pull_tier
@@ -321,20 +339,21 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             return stripped[: -len(kw)].rstrip(), True
         return raw, False
 
-    def _strip_cast_mode_keywords(self, raw: str) -> tuple[str, bool, bool, bool]:
-        """Strip trailing ``secondary``, ``base``, and ``openly`` keywords in any order.
+    def _strip_cast_mode_keywords(self, raw: str) -> tuple[str, bool, bool, bool, bool]:
+        """Strip trailing ``secondary``, ``base``, ``openly``, ``soulfray`` keywords.
 
-        All three keywords are standalone trailing tokens (case-insensitive, whole
-        word).  Loops until none is the trailing token so that any order (e.g.
-        ``secondary base openly``, ``openly base``) yields the correct flags —
-        fixing the fixed-order stripping bug (#1581 Task 9), extended for
-        ``openly`` (#2710 Task 6).
+        All four keywords are standalone trailing tokens (case-insensitive, whole
+        word), in any order.  Loops until none is the trailing token so that any
+        order (e.g. ``secondary base openly``, ``openly base``) yields the correct
+        flags - fixing the fixed-order stripping bug (#1581 Task 9), extended for
+        ``openly`` (#2710 Task 6) and ``soulfray`` (#3573).
 
-        Returns ``(remainder, secondary, use_base_form, cast_openly)``.
+        Returns ``(remainder, secondary, use_base_form, cast_openly, confirm_soulfray)``.
         """
         secondary = False
         use_base_form = False
         cast_openly = False
+        confirm_soulfray = False
         changed = True
         while changed:
             changed = False
@@ -350,7 +369,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
             if found:
                 cast_openly = True
                 changed = True
-        return raw, secondary, use_base_form, cast_openly
+            raw, found = self._strip_trailing_keyword(raw, _SOULFRAY_KEYWORD)
+            if found:
+                confirm_soulfray = True
+                changed = True
+        return raw, secondary, use_base_form, cast_openly, confirm_soulfray
 
     @staticmethod
     def _extract_strain_keyword(raw: str) -> tuple[str, int]:
@@ -548,6 +571,25 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         fury_anchor_id = self._resolve_fury_anchor_id()
         if fury_anchor_id is not None:
             kwargs["fury_anchor_id"] = fury_anchor_id
+
+    def _inject_cast_mode_kwargs(self, kwargs: dict[str, Any]) -> None:
+        """Add ``use_base_form`` / ``cast_openly`` / ``confirm_soulfray_risk`` when declared.
+
+        Each is only injected when explicitly declared via its trailing keyword
+        (``base`` / ``openly`` / ``soulfray``), keeping the defaults (variant
+        applied, concealment respected, soulfray halt-and-prompt) from polluting
+        kwargs unnecessarily. ``confirm_soulfray_risk`` (#3573) mirrors
+        ``combat interpose ... soulfray``'s pre-consent token (#3573 Task 1) -
+        CastTechniqueAction.execute's own default (False) is what makes a plain
+        `cast` on a soulfray-afflicted caster halt and prompt for the separate
+        "accept soulfray" offer; this keyword skips straight past that.
+        """
+        if self._use_base_form:
+            kwargs["use_base_form"] = True
+        if self._cast_openly:
+            kwargs["cast_openly"] = True
+        if self._confirm_soulfray:
+            kwargs["confirm_soulfray_risk"] = True
 
     def _resolve_fury_anchor_id(self) -> int | None:
         """Return the CharacterSheet pk named by ``anchor=`` (bonded character key).
@@ -873,15 +915,10 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         if self._strain > 0:
             kwargs["strain_commitment"] = self._strain
 
-        # Base-form opt-out: only inject when explicitly declared to keep the
-        # default (variant applied) from polluting kwargs unnecessarily.
-        if self._use_base_form:
-            kwargs["use_base_form"] = True
-
-        # Cast-concealment waiver (#2710): only inject when explicitly declared,
-        # same pattern as use_base_form above.
-        if self._cast_openly:
-            kwargs["cast_openly"] = True
+        # Base-form / cast-concealment / soulfray-consent trailing keywords: only
+        # inject when explicitly declared, to keep the defaults from polluting
+        # kwargs unnecessarily.
+        self._inject_cast_mode_kwargs(kwargs)
 
         if self._target_name:
             self._inject_target_kwargs(kwargs)

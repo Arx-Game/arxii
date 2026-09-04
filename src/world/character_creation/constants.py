@@ -133,3 +133,16 @@ class OriginStoryState(models.TextChoices):
     NOT_STARTED = "not_started", "Not Started"
     SLOTS_ONLY = "slots_only", "Slots Only"
     COMPLETE = "complete", "Complete"
+
+
+class FamilyPath(models.TextChoices):
+    """How a character's family record relates to their Upbringing (#3617).
+
+    ``ANY`` is only valid on ``OriginTemplateSlot.applies_to`` (the prompt shows on
+    every path). A draft's chosen path is one of the other three.
+    """
+
+    ANY = "any", "Any path"
+    CLAIMED = "claimed", "Claim a staff-authored family"
+    NAMED = "named", "Name your own family"
+    NONE = "none", "No family"

@@ -24,6 +24,7 @@ import {
 } from './queries';
 import { DuelYieldControls, DuelAcknowledgeRiskBanner } from './duels/DuelChallengeControls';
 import { YourTurn } from './sections/YourTurn';
+import { PendingAttacks } from './components/PendingAttacks';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools, findOwnParticipant } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
@@ -288,7 +289,10 @@ export function CombatTurnPanel({
           onPositionShapeChange={onPositionShapeChange}
         />
       ) : (
-        <p className="text-xs text-muted-foreground">You are observing this encounter.</p>
+        <>
+          <PendingAttacks attacks={encounter.pending_attacks ?? []} viewerParticipantId={null} />
+          <p className="text-xs text-muted-foreground">You are observing this encounter.</p>
+        </>
       )}
 
       {/* 2. ResonanceBudget */}

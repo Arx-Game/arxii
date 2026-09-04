@@ -40,6 +40,8 @@ from world.gm.permissions import IsGM, IsGMOrStaff
 from world.gm.serializers import (
     CatalogSuggestionDetailSerializer,
     DemandRansomSerializer,
+    DiscoveryQuerySerializer,
+    DiscoveryResultSerializer,
     GMApplicationActionSerializer,
     GMApplicationCreateSerializer,
     GMApplicationDetailSerializer,
@@ -63,6 +65,7 @@ from world.gm.serializers import (
 from world.gm.services import (
     TableRequestError,
     archive_table,
+    find_situations,
     gm_application_queue,
     gm_evidence_summary,
     join_table,
@@ -73,6 +76,7 @@ from world.gm.services import (
     submit_distinction_change_request,
     submit_profile_text_request,
     transfer_ownership as transfer_ownership_service,
+    user_breadth_index,
     withdraw_table_update_request,
 )
 from world.player_submissions.constants import SubmissionStatus
@@ -217,11 +221,14 @@ class GMProfileViewSet(
         profile = GMProfile.objects.filter(account=request.user).first()
         if profile is None:
             return Response(status=404)
+        context = {"request": request}
         if request.method == "PATCH":
-            body = GMProfileMineSerializer(profile, data=request.data, partial=True)
+            body = GMProfileMineSerializer(
+                profile, data=request.data, partial=True, context=context
+            )
             body.is_valid(raise_exception=True)
             body.save()
-        return Response(GMProfileMineSerializer(profile).data)
+        return Response(GMProfileMineSerializer(profile, context=context).data)
 
     @extend_schema(
         request=MintGMCharacterRequestSerializer,
@@ -923,3 +930,23 @@ class GMSummonOfferViewSet(viewsets.ReadOnlyModelViewSet):
             .select_related("scene")
             .order_by("-created_at")
         )
+
+
+class DiscoveryView(APIView):
+    """GET /api/gm/discovery/?q=&risk=: the catalog browse the web GM panel
+    and the beat form use (#3564). Same search as telnet ``setsituation find``;
+    kinds above the caller's tier never appear. Read-only, never writes a pool.
+    """
+
+    permission_classes = [IsAuthenticated, IsGMOrStaff]
+
+    @extend_schema(parameters=[DiscoveryQuerySerializer], responses=DiscoveryResultSerializer)
+    def get(self, request: Request) -> Response:
+        params = DiscoveryQuerySerializer(data=request.query_params)
+        params.is_valid(raise_exception=True)
+        found = find_situations(
+            query=params.validated_data.get("q", ""),
+            risk=params.validated_data.get("risk") or None,
+            actor_level_index=user_breadth_index(request.user),
+        )
+        return Response(DiscoveryResultSerializer(found).data)

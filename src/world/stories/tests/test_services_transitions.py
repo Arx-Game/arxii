@@ -6,7 +6,7 @@ from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.stories.constants import BeatOutcome, TransitionMode
+from world.stories.constants import BeatOutcome
 from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.factories import (
     BeatFactory,
@@ -131,7 +131,6 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         success_transition = TransitionFactory(
             source_episode=source,
             target_episode=target_success,
-            mode=TransitionMode.AUTO,
             order=0,
         )
         TransitionRequiredOutcomeFactory(
@@ -143,7 +142,6 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         failure_transition = TransitionFactory(
             source_episode=source,
             target_episode=target_failure,
-            mode=TransitionMode.AUTO,
             order=1,
         )
         TransitionRequiredOutcomeFactory(
@@ -170,7 +168,6 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         success_transition = TransitionFactory(
             source_episode=source,
             target_episode=target_success,
-            mode=TransitionMode.AUTO,
             order=0,
         )
         TransitionRequiredOutcomeFactory(
@@ -182,7 +179,6 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         failure_transition = TransitionFactory(
             source_episode=source,
             target_episode=target_failure,
-            mode=TransitionMode.AUTO,
             order=1,
         )
         TransitionRequiredOutcomeFactory(

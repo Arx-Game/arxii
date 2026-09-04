@@ -1,11 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchAccount, fetchRegistrationStatus, postLogin, postLogout, postRegister } from './api';
-import { AccountData } from './types';
+import {
+  completeMfaLogin,
+  fetchAccount,
+  fetchRegistrationStatus,
+  postLogin,
+  postLogout,
+  postRegister,
+} from './api';
+import { AccountData, LoginResult } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
 import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
@@ -79,20 +87,37 @@ export function useAuthStatus(): { isLoading: boolean; account: AccountData | nu
   return { isLoading: isPending, account: data ?? null };
 }
 
-export function useLogin(onSuccess?: (data: AccountData) => void) {
+export function useLogin(onSuccess?: (data: LoginResult) => void) {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: postLogin,
     onSuccess: (data) => {
-      // Keep React Query cache in sync with Redux so guards reading the
-      // cache (via useAuthStatus) see the authenticated state on the
-      // next render — without this, post-login navigation to a guarded
-      // route would bounce back through /login because the cache still
-      // showed `data: null` from the pre-login fetch.
-      queryClient.setQueryData(['account'], data);
-      dispatch(setAccount(data));
+      if (data.kind === 'ok') {
+        // Keep React Query cache in sync with Redux so guards reading the
+        // cache (via useAuthStatus) see the authenticated state on the
+        // next render — without this, post-login navigation to a guarded
+        // route would bounce back through /login because the cache still
+        // showed `data: null` from the pre-login fetch.
+        queryClient.setQueryData(['account'], data.account);
+        dispatch(setAccount(data.account));
+      }
       onSuccess?.(data);
+    },
+  });
+}
+
+/** Completes a login that stopped at the 2FA step (#3591). Same cache/Redux
+ * write-through as the `useLogin` ok branch, once the code is accepted. */
+export function useCompleteMfaLogin(onSuccess?: (account: AccountData) => void) {
+  const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: completeMfaLogin,
+    onSuccess: (account) => {
+      queryClient.setQueryData(['account'], account);
+      dispatch(setAccount(account));
+      onSuccess?.(account);
     },
   });
 }
@@ -123,9 +148,23 @@ export function useRegister(
   });
 }
 
+/**
+ * Log out and land on the logged-out home page, whatever page is open (#3592).
+ *
+ * Clearing the cache alone does NOT leave the current page. Most routes
+ * (e.g. /characters/create) have no guard at all, so nothing would ever
+ * move them. On a guarded route the guard keeps its last observer result
+ * until something re-renders it, and nothing it subscribes to changes when
+ * the `['account']` entry is removed, so it stayed put too; and even when
+ * a guard did re-evaluate, its destination (`/login`) is wrong for a
+ * deliberate logout. Hence this hook navigates to `/` itself, and writes
+ * `null` into `['account']` so every reader (guards, GatefoldPage) sees a
+ * settled logged-out account instead of a pending refetch.
+ */
 export function useLogout(onSuccess?: () => void) {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { disconnectAll } = useGameSocket();
   return useMutation({
     mutationFn: postLogout,
@@ -133,11 +172,11 @@ export function useLogout(onSuccess?: () => void) {
       disconnectAll();
       dispatch(resetGame());
       dispatch(setAccount(null));
-      // clear() wipes every cache entry including ['account']; that's
-      // what guards observe as `isPending` flipping back true on the
-      // next route — render `null`, then redirect to /login once the
-      // cleared cache settles with `data: null`.
+      // clear() drops every per-account cache entry (mail, roster, ...)
+      // so the next login never sees the previous account's data.
       queryClient.clear();
+      queryClient.setQueryData(['account'], null);
+      navigate('/');
       onSuccess?.();
     },
   });

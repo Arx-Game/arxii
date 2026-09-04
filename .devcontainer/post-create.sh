@@ -248,3 +248,16 @@ shopt -u nullglob
 # Claude Code does). Selects skills whose SKILL.md declares
 # `compatibility: polytoken`. Idempotent; re-run via `just sync-polytoken-skills`.
 bash /workspaces/arxii/tools/skills/sync-polytoken-skills.sh
+
+# Symlink in-repo reviewer agents into the user's Claude agents directory, the
+# same way skills are handled above (.claude/ is gitignored, so tools/agents/ is
+# the tracked home). Every defect that reaches main or production gets a reviewer
+# agent for its class — see tools/agents/README.md.
+mkdir -p /home/vscode/.claude/agents
+shopt -s nullglob
+for agent in /workspaces/arxii/tools/agents/*.md; do
+  name=$(basename "$agent")
+  [ "$name" = "README.md" ] && continue
+  ln -sfn "$agent" "/home/vscode/.claude/agents/$name"
+done
+shopt -u nullglob

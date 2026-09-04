@@ -587,6 +587,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - `POST /api/magic/pose-endorsements/` + `DELETE .../pose-endorsements/{id}/` — create/retract pose endorsement (Spec C)
   - `POST /api/magic/scene-entry-endorsements/` — create entry endorsement; fires `grant_resonance` synchronously (Spec C)
   - `GET /api/magic/resonance-grants/` — paginated audit ledger (Spec C)
+  - `GET /api/magic/consequence-pool-catalog/` - the #1995 flavor catalog
+    (`?action_category=` narrows to combat/technique catalogs; no param is the flat
+    union). `?scope=beat` (#3562) widens it to every authored `ConsequencePool`, ordered
+    by name, for the stories app's beat-authoring stakes picker; `retrieve` is always
+    unfiltered and returns `ConsequencePoolDetailSerializer`'s resolved `entries` (see
+    `docs/systems/magic.md`'s "Beat-authoring parity" note)
 - **API endpoints (dramatic moment tagging — #1139):**
   - `GET /api/magic/dramatic-moment-types/` — unpaginated catalog for the tag-picker
   - `POST /api/magic/dramatic-moment-tags/` — create tag; `IsSceneGMOrOwnerOrStaff` gated
@@ -1460,6 +1466,11 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
+- **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
+  `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes
+  for family standing, subordination, patronage, and culture-specific facts through this
+  layer: [family-authoring-recipes.md](family-authoring-recipes.md) (recipes 4-7 and 9
+  use the houses layer); design record: ADR-0268, ADR-0269.
 - **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`)
 - **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
@@ -1558,7 +1569,8 @@ Lore storage and character knowledge tracking.
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`
   per-character breakdown in entry payloads) — `CodexVisibilityMixin` in
-  `world/codex/views.py`
+  `world/codex/views.py`; the account's knowledge map is `Account.cached_codex_knowledge`
+  (#3597), cleared on every knowledge write, so the mixin holds no per-request state
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
@@ -1609,7 +1621,10 @@ resolve them automatically or through a collaborative **research project**.
   (`frontend/src/clues/components/`), reached from `PlaceClueDialog`'s "New clue…" and
   `StaffSecretsPanel`'s "Author a clue to this secret".
 - **Key functions (`world/clues/services.py`, `research.py`):** `acquire_clue`,
-  `target_already_known`, `search_room` (Search check per hidden clue), `grant_clue_target`
+  `target_already_known`, `clue_target_kind_allowed(account, target_kind)`
+  (#3566 - the clue-authoring policy as one callable: staff → anything,
+  SENIOR+ GM required otherwise, SECRET staff-only; shared by `author_clue`
+  and the stake reward-line CLUE-sink gate), `search_room` (Search check per hidden clue), `grant_clue_target`
   (AUTOMATIC resolution — codex KNOWN / rescue mission / secret fact / persona-link
   `PersonaDiscovery` via `_grant_persona_link_target`, #2120 — the only in-game
   `PersonaDiscovery` producer; mask piercing stays GM-authored per ADR-0033), `maybe_grant_clue_triggers`
@@ -1630,6 +1645,12 @@ resolve them automatically or through a collaborative **research project**.
   `HeldClueSerializer`) — the held-clue *journal*, scoped to characters the requester plays
   (`for_account`; no cross-player leak). Web `CluesTab` on `CharacterSheetPage` (own character
   only). A telnet `sheet/clues` section + active-research "pursuit" tracking are follow-ups.
+- **GM search surface (#3566):** `GET /api/clues/search/?q=` (`ClueSearchView`,
+  `IsAuthenticated` + `IsGMOrStaff`) - a small picker endpoint for the stake
+  reward-line editor's CLUE sink, not a general clue browser. Filters to
+  `RESOLVABLE_CLUE_TARGET_KINDS`, then policy-filters each row through
+  `clue_target_kind_allowed` for the requester; returns at most 25
+  `{id, name, target_kind}` rows (`ClueSearchResultSerializer`).
 - **Integrates with:** codex (codex-target grant via `add_progress`), missions
   (`grant_rescue_mission` for RESCUE's AUTOMATIC mission target; `staff_assign_mission`
   for a RESEARCH-resolved MISSION target, #3429), projects (RESEARCH kind), captivity
@@ -2119,6 +2140,12 @@ Multi-stage character creation flow with draft system.
   the same change so a sibling domain service can reuse `_send_email`/`_get_staff_emails`
   without subclassing `RosterEmailService` itself, whose approve/deny methods take a
   roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
+- **Lineage stage: Upbringings (#3617):** the Lineage stage offers per-beginning
+  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost, a trust
+  gate, and a family path (claim a staff-authored family, name a new one, or
+  none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
+  new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
+  the design decisions: ADR-0268, ADR-0269.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
@@ -2278,6 +2305,8 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Durable character selection (#3412 slice 1, ADR-0241):** `PlayerData.selected_entry`
   is the account's server-side "who am I browsing as" fact (state 2.5 — selected but
   not necessarily puppeting). Sole mutator `world.roster.services.selection.set_selected_entry`;
+  sole reader for "who is this request acting as" `selection.selected_character(account)`
+  (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
   presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
@@ -2309,7 +2338,9 @@ Character lifecycle management with web-first applications and player anonymity.
 Person-node genealogy: typed parentage/union edges, truth-vs-public-record via
 Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 
-- **Models:** `Family`, `Kinsperson` (5 definition tiers; heredity stubs
+- **Models:** `Family` (`kind` FK `FamilyKind`, `influence`, #3617),
+  `FamilyKind` (authored rows: Commoner, Noble, Crime, or any kind staff add;
+  `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
   `species`/`power_band`, #2815), `FamilyMembership`, `UnionKind`/`Union`,
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent
@@ -2352,8 +2383,11 @@ GM at a given level may author (#2000, ADR-0097).
   `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
   (single-use recruitment code, public or private-with-email-match, 30-day default
   expiry), `GMLevelCap` (one row per `GMLevel`, staff-tunable: `max_beat_risk`
-  (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
-  `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
+  (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`,
+  `auto_clear_regional`, `max_story_areas`, `max_story_rooms_per_area`,
+  `max_story_npcs`, `allow_item_rewards` (#3566 - gates ITEM-sink
+  `StakeRewardLine` authoring, seeded `True` for EXPERIENCED/SENIOR only);
+  seeded via `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
   `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
   `promote_gm`, never edited by hand), **`GMRewardConfig`** (#2123 — pk=1 singleton,
   `load()` classmethod; every GM Story Reward award value as a proper column:
@@ -2409,7 +2443,11 @@ GM at a given level may author (#2000, ADR-0097).
 - **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
   `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
   `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
-  `average_rating`, `rating_count`)
+  `average_rating`, `rating_count`), `DiscoveryResult` (#3564: `templates`,
+  `challenges`, `kinds: list[KindResult]`, what `find_situations` returns and
+  both its faces render), `KindResult` (`kind`, `check_fits`,
+  `difficulty_guide` (the guide for the requested risk or `None`),
+  `all_guides` (the full ladder), `pool_guides`)
 - **Key Services (`services.py`):** `create_table`/`archive_table`/`transfer_ownership`,
   `join_table`/`leave_table` (auto-detaches CHARACTER-scope stories on leave),
   `gm_application_queue(gm)`/`approve_application_as_gm`/`deny_application_as_gm`,
@@ -2427,18 +2465,44 @@ GM at a given level may author (#2000, ADR-0097).
   `GameWeek`; awards via `progression.award_xp(reason=ProgressionReason.GM_STORY_REWARD)`.
   Never raises — a bug here logs and returns `None` rather than aborting the beat
   mark/episode resolve/story completion/feedback submission that triggered it.
-- **Trust-ladder consumers:** `stories.BeatSerializer`'s risk gate and
-  `stories.StakeSerializer`'s custom-stakes gate read the acting GM's `GMLevelCap` via
-  `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
-  `combat.StakesLevelRequirement.minimum_gm_level` gates on `gm_account.gm_profile.level`
-  (no profile → STARTING)
+  **`find_situations(*, query, risk, actor_level_index) -> DiscoveryResult`**
+  (#3564): the one catalog search behind telnet `setsituation find` and
+  `GET /api/gm/discovery/`; kinds always come from `SituationKind.objects
+  .cached_all()` filtered to `actor_level_index`, templates and challenges only
+  when `query` is non-empty (capped `FIND_RESULT_LIMIT = 15`), fits/guides/pool
+  guidance loaded with three grouped `filter(situation_kind_id__in=...)`
+  queries rather than a `to_attr` prefetch onto the identity-mapped kinds
+  (ADR-0263). **`user_breadth_index(user) -> int`**: the web caller's
+  `find_situations` breadth: staff get the top index, a GM their own level
+  index, an account with no `GMProfile` get `0`; mirrors
+  `FindSituationAction._actor_breadth_index` for a request user rather than an
+  actor object.
+- **Trust-ladder consumers:** `cap_for_profile(profile) -> GMLevelCap | None`
+  (`world.gm.services`, #3562) is the single `GMLevelCap.objects.get(level=profile.level)`
+  lookup - `None` when the level is unseeded, never raises. `stories.BeatSerializer`'s risk
+  gate (`gm_max_risk`, `world.gm.services`) and `stories.StakeSerializer`'s custom-stakes/
+  global-scope gates (`_gm_allows_custom_stakes`/`_gm_allows_global_scope`,
+  `world.stories.serializers`) all delegate to it instead of re-deriving the query (staff
+  bypass unchanged, handled by each caller); `stories.StakeRewardLineSerializer`'s
+  ITEM-sink gate (`_gm_allows_item_rewards`, #3566) does the same;
+  `combat.StakesLevelRequirement.minimum_gm_level`
+  gates on `gm_account.gm_profile.level` directly (no profile → STARTING). `GMProfileMineSerializer`
+  (below) also reads it to surface the caller's own cap on the wire.
 - **API Endpoints:** `GMApplicationViewSet` (`/api/gm/applications/`; create for
   players, list/review/update for staff — approval auto-creates a `GMProfile`),
   `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
   `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
   `IsAdminUser`; `GET`/`PATCH /api/gm/profiles/mine/` (#3478) — the requesting account's
   own `GMProfile` via `GMProfileMineSerializer`, `contact_times`/`ooc_info` writable,
-  `level` read-only, 404 for a non-GM account; `POST /api/gm/profiles/character/` (#3478)
+  `level` read-only, 404 for a non-GM account. **`max_beat_risk`/`allow_custom_stakes`
+  (#3562)** are read-only `SerializerMethodField`s built from `cap_for_profile` - staff
+  get `RenownRisk.EXTREME`/`True` regardless of any cap row, a non-staff GM gets its own
+  `GMLevelCap.max_beat_risk`/`allow_custom_stakes` (`RenownRisk.NONE`/`False` when the
+  level is unseeded); a PATCH body naming either field is silently ignored
+  (`SerializerMethodField` is never writable). The beat-authoring frontend
+  (`useGMProfileMine`, `frontend/src/gm/queries.ts`) reads this payload to build its
+  risk-select options and stakes-picker gating from the same ceiling the API enforces,
+  instead of a client-side guess; `POST /api/gm/profiles/character/` (#3478)
   mints the account's own GM/Staff character via `mint_gm_character`
   (`world.roster.services.staff_characters`, role-aware: staff mints
   `typeclasses.gm_characters.StaffCharacter`, an approved GM mints `GMCharacter`, anyone
@@ -2452,7 +2516,11 @@ GM at a given level may author (#2000, ADR-0097).
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
   queue), `GMInviteClaimView`, `DemandRansomView`, `GMSummonOfferViewSet`
-  (`/api/gm/summon-offers/`, read-only, #3071 — see "GM summon" below). **UI-wired
+  (`/api/gm/summon-offers/`, read-only, #3071, see "GM summon" below),
+  `DiscoveryView` (`GET /api/gm/discovery/?q=&risk=`, `IsAuthenticated` +
+  `IsGMOrStaff`, #3564: the web GM panel's and beat form's catalog browse;
+  invalid `risk` 400s, empty `q` returns kinds only, see "Scenario catalog"
+  below). **UI-wired
   (#3268):** the invite/application group (`GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView`) renders in `RecruitmentTab` on
   `frontend/src/tables/pages/TableDetailPage.tsx`; `GMInviteClaimView` renders in
@@ -2472,9 +2540,11 @@ GM at a given level may author (#2000, ADR-0097).
   (`mint-builder-character`, #3283's original staff-only stopgap): that endpoint and
   its frontend caller (`mintBuilderCharacter`, `frontend/src/world-builder/api.ts`)
   are deleted; `WorldBuilderPage`'s no-actor banner
-  (`data-testid="world-builder-actor-banner"`) is now a plain "set up your GM Profile
-  from the Hall" message linking to `/`. See `docs/roadmap/tooling.md`'s "GM
-  onboarding moves to the Hall" entry and `gm-system.md`'s Phase 9.
+  (`data-testid="world-builder-actor-banner"`) became a plain "set up your GM Profile
+  from the Hall" message linking to `/` — until #3538 retired `WorldBuilderPage`
+  entirely (the Atlas, #3477/#3533, replaced the grid-first canvas). See
+  `docs/roadmap/tooling.md`'s "GM onboarding moves to the Hall" entry and
+  `gm-system.md`'s Phase 9.
 - **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
@@ -2645,12 +2715,18 @@ GM at a given level may author (#2000, ADR-0097).
   `GET /api/scenes/{id}/gm-rail/`, see `docs/systems/scenes.md`'s "API Endpoints"
   section) as one of its per-participant sections.
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
-  shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
-  read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
-  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) searches
-  `mechanics.SituationTemplate` by name/description and, independently by the same
-  term, any matching `SituationKind` — returning its `CheckTypeSituationFit`,
-  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows as text.
+  shape from checks to situations. Since #3564 the search itself lives in one
+  service, `find_situations` (`world.gm.services`), behind two faces:
+  `FindSituationAction` (key `gm_find_situation`, read-only, gated
+  `MinimumGMLevelPrerequisite(GMLevel.STARTING)`, lower than
+  `SetSituationAction`'s JUNIOR floor since browsing mutates nothing) formats
+  the result for telnet, and `DiscoveryView` (`GET /api/gm/discovery/`) formats
+  it for the web; both search `mechanics.SituationTemplate`/`ChallengeTemplate`
+  by name/description(/goal) and, independently by the same term, any matching
+  `SituationKind`, returning its `CheckTypeSituationFit`,
+  `SituationDifficultyGuide`, and `ConsequencePoolGuide` rows (text on telnet,
+  structured JSON on the wire). An empty query is a kind-first cold open:
+  every kind in breadth, no templates or challenges, on both faces.
   `SituationKind` results are filtered server-side on `minimum_gm_level` against the
   caller's own `GMLevel` (staff see everything) — a kind above a GM's tier never
   appears, even on an exact name match. `SubmitCatalogSuggestionAction` (key
@@ -2658,12 +2734,25 @@ GM at a given level may author (#2000, ADR-0097).
   via `world.gm.services.submit_catalog_suggestion`, gated additionally on
   `PROPOSAL_KIND_MIN_LEVEL[proposal_kind]` (Decision 9) — refuses a below-tier
   `proposal_kind` with a level-appropriate message; staff bypass every gate. Both
-  live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find <term>`
-  (extends `commands/setsituation.py`, mirroring `gm check find`'s shape) and `gm
-  suggest <kind>=<text>` (`commands/gm_ops.py`'s `CmdGMDashboard`, kind one of
-  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). Web: the
-  same generic `DispatchActionView` seam `set_the_stage`/`gm_invoke_check` already
-  use — no dedicated endpoint. Suggestion inbox: `SubmissionCategory
+  actions live in `actions/definitions/gm_catalog.py`. Telnet: `setsituation find
+  <term>` (extends `commands/setsituation.py`, mirroring `gm check find`'s
+  shape) and `gm suggest <kind>=<text>` (`commands/gm_ops.py`'s
+  `CmdGMDashboard`, kind one of
+  `new_situation`/`check_fit`/`difficulty_guide`/`pool_guide`/`other`). **Web
+  (#3564):** `DiscoveryView` (`IsAuthenticated` + `IsGMOrStaff`) backs
+  `SituationFinder.tsx` (`frontend/src/gm-adjudication/`), which renders kind
+  cards (fits, difficulty guide, pool guidance always marked advisory) plus
+  templates and challenges, with host-injected Stage/Place/Use-this-check
+  buttons and a "Suggest an entry" dialog (`CatalogSuggestionDialog.tsx`,
+  dispatches `gm_submit_catalog_suggestion`) shown only when a character is
+  active. Three hosts embed it behind a "Browse the catalog" toggle: beat
+  prep's staged-templates editor (`StagedTemplatesEditor` in
+  `stories/components/BeatFormDialog.tsx`, Stage appends a row), the scene
+  panel's Situation tab below (one-click Place), and its Call Check tab
+  (a fitting check selects it and pre-fills the difficulty band from the
+  guide for the running beat's risk, `GMAdjudicationPanel`'s
+  `scene.running_beat?.risk`; the same running beat may also carry a scene
+  clock, `scene.clock` - see "Scene clock (#3567)" below). Suggestion inbox: `SubmissionCategory
   .CATALOG_SUGGESTION` (`world.player_submissions.constants`) +
   `_catalog_suggestion_to_item` in `world.staff_inbox.services.get_staff_inbox`,
   mirroring `GMApplication`'s exact mapping shape (Decision 8); staff triage via
@@ -2699,7 +2788,11 @@ GM at a given level may author (#2000, ADR-0097).
   (`situation_template_id`) or `place_challenge` (`challenge_template_id` +
   `target_object_name` + optional edge/setback) the same generic REST way as the
   check/award/condition tabs above — both act on the GM's own room
-  (`target_type=SELF`), so this tab has no participant picker. Two fold-ins:
+  (`target_type=SELF`), so this tab has no participant picker. **Since #3564**
+  the same tab embeds `SituationFinder` behind a "Browse the catalog" toggle;
+  choosing a template or challenge card there dispatches the same
+  `set_situation`/`place_challenge` one-click, with an empty challenge target
+  refused server-side rather than client-validated. Two fold-ins:
   `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
   `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
   scale resolved every authored challenge at the bottom rank), and
@@ -2875,7 +2968,10 @@ action consent flow, and a three-mode non-combat round framework.
 
 - **Models:** `Scene` (incl. `running_beat` FK → `stories.Beat`, nullable, #3425 — the beat this
   scene is currently running, set by `RunBeatAction`/cleared by `finish_scene_full`; see
-  stories.md's "Session prep"), `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
+  stories.md's "Session prep"), `SceneClock` (#3567 - an authored countdown on the beat a scene
+  is running: `scene`/`beat` FKs, `size`/`filled`, `closed_at`/`closed_reason`
+  (`SceneClockClosedReason`); one open clock per beat (`UniqueConstraint`); see scenes.md's
+  "Scene clock" and ADR-0264), `SceneParticipation`, `Persona`, `SceneActionRequest`, `SceneActionTarget`,
   `SceneCastPullDeclaration`,
   **Round framework (#1351):** `SceneRound` (room-anchored non-combat round — `room` FKs
   `evennia_extensions.RoomProfile` since #2608, as do `Place.room` and `SpeakerQueue.room`;
@@ -3137,8 +3233,25 @@ action consent flow, and a three-mode non-combat round framework.
 ### Stories
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
-- **Models:** `Story` (incl. `summary` — player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 — see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 — see below)
-- **Session prep + Run Beat (#3425):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat — nested read-write child lists on `BeatSerializer`, including the id-based-diff update path. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: creates a `CombatEncounter`/spawns opponents (ENCOUNTER) or instantiates situations/challenges (SITUATION), and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows + `GMAdjudicationPanel`'s Run Beat tab. See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
+- **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `BeatStagedBattle`/`BeatStagedBattleUnit` (a whole pre-staged battle on an ENCOUNTER beat, O2O + child rows, mutually exclusive with `BeatOpponentLine`, #3569 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
+- **The scenario graph is a beat's body, not a second option engine (#3565):** a `Beat` (SITUATION or TASK kind) points at a `missions.MissionTemplate` via `required_mission`; when that template is `StoryScenario`-owned, the story's Lead GM authored it under the trust ladder rather than staff. `Transition.mode`/`TransitionMode`/`AmbiguousTransitionError` are retired: routing is fully automatic, the lowest `(order, pk)` eligible outbound transition fires, and `services/routing.py`'s `routing_report`/`RoutingReport` (surfaced as `routing_problems` on the episode payloads and `EpisodeDetailSerializer.routing_ambiguous`, #3563) warns the author tree when two transitions could both be eligible at once, or when a beat/stake outcome has no accepting transition. `Beat.predicate_type` defaults to `OUTCOME_TIER` (was `GM_MARKED`) - a beat resolves from its graph, an encounter, a battle, or a decisive check by default; GM-marked is now the exception, authored only for an out-of-band fact a machine grader cannot see. See stories.md's "StoryScenario" section and Missions & Living Grid below.
+- **Session prep + Run Beat (#3425, #3569):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat, or - mutually exclusive with `BeatOpponentLine` - a whole `BeatStagedBattle` (blueprint/region/name/party side + `BeatStagedBattleUnit` lines) on an ENCOUNTER beat, #3569 - nested read-write on `BeatSerializer`, including the id-based-diff update path for the child lists and an omitted-vs-null convention for the single nested `staged_battle`. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: for ENCOUNTER, creates a `CombatEncounter`/spawns opponents, or - when a `BeatStagedBattle` exists - stages a `Battle` from its blueprint instead (`Battle.story_beat=beat`, units spawned by side/place, the running scene's present party enlisted on the declared side, idempotent re-run); for SITUATION, instantiates situations/challenges; and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows (plus an Opponents/Battle toggle for ENCOUNTER, mounting `BattlePrepEditor` in Battle mode) + `GMAdjudicationPanel`'s Run Beat tab ("Start siege" for a staged-battle row, navigates to `/scenes/{battle_scene_id}/battle`). See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
+- **Scene clock (#3567; ADR-0264):** `Beat.clock_size` (0 = no clock) authors a countdown that
+  `RunBeatAction` opens as a `world.scenes.models.SceneClock` (`scenes` app, keyed by beat, one
+  open row per beat) when the beat runs. Filled by two sources - combat round starts
+  (`begin_declaration_phase`, `world.combat.services`; battle rounds never call it, so a staged
+  battle's own rounds don't tick) and the GM `advance_clock` gesture (`AdvanceClockAction`,
+  `actions/definitions/gm_story.py`, telnet `story clock [n]`) - both via `tick_scene_clock`
+  (`world.scenes.clock_services`, the sole writer of `SceneClock` rows: also
+  `start_scene_clock`/`open_clock_for_beat`/`close_open_clock_for_beat`/`close_scene_clocks`). A
+  full clock stamps FILLED and schedules the beat's EXPIRED completion via
+  `transaction.on_commit`, lock-then-checked so a later round-pipeline failure can never roll
+  back a completion players were already told about. `finish_scene_full` closes every clock
+  opened in that scene as SCENE_ENDED (no completion); any other beat completion closes the open
+  clock as COMPLETED. Player-visible on every scene viewer as `SceneDetailSerializer.clock`
+  (`{size, filled}`, no beat/consequence named) rendered by `SceneClockPips.tsx` on the scene
+  header; the GM story rail additionally shows the beat's authored `clock_size` plus an Advance
+  control. See stories.md's "Scene clock" (Run Beat section) and scenes.md's "Scene clock".
 - **Declared-risk badge (#3433):** `SceneDetailSerializer.declared_risk` - the player-visible
   sibling of the GM-gated `running_beat` field, tier string only (`RenownRisk`, never a beat
   id/name). Precedence: `scene.running_beat.risk` → the active `CombatEncounter.story_beat.risk`
@@ -3147,10 +3260,11 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
   scenes.md's "Declared-risk badge" section.
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
+- **`BeatPredicateType.NPC_REGARD_AT_LEAST` (#3570):** a Beat gates on a named NPC's `NpcRegard` for the character, using `Beat.required_npc_sheet` (the NPC, FK → CharacterSheet, SET_NULL) + `required_standing` (shared with the faction predicate above); evaluator `_evaluate_npc_regard_at_least` reads `NpcRegard` from the NPC's primary persona toward the character's primary persona (missing row = 0, never `NPCStanding.affection` or the relationships affection track). Read-side complement to the Stakes Contract Engine's `NPC_FATE` `npc_regard_delta` writer and the structured-consequence `SHIFT_NPC_REGARD` pool effect (below); GROUP/GLOBAL scopes fall through to UNSATISFIED like the faction sibling (neither is in the ANY-member predicate set)
 - **GM↔player visibility contract:** `description`/`consequences` are GM/staff-only; `summary` is player-facing ("The Story So Far"), blanked while node `maturity == PITCH`. Enforced server-side in two places: the three Detail serializers' `to_representation` (via `_gm_text_gate`, default-deny when no request) **and** `serialize_story_log` (per-beat internals gated to privileged roles). No dedicated `pitch` field by design — `description`=GM pitch, `summary`=player recap
-- **Reactivity entry points (Phase 3):** `stories.services.reactivity.on_character_level_changed` / `on_achievement_earned` / `on_condition_applied` / `on_condition_expired` / `on_codex_entry_unlocked` / `on_story_advanced`
-- **Key Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `record_aggregate_contribution`, `get_eligible_transitions`, `resolve_episode` (reconciles ProgressStatus on advance; distinguishes routing-block from authoring frontier), `create_character_progress` / `create_group_progress` / `create_global_progress` (reject UNASSIGNED scope), `services.frontier.resolve_frontier` / `set_progress_status`, `services.maturity.promote_episode_maturity`, `services.dashboards.compute_story_status_line`, `catch_up_character_stories` (called from `Character.at_post_puppet`)
-- **API Endpoints:** `POST /api/episodes/{id}/promote/` (set node maturity; PLOT-gate mirrored in `PromoteEpisodeInputSerializer` → 400 on gate violation), `POST /api/stories/{id}/assign-to-scope/` (lift a story out of UNASSIGNED; sets scope + creates the matching progress record; 400 if already-assigned or scope↔target invariant violated), `GET /api/stories/gm-queue/` + `GET /api/stories/staff-workload/` (now query-bounded with `assertNumQueries` locks; staff-workload per-GM membership is status-agnostic), plus standard ViewSet CRUD and the existing `log/` / `my-active/` / `resolve-episode/` / beat-`mark`/`contribute` / AGM-claim / session-request actions, and append-only `/api/story-notes/`
+- **Reactivity entry points (Phase 3):** `stories.services.reactivity.on_character_level_changed` / `on_achievement_earned` / `on_condition_applied` / `on_condition_expired` / `on_codex_entry_unlocked` / `on_story_advanced`. The general-purpose `on_character_state_changed` also gets called directly (#3570): `world.npc_services.regard.record_npc_regard_event` (after its regard write) and `world.societies.renown.bump_society_reputation`/`bump_organization_reputation` (after a non-zero reputation write), so an `NPC_REGARD_AT_LEAST`/`FACTION_STANDING_AT_LEAST` beat can flip in the same request
+- **Key Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `record_scenario_outcome` (`world.stories.services.beats`; a scenario run's ending on an OUTCOME_TIER beat, #3565, closes #3560), `record_aggregate_contribution`, `get_eligible_transitions` (`services/transitions.py`), `routing_report` / `routing_reports_for_episodes` (`services/routing.py`, authoring-time dead-end + ambiguity report, #3563), `resolve_episode` (reconciles ProgressStatus on advance; distinguishes routing-block from authoring frontier; routing is now fully automatic, no `chosen_transition` input), `create_character_progress` / `create_group_progress` / `create_global_progress` (reject UNASSIGNED scope), `services.frontier.resolve_frontier` / `set_progress_status`, `services.maturity.promote_episode_maturity`, `services.dashboards.compute_story_status_line`, `catch_up_character_stories` (called from `Character.at_post_puppet`), `services.scenarios.create_scenario_for_beat` (#3565, the write side of `POST /api/beats/{id}/scenario/`)
+- **API Endpoints:** `POST /api/episodes/{id}/promote/` (set node maturity; PLOT-gate mirrored in `PromoteEpisodeInputSerializer` → 400 on gate violation), `POST /api/episodes/{id}/resolve/` (fire `resolve_episode`; body `{progress_id?, gm_notes?}` - no `chosen_transition`, #3565, routing is automatic), `POST /api/beats/{id}/scenario/` (GM authors a scenario graph as the beat's body, #3565: creates the `MissionTemplate` + `StoryScenario` row, sets `beat.required_mission`; idempotent), `GET /api/scenes/{id}/scenario/` (#3565, `world.scenes` - the running scenario's node/options for the party, ballots + node for the GM, see stories.md), `POST /api/stories/{id}/assign-to-scope/` (lift a story out of UNASSIGNED; sets scope + creates the matching progress record; 400 if already-assigned or scope↔target invariant violated), `GET /api/stories/gm-queue/` + `GET /api/stories/staff-workload/` (now query-bounded with `assertNumQueries` locks; staff-workload per-GM membership is status-agnostic), plus standard ViewSet CRUD and the existing `log/` / `my-active/` / beat-`mark`/`contribute` / AGM-claim / session-request actions, and append-only `/api/story-notes/`
 - **Authoring/run-control UI:** `StoryAuthorPage` carries the run-control surface — `PromoteMaturityButton` (inline PLOT-gate 400), `ScopeAssignDialog`, GM Notes tab (StoryNote), inline `ProgressStateBanner`, Resolve/Mark run-control, nimble +Beat/+Branch quick-add; `BeatFormDialog` exposes kind/advances/risk (risk staff-gated); forms use "Internal GM Description" / "The Story So Far" labels + episode `resting_conclusion`/`is_ending`
 - **Integrates with:** scenes (episode content), roster (participants), achievements / conditions / codex / classes (predicate evaluation + reactivity hooks fire from their services), narrative (beat completions and episode resolutions emit NarrativeMessages)
 - **Player→GM recruitment loop (#2119):** `GroupStoryRequest` — a covenant officer's open,
@@ -3172,20 +3286,24 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
-### Stakes Contract Engine (#1770 PR1–4)
+### Stakes Contract Engine (#1770 PR1-4; web editor + GM-pick retirement #3561)
 GM-authored, player-visible "what's actually at risk" contract backing a story
 `Beat`'s risk declaration — named stakes with WIN/LOSS/WITHDRAWAL branches, banded
 by designer-tunable calibration rows, priced for the actual party at scene-start
 lock (activation wired at every commit surface, PR4), read by the Legend award,
-resolved per-stake at beat completion (machine grading / GM constrained pick),
-and paying authored win-reward lines through an anti-farming activation gate
-(PR3). ADR-0067.
+resolved per-stake at beat completion (machine grading; a named branch is chosen
+by the completing beat's authored `outcome_key`, never a runtime GM pick - #3561,
+ADR-0259), and paying authored win-reward lines through an anti-farming activation
+gate (PR3). ADR-0067. The full contract is now editable from the story author
+page (`StakesPanel` on the beat, #3561) - see the "Web editor + GM-pick
+retirement" entry below.
 
 - **Models:** `RiskCalibration` (per-tier severity floor/ceiling + `max_fuse_hops`
   chain-rule bound; `reward_floor`/`reward_ceiling` band the WIN reward total —
   PR3, ceiling 0 = unconfigured), `StakeTemplate`
   (menu-first catalog, `min_risk`/`max_risk` band), `Stake` (beat FK
-  `related_name="stakes"`; typed subject FKs + `subject_label`; `player_summary`),
+  `related_name="stakes"`; typed subject FKs incl. `subject_asset` (#3561, →
+  `assets.NPCAsset`) + `subject_label`; `player_summary`),
   `StakeResolution` (stake FK `related_name="resolutions"`; `column`
   WIN/LOSS/WITHDRAWAL; `outcome_key` (#1760 — designer slug naming a branch
   within `column`'s polarity, blank = plain default; unique
@@ -3196,17 +3314,25 @@ and paying authored win-reward lines through an anti-farming activation gate
   `sets_subject_lifecycle` — pillar-12 validated; `machine_match_lifecycle_state`
   (#1760 — generalizes the old NPC-vitals DEAD-only override to the full
   `LifecycleState` ladder; a match wins over the beat-derived column, even
-  crossing WIN/LOSS polarity)), `StakeRewardLine` (PR3;
-  resolution FK `related_name="reward_lines"`; `sink` MONEY/RESONANCE; `amount`
-  per-participant money-equivalent scalar; `resonance` required iff
-  sink=RESONANCE), `StakeContractActivation`
+  crossing WIN/LOSS polarity); `npc_regard_delta` (#2039 writer, exposed on the
+  serializer #3561) and `transitions_subject_asset` (#3561 writer, `ASSET`-only,
+  transitions `subject_asset` to COMPROMISED/LOST/DISMISSED)), `StakeRewardLine`
+  (PR3; ITEM/CLUE/CODEX sinks added #3566; resolution FK
+  `related_name="reward_lines"`; `sink` MONEY/RESONANCE/ITEM/CLUE/CODEX;
+  `amount` per-participant money-equivalent scalar (pinned to
+  `item_template.value` for ITEM); `resonance`/`item_template` (PROTECT)/
+  `clue` (PROTECT)/`codex_entry` (PROTECT) each required iff `sink` matches),
+  `StakeContractActivation`
   (lock + audit row; partial-unique open-per-beat; `effective_risk`),
-  `StakeOutcome` (PR2 per-stake resolution audit/routing row; exactly one per stake);
+  `StakeOutcome` (PR2 per-stake resolution audit/routing row; exactly one per
+  stake; `method` is always MACHINE since #3561 retired `GM_PICK`);
   `Beat.target_level`; `TransitionRequiredOutcome.stake` +
-  `required_stake_column` (PR2 stake-level transition routing).
-- **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind`,
-  `StakeResolutionColumn`, `StakeOutcomeMethod` (MACHINE/GM_PICK),
-  `StakeRewardSink` (MONEY/RESONANCE — no Legend sink; Legend stays automatic),
+  `required_stake_column` (PR2 stake-level transition routing, authorable via
+  `TransitionFormDialog`'s stake-column routing mode, #3561).
+- **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind` (incl.
+  `ASSET`, #3561), `StakeResolutionColumn`, `StakeOutcomeMethod` (`MACHINE` only
+  since #3561 retired `GM_PICK`), `StakeRewardSink` (MONEY/RESONANCE/ITEM/CLUE/
+  CODEX, #3566 added the last three - no Legend sink; Legend stays automatic),
   `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`.
 - **Key Services (`world.stories.services.stakes`):** `compute_effective_risk`
   (party-level-vs-target-level curve, `LEVELS_PER_TIER=2`, bounded +1 under-level
@@ -3216,19 +3342,31 @@ and paying authored win-reward lines through an anti-farming activation gate
   `activate_stakes_contract` (idempotent lock; unready → effective `NONE`),
   `effective_risk_for_beat` (read seam consumed by `_legend_award`),
   `resolve_open_activation` (wired into the beat-completion tail).
-- **Key Services (`world.stories.services.stake_resolution`, PR2):**
-  `resolve_stakes_for_completion` (completion-tail machine grading; NPC-vitals
-  DEAD → LOSS override; withdrawal branch firing; idempotent audit rows),
-  `resolve_stake_by_gm_pick` (constrained pick by `(column, outcome_key)` pair,
-  #1760; `POST /api/stakes/{id}/resolve/`),
+- **Key Services (`world.stories.services.stake_resolution`, PR2; branch
+  selection reworked #3561):** `resolve_stakes_for_completion` (completion-tail
+  machine grading; NPC-vitals DEAD → LOSS override; `outcome_key`-matched named
+  branch selection, #3561; withdrawal and revoked-consent branch firing both
+  record the empty outcome when unauthored, Decision 2 #3561; idempotent audit
+  rows), `_branch_for_column` (#3561 - the shared branch picker: lifecycle
+  match, then `outcome_key` match, then plain default, then first authored),
   `stake_resolution_payload_problems` + `sheet_is_player_held` (pillar-12
-  no-fiat validation), `_apply_stake_rewards` (PR3 — WIN payout per line ×
-  participant, gated on a ready effective-risk-bearing activation; sinks:
-  `currency.deliver_mission_money`, `magic.grant_resonance` with
-  `GainSource.STAKE_REWARD`; deliberately NOT the missions deed router).
-  Cross-app writers: `items.forfeit_item_instance`
+  no-fiat validation; #3561 added the `transitions_subject_asset`-requires-ASSET
+  check), `_apply_stake_rewards` (PR3 - WIN payout per line x
+  participant, gated on a ready effective-risk-bearing activation; each
+  line x participant delivery individually try/excepted since #3566 so one
+  failure doesn't stop the rest; sinks: `currency.deliver_mission_money`,
+  `magic.grant_resonance` with `GainSource.STAKE_REWARD`,
+  `items.narrative_grants.grant_touchstone_item_to_character` (#3566),
+  `clues.grant_clue_target` (#3566), `codex.grant_codex_entry` (#3566);
+  deliberately NOT the missions deed router). CLUE/CODEX delivery
+  (`_deliver_knowledge_reward_line`) skips an NPC participant with no
+  `roster_entry_or_none` while MONEY/RESONANCE/ITEM still pay that
+  participant (#3566).
+  `resolve_stake_by_gm_pick` and `POST /api/stakes/{id}/resolve/` are removed
+  (#3561, ADR-0259). Cross-app writers: `items.forfeit_item_instance`
   (soft-forfeit), `npc_services.adjust_npc_affection`,
-  `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
+  `roster.set_lifecycle_state`, `assets.transition_asset_status` (#3561);
+  `vitals._mark_dead` now propagates
   `LifecycleState.DEAD` to the roster lifecycle.
 - **Opt-in surfaces (PR4):** `check_stake_boundaries`
   (`world.stories.services.boundaries` — real hard-line/treasured-subject
@@ -3236,7 +3374,14 @@ and paying authored win-reward lines through an anti-farming activation gate
   `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
   staff-only, ADR-0033); `stakes_summary_for_beat` +
   `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
-  never serialized); `GET /api/beats/{id}/stakes-summary/`; `combat_stakes` on
+  never serialized; `StakeSummarySerializer.reward_kinds`, #3566, is the one
+  exception in spirit only - sorted/deduped payout *category* labels
+  (`REWARD_KIND_BY_SINK`: money/resonance/item/knowledge, CLUE and CODEX both
+  read as "knowledge"), never an amount or a target); `GET
+  /api/beats/{id}/stakes-summary/`; `GET
+  /api/scenes/{id}/stakes-summary/` (#3561 - the scene-scoped sibling, since a
+  player never receives the running beat's id from any scene payload; delegates
+  to the same builder); `combat_stakes` on
   both consent-prompt serializers (`world.scenes.action_serializers`) rendered
   by `ConsentPrompt`; activation wired at `create_pvp_duel`/`create_lethal_duel`/
   `seed_or_feed_encounter_from_cast` (via `combat.beat_wiring.
@@ -3267,6 +3412,23 @@ and paying authored win-reward lines through an anti-farming activation gate
   beat action (engagement-armed stakes), not at assignment time.
   `BeatViewSet.assign_mission` action (`POST /api/beats/{id}/assign-mission/`,
   `CanAssignMissionToBeat` — Lead GM or staff). ADR-0104.
+- **Web editor + GM-pick retirement (#3561, ADR-0259):** `StakesPanel` mounted
+  under the beat in `StoryAuthorTree` (collapsible) and `BeatFormDialog` (edit
+  mode) - `StakeRow` (template, `SubjectRefFields` subject picker with a new
+  ASSET case), `BranchColumns` (WIN/LOSS/WITHDRAWAL, per-subject-kind writer
+  fields), `RewardLinesEditor`, `ReadinessStrip`. Every write goes through the
+  existing CRUD viewsets - no new write endpoint. `TransitionFormDialog`'s
+  `AddRoutingRow` gained a stake-column routing mode (writes
+  `TransitionRequiredOutcome.stake`/`required_stake_column`). `GMStoryRail`
+  gained a Stakes section (`rail_services._serialize_stakes`/
+  `_serialize_activation`) showing each stake's outcome once fired plus the
+  activation strip. `SceneHeader`'s declared-risk badge is now a toggle opening
+  a "What is wagered" panel reading the scene stakes-summary endpoint above.
+  `NPCAssetViewSet`'s search (`?name=`) backs the ASSET subject picker, widened
+  for a non-staff GM to their own assets plus assets promoted within a story
+  they lead (never every player's assets). Readiness gained two problems for
+  named-branch authoring gaps: a column with a named branch but no default,
+  and a named key the beat's scenario doesn't declare.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
@@ -3275,8 +3437,10 @@ and paying authored win-reward lines through an anti-farming activation gate
   (`_legend_award` scaling), checks (`Consequence.character_loss` reachability
   test; branch pools via the shared `_fire_pool_with_context`), combat
   (FLED/ABANDONED withdrawal wire + PR4 activation seams), items /
-  npc_services / roster (writers), currency / magic (PR3 win-reward sinks),
-  scenes / missions / actions (PR4 opt-in surfaces)
+  npc_services / roster / assets (writers - `assets.transition_asset_status`,
+  #3561), currency / magic (PR3 win-reward sinks),
+  scenes / missions / actions (PR4 opt-in surfaces; #3561 adds the GM rail
+  Stakes section + scene stakes-summary)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
 
@@ -3901,7 +4065,12 @@ register as additional kinds.
   cites none. `is_bond_story_vital(regard)` derives "vital to your story" status
   from `|value| >= RegardEventConfig.story_vital_threshold` — no stored flag,
   matching `NpcRegard`'s "no separate enemy flag" design; symmetric for hostile
-  and infatuated (toxic-bond-family) valence alike.
+  and infatuated (toxic-bond-family) valence alike. `record_npc_regard_event`
+  also calls `stories.services.reactivity.on_character_state_changed(target.character_sheet)`
+  inside its own transaction, after the relationships-track mirror call, so a
+  `BeatPredicateType.NPC_REGARD_AT_LEAST` beat gated on this NPC's regard can
+  flip in the same request instead of waiting for the character's next login
+  (#3570)
   - **Four authoring paths:** (1) combat auto-hooks in
     `world/combat/services.py`'s `_resolve_pc_action`/`_resolve_npc_action_on_target`
     fire on a genuine defeat/critical-hit against a persona-backed opponent; (2) the
@@ -4090,16 +4259,30 @@ reshape the world around them. No engine arbitration: the player picks, pick+che
 state is node position + snapshots + already-applied consequences, never a scratch blob.
 
 - **Models:** `MissionTemplate` (authored graph: entry node + availability metadata — level
-  band, risk tier, draw weight, visibility) → `MissionNode` → `MissionOption` (`BRANCH` /
-  `CHECK` / `EXTERNAL_ACT`) → `MissionOptionRoute` (outcome-tier-keyed, optionally weighted
-  `Candidate`s) → `MissionOptionRouteReward` (`DeedRewardSink`: MONEY / LEGEND_POINTS /
+  band, risk tier, draw weight, visibility) → `MissionNode` (`track_successes`/
+  `track_failures`/`track_success_target`/`track_failure_target`/`track_success_beat_outcome`/
+  `track_failure_beat_outcome`, #3568 - a progress-track node: 0/0 = not a track, both
+  thresholds travel together; `is_track` property reads `track_successes > 0`) →
+  `MissionOption` (`OptionKind`: `BRANCH` / `CHECK` / `EXTERNAL_ACT` / `ENCOUNTER` (#3565) /
+  `CONTEST` (#3568 - a CHECK whose difficulty adds `level_opposition` for the option's
+  `opposition_sheet` at `effective_combat_level`, checked with `opposition_check_type`; the
+  NPC never rolls, tiers and routes are a CHECK's)) → `MissionOptionRoute`
+  (outcome-tier-keyed, optionally weighted `Candidate`s; `beat_outcome` (SUCCESS/FAILURE,
+  blank), meaningful only on a terminal route, #3565 - a terminal route can declare the
+  linked story beat FAILURE even when the party reached an ending, so walking away isn't
+  silently a win) → `MissionOptionRouteReward` (`DeedRewardSink`: MONEY / LEGEND_POINTS /
   RESONANCE / RUMOR / CRIME_WATCH / BEAT / ITEM / FOLLOW_ON_SUMMONS / PROJECT).
   `MissionInstance` (the live run — `current_node`, participant set, status),
   `MissionParticipant`, `MissionDeedRecord` (+ child `MissionDeedRewardLine` rows, no dict
-  payloads), `MissionRiskAcknowledgement`, `MissionRunTale` (#2047 player-authored epilogue),
+  payloads), `MissionTrackProgress` (#3568 - per-run `successes`/`failures` counter for a
+  track node, one row per (instance, node); `enter_node` resets it to 0/0 on every entry,
+  matching `MissionNodeSnapshot`'s per-visit semantics; play state, resettable),
+  `MissionRiskAcknowledgement`, `MissionRunTale` (#2047 player-authored epilogue),
   `MissionGiver` (`GiverKind`: `ROOM_TRIGGER` / `ENVIRONMENTAL_DETAIL` / `BOARD` — a Notice
   Board), `MissionAssistPattern` (support-move density catalog), `MissionInvite`/
-  `MissionGroupBallot` (co-op).
+  `MissionGroupBallot` (co-op), `MissionOption.encounter_risk_level` (`RiskLevel`, ENCOUNTER
+  options only, #3565), `MissionOptionOpponentLine` (the `BeatOpponentLine` shape keyed on
+  an ENCOUNTER option instead of a beat, #3565).
 - **External-Act Beat (#1035, ADR-0112):** `OptionKind.EXTERNAL_ACT` +
   `MissionOption.required_act` (`ExternalAct`: `TECHNIQUE_CAST` / `THREAD_WOVEN` /
   `COVENANT_SWORN`) — an option presented like any other but never pickable; it resolves when
@@ -4109,8 +4292,104 @@ state is node position + snapshots + already-applied consequences, never a scrat
   (`THREAD_WOVEN`/`COVENANT_SWORN`) also fast-forward at `enter_node`; `TECHNIQUE_CAST` never
   does. Powers the seeded Tutorial Chain (`world.seeds.game_content.tutorial`, `"tutorial"`
   seed cluster) — seven templates walking a new character through the level-1 loops.
-- **Key services:** `services/resolution.py` (`resolve_option`, `enter_node`),
-  `services/play.py` (journal/beat presentation + `abandon_mission`), `services/report.py`
+- **Story beats run on the scenario graph, GM-owned scenarios (#3565):** `StoryScenario`
+  (`world.stories`) links a `MissionTemplate` to a story with no reverse FK from missions
+  (ADR-0010) - ownership reads through `template.story_scenario.story`. A story-owned
+  template is created RESTRICTED with an empty `availability_rule` and `base_weight=0`, and
+  is excluded from `services/boards.py`/`services/opportunities.py`'s querysets by
+  `story_scenario__isnull=True`, so a GM's scenario never becomes a public quest offer.
+  `IsStaffOrScenarioOwner` (`world.missions.permissions`) opens `MissionTemplateViewSet` /
+  `MissionNodeViewSet` / `MissionOptionViewSet` / `MissionOptionRouteViewSet` /
+  `MissionOptionRouteCandidateViewSet` / `MissionOptionRouteRewardViewSet` /
+  `MissionCategoryViewSet` (read) / `PredicateLeafCatalogViewSet` (read) to a Lead GM over
+  their own story's scenarios, staff unrestricted; `MissionGiverViewSet` and
+  `MissionInstanceViewSet` stay `IsAdminUser`. Read scope: `scenario_scope_q` (OPEN templates
+  within the caller's risk cap, OR a `StoryScenario` their table leads); write scope:
+  `user_leads_template`. `max_risk_tier_for` caps a non-staff author's writes at the
+  `RiskLevel`↔`RenownRisk` mapping of their `GMLevelCap.max_beat_risk`
+  (`world.gm.services.gm_max_risk`, moved off `world.stories.serializers._gm_max_risk` so
+  neither app imports the other for it). Template creation is staff-only except through
+  `POST /api/beats/{id}/scenario/` (`world.stories.services.scenarios.create_scenario_for_beat`)
+  - a GM cannot create a bare `MissionTemplate` and cannot take ownership of a catalog one.
+  Frontend: `MissionCanvasPage`/`NodePage`/`OptionPage` (unchanged components) mount a second
+  time under `/stories/scenarios/:id/canvas|nodes/:nodeId|nodes/:nodeId/options/:optionId`
+  behind `GMRoute` (`account.is_gm || account.is_staff`), alongside the staff-only
+  `/staff/missions/...` mount; `studioPaths` (`frontend/src/missions/studioPaths.ts`) is the
+  shared link builder both mounts' pages use so the components stay identical between them.
+  `scenario_scope_q`'s OPEN branch also requires `risk_tier__gte=1` (#3562) - `risk_tier=0` is
+  an unset sentinel, never a living tier, and without the floor it slipped into scope under any
+  positive ceiling (`0 <= max_risk_tier_for(user)` for any GM with a profile).
+  `BeatSerializer.validate` (`world.stories.serializers`) reuses `scenario_scope_q` too: a
+  non-staff GM's `required_mission` write is rejected (`{"required_mission": "..."}`, 400)
+  unless the template is in that same scope - see `docs/systems/stakes.md`'s API table for the
+  sibling GM readiness endpoint this task also added.
+- **ENCOUNTER option: objective-first (#3565, ADR-0258):** picking (or a group vote landing
+  on) an ENCOUNTER option creates a `CombatEncounter` in the scene via the same service
+  `RunBeatAction._run_encounter_beat` uses, spawns the option's authored
+  `MissionOptionOpponentLine` roster (`world.combat.encounter_prep.spawn_opponent_lines`),
+  pauses the run (`MissionInstance.is_paused`), and stamps the pending
+  `MissionDeedRecord` on `CombatEncounter.scenario_deed` (SET_NULL) - never
+  `story_beat`. `start_encounter_for_option`/`complete_encounter_for_option`
+  (`world.missions.services.encounter_option`) mint the deed+fight and, on
+  `ENCOUNTER_COMPLETED`, classify the encounter's (outcome, risk_level) via
+  `classify_battle_outcome` + `EncounterOutcomeMapping` into a `CheckOutcome` tier and route
+  it through `resolution._route_graded_outcome` exactly like a rolled CHECK. FLED and
+  ABANDONED are tiers like any other here - the GM authors their routes, required content on
+  the admin sentinel (#3444) alongside #3559's rows. `world.combat.beat_wiring
+  .encounter_completed_beat_handler` branches on `encounter.scenario_deed_id` first: a
+  scenario ENCOUNTER never touches the linked story beat, only the graph's eventual terminal
+  does (a fight is incidental to the objective, never grades the beat by itself).
+- **CONTEST option and track nodes - multi-stage scenes on the scenario graph, not a second
+  engine (#3568, ADR-0265):** `OptionKind.CONTEST` resolves inside `resolve_option` exactly
+  like an AUTHORED CHECK, except the target difficulty is `instance.template.risk_tier +
+  _contest_opposition(option)`, where `_contest_opposition` adds
+  `level_opposition(option.opposition_check_type, level=effective_combat_level
+  (option.opposition_sheet), character=option.opposition_sheet.character)` - the opposition
+  is an authored `CharacterSheet` (usually an NPC's), never a second roller; its passive level
+  term is the only cost. `MissionOption.clean()`'s `_contest_errors` requires AUTHORED source,
+  both check types, `opposition_sheet`, and forbids `branch_target` (a CONTEST is always a
+  dice resolution, like a CHECK). A **track node** is a `MissionNode` with both
+  `track_successes`/`track_failures` set (`is_track`): its CHECK/CONTEST options' routes may
+  not set `target_node`/`is_random_set` (`MissionOptionRoute.clean()`) - "the track decides."
+  `_route_graded_outcome` still applies the resolving route's per-tier consequence, then (when
+  `node.is_track` and the option is CHECK/CONTEST) hands the graded deed to `_advance_track`
+  instead of routing/terminating; `tier_is_success(outcome)` (`success_level >= 1`) decides
+  which counter on the per-run `MissionTrackProgress` row increments. Reaching
+  `track_successes` routes to `track_success_target` with `track_success_beat_outcome` (default
+  SUCCESS); reaching `track_failures` routes to `track_failure_target` with
+  `track_failure_beat_outcome` (default FAILURE); `_end_track` enters the target node when set,
+  else calls `_finish_terminal(instance, beat_outcome=...)` for a null target. `enter_node`
+  resets a re-entered track's counter to 0/0. `MissionNode.clean()`'s `_validate_track` forbids
+  a track node on `ConflictMode.JOINT` (each attempt would count once per participant, not
+  once for the node) and forbids ENCOUNTER/EXTERNAL_ACT options on a track
+  (`_track_node_kind_errors`) - a track's tier comes only from a CHECK or CONTEST deed.
+  Presentation: `TrackView` (`successes`/`needed`/`failures`/`allowed`, counts only - no
+  opposition sheet, no check type, no difficulty number) on `BeatView.track`/
+  `GroupBeatView.track`, built by `services/play.py`'s `_track_view`; the web `BeatCard`/
+  `GroupBeatCard` render it via the generic `frontend/src/components/ui/pips.tsx` `Pips`
+  component (two rows: successes toward the threshold, failures toward theirs) rather than a
+  bespoke scene-clock widget. `MissionNodeSerializer`/`MissionOptionSerializer`/
+  `MissionOptionRouteSerializer` (`world.missions.serializers`) each gained a `validate()` that
+  builds a probe model instance and calls its `clean()` - DRF's `ModelSerializer` skips
+  `clean()` on `save()`, so without this a bad CONTEST/track row 500'd instead of 400'ing (the
+  fix also closed two pre-existing gaps: `MissionOptionRoute.save()` never called `clean()` at
+  all, and the node/option serializers hadn't mirrored their models' pre-#3568 kind-pairing
+  invariants either).
+- **Key services:** `services/resolution.py` (`resolve_option`, `enter_node` (resets
+  `MissionTrackProgress` on track re-entry, #3568), `tier_is_success` (#3568 - whether a graded
+  `CheckOutcome.success_level >= 1`), `_route_graded_outcome` - shared tier-routing tail for a
+  rolled CHECK, a completed ENCOUNTER (#3565), and a track-node CHECK/CONTEST hand-off to
+  `_advance_track` (#3568), `_advance_track`/`_end_track` (#3568 - count a track deed and route
+  a threshold hit)), `services/run.py` (`start_scenario_for_scene(beat, scene)` - starts or
+  rejoins the beat's scenario for the scene's whole party, #3565), `services/beat.py`
+  (`beat_outcome_for_route`, `on_mission_complete_for_beat(instance, *, route=, option=,
+  beat_outcome=)` - the mission→beat report-back seam, reads the resolving option's key and
+  applies the `beat_outcome` rule before calling `stories.services.beats
+  .record_scenario_outcome`, #3565; the `beat_outcome` keyword (#3568) overrides the derived
+  outcome with a track node's authored terminal outcome - the route's graded tier, when any,
+  still records as `outcome_tier`),
+  `services/encounter_option.py` (`start_encounter_for_option`, `complete_encounter_for_option`,
+  #3565), `services/play.py` (journal/beat presentation + `abandon_mission`), `services/report.py`
   (after-action payout + `ReportStyle`), `services/boards.py` (Notice Board preview-then-take),
   `services/opportunities.py` (here/nearby/your-orgs discovery), `services/multiplayer.py`
   (GROUP_VOTE/JOINT group beats), `services/rewards.py` (deed reward routing).
@@ -4141,6 +4420,11 @@ state is node position + snapshots + already-applied consequences, never a scrat
   T4-T7 set it too for robustness against a non-offer grant (e.g. `staff_assign_mission`).
 - **API:** `/api/missions/journal/` (+ `.../opportunities/`, `.../{id}/report/`,
   `.../{id}/tale/`, `.../{id}/invite/`, group-pick/vote/beat), `/api/missions/boards/<pk>/take/`.
+  Authoring viewsets (`/api/missions/templates/`, `/api/missions/nodes/`,
+  `/api/missions/options/`, `/api/missions/routes/`, ... - `world.missions.urls`) are
+  `IsStaffOrScenarioOwner`-gated (#3565, see above), not `IsAdminUser` any more;
+  `POST /api/beats/{id}/scenario/` (stories app) and `GET /api/scenes/{id}/scenario/`
+  (scenes app) are the story-side authoring and play seams - see stories.md.
   `.../{id}/report/` request/response are typed (`MissionReportRequestSerializer`/
   `MissionReportResultSerializer`, #3040 — was raw dict access). The web Journal
   (`frontend/src/missions/pages/JournalPage.tsx`) surfaces a RESOLVED entry under its own
@@ -4895,7 +5179,12 @@ ADR-0091.
   Offer is hidden when no active asset has `uncollected_pool > 0`
   (`_asset_has_collectable_income` in `world.npc_services.services`).
 - **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
-  at `/api/assets/`, scoped to the requesting user's own promoted assets.
+  at `/api/assets/`, scoped by default to the requesting user's own promoted
+  assets. **Widened for a non-staff GM (#3561):** own assets plus assets
+  promoted by a persona whose character sheet participates in a story that GM
+  leads (staff see every asset) - backs the stakes editor's ASSET subject
+  picker; `NPCAssetFilter`'s `name` filter (`icontains` on the promoted
+  persona's name) is the search field. Never every player's assets.
 - **Source:** `src/world/assets/`
 
 Deferred follow-ups: distinction-granted starting assets (`needs-design`),
@@ -6418,11 +6707,12 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter` (`story_beat` FK → `stories.Beat`,
-  nullable, #1760 — when set, `encounter_completed_beat_handler` resolves
-  ONLY this one beat with this encounter's graded outcome instead of every
-  UNSATISFIED `OUTCOME_TIER` beat linked to the scene; fixes multiple beats
-  sharing a scene all getting stamped with the same encounter's outcome;
-  unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
+  nullable, #1760, #3559 - `beat_for_scene_conclusion` picks at most ONE beat
+  an encounter may grade: this explicit `story_beat` when it's still
+  UNSATISFIED `OUTCOME_TIER`, else the scene's `running_beat` when that is
+  itself the objective (`kind=ENCOUNTER`); the old find-every-linked-beat
+  scan is gone - an unrouted encounter with no running beat grades nothing),
+  `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR / CHARGE /
   JOUST (#1843, see "Mounted combat" below); plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
@@ -6695,7 +6985,18 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
-    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060. **Consented upkeep
+    (#3573):** unaffordable upkeep on an instance with `ConditionInstance.soulfray_consented`
+    debits into deficit (via `_debit_ally_paid_upkeep`/`_pay_upkeep`) instead of lapsing the
+    condition, and accrues Soulfray; a deficit fire narrates "bleeds soul to keep the ward on
+    {bearer}". Both here and in interpose, lethality is `encounter.is_lethal` (already a
+    live combat encounter by construction). Same consent branch structure applies to a
+    Barrier/other reactive-condition fire (`_try_spend_reactive`, `world/magic/services/
+    effect_handlers.py`) - since that seam can fire on a ward held outside a combat
+    encounter, it instead reads `active_combat_engagement_for(payer)` (extracted from
+    `ParticipantSerializer._combat_engagement`, #3573) for the character's live COMBAT
+    `CharacterEngagement`, falling back to lethal when None. See ADR-0255 (amends
+    ADR-0118).
   - `is_untargetable(target: ObjectDB) -> bool` (`world/conditions/services.py`) — returns
     True when the target has an active `ConditionInstance` whose
     `ConditionCategory.grants_intangibility` is True; used by NPC targeting + PC AoE
@@ -6760,6 +7061,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `ConditionInstance.absorb_remaining` (int, nullable) — remaining absorption buffer for
     the Aegis Field (force-field) handler; seeded by `init_absorb_buffer` on
     `CONDITION_APPLIED`.
+  - `ConditionInstance.soulfray_consented` (bool, default False, #3573) - the caster
+    consented at cast time to keep this condition's reactive cost/upkeep firing past zero
+    anima at the price of Soulfray; stamped by `_create_instance_from_context` from both
+    `apply_technique_conditions` and `apply_signature_bonus_conditions`, never changes
+    after creation. Read by `_try_spend_reactive` and `drain_reactive_upkeep`.
 - **Key Services (`world/combat/services.py`):**
   - `resolve_round(encounter)` — full round orchestrator: passives → refresh triggers →
     interpose challenges → focused actions → post-passes (challenges, clashes, bleed-out)
@@ -6776,7 +7082,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `redirect_opponent_target`/`redirect_object_target` (mutually exclusive, both
     `None` = "away") declare a REDIRECT-flavor technique's saved-damage destination
     at declaration time (ADR-0032/0122), validated by `_validate_redirect_declaration`
-    — see combat `AGENT_GLOSSARY.md`'s Redirect entry.
+    - see combat `AGENT_GLOSSARY.md`'s Redirect entry. **Soulfray consent (#3573):**
+    a keyword-only `confirm_soulfray_risk` (bool, default False) is captured at
+    declaration time, since a reaction fires inside someone else's resolution and
+    can't stop to prompt - stored on `CombatRoundAction.confirm_soulfray_risk` and
+    read by `_try_technique_interpose`. Telnet: a trailing `soulfray` keyword on
+    `combat interpose ...` (`commands/combat_maneuvers.py`) sets it. See ADR-0255
+    (amends ADR-0118).
   - `_try_interpose(participant, pre_payload)` — fires at `DAMAGE_PRE_APPLY` seam; finds
     an armed interpose challenge naming *participant* (or "any ally") and dispatches it
     via `_dispatch_interpose_action`
@@ -6801,15 +7113,21 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     inventing an action outside `get_available_actions`'s output (ADR-0032).
   - `_try_technique_interpose(action, interposer, protected, pre_payload, *, extra_modifiers=0)`
     (#2207) — resolves a technique-guardian's declared protective reaction. Affordability
-    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`;
-    unaffordable → fizzle, no roll/no cost); rolls the guardian's own cast check
+    first (`ConditionTemplate.reactive_anima_cost` via `protective_condition_and_flavor`,
+    gated by `_guardian_can_fire_technique_interpose`: affordable fires unconditionally;
+    unaffordable fires only when `action.confirm_soulfray_risk` was set at declaration
+    (#3573) - no pool at all still fizzles regardless); rolls the guardian's own cast check
     (`resolve_cast_check_type`, None-guarded — an unprovisioned caster fizzles the same way)
     against the mundane Interpose challenge's severity; debits anima (not fatigue) on any
-    non-fizzle fire; grades via the SAME `_grade_interpose_damage` the mundane path uses
-    (SHIELD divisor included). A clean `blink`-flavored block relocates the ward to the
-    guardian's own current position (`force_move_to_position`) — a stand-in for #2206's
-    `CombatRoundAction.cast_destination`, preferred once that field lands. See ADR-0118
-    for why this rolls outside `use_technique`. **`redirect`-flavored resolution
+    non-fizzle fire via `_settle_technique_interpose_cost` (#3573) - `deduct_anima(lethal=
+    encounter.is_lethal)` runs the guardian into deficit when consented, and a consented
+    fire also accrues Soulfray through `world.magic.services.soulfray.accumulate_soulfray`
+    (deficit>0 narrates "tears at their own soul to hold the line over {ally}"); grades via
+    the SAME `_grade_interpose_damage` the mundane path uses (SHIELD divisor included). A
+    clean `blink`-flavored block relocates the ward to the guardian's own current position
+    (`force_move_to_position`) - a stand-in for #2206's `CombatRoundAction.cast_destination`,
+    preferred once that field lands. See ADR-0118 (amended by ADR-0255, #3573) for why this
+    rolls outside `use_technique`. **`redirect`-flavored resolution
     (#2210):** `saved = amount_before - pre_payload.amount` after grading (zero
     redirects nothing); `_resolve_technique_redirect` dispatches the saved amount to
     the declared destination (`_redirect_away` / `_redirect_to_opponent` /
@@ -6908,9 +7226,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Telegraphed enemy wind-ups + reaction economy (#2637, #2639; ADR-0161 — extends
   ADR-0118's pre-armed-policy shape):**
   - `ThreatPoolEntry.windup_rounds` (PositiveSmallInt, default 0) + `windup_telegraph`
-    (CharField, blank → generic fallback "`{opponent} begins something enormous...`" at
-    broadcast time) — authored data on existing threat pools; 0 is today's same-round
-    behavior unchanged.
+    (CharField) — authored data on existing threat pools; 0 is today's same-round behavior
+    unchanged. `_broadcast_windup_telegraph` always names a target (#3572): authored text
+    may use `{opponent}` and `{target}`; if it lacks `{target}`, `WINDUP_TARGET_CLAUSE`
+    (`" It is aimed at {target}."`) is appended; a room-targeting wind-up (no `target`)
+    formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
+    falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
+    bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -6930,6 +7252,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     active-engaged `CharacterCovenantRole` whose role (or that role's `parent_role` — rides
     the same shape as `blend_weight_for`) has the flag; at most one call-out per round per
     encounter. v1 is partially-passive — it picks THAT a wind-up gets called, not WHICH one.
+  - **Client surface (#3572):** `EncounterDetailSerializer.pending_attacks`
+    (`get_pending_attacks`, schema-typed via `PendingAttackSerializer`, the same
+    schema-only idiom as `EngagementLockSerializer`) lists pending `PendingOpponentAttack`
+    rows soonest-landing first: id, opponent_id, opponent_name, target_participant_id,
+    target_name, declared_round, resolves_round, rounds_until_landing, downgrades,
+    called_out, damage_scale (`windup_damage_scale`), cancelled. One query, select_related
+    on opponent/target. `frontend/src/combat/components/PendingAttacks.tsx` renders the
+    rows as the threat strip at the top of `YourTurn` (Guard/Strike prefills) and
+    read-only for observers in `CombatTurnPanel`; telnet bare `combat`
+    (`src/commands/combat_maneuvers.py`) prints the same rows as a `Wind-ups:` block.
   - **Maturation:** `_mature_pending_opponent_attacks` runs in `resolve_round` after the
     encounter flips to RESOLVING but BEFORE the round's `CombatOpponentAction` rows are
     queried, so a matured wind-up's synthesized action (real `CombatOpponentAction`,
@@ -7161,7 +7493,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   technique reveals a destination select (Away / `encounter.opponents` / `encounter.
   volatile_objects`) — dispatches via `useGuardMutation`'s `redirectOpponentTargetId`/
   `redirectObjectTargetId` args (`frontend/src/combat/queries.ts`) and shows a
-  "Guarding" badge once armed.
+  "Guarding" badge once armed. **Soulfray consent + fee (#3573):** when a protective
+  technique is selected, a `guard-soulfray-toggle` checkbox (fee read from
+  `PlayerAction.reactive_anima_cost`, anima from `useCharacterAnima`) lets the
+  guardian consent up front to hold the ward alive past zero anima by drawing on
+  Soulfray - `confirm_soulfray_risk` rides `useGuardMutation`'s `confirmSoulfrayRisk`
+  arg; resets to false when the technique select reverts to mundane. The focused cast
+  card carries the same consent for a ward-bearing technique with no active Soulfray
+  warning (`cast-ward-soulfray-toggle`, bound to the existing `soulfrayAccepted`
+  state) - when a warning IS active, `SoulfrayAcceptGate`'s acceptance alone covers
+  both. The real out-of-combat integration point (party wards) is the standalone
+  cast panel (`ActionPanel.tsx`'s `castableTechniques` list), not the technique-
+  enhancement path: a selected technique's `reactive_anima_cost` (exposed via
+  `CastableTechniqueSerializer`) drives its own `cast-ward-soulfray-toggle`, which
+  sends `soulfray_consented: true` through `castTechnique` - see the
+  `TechniqueCastCreateSerializer.soulfray_consented` note in `docs/systems/magic.md`
+  for the full wire-to-`ConditionInstance.soulfray_consented` path.
 - **Telnet parity (#2207/#2210):** `combat interpose [ally] [with <technique>] [into
   <destination>]` (`CmdCombat._resolve_interpose_args`, `src/commands/
   combat_maneuvers.py`) — all three clauses optional; `with <technique>` splits on
@@ -7345,7 +7692,12 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     `set_battle_side_posture` (#1711), `assign_unit_commander` (#1711),
     `create_fortification` (snapshots `max_integrity` from `Building.fortification_level`
     if a `building` is given, #1713)
-  - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
+  - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`;
+    the first round open also calls `activate_stakes_for_battle` - scoped to
+    `battle.story_beat` alone when it is set and itself a staked, still-UNSATISFIED
+    beat, else falling back to every staked beat sharing `battle.scene`, #3569, so a
+    battle pre-staged onto one beat via session prep never also locks a sibling
+    staked beat that merely shares its scene - see battles.md's "Stakes / Beat Wiring"),
     `declare_battle_action` (requires `technique`; update_or_create; now dispatches 11
     `BattleActionKind` values; scope/command-tier validated for PLACE/SIDE, #1710;
     REPEL/HOLD require scope=PLACE, #1712; BREACH/FORTIFY validate `target_fortification`
@@ -7365,8 +7717,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     applies a drowning/falling hazard consequence; called from resolution on hull
     breach or living-mount defeat)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
-    `conclude_battle` (sets outcome + ends scene; resolves any linked story beat's stakes
-    contract via `resolve_battle_beats`, #1785; runs every registered
+    `conclude_battle` (sets outcome + ends scene; resolves the one story beat this
+    battle grades, if any, via `resolve_battle_beats`, #1785, #3559; runs every registered
     `battles.conclusion_hooks` hook, including win-gated Legend wiring below; still never
     calls `complete_story`),
     `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)
@@ -8443,6 +8795,17 @@ access, no deploy required.
   `EmailAddressAdmin.mark_as_verified`/`mark_as_unverified` in
   `evennia_extensions/admin.py`.
 - **Source:** `src/world/registration/`, `src/evennia_extensions/adapters.py`
+- **Account settings (#3591):** `/profile/account` lets a signed-in player change
+  email and password and manage two-factor authentication (2FA), all through
+  `allauth.headless` endpoints (no home-grown credential views). The one
+  first-party field is `PlayerData.block_telnet_login_with_2fa` (opt-in on top of
+  opt-in 2FA, read by `Account.authenticate`, written by
+  `GET`/`PATCH /api/account/security-settings/`); TOTP secrets and recovery-code
+  seeds are encrypted at rest by `MFA_ADAPTER = evennia_extensions.mfa_adapter
+  .ArxMFAAdapter` under `MFA_SECRETS_KEY`, checked at startup and by the
+  `mfa-secrets-key` required-content probe. See ADR-0266 (telnet block is a
+  second opt-in) and ADR-0267 (dedicated encryption key), and registration.md's
+  "Account settings" section for endpoints and runbooks.
 - **Details:** [registration.md](registration.md)
 
 ---

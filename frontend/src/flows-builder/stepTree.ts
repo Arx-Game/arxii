@@ -190,7 +190,11 @@ function checkParamValue(
       );
     }
   }
-  if (paramSpec.choices.length > 0 && !paramSpec.choices.some((choice) => choice === value)) {
+  // Widened rather than cast: `value` is unknown by design, and a non-string can
+  // never be in a string[] of choices, so this reads exactly as the old
+  // some(choice => choice === value) did.
+  const choices: readonly unknown[] = paramSpec.choices;
+  if (choices.length > 0 && !choices.includes(value)) {
     errors.push(
       `Step '${clientId}': parameter '${paramSpec.name}' must be one of ${JSON.stringify(paramSpec.choices)}.`
     );
@@ -225,10 +229,7 @@ function checkStepAgainstSpec(errors: string[], step: ClientStep, spec: StepActi
  * this collects every problem it finds so the editor can surface them all
  * at once.
  */
-export function validateSteps(steps: ClientStep[], specs: Map<string, StepActionSpec>): string[] {
-  const errors: string[] = [];
-  if (steps.length === 0) return errors;
-
+function indexByClientId(steps: ClientStep[], errors: string[]): Map<string, ClientStep> {
   const byId = new Map<string, ClientStep>();
   for (const step of steps) {
     const clientId = step.clientId || '';
@@ -242,7 +243,15 @@ export function validateSteps(steps: ClientStep[], specs: Map<string, StepAction
     }
     byId.set(clientId, step);
   }
+  return byId;
+}
 
+/** Every non-root step must name a parent that exists, and there must be exactly one root. */
+function checkParentage(
+  steps: ClientStep[],
+  byId: Map<string, ClientStep>,
+  errors: string[]
+): void {
   let rootCount = 0;
   for (const step of steps) {
     const parentId = step.parentClientId;
@@ -255,7 +264,15 @@ export function validateSteps(steps: ClientStep[], specs: Map<string, StepAction
   if (rootCount !== 1) {
     errors.push(`Step tree must have exactly one root; found ${rootCount}.`);
   }
+}
 
+/**
+ * Walk each step's parent chain looking for a step it already passed through.
+ *
+ * A chain that hits a missing parent stops silently — `checkParentage` has
+ * already reported that one, and reporting it twice helps nobody.
+ */
+function checkCycles(steps: ClientStep[], byId: Map<string, ClientStep>, errors: string[]): void {
   for (const step of steps) {
     const visited = new Set<string>([step.clientId]);
     let node: ClientStep = step;
@@ -267,11 +284,17 @@ export function validateSteps(steps: ClientStep[], specs: Map<string, StepAction
       }
       visited.add(parentId);
       const parent = byId.get(parentId);
-      if (!parent) break; // already reported by the parent-resolution check above
+      if (!parent) break;
       node = parent;
     }
   }
+}
 
+function checkActions(
+  steps: ClientStep[],
+  specs: Map<string, StepActionSpec>,
+  errors: string[]
+): void {
   for (const step of steps) {
     const spec = specs.get(step.action);
     if (!spec) {
@@ -280,6 +303,23 @@ export function validateSteps(steps: ClientStep[], specs: Map<string, StepAction
     }
     checkStepAgainstSpec(errors, step, spec);
   }
+}
+
+/**
+ * Validate an authored (unsaved) step tree against the catalog, returning
+ * human-readable problems (empty when the tree is save-safe). Unlike the
+ * backend's `validate_step_tree` (which raises on the first violation),
+ * this collects every problem it finds so the editor can surface them all
+ * at once.
+ */
+export function validateSteps(steps: ClientStep[], specs: Map<string, StepActionSpec>): string[] {
+  const errors: string[] = [];
+  if (steps.length === 0) return errors;
+
+  const byId = indexByClientId(steps, errors);
+  checkParentage(steps, byId, errors);
+  checkCycles(steps, byId, errors);
+  checkActions(steps, specs, errors);
 
   return errors;
 }

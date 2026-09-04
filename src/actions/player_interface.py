@@ -563,6 +563,42 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
     return result
 
 
+def _fury_tier_options() -> tuple[FuryTierOption, ...]:
+    """The authored fury ladder, offered alongside every combat declaration."""
+    from world.magic.models import FuryTier  # noqa: PLC0415
+
+    return tuple(
+        FuryTierOption(
+            id=tier.pk,
+            name=tier.name,
+            depth=tier.depth,
+            control_penalty=tier.control_penalty,
+            intensity_bonus=tier.intensity_bonus,
+            berserk_severity=tier.berserk_severity,
+        )
+        for tier in FuryTier.objects.order_by("depth")
+    )
+
+
+def _eligible_fury_anchors(character: ObjectDB, sheet: CharacterSheet) -> tuple[AnchorOption, ...]:
+    """Consented, active relationships whose bond can carry a provocation (#1543)."""
+    from world.magic.services.fury import provocation_cap  # noqa: PLC0415
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    anchors: list[AnchorOption] = []
+    for rel in CharacterRelationship.objects.filter(
+        source=sheet, is_active=True, is_pending=False
+    ).select_related("target", "target__character"):
+        anchor_sheet = rel.target
+        cap = provocation_cap(character, anchor_sheet)
+        if cap < 1:
+            continue
+        anchor_char = anchor_sheet.character
+        name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
+        anchors.append(AnchorOption(id=anchor_sheet.pk, name=name, provocation_cap=cap))
+    return tuple(anchors)
+
+
 def _combat_actions(
     character: ObjectDB,
     ctx: RoundContext | None = _UNSET,  # type: ignore[assignment]
@@ -614,47 +650,23 @@ def _combat_actions(
     # Soulfray + fury declaration context (#1543). One soulfray lookup per
     # character; fury tiers are a small authored catalog; anchors are the
     # caster's consented relationships with a non-zero bond.
-    from world.magic.models import FuryTier  # noqa: PLC0415
     from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
-    from world.magic.services.fury import provocation_cap  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
         position_target_shape,
-        protective_flavor,
+        protective_condition_and_flavor,
     )
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
     grants = list(grants)
     if not grants:
         return []
 
-    fury_tiers = tuple(
-        FuryTierOption(
-            id=t.pk,
-            name=t.name,
-            depth=t.depth,
-            control_penalty=t.control_penalty,
-            intensity_bonus=t.intensity_bonus,
-            berserk_severity=t.berserk_severity,
-        )
-        for t in FuryTier.objects.order_by("depth")
-    )
+    fury_tiers = _fury_tier_options()
     soulfray_warning = get_soulfray_warning(character)
-    anchors: list[AnchorOption] = []
-    for rel in CharacterRelationship.objects.filter(
-        source=sheet, is_active=True, is_pending=False
-    ).select_related("target", "target__character"):
-        anchor_sheet = rel.target
-        cap = provocation_cap(character, anchor_sheet)
-        if cap < 1:
-            continue
-        anchor_char = anchor_sheet.character
-        name = anchor_char.key if anchor_char is not None else str(anchor_sheet)
-        anchors.append(AnchorOption(id=anchor_sheet.pk, name=name, provocation_cap=cap))
-    eligible_fury_anchors = tuple(anchors)
+    eligible_fury_anchors = _eligible_fury_anchors(character, sheet)
 
     result: list[PlayerAction] = []
     for grant in grants:
@@ -669,6 +681,18 @@ def _combat_actions(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,
         )
+        # Guardian-declaration flavor + fee (#2207, #3573): one batched query per
+        # technique (protective_condition_and_flavor's select_related + nested
+        # Prefetch) - this loop is per-technique already (technique_performable
+        # above), so this adds one more per-technique query on the same cadence,
+        # not a new N+1 shape. Both protective_flavor and reactive_anima_cost are
+        # derived from the SAME resolved (ConditionTemplate, flavor) tuple, so
+        # this call replaces the separate protective_flavor(technique) lookup
+        # rather than adding a second query. Flagging for the reviewer per the
+        # task brief rather than silently shipping: if this loop is ever hoisted
+        # to a batched form, this traversal would need batching too.
+        protective = protective_condition_and_flavor(technique)
+        protective_template, protective_flavor = protective or (None, None)
         result.append(
             PlayerAction(
                 backend=ActionBackend.COMBAT,
@@ -678,14 +702,10 @@ def _combat_actions(
                 action_template=template,
                 action_category=technique.action_category,
                 reach=technique.reach,
-                # Guardian-declaration flavor (#2207): one batched query per technique
-                # (protective_condition_and_flavor's select_related + nested Prefetch) —
-                # this loop is per-technique already (technique_performable above), so
-                # this adds one more per-technique query on the same cadence, not a new
-                # N+1 shape. Flagging for the reviewer per the task brief rather than
-                # silently shipping: if this loop is ever hoisted to a batched form,
-                # protective_flavor's traversal would need batching too.
-                protective_flavor=protective_flavor(technique),
+                protective_flavor=protective_flavor,
+                reactive_anima_cost=(
+                    protective_template.reactive_anima_cost if protective_template else None
+                ),
                 position_target_shape=position_target_shape(technique),
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,

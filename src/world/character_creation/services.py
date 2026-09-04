@@ -18,6 +18,7 @@ from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
+from rest_framework import serializers
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
@@ -25,6 +26,7 @@ from world.character_creation.constants import (
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
     CommentType,
+    FamilyPath,
     OriginStoryState,
 )
 from world.character_creation.models import (
@@ -32,6 +34,7 @@ from world.character_creation.models import (
     CharacterOriginSlot,
     OriginTemplate,
     OriginTemplateSlot,
+    OriginTemplateSlotChoice,
 )
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
@@ -49,7 +52,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet, Gender, Profile
-    from world.roster.models import Kinsperson
+    from world.roster.models import Family, Kinsperson
     from world.scenes.models import Persona
     from world.stories.models import Story
 
@@ -129,6 +132,10 @@ def finalize_character(
         raise DraftExpiredError(msg)
 
     require_draft_complete(draft)
+
+    # NAMED-path family must exist before the name is built (#3617): the surname
+    # comes from the family name.
+    _ensure_named_family(draft)
 
     # Build character name
     full_name = _build_character_full_name(draft)
@@ -563,24 +570,47 @@ def _grant_orientation_mission(
     staff_assign_mission(template, character, persona=persona)
 
 
-def _finalize_origin_slots(sheet: CharacterSheet, origin_slots: dict[str, str]) -> str:
-    """Upsert CharacterOriginSlot rows from draft_data and assemble prose (#2478).
+def _finalize_origin_slots(
+    sheet: CharacterSheet,
+    origin_slots: dict[str, str],
+    origin_choices: dict[str, int],
+    visible_slot_ids: set[int],
+) -> str:
+    """Upsert answers (text and choices) from draft_data and assemble prose (#2478, #3617).
 
     Called from ``_apply_sheet_demographics`` when the draft carries
-    ``origin_slots``. Returns the assembled prose for ``Profile.background``.
-    State refresh is deferred to the caller (after ``profile.save()``) so
-    ``refresh_origin_story_state`` sees the final prose value.
+    ``origin_slots`` and/or ``origin_choices``. ``visible_slot_ids`` (from
+    ``CharacterDraft.visible_origin_slot_ids``) excludes slots the resolved
+    family path hides; an answer left over from before a path switch is
+    ignored here, not persisted (#3617 review). Returns the assembled prose for
+    ``Profile.background``. State refresh is deferred to the caller (after
+    ``profile.save()``) so ``refresh_origin_story_state`` sees the final prose value.
     """
-    for slot_id_str, value in origin_slots.items():
+    for slot_id_str in set(origin_slots) | set(origin_choices):
         try:
-            slot = OriginTemplateSlot.objects.get(pk=int(slot_id_str))
-        except (OriginTemplateSlot.DoesNotExist, ValueError, TypeError):
-            logger.warning(
-                "Origin slot id %s not found during finalize; skipping.",
-                slot_id_str,
-            )
+            slot_id = int(slot_id_str)
+        except (ValueError, TypeError):
+            logger.warning("Origin slot id %s not found during finalize; skipping.", slot_id_str)
             continue
-        set_origin_slot(sheet, slot, value)
+        if slot_id not in visible_slot_ids:
+            continue
+        try:
+            slot = OriginTemplateSlot.objects.get(pk=slot_id)
+        except OriginTemplateSlot.DoesNotExist:
+            logger.warning("Origin slot id %s not found during finalize; skipping.", slot_id_str)
+            continue
+        choice = None
+        choice_id = origin_choices.get(slot_id_str)
+        if choice_id is not None:
+            choice = OriginTemplateSlotChoice.objects.filter(pk=choice_id, slot=slot).first()
+            if choice is None:
+                logger.warning(
+                    "Origin choice %s not on slot %s; skipping choice.", choice_id, slot.pk
+                )
+        value = str(origin_slots.get(slot_id_str, "")).strip()
+        if not value and choice is None:
+            continue
+        set_origin_slot(sheet, slot, value, choice=choice)
     return assemble_origin_prose(sheet)
 
 
@@ -600,6 +630,44 @@ def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         sheet.species = draft.selected_species
     if draft.family:
         sheet.family = draft.family
+
+
+def _ensure_named_family(draft: CharacterDraft) -> None:
+    """Create and bind the NAMED-path family before the character name is built (#3617).
+
+    Must run before ``_build_character_full_name`` (which reads ``draft.family``
+    to compose the surname) in both ``finalize_character`` and
+    ``finalize_gm_character``: a NAMED-path draft otherwise finalizes with no
+    family yet on record and the surname silently falls back to the tarot ritual.
+    """
+    if draft.family_id is not None:
+        return
+    if draft.resolve_family_path() != FamilyPath.NAMED:
+        return
+    family = _create_named_family(draft)
+    draft.family = family  # downstream kinship binding also reads draft.family
+    draft.save(update_fields=["family"])
+
+
+def _create_named_family(draft: CharacterDraft) -> Family:
+    """Create the player-named family at approval (#3617): no authority, influence 0."""
+    from world.roster.models import Family  # noqa: PLC0415
+
+    template = draft.selected_origin_template
+    name = str(draft.draft_data.get("new_family_name", "")).strip()
+    existing = Family.objects.filter(name__iexact=name).first()
+    if existing is not None:
+        # The validator rejects collisions; a race between two approvals lands here.
+        return existing
+    return Family.objects.create(
+        name=name,
+        kind=template.named_family_kind,
+        is_playable=True,
+        created_by_cg=True,
+        created_by=draft.account,
+        origin_realm=draft.selected_area.realm if draft.selected_area else None,
+        influence=0,
+    )
 
 
 def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:
@@ -674,24 +742,28 @@ def _ensure_profile(sheet: CharacterSheet) -> Profile:
     return profile
 
 
-def _set_descriptive_text(sheet: CharacterSheet, draft_data: dict) -> str | None:
-    """Apply descriptive/profile text fields from draft_data.
+def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> dict:
+    """Apply descriptive/profile text fields from the draft's draft_data.
 
     additional_desc is appearance text (stays on the sheet); the narrative bio
     lives on true_profile now (#1270). Origin story: assemble prose from
-    structured slots if present (#2478), otherwise fall back to legacy
-    free-text background for backward compat. Returns the origin_slots dict
-    if prose was assembled (so the caller can refresh state), else None.
+    structured slots and/or picked choices (#2478, #3617), filtered to the
+    slots visible on the resolved family path. Returns a truthy dict
+    (whichever of origin_slots/origin_choices was non-empty) when prose
+    was assembled, so the caller can refresh state; else an empty dict.
     """
+    draft_data = draft.draft_data
     if draft_data.get("description"):
         sheet.additional_desc = draft_data["description"]
 
     profile = _ensure_profile(sheet)
-    origin_slots = draft_data.get("origin_slots")
-    if origin_slots:
-        profile.background = _finalize_origin_slots(sheet, origin_slots)
-    elif draft_data.get("background"):
-        profile.background = draft_data["background"]
+    origin_slots = draft_data.get("origin_slots") or {}
+    origin_choices = draft_data.get("origin_choices") or {}
+    if origin_slots or origin_choices:
+        visible_slot_ids = draft.visible_origin_slot_ids()
+        profile.background = _finalize_origin_slots(
+            sheet, origin_slots, origin_choices, visible_slot_ids
+        )
     if draft_data.get("personality"):
         profile.personality = draft_data["personality"]
     if draft_data.get("concept"):
@@ -699,7 +771,7 @@ def _set_descriptive_text(sheet: CharacterSheet, draft_data: dict) -> str | None
     if draft_data.get("quote"):
         profile.quote = draft_data["quote"]
     profile.save()
-    return origin_slots
+    return origin_slots or origin_choices
 
 
 def _set_physical_characteristics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
@@ -727,7 +799,7 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     _set_heritage(sheet, draft)
     _set_origin_realm(sheet, draft)
 
-    origin_slots = _set_descriptive_text(sheet, draft.draft_data)
+    origin_slots = _set_descriptive_text(sheet, draft)
     # Refresh origin-story state now that the assembled prose is persisted (#2478).
     if origin_slots:
         refresh_origin_story_state(sheet)
@@ -2411,6 +2483,10 @@ def finalize_gm_character(
         except StaffMintError as exc:
             raise ValidationError(exc.user_message) from exc
 
+    # NAMED-path family must exist before the name is built (#3617): the surname
+    # comes from the family name.
+    _ensure_named_family(draft)
+
     # Build name — reuse helper (handles tarot surname for orphans, plain
     # first_name otherwise).
     full_name = _build_character_full_name(draft)
@@ -2525,12 +2601,19 @@ def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
 
 
 @transaction.atomic
-def set_origin_slot(sheet: CharacterSheet, slot: OriginTemplateSlot, value: str) -> None:
-    """Upsert a character's slot answer, then refresh state.
+def set_origin_slot(
+    sheet: CharacterSheet,
+    slot: OriginTemplateSlot,
+    value: str,
+    choice: OriginTemplateSlotChoice | None = None,
+) -> None:
+    """Upsert a character's answer (text and/or picked choice), then refresh state.
 
     Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``).
     """
-    CharacterOriginSlot.objects.update_or_create(sheet=sheet, slot=slot, defaults={"value": value})
+    CharacterOriginSlot.objects.update_or_create(
+        sheet=sheet, slot=slot, defaults={"value": value, "choice": choice}
+    )
     refresh_origin_story_state(sheet)
 
 
@@ -2547,7 +2630,9 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     sheet-editor save. Returns empty string when the sheet has no slots
     filled.
     """
-    slots = list(sheet.origin_slots.select_related("slot__template").order_by("slot__sort_order"))
+    slots = list(
+        sheet.origin_slots.select_related("slot__template", "choice").order_by("slot__sort_order")
+    )
     if not slots:
         return ""
 
@@ -2558,6 +2643,80 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
     lines = [template.frame_narrative, ""]
     for row in slots:
         lines.append(row.slot.prompt)
-        lines.append(row.value)
+        answer = row.choice.name if row.choice is not None else ""
+        if row.value:
+            answer = f"{answer}: {row.value}" if answer else row.value
+        lines.append(answer)
         lines.append("")
     return "\n".join(lines).strip()
+
+
+# =============================================================================
+# Upbringing / family-path selection services (#3617)
+# =============================================================================
+
+_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
+
+
+def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> None:
+    """Choose the draft's Upbringing; a change resets everything downstream of it (#3617)."""
+    wrong_beginning = (
+        draft.selected_beginnings_id is None
+        or template.beginning_id != draft.selected_beginnings_id
+    )
+    if wrong_beginning:
+        msg = "Your upbringing does not belong to your beginning"
+        raise serializers.ValidationError(msg)
+    if not template.is_accessible_by(draft.account):
+        msg = "That upbringing is not available to you"
+        raise serializers.ValidationError(msg)
+    if draft.selected_origin_template_id == template.pk:
+        return
+    draft.selected_origin_template = template
+    draft.family_path = ""
+    draft.family = None
+    draft.claimed_kin_slot = None
+    draft.claimed_kin_pool = None
+    for key in _UPBRINGING_DRAFT_KEYS:
+        draft.draft_data.pop(key, None)
+    draft.save()
+
+
+def set_family_path(draft: CharacterDraft, path: str) -> None:
+    """Pick the family path when the Upbringing allows more than one (#3617).
+
+    Switching to a different path invalidates anything anchored to the old
+    one: a claimed/named family and any kin-slot/pool claim, none of which
+    are valid on the new path. Prompts (``origin_slots``/``origin_choices``)
+    survive the switch: a slot whose ``applies_to`` is ANY still applies,
+    and ``_finalize_origin_slots``/``calculate_upbringing_cost`` filter the
+    rest by the resolved path's visible slots. A PATCH to the already-active
+    path is a no-op.
+    """
+    template = draft.selected_origin_template
+    if template is None or path not in template.allowed_family_paths():
+        msg = "Choose how your family fits your upbringing"
+        raise serializers.ValidationError(msg)
+    if draft.family_path == path:
+        return
+    draft.family_path = path
+    draft.family = None
+    draft.claimed_kin_slot = None
+    draft.claimed_kin_pool = None
+    draft.draft_data.pop("new_family_name", None)
+    draft.save(
+        update_fields=[
+            "family_path",
+            "family",
+            "claimed_kin_slot",
+            "claimed_kin_pool",
+            "draft_data",
+        ]
+    )
+
+
+def family_name_is_taken(name: str) -> bool:
+    """Case-insensitive collision with any family or organisation name (#3617)."""
+    from world.societies.houses.creator import family_name_is_taken as _taken  # noqa: PLC0415
+
+    return _taken(name)

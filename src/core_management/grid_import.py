@@ -1349,13 +1349,16 @@ def _upsert_ambient_emit_row(
     fields = _build_ambient_emit_fields(row_data, room_profile, area)
 
     existing = AmbientEmit.objects.filter(key=row_data["key"]).first()
-    if existing is not None and existing.written_by_id is not None:
-        if _ambient_emit_differs(existing, fields, room_profile):
-            result.reports.append(
-                f"ambient emit {row_data['key']!r} is credited and differs from the "
-                "bundle; frozen (resolve via the load-conflict admin)"
-            )
-            return
+    if (
+        existing is not None
+        and existing.written_by_id is not None
+        and _ambient_emit_differs(existing, fields, room_profile)
+    ):
+        result.reports.append(
+            f"ambient emit {row_data['key']!r} is credited and differs from the "
+            "bundle; frozen (resolve via the load-conflict admin)"
+        )
+        return
 
     _, created = AmbientEmit.objects.update_or_create(key=row_data["key"], defaults=fields)
     result.created_ambient_emits += created

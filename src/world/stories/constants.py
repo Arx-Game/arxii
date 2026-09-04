@@ -86,6 +86,7 @@ class BeatPredicateType(models.TextChoices):
     AGGREGATE_THRESHOLD = "aggregate_threshold", "Aggregate threshold reached"
     OUTCOME_TIER = "outcome_tier", "Outcome tier (machine-graded)"
     FACTION_STANDING_AT_LEAST = "faction_standing_at_least", "Faction standing at least"
+    NPC_REGARD_AT_LEAST = "npc_regard_at_least", "NPC regard at least"
 
 
 class StoryMilestoneType(models.TextChoices):
@@ -116,18 +117,12 @@ class BeatOutcome(models.TextChoices):
     SUCCESS = "success", "Success"
     FAILURE = "failure", "Failure"
     EXPIRED = "expired", "Expired"
-    PENDING_GM_REVIEW = "pending_gm_review", "Pending GM review"
 
 
 class BeatVisibility(models.TextChoices):
     HINTED = "hinted", "Hinted"
     SECRET = "secret", "Secret"
     VISIBLE = "visible", "Visible"
-
-
-class TransitionMode(models.TextChoices):
-    AUTO = "auto", "Auto"
-    GM_CHOICE = "gm_choice", "GM Choice"
 
 
 class StoryGMOfferStatus(models.TextChoices):
@@ -214,26 +209,32 @@ class StakeRewardSink(models.TextChoices):
     """Where a StakeRewardLine's payout lands (#1770 PR3 — two-sided contract).
 
     Only sinks with a real, coherent delivery service are offered: MONEY
-    (world.currency.services.deliver_mission_money) and RESONANCE
-    (world.magic.services.resonance.grant_resonance). Legend is deliberately
-    NOT a sink — it stays automatic on top via effective risk (pillar 6).
+    (world.currency.services.deliver_mission_money), RESONANCE
+    (world.magic.services.resonance.grant_resonance), ITEM (mints an
+    ItemInstance off item_template), CLUE (world.clues.services.grant_clue_target
+    via acquire_clue), and CODEX (world.codex.services.grant_codex_entry).
+    Legend is deliberately NOT a sink: it stays automatic on top via
+    effective risk (pillar 6, #3566).
     """
 
     MONEY = "money", "Money"
     RESONANCE = "resonance", "Resonance"
+    ITEM = "item", "Item"
+    CLUE = "clue", "Clue"
+    CODEX = "codex", "Codex Entry"
 
 
 class StakeOutcomeMethod(models.TextChoices):
     """How a StakeOutcome was decided (#1770 PR2).
 
-    MACHINE: graded automatically by the completion tail (beat outcome column,
-    with data-where-it-exists overrides such as NPC vitals DEAD -> LOSS).
-    GM_PICK: a GM chose among the stake's authored columns (constrained pick —
-    never free composition).
+    MACHINE is the only method: every outcome is graded automatically by the
+    completion tail (beat outcome column, with data-where-it-exists overrides
+    such as NPC vitals DEAD -> LOSS). #3561 retired the GM constrained pick;
+    StakeOutcome.resolved_by / gm_notes remain as audit fields from before
+    that removal (see their help_text).
     """
 
     MACHINE = "machine", "Machine"
-    GM_PICK = "gm_pick", "GM pick"
 
 
 # Risk ladder for effective-risk shifts (index order matters).

@@ -131,6 +131,12 @@ export interface PlayerAction {
    */
   protective_flavor?: string | null;
   /**
+   * Flat reactive anima fee of the technique's protective condition (#3573).
+   * null / absent when the technique carries no protective reactive-trigger
+   * handler (mirrors protective_flavor's null case).
+   */
+  reactive_anima_cost?: number | null;
+  /**
    * Cast-time position-targeting shape for this technique (#2206). Hand-typed
    * mirror of the backend `position_target_shape` field (generated api.d.ts
    * was not regenerated for this feature — see Task 5 brief). "none" → no
@@ -492,6 +498,11 @@ export interface CastableTechnique {
    * as `preferred_resonance_id`, or the base form via `use_base_form`.
    */
   forms: TechniqueForm[];
+  /**
+   * Flat reactive anima fee of this technique's protective condition (#3573).
+   * null when the technique carries no protective reactive-trigger handler.
+   */
+  reactive_anima_cost?: number | null;
 }
 
 export interface CastPullRequestBody {
@@ -516,6 +527,13 @@ export interface CastRequestBody {
    * `cast <tech> variant=<resonance>`. Omit for the default form.
    */
   preferred_resonance_id?: number | null;
+  /**
+   * The caster's explicit consent (#3573) to hold a ward-bearing cast's
+   * protective condition alive past zero anima via Soulfray. Only meaningful
+   * when the cast technique's reactive_anima_cost is non-null. Defaults to
+   * unconsented server-side when omitted.
+   */
+  soulfray_consented?: boolean;
 }
 
 /** Immediate-path cast result (EnhancedSceneActionResultSerializer). */

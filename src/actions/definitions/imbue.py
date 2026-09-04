@@ -44,11 +44,8 @@ class ImbueAction(Action):
         from django.db import transaction  # noqa: PLC0415
 
         from world.magic.exceptions import (  # noqa: PLC0415
-            AnchorCapExceeded,
-            InvalidImbueAmount,
             MagicError,
             ProtagonismLockedError,
-            ResonanceInsufficient,
         )
         from world.magic.models import PendingRitualEffect  # noqa: PLC0415
         from world.magic.services.resonance import spend_resonance_for_imbuing  # noqa: PLC0415
@@ -69,7 +66,7 @@ class ImbueAction(Action):
                 ).delete()
         except ProtagonismLockedError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except (AnchorCapExceeded, InvalidImbueAmount, ResonanceInsufficient, MagicError) as exc:
+        except MagicError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
         if result.blocked_by == "CROSSING_REQUIREMENT" and result.blocked_requirement_messages:  # noqa: STRING_LITERAL

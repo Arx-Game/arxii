@@ -43,6 +43,7 @@ from world.scenes.permissions import (
 )
 from world.scenes.rail_serializers import GMStoryRailSerializer
 from world.scenes.rail_services import build_gm_story_rail_payload, viewer_qualifies_for_rail
+from world.scenes.scenario_services import build_scene_scenario_payload
 from world.scenes.scene_admin_services import finish_scene_full
 from world.scenes.serializers import (
     ActivePersonaResultSerializer,
@@ -52,6 +53,7 @@ from world.scenes.serializers import (
     PersonaSerializer,
     SceneDetailSerializer,
     SceneListSerializer,
+    SceneScenarioSerializer,
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
     SetActivePersonaRequestSerializer,
@@ -76,6 +78,7 @@ from world.societies.spread_serializers import (
     SpreadResultSerializer,
     SpreadSpecializationSerializer,
 )
+from world.stories.serializers import StakesSummarySerializer
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -102,7 +105,7 @@ def _build_scene_prefetches() -> list[Prefetch]:
         ),
         Prefetch(
             "dramatic_moment_tags",
-            queryset=DramaticMomentTag.objects.only("character_sheet_id", "scene_id"),
+            queryset=DramaticMomentTag.objects.all(),
             to_attr="cached_scene_drama_tags",
         ),
     ]
@@ -244,6 +247,24 @@ class SceneViewSet(viewsets.ModelViewSet):
             # filters interactions through Interaction.visible_to, so individual poses
             # are gated even where scene-level access is granted.
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
+        elif self.action in ["scenario", "gm_rail", "stakes_summary"]:
+            # #3565 fix round 1 (CRITICAL): these composed reads previously fell
+            # through to the `else` branch's bare IsAuthenticatedOrReadOnly, which has
+            # no has_object_permission -- ANY authenticated account could pull a
+            # PRIVATE/EPHEMERAL scene's running-scenario or story-rail state by id,
+            # even with zero standing on the scene. IsAuthenticated (not
+            # IsAuthenticatedOrReadOnly -- that would let an ANONYMOUS request through
+            # for a PUBLIC scene, which these actions have never allowed; see the
+            # #3565 task-7 report) plus ReadOnlyOrSceneParticipant's object-level
+            # `Scene.is_viewable_by` gives the same private/ephemeral floor `retrieve`
+            # already has: anonymous -> 401 (IsAuthenticated fails first), an
+            # authenticated viewer who cannot see the scene -> 403, a viewer who can
+            # -> through to the action's own further per-viewer gating
+            # (`viewer_qualifies_for_rail` / `build_scene_scenario_payload`'s
+            # per-section checks). `stakes_summary` (#3561) rides the same floor -- a
+            # scene participant may opt in without ever seeing the beat's branch
+            # contents; it needs no *further* per-viewer gating beyond this.
+            permission_classes = [permissions.IsAuthenticated, ReadOnlyOrSceneParticipant]
         else:
             # Default permissions for list, create, spotlight
             permission_classes = self.permission_classes
@@ -408,14 +429,19 @@ class SceneViewSet(viewsets.ModelViewSet):
         """GET /api/scenes/{id}/gm-rail/ (#3434) - the running beat's authored
         material, protected subjects, and room clue placements, gated per-viewer.
 
-        Composed read only -- no writes, no models, no migration. View-level gate
-        (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff`` includes
-        the scene owner and is too broad -- see the #3434 spec's anti-reinvention
-        ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
-        (``viewer_qualifies_for_rail``). Denial is 403 (not 404) -- unlike
-        ``CharacterVitalsView``, the scene itself is already visible through the
-        plain detail endpoint, so this gate is refusing a sub-resource, not hiding
-        the scene's existence.
+        Composed read only -- no writes, no models, no migration. Scene-level gate
+        via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+        ``ReadOnlyOrSceneParticipant`` -- a viewer must be able to see the scene at
+        all (``Scene.is_viewable_by``) before this action's own body runs; this was
+        previously missing (a PRIVATE/EPHEMERAL scene's story rail leaked to any
+        authenticated account, #3565 fix round 1 CRITICAL). On top of that,
+        view-level gate (no reusable permission class fits: ``IsSceneGMOrOwnerOrStaff``
+        includes the scene owner and is too broad -- see the #3434 spec's
+        anti-reinvention ledger): staff, or ``scene.is_gm(user)`` at JUNIOR+ GM trust
+        (``viewer_qualifies_for_rail``). Denial there is 403 (not 404) -- unlike
+        ``CharacterVitalsView``, a viewer who can see the scene at all (the gate
+        above) already knows it exists, so this second gate is refusing a
+        sub-resource, not hiding the scene's existence.
 
         Payload sections are gated further, per-viewer, inside
         ``build_gm_story_rail_payload``: the beat summary for any qualifying
@@ -435,6 +461,72 @@ class SceneViewSet(viewsets.ModelViewSet):
         # is documentation-only (see its module docstring); re-running the payload
         # through it here would double-serialize those already-flat dicts.
         return Response(payload)
+
+    @extend_schema(responses=SceneScenarioSerializer, tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="scenario")
+    def scenario(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/scenes/{id}/scenario/ (#3565) - the mission scenario this scene is
+        currently running, gated per-viewer.
+
+        Composed read only -- no writes, no models, no migration. Scene-level gate
+        via ``get_permissions`` (#3565 fix round 1): ``IsAuthenticated`` +
+        ``ReadOnlyOrSceneParticipant`` -- a viewer must be authenticated AND able to
+        see the scene at all (``Scene.is_viewable_by`` -- public, staff, or a scene
+        participant) before this action's own body ever runs. Past that gate: any
+        such viewer gets 200, ``instance_id`` null when the scene runs no scenario.
+        Sub-sections are gated inside ``build_scene_scenario_payload``: ``group_beat``
+        (the same shape as ``journal/{id}/group-beat/``) only for a viewer playing a
+        participant on the run; ``gm`` (current node, every ballot, the last deed,
+        the running beat's outcome) only for staff or viewers with standing on the
+        running story (``viewer_has_story_standing`` -- the same #3434 leak
+        invariant). A bystander with neither gets both null but still 200.
+        """
+        scene = self.get_object()
+        user = cast(AccountDB, request.user)
+        payload = build_scene_scenario_payload(scene, user)
+        return Response(SceneScenarioSerializer(payload).data)
+
+    @extend_schema(responses=StakesSummarySerializer, tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="stakes-summary")
+    def stakes_summary(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/scenes/{id}/stakes-summary/ (#3561) - what the scene's running beat
+        wagers, for the party's opt-in prompt.
+
+        Composed read only -- no writes, no models, no migration. Scene-level gate via
+        ``get_permissions``: ``IsAuthenticated`` + ``ReadOnlyOrSceneParticipant`` -- the
+        same participant/staff floor ``scenario``/``gm-rail`` use (``Scene.is_viewable_by``).
+
+        Exists because a player never receives the running beat id from any scene
+        payload (``SceneListSerializer``/``SceneDetailSerializer`` deliberately omit
+        ``running_beat`` -- see the #3562 leak rule this preserves): the beat-scoped
+        ``GET /api/beats/{id}/stakes-summary/`` (``BeatViewSet.stakes_summary``) is
+        unreachable to a player who was never handed a beat id, so this resolves
+        ``scene.running_beat`` server-side and delegates to the identical
+        ``stakes_summary_for_beat`` builder -- one payload shape, two entry points.
+        Leaks only ``player_summary``/``severity`` per stake, plus declared/effective
+        risk and readiness (#1770 pillar 9); branch contents (``StakeResolution`` rows)
+        are never included.
+
+        When the scene runs no beat, returns the same shape with ``declared_risk``/
+        ``effective_risk`` null and an empty ``stakes`` list, built by hand rather than
+        through ``StakesSummarySerializer`` (whose ``declared_risk``/``effective_risk``
+        ``CharField``s forbid null) -- there is no beat to build a
+        ``StakesSummarySerializer``-shaped instance from.
+        """
+        from world.stories.serializers import stakes_summary_for_beat  # noqa: PLC0415
+
+        scene = self.get_object()
+        beat = scene.running_beat
+        if beat is None:
+            return Response(
+                {
+                    "declared_risk": None,
+                    "effective_risk": None,
+                    "is_ready": True,
+                    "stakes": [],
+                }
+            )
+        return Response(stakes_summary_for_beat(beat))
 
     @extend_schema(responses=HighlightReelSerializer, tags=["scenes"])
     @action(
@@ -828,7 +920,7 @@ class PersonaViewSet(
         request=SpreadInputSerializer, responses=SpreadResultSerializer, tags=["personas"]
     )
     @action(detail=True, methods=[HTTPMethod.POST])
-    def spread(self, request: Request, pk: int | None = None) -> Response:  # noqa: PLR0911
+    def spread(self, request: Request, pk: int | None = None) -> Response:
         """#745 — Spread a tale: resolve an area 'Spread a Tale' action for this persona."""
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
 

@@ -8,9 +8,18 @@ facts from #1884.
 
 ## Models
 
-- **`Family`** — surname container (noble/commoner/crime, `origin_realm`).
-  Nodes are not family-owned; `Kinsperson.family` is a denorm of the active
-  primary `FamilyMembership`.
+- **`Family`**: surname container (`kind` FK `FamilyKind`, `influence`,
+  `origin_realm`). Nodes are not family-owned; `Kinsperson.family` is a denorm
+  of the active primary `FamilyMembership`.
+- **`FamilyKind`** (#3617): an authored kind of family (Commoner, Noble,
+  Crime, or any kind staff add): rows, not a code list. `styles_as_house` is
+  the one behaviour code reads (`world.societies.houses`). Canonical rows come
+  from migration 0219 in a real deploy; test tiers never replay migration
+  `RunPython`, so callers that need a canonical kind without assuming a
+  migrated database call `world.roster.seeds.ensure_family_kinds()` (tests use
+  `FamilyKindFactory` instead). `Family.influence` (0 = holds no authority; a
+  player-named family is always 0) prices claim-path Upbringing choices; see
+  `docs/systems/family-authoring-recipes.md`.
 - **`Kinsperson`** — a person-node at a definition tier aligned with the NPC
   ladder (`NAME_ONLY → FUNCTIONARY → STANDING → SHEETED → PC`); anchors:
   `sheet` (OneToOne CharacterSheet), `functionary`. Appable-slot fields

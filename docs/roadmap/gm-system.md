@@ -99,8 +99,11 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
 ### Trust and Feedback ✅ (#2000)
 - **`GMProfile.level` is the canonical trust ladder** — see ADR-0097. `GMLevelCap`
   (one row per `GMLevel`, seeded via `seed_default_gm_level_caps`) holds the
-  per-level caps: `max_beat_risk`, `allow_custom_stakes`, `allow_global_scope_authoring`.
-  Staff-tunable in admin, not hardcoded.
+  per-level caps: `max_beat_risk`, `allow_custom_stakes`,
+  `allow_global_scope_authoring`, `auto_clear_regional`, `max_story_areas`,
+  `max_story_rooms_per_area`, `max_story_npcs`, and `allow_item_rewards`
+  (#3566 - may author ITEM-sink `StakeRewardLine`s, seeded `True` for
+  EXPERIENCED and SENIOR only). Staff-tunable in admin, not hardcoded.
 - **Advancement is staff-only and audited** — `world.gm.services.promote_gm` is the
   only path that changes `profile.level` (promotion or demotion); every call writes a
   `GMLevelChange` row (old level, new level, `changed_by`, `reason`). No automatic
@@ -234,6 +237,24 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   (see `docs/systems/INDEX.md`'s "Pool opacity" entry). Frontend: `GMStoryRail`
   (`frontend/src/scenes/components/GMStoryRail.tsx`), a `CombatRail`-pattern sibling
   in `SceneDetailPage`'s right rail.
+- **Scene clock: time pressure inside a session ✅ (#3567, ADR-0264)** - the story-prep
+  system had a beat's *stakes* (risk-declared consequences) but no way to make a
+  session-running GM feel a clock ticking. **Built:** `Beat.clock_size` (authored
+  ticks, 0 = none) opens a `SceneClock` when `RunBeatAction` runs the beat (keyed by
+  beat, so a staged battle's own private scene shares its GM table scene's clock).
+  Two fill sources: every combat round start (`begin_declaration_phase`) ticks it by
+  one - battle rounds never call that function, so a staged battle's own rounds don't
+  tick it - and the GM's `advance_clock` gesture (telnet `story clock [n]`, web the GM
+  story rail's Advance button) spends an explicit tick count; the gesture paces, it
+  never decides the outcome (ADR-0030/ADR-0240). A full clock resolves the beat
+  EXPIRED through the same completion tail deadline expiry uses
+  (`complete_beat_expired`, #3558), scheduled via `transaction.on_commit` and
+  lock-then-checked so a later failure in the same round pipeline can never roll back
+  a completion already told to players (ADR-0264). `RunBeatAction` also refuses a
+  second scene running the same beat (excluding that beat's own staged battle) so a
+  clock never couples two tables. Player-visible on every scene viewer as pips
+  (`SceneClockPips.tsx`, size/filled only - no beat, no consequence); the GM story
+  rail additionally shows the authored size and the Advance control.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
@@ -383,6 +404,21 @@ Delivered this increment:
   a `SituationDifficultyGuide` row per `RenownRisk` tier, seeded idempotently
   by `world.gm.factories.seed_catalog_starter_content`, composed into the
   existing `"gm"` cluster seeder.
+- **Web face (#3564)**: the browse logic moved into one service,
+  `find_situations` (`world/gm/services.py`), behind two faces: telnet's
+  `FindSituationAction` now formats its result instead of searching itself,
+  and a new `GET /api/gm/discovery/?q=&risk=` (`DiscoveryView`,
+  `IsAuthenticated` + `IsGMOrStaff`) serves the web GM panel and the beat
+  form. An empty query is a kind-first cold open (every kind within the
+  caller's breadth, no templates or challenges); telnet's own empty-query
+  listing changed to match, so seeing kinds only at the console is the new
+  behaviour, not a regression. Web: `SituationFinder.tsx`
+  (`frontend/src/gm-adjudication/`) renders kind cards with fits, difficulty
+  guides and advisory pool guidance, plus templates and challenges, behind a
+  "Browse the catalog" toggle in beat prep's staged-templates editor, the
+  scene panel's Situation tab (one-click Stage/Place), and its Call Check tab
+  (band pre-fill from the running beat's risk); `CatalogSuggestionDialog.tsx`
+  dispatches `gm_submit_catalog_suggestion` from the finder.
 
 Deferred (premises verified in the #2127 spec's anti-reinvention pass):
 - Encounter- and mission-type find/browse (separate PR per Decision 1).

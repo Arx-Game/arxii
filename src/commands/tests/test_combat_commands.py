@@ -116,6 +116,24 @@ class CmdDeclareTechniqueTests(TestCase):
             kwargs = cmd.resolve_action_args()
         self.assertEqual(kwargs, {"effort_level": "medium"})
 
+    def test_soulfray_keyword_adds_confirm_soulfray_risk(self) -> None:
+        """'cast Firebolt soulfray' (#3573) reaches kwargs as confirm_soulfray_risk=True."""
+        cmd = _make_cmd("Firebolt soulfray")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertEqual(kwargs, {"effort_level": "medium", "confirm_soulfray_risk": True})
+
+    def test_without_soulfray_keyword_has_no_confirm_soulfray_risk(self) -> None:
+        """A plain cast (no trailing 'soulfray') carries no confirm_soulfray_risk key -
+        CastTechniqueAction.execute's own default (False) then gates on any active
+        Soulfray stage, matching the existing halt-and-prompt telnet behavior."""
+        cmd = _make_cmd("Firebolt")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd.resolve_action_ref()
+            kwargs = cmd.resolve_action_args()
+        self.assertNotIn("confirm_soulfray_risk", kwargs)
+
     def test_ambiguous_opponent_name_raises(self) -> None:
         """Two opponents with the same name must raise CommandError (combat path)."""
         cmd = _make_cmd("Firebolt at Mook")
@@ -476,6 +494,47 @@ class CmdDeclareTechniqueKeywordOrderTests(TestCase):
             cmd._parse_args()
         self.assertTrue(cmd._secondary)
         self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+        self.assertEqual(cmd._target_name, "Aria")
+
+    def test_soulfray_alone(self) -> None:
+        """'cast Firebolt soulfray' (#3573) parses _confirm_soulfray=True, others False."""
+        cmd = self._parse("Firebolt soulfray")
+        self.assertTrue(cmd._confirm_soulfray)
+        self.assertFalse(cmd._secondary)
+        self.assertFalse(cmd._use_base_form)
+        self.assertFalse(cmd._cast_openly)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_soulfray_before_base(self) -> None:
+        """'cast Firebolt soulfray base' recognises both regardless of order."""
+        cmd = self._parse("Firebolt soulfray base")
+        self.assertTrue(cmd._confirm_soulfray)
+        self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_base_before_soulfray(self) -> None:
+        """'cast Firebolt base soulfray' recognises both regardless of order."""
+        cmd = self._parse("Firebolt base soulfray")
+        self.assertTrue(cmd._confirm_soulfray)
+        self.assertTrue(cmd._use_base_form)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_all_four_trailing_keywords_together(self) -> None:
+        """All four trailing keywords coexist in any order; technique name stays clean."""
+        cmd = self._parse("Firebolt secondary base openly soulfray")
+        self.assertTrue(cmd._secondary)
+        self.assertTrue(cmd._use_base_form)
+        self.assertTrue(cmd._cast_openly)
+        self.assertTrue(cmd._confirm_soulfray)
+        self.assertEqual(cmd._technique_name, "Firebolt")
+
+    def test_soulfray_with_target(self) -> None:
+        """The soulfray flag coexists with 'at <target>' and the technique name is clean."""
+        cmd = _make_cmd("Firebolt at Aria soulfray")
+        with patch.object(cmd, "_resolve_technique_id", return_value=1):
+            cmd._parse_args()
+        self.assertTrue(cmd._confirm_soulfray)
         self.assertEqual(cmd._technique_name, "Firebolt")
         self.assertEqual(cmd._target_name, "Aria")
 

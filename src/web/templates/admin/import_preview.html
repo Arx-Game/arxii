@@ -54,14 +54,14 @@
                         <th style="text-align: right;">Changed</th>
                         <th style="text-align: right;">Unchanged</th>
                         <th style="text-align: right;">Local Only</th>
-                        <th>Action</th>
+                        <th id="col-action">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for model in analysis.models %}
                     <tr>
                         <td>
-                            <strong>{{ model.app_label }}.{{ model.model_name }}</strong>
+                            <strong id="model-row-{{ forloop.counter }}">{{ model.app_label }}.{{ model.model_name }}</strong>
                             <br>
                             <span style="color: #666; font-size: 0.9em;">
                                 {{ model.verbose_name }}
@@ -109,6 +109,7 @@
                         </td>
                         <td>
                             <select name="action_{{ model.app_label }}.{{ model.model_name }}"
+                                    aria-labelledby="model-row-{{ forloop.counter }} col-action"
                                     style="padding: 4px;">
                                 {% if model.is_instance_data %}
                                     {# Instance data defaults to skip #}
@@ -213,7 +214,7 @@
     toggleLinks.forEach(function(link) {
         link.addEventListener('click', function(e) {
             e.preventDefault();
-            var targetId = link.getAttribute('data-target');
+            var targetId = link.dataset.target;
             var target = document.getElementById(targetId);
             var icon = link.querySelector('.toggle-icon');
             if (target) {

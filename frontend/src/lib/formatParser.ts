@@ -78,50 +78,54 @@ const MARKDOWN_LINK_RE = /\[([^\]\n]{1,500})\]\((https?:\/\/[^\s)]{1,2048})\)/g;
 /** Trailing punctuation that is unlikely to be part of a URL. */
 const TRAILING_PUNCT = new Set(['.', ',', ')', '!', '?', ':', ';']);
 
-function collectTokens(text: string): Token[] {
-  const tokens: Token[] = [];
-
-  // Color starts
+function collectColorTokens(text: string, tokens: Token[]): void {
   COLOR_START_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = COLOR_START_RE.exec(text)) !== null) {
-    let hex: string | undefined;
-    if (m[2] !== undefined) {
-      // Indexed: |[123]
-      hex = xtermToHex(parseInt(m[2], 10));
-    } else if (m[3] !== undefined) {
-      // Named: |r — skip 'n' as it is the reset code, not a color
-      if (m[3] === 'n' || m[3] === 'N') continue;
-      const idx = MU_COLOR_NAMES[m[3]];
-      if (idx !== undefined) {
-        hex = xtermToHex(idx);
-      }
-    }
+    const hex = resolveColorHex(m);
     if (hex !== undefined) {
       tokens.push({ kind: 'colorStart', start: m.index, end: m.index + m[0].length, hex });
     }
   }
 
-  // Color resets
   COLOR_RESET_RE.lastIndex = 0;
   while ((m = COLOR_RESET_RE.exec(text)) !== null) {
     tokens.push({ kind: 'colorReset', start: m.index, end: m.index + m[0].length });
   }
+}
 
-  // Bold markers (**)
-  BOLD_RE.lastIndex = 0;
-  while ((m = BOLD_RE.exec(text)) !== null) {
-    tokens.push({ kind: 'boldMarker', start: m.index, end: m.index + 2 });
+/** The hex a `|[123]` or `|r` match resolves to, or undefined if it names no color. */
+function resolveColorHex(m: RegExpExecArray): string | undefined {
+  if (m[2] !== undefined) {
+    // Indexed: |[123]
+    return xtermToHex(Number.parseInt(m[2], 10));
   }
+  if (m[3] === undefined) return undefined;
+  // Named: |r — 'n' is the reset code, not a color
+  if (m[3] === 'n' || m[3] === 'N') return undefined;
+  const idx = MU_COLOR_NAMES[m[3]];
+  return idx === undefined ? undefined : xtermToHex(idx);
+}
 
-  // Strikethrough markers (~~)
-  STRIKE_RE.lastIndex = 0;
-  while ((m = STRIKE_RE.exec(text)) !== null) {
-    tokens.push({ kind: 'strikeMarker', start: m.index, end: m.index + 2 });
+/** Two-character markdown markers (`**`, `~~`), which pair up in a later pass. */
+function collectMarkerTokens(text: string, tokens: Token[]): void {
+  const patterns: Array<[RegExp, Token['kind']]> = [
+    [BOLD_RE, 'boldMarker'],
+    [STRIKE_RE, 'strikeMarker'],
+  ];
+  for (const [re, kind] of patterns) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      tokens.push({ kind, start: m.index, end: m.index + 2 });
+    }
   }
+}
 
-  // URLs — strip trailing punctuation
+function collectLinkTokens(text: string, tokens: Token[]): void {
+  // Bare URLs — trailing sentence punctuation is not part of the link.
   URL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
   while ((m = URL_RE.exec(text)) !== null) {
     let url = m[0];
     let end = m.index + url.length;
@@ -145,10 +149,14 @@ function collectTokens(text: string): Token[] {
       displayText: m[1],
     });
   }
+}
 
-  // Sort by position
+function collectTokens(text: string): Token[] {
+  const tokens: Token[] = [];
+  collectColorTokens(text, tokens);
+  collectMarkerTokens(text, tokens);
+  collectLinkTokens(text, tokens);
   tokens.sort((a, b) => a.start - b.start || a.end - b.end);
-
   return tokens;
 }
 
@@ -181,243 +189,218 @@ function pushText(segments: Segment[], content: string): void {
 }
 
 /**
- * Parse formatted content into an array of typed segments.
- *
- * Processes color codes, bold, italic, strikethrough, and URLs
- * in a single pass over the input text.
+ * A resolved span of formatted text: the markers occupy `fullStart..fullEnd`,
+ * the content they wrap occupies `contentStart..contentEnd`.
  */
-export function parseFormattedContent(text: string): Segment[] {
-  if (!text) return [];
+interface Range {
+  type: SegmentType;
+  contentStart: number;
+  contentEnd: number;
+  fullStart: number;
+  fullEnd: number;
+  hex?: string;
+  url?: string;
+}
 
-  const segments: Segment[] = [];
-  const tokens = collectTokens(text);
+/**
+ * Pair up two-character markers of one kind (`**` or `~~`) into ranges.
+ *
+ * A pair with empty content is not a span and is left unconsumed, so its
+ * markers stay in the text. Bold additionally swallows any italic markers
+ * inside the pair — `**a *b* c**` is bold throughout, not bold-around-italic.
+ */
+function findSpanClose(
+  tokens: Token[],
+  text: string,
+  openIdx: number,
+  kind: 'boldMarker' | 'strikeMarker'
+): number {
+  const closeIdx = findClosingMarker(tokens, openIdx, kind, text);
+  if (closeIdx === -1) return -1;
+  // An empty pair is not a span — leave the markers in the text as literals.
+  if (tokens[openIdx].end === tokens[closeIdx].start) return -1;
+  return closeIdx;
+}
 
-  // Track which token indices are "consumed" as part of a matched pair
-  const consumed = new Set<number>();
-
-  // First pass: resolve paired markers (bold, strike, italic) and colors
-  // We'll build a list of "ranges" that represent formatted content
-  interface Range {
-    type: SegmentType;
-    contentStart: number;
-    contentEnd: number;
-    fullStart: number;
-    fullEnd: number;
-    hex?: string;
-    url?: string;
+/**
+ * Swallow the italic markers inside a bold span.
+ *
+ * `**a *b* c**` is bold throughout, not bold-around-italic.
+ */
+function consumeItalicMarkersWithin(
+  tokens: Token[],
+  openIdx: number,
+  closeIdx: number,
+  consumed: Set<number>
+): void {
+  for (let j = openIdx + 1; j < closeIdx; j++) {
+    if (tokens[j].kind === 'italicMarker') consumed.add(j);
   }
+}
 
-  const ranges: Range[] = [];
-
-  // Match bold pairs
+function matchPairedMarkers(
+  tokens: Token[],
+  text: string,
+  kind: 'boldMarker' | 'strikeMarker',
+  type: 'bold' | 'strikethrough',
+  consumed: Set<number>,
+  ranges: Range[]
+): void {
   for (let i = 0; i < tokens.length; i++) {
-    if (consumed.has(i)) continue;
-    if (tokens[i].kind === 'boldMarker') {
-      const closeIdx = findClosingMarker(tokens, i, 'boldMarker', text);
-      if (closeIdx !== -1) {
-        const innerText = text.slice(tokens[i].end, tokens[closeIdx].start);
-        if (innerText.length > 0) {
-          ranges.push({
-            type: 'bold',
-            contentStart: tokens[i].end,
-            contentEnd: tokens[closeIdx].start,
-            fullStart: tokens[i].start,
-            fullEnd: tokens[closeIdx].end,
-          });
-          consumed.add(i);
-          consumed.add(closeIdx);
-          // Also consume any italic markers inside the bold range
-          for (let j = i + 1; j < closeIdx; j++) {
-            if (tokens[j].kind === 'italicMarker') {
-              consumed.add(j);
-            }
-          }
-        }
-      }
-    }
-  }
+    if (consumed.has(i) || tokens[i].kind !== kind) continue;
+    const closeIdx = findSpanClose(tokens, text, i, kind);
+    if (closeIdx === -1) continue;
 
-  // Match strikethrough pairs
-  for (let i = 0; i < tokens.length; i++) {
-    if (consumed.has(i)) continue;
-    if (tokens[i].kind === 'strikeMarker') {
-      const closeIdx = findClosingMarker(tokens, i, 'strikeMarker', text);
-      if (closeIdx !== -1) {
-        const innerText = text.slice(tokens[i].end, tokens[closeIdx].start);
-        if (innerText.length > 0) {
-          ranges.push({
-            type: 'strikethrough',
-            contentStart: tokens[i].end,
-            contentEnd: tokens[closeIdx].start,
-            fullStart: tokens[i].start,
-            fullEnd: tokens[closeIdx].end,
-          });
-          consumed.add(i);
-          consumed.add(closeIdx);
-        }
-      }
-    }
+    ranges.push({
+      type,
+      contentStart: tokens[i].end,
+      contentEnd: tokens[closeIdx].start,
+      fullStart: tokens[i].start,
+      fullEnd: tokens[closeIdx].end,
+    });
+    consumed.add(i);
+    consumed.add(closeIdx);
+    if (type === 'bold') consumeItalicMarkersWithin(tokens, i, closeIdx, consumed);
   }
+}
 
-  // Collect italic markers that weren't consumed by bold
-  // Build a Set of consumed positions from bold ranges for O(1) lookup
-  const consumedPositions = new Set<number>();
+/**
+ * The positions of single `*` characters that can open or close an italic span.
+ *
+ * Skips the two characters of any `**` (matched bold markers, and unmatched
+ * ones too — a stray `**` is not two italics) and anything sitting inside a
+ * range already claimed by bold or strikethrough.
+ */
+function boldMarkerPositions(ranges: Range[]): Set<number> {
+  const positions = new Set<number>();
   for (const r of ranges) {
-    if (r.type === 'bold') {
-      // The bold markers occupy fullStart..fullStart+2 and fullEnd-2..fullEnd
-      for (let p = r.fullStart; p < r.fullStart + 2; p++) consumedPositions.add(p);
-      for (let p = r.fullEnd - 2; p < r.fullEnd; p++) consumedPositions.add(p);
-    }
+    if (r.type !== 'bold') continue;
+    for (let p = r.fullStart; p < r.fullStart + 2; p++) positions.add(p);
+    for (let p = r.fullEnd - 2; p < r.fullEnd; p++) positions.add(p);
   }
+  return positions;
+}
 
-  // Build a Set of positions inside any range for O(1) lookup
-  // We only need to check range boundaries, so collect all range intervals
-  const rangeIntervals: Array<{ start: number; end: number }> = ranges.map((r) => ({
-    start: r.fullStart,
-    end: r.fullEnd,
-  }));
+/** Whether a position sits strictly inside a range something else already claimed. */
+function isInsideAnyRange(pos: number, ranges: Range[]): boolean {
+  return ranges.some((r) => pos > r.fullStart && pos < r.fullEnd);
+}
 
-  function isInsideRange(pos: number): boolean {
-    for (const interval of rangeIntervals) {
-      if (pos > interval.start && pos < interval.end) {
-        return true;
-      }
+function findItalicPositions(text: string, ranges: Range[]): number[] {
+  const markerPositions = boldMarkerPositions(ranges);
+  const positions: number[] = [];
+
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '*') {
+      i += 1;
+      continue;
     }
-    return false;
-  }
-
-  const italicPositions: number[] = [];
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '*') {
-      // Check this isn't part of a consumed bold marker range
-      if (consumedPositions.has(i)) continue;
-
-      // Check it's not part of a ** (unconsumed bold that didn't match)
-      if (i + 1 < text.length && text[i + 1] === '*') {
-        // Part of ** — skip both
-        i++;
-        continue;
-      }
-      if (i > 0 && text[i - 1] === '*') {
-        // Second char of ** — already skipped
-        continue;
-      }
-
-      // Also check it's not inside a consumed range (bold content)
-      if (isInsideRange(i)) continue;
-
-      italicPositions.push(i);
+    // A `**` is one marker, not two italics — skip both characters, whether or
+    // not the pair went on to resolve into a bold range.
+    if (text[i + 1] === '*') {
+      i += 2;
+      continue;
     }
+    // `text[i - 1]` is undefined at i === 0, which is correctly not '*'.
+    if (text[i - 1] !== '*' && !markerPositions.has(i) && !isInsideAnyRange(i, ranges)) {
+      positions.push(i);
+    }
+    i += 1;
   }
+  return positions;
+}
 
-  // Pair up italic markers — reject pairs that span newlines
-  for (let i = 0; i + 1 < italicPositions.length; i += 2) {
-    const openPos = italicPositions[i];
-    const closePos = italicPositions[i + 1];
+/** Pair the leftover single `*` markers into italic ranges, in order. */
+function matchItalicRanges(text: string, ranges: Range[]): void {
+  const positions = findItalicPositions(text, ranges);
+  for (let i = 0; i + 1 < positions.length; i += 2) {
+    const openPos = positions[i];
+    const closePos = positions[i + 1];
     const innerText = text.slice(openPos + 1, closePos);
-    if (innerText.length > 0 && !innerText.includes('\n')) {
+    // A newline breaks the span, same as the other markdown markers.
+    if (innerText.length === 0 || innerText.includes('\n')) continue;
+    ranges.push({
+      type: 'italic',
+      contentStart: openPos + 1,
+      contentEnd: closePos,
+      fullStart: openPos,
+      fullEnd: closePos + 1,
+    });
+  }
+}
+
+/**
+ * Turn each color start into a range running to the next reset.
+ *
+ * A color with no reset after it runs to the end of the text — an unterminated
+ * `|r` colors the rest of the line rather than being dropped.
+ */
+function matchColorRanges(
+  tokens: Token[],
+  text: string,
+  consumed: Set<number>,
+  ranges: Range[]
+): void {
+  for (let i = 0; i < tokens.length; i++) {
+    if (consumed.has(i) || tokens[i].kind !== 'colorStart' || !tokens[i].hex) continue;
+
+    const resetIdx = tokens.findIndex((t, j) => j > i && t.kind === 'colorReset');
+    const contentEnd = resetIdx === -1 ? text.length : tokens[resetIdx].start;
+    if (text.slice(tokens[i].end, contentEnd).length > 0) {
       ranges.push({
-        type: 'italic',
-        contentStart: openPos + 1,
-        contentEnd: closePos,
-        fullStart: openPos,
-        fullEnd: closePos + 1,
+        type: 'color',
+        contentStart: tokens[i].end,
+        contentEnd,
+        fullStart: tokens[i].start,
+        fullEnd: resetIdx === -1 ? text.length : tokens[resetIdx].end,
+        hex: tokens[i].hex,
       });
     }
+    consumed.add(i);
+    if (resetIdx !== -1) consumed.add(resetIdx);
   }
+}
 
-  // Match color ranges
+/**
+ * Add ranges for URLs and markdown links that no other range already covers.
+ *
+ * A link inside a bold or colored span is left alone: that span already owns
+ * the text, and nesting the two would double-render it.
+ */
+function matchLinkRanges(tokens: Token[], consumed: Set<number>, ranges: Range[]): void {
   for (let i = 0; i < tokens.length; i++) {
-    if (consumed.has(i)) continue;
-    if (tokens[i].kind === 'colorStart' && tokens[i].hex) {
-      // Find the next colorReset
-      let resetIdx = -1;
-      for (let j = i + 1; j < tokens.length; j++) {
-        if (tokens[j].kind === 'colorReset') {
-          resetIdx = j;
-          break;
-        }
-      }
-      if (resetIdx !== -1) {
-        const innerText = text.slice(tokens[i].end, tokens[resetIdx].start);
-        if (innerText.length > 0) {
-          ranges.push({
-            type: 'color',
-            contentStart: tokens[i].end,
-            contentEnd: tokens[resetIdx].start,
-            fullStart: tokens[i].start,
-            fullEnd: tokens[resetIdx].end,
-            hex: tokens[i].hex,
-          });
-        }
-        consumed.add(i);
-        consumed.add(resetIdx);
-      } else {
-        // No reset — color extends to end
-        const innerText = text.slice(tokens[i].end);
-        if (innerText.length > 0) {
-          ranges.push({
-            type: 'color',
-            contentStart: tokens[i].end,
-            contentEnd: text.length,
-            fullStart: tokens[i].start,
-            fullEnd: text.length,
-            hex: tokens[i].hex,
-          });
-        }
-        consumed.add(i);
-      }
-    }
-  }
-
-  // Add URL and markdown-link ranges
-  for (let i = 0; i < tokens.length; i++) {
-    if (consumed.has(i)) continue;
     const t = tokens[i];
-    if (t.kind === 'url' || t.kind === 'markdownLink') {
-      let inside = false;
-      for (const r of ranges) {
-        if (t.start >= r.fullStart && t.end <= r.fullEnd) {
-          inside = true;
-          break;
-        }
-      }
-      if (!inside) {
-        if (t.kind === 'markdownLink') {
-          const displayLen = t.displayText?.length ?? 0;
-          ranges.push({
-            type: 'link',
-            contentStart: t.start + 1,
-            contentEnd: t.start + 1 + displayLen,
-            fullStart: t.start,
-            fullEnd: t.end,
-            url: t.url,
-          });
-        } else {
-          ranges.push({
-            type: 'link',
-            contentStart: t.start,
-            contentEnd: t.end,
-            fullStart: t.start,
-            fullEnd: t.end,
-            url: t.url,
-          });
-        }
-        consumed.add(i);
-      }
-    }
-  }
+    if (consumed.has(i) || (t.kind !== 'url' && t.kind !== 'markdownLink')) continue;
+    if (ranges.some((r) => t.start >= r.fullStart && t.end <= r.fullEnd)) continue;
 
-  // Sort ranges by fullStart
+    const displayLen = t.displayText?.length ?? 0;
+    ranges.push({
+      type: 'link',
+      // A markdown link displays only the text between the brackets.
+      contentStart: t.kind === 'markdownLink' ? t.start + 1 : t.start,
+      contentEnd: t.kind === 'markdownLink' ? t.start + 1 + displayLen : t.end,
+      fullStart: t.start,
+      fullEnd: t.end,
+      url: t.url,
+    });
+    consumed.add(i);
+  }
+}
+
+/**
+ * Walk the ranges in source order, emitting the plain text between them.
+ *
+ * Ranges are resolved independently and may overlap; a range that starts before
+ * where the previous one ended is dropped rather than rendered twice.
+ */
+function buildSegments(text: string, ranges: Range[]): Segment[] {
+  const segments: Segment[] = [];
   ranges.sort((a, b) => a.fullStart - b.fullStart);
 
-  // Now build segments by walking through the text
   let pos = 0;
   for (const range of ranges) {
-    // Skip overlapping ranges
     if (range.fullStart < pos) continue;
-
-    // Text before this range
     if (range.fullStart > pos) {
       pushText(segments, text.slice(pos, range.fullStart));
     }
@@ -430,14 +413,36 @@ export function parseFormattedContent(text: string): Segment[] {
     } else {
       segments.push({ type: range.type, content });
     }
-
     pos = range.fullEnd;
   }
 
-  // Remaining text
   if (pos < text.length) {
     pushText(segments, text.slice(pos));
   }
-
   return segments;
+}
+
+/**
+ * Parse formatted content into an array of typed segments.
+ *
+ * Processes color codes, bold, italic, strikethrough, and URLs in a single
+ * pass over the input text. The passes run in a fixed order because each one
+ * narrows what is still available to the next: bold claims the italic markers
+ * inside it, italics take what bold and strikethrough left, colors and links
+ * skip anything already claimed.
+ */
+export function parseFormattedContent(text: string): Segment[] {
+  if (!text) return [];
+
+  const tokens = collectTokens(text);
+  const consumed = new Set<number>();
+  const ranges: Range[] = [];
+
+  matchPairedMarkers(tokens, text, 'boldMarker', 'bold', consumed, ranges);
+  matchPairedMarkers(tokens, text, 'strikeMarker', 'strikethrough', consumed, ranges);
+  matchItalicRanges(text, ranges);
+  matchColorRanges(tokens, text, consumed, ranges);
+  matchLinkRanges(tokens, consumed, ranges);
+
+  return buildSegments(text, ranges);
 }

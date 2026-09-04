@@ -1,17 +1,22 @@
 /**
  * MissionCanvasPage — fullscreen MissionCanvas for one template.
  *
- * Routes: /staff/missions/:id/canvas. Hits the detail endpoint once
- * for the template id (canvas needs it for the per-template filters).
+ * Mounted twice: /staff/missions/:id/canvas (StaffRoute) and
+ * /stories/scenarios/:id/canvas (GMRoute, #3565) - studioPaths derives
+ * which mount is live from the current URL so every link on the page
+ * stays on the right side. Hits the detail endpoint once for the
+ * template id (canvas needs it for the per-template filters, and the
+ * scenario mount needs template.story_id for the browser link).
  */
 
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 import { MissionCanvas } from '../components/MissionCanvas';
 import { useMissionTemplate } from '../queries';
+import { studioBaseFromPath, studioPaths } from '../studioPaths';
 
 export function MissionCanvasPage() {
   const { id: idStr } = useParams<{ id: string }>();
@@ -21,6 +26,10 @@ export function MissionCanvasPage() {
   const id = idStr && Number.isFinite(Number(idStr)) ? Number(idStr) : undefined;
   const { data: template, isLoading, isError } = useMissionTemplate(id);
   const navigate = useNavigate();
+  const location = useLocation();
+  const base = studioBaseFromPath(location.pathname);
+  const paths = studioPaths(base, id ?? 0, template?.story_id);
+  const noun = base === 'scenario' ? 'scenario' : 'mission';
 
   if (id === undefined) {
     return (
@@ -30,8 +39,8 @@ export function MissionCanvasPage() {
           role="alert"
         >
           <p className="font-medium">Missing or invalid id in URL.</p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
-            ← Back to Mission Studio
+          <Button variant="outline" className="mt-3" onClick={() => navigate(paths.browser)}>
+            ← Back to {paths.browserLabel}
           </Button>
         </div>
       </div>
@@ -45,12 +54,12 @@ export function MissionCanvasPage() {
           className="rounded border border-destructive bg-destructive/10 p-4 text-sm"
           role="alert"
         >
-          <p className="font-medium">Couldn't load this mission.</p>
+          <p className="font-medium">Couldn't load this {noun}.</p>
           <p className="mt-1 text-muted-foreground">
-            The mission may not exist or you may not have access.
+            The {noun} may not exist or you may not have access.
           </p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
-            ← Back to Mission Studio
+          <Button variant="outline" className="mt-3" onClick={() => navigate(paths.browser)}>
+            ← Back to {paths.browserLabel}
           </Button>
         </div>
       </div>
@@ -62,9 +71,11 @@ export function MissionCanvasPage() {
       <div className="flex items-center justify-between">
         <div>
           <Button asChild variant="ghost" size="sm">
-            <Link to={`/staff/missions?id=${id ?? ''}`}>← Back to browser</Link>
+            <Link to={paths.browser}>← Back to browser</Link>
           </Button>
-          <h1 className="mt-1 text-2xl font-semibold">{template?.name ?? `#${id}`}: Graph</h1>
+          <h1 className="mt-1 text-2xl font-semibold">
+            {template?.name ?? `#${id}`}: {base === 'scenario' ? 'Scenario graph' : 'Graph'}
+          </h1>
         </div>
       </div>
       {isLoading ? (

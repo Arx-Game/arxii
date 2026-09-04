@@ -126,4 +126,22 @@ describe('computeLayout', () => {
     );
     expect(result.layoutedEdges[0].label).toBe('t7');
   });
+
+  it('labels track nodes with "[track N/M]" (#3568)', () => {
+    const result = computeLayout(
+      [node(1, 'siege', { track_successes: 3, track_failures: 2 })],
+      [],
+      []
+    );
+    expect(result.layoutedNodes[0].data.label).toBe('siege [track 3/2]');
+  });
+
+  it('does not add a track badge when track_successes is 0', () => {
+    const result = computeLayout(
+      [node(1, 'plain', { track_successes: 0, track_failures: 0 })],
+      [],
+      []
+    );
+    expect(result.layoutedNodes[0].data.label).toBe('plain');
+  });
 });

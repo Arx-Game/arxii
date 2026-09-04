@@ -86,7 +86,9 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
     full_clean+save, and the value update(s)) runs inside a single
     ``transaction.atomic()`` block so a ``full_clean()`` failure (e.g. a
     missing citation) cannot leave an orphan freshly-created NpcRegard row
-    committed with no accompanying event.
+    committed with no accompanying event. Before returning, re-evaluates the
+    target character's open beats, so an NPC_REGARD_AT_LEAST beat can flip in
+    the same request (#3570).
     """
     from django.db import transaction  # noqa: PLC0415
     from django.db.models import F  # noqa: PLC0415
@@ -137,6 +139,10 @@ def record_npc_regard_event(  # noqa: PLR0913 — keyword-only; each arg is a di
         from world.relationships.services import mirror_npc_regard_event_to_track  # noqa: PLC0415
 
         mirror_npc_regard_event_to_track(event)
+
+        from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
+
+        on_character_state_changed(target.character_sheet)
 
     return event
 

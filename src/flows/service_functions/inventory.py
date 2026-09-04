@@ -203,7 +203,7 @@ def _placed_as_active_decoration(item_instance: ItemInstance) -> bool:
     return RoomDecoration.objects.filter(source_item_instance=item_instance).exists()
 
 
-def _take_denial(  # noqa: PLR0911
+def _take_denial(
     taker_sheet: CharacterSheet | None, item_instance: ItemInstance
 ) -> type[InventoryError] | None:
     """Why plain take refuses this item (#1909), or None when take is allowed.
@@ -311,7 +311,7 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     taker_sheet = character.obj.character_sheet
     denial = _take_denial(taker_sheet, item.instance)
     if denial is not None:
-        raise denial
+        raise denial()
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
@@ -548,7 +548,7 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     taker_sheet = character.obj.character_sheet
     denial = _take_denial(taker_sheet, item.instance)
     if denial is not None:
-        raise denial
+        raise denial()
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
@@ -620,7 +620,7 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
     )
 
 
-def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:  # noqa: PLR0911
+def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
     """Target-side-only availability (#1909): NPC-owned always; players by consent.
 
     An actively-placed decoration (#2991) is never stealable: routing it through

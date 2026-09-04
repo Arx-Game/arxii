@@ -21,6 +21,8 @@ from world.mechanics.models import (
     SituationTemplate,
 )
 
+_CATEGORY_NAME_SOURCE = "category.name"
+
 
 class ModifierCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -29,7 +31,7 @@ class ModifierCategorySerializer(serializers.ModelSerializer):
 
 
 class ModifierTargetSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_name = serializers.CharField(source=_CATEGORY_NAME_SOURCE, read_only=True)
 
     class Meta:
         model = ModifierTarget
@@ -47,7 +49,7 @@ class ModifierTargetSerializer(serializers.ModelSerializer):
 class ModifierTargetListSerializer(serializers.ModelSerializer):
     """Lighter serializer for list views."""
 
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_name = serializers.CharField(source=_CATEGORY_NAME_SOURCE, read_only=True)
     codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
@@ -190,7 +192,7 @@ class ChallengeTemplateConsequenceSerializer(serializers.ModelSerializer):
 class ChallengeTemplateListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for challenge template list views."""
 
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_name = serializers.CharField(source=_CATEGORY_NAME_SOURCE, read_only=True)
 
     class Meta:
         model = ChallengeTemplate
@@ -208,7 +210,7 @@ class ChallengeTemplateListSerializer(serializers.ModelSerializer):
 class ChallengeTemplateDetailSerializer(serializers.ModelSerializer):
     """Full serializer for challenge template detail views."""
 
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_name = serializers.CharField(source=_CATEGORY_NAME_SOURCE, read_only=True)
     template_properties = ChallengeTemplatePropertySerializer(
         source="cached_template_properties", many=True, read_only=True
     )
@@ -282,14 +284,13 @@ class SituationChallengeLinkSerializer(serializers.ModelSerializer):
             "challenge_template",
             "challenge_template_name",
             "display_order",
-            "depends_on",
         ]
 
 
 class SituationTemplateListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for situation template list views."""
 
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_name = serializers.CharField(source=_CATEGORY_NAME_SOURCE, read_only=True)
 
     class Meta:
         model = SituationTemplate
@@ -299,7 +300,7 @@ class SituationTemplateListSerializer(serializers.ModelSerializer):
 class SituationTemplateDetailSerializer(serializers.ModelSerializer):
     """Full serializer for situation template detail views."""
 
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_name = serializers.CharField(source=_CATEGORY_NAME_SOURCE, read_only=True)
     challenge_links = SituationChallengeLinkSerializer(
         source="cached_challenge_links", many=True, read_only=True
     )

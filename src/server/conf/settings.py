@@ -19,6 +19,7 @@ https://github.com/joke2k/django-environ
 """
 
 import contextlib
+from email.utils import formataddr, parseaddr
 
 import environ
 from evennia.settings_default import *
@@ -77,6 +78,7 @@ INSTALLED_APPS += [
     "allauth.socialaccount.providers.facebook",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.discord",
+    "allauth.mfa",
     # Load after allauth to override admin
     "evennia_extensions.apps.EvenniaExtensionsConfig",
     "django_htmx",
@@ -94,9 +96,23 @@ AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
 
-# Ensure the Evennia log directory exists for all environments (including CI).
-LOG_DIR = os.path.join(GAME_DIR, "server", "logs")
+# Where Evennia writes server.log / portal.log / http_requests.log /
+# lockwarnings.log. Env-driven (#3599): production sets LOG_DIR=/var/log/arxii
+# in the EnvironmentFile (roles/secrets_vault arxii.env.j2) so the read-only
+# ops account can read the files; dev and CI keep Evennia's default under
+# the gamedir. Evennia derived the four file settings from ITS default at
+# import, so they are recomputed here; see log_paths.py. The directory must
+# already exist and be writable by the service user before this import in
+# production (roles/app_deploy creates it before the first Django command).
+from evennia_extensions.observability.log_paths import log_file_paths
+
+LOG_DIR = env("LOG_DIR", default=os.path.join(GAME_DIR, "server", "logs"))
 os.makedirs(LOG_DIR, exist_ok=True)
+_log_files = log_file_paths(LOG_DIR)
+SERVER_LOG_FILE = _log_files.server
+PORTAL_LOG_FILE = _log_files.portal
+HTTP_LOG_FILE = _log_files.http
+LOCKWARNING_LOG_FILE = _log_files.lockwarning
 
 # Required for django-allauth
 SITE_ID = os.environ.get("SITE_ID", 1)
@@ -156,8 +172,17 @@ if RESEND_API_KEY and not DEBUG:
 else:
     # Use console backend for testing when no email service configured
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
-SITE_URL = env("SITE_URL", default="https://arxmush.org")
+# Gmail and most other clients show a From address that has no display name as
+# just its mailbox ("noreply"), so a bare address from the environment gets the
+# game's name here. An operator who already supplies "Name <addr>" keeps it.
+_from_email = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
+DEFAULT_FROM_EMAIL = (
+    _from_email if parseaddr(_from_email)[0] else formataddr(("Arx II", _from_email))
+)
+# Prod renders SITE_URL (and FRONTEND_URL) into the EnvironmentFile from the
+# deployed web FQDN (infra/ansible/roles/secrets_vault), so this default only
+# reaches a dev box whose .env leaves it unset. It used to be the Arx I domain.
+SITE_URL = env("SITE_URL", default="https://play.arx2.com")
 
 # systemd writes this file when a shutdown/reboot is scheduled and removes it on
 # cancel; world.downtime derives the automatic-reboot announcement from it (#3194).
@@ -209,23 +234,34 @@ SEED_SAMPLE_CONTENT = env.bool("ARXII_SEED_SAMPLE_CONTENT", default=False)
 # disables it entirely (dev/rehearsal have none), matching the ops dashboard's
 # `sentry_dsn_configured` probe in `web/admin/tuning/tech_health.py`, which reads
 # the same `SENTRY_DSN` env var. Deliberately separate from the bespoke, no-SaaS
-# `SystemErrorReport` path (#1164, `world/player_submissions/services.py`) — that
+# `SystemErrorReport` path (#1164, `world/player_submissions/services.py`) - that
 # system stays player-facing and DB-backed by design; Sentry here is for
 # ops/dev-facing infra-level error and performance telemetry.
 SENTRY_DSN = env("SENTRY_DSN", default="")
 if SENTRY_DSN:
     import sentry_sdk  # deferred so DSN-less envs pay zero import cost
 
+    from evennia_extensions.observability.sentry_twisted import install_sentry_log_observer
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
-        # PII off by design — player privacy is content-boundaries ADR territory;
-        # Sentry must never capture request bodies, user emails, or IPs.
+        # PII off by design - player privacy is content-boundaries ADR territory.
+        # This flag withholds cookies, the logged-in user block and IP-shaped
+        # headers. It does NOT withhold request bodies (the SDK sends bodies up
+        # to max_request_body_size regardless), hence the explicit "never"
+        # below (#3599). Local variables in tracebacks stay on: they are most
+        # of a traceback's value, and the SDK's scrubber blanks password/token/
+        # cookie/IP-named values by name.
         send_default_pii=False,
+        max_request_body_size="never",
         # Low sample rate: performance tracing is a sampling signal, not a full log.
         traces_sample_rate=float(env("SENTRY_TRACES_SAMPLE_RATE", default="0.05")),
         environment=env("SENTRY_ENVIRONMENT", default="production"),
         release=env("SENTRY_RELEASE", default="") or None,
     )
+    # Evennia's own log_err/log_trace never reach Sentry's stdlib logging
+    # integration (they go through Twisted). This forwards them (#3599).
+    install_sentry_log_observer()
 
 # GitHub issue filing (#1164) — staff can file a public issue from a player bug
 # report or an auto-captured error. Repo + token are env-configured; an empty
@@ -288,12 +324,42 @@ NEW_ACCOUNT_REGISTRATION_ENABLED = False
 # Allauth settings
 ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "evennia_extensions.social_adapters.ArxSocialAccountAdapter"
+MFA_ADAPTER = "evennia_extensions.mfa_adapter.ArxMFAAdapter"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+# Without a prefix allauth falls back to "[<Site.name>] ", and the only row in
+# Django's sites table is the framework default "example.com". The stock body
+# templates read that same row; their overrides live in
+# src/web/templates/account/email/. Same prefix the roster mail already uses.
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Arx II] "
 ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email login
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+LOGIN_URL = "/login"  # the React page; the admin redirects here (#3591)
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
 ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = FRONTEND_URL + "/login?verified=true"
+
+# Account settings surface (#3591). One email per account: a change adds a
+# pending second address that replaces the first once verified.
+ACCOUNT_CHANGE_EMAIL = True
+# allauth only raises its reauthentication 401 inside the email flows when this
+# is on (it defaults to off); the MFA flows raise it unconditionally.
+ACCOUNT_REAUTHENTICATION_REQUIRED = True
+# "Your password / email was changed" mail, best-effort via ArxAccountAdapter.send_mail.
+ACCOUNT_EMAIL_NOTIFICATIONS = True
+
+# Two-factor authentication (#3591, ADR-0266): opt-in, never required.
+MFA_SUPPORTED_TYPES = ["totp", "recovery_codes"]  # no WebAuthn/passkeys in v1
+MFA_TOTP_TOLERANCE = 1  # accept the previous and next 30s step (clock drift)
+# allauth's default interlock stops a 2FA account from changing its email and an
+# account with a pending change from enrolling. Verification is mandatory before
+# login completes, and email changes are reauth-gated, so the interlock's threat
+# (an unverified signup enabling 2FA to lock out the real owner) cannot occur here.
+MFA_ALLOW_UNVERIFIED_EMAIL = True
+MFA_TOTP_ISSUER = "Arx II"
+# Fernet key(s) for TOTP secrets and recovery-code seeds (ADR-0267). Comma-separated,
+# first key current; rotation is prepend, deploy, re-encrypt, drop. Required, like
+# SECRET_KEY: losing it locks every 2FA user out until staff reset them.
+MFA_SECRETS_KEY = env("MFA_SECRETS_KEY")
 
 # Django-allauth headless configuration
 HEADLESS_ONLY = True  # Use headless API mode with custom email verification
@@ -448,41 +514,63 @@ LOGGING = {
             "format": "[{levelname}] {name}: {message}",
             "style": "{",
         },
+        # Evennia's Twisted file observer already writes its own level marker
+        # on every server.log line, so the bridge formatter must not duplicate
+        # it; the logger name stays because Evennia overwrites the namespace
+        # slot (#3599).
+        "bridge": {
+            "format": "{name}: {message}",
+            "style": "{",
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        # Re-emits every record into Twisted's log so it lands in server.log
+        # (#3599). In production twistd has no stdout, so without this the
+        # console handler's output is discarded.
+        "twisted_bridge": {
+            "class": "evennia_extensions.observability.log_bridge.TwistedLogHandler",
+            "formatter": "bridge",
+        },
     },
     "root": {
-        "handlers": ["console"],
+        "handlers": ["console", "twisted_bridge"],
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
             "propagate": False,
         },
         "django.request": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "ERROR",
             "propagate": False,
         },
         "django.db.backends": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "WARNING",
             "propagate": False,
         },
         "world": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
             "propagate": False,
         },
         "evennia": {
-            "handlers": ["console"],
+            "handlers": ["console", "twisted_bridge"],
             "level": "INFO",
+            "propagate": False,
+        },
+        # sentry_sdk's own logger (dedupe "dropped duplicated event" INFO lines,
+        # one per traceback line) must not be bridged into server.log (#3599).
+        "sentry_sdk": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },

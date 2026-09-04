@@ -28,7 +28,13 @@ from world.missions.factories import (
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionGroupBallot, MissionInstance, MissionNode, MissionOption
+from world.missions.models import (
+    MissionGroupBallot,
+    MissionInstance,
+    MissionNode,
+    MissionOption,
+    MissionOptionRoute,
+)
 from world.missions.services import beat as beat_service, resolve_group_node, resolve_option
 from world.stories.constants import BeatOutcome, BeatPredicateType
 from world.stories.factories import BeatFactory, StoryProgressFactory
@@ -69,6 +75,16 @@ class SoloTerminalBeatSeamTests(TestCase):
     def setUp(self) -> None:
         beat_service.clear_triggers()
 
+    def _beat(self, *, predicate_type: str = BeatPredicateType.GM_MARKED) -> Beat:
+        """A Beat with an active StoryProgress wired for its story (shared setup)."""
+        beat = BeatFactory(predicate_type=predicate_type)
+        story = beat.episode.chapter.story
+        sheet = self.character.sheet_data
+        story.character_sheet = sheet
+        story.save()
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        return beat
+
     def _make_terminal_run(
         self,
         *,
@@ -87,6 +103,9 @@ class SoloTerminalBeatSeamTests(TestCase):
             option_kind=OptionKind.BRANCH,
             source_kind=OptionSource.AUTHORED,
         )
+        # Null-tier terminal route (#3565): lets tests read/override its
+        # authored beat_outcome via MissionOptionRoute.objects.get(...).
+        MissionOptionRouteFactory(option=option, outcome_tier=None, target_node=None)
         return instance, entry, actor, option
 
     def test_solo_terminal_of_beat_bound_records_one_trigger(self) -> None:
@@ -117,6 +136,53 @@ class SoloTerminalBeatSeamTests(TestCase):
         resolve_option(instance, entry, option, actor)
 
         self.assertEqual(beat_service.get_triggers(), ())
+
+    def test_branch_terminal_with_authored_failure_records_failure_and_key(self) -> None:
+        beat = self._beat(predicate_type=BeatPredicateType.OUTCOME_TIER)
+        instance, entry, actor, option = self._make_terminal_run(source_beat=beat)
+        route = MissionOptionRoute.objects.get(option=option, outcome_tier__isnull=True)
+        route.beat_outcome = BeatOutcome.FAILURE
+        route.save()
+
+        resolve_option(instance, entry, option, actor)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.FAILURE)
+        self.assertEqual(beat.outcome_key, option.key)
+
+    def test_branch_terminal_defaults_to_success_on_outcome_tier_beat(self) -> None:
+        beat = self._beat(predicate_type=BeatPredicateType.OUTCOME_TIER)
+        instance, entry, actor, option = self._make_terminal_run(source_beat=beat)
+
+        resolve_option(instance, entry, option, actor)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertEqual(beat.outcome_key, option.key)
+
+    def test_tier_route_still_derives_from_success_level(self) -> None:
+        # A CHECK option whose failure-tier route is terminal; the check is
+        # forced to fail (pattern mirrors JointTerminalBeatSeamTests below,
+        # which forces success via the same _PERFORM_CHECK patch).
+        beat = self._beat(predicate_type=BeatPredicateType.OUTCOME_TIER)
+        instance, entry, actor, _unused_option = self._make_terminal_run(source_beat=beat)
+        check_type = CheckTypeFactory(name="BeatSoloFailCheck")
+        failure = CheckOutcomeFactory(name="BeatSoloFailure", success_level=-2)
+        option = MissionOptionFactory(
+            node=entry,
+            order=1,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=check_type,
+        )
+        MissionOptionRouteFactory(option=option, outcome_tier=failure, target_node=None)
+
+        with patch(_PERFORM_CHECK, return_value=_result_for(check_type, failure)):
+            resolve_option(instance, entry, option, actor)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.FAILURE)
+        self.assertEqual(beat.outcome_key, option.key)
 
 
 class JointTerminalBeatSeamTests(TestCase):

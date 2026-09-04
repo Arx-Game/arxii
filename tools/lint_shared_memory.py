@@ -84,15 +84,14 @@ class SharedMemoryVisitor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         base_names = [_get_base_name(b) for b in node.bases]
-        if any(name in _MODEL_BASES for name in base_names):
-            if not _is_abstract(node):
-                line_index = max(node.lineno - 1, 0)
-                if line_index < len(self.lines):
-                    line_text = self.lines[line_index]
-                    if SUPPRESSION_TOKEN in line_text.lower():
-                        self.generic_visit(node)
-                        return
-                self.errors.append((node.lineno, node.col_offset, node.name))
+        if any(name in _MODEL_BASES for name in base_names) and not _is_abstract(node):
+            line_index = max(node.lineno - 1, 0)
+            if line_index < len(self.lines):
+                line_text = self.lines[line_index]
+                if SUPPRESSION_TOKEN in line_text.lower():
+                    self.generic_visit(node)
+                    return
+            self.errors.append((node.lineno, node.col_offset, node.name))
         self.generic_visit(node)
 
 

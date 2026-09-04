@@ -12,6 +12,50 @@ import { EventCard } from '../components/EventCard';
 import { EVENT_STATUS_TABS } from '../types';
 import type { EventListItem, PaginatedResponse } from '../types';
 
+/** Why the list is empty: a search that matched nothing, or a genuinely empty tab. */
+function emptyMessage(search: string, status: string): string {
+  if (search) return `No events found for "${search}".`;
+  return `No ${status === 'scheduled' ? 'upcoming' : status} events.`;
+}
+
+/** Previous/next controls, rendered only when there is more than one page. */
+function Pager({
+  page,
+  numPages,
+  current,
+  onPage,
+}: Readonly<{
+  page: number;
+  numPages: number;
+  current: number;
+  onPage: (updater: (p: number) => number) => void;
+}>) {
+  if (numPages <= 1) return null;
+  return (
+    <div className="mt-6 flex items-center justify-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page === 1}
+        onClick={() => onPage((p) => p - 1)}
+      >
+        Previous
+      </Button>
+      <span className="text-sm text-muted-foreground">
+        Page {current} of {numPages}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page >= numPages}
+        onClick={() => onPage((p) => p + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+}
+
 export function EventsListPage() {
   const account = useAccount();
   const [status, setStatus] = useState('scheduled');
@@ -35,6 +79,36 @@ export function EventsListPage() {
     queryKey: ['events', params],
     queryFn: () => fetchEvents(params),
   });
+
+  const renderResults = () => {
+    if (isError) {
+      return <p className="py-8 text-center text-muted-foreground">Failed to load events.</p>;
+    }
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (!data?.results?.length) {
+      return (
+        <p className="py-8 text-center text-muted-foreground">
+          {emptyMessage(debouncedSearch, status)}
+        </p>
+      );
+    }
+    return (
+      <>
+        <div className="space-y-3">
+          {data.results.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+        <Pager page={page} numPages={data.num_pages} current={data.current_page} onPage={setPage} />
+      </>
+    );
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -78,51 +152,7 @@ export function EventsListPage() {
         </div>
       </div>
 
-      {isError ? (
-        <p className="py-8 text-center text-muted-foreground">Failed to load events.</p>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : !data?.results?.length ? (
-        <p className="py-8 text-center text-muted-foreground">
-          {debouncedSearch
-            ? `No events found for "${debouncedSearch}".`
-            : `No ${status === 'scheduled' ? 'upcoming' : status} events.`}
-        </p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {data.results.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </div>
-
-          {data.num_pages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {data.current_page} of {data.num_pages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= data.num_pages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+      {renderResults()}
     </div>
   );
 }

@@ -6,6 +6,7 @@ export function ProfilePage() {
 
   const getCurrentTab = () => {
     if (pathname.includes('/media')) return 'media';
+    if (pathname.includes('/account')) return 'account';
     if (pathname.includes('/settings')) return 'settings';
     if (pathname.includes('/privacy')) return 'privacy';
     if (pathname.includes('/boundaries')) return 'boundaries';
@@ -20,25 +21,28 @@ export function ProfilePage() {
       <Tabs value={getCurrentTab()} className="w-full">
         <TabsList>
           <TabsTrigger value="mail" asChild>
-            <Link to="mail">Mail</Link>
+            <Link to="/profile/mail">Mail</Link>
           </TabsTrigger>
           <TabsTrigger value="media" asChild>
-            <Link to="media">Media</Link>
+            <Link to="/profile/media">Media</Link>
           </TabsTrigger>
           <TabsTrigger value="settings" asChild>
-            <Link to="settings">Settings</Link>
+            <Link to="/profile/settings">Settings</Link>
+          </TabsTrigger>
+          <TabsTrigger value="account" asChild>
+            <Link to="/profile/account">Account</Link>
           </TabsTrigger>
           <TabsTrigger value="privacy" asChild>
-            <Link to="privacy">Privacy</Link>
+            <Link to="/profile/privacy">Privacy</Link>
           </TabsTrigger>
           <TabsTrigger value="boundaries" asChild>
-            <Link to="boundaries">Boundaries</Link>
+            <Link to="/profile/boundaries">Boundaries</Link>
           </TabsTrigger>
           <TabsTrigger value="blocks" asChild>
-            <Link to="blocks">Blocked</Link>
+            <Link to="/profile/blocks">Blocked</Link>
           </TabsTrigger>
           <TabsTrigger value="mutes" asChild>
-            <Link to="mutes">Muted</Link>
+            <Link to="/profile/mutes">Muted</Link>
           </TabsTrigger>
         </TabsList>
       </Tabs>

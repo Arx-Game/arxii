@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.base import Action
+from actions.definitions.beat_routing import resolve_routed_beat
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
@@ -50,6 +51,7 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
 _NO_ACTIVE_ENCOUNTER = "There is no active encounter here."
 _NO_GM_PERMISSION = "Only the scene's GM or staff can do that."
 _NO_ACTIVE_SCENE = "There is no active scene here to start an encounter in."
+_NO_BEAT_PERMISSION = "Only that beat's story Lead GM or staff may route an encounter onto it."
 
 
 def _encounter_in_room(
@@ -969,7 +971,19 @@ class CreateEncounterAction(Action):
                 return ActionResult(success=False, message="Invalid pace mode.")
             resolved_pace_mode = pace_mode
 
-        encounter = CombatEncounter.objects.create(scene=scene, pace_mode=resolved_pace_mode)
+        beat = None
+        beat_id = kwargs.get("beat_id")
+        if beat_id is not None:
+            resolved = resolve_routed_beat(
+                actor, beat_id, permission_denied_message=_NO_BEAT_PERMISSION
+            )
+            if isinstance(resolved, str):
+                return ActionResult(success=False, message=resolved)
+            beat = resolved
+
+        encounter = CombatEncounter.objects.create(
+            scene=scene, pace_mode=resolved_pace_mode, story_beat=beat
+        )
         finalize_new_encounter(encounter)
         return ActionResult(
             success=True,

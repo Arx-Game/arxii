@@ -48,7 +48,7 @@ def _actor_persona(actor: ObjectDB) -> Persona | None:
         return None
 
 
-def _resolve_target_persona(value: Any) -> Persona | None:  # noqa: PLR0911
+def _resolve_target_persona(value: Any) -> Persona | None:
     from world.scenes.models import Persona  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -108,7 +108,7 @@ class DeclareStandingAction(Action):
     target_filters: TargetFilters = field(default=_TARGET_FILTERS)
     costs_turn: bool = True
 
-    def execute(  # noqa: PLR0911
+    def execute(
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,

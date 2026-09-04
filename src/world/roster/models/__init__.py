@@ -25,6 +25,7 @@ from world.roster.models.choices import (
 )
 from world.roster.models.families import (
     Family,
+    FamilyKind,
     FamilyMembership,
     KinSlotPool,
     Kinsperson,
@@ -55,6 +56,7 @@ __all__ = [
     "ApplicationStatus",
     "ApprovalScope",
     "Family",
+    "FamilyKind",
     "FamilyMembership",
     "GameInvite",
     "InviteStatus",

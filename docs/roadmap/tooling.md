@@ -68,9 +68,11 @@ role-aware `mint_gm_character` (`world.roster.services.staff_characters`) replac
 it at `POST /api/gm/profiles/character/`, onboarding both staff and approved GMs
 (not staff alone) through the Hall's GM slot instead. The world-builder page's
 no-actor banner (`WorldBuilderPage`, `data-testid="world-builder-actor-banner"`)
-now just points at the Hall ("set up your GM Profile from the Hall" + a Link to
-`/`) rather than minting inline. See `docs/roadmap/gm-system.md`'s Phase 9 for the
-full rundown.
+then just pointed at the Hall ("set up your GM Profile from the Hall" + a Link
+to `/`) rather than minting inline — and `WorldBuilderPage` itself (banner and
+all) was retired with the rest of the grid-first canvas in #3538, the Atlas
+(#3477/#3533) having replaced it. See `docs/roadmap/gm-system.md`'s Phase 9 for
+the full rundown.
 
 ## Built (2026-08-20, #3283 — field feedback: staff mint, breadcrumbs, room editor page)
 

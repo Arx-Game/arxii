@@ -12,7 +12,7 @@
  *  - Error: field errors surface inline
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -28,6 +28,7 @@ vi.mock('../queries', () => ({
   useTransitionRequiredOutcomes: vi.fn(),
   useEpisodeList: vi.fn(),
   useBeatList: vi.fn(),
+  useStakes: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -90,6 +91,13 @@ function setupMocks() {
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof queries.useTransitionRequiredOutcomes>);
 
+  vi.mocked(queries.useStakes).mockReturnValue({
+    data: { count: 0, results: [], next: null, previous: null },
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useStakes>);
+
   return { saveMock };
 }
 
@@ -106,7 +114,6 @@ const existingTransition: Transition = {
   source_episode_title: 'Episode 1',
   target_episode: 20,
   target_episode_title: 'Episode 2',
-  mode: 'auto',
   connection_type: 'therefore',
   connection_summary: 'The hero succeeds',
   order: 0,
@@ -136,6 +143,14 @@ describe('TransitionFormDialog', () => {
     expect(screen.getByText('10')).toBeInTheDocument();
   });
 
+  it('does not render a mode radio group (#3565: GM-choice retired)', () => {
+    setupMocks();
+    renderWithProviders(<TransitionFormDialog {...defaultProps} />);
+    expect(screen.queryByText(/^mode$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gm choice/i)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+  });
+
   it('submits via single atomic mutation on create', async () => {
     const user = userEvent.setup();
     const { saveMock } = setupMocks();
@@ -154,7 +169,6 @@ describe('TransitionFormDialog', () => {
       expect(saveMock).toHaveBeenCalledWith(
         expect.objectContaining({
           source_episode: 10,
-          mode: 'auto',
           outcomes: [],
           existing_id: null,
         }),
@@ -246,6 +260,149 @@ describe('TransitionFormDialog', () => {
     expect(screen.getByTestId('confirm-routing-row')).toBeDisabled();
   });
 
+  it('shows an option select for a beat with a scenario, and sends required_outcome_key', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    const { saveMock } = setupMocks();
+    saveMock.mockImplementation((_body: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ ...existingTransition, id: 99 });
+    });
+
+    // Override the beat list AFTER setupMocks (which stubs it empty) so this
+    // beat's scenario is what the Option select reads.
+    vi.mocked(queries.useBeatList).mockReturnValue({
+      data: {
+        count: 1,
+        results: [
+          {
+            id: 7,
+            internal_description: 'Defeat the boss',
+            episode: 10,
+            predicate_type: 'gm_marked',
+            outcome: 'unsatisfied',
+            agm_eligible: false,
+            can_mark: false,
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+            scenario: {
+              template_id: 99,
+              name: 'The Boss Fight',
+              option_keys: ['negotiate', 'fight'],
+            },
+          },
+        ],
+        next: null,
+        previous: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useBeatList>);
+
+    renderWithProviders(<TransitionFormDialog {...defaultProps} />);
+
+    await user.click(screen.getByTestId('add-routing-row-btn'));
+    const addForm = screen.getByTestId('add-routing-row-form');
+
+    // Select the beat; its scenario is non-null, so the Option select appears.
+    const beatTrigger = within(addForm).getAllByRole('combobox')[0];
+    await user.click(beatTrigger);
+    await user.click(await screen.findByText(/Defeat the boss/i));
+
+    expect(within(addForm).getByText(/^option$/i)).toBeInTheDocument();
+
+    // Pick the "negotiate" option key.
+    const optionTrigger = within(addForm).getAllByRole('combobox')[2];
+    await user.click(optionTrigger);
+    await user.click(await screen.findByText('negotiate'));
+
+    await user.click(screen.getByTestId('confirm-routing-row'));
+    expect(screen.getByTestId('routing-predicate-list')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /create transition/i }));
+
+    await waitFor(() => {
+      expect(saveMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcomes: [
+            expect.objectContaining({
+              beat: 7,
+              required_outcome: 'success',
+              required_outcome_key: 'negotiate',
+            }),
+          ],
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('shows no option select and sends a blank required_outcome_key for a beat with no scenario', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    const { saveMock } = setupMocks();
+    saveMock.mockImplementation((_body: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ ...existingTransition, id: 99 });
+    });
+
+    // Override the beat list AFTER setupMocks (which stubs it empty).
+    vi.mocked(queries.useBeatList).mockReturnValue({
+      data: {
+        count: 1,
+        results: [
+          {
+            id: 8,
+            internal_description: 'Talk down the guard',
+            episode: 10,
+            predicate_type: 'gm_marked',
+            outcome: 'unsatisfied',
+            agm_eligible: false,
+            can_mark: false,
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+            scenario: null,
+          },
+        ],
+        next: null,
+        previous: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useBeatList>);
+
+    renderWithProviders(<TransitionFormDialog {...defaultProps} />);
+
+    await user.click(screen.getByTestId('add-routing-row-btn'));
+    const addForm = screen.getByTestId('add-routing-row-form');
+
+    const beatTrigger = within(addForm).getAllByRole('combobox')[0];
+    await user.click(beatTrigger);
+    await user.click(await screen.findByText(/Talk down the guard/i));
+
+    expect(within(addForm).queryByText(/^option$/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('confirm-routing-row'));
+    await user.click(screen.getByRole('button', { name: /create transition/i }));
+
+    await waitFor(() => {
+      expect(saveMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcomes: [
+            expect.objectContaining({
+              beat: 8,
+              required_outcome: 'success',
+              required_outcome_key: '',
+            }),
+          ],
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
   it('remove routing predicate row removes it from local state', async () => {
     const user = userEvent.setup();
     const outcomeRow: TransitionRequiredOutcome = {
@@ -304,6 +461,168 @@ describe('TransitionFormDialog', () => {
 
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Transition updated');
+    });
+  });
+
+  it('stake-column mode shows Stake and Column selects instead of Required Outcome', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    setupMocks();
+
+    vi.mocked(queries.useBeatList).mockReturnValue({
+      data: {
+        count: 1,
+        results: [
+          {
+            id: 9,
+            internal_description: 'Duel the rival',
+            episode: 10,
+            predicate_type: 'gm_marked',
+            outcome: 'unsatisfied',
+            agm_eligible: false,
+            can_mark: false,
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        next: null,
+        previous: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useBeatList>);
+
+    vi.mocked(queries.useStakes).mockReturnValue({
+      data: {
+        count: 1,
+        results: [
+          {
+            id: 42,
+            beat: 9,
+            player_summary: 'A dueling scar, worn for all to see.',
+            outcomes: [],
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        next: null,
+        previous: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useStakes>);
+
+    renderWithProviders(<TransitionFormDialog {...defaultProps} />);
+
+    await user.click(screen.getByTestId('add-routing-row-btn'));
+    const addForm = screen.getByTestId('add-routing-row-form');
+
+    const beatTrigger = within(addForm).getAllByRole('combobox')[0];
+    await user.click(beatTrigger);
+    await user.click(await screen.findByText(/Duel the rival/i));
+
+    const routeOnGroup = within(addForm).getByTestId('routing-row-route-on');
+    await user.click(within(routeOnGroup).getByRole('radio', { name: /stake column/i }));
+
+    expect(within(addForm).queryByText(/^required outcome$/i)).not.toBeInTheDocument();
+    expect(within(addForm).getByText(/^stake$/i)).toBeInTheDocument();
+    expect(within(addForm).getByText(/^column$/i)).toBeInTheDocument();
+    expect(screen.getByTestId('confirm-routing-row')).toBeDisabled();
+  });
+
+  it('sends stake and required_stake_column for a stake-column routing row', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const { saveMock } = setupMocks();
+    saveMock.mockImplementation((_body: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ ...existingTransition, id: 99 });
+    });
+
+    vi.mocked(queries.useBeatList).mockReturnValue({
+      data: {
+        count: 1,
+        results: [
+          {
+            id: 9,
+            internal_description: 'Duel the rival',
+            episode: 10,
+            predicate_type: 'gm_marked',
+            outcome: 'unsatisfied',
+            agm_eligible: false,
+            can_mark: false,
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        next: null,
+        previous: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useBeatList>);
+
+    vi.mocked(queries.useStakes).mockReturnValue({
+      data: {
+        count: 1,
+        results: [
+          {
+            id: 42,
+            beat: 9,
+            player_summary: 'A dueling scar, worn for all to see.',
+            outcomes: [],
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        next: null,
+        previous: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useStakes>);
+
+    renderWithProviders(<TransitionFormDialog {...defaultProps} />);
+
+    await user.click(screen.getByTestId('add-routing-row-btn'));
+    const addForm = screen.getByTestId('add-routing-row-form');
+
+    const beatTrigger = within(addForm).getAllByRole('combobox')[0];
+    await user.click(beatTrigger);
+    await user.click(await screen.findByText(/Duel the rival/i));
+
+    const routeOnGroup = within(addForm).getByTestId('routing-row-route-on');
+    await user.click(within(routeOnGroup).getByRole('radio', { name: /stake column/i }));
+
+    const stakeTrigger = within(addForm).getAllByRole('combobox')[1];
+    await user.click(stakeTrigger);
+    await user.click(await screen.findByText(/A dueling scar/i));
+
+    const columnTrigger = within(addForm).getAllByRole('combobox')[2];
+    await user.click(columnTrigger);
+    await user.click(await screen.findByText('Loss'));
+
+    await user.click(screen.getByTestId('confirm-routing-row'));
+    expect(screen.getByTestId('routing-predicate-list')).toBeInTheDocument();
+    expect(screen.getByText(/stake #42 loss/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /create transition/i }));
+
+    await waitFor(() => {
+      expect(saveMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcomes: [
+            expect.objectContaining({
+              beat: 9,
+              stake: 42,
+              required_stake_column: 'loss',
+            }),
+          ],
+        }),
+        expect.any(Object)
+      );
     });
   });
 });

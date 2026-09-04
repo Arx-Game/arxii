@@ -1,8 +1,79 @@
 # Stories glossary
 
 **Story / Chapter / Episode / Beat / Transition**:
-The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically or by GM choice. Episodes are nodes and Transitions are edges — a Story progresses by satisfying Beats to make Transitions eligible.
-_Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition).
+The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically - the lowest authored `(order, pk)` eligible edge, never a runtime GM pick (#3565, ADR-0258; the retired mode was called GM Choice). Episodes are nodes and Transitions are edges - a Story progresses by satisfying Beats to make Transitions eligible.
+_Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition), GM choice (routing is never a runtime pick, #3565).
+
+**Beat predicate**:
+`Beat.predicate_type` (`BeatPredicateType`) - what an auto-evaluated Beat is
+actually gated on: `GM_MARKED` (no auto-evaluation), `CHARACTER_LEVEL_AT_LEAST`,
+`ACHIEVEMENT_HELD`, `CONDITION_HELD`, `CODEX_ENTRY_UNLOCKED`,
+`STORY_AT_MILESTONE`, `AGGREGATE_THRESHOLD` (write-path triggered, not
+`evaluate_auto_beats`), `OUTCOME_TIER` (the default; graded by a scenario run,
+encounter, battle, or decisive check), `FACTION_STANDING_AT_LEAST` (reads
+`SocietyReputation`/`OrganizationReputation.value`), and `NPC_REGARD_AT_LEAST`
+(#3570; reads `NpcRegard`, the NPC's signed opinion of the character's
+persona). Three memories can each hold "how an NPC feels about a character"
+and only one backs this last predicate type: `NpcRegard` (the notable-NPC
+opinion axis, `world.npc_services`, read by `NPC_REGARD_AT_LEAST`) is distinct
+from `NPCStanding.affection` (the functionary disposition track,
+`adjust_npc_affection`, ADR-0085) and from the relationships affection track
+(`CharacterRelationship`/`RelationshipTrackProgress`, `SHIFT_AFFECTION`) - a
+beat authored against the wrong memory silently never flips.
+_Avoid_: predicate (name the specific type), regard/standing used
+interchangeably (they are different memories with different writers).
+
+**Session prep**:
+What a GM authors on a Beat, ahead of the table, so `RunBeatAction` can
+instantiate it into the live scene in one press: an **opponent line**
+(`BeatOpponentLine` - creature template x count x position hint) or a
+**staged template** (`BeatStagedTemplate` - situation XOR challenge template)
+on a SITUATION beat, or, on an ENCOUNTER beat, either a freeform roster of
+opponent lines or a whole **staged battle** (`BeatStagedBattle` - a battle-map
+blueprint, region, party side, and `BeatStagedBattleUnit` lines by
+template/side/place) - never both on the same beat (server-enforced XOR,
+#3569). "Prep" names the row set; "session prep" names the workflow of
+authoring it before play.
+_Avoid_: encounter roster (ambiguous with the live `CombatEncounter`), battle
+prep (staged battle is the specific term), pre-stage without naming which of
+the three rows.
+
+**Routing report**:
+The authoring-time check on an episode's outbound transitions, before any
+session ever runs them (`services/routing.py::routing_report`/
+`routing_reports_for_episodes`, `RoutingReport`, #3563). A **dead end** is a
+beat's FAILURE, its EXPIRED when it has a deadline or its scene clock fills, or a stake's LOSS that no
+outbound transition accepts - at runtime that outcome would pause the run at
+the frontier mid-session. An **ambiguity** is a pair of outbound transitions
+whose requirement sets never contradict, so both could be eligible at once and
+the lowest `(order, pk)` one silently wins. The report is **advisory**: it
+never blocks saving, resolving, or running, and an episode with no outbound
+transitions gets an empty report by design. It surfaces as `routing_problems`
+on the episode payloads and `routing_ambiguous` on detail, GM-only.
+_Avoid_: readiness (that is the stakes contract), validation error (the report
+never blocks).
+
+**Scenario / Scenario Graph**:
+A SITUATION or TASK Beat's body is the same authored option -> check -> tier -> consequence
+-> next graph that already runs missions (`MissionTemplate`/`MissionNode`/`MissionOption`/
+`MissionOptionRoute`, `world.missions` - see that app's glossary) - not a second, story-local
+option engine (#3565, ADR-0258). **Scenario** is the GM-facing name for this on the story side
+(the story author page's "Design scenario" action, the scene's Scenario Card/rail section);
+**scenario graph** is the code and glossary term for the shared primitive itself, used whether
+the wrapper is a story beat or a mission. `StoryScenario` (below) is the ownership link that
+makes a scenario a *story's own* scenario rather than staff-authored catalog content.
+_Avoid_: mission (reserve for a scenario graph in its quest wrapper - `MissionTemplate`'s giver
+economy - see Mission in the missions glossary), GM choice (the runtime pick this replaces),
+option engine (there is exactly one, shared).
+
+**StoryScenario**:
+The ownership link (`world.stories.models.StoryScenario`) between a `Story` and the
+`missions.MissionTemplate` a Lead GM authored as one of their beats' bodies - `story` FK +
+`template` O2O (`related_name="story_scenario"`), read via `template.story_scenario.story` so
+`world.missions` never imports `Story` (ADR-0010, #3565). A story-owned template is created
+RESTRICTED with zero draw weight and excluded from boards/opportunities, so it never surfaces
+as a public quest; the link is immutable after creation - a scenario is never re-parented.
+_Avoid_: mission ownership, scenario link (StoryScenario is the specific model name).
 
 **Era**:
 A temporal metaplot tag (player-facing "Season N") that stories and events are stamped against, with exactly one ACTIVE era enforced at a time. It is a temporal label, not a parent in the Story/Chapter/Episode hierarchy.
@@ -57,23 +128,47 @@ The `StakeContractActivation` row locking a beat's stakes contract at scene star
 _Avoid_: lock (use Activation for the row; "lock" for the behavior it enforces), snapshot.
 
 **Stake Outcome**:
-The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) — which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail, or a GM's Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). Exactly one StakeOutcome per stake (unique constraint) — transition routing reads it. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
-_Avoid_: stake result, stake completion.
-
-**Constrained Pick**:
-The GM's resolution move on a pending stake (`resolve_stake_by_gm_pick`, `POST /api/stakes/{id}/resolve/`): choosing one of the stake's *authored* resolution columns — never composing a consequence freehand at resolution time. The picked branch fires exactly like the machine path (pool + writers); the StakeOutcome records `GM_PICK`, the GM, and notes. One pick per stake.
-_Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bounded by authorship).
+The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) - which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail is the only method since #3561 retired the GM Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). Exactly one StakeOutcome per stake (unique constraint) - transition routing reads it. `resolved_by` / `gm_notes` are historical audit fields from before #3561 - a pre-#3561 row resolved by a GM's pick still shows who and their notes, but every row since is machine-graded with both blank. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
+_Avoid_: stake result, stake completion, GM pick / Constrained Pick (retired #3561 - stakes are always machine-graded now).
 
 **Outcome Key**:
-The `StakeResolution.outcome_key` slug (#1760) — an open, designer-authored vocabulary naming *which* branch a resolution is, within one Stake's one `StakeResolutionColumn`. Lets a stake author multiple named branches sharing a polarity (e.g. two distinct LOSS branches, `"destroyed"` and `"captured"`); blank is the column's single plain/default branch and is what every pre-#1760 `StakeResolution` row carries (backward compatible). `column` + `Outcome Key` together — not `column` alone — identify one authored branch (unique `(stake, column, outcome_key)`); a GM's Constrained Pick names both.
+The `StakeResolution.outcome_key` slug (#1760) - an open, designer-authored vocabulary naming *which* branch a resolution is, within one Stake's one `StakeResolutionColumn`. Lets a stake author multiple named branches sharing a polarity (e.g. two distinct LOSS branches, `"destroyed"` and `"captured"`); blank is the column's single plain/default branch and is what every pre-#1760 `StakeResolution` row carries (backward compatible). `column` + `Outcome Key` together - not `column` alone - identify one authored branch (unique `(stake, column, outcome_key)`); machine grading resolves both from the completing beat's outcome and the completion's own `outcome_key` (#3561).
 _Avoid_: sub-branch, variant (reserve "branch" for the `StakeResolution` row itself; Outcome Key is the naming dimension that distinguishes branches sharing a column).
 
+**Named Branch**:
+A `StakeResolution` row whose `Outcome Key` is non-blank - the second (or
+third...) authored branch sharing a `Stake`'s column, distinguished from the
+column's plain/default branch by its key. Reached by key match, never by a
+runtime GM decision (#3561, ADR-0259): `_branch_for_column` selects a named
+branch when the completing beat's own `outcome_key` equals it, falling back
+to the plain branch (or the column's first authored branch) when it doesn't.
+Readiness (`_named_branch_problems`, #3561) flags two authoring gaps: a
+column with a named branch but no plain default, and a named key no option
+of the beat's scenario declares.
+_Avoid_: sub-branch, variant (see Outcome Key's note - "branch"/"named
+branch" name the `StakeResolution` row; Outcome Key names the field that
+distinguishes it).
+
+**Beat Outcome Key**:
+`Beat.outcome_key`/`BeatCompletion.outcome_key` (#3565) - the `MissionOption.key` of the
+scenario option that ended the run which resolved an OUTCOME_TIER beat, denormalised at
+completion; blank for combat, battle, decisive-check, and GM-marked completions.
+`TransitionRequiredOutcome.required_outcome_key` routes on it, the same shape the Stakes
+`Outcome Key` above used first (#1760) - but a different field on a different model, naming
+which scenario ending fired rather than which stake branch fired.
+_Avoid_: outcome key alone when the Stakes `Outcome Key` is also in scope (name the model);
+option key (that's `MissionOption.key`, the source value this field denormalises).
+
 **Withdrawal Column**:
-The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED (`withdrawal=True` through `record_outcome_tier_completion`); stakes without an authored WITHDRAWAL branch pend with the beat's PENDING_GM_REVIEW for a Constrained Pick. The beat itself still awaits GM adjudication.
+The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED, via `resolve_stakes_for_withdrawal` (#3559); stakes without an authored WITHDRAWAL branch still record an empty (`resolution=None`) StakeOutcome (audit honesty). The beat's own outcome is left untouched (still open) - a withdrawal never completes the beat.
 _Avoid_: flee branch, retreat outcome.
 
+**Objective-First Grading**:
+The rule (#3559) that no OUTCOME_TIER beat ever waits on a GM ruling to close - three structural replacements stand in for the deleted `BeatOutcome.PENDING_GM_REVIEW`. `beat_for_scene_conclusion` scopes a concluded fight or battle to at most one gradable beat (its explicit `story_beat`, else the scene's `running_beat` only when that beat is itself the objective). An outlier roll clamps to the best authored tier of the same polarity (`clamp_tier_to_pool`) instead of parking the beat. A missing `EncounterOutcomeMapping`/`BattleOutcomeMapping` row is required content, reported on the admin sentinel (#3444), not a fallback state. The same "objective-first" principle applies one layer down inside a scenario (#3565, ADR-0258): a fight spawned by an ENCOUNTER scenario option grades that option's route (`CombatEncounter.scenario_deed`), never a beat directly - see the missions glossary's ENCOUNTER Option entry.
+_Avoid_: pending review, GM review queue, parked beat.
+
 **Reward Line**:
-One authored win payout on a stake's branch (`StakeRewardLine`, #1770 PR3) — a `sink` (`StakeRewardSink`: MONEY or RESONANCE), an `amount` (a money-equivalent scalar paid to EACH completion participant, ALL_EQUAL), and a `resonance` FK when the sink is RESONANCE. Hangs off a WIN-column `StakeResolution` (WIN-only, enforced in clean() + serializer); paid by `_apply_stake_rewards` only under a ready, effective-risk-bearing Activation, with the Reward Band re-checked at pay time. Distinct from missions' `MissionDeedRewardLine` (deed-anchored; stakes deliberately reuse the sink *services*, not the deed router).
+One authored win payout on a stake's branch (`StakeRewardLine`, #1770 PR3; ITEM/CLUE/CODEX added #3566) - a `sink` (`StakeRewardSink`: MONEY, RESONANCE, ITEM, CLUE, or CODEX), an `amount` (a money-equivalent scalar paid to EACH completion participant, ALL_EQUAL), and the FK matching the sink (`resonance`, `item_template`, `clue`, or `codex_entry`). For ITEM, `amount` is never author-supplied - it is pinned to `item_template.value` (`clean()` + serializer reject a differing amount), and authoring is gated on `GMLevelCap.allow_item_rewards` (seeded True for EXPERIENCED/SENIOR only, staff bypass). For CLUE, only a resolvable target kind (codex, rescue, secret, persona link) is a valid target, further gated by the clue-authoring policy (`clue_target_kind_allowed`, shared with `author_clue`: SENIOR+ GM or staff, SECRET staff-only). Hangs off a WIN-column `StakeResolution` (WIN-only, enforced in clean() + serializer); paid by `_apply_stake_rewards` only under a ready, effective-risk-bearing Activation, with the Reward Band re-checked at pay time; CLUE/CODEX delivery skips a participant with no roster entry (NPC) while MONEY/RESONANCE/ITEM still pay them, and each line x participant delivery is individually wrapped so one failure doesn't stop the rest. Distinct from missions' `MissionDeedRewardLine` (deed-anchored; stakes deliberately reuse the sink *services*, not the deed router).
 _Avoid_: reward row, payout entry, deed line.
 
 **Reward Band**:
@@ -81,7 +176,7 @@ The per-tier `RiskCalibration.reward_floor`/`reward_ceiling` window (#1770 PR3) 
 _Avoid_: reward cap (the band has a floor too), payout limit.
 
 **Stakes Summary**:
-The one player-visible wire shape for a beat's stakes contract (#1770 PR4) — `{declared_risk, effective_risk, is_ready, stakes: [{id, player_summary, severity, severity_label}]}`, built by `stakes_summary_for_beat` (`world.stories.serializers`) and served at `GET /api/beats/{id}/stakes-summary/` and as `combat_stakes` on the consent-prompt serializers. What is wagered is visible; branch contents (`StakeResolution`) are never part of the shape (pillar 9).
+The one player-visible wire shape for a beat's stakes contract (#1770 PR4) - `{declared_risk, effective_risk, is_ready, stakes: [{id, player_summary, severity, severity_label, reward_kinds}]}`, built by `stakes_summary_for_beat` (`world.stories.serializers`) and served at `GET /api/beats/{id}/stakes-summary/` and as `combat_stakes` on the consent-prompt serializers. What is wagered is visible; branch contents (`StakeResolution`) are never part of the shape (pillar 9). `reward_kinds` (#3566) is the one exception in spirit only - sorted, deduplicated payout *category* labels (money/resonance/item/knowledge - CLUE and CODEX both read as "knowledge") across the WIN branch(es)' reward lines, never an amount or a target.
 _Avoid_: stakes preview, contract dump (a summary never includes resolutions).
 
 **Boundary Check** (stakes):

@@ -51,3 +51,48 @@ export function statusVariant(
       return 'destructive';
   }
 }
+
+/**
+ * A character's display name from its parts.
+ *
+ * Shared by the identity stage and the review stage, which differ only in what
+ * they show when no first name has been entered yet.
+ */
+export function composeFullName(
+  firstName: string | null | undefined,
+  familyName: string | null | undefined,
+  fallback: string
+): string {
+  if (!firstName) return fallback;
+  if (!familyName) return firstName;
+  return `${firstName} ${familyName}`;
+}
+
+/**
+ * Height in inches as feet and inches (68 -> 5'8"), the form players read
+ * heights in. The draft stores and PATCHes plain inches; this is display
+ * only, and the number input on the appearance stage stays in inches.
+ */
+export function formatHeight(inches: number): string {
+  const feet = Math.floor(inches / 12);
+  const remainingInches = inches % 12;
+  return `${feet}'${remainingInches}"`;
+}
+
+/**
+ * Generate a gradient background color based on the area name.
+ * Creates a consistent but varied appearance for each area.
+ */
+export function getGradientColors(name: string): [string, string] {
+  // Simple hash function for consistent colors
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  // Generate two hue values for gradient
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 40) % 360; // Offset for second color
+
+  return [`hsl(${hue1}, 40%, 25%)`, `hsl(${hue2}, 50%, 35%)`];
+}

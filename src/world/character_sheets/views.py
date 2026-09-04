@@ -101,33 +101,71 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="set-origin-slot")
     def set_origin_slot_action(self, request: Request, pk: int | None = None) -> Response:
-        """Set a character's origin-story slot answer (#2478)."""
+        """Set a character's origin-story slot answer (#2478, #3617).
+
+        A costed pick-list choice is set at character creation only; a non-staff
+        caller sending ``choice_id`` here is refused. A text-only write on a slot
+        that already carries a choice keeps that choice (write-ins never clear it).
+        """
         sheet = self.get_object()
         self._check_ownership(sheet)
         serializer = OriginSlotInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        from world.character_creation.models import OriginTemplateSlot  # noqa: PLC0415
+        from world.character_creation.models import (  # noqa: PLC0415
+            CharacterOriginSlot,
+            OriginTemplateSlot,
+        )
 
         try:
             slot = OriginTemplateSlot.objects.get(pk=serializer.validated_data["slot_id"])
         except OriginTemplateSlot.DoesNotExist:
             return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
-        set_origin_slot(sheet, slot, serializer.validated_data["value"])
+
+        choice_id = serializer.validated_data.get("choice_id")
+        if choice_id is not None:
+            if not request.user.is_staff:
+                return Response(
+                    {"detail": "Upbringing choices are set at character creation."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+
+            choice = OriginTemplateSlotChoice.objects.filter(pk=choice_id, slot=slot).first()
+            if choice is None:
+                return Response({"detail": "Choice not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            existing = CharacterOriginSlot.objects.filter(sheet=sheet, slot=slot).first()
+            choice = existing.choice if existing is not None else None
+        set_origin_slot(sheet, slot, serializer.validated_data["value"], choice=choice)
         return Response(status=status.HTTP_200_OK)
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="clear-origin-slot")
     def clear_origin_slot_action(self, request: Request, pk: int | None = None) -> Response:
-        """Clear a character's origin-story slot answer (#2478)."""
+        """Clear a character's origin-story slot answer (#2478, #3617).
+
+        A slot holding a costed choice was set at character creation; a
+        non-staff caller clearing it here would erase a priced pick for free,
+        so that combination is refused the same way setting one is.
+        """
         sheet = self.get_object()
         self._check_ownership(sheet)
         serializer = OriginSlotClearSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        from world.character_creation.models import OriginTemplateSlot  # noqa: PLC0415
+        from world.character_creation.models import (  # noqa: PLC0415
+            CharacterOriginSlot,
+            OriginTemplateSlot,
+        )
 
         try:
             slot = OriginTemplateSlot.objects.get(pk=serializer.validated_data["slot_id"])
         except OriginTemplateSlot.DoesNotExist:
             return Response({"detail": "Slot not found."}, status=status.HTTP_404_NOT_FOUND)
+        existing = CharacterOriginSlot.objects.filter(sheet=sheet, slot=slot).first()
+        if existing is not None and existing.choice_id is not None and not request.user.is_staff:
+            return Response(
+                {"detail": "Upbringing choices are set at character creation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         clear_origin_slot(sheet, slot)
         return Response(status=status.HTTP_200_OK)
 

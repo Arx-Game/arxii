@@ -1,27 +1,17 @@
 /**
- * Stage 7: Appearance
+ * Stage 7: Appearance (#3630).
  *
- * Physical characteristics: age, height, build, form traits (hair, eyes, etc.), description.
+ * Physical characteristics as fields and choice rows: age and birthday day
+ * and height in inches are typed numbers (a `StatRow`'s pips would run to a
+ * hundred); birthday month, height band, build and each form trait are
+ * pressed-row choices. The record rail lists the choices made so far; every
+ * explanatory sentence the old layout put under a section heading now lives
+ * in the margin instead (Decision 8).
  */
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { ChapterLeaf, ChoiceRow, Field, Marginalia, Note, RecordRail } from '../folio';
 import {
   useBuilds,
   useCGExplanations,
@@ -29,23 +19,10 @@ import {
   useHeightBands,
   useUpdateDraft,
 } from '../queries';
+import { formatHeight } from '../utils';
 import { MarkingsEditor } from './MarkingsEditor';
-import type {
-  Build,
-  CharacterDraft,
-  FormTraitOption,
-  FormTrait,
-  HeightBand,
-  InheritedTraitGroup,
-} from '../types';
-
-/** A trait row for rendering: own palette + inherited groups (#2815). */
-interface MergedTraitOptions {
-  trait: FormTrait;
-  is_required: boolean;
-  options: FormTraitOption[];
-  inherited: InheritedTraitGroup[];
-}
+import { Stage } from '../types';
+import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
 
 interface AppearanceStageProps {
   draft: CharacterDraft;
@@ -96,37 +73,26 @@ export function AppearanceStage({
   );
   const draftData = draft.draft_data;
 
-  // Merge own-palette traits with inherited cross-line groups (#2815). An
-  // inherited group for a trait outside the own palette (e.g. a pinned value
-  // on a trait the species doesn't normally offer) gets its own row.
-  const mergedFormOptions = useMemo<MergedTraitOptions[]>(() => {
-    if (!formOptions) return [];
-    const rows: MergedTraitOptions[] = formOptions.traits.map((entry) => ({
-      trait: entry.trait,
-      is_required: entry.is_required,
-      options: entry.options,
-      inherited: [],
-    }));
-    const byTraitId = new Map(rows.map((row) => [row.trait.id, row]));
-    for (const group of formOptions.inherited) {
-      const row = byTraitId.get(group.trait.id);
-      if (row) {
-        row.inherited.push(group);
-      } else {
-        const newRow: MergedTraitOptions = {
-          trait: group.trait,
-          is_required: false,
-          options: [],
-          inherited: [group],
-        };
-        byTraitId.set(group.trait.id, newRow);
-        rows.push(newRow);
-      }
-    }
-    return rows;
-  }, [formOptions]);
+  // Traits the species offers directly (#2815); a trait id absent from this
+  // set but present in `formOptions.inherited` is a stray pinned value (e.g.
+  // from a family line) with no own-palette row of its own.
+  const ownTraitIds = useMemo(
+    () => new Set((formOptions?.traits ?? []).map((t) => t.trait.id)),
+    [formOptions]
+  );
+  const inheritedOptionsFor = useCallback(
+    (traitId: number): FormTraitOption[] =>
+      (formOptions?.inherited ?? [])
+        .filter((group) => group.trait.id === traitId)
+        .flatMap((group) => group.options),
+    [formOptions]
+  );
+  const strayInherited = useMemo(
+    () => (formOptions?.inherited ?? []).filter((group) => !ownTraitIds.has(group.trait.id)),
+    [formOptions, ownTraitIds]
+  );
 
-  const { register, getValues, reset, formState } = useForm<AppearanceFormValues>({
+  const { register, getValues, formState } = useForm<AppearanceFormValues>({
     defaultValues: {
       description: draftData.description ?? '',
     },
@@ -147,7 +113,7 @@ export function AppearanceStage({
     } catch {
       return window.confirm('Failed to save description. Discard changes and continue?');
     }
-  }, [draft.id, updateDraft, formState.isDirty, getValues, reset]);
+  }, [draft.id, updateDraft, formState.isDirty, getValues]);
 
   useEffect(() => {
     if (!onRegisterBeforeLeave) return;
@@ -208,15 +174,24 @@ export function AppearanceStage({
     });
   };
 
-  // Local thumb position while dragging; null = track the draft value.
-  const [heightDraft, setHeightDraft] = useState<number | null>(null);
+  // Local buffer while typing; null once committed, so display tracks the
+  // draft value again (including a band swap's midpoint reset).
+  const [heightInput, setHeightInput] = useState<string | null>(null);
 
-  const handleHeightInchesCommit = (value: number[]) => {
-    setHeightDraft(null);
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: { height_inches: value[0] },
-    });
+  const commitHeightInches = () => {
+    const band = draft.height_band;
+    if (!band) return;
+    const parsed = parseInt(heightInput ?? '', 10);
+    if (!Number.isNaN(parsed)) {
+      const clamped = Math.max(band.min_inches, Math.min(band.max_inches, parsed));
+      if (clamped !== draft.height_inches) {
+        updateDraft.mutate({
+          draftId: draft.id,
+          data: { height_inches: clamped },
+        });
+      }
+    }
+    setHeightInput(null);
   };
 
   const handleBuildSelect = (build: Build) => {
@@ -226,16 +201,19 @@ export function AppearanceStage({
     });
   };
 
-  const handleFormTraitChange = (traitName: string, optionId: number) => {
+  const handleFormTraitChange = (traitName: string, optionId: number | null) => {
+    const nextFormTraits = { ...(draftData.form_traits ?? {}) };
+    if (optionId === null) {
+      delete nextFormTraits[traitName];
+    } else {
+      nextFormTraits[traitName] = optionId;
+    }
     updateDraft.mutate({
       draftId: draft.id,
       data: {
         draft_data: {
           ...draftData,
-          form_traits: {
-            ...(draftData.form_traits ?? {}),
-            [traitName]: optionId,
-          },
+          form_traits: nextFormTraits,
         },
       },
     });
@@ -265,290 +243,270 @@ export function AppearanceStage({
     });
   };
 
-  const formatHeight = (inches: number): string => {
-    const feet = Math.floor(inches / 12);
-    const remainingInches = inches % 12;
-    return `${feet}'${remainingInches}"`;
+  const getSelectedOptionId = (traitName: string): number | null => {
+    const formTraits = draftData.form_traits as Record<string, number> | undefined;
+    return formTraits?.[traitName] ?? null;
   };
 
-  // Get the selected option for a form trait
-  const getSelectedOptionId = (traitName: string): string => {
-    const formTraits = draftData.form_traits as Record<string, number> | undefined;
-    const selectedId = formTraits?.[traitName];
-    return selectedId ? String(selectedId) : '';
-  };
+  const heightBandTitle = (band: HeightBand): string =>
+    !band.is_cg_selectable && isStaff
+      ? `${band.min_inches} to ${band.max_inches} inches (not normally offered to players)`
+      : `${band.min_inches} to ${band.max_inches} inches`;
+
+  const buildTitle = (build: Build): string | undefined =>
+    !build.is_cg_selectable && isStaff ? 'Not normally offered to players' : undefined;
+
+  const rail = (
+    <>
+      <RecordRail
+        rows={[
+          { label: 'Origin', value: draft.selected_area?.name },
+          { label: 'Species', value: draft.selected_species?.name },
+          { label: 'Age', value: draft.age !== null ? String(draft.age) : undefined },
+          {
+            label: 'Height',
+            value:
+              draft.height_band && draft.height_inches !== null
+                ? `${draft.height_band.display_name}, ${formatHeight(draft.height_inches)}`
+                : undefined,
+          },
+          { label: 'Build', value: draft.build?.display_name },
+        ]}
+        ledger="Stage 8 of 11"
+      />
+      <Marginalia id="note-appearance">
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Age">
+          must be between {AGE_MIN} and {ageMax} years.
+        </Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Birthday">
+          is the day your character celebrates each year. Friends will see it coming up in the Town
+          Crier’s tidings.
+        </Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Height">
+          is a category first and an exact figure within it second.
+          {draft.height_band && (
+            <>
+              {' '}
+              Other characters see you as “{draft.height_band.display_name}” rather than your exact
+              height.
+            </>
+          )}
+        </Note>
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Build">is your character’s body type.</Note>
+        {draft.selected_species && (
+          // PLACEHOLDER: Apostate rewrite
+          <Note lead="Physical features">
+            are drawn from the palette your species offers, plus anything a parent line passes down.
+          </Note>
+        )}
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Physical description">
+          is optional, and is appended to the automatic description.
+        </Note>
+        {/* Moved from MarkingsEditor.tsx, which has no margin of its own. */}
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Markings">
+          are tattoos, scars, brands and birthmarks: what your character’s skin remembers. Clothing
+          conceals a marking at the regions it covers; revealing garments and the in-game reveal
+          bare it. Optional.
+        </Note>
+      </Marginalia>
+    </>
+  );
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.APPEARANCE}
+      title={copy?.appearance_heading ?? 'Appearance'}
+      intro={copy?.appearance_intro}
+      aside={rail}
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.appearance_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.appearance_intro ?? ''}</p>
-      </div>
+      <h2 className="section-h">{copy?.appearance_age_heading ?? 'Age'}</h2>
+      <Field
+        id="age"
+        label="Age"
+        hint={
+          draft.selected_species?.eternal_youth
+            ? 'Your species keeps its eternal youth; apparent age locks in the early twenties.'
+            : // Unseeded copy key today; renders nothing until staff write it.
+              copy?.appearance_age_hint
+        }
+      >
+        <input
+          id="age"
+          type="number"
+          min={AGE_MIN}
+          max={ageMax}
+          value={localAge}
+          onChange={(e) => setLocalAge(e.target.value)}
+          onBlur={commitAge}
+        />
+      </Field>
 
-      {/* Age */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Age</h3>
-        <div className="max-w-xs">
-          <Input
+      <h2 className="section-h">{copy?.appearance_birthday_heading ?? 'Birthday'}</h2>
+      <ChoiceRow
+        label="Month"
+        options={MONTH_NAMES.map((name, index) => ({ value: index + 1, label: name }))}
+        value={birthdayMonth}
+        onChange={(month) => commitBirthday(month, birthdayDay ?? 1)}
+      />
+      <Field id="bday" label="Day">
+        <input
+          id="bday"
+          type="number"
+          min={1}
+          max={maxDay}
+          value={birthdayDay ?? ''}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            if (!Number.isNaN(parsed) && birthdayMonth) {
+              commitBirthday(birthdayMonth, parsed);
+            }
+          }}
+          disabled={!birthdayMonth}
+        />
+      </Field>
+
+      <h2 className="section-h">{copy?.appearance_height_heading ?? 'Height'}</h2>
+      {heightBandsLoading ? (
+        <p className="ledger-line" aria-busy="true">
+          Loading height bands…
+        </p>
+      ) : (
+        <ChoiceRow
+          label="Height band"
+          options={(heightBands ?? []).map((band) => ({
+            value: band.id,
+            label: band.display_name,
+            title: heightBandTitle(band),
+          }))}
+          value={draft.height_band?.id ?? null}
+          onChange={(id) => {
+            const band = (heightBands ?? []).find((b) => b.id === id);
+            if (band) handleHeightBandSelect(band);
+          }}
+        />
+      )}
+      {draft.height_band && (
+        <Field
+          id="height"
+          label="Height in inches"
+          hint={`${formatHeight(draft.height_band.min_inches)} to ${formatHeight(
+            draft.height_band.max_inches
+          )}`}
+        >
+          <input
+            id="height"
             type="number"
-            min={AGE_MIN}
-            max={ageMax}
-            value={localAge}
-            onChange={(e) => setLocalAge(e.target.value)}
-            onBlur={commitAge}
-            placeholder={`Enter age (${AGE_MIN}-${ageMax})`}
+            min={draft.height_band.min_inches}
+            max={draft.height_band.max_inches}
+            value={heightInput ?? String(draft.height_inches ?? '')}
+            onChange={(e) => setHeightInput(e.target.value)}
+            onBlur={commitHeightInches}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Age must be between {AGE_MIN} and {ageMax} years.
-            {draft.selected_species?.eternal_youth &&
-              ' Your species keeps its eternal youth; apparent age locks in the early twenties.'}
-          </p>
-        </div>
-      </section>
-
-      {/* Birthday */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Birthday</h3>
-        <p className="text-sm text-muted-foreground">
-          The day your character celebrates each year. Friends will see it coming up in the Town
-          Crier&apos;s tidings.
-        </p>
-        <div className="flex max-w-md gap-3">
-          <div className="flex-1">
-            <Label className="text-xs">Month</Label>
-            <Select
-              value={birthdayMonth ? String(birthdayMonth) : ''}
-              onValueChange={(value) => commitBirthday(parseInt(value, 10), birthdayDay ?? 1)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Month" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_NAMES.map((name, index) => (
-                  <SelectItem key={name} value={String(index + 1)}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-28">
-            <Label className="text-xs">Day</Label>
-            <Input
-              type="number"
-              min={1}
-              max={maxDay}
-              value={birthdayDay ?? ''}
-              onChange={(e) => {
-                const parsed = parseInt(e.target.value, 10);
-                if (!Number.isNaN(parsed) && birthdayMonth) {
-                  commitBirthday(birthdayMonth, parsed);
-                }
-              }}
-              placeholder="Day"
-              disabled={!birthdayMonth}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Height Band Selection */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Height</h3>
-        <p className="text-sm text-muted-foreground">
-          Select your height category, then fine-tune your exact height.
-        </p>
-        {heightBandsLoading ? (
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {heightBands?.map((band) => (
-              <Button
-                key={band.id}
-                variant={draft.height_band?.id === band.id ? 'default' : 'outline'}
-                onClick={() => handleHeightBandSelect(band)}
-                className={cn(
-                  !band.is_cg_selectable &&
-                    isStaff &&
-                    'border-red-500 text-red-500 hover:bg-red-500/10 hover:text-red-500'
-                )}
-              >
-                {band.display_name}
-              </Button>
-            ))}
-          </div>
-        )}
-
-        {draft.height_band && (
-          <div className="max-w-md space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>{formatHeight(draft.height_band.min_inches)}</span>
-              <span className="font-semibold">
-                {(heightDraft ?? draft.height_inches)
-                  ? formatHeight(heightDraft ?? draft.height_inches!)
-                  : '-'}
-              </span>
-              <span>{formatHeight(draft.height_band.max_inches)}</span>
-            </div>
-            <Slider
-              value={[heightDraft ?? draft.height_inches ?? draft.height_band.min_inches]}
-              min={draft.height_band.min_inches}
-              max={draft.height_band.max_inches}
-              step={1}
-              // Commit-only PATCH (2026-07 audit): onValueChange fired one
-              // request per drag tick — a request storm whose out-of-order
-              // responses rubber-banded the thumb. Local state keeps the
-              // thumb tracking during the drag.
-              onValueChange={(value) => setHeightDraft(value[0])}
-              onValueCommit={handleHeightInchesCommit}
-            />
-            <p className="text-xs text-muted-foreground">
-              Other characters will see you as "{draft.height_band.display_name}" rather than your
-              exact height.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* Build Selection */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Build</h3>
-        <p className="text-sm text-muted-foreground">Select your body type.</p>
-        {buildsLoading ? (
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {builds?.map((build) => (
-              <Button
-                key={build.id}
-                variant={draft.build?.id === build.id ? 'default' : 'outline'}
-                onClick={() => handleBuildSelect(build)}
-                className={cn(
-                  !build.is_cg_selectable &&
-                    isStaff &&
-                    'border-red-500 text-red-500 hover:bg-red-500/10 hover:text-red-500'
-                )}
-              >
-                {build.display_name}
-              </Button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Form Traits (Hair, Eyes, Skin, etc.) */}
-      {draft.selected_species && (
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Physical Features</h3>
-          <p className="text-sm text-muted-foreground">
-            Select your character's physical features.
-          </p>
-          {formOptionsLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 animate-pulse rounded bg-muted" />
-              ))}
-            </div>
-          ) : mergedFormOptions.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {mergedFormOptions.map((formOption) => (
-                <div key={formOption.trait.id} className="space-y-2">
-                  <Label htmlFor={`trait-${formOption.trait.name}`}>
-                    {formOption.trait.display_name}
-                    {formOption.is_required && (
-                      <span
-                        className="ml-1 text-destructive"
-                        title="Required for your species"
-                        aria-label="required"
-                      >
-                        *
-                      </span>
-                    )}
-                  </Label>
-                  <Select
-                    value={getSelectedOptionId(formOption.trait.name)}
-                    onValueChange={(value) =>
-                      handleFormTraitChange(formOption.trait.name, parseInt(value, 10))
-                    }
-                  >
-                    <SelectTrigger id={`trait-${formOption.trait.name}`}>
-                      <SelectValue placeholder={`Select ${formOption.trait.display_name}`} />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60 overflow-y-auto">
-                      {formOption.options.map((option) => (
-                        <SelectItem key={option.id} value={String(option.id)}>
-                          {option.display_name}
-                        </SelectItem>
-                      ))}
-                      {formOption.inherited.map((group) => (
-                        <SelectGroup key={`${formOption.trait.id}-${group.source}`}>
-                          <SelectLabel className="text-accent-foreground">
-                            From your {group.source}
-                          </SelectLabel>
-                          {group.options.map((option) => (
-                            <SelectItem key={option.id} value={String(option.id)}>
-                              {option.display_name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    aria-label={`Describe your ${formOption.trait.display_name.toLowerCase()}`}
-                    placeholder="Describe it (optional): e.g. flowing crimson"
-                    defaultValue={getTraitDescriptor(formOption.trait.name)}
-                    onBlur={(e) =>
-                      handleTraitDescriptorCommit(formOption.trait.name, e.target.value)
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm italic text-muted-foreground">
-              No physical features available for this species.
-            </p>
-          )}
-        </section>
+        </Field>
       )}
 
-      {/* Description */}
-      <section className="space-y-4">
-        <h3 className="theme-heading text-lg font-semibold">Physical Description</h3>
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            {...register('description')}
-            placeholder="Describe your character's physical appearance..."
-            rows={4}
-            className="resize-y"
-          />
-          <p className="text-xs text-muted-foreground">
-            (Optional, appended to automatic descriptions)
-          </p>
-        </div>
-      </section>
+      <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>
+      {buildsLoading ? (
+        <p className="ledger-line" aria-busy="true">
+          Loading builds…
+        </p>
+      ) : (
+        <ChoiceRow
+          label="Build"
+          options={(builds ?? []).map((build) => ({
+            value: build.id,
+            label: build.display_name,
+            title: buildTitle(build),
+          }))}
+          value={draft.build?.id ?? null}
+          onChange={(id) => {
+            const build = (builds ?? []).find((b) => b.id === id);
+            if (build) handleBuildSelect(build);
+          }}
+        />
+      )}
 
-      {/* Body markings (#2985) */}
-      <section className="space-y-4">
-        <MarkingsEditor />
-      </section>
-    </motion.div>
+      {draft.selected_species && (
+        <>
+          <h2 className="section-h">{copy?.appearance_features_heading ?? 'Physical features'}</h2>
+          {formOptionsLoading && (
+            <p className="ledger-line" aria-busy="true">
+              Loading physical features…
+            </p>
+          )}
+          {(formOptions?.traits ?? []).map((t) => (
+            <div key={t.trait.id}>
+              <h3 className="section-h" id={`trait-${t.trait.id}`}>
+                {t.trait.display_name}
+                {t.is_required && ' (required)'}
+              </h3>
+              <ChoiceRow
+                labelledBy={`trait-${t.trait.id}`}
+                label={t.trait.display_name}
+                options={[...t.options, ...inheritedOptionsFor(t.trait.id)].map((o) => ({
+                  value: o.id,
+                  label: o.display_name,
+                }))}
+                value={getSelectedOptionId(t.trait.name)}
+                onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
+                clearable={!t.is_required}
+              />
+              <Field id={`desc-${t.trait.id}`} label="In your own words" hint="Optional.">
+                <input
+                  id={`desc-${t.trait.id}`}
+                  type="text"
+                  defaultValue={getTraitDescriptor(t.trait.name)}
+                  onBlur={(e) => handleTraitDescriptorCommit(t.trait.name, e.target.value)}
+                />
+              </Field>
+            </div>
+          ))}
+          {strayInherited.map((group) => (
+            <div key={`${group.trait.id}-${group.source}`}>
+              <h3 className="section-h" id={`trait-${group.trait.id}-${group.source}`}>
+                {group.trait.display_name}{' '}
+                <span className="entry-gloss">(from {group.source})</span>
+              </h3>
+              <ChoiceRow
+                labelledBy={`trait-${group.trait.id}-${group.source}`}
+                label={group.trait.display_name}
+                options={group.options.map((o) => ({ value: o.id, label: o.display_name }))}
+                value={getSelectedOptionId(group.trait.name)}
+                onChange={(optionId) => handleFormTraitChange(group.trait.name, optionId)}
+                clearable
+              />
+              <Field
+                id={`desc-${group.trait.id}-${group.source}`}
+                label="In your own words"
+                hint="Optional."
+              >
+                <input
+                  id={`desc-${group.trait.id}-${group.source}`}
+                  type="text"
+                  defaultValue={getTraitDescriptor(group.trait.name)}
+                  onBlur={(e) => handleTraitDescriptorCommit(group.trait.name, e.target.value)}
+                />
+              </Field>
+            </div>
+          ))}
+        </>
+      )}
+
+      <h2 className="section-h">
+        {copy?.appearance_description_heading ?? 'Physical description'}
+      </h2>
+      <Field id="description" label="Physical description">
+        <textarea id="description" rows={6} {...register('description')} />
+      </Field>
+
+      <h2 className="section-h">{copy?.appearance_markings_heading ?? 'Markings'}</h2>
+      <MarkingsEditor />
+    </ChapterLeaf>
   );
 }

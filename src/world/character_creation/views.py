@@ -2,6 +2,7 @@
 Character Creation API views.
 """
 
+from collections import defaultdict
 from http import HTTPMethod
 import logging
 from typing import TYPE_CHECKING, Any, cast
@@ -105,10 +106,33 @@ from world.magic.models import (
 )
 from world.magic.services.cg_catalog import get_gift_options, get_technique_options
 from world.magic.types.cg_catalog import TechniqueOptions
+from world.roster.models import FamilyKind
 from world.species.models import Language, Species, SpeciesStatBonus
 from world.stories.pagination import StandardResultsSetPagination
 
+_NO_APPLICATION_DETAIL = "No application found."
+
 logger = logging.getLogger(__name__)
+
+
+def _claimable_kind_ids_by_template(templates: list[OriginTemplate]) -> dict[int, list[int]]:
+    """One flat query for every ``claimable_kinds`` row across ``templates``.
+
+    Grouped by ``OriginTemplate`` id in Python, mirroring the two-flat-queries
+    pattern already used for slot choices (``validators.py:_get_prompt_errors``,
+    ``CGOriginTemplateSerializer.get_slots``). Bounded to exactly one query
+    regardless of how many templates are being listed - see
+    ``CGOriginTemplateViewSet.list()``.
+    """
+    grouping: dict[int, list[int]] = defaultdict(list)
+    if not templates:
+        return grouping
+    rows = FamilyKind.objects.filter(
+        claimable_in_templates__in=[t.pk for t in templates]
+    ).values_list("claimable_in_templates", "id")
+    for template_id, kind_id in rows:
+        grouping[template_id].append(kind_id)
+    return grouping
 
 
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
@@ -169,7 +193,7 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
                 Prefetch(
                     "codex_grants",
-                    queryset=BeginningsCodexGrant.objects.only("beginnings_id", "entry_id"),
+                    queryset=BeginningsCodexGrant.objects.all(),
                     to_attr="cached_codex_grants",
                 ),
             )
@@ -304,7 +328,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
         )
         codex_grants_prefetch = Prefetch(
             "codex_grants",
-            queryset=PathCodexGrant.objects.only("path_id", "entry_id"),
+            queryset=PathCodexGrant.objects.all(),
             to_attr="cached_codex_grants",
         )
         return (
@@ -523,10 +547,13 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
     def _resolve_options(self) -> TechniqueOptions | None:
-        """Resolve pool/tradition techniques for ``?draft_id=&gift_id=``, cached per request."""
-        if hasattr(self, "_cg_technique_options"):
-            return self._cg_technique_options
+        """Resolve pool/tradition techniques for ``?draft_id=&gift_id=``.
 
+        Recomputed by each caller rather than cached on the ViewSet: state does not
+        live on views (ADR-0260). ``get_queryset()`` and ``get_serializer_context()``
+        therefore resolve once each per request, which costs one extra pass over a
+        small authored catalog on the one request that opens the technique picker.
+        """
         request = _view_request(self)
         raw_draft_id = None
         raw_gift_id = None
@@ -549,7 +576,6 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
                         draft.selected_path, gift, draft.selected_tradition
                     )
 
-        self._cg_technique_options = options
         return options
 
     def get_queryset(self) -> QuerySet[Technique]:
@@ -595,10 +621,11 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    """List active origin-story templates for the CG guided flow (#2478).
+    """List active origin-story templates for the CG guided flow (#2478, #3617).
 
     Filter by ``beginning`` to get templates available for a specific beginning.
-    Mirrors ``CGGlimpseTagViewSet``.
+    Trust-gated: staff see every active row, everyone else only rows whose
+    ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
     """
 
     pagination_class = None  # ADR-0138: opt out of default paginator
@@ -608,9 +635,30 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["beginning"]
 
     def get_queryset(self) -> QuerySet[OriginTemplate]:
-        """Return active templates with prefetched slots, ordered."""
+        """Return active, trust-accessible templates with prefetched slots, ordered.
+
+        ``claimable_kinds`` and slot choices are both resolved by ``list()``/the
+        serializer via a flat query grouped in Python, never a per-instance
+        ``.claimable_kinds.all()`` call in a loop and never a *new* prefetch here
+        (ADR-0263). Verified empirically (2026-09, this review round): a bare,
+        no-``to_attr`` ``prefetch_related("claimable_kinds")`` also goes stale
+        across two GET-only requests against this identity-mapped model when no
+        intervening ORM-level M2M write happens on the same cached instance -
+        the same staleness class ADR-0263 documents for ``to_attr``, just via
+        ``instance._prefetched_objects_cache`` instead of a bare attribute name.
+        The existing ``cached_slots`` prefetch below is the one already-shipped
+        ``to_attr`` exception, kept as-is rather than touched by this task.
+        """
+        user = self.request.user
+        qs = OriginTemplate.objects.filter(is_active=True)
+        if not user.is_staff:
+            try:
+                trust = user.trust
+            except AttributeError:
+                trust = 0
+            qs = qs.filter(trust_required__lte=trust)
         return (
-            OriginTemplate.objects.filter(is_active=True)
+            qs.select_related("named_family_kind")
             .prefetch_related(
                 Prefetch(
                     "slots",
@@ -620,6 +668,24 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             )
             .order_by("sort_order", "name")
         )
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Serialize with one batched ``claimable_kind_ids`` query, not one per row.
+
+        Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
+        so there is no ``page`` branch to preserve) but materializes the
+        queryset once and passes a template-id -> kind-id grouping into the
+        serializer context (no per-request memo on ``self`` - ADR-0260; the
+        grouping is a plain argument, not state stashed on the view or
+        serializer instance).
+        """
+        templates = list(self.filter_queryset(self.get_queryset()))
+        context = {
+            **self.get_serializer_context(),
+            "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),
+        }
+        serializer = self.get_serializer_class()(templates, many=True, context=context)
+        return Response(serializer.data)
 
 
 class CanCreateCharacterView(APIView):
@@ -1023,7 +1089,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         try:
@@ -1043,7 +1109,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         comment = request.data.get("comment", "")
@@ -1064,7 +1130,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         try:
@@ -1088,7 +1154,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         serializer = DraftApplicationDetailSerializer(application)
@@ -1106,7 +1172,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             application = draft.application
         except DraftApplication.DoesNotExist:
             return Response(
-                {"detail": "No application found."},
+                {"detail": _NO_APPLICATION_DETAIL},
                 status=status.HTTP_404_NOT_FOUND,
             )
         text = request.data.get("text", "")

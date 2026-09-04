@@ -109,7 +109,7 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_retrieve_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/"
         self.client.get(url)  # warm-up
-        # 6 queries on the warm call:
+        # 8 queries on the warm call:
         #   1. session + 2. encounter + 3. the lone remaining roster lookup
         #      the permission classes need (served by the account-level
         #      ``played_character_sheet_ids`` cached_property after warm-up).
@@ -132,10 +132,14 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         #      (select_related through the position link). Bounded per
         #      request (filters on room + property__detonation__isnull);
         #      does not scale with participant count.
+        #   8. PendingOpponentAttack lookup for ``pending_attacks`` (#3572) - one
+        #      flat query for this encounter's pending wind-ups (select_related
+        #      opponent + target sheet character). Bounded per request (filters
+        #      on encounter); does not scale with participant count.
         # The participants/opponents prefetches do not fire on the warm
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute.
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

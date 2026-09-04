@@ -253,39 +253,31 @@ class OfferSummonsCreateSerializer(serializers.Serializer):
     message = serializers.CharField(required=False, allow_blank=True, default="")
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
 
-    def validate_offer_id(self, value: int) -> int:
+    def validate(self, attrs: dict) -> dict:
+        """Resolve the two ids to rows and hand them back in ``validated_data``.
+
+        The resolved instances travel in the returned dict, DRF's own channel for
+        them, rather than being stashed on the serializer for the view to read back
+        off ``self`` (ADR-0260). Errors stay keyed to the field that carries the id,
+        so the response shape is unchanged.
+        """
         from world.npc_services.constants import OfferKind  # noqa: PLC0415
-        from world.npc_services.models import NPCServiceOffer  # noqa: PLC0415
-
-        offer = NPCServiceOffer.objects.filter(pk=value).first()
-        if offer is None:
-            msg = "That NPC service offer was not found."
-            raise serializers.ValidationError(msg)
-        if offer.kind != OfferKind.MISSION:
-            msg = "Summonses are limited to MISSION-kind offers in v1 (#2050)."
-            raise serializers.ValidationError(msg)
-        self._offer = offer
-        return value
-
-    def validate_target_persona_id(self, value: int) -> int:
         from world.scenes.models import Persona  # noqa: PLC0415
 
-        persona = Persona.objects.filter(pk=value).first()
+        offer = NPCServiceOffer.objects.filter(pk=attrs["offer_id"]).first()
+        if offer is None:
+            msg = "That NPC service offer was not found."
+            raise serializers.ValidationError({"offer_id": msg})
+        if offer.kind != OfferKind.MISSION:
+            msg = "Summonses are limited to MISSION-kind offers in v1 (#2050)."
+            raise serializers.ValidationError({"offer_id": msg})
+
+        persona = Persona.objects.filter(pk=attrs["target_persona_id"]).first()
         if persona is None:
             msg = "That target persona was not found."
-            raise serializers.ValidationError(msg)
-        self._target_persona = persona
-        return value
+            raise serializers.ValidationError({"target_persona_id": msg})
 
-    @property
-    def offer(self):
-        """The resolved NPCServiceOffer (set during validation)."""
-        return self._offer
-
-    @property
-    def target_persona(self):
-        """The resolved Persona (set during validation)."""
-        return self._target_persona
+        return attrs | {"offer": offer, "target_persona": persona}
 
 
 class SummonsRespondSerializer(serializers.Serializer):

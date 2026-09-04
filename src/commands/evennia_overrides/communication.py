@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -21,11 +20,10 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
+from commands.utils.argsplit import split_bracketed_prefix
 from world.scenes.place_models import Place
 
-# Per-say language tag (#2993): a leading "(tongue) rest of the line" switches
-# just this one utterance's language without touching the sticky default.
-_LANGUAGE_TAG_RE = re.compile(r"^\(([^)]{1,50})\)\s+(.*)$")
+_CMD_ALL_LOCK = "cmd:all()"
 
 
 def _flag_page_contact(sender_char: object, target_char: object) -> None:
@@ -99,7 +97,7 @@ class CmdSay(ArxCommand):
     """Speak aloud to the room."""
 
     key = "say"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = SayAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -109,9 +107,11 @@ class CmdSay(ArxCommand):
             raise CommandError(msg)
 
         language_id: int | None = None
-        tag_match = _LANGUAGE_TAG_RE.match(text)
+        # Per-say language tag (#2993): a leading "(tongue) rest of the line"
+        # switches just this one utterance's language without touching the default.
+        tag_match = split_bracketed_prefix(text, "(", ")")
         if tag_match:
-            tongue_name = tag_match.group(1).strip()
+            tongue_name = tag_match[0]
             from world.species.models import Language  # noqa: PLC0415
 
             language = Language.objects.filter(name__iexact=tongue_name).first()
@@ -119,7 +119,7 @@ class CmdSay(ArxCommand):
                 msg = f"There is no language called '{tongue_name}'."
                 raise CommandError(msg)
             language_id = language.pk
-            text = tag_match.group(2).strip()
+            text = tag_match[1]
             if not text:
                 msg = "Say what?"
                 raise CommandError(msg)
@@ -139,7 +139,7 @@ class CmdWhisper(ArxCommand):
     """Whisper something to a target."""
 
     key = "whisper"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = WhisperAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -178,7 +178,7 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
     ]
 
     key = "page"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     help_category = "Account"
 
     def _resolve_target(self, charname: str) -> Any | None:
@@ -292,7 +292,7 @@ class CmdTabletalk(ArxCommand):
 
     key = "tt"
     aliases: ClassVar[list[str]] = ["tabletalk"]
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PoseAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -328,7 +328,7 @@ class CmdPose(ArxCommand):
 
     key = "pose"
     aliases: ClassVar[list[str]] = ["emote"]
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PoseAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -352,7 +352,7 @@ class CmdMutter(ArxCommand):
     """
 
     key = "mutter"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = MutterAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -391,7 +391,7 @@ class CmdPemit(ArxCommand):
     """
 
     key = "pemit"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = PemitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -423,7 +423,7 @@ class CmdEmit(ArxCommand):
     """
 
     key = "emit"
-    locks = "cmd:all()"
+    locks = _CMD_ALL_LOCK
     action = EmitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:

@@ -414,6 +414,12 @@ export async function castTechnique(
     /** #2901: which form to work — omit for the default. */
     use_base_form?: boolean;
     preferred_resonance_id?: number | null;
+    /**
+     * The caster's explicit consent (#3573) to hold a ward-bearing cast's
+     * protective condition alive past zero anima via Soulfray. Only meaningful
+     * when the cast technique's reactive_anima_cost is non-null.
+     */
+    soulfray_consented?: boolean;
   }
 ): Promise<CastResponse> {
   const body: CastRequestBody = {
@@ -438,6 +444,9 @@ export async function castTechnique(
   }
   if (params.preferred_resonance_id != null) {
     body.preferred_resonance_id = params.preferred_resonance_id;
+  }
+  if (params.soulfray_consented) {
+    body.soulfray_consented = true;
   }
   const res = await apiFetch('/api/action-requests/cast/', {
     method: 'POST',

@@ -531,7 +531,7 @@ _ALWAYS_IN_ACTION_KINDS = frozenset(
 )
 
 
-def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: PLR0911
+def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     """Return True iff ``thread``'s anchor is involved in the action (Spec A §5.2).
 
     Relationship anchors are always considered in-action (player asserts
@@ -565,7 +565,7 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: 
     return False
 
 
-def _anchor_ambiently_active(  # noqa: PLR0911 — one arm per TargetKind, flat by design
+def _anchor_ambiently_active(
     thread: Thread,
     ctx: PullActionContext,
     *,
@@ -778,6 +778,127 @@ def _compute_capability_grant_value(
     )
 
 
+# ASSUME_ALTERNATE_SELF, CAPABILITY_GRANT, NARRATIVE_ONLY and CORRUPTION_RESISTANCE
+# have no numeric payload; their scaled_value must be None. ASSUME_ALTERNATE_SELF
+# derives its runtime stat-suite from the target form's selected combat profile
+# (crit/mid/fail bands). CORRUPTION_RESISTANCE derives its runtime value from
+# CharacterResonance.lifetime_helped (Spec B §10.2) — it is applied directly in
+# accrue_corruption, not via a scaled_value here.
+_NO_NUMERIC_PAYLOAD = frozenset(
+    {
+        EffectKind.ASSUME_ALTERNATE_SELF,
+        EffectKind.CAPABILITY_GRANT,
+        EffectKind.NARRATIVE_ONLY,
+        EffectKind.CORRUPTION_RESISTANCE,
+    }
+)
+
+# VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot lives on
+# CombatPullResolvedEffect and is read on the combat path, so ephemeral (RP) pulls
+# flag them inactive (cost still paid). CAPABILITY_GRANT is active in non-combat
+# context — the frozen value is persisted via the Thread Surge condition +
+# EphemeralPullCapabilityGrant sidecar (#2840).
+_COMBAT_ONLY_KINDS = frozenset({EffectKind.VITAL_BONUS, EffectKind.RESISTANCE})
+
+
+def _worn_facet_aggregate(thread: Thread) -> Decimal | None:
+    """Summed quality multiplier of worn items bearing this thread's facet.
+
+    None when the wearer has no matching items, which means the effect row does not
+    resolve at all. Other threads in the sweep are unaffected.
+    """
+    matching = thread.owner.character.equipped_items.item_facets_for(thread.target_facet)
+    if not matching:
+        return None
+    # Decimal(str(...)) coerces in case a multiplier surfaces as float (e.g. via
+    # factory or .values() in test fixtures); DecimalField normally returns Decimal
+    # but this is belt-and-suspenders.
+    return sum(
+        (
+            (
+                Decimal(str(item_facet.item_instance.quality_tier.stat_multiplier))
+                if item_facet.item_instance.quality_tier is not None
+                else Decimal(1)
+            )
+            * Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
+            for item_facet in matching
+        ),
+        Decimal(0),
+    )
+
+
+def _resolve_one_pull_effect(  # noqa: PLR0913 - mirrors resolve_pull_effects' inputs
+    thread: Thread,
+    row: ThreadPullEffect,
+    *,
+    effect_tier: int,
+    multiplier: Decimal,
+    target: ObjectDB | None,
+    in_combat: bool,
+    power_config: object,
+    context_free_power: int,
+) -> ResolvedPullEffect | None:
+    """One (thread x tier x row) triple, or None when the row does not apply."""
+    from world.magic.services.pull_modulation import apply_target_modulation  # noqa: PLC0415
+
+    authored = (
+        row.flat_bonus_amount
+        or row.intensity_bump_amount
+        or row.vital_bonus_amount
+        or row.resistance_amount
+    )
+    has_numeric_payload = row.effect_kind not in _NO_NUMERIC_PAYLOAD
+
+    # round(), not int() truncation: thread_level_multiplier (#1718) returns a
+    # fractional Decimal for levels 1-9, and rounding to the nearest int is fairer
+    # to the player than always flooring.
+    if thread.target_kind == TargetKind.FACET:
+        worn_aggregate = _worn_facet_aggregate(thread)
+        if worn_aggregate is None:
+            return None
+        base_scaled = (
+            round((authored or 0) * multiplier * worn_aggregate) if has_numeric_payload else None
+        )
+    else:
+        base_scaled = round((authored or 0) * multiplier) if has_numeric_payload else None
+
+    if has_numeric_payload:
+        base_scaled = apply_target_modulation(thread, target, row, base_scaled)
+
+    inactive = row.effect_kind in _COMBAT_ONLY_KINDS and not in_combat
+    # #2730: the frozen curved magnitude for CAPABILITY_GRANT, using the same
+    # apply_capability_curve formula as the passive path
+    # (handlers.py:_passive_capability_grants_cache), with context_free_power as the
+    # power figure (ADR-0169 D6).
+    capability_grant_value = _compute_capability_grant_value(
+        row,
+        inactive=inactive,
+        multiplier=multiplier,
+        power_config=power_config,
+        context_free_power=context_free_power,
+    )
+    return ResolvedPullEffect(
+        kind=row.effect_kind,
+        authored_value=authored,
+        # ResolvedPullEffect.level_multiplier is int-typed (persisted to
+        # CombatPullResolvedEffect.level_multiplier, a PositiveSmallIntegerField);
+        # round() the transient Decimal multiplier to an int for the snapshot (#1718).
+        level_multiplier=round(multiplier),
+        scaled_value=0 if inactive else base_scaled,
+        vital_target=row.vital_target,
+        source_thread=thread,
+        source_thread_level=thread.level,
+        source_tier=effect_tier,
+        granted_capability=row.capability_grant,
+        narrative_snippet=row.narrative_snippet,
+        inactive=inactive,
+        inactive_reason=("requires combat context" if inactive else None),
+        target_form=row.target_form,
+        resistance_damage_type=row.resistance_damage_type,
+        capability_grant_value=capability_grant_value,
+    )
+
+
 def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required
     threads: list[Thread],
     tier: int,
@@ -807,12 +928,15 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     still reports the thread's REAL level (the bonus is a resolution-time
     override, never a persisted fact).
     """
-    from world.magic.services.pull_modulation import apply_target_modulation  # noqa: PLC0415
 
     # #2730: CAPABILITY_GRANT rows are curved at resolve time using the same
     # apply_capability_curve formula the passive path uses. The power figure
     # is context_free_power (ADR-0169 D6 — capability standing must not
     # flicker based on whether combat is running). Fetched once per sweep.
+    # #2730: CAPABILITY_GRANT rows are curved at resolve time using the same
+    # apply_capability_curve formula the passive path uses. The power figure is
+    # context_free_power (ADR-0169 D6 — capability standing must not flicker based
+    # on whether combat is running). Fetched once per sweep.
     power_config, context_free_power = _derive_pull_power(character_sheet)
 
     resolved: list[ResolvedPullEffect] = []
@@ -822,118 +946,20 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
             effective_level = t.level + beseech_bonus
         multiplier = thread_level_multiplier(effective_level)
         for effect_tier in range(tier + 1):
-            rows = get_pull_effects_for_thread(
-                t,
-                tier=effect_tier,
-                min_thread_level__lte=t.level,
-            )
+            rows = get_pull_effects_for_thread(t, tier=effect_tier, min_thread_level__lte=t.level)
             for row in rows:
-                authored = (
-                    row.flat_bonus_amount
-                    or row.intensity_bump_amount
-                    or row.vital_bonus_amount
-                    or row.resistance_amount
-                )
-                # ASSUME_ALTERNATE_SELF, CAPABILITY_GRANT, NARRATIVE_ONLY, and
-                # CORRUPTION_RESISTANCE have no numeric payload; their scaled_value
-                # must be None. ASSUME_ALTERNATE_SELF derives its runtime stat-suite
-                # from the target form's selected combat profile (crit/mid/fail bands).
-                # CORRUPTION_RESISTANCE derives its runtime value from
-                # CharacterResonance.lifetime_helped (Spec B §10.2) — it is applied
-                # directly in accrue_corruption, not via a scaled_value here.
-                has_numeric_payload = row.effect_kind not in (
-                    EffectKind.ASSUME_ALTERNATE_SELF,
-                    EffectKind.CAPABILITY_GRANT,
-                    EffectKind.NARRATIVE_ONLY,
-                    EffectKind.CORRUPTION_RESISTANCE,
-                )
-
-                if t.target_kind == TargetKind.FACET:
-                    matching = t.owner.character.equipped_items.item_facets_for(t.target_facet)
-                    if not matching:
-                        # No worn items bearing this facet — skip this effect row.
-                        # Other threads in the outer loop still resolve normally.
-                        continue
-                    # Decimal(str(...)) coerces in case a multiplier surfaces as
-                    # float (e.g. via factory or .values() in test fixtures);
-                    # DecimalField normally returns Decimal but this is
-                    # belt-and-suspenders.
-                    items_aggregate = [
-                        (
-                            Decimal(str(item_facet.item_instance.quality_tier.stat_multiplier))
-                            if item_facet.item_instance.quality_tier is not None
-                            else Decimal(1)
-                        )
-                        * Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
-                        for item_facet in matching
-                    ]
-                    worn_aggregate = sum(items_aggregate, Decimal(0))
-                    # round(), not int() truncation: thread_level_multiplier (#1718)
-                    # now returns a fractional Decimal for levels 1-9, and rounding to
-                    # the nearest int is fairer to the player than always flooring.
-                    base_scaled = (
-                        round((authored or 0) * multiplier * worn_aggregate)
-                        if has_numeric_payload
-                        else None
-                    )
-                else:
-                    # See the FACET-branch comment above re: round() vs int().
-                    base_scaled = (
-                        round((authored or 0) * multiplier) if has_numeric_payload else None
-                    )
-
-                if has_numeric_payload:
-                    base_scaled = apply_target_modulation(t, target, row, base_scaled)
-
-                # VITAL_BONUS, RESISTANCE, and CAPABILITY_GRANT are combat-only
-                # VITAL_BONUS and RESISTANCE are combat-only consumers: their
-                # snapshot lives on CombatPullResolvedEffect and is read on the
-                # combat path, so ephemeral (RP) pulls flag them inactive (cost
-                # still paid). CAPABILITY_GRANT is now active in non-combat
-                # context — the frozen value is persisted via the Thread Surge
-                # condition + EphemeralPullCapabilityGrant sidecar (#2840).
-                inactive = (
-                    row.effect_kind
-                    in (
-                        EffectKind.VITAL_BONUS,
-                        EffectKind.RESISTANCE,
-                    )
-                    and not in_combat
-                )
-                # #2730: compute the frozen curved magnitude for CAPABILITY_GRANT.
-                # Uses the same apply_capability_curve formula as the passive path
-                # (handlers.py:_passive_capability_grants_cache), with
-                # context_free_power as the power figure (ADR-0169 D6).
-                capability_grant_value = _compute_capability_grant_value(
+                effect = _resolve_one_pull_effect(
+                    t,
                     row,
-                    inactive=inactive,
+                    effect_tier=effect_tier,
                     multiplier=multiplier,
+                    target=target,
+                    in_combat=in_combat,
                     power_config=power_config,
                     context_free_power=context_free_power,
                 )
-                resolved.append(
-                    ResolvedPullEffect(
-                        kind=row.effect_kind,
-                        authored_value=authored,
-                        # ResolvedPullEffect.level_multiplier is int-typed (persisted
-                        # to CombatPullResolvedEffect.level_multiplier, a
-                        # PositiveSmallIntegerField); round() the transient Decimal
-                        # multiplier to an int for the snapshot (#1718).
-                        level_multiplier=round(multiplier),
-                        scaled_value=0 if inactive else base_scaled,
-                        vital_target=row.vital_target,
-                        source_thread=t,
-                        source_thread_level=t.level,
-                        source_tier=effect_tier,
-                        granted_capability=row.capability_grant,
-                        narrative_snippet=row.narrative_snippet,
-                        inactive=inactive,
-                        inactive_reason=("requires combat context" if inactive else None),
-                        target_form=row.target_form,
-                        resistance_damage_type=row.resistance_damage_type,
-                        capability_grant_value=capability_grant_value,
-                    )
-                )
+                if effect is not None:
+                    resolved.append(effect)
     return resolved
 
 
@@ -1243,9 +1269,11 @@ def _validate_pull_threads_for_commit(
                 raise CovenantRoleNotEngagedError
             msg = "Thread anchor is not involved in this action."
             raise InvalidImbueAmount(msg)
-        if t.target_kind == TargetKind.FACET:
-            if not character_sheet.character.equipped_items.item_facets_for(t.target_facet):
-                raise NoMatchingWornFacetItemsError
+        if (
+            t.target_kind == TargetKind.FACET
+            and not character_sheet.character.equipped_items.item_facets_for(t.target_facet)
+        ):
+            raise NoMatchingWornFacetItemsError
 
 
 @transaction.atomic

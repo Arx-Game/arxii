@@ -248,7 +248,6 @@ class CmdRitual(ArxCommand):
             RitualExecutionKind,
         )
         from world.magic.exceptions import (  # noqa: PLC0415
-            ParticipantCountError,
             RitualSessionError,
         )
         from world.magic.models import Ritual  # noqa: PLC0415
@@ -308,7 +307,7 @@ class CmdRitual(ArxCommand):
                 initiator_references=parse.initiator_references,
                 expires_at=timezone.now() + timedelta(hours=24),
             )
-        except (ParticipantCountError, RitualSessionError) as exc:
+        except RitualSessionError as exc:
             raise CommandError(exc.user_message) from exc
 
         invite_list = ", ".join(inv.character.db_key for inv in invitees)
@@ -557,6 +556,79 @@ class CmdRitual(ArxCommand):
             kwargs[_THREAD_ID_KEY if key == _THREAD_KWARG else key] = parsed
         return kwargs
 
+    def _honors_establishing(self, kv: dict[str, str]) -> bool:
+        """Which of the rite's two forms was given, refusing every ambiguous mix.
+
+        Exactly one of ``deed=``/``event=`` selects the branch; giving both or
+        neither is refused here, by name, before ``honor_deed`` ever runs (that
+        service raises a plain ``ValueError`` for the same shape mistake, which is
+        not a player-safe message).
+        """
+        deed_raw = kv.get("deed", "").strip()
+        event_raw = kv.get("event", "").strip()
+        if deed_raw and event_raw:
+            raise CommandError(_HONORS_BOTH_GIVEN_MSG)
+        if not deed_raw and not event_raw:
+            raise CommandError(_HONORS_NEITHER_GIVEN_MSG)
+
+        deed_title = kv.get("deed_title", "").strip()
+        if deed_title and not event_raw:
+            raise CommandError(_HONORS_DEED_TITLE_WITHOUT_EVENT_MSG)
+
+        establishing = bool(event_raw)
+        usage = _HONORS_ESTABLISH_USAGE if establishing else _HONORS_AMPLIFY_USAGE
+        required = (
+            kv.get("honoree", "").strip(),
+            kv.get("title", "").strip(),
+            kv.get("body", "").strip(),
+        )
+        if not all(required):
+            raise CommandError(usage)
+        if establishing and not deed_title:
+            raise CommandError(usage)
+        return establishing
+
+    def _resolve_honoree(self, honoree_name: str) -> Any:
+        """Resolve the honoree by exact (case-insensitive) Persona name, globally.
+
+        Never room-scoped: honoring is explicitly unrestricted by life-state or
+        presence, so a posthumous honoree may be off-scene or dead. Persona names
+        are NOT globally unique (``unique_persona_name_per_character`` is
+        per-character, #3466 whole-branch-review I3), so more than one match is
+        refused with a disambiguation message rather than silently picking the
+        first - a paid, irreversible rite is the wrong place to guess.
+        """
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        matches = list(Persona.objects.filter(name__iexact=honoree_name))
+        if not matches:
+            msg = f"No one named '{honoree_name}' is known to have any deeds."
+            raise CommandError(msg)
+        if len(matches) > 1:
+            msg = (
+                f"More than one persona is named '{honoree_name}', so a GM will need to "
+                "resolve this by id."
+            )
+            raise CommandError(msg)
+        return matches[0]
+
+    def _honors_amplify_payload(self, deed_raw: str, honoree_persona: Any) -> dict[str, Any]:
+        """Amplify-branch fields, refusing a honoree that is not the deed's own.
+
+        The amplify service call ignores ``honoree_persona`` entirely (it honors
+        whoever ``deed.persona`` is), so a mismatched ``honoree=`` would otherwise
+        silently honor someone other than who was named.
+        """
+        fields = self._resolve_honors_amplify_fields(deed_raw)
+        deed = fields["deed"]
+        if deed.persona_id != honoree_persona.pk:
+            msg = (
+                f"Deed #{deed.pk} belongs to {deed.persona.name}, not "
+                f"{honoree_persona.name}. honoree= must name the deed's own persona."
+            )
+            raise CommandError(msg)
+        return fields
+
     def _resolve_honors_args(self, ritual: Ritual, rest: str) -> dict[str, Any]:
         """Parse the Rite of Honors' two forms (#3466):
 
@@ -584,66 +656,26 @@ class CmdRitual(ArxCommand):
         inside ``honor_deed`` itself are the real eligibility gates; this only
         resolves names/ids to rows and enforces which form was given.
         """
-        from world.scenes.models import Persona  # noqa: PLC0415
-
         kv, _flags = parse_kv_and_flags(
             rest, multiword_keys=_HONORS_MULTIWORD_KEYS, known_flags=frozenset()
         )
-
-        honoree_name = kv.get("honoree", "").strip()
-        deed_raw = kv.get("deed", "").strip()
-        event_raw = kv.get("event", "").strip()
-        deed_title = kv.get("deed_title", "").strip()
-        journal_title = kv.get("title", "").strip()
-        journal_body = kv.get("body", "").strip()
-
-        if deed_raw and event_raw:
-            raise CommandError(_HONORS_BOTH_GIVEN_MSG)
-        if not deed_raw and not event_raw:
-            raise CommandError(_HONORS_NEITHER_GIVEN_MSG)
-        if deed_title and not event_raw:
-            raise CommandError(_HONORS_DEED_TITLE_WITHOUT_EVENT_MSG)
-
-        establishing = bool(event_raw)
-        usage = _HONORS_ESTABLISH_USAGE if establishing else _HONORS_AMPLIFY_USAGE
-        if not (honoree_name and journal_title and journal_body):
-            raise CommandError(usage)
-        if establishing and not deed_title:
-            raise CommandError(usage)
-
-        honoree_matches = list(Persona.objects.filter(name__iexact=honoree_name))
-        if not honoree_matches:
-            msg = f"No one named '{honoree_name}' is known to have any deeds."
-            raise CommandError(msg)
-        if len(honoree_matches) > 1:
-            msg = (
-                f"More than one persona is named '{honoree_name}', so a GM will need to "
-                "resolve this by id."
-            )
-            raise CommandError(msg)
-        honoree_persona = honoree_matches[0]
+        establishing = self._honors_establishing(kv)
+        honoree_persona = self._resolve_honoree(kv.get("honoree", "").strip())
 
         result: dict[str, Any] = {
             "ritual": ritual,
             "honoree_persona": honoree_persona,
-            "journal_title": journal_title,
-            "journal_body": journal_body,
+            "journal_title": kv.get("title", "").strip(),
+            "journal_body": kv.get("body", "").strip(),
         }
         if establishing:
-            result.update(self._resolve_honors_establish_fields(event_raw, deed_title))
-        else:
-            amplify_fields = self._resolve_honors_amplify_fields(deed_raw)
-            deed = amplify_fields["deed"]
-            # The amplify service call ignores `honoree_persona` entirely (it
-            # honors whoever `deed.persona` is) — verify the named honoree
-            # actually matches, rather than silently dropping a mismatch.
-            if deed.persona_id != honoree_persona.pk:
-                msg = (
-                    f"Deed #{deed.pk} belongs to {deed.persona.name}, not "
-                    f"{honoree_persona.name}. honoree= must name the deed's own persona."
+            result.update(
+                self._resolve_honors_establish_fields(
+                    kv.get("event", "").strip(), kv.get("deed_title", "").strip()
                 )
-                raise CommandError(msg)
-            result.update(amplify_fields)
+            )
+        else:
+            result.update(self._honors_amplify_payload(kv.get("deed", "").strip(), honoree_persona))
         return result
 
     def _resolve_honors_amplify_fields(self, deed_raw: str) -> dict[str, Any]:

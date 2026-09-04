@@ -7,11 +7,11 @@
  * writes through the sheet API set-origin-slot / clear-origin-slot actions.
  * Slot values are saved immediately on change.
  *
- * Unlike the CG OriginStorySection (which fetches the template to show the
- * frame + all available slots), this editor only shows slots the player has
- * already started filling — the frame narrative is not re-shown (the player
- * saw it at CG). This keeps the dialog self-contained without needing the
- * character's beginning id.
+ * Unlike the CG Lineage step's UpbringingPrompts (which fetches the chosen
+ * Upbringing to show its frame + every prompt on the resolved family path,
+ * #3617), this editor only shows slots the player has already started filling:
+ * the frame narrative is not re-shown (the player saw it at CG). This keeps the
+ * dialog self-contained without needing the character's beginning id.
  */
 
 import { useState } from 'react';

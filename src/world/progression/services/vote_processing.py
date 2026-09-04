@@ -7,6 +7,8 @@ recognize memorable poses (top-voted interactions per scene).
 
 from __future__ import annotations
 
+from collections import defaultdict
+from collections.abc import Iterator
 import logging
 from math import log2
 
@@ -38,6 +40,52 @@ def calculate_vote_xp(unique_voter_count: int) -> int:
     return min(VOTE_XP_CAP, int(raw))
 
 
+def _placing_poses(group: list[Interaction]) -> Iterator[tuple[int, Interaction]]:
+    """Yield ``(tier_index, interaction)`` for one scene's placing poses.
+
+    ``group`` arrives sorted by descending vote count. Everyone on the same vote
+    count shares a tier, so a two-way tie for first yields tier 0 twice and the
+    next distinct count is tier 1 — the tie takes the higher tier, and the tier
+    below it is not skipped. Stops once the placings in ``MEMORABLE_POSE_XP`` run
+    out.
+    """
+    tier_index = 0
+    prev_vote_count: int | None = None
+    for interaction in group:
+        if prev_vote_count is not None and interaction.vote_count < prev_vote_count:
+            tier_index += 1
+        if tier_index >= len(MEMORABLE_POSE_XP):
+            return
+        prev_vote_count = interaction.vote_count
+        yield tier_index, interaction
+
+
+def _award_memorable_pose(interaction: Interaction, tier_index: int, scene_id: int) -> None:
+    """Pay one placing pose, tolerating a poser with no account behind them.
+
+    A failed award is logged and swallowed: one broken row must not cost every
+    other player in the week their bonus.
+    """
+    account = get_account_for_character(interaction.persona.character_sheet.character)
+    if account is None:
+        return
+    try:
+        award_xp(
+            account=account,
+            amount=MEMORABLE_POSE_XP[tier_index],
+            reason=ProgressionReason.MEMORABLE_POSE,
+            description=(
+                f"Memorable pose (#{tier_index + 1}) in scene {scene_id} "
+                f"with {interaction.vote_count} votes"
+            ),
+        )
+    except Exception:
+        logger.exception(
+            "Failed to award memorable pose XP for interaction %d",
+            interaction.pk,
+        )
+
+
 def process_memorable_poses(game_week: GameWeek) -> None:
     """Award bonus XP to the top 3 most-voted interactions per scene.
 
@@ -54,52 +102,13 @@ def process_memorable_poses(game_week: GameWeek) -> None:
         .order_by("scene_id", "-vote_count")
     )
 
-    # Group by scene
-    scene_groups: dict[int, list[Interaction]] = {}
+    scene_groups: dict[int, list[Interaction]] = defaultdict(list)
     for interaction in interactions:
-        scene_id = interaction.scene_id
-        if scene_id not in scene_groups:
-            scene_groups[scene_id] = []
-        scene_groups[scene_id].append(interaction)
+        scene_groups[interaction.scene_id].append(interaction)
 
     for scene_id, group in scene_groups.items():
-        # group is already sorted by -vote_count
-        tier_index = 0
-        prev_vote_count: int | None = None
-
-        for interaction in group:
-            if tier_index >= len(MEMORABLE_POSE_XP):
-                break
-
-            # Ties: if same vote_count as previous, same tier
-            if prev_vote_count is not None and interaction.vote_count < prev_vote_count:
-                tier_index += 1
-                if tier_index >= len(MEMORABLE_POSE_XP):
-                    break
-
-            xp_amount = MEMORABLE_POSE_XP[tier_index]
-            account = get_account_for_character(interaction.persona.character_sheet.character)
-            if account is None:
-                prev_vote_count = interaction.vote_count
-                continue
-
-            try:
-                award_xp(
-                    account=account,
-                    amount=xp_amount,
-                    reason=ProgressionReason.MEMORABLE_POSE,
-                    description=(
-                        f"Memorable pose (#{tier_index + 1}) in scene {scene_id} "
-                        f"with {interaction.vote_count} votes"
-                    ),
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to award memorable pose XP for interaction %d",
-                    interaction.pk,
-                )
-
-            prev_vote_count = interaction.vote_count
+        for tier_index, interaction in _placing_poses(group):
+            _award_memorable_pose(interaction, tier_index, scene_id)
 
     # Reset vote counts only for interactions that were voted on in the processed week
     voted_interaction_ids = WeeklyVote.objects.filter(

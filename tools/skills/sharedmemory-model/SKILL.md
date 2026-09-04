@@ -40,10 +40,12 @@ Once a model instance is loaded, it is a persistent Python object in the identit
 
 **Do NOT:**
 - Write `resolve_*` or `batch_fetch_*` helpers that re-query data the identity map already has
+- Replace a per-row `objects.get(pk=...)` with `filter(pk__in=[...])` to "batch away an N+1". Only a **single-kwarg pk lookup** short-circuits to the identity map (`SharedMemoryManager.get`, evennia/utils/idmapper/manager.py); `pk__in` is an ordinary queryset and issues SQL on every call, warm or cold. On an authored catalog the per-row `get(pk=...)` is the *cheaper* form once warm - see `core.managers.CachedAllMixin`, whose whole point is that "an unrelated `Model.objects.get(pk=X)` call elsewhere in the codebase also becomes a free hit once a catalog is warm" (#1846). Batching it trades zero queries for one.
 - Flush the cache and re-fetch an object to "refresh" it after a mutation (`.save()` already updates the in-memory instance)
 - Pass raw field values through serializer context to avoid attribute traversal
 - Build parallel `{id: tuple}` lookups to "pre-resolve" related objects
 - Call `.values()` or `.values_list()` to avoid instantiating model objects you think are "too expensive"
+- Narrow a queryset with `.only(...)` or `.defer(...)`. The identity map answers every later load of that pk with the resident instance and never copies the fresh columns onto it, so a row first loaded narrowed stays narrowed for the whole process, and the next read of a missing column raises `KeyError` from Django's deferred-attribute getter (Sentry ARX2-9: the CG beginnings list narrowed codex grants, the Beginnings admin 500'd on `is_perspective` until restart). Narrowing saves nothing on a row that is loaded once and served from memory. If you genuinely want a projection rather than instances, that is the one place `.values_list()` belongs. Enforced by `lint_only_defer.py`; see ADR-0261.
 
 **Signs you are fighting SharedMemoryModel instead of using it:**
 - You wrote a function that fetches related data already reachable via FK walks

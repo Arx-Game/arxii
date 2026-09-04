@@ -35,7 +35,7 @@ from world.missions.models import MissionDeedRecord
 from world.missions.services import resolve_option
 from world.traits.factories import CheckOutcomeFactory
 
-_APPLY = "world.missions.services.resolution.apply_resolution"
+_APPLY = "world.missions.services.resolution.apply_all_effects"
 
 
 class ResolveOptionAdvanceFalseTests(TestCase):
@@ -95,7 +95,7 @@ class ResolveOptionAdvanceFalseTests(TestCase):
         # Per-act consequence still applied (the reuse boundary).
         self.assertEqual(mocked.call_count, 1)
         self.assertEqual(
-            mocked.call_args_list[0].args[0].selected_consequence,
+            mocked.call_args_list[0].args[0],
             self.success_conseq,
         )
         # But the instance position/status is UNTOUCHED — no routing.

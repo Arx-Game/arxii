@@ -361,6 +361,28 @@ chk   "ops_access clears authorized_keys when the pubkey Variable is empty (revo
 chk   "devcontainer firewall gates prod SSH on the ops-key mount" \
   "grep -q 'arxii-ops-key/arxii_ops' .devcontainer/init-firewall.sh && grep -q -- '--dport 22 -j REJECT' .devcontainer/init-firewall.sh"
 
+# (e2) Game logs outside the release tree (#3599): LOG_DIR is env-driven and
+# points at /var/log/arxii in prod; the dir is created by app_deploy BEFORE
+# the first Django command (settings.py makedirs on import as the service
+# user, which cannot create it under /var/log); pruned by systemd-tmpfiles
+# (Evennia rotates but never prunes, so logrotate would double-rotate);
+# settings.py recomputes all four Evennia file paths from LOG_DIR.
+chk   "arxii.env.j2 sets LOG_DIR from app_log_dir" \
+  "has_code '^LOG_DIR=\{\{ app_log_dir \}\}' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
+chk   "app_deploy defaults app_log_dir to /var/log/arxii" \
+  "has_code '^app_log_dir: /var/log/arxii' infra/ansible/roles/app_deploy/defaults/main.yml"
+chk   "app_deploy creates the log dir with the adm group (arxops reads via adm)" \
+  "has_code_between 'name: Ensure the game log dir exists' 'name: Ensure releases dir exists' 'group: adm' infra/ansible/roles/app_deploy/tasks/main.yml"
+assert_before "app_deploy creates the log dir BEFORE the first Django command" \
+  'name: Ensure the game log dir exists' 'name: Check whether this release has migrations to apply' \
+  infra/ansible/roles/app_deploy/tasks/main.yml
+chk   "app_deploy installs a tmpfiles.d age rule for the log dir" \
+  "has_code 'tmpfiles.d/arxii-logs.conf' infra/ansible/roles/app_deploy/tasks/main.yml && has_code 'app_log_retention_days' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy sets a default ACL on the log dir (twistd umask 0077 makes rotated files 0600)" \
+  "has_code_between 'name: Default ACL so twistd' 'name: Install the tmpfiles.d rule' 'default: true' infra/ansible/roles/app_deploy/tasks/main.yml && has_code_between 'name: Default ACL so twistd' 'name: Install the tmpfiles.d rule' 'entity: adm' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "settings.py recomputes all four Evennia log-file paths from LOG_DIR" \
+  "has_code '^SERVER_LOG_FILE = ' src/server/conf/settings.py && has_code '^PORTAL_LOG_FILE = ' src/server/conf/settings.py && has_code '^HTTP_LOG_FILE = ' src/server/conf/settings.py && has_code '^LOCKWARNING_LOG_FILE = ' src/server/conf/settings.py"
+
 # (f) The first-run superuser PASSWORD (unlike username/email) is a real
 # secret with no safe default — it must be preflight-required.
 chk   "ARXII_DJANGO_SUPERUSER_PASSWORD is a standup.sh preflight-required secret" \
@@ -425,6 +447,8 @@ chk   "settings.py guards the prod secret_settings overlay import" \
   "grep -q 'import server.conf.secret_settings' src/server/conf/settings.py && grep -B1 'import server.conf.secret_settings' src/server/conf/settings.py | grep -q 'contextlib.suppress(ImportError)'"
 chk   "secrets_vault's EnvironmentFile renders SECRET_KEY and DATABASE_URL (settings.py's actual env-read contract)" \
   "grep -q 'ARXII_DJANGO_SECRET_KEY: SECRET_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^DATABASE_URL=' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
+chk   "secrets_vault renders MFA_SECRETS_KEY (settings.py's required 2FA key, #3591)" \
+  "grep -q 'ARXII_MFA_SECRETS_KEY: MFA_SECRETS_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q 'ARXII_MFA_SECRETS_KEY' infra/scripts/standup.sh"
 
 echo "== #2236 Phase 3 P1 (dress rehearsal) =="
 # (a) rehearse.sh must NEVER touch the prod terraform root — grep its own
@@ -714,7 +738,7 @@ ACCOUNT-TIME checklist (run once real creds exist — cannot be static):
       converge, smoke.sh all-PASS, backup object lands in the stage bucket,
       restore rehearsal verifies — run this BEFORE the first real
       standup.sh/"Stand up infra" button press
-  [ ] `just pull-prod confirm=yes` (#2236 Phase 4) pulls a real dev_reader-
+  [ ] `just pull-prod yes` (#2236 Phase 4) pulls a real dev_reader-
       keyed dump and restores it into a scratch local DB
   [ ] arxii-media-mirror.service (#2236 Phase 4) completes with 0 failed on
       a real box and lands objects under media/ in the real R2 bucket

@@ -912,7 +912,9 @@ client can never name someone else's membership from the wire. Shared by telnet
 
 `CharacterCovenantRoleSerializer` exposes `standing` on the membership payload;
 `CovenantSerializer.get_treasury_balance` exposes a member-gated `treasury_balance` field
-(non-members see `null`) via the shared `_resolve_viewer_membership` helper. The frontend
+(non-members see `null`) via the shared `_resolve_viewer_membership` helper, which reads
+`Account.cached_covenant_memberships` (#3597); the list endpoint passes its page aggregates
+and treasury balances to the serializer as explicit context. The frontend
 renders a Minor Member badge and the `TreasuryPanel` deposit/withdraw controls; a rejected
 dispatch (e.g. a rank-unauthorized withdrawal) surfaces through `dispatchTreasuryResult`,
 which throws on `success === false` so the mutation's `onError` fires instead of silently

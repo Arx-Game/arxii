@@ -24,7 +24,6 @@ from world.stories.constants import (
     ProgressStatus,
     SessionRequestStatus,
     StoryScope,
-    TransitionMode,
 )
 from world.stories.factories import (
     AssistantGMClaimFactory,
@@ -117,7 +116,6 @@ class GMQueueEpisodesReadyTest(APITestCase):
         cls.transition = TransitionFactory(
             source_episode=cls.episode,
             target_episode=cls.next_ep,
-            mode=TransitionMode.AUTO,
         )
         cls.progress = StoryProgressFactory(
             story=cls.story,
@@ -161,7 +159,7 @@ class GMQueueEpisodesReadyTest(APITestCase):
         transitions = matching[0]["eligible_transitions"]
         assert len(transitions) >= 1
         assert "transition_id" in transitions[0]
-        assert "mode" in transitions[0]
+        assert "mode" not in transitions[0]
 
 
 class GMQueueWaitingForGMTest(APITestCase):
@@ -368,7 +366,6 @@ def _make_ready_story(table):
     TransitionFactory(
         source_episode=episode,
         target_episode=next_ep,
-        mode=TransitionMode.AUTO,
     )
     StoryProgressFactory(
         story=story,

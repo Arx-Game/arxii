@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { GMRoute } from './components/GMRoute';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RequireCharacter } from './components/RequireCharacter';
@@ -25,6 +26,7 @@ import { CharacterCreationPage } from './character-creation';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { AccountSettingsPage } from './account/pages/AccountSettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { TidingsPage } from './tidings/pages/TidingsPage';
 import { JournalPage } from './missions/pages/JournalPage';
@@ -85,11 +87,6 @@ const TriggerGiversPage = lazy(() =>
 const AtlasPage = lazy(() =>
   import('@/world-builder/atlas/AtlasPage').then((m) => ({
     default: m.AtlasPage,
-  }))
-);
-const RoomEditorPage = lazy(() =>
-  import('@/world-builder/pages/RoomEditorPage').then((m) => ({
-    default: m.RoomEditorPage,
   }))
 );
 const FlowsBuilderPage = lazy(() =>
@@ -411,6 +408,7 @@ function App() {
             <Route path="mail" element={<MailPage />} />
             <Route path="media" element={<PlayerMediaPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="account" element={<AccountSettingsPage />} />
             <Route
               path="privacy"
               element={
@@ -609,16 +607,6 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <AtlasPage />
-                </Suspense>
-              </StaffRoute>
-            }
-          />
-          <Route
-            path="/staff/world-builder/rooms/:roomId"
-            element={
-              <StaffRoute>
-                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <RoomEditorPage />
                 </Suspense>
               </StaffRoute>
             }
@@ -943,6 +931,41 @@ function App() {
                   <StoryAuthorPage />
                 </ProtectedRoute>
               </Suspense>
+            }
+          />
+          {/* Scenario Studio (#3565) - the same Mission Studio editor pages,
+              reachable by a story's GM under /stories/scenarios/... instead
+              of /staff/missions/..., behind GMRoute instead of StaffRoute.
+              Must come before /stories/:id below so "scenarios" isn't
+              swallowed by the catch-all. */}
+          <Route
+            path="/stories/scenarios/:id/canvas"
+            element={
+              <GMRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionCanvasPage />
+                </Suspense>
+              </GMRoute>
+            }
+          />
+          <Route
+            path="/stories/scenarios/:id/nodes/:nodeId"
+            element={
+              <GMRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionNodePage />
+                </Suspense>
+              </GMRoute>
+            }
+          />
+          <Route
+            path="/stories/scenarios/:id/nodes/:nodeId/options/:optionId"
+            element={
+              <GMRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <MissionOptionPage />
+                </Suspense>
+              </GMRoute>
             }
           />
           {/* /stories/:id must come after the named /stories/* paths */}

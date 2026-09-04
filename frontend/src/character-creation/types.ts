@@ -25,7 +25,6 @@ export interface Beginnings {
   name: string;
   description: string;
   art_image: string | null;
-  family_known: boolean;
   allowed_species_ids: number[];
   grants_species_languages: boolean;
   cg_point_cost: number;
@@ -80,7 +79,9 @@ export interface CGPointsBreakdown {
 export interface Family {
   id: number;
   name: string;
-  family_type: 'commoner' | 'noble' | 'crime';
+  // #3617: authored kind row (was a 'commoner' | 'noble' | 'crime' code).
+  kind: { id: number; name: string; styles_as_house: boolean };
+  influence: number;
   description: string;
   origin_realm?: number;
   // #3261 — resolved nobiliary particles ('' when the family has none).
@@ -341,6 +342,9 @@ export interface CharacterDraft {
   birthday_month: number | null;
   birthday_day: number | null;
   family: Family | null;
+  /** The Upbringing chosen for the Lineage stage and the family path it took (#3617). */
+  selected_origin_template: OriginTemplate | null;
+  family_path: FamilyPath | '';
   claimed_kin_slot: number | null;
   claimed_kin_pool: number | null;
   defer_parents: boolean;
@@ -690,8 +694,12 @@ export interface DraftData {
   description?: string;
   personality?: string;
   background?: string;
-  // Origin story guided flow (#2478)
+  // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
+  // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
+  origin_choices?: Record<string, number | null>;
+  // The name given to a newly founded family on the 'named' family path (#3617)
+  new_family_name?: string;
   concept?: string;
   quote?: string;
   stats?: Stats;
@@ -725,8 +733,6 @@ export interface DraftData {
   // Tarot card selection for familyless characters
   tarot_card_name?: string;
   tarot_reversed?: boolean;
-  // Orphan / no family flag for lineage stage
-  lineage_is_orphan?: boolean;
   // Invented parents (#2815) — names + genders; species rides
   // CharacterDraft.second_parent_species
   line_parent_name?: string;
@@ -751,6 +757,8 @@ export interface CharacterDraftUpdate {
   birthday_month?: number | null;
   birthday_day?: number | null;
   family_id?: number | null;
+  selected_origin_template_id?: number | null;
+  family_path?: FamilyPath | '';
   height_band_id?: number | null;
   height_inches?: number | null;
   build_id?: number | null;
@@ -844,7 +852,21 @@ export interface DraftSummary {
   stage_completion: Record<number, boolean>;
 }
 
-// Origin story guided flow (#2478)
+// Origin story guided flow (#2478); extended into the Upbringing model (#3617)
+
+/** One priced answer on a pick-list Upbringing prompt. */
+export interface OriginTemplateSlotChoice {
+  id: number;
+  name: string;
+  description: string;
+  cg_point_cost: number;
+  cost_per_influence: number;
+  sort_order: number;
+}
+
+/** The family path a slot prompt is scoped to, or 'any' for every path. */
+export type FamilyPath = 'claimed' | 'named' | 'none';
+
 export interface OriginTemplateSlot {
   id: number;
   name: string;
@@ -852,13 +874,51 @@ export interface OriginTemplateSlot {
   example: string;
   sort_order: number;
   is_required: boolean;
+  applies_to: 'any' | FamilyPath;
+  allows_text: boolean;
+  choices: OriginTemplateSlotChoice[];
 }
 
+/** An "Upbringing" in CG copy: the authored content row chosen in the Lineage step. */
 export interface OriginTemplate {
   id: number;
   name: string;
   frame_narrative: string;
   is_active: boolean;
   sort_order: number;
+  cg_point_cost: number;
+  trust_required: number;
+  allows_claim_family: boolean;
+  allows_name_family: boolean;
+  allows_no_family: boolean;
+  claimable_kind_ids: number[];
+  named_family_kind: number | null;
   slots: OriginTemplateSlot[];
+}
+
+/** The family paths this Upbringing allows, in claim/name/none order. */
+export function allowedFamilyPaths(t: OriginTemplate): FamilyPath[] {
+  const paths: FamilyPath[] = [];
+  if (t.allows_claim_family) paths.push('claimed');
+  if (t.allows_name_family) paths.push('named');
+  if (t.allows_no_family) paths.push('none');
+  return paths;
+}
+
+/**
+ * The family path in effect for the draft's chosen Upbringing: the single
+ * allowed path when there is only one, the draft's stored pick when it is
+ * still one of the allowed paths, or '' when nothing is resolved yet.
+ */
+export function resolveFamilyPath(draft: CharacterDraft): FamilyPath | '' {
+  const t = draft.selected_origin_template;
+  if (!t) return '';
+  const allowed = allowedFamilyPaths(t);
+  if (allowed.length === 1) return allowed[0];
+  return allowed.includes(draft.family_path as FamilyPath) ? (draft.family_path as FamilyPath) : '';
+}
+
+/** A pick-list choice's CG point cost, scaled by the claimed family's influence. */
+export function choiceCost(choice: OriginTemplateSlotChoice, influence: number): number {
+  return choice.cg_point_cost + choice.cost_per_influence * influence;
 }

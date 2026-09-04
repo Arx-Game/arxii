@@ -49,7 +49,6 @@ export function SoulfrayAcceptGate({
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"
-          role="checkbox"
           aria-label="Accept the risk"
           checked={accepted}
           disabled={disabled}

@@ -413,9 +413,8 @@ def get_endorseable_poses_in_scene(
         if interaction.mode == InteractionMode.WHISPER:
             if interaction.pk not in received_whisper_pks:
                 continue
-        elif interaction.visibility == InteractionVisibility.VERY_PRIVATE:
-            if not is_participant:
-                continue
+        elif interaction.visibility == InteractionVisibility.VERY_PRIVATE and not is_participant:
+            continue
         result.append((idx, interaction))
 
     return result

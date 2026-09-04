@@ -16,7 +16,7 @@ Evennia server configuration and customization. Contains settings and hooks for 
 - **`web_plugins.py`**: Web interface plugin configuration
 
 ### `logs/`
-- Runtime log files from Evennia server
+- Default runtime log location (`settings.LOG_DIR`, env-driven; production uses `/var/log/arxii`)
 - Channel logs, HTTP request logs, server logs
 
 ## Key Files

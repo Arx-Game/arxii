@@ -137,6 +137,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
     def test_settle_at_registrar_unblocks_train_offer(self) -> None:  # noqa: PLR0915
         from evennia.accounts.models import AccountDB
 
+        from world.character_creation.factories import make_unknown_upbringing
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.magic.models import CharacterTechnique, Resonance, Tradition
@@ -186,6 +187,8 @@ class SettleObligationLoopEndToEndTests(TestCase):
             name="average_build"
         )
         tarot = TarotCard.objects.get(name="The Fool")
+        # (#3617) An amnesiac Upbringing stands in for the retired orphan flag.
+        unknown_upbringing = make_unknown_upbringing(beginnings)
 
         tradition = Tradition.objects.get(name="Unbound")
         gift = get_gift_options(tradition, path)[0]
@@ -215,7 +218,6 @@ class SettleObligationLoopEndToEndTests(TestCase):
             "first_name": "Debtor",
             "description": "A fresh Unbound Prospect who owes the Academy a Hare.",
             "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 2),
-            "lineage_is_orphan": True,
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "traits_complete": True,
@@ -229,6 +231,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
             account=account,
             selected_area=area,
             selected_beginnings=beginnings,
+            selected_origin_template=unknown_upbringing,
             selected_species=species,
             selected_gender=gender,
             selected_path=path,

@@ -25,6 +25,7 @@ from world.scenes.constants import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Scene` | Primary scene entity (SharedMemoryModel, cached) | `name`, `description`, `location` (FK ObjectDB — the last room-shaped ObjectDB FK still pending retarget to `RoomProfile`; see #2608), `date_started`, `date_finished`, `is_active`, `is_public`, `running_beat` (FK `arxii.Beat`, nullable, SET_NULL, #3425 — the story beat this scene is currently running, written by `RunBeatAction` and cleared by `finish_scene_full`) |
+| `SceneClock` | An authored countdown on the beat a scene is running (#3567) | `scene` (FK, CASCADE - where it was opened), `beat` (FK `arxii.Beat`, CASCADE - the key: a staged battle's private scene runs the same beat and reads the same clock), `size`/`filled` (PositiveSmallIntegerField), `created_at`, `closed_at` (nullable), `closed_reason` (`SceneClockClosedReason`: FILLED/COMPLETED/SCENE_ENDED). `UniqueConstraint` on `beat` where `closed_at__isnull=True` - one open clock per beat. Play state: resettable |
 | `SceneParticipation` | Links accounts to scenes with roles | `scene` (FK), `account` (FK AccountDB), `is_gm`, `is_owner`, `joined_at`, `left_at` |
 | `Persona` | Identity a participant uses within a scene | `participation` (FK), `name`, `is_fake_name`, `description`, `thumbnail_url`, `character` (FK ObjectDB) |
 
@@ -458,11 +459,26 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   scene's existence). Payload (`world.scenes.rail_services.build_gm_story_rail_payload`,
   no models/writes/migration):
   - `beat` - null when no `running_beat`; else id/kind/risk/outcome/predicate_type/
-    pools-authored booleans for any qualifying viewer, plus `internal_description`/
-    `opponent_lines`/`staged_templates` (else null) gated on story standing
+    authored `clock_size` (#3567)/pools-authored booleans for any qualifying viewer,
+    plus `internal_description`/
+    `opponent_lines`/`staged_templates`/`staged_battle` (else null) gated on story
+    standing - `staged_battle` (#3569) carries `blueprint_name`/`name`/
+    `party_side_role`/`unit_line_count`, null when the running ENCOUNTER beat
+    has no `BeatStagedBattle` or the viewer lacks story standing
   - `protected_subjects` - active `StoryProtectedSubject` rows for the running beat's
     story, same scoping `stories.permissions.user_owns_or_leads_story` enforces
     (never widened - see `IsProtectedSubjectStoryOwnerOrStaff`'s "no carve-out" invariant)
+  - `stakes` (#3561) - gated the same as `internal_description`/`protected_subjects`
+    (story standing required): the running beat's `Stake` rows, each with
+    `id`/`player_summary`/`severity`/`subject_kind` and its fired `outcome`
+    (`{column, outcome_key, resolution_summary}`, or `null` while unresolved) -
+    lets the GM narrate what the machine decided without opening the editor.
+    Branch contents for an *unresolved* stake are not included; only what
+    already fired is shown
+  - `activation` (#3561) - same gate: the running beat's locked-contract state,
+    `{locked_at, effective_risk, is_ready}` or `null` if the beat has never
+    activated. Prefers the open activation, falling back to the most recent one
+    so a resolved contract still shows its lock instead of disappearing
   - `clue_placements` - the room's active `RoomClue` placements, staff-only
   - `participants` - characters currently present in the scene's room
     (location-derived, same room-contents read `Scene.has_character_present` uses)
@@ -471,7 +487,24 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   (`frontend/src/scenes/components/GMStoryRail.tsx`), mounted from `SceneDetailPage` as a
   `CombatRail`-pattern sibling whenever `scene.viewer_can_gm`; renders a "no beat running"
   hint when there's no running beat, and tolerates a denied per-participant
-  conditions/vitals fetch without breaking the rest of the rail.
+  conditions/vitals fetch without breaking the rest of the rail. **Stakes section (#3561):**
+  lists each stake's `player_summary`/severity and, once fired, its outcome column and
+  narrative summary, plus the activation strip (`locked_at`/`effective_risk`/`is_ready`)
+  when the beat has ever activated.
+- `GET /api/scenes/{id}/stakes-summary/` (#3561) - what the scene's running beat wagers,
+  for the party's opt-in prompt. `IsAuthenticated` + `ReadOnlyOrSceneParticipant` (the
+  same participant/staff floor `scenario`/`gm-rail` use). Composed read only - no models,
+  no writes, no migration: resolves `scene.running_beat` server-side and delegates to the
+  same `stakes_summary_for_beat` builder `GET /api/beats/{id}/stakes-summary/` uses (see
+  [stakes.md](stakes.md)'s "Opt-in & Visibility Surfaces" section), so it exists purely
+  because a player never receives the running beat's id from any scene payload
+  (`SceneListSerializer`/`SceneDetailSerializer` deliberately omit `running_beat`) - the
+  beat-scoped endpoint is unreachable without one. With no running beat, returns the same
+  shape with `declared_risk`/`effective_risk` null and an empty `stakes` list. Frontend:
+  `SceneHeader.tsx`'s `DeclaredRiskBadge` is a toggle button - clicking it opens "What is
+  wagered", a panel listing each stake's `player_summary` + severity label and the
+  effective risk (`data-testid="scene-header-stakes-panel"`); branch contents are never
+  part of the payload.
 
 **Filters:** `is_active`, `is_public`, `location`, `participant`, `status` (active/completed/upcoming), `gm`, `player`
 
@@ -649,11 +682,53 @@ for the viewer.
 running this beat" pointer — see `stories.md`'s "Session prep" section for the full
 `BeatOpponentLine`/`BeatStagedTemplate`/`RunBeatAction`/`GMListRunnableBeatsAction` contract.
 Written only by `RunBeatAction` (`src/actions/definitions/gm_story.py`); cleared by
-`finish_scene_full`. Exposed on `SceneListSerializer`/`SceneDetailSerializer` as `running_beat`
-(`{id, risk}`, GM/staff viewers only — mirrors `viewer_can_gm`'s gate). Web surface: the
+`finish_scene_full`. Exposed on `SceneListSerializer` (and so on `SceneDetailSerializer`,
+which inherits it) as `running_beat` (`{id, risk, clock_size}`, GM/staff viewers only -
+mirrors `viewer_can_gm`'s gate; every other viewer gets `null`). Web surface: the
 `GMAdjudicationPanel`'s "Run Beat" tab (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`)
 authors it; the running beat's authored material then rides the GM story rail (#3434,
 `GET /api/scenes/{id}/gm-rail/`, see "API Endpoints" above) for referee-time reference.
+
+### Scene clock (#3567)
+
+An authored countdown on the beat a scene is running - see `stories.md`'s "Scene
+clock" (in the Run Beat section) for the full model/lifecycle. `RunBeatAction`
+opens a `SceneClock` (`world.scenes.clock_services.start_scene_clock`) when
+`beat.clock_size > 0`; it fills from two sources:
+
+- **Combat round starts** - `begin_declaration_phase` (`world.combat.services`)
+  ticks the running beat's clock by 1 every round via `tick_scene_clock`. Battle
+  rounds (`begin_battle_round`, `world.battles.services`) never call
+  `begin_declaration_phase`, so a staged battle's own rounds do **not** tick the
+  clock.
+- **The GM's `advance_clock` gesture** (`AdvanceClockAction`, `actions/definitions
+  /gm_story.py`) - spends an explicit `by` tick count; telnet `story clock [n]`,
+  web the GM story rail's Advance button.
+
+`tick_scene_clock` runs in the caller's own transaction: it stamps the clock
+FILLED and closed there, but schedules the beat's EXPIRED completion with
+`transaction.on_commit` rather than completing inline - a lock-then-check
+callback (`_complete_filled_clock_beat`) that re-verifies the beat is still
+UNSATISFIED before calling `complete_beat_expired`, so a later failure in the
+same round pipeline can never roll back a completion already broadcast to
+players (ADR-0264). `finish_scene_full` closes (`SCENE_ENDED`, no completion)
+every clock opened **in that scene** via `close_scene_clocks` - a battle
+scene's own clock row (same beat, different `scene` FK) survives its GM table
+scene finishing, and vice versa, since both share the beat-keyed clock but each
+opened their own row.
+
+`SceneDetailSerializer.clock` (`SceneClockSerializer`, `{size, filled}`) is the
+player-visible face - visible to **every** viewer, unlike `running_beat` above:
+it names no beat and no consequence, only how much time is left (#3567 Decision
+4). `get_clock` resolves the scene's running beat (`running_beat_for_scene`)
+and its open `SceneClock` (`open_clock_for_beat`); `null` when the scene runs
+no beat or that beat has no open clock (including `clock_size == 0`). Frontend:
+`SceneClockPips` (`frontend/src/scenes/components/SceneClockPips.tsx`) renders
+one pip per tick, filled pips first, mounted from `SceneHeader.tsx` whenever
+`scene.clock` is non-null. The GM story rail additionally shows the beat's
+*authored* `clock_size` (`rail.beat.clock_size`, distinct from the live
+`scene.clock.filled`/`size` pair) alongside an Advance control when a clock is
+running.
 
 ### Declared-risk badge (#3433)
 
@@ -684,6 +759,13 @@ badge, `data-testid="scene-header-risk-badge"`, copy `"<TIER> stakes"`. Tier map
 stakes tags were considered and rejected (2026-08-29 ruling) - stakes consent already happens at
 beat activation via the boundaries/stakes-contract flow, so a header-only read of authored data
 is the whole surface; no per-roll noise.
+
+**"What is wagered" panel (#3561).** The badge is now a toggle: clicking it opens a small
+panel (`data-testid="scene-header-stakes-panel"`) polling `GET /api/scenes/{id}/stakes-summary/`
+(see "API Endpoints" above) and listing each stake's `player_summary` + severity label plus
+the effective risk - the player-visible half of the contract, at the same opt-in moment
+[stakes.md](stakes.md)'s "Opt-in & Visibility Surfaces" section describes. Branch contents
+(what a WIN/LOSS/WITHDRAWAL actually does) are never part of the payload.
 
 ### Lifecycle Actions
 
@@ -1033,8 +1115,8 @@ of silently recording under the wrong scene. A scene with no location (`location
 is `None`) skips the check. `PlaceSerializer.viewer_is_present`
 (`place_views.py`) is a `SerializerMethodField` reporting whether one of the
 requesting account's owned personas has a `PlacePresence` row at that place;
-memoized per serializer instance so a places-list response shares one owned-persona
-lookup across all rows instead of re-querying per row. Scene poses submitted from
+reading the account's `cached_persona_ids` (one query per account per process, #3597)
+so a places-list response never re-queries per row. Scene poses submitted from
 `/game` take the REST `submit-pose` path, keyed by `scene_id` — a pose belongs to
 a scene, not a room, so this is unrelated to room id.
 

@@ -49,6 +49,10 @@ vi.mock('@/events/queries', () => ({
   searchSocieties: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('../api', () => ({
+  searchNpcAssets: vi.fn().mockResolvedValue([]),
+}));
+
 function Harness({ initialKind = 'custom' }: { initialKind?: SubjectKindEnum }) {
   const [value, setValue] = useState<SubjectRefValue>(emptySubjectRef(initialKind));
   return <SubjectRefFields value={value} onChange={setValue} />;
@@ -74,6 +78,11 @@ describe('SubjectRefFields', () => {
     renderWithProviders(<Harness initialKind="faction" />);
     expect(screen.getByText('Faction level')).toBeInTheDocument();
     expect(screen.getByLabelText(/society/i)).toBeInTheDocument();
+  });
+
+  it('shows an NPC asset search field for asset (#3561)', () => {
+    renderWithProviders(<Harness initialKind="asset" />);
+    expect(screen.getByLabelText(/asset/i)).toBeInTheDocument();
   });
 
   it('switching kind resets the previously-set ref fields', async () => {

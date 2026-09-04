@@ -13,11 +13,10 @@ vi.mock('@/roster/visibility', () => ({
   useSetAppearOffline: vi.fn(),
 }));
 
-// Theme provider + connected-accounts pull from contexts/network we don't exercise here.
+// Theme provider pulls from a context we don't exercise here.
 vi.mock('@/components/realm-theme-provider', () => ({
   useRealmTheme: () => ({ plainMode: false, setPlainMode: vi.fn() }),
 }));
-vi.mock('@/components/ConnectedAccounts', () => ({ ConnectedAccounts: () => null }));
 
 import * as visibility from '@/roster/visibility';
 

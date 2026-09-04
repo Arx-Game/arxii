@@ -79,10 +79,6 @@ interface ClearanceNoteDialogProps {
   /** Called with the trimmed note when the user submits. The dialog closes
    *  itself on success via {@link onSuccess}. */
   onSubmit: (note: string, helpers: { setError: (msg: string) => void; close: () => void }) => void;
-  /** Toast message on success. */
-  successToast: string;
-  /** Fallback error message for inline display. */
-  errorFallback: string;
   /** Variant for the submit button. */
   submitVariant?: 'default' | 'destructive';
   /** testId for the trigger button. */

@@ -76,7 +76,13 @@ vi.mock('@/magic/components/threads/ThreadPullDialog', () => ({
 //     parent state already holds a techniqueId, or where the mockImplementation
 //     hard-codes one).
 type CardProps = {
-  actionContext: { slot: string; strainCommitment: number; techniqueId?: number };
+  actionContext: {
+    slot: string;
+    strainCommitment: number;
+    techniqueId?: number;
+    targetKind?: string;
+    targetId?: number;
+  };
   onContextChange: (ctx: {
     slot: string;
     strainCommitment: number;
@@ -91,6 +97,11 @@ function defaultCardImpl({ actionContext, onContextChange, readOnly }: CardProps
   return (
     <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
       ActionCard [{slot}]
+      {slot === 'focused' && (
+        <span data-testid="card-target">
+          {actionContext.targetKind ?? ''}:{actionContext.targetId ?? ''}
+        </span>
+      )}
       <button
         type="button"
         data-testid={`card-change-btn-${slot}`}
@@ -143,6 +154,11 @@ vi.mock('@/magic/queries', async (importOriginal) => {
       isError: false,
     }),
     useCharacterResonances: vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false }),
+    // #3573 - Guard fee readout reads current anima; stubbed so no real network
+    // call fires in these component tests (mirrors the hooks above).
+    useCharacterAnima: vi
+      .fn()
+      .mockReturnValue({ data: { current: 5, maximum: 10 }, isLoading: false, isError: false }),
   };
 });
 
@@ -282,6 +298,7 @@ function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetai
     current_round_actions: [],
     clashes: [],
     engagement_locks: [],
+    pending_attacks: [],
     created_at: '2026-06-11T00:00:00Z',
     ...overrides,
   } as unknown as EncounterDetail;
@@ -1202,6 +1219,55 @@ describe('YourTurn — #1001a focused target', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// #3572 — threat strip prefills
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — pending attacks strip prefills (#3572)', () => {
+  function pendingAttackFixture(): NonNullable<EncounterDetail['pending_attacks']>[number] {
+    return {
+      id: 1,
+      opponent_id: 10,
+      opponent_name: 'Ogre',
+      target_participant_id: 5,
+      target_name: 'Kira',
+      declared_round: 1,
+      resolves_round: 3,
+      rounds_until_landing: 1,
+      downgrades: 0,
+      called_out: false,
+      damage_scale: 1,
+      cancelled: false,
+    };
+  }
+
+  it('prefills the Guard ally from a wind-up row', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      participants: [makeParticipant(5, 'Kira')],
+      pending_attacks: [pendingAttackFixture()],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('pending-attack-guard-1'));
+    expect(screen.getByTestId('guard-ally-select')).toHaveTextContent('Kira');
+  });
+
+  it('prefills the focused target from a wind-up row', async () => {
+    setupMocks();
+    const encounter = makeEncounter({
+      participants: [makeParticipant(5, 'Kira')],
+      pending_attacks: [pendingAttackFixture()],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    await userEvent.click(screen.getByTestId('pending-attack-strike-1'));
+    expect(screen.getByTestId('card-target')).toHaveTextContent('opponent:10');
+  });
+});
+
 describe('YourTurn — own-action resolved by participant PK, not position', () => {
   it('shows flee badge even when another participant action appears first in the list (GM view)', () => {
     // Simulates the GM/staff scenario where current_round_actions contains
@@ -1746,6 +1812,126 @@ describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
       'title',
       'Flee the encounter, Cover an ally, or Guard an ally with your body or a protective technique, instead of declaring an offensive or defensive action.'
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #3573 - Guard consent toggle (fee readout) + ward-cast consent
+// ---------------------------------------------------------------------------
+
+describe('YourTurn - Guard Soulfray consent toggle (#3573)', () => {
+  async function selectGuardTechnique(displayName: string) {
+    const trigger = screen.getByTestId('guard-technique-select');
+    await userEvent.click(trigger);
+    const option = await screen.findByText(new RegExp(displayName));
+    await userEvent.click(option);
+  }
+
+  it('sends confirm_soulfray_risk when the guardian accepts Soulfray', async () => {
+    setupMocks();
+    const protective = makeCastPlayerAction(30, 'Aegis Field', {
+      protective_flavor: 'barrier',
+      reactive_anima_cost: 3,
+    });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ availableActions: [protective], encounter })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await selectGuardTechnique('Aegis Field');
+
+    await userEvent.click(screen.getByTestId('guard-soulfray-toggle'));
+    await userEvent.click(screen.getByTestId('guard-confirm-btn'));
+
+    expect(mockGuardMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ techniqueId: 30, confirmSoulfrayRisk: true }),
+      expect.anything()
+    );
+  });
+
+  it('shows the fee next to the toggle and hides the toggle for mundane guards', async () => {
+    setupMocks();
+    const protective = makeCastPlayerAction(31, 'Aegis Field', {
+      protective_flavor: 'barrier',
+      reactive_anima_cost: 3,
+    });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ availableActions: [protective], encounter })} />, {
+      wrapper: createWrapper(),
+    });
+
+    // No technique selected yet (mundane default) - toggle hidden.
+    expect(screen.queryByTestId('guard-soulfray-toggle')).not.toBeInTheDocument();
+
+    await selectGuardTechnique('Aegis Field');
+
+    const gate = screen.getByTestId('guard-soulfray-gate');
+    expect(gate).toHaveTextContent(/fee 3/i);
+  });
+
+  it('hides the toggle entirely when no protective technique is available (mundane guard)', () => {
+    setupMocks();
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ availableActions: [], encounter })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('guard-technique-select')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('guard-soulfray-toggle')).not.toBeInTheDocument();
+  });
+
+  it('sends confirm_soulfray_risk for a ward-bearing cast with no active Soulfray warning', async () => {
+    setupMocks();
+    const cast = makeCastPlayerAction(32, 'Aegis Field', {
+      soulfray_warning: null,
+      reactive_anima_cost: 3,
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 32 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    // No Soulfray warning present - the heavier SoulfrayAcceptGate must not render.
+    expect(screen.queryByTestId('soulfray-accept-gate')).not.toBeInTheDocument();
+
+    const toggle = screen.getByTestId('cast-ward-soulfray-toggle');
+    expect(screen.getByTestId('cast-ward-soulfray-gate')).toHaveTextContent(/fee 3/i);
+    await userEvent.click(toggle);
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({
+      effort_level: 'medium',
+      confirm_soulfray_risk: true,
+    });
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 });
 

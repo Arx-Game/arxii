@@ -22,6 +22,39 @@ export function StaffApplicationsPage() {
   const { data, isLoading } = useApplications(statusFilter);
   const applications = data?.results;
 
+  const renderApplications = () => {
+    if (isLoading) {
+      return <p className="text-muted-foreground">Loading...</p>;
+    }
+    if (!applications?.length) {
+      return <p className="text-muted-foreground">No applications found.</p>;
+    }
+    return (
+      <div className="space-y-3">
+        {applications.map((app) => (
+          <Link key={app.id} to={`/staff/applications/${app.id}`}>
+            <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+              <CardContent className="flex items-center justify-between py-4">
+                <div>
+                  <p className="font-medium">{app.draft_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    by {app.player_name} &middot; {new Date(app.submitted_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {app.reviewer_name && (
+                    <span className="text-xs text-muted-foreground">{app.reviewer_name}</span>
+                  )}
+                  <Badge variant={statusVariant(app.status)}>{statusLabel(app.status)}</Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Character Applications</h1>
@@ -41,35 +74,7 @@ export function StaffApplicationsPage() {
       </div>
 
       {/* Applications list */}
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : !applications?.length ? (
-        <p className="text-muted-foreground">No applications found.</p>
-      ) : (
-        <div className="space-y-3">
-          {applications.map((app) => (
-            <Link key={app.id} to={`/staff/applications/${app.id}`}>
-              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                <CardContent className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="font-medium">{app.draft_name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      by {app.player_name} &middot;{' '}
-                      {new Date(app.submitted_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {app.reviewer_name && (
-                      <span className="text-xs text-muted-foreground">{app.reviewer_name}</span>
-                    )}
-                    <Badge variant={statusVariant(app.status)}>{statusLabel(app.status)}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
+      {renderApplications()}
     </div>
   );
 }

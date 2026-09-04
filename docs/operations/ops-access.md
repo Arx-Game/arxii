@@ -78,8 +78,48 @@ For a stronger revoke (e.g. you suspect the key leaked), also clear the
 an empty `authorized_keys` and the key is dead everywhere; re-mint a fresh
 pair before the next session.
 
+## Two-factor authentication lockout resets
+
+A player or administrator locked out of two-factor authentication (2FA, #3591)
+is never recovered over SSH. The `arxops` user has no Postgres access and no
+`/etc/arxii` secrets, and there is no shell-side reset path for
+`allauth.mfa.Authenticator` rows even for `arxadmin`. The only sanctioned reset
+is the Django admin: MFA > Authenticators, delete the account's rows after
+verifying identity out of band. See `docs/systems/registration.md`'s "Account
+settings" section for the full runbook, including the administrator-lockout
+layers.
+
 ## Verifying the gate state
 
 Inside the container: `ssh -o BatchMode=yes -o ConnectTimeout=5 arxii-prod true`
 — exits 0 when open; "Connection refused"/"No route to host" when closed.
 The postStart output also prints the gate state on every container start.
+
+## Reading the game logs
+
+Since #3599 the game writes its log files to `/var/log/arxii` on the box
+(`LOG_DIR` in the EnvironmentFile; `roles/app_deploy` creates the directory
+as `arxii:adm` 0750 and a systemd-tmpfiles rule deletes files older than 30
+days). `arxops` is in `adm`, so with the gate open it reads them with no sudo.
+A default ACL on the directory keeps rotated files group-readable (twistd
+runs with umask 0077, so without it every rotated log would be 0600). After
+the first deploy, confirm with `ssh arxii-prod stat -c '%a %U:%G'
+/var/log/arxii/server.log` again after the first rotation, not only on day
+one.
+
+```bash
+ssh arxii-prod tail -n 200 /var/log/arxii/server.log
+ssh arxii-prod grep -n 'AccountDB' /var/log/arxii/server.log
+ssh arxii-prod ls -la /var/log/arxii            # rotated copies: server.log.YYYY_MM_DD
+ssh arxii-prod journalctl -u arxii --since '1 hour ago' --no-pager
+```
+
+`server.log` is the game process (Evennia's own lines plus, since #3599,
+Django's `logging` output, which used to be discarded in daemon mode);
+`portal.log` is the network process; `http_requests.log` is one line per
+web request, including client IPs. Every error-level line in `server.log`
+is also a Sentry event (tag `logger: evennia.twisted`), so check Sentry
+before opening the gate for a traceback.
+
+A production traceback never goes into a public issue or PR
+([ADR-0254](../adr/0254-sentry-digest-is-a-pointer-not-a-reproduction.md)).

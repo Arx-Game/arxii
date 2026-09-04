@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toDisplayString } from '@/lib/displayValue';
 import {
   Select,
   SelectContent,
@@ -143,6 +144,11 @@ export function coercePredicate(
 
 function coerceValue(raw: unknown, type: PredicateParamType): unknown {
   if (raw === undefined || raw === null || raw === '') return raw;
+  // Inputs hand us primitives. Anything else has no sensible coercion here, and
+  // String() would store the literal "[object Object]" as the parameter value.
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    return raw;
+  }
   const s = String(raw);
   switch (type) {
     case 'int': {
@@ -414,7 +420,7 @@ function LeafView({
             // each with their own requirements_override).
             const inputId = `${builderId}-leaf-${value.leaf}-${p.name}`;
             const raw = value.params[p.name];
-            const display = raw === undefined || raw === null ? '' : String(raw);
+            const display = toDisplayString(raw);
             return (
               <div key={p.name}>
                 <Label className="text-xs" htmlFor={inputId}>

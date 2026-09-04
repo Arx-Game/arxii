@@ -100,6 +100,11 @@ class _EventActorMixin:
         Account instance in memory across requests, so this list is
         computed once per account per process and reused across requests.
         Invalidation is wired via ``RosterTenure.related_cache_fields``.
+
+        ``request.user`` is the Account typeclass, never the base ``AccountDB``:
+        signup instantiates the typeclass and migration 0213 repointed the rows
+        that predate it (ADR-0260). A row still on ``AccountDB`` is a data error the ops panel's
+        ``typeclassed-accounts`` probe names, not a case views branch on.
         """
         user = self.request.user
         if not user.is_authenticated:
@@ -288,11 +293,14 @@ class EventViewSet(_EventActorMixin, ModelViewSet):
 
         # If scheduled_real_time changed, validate location gap
         new_real_time = data.get("scheduled_real_time")
-        if new_real_time and new_real_time != event.scheduled_real_time:
-            if not validate_location_gap(
+        if (
+            new_real_time
+            and new_real_time != event.scheduled_real_time
+            and not validate_location_gap(
                 event.location_id, new_real_time, exclude_event_id=event.id
-            ):
-                raise DRFValidationError(EventError.LOCATION_GAP)
+            )
+        ):
+            raise DRFValidationError(EventError.LOCATION_GAP)
 
         serializer.save()
 

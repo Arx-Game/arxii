@@ -1,5 +1,6 @@
 /**
- * TechniqueSelector — third step of the GiftStage funnel (#2426 Task 10).
+ * TechniqueSelector (#3630) — techniques as index entries, third step of the
+ * Gift funnel.
  *
  * Lists the technique options (pool ∪ signature) for the chosen gift, grouped
  * by category using the same Offense/Defense/Enhancement/Affliction/Utility
@@ -7,13 +8,9 @@
  * at `draft.starting_technique_picks` (base 1 + distinction bonus).
  */
 
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CodexTerm } from '@/codex/components/CodexTerm';
-import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
-import { cn } from '@/lib/utils';
-import { CheckCircle2, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
+import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
+import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
 import { useCGTechniqueOptions, useUpdateDraft } from '../../queries';
 import type { CGTechniqueOption, CharacterDraft } from '../../types';
 
@@ -36,6 +33,21 @@ const CATEGORY_ORDER: CGTechniqueOption['category'][] = [
 interface TechniqueSelectorProps {
   draft: CharacterDraft;
   giftId: number;
+}
+
+/**
+ * Toggling a technique: deselect it if it is already chosen, refuse to add when
+ * the budget is spent, otherwise add it.
+ */
+function nextSelection(
+  selectedIds: number[],
+  techniqueId: number,
+  isSelected: boolean,
+  atBudget: boolean
+): number[] {
+  if (isSelected) return selectedIds.filter((id) => id !== techniqueId);
+  if (atBudget) return selectedIds;
+  return [...selectedIds, techniqueId];
 }
 
 export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
@@ -65,28 +77,21 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-muted-foreground">Loading techniques...</span>
-      </div>
+      <p className="ledger-line" aria-busy="true">
+        Loading techniques…
+      </p>
     );
   }
 
   if (!options || options.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">No techniques are available for this gift.</p>
-    );
+    return <p className="ledger-line">No techniques are available for this gift.</p>;
   }
 
   const atBudget = selectedIds.length >= picks;
 
   const toggle = (techniqueId: number) => {
     const isSelected = selectedIds.includes(techniqueId);
-    const next = isSelected
-      ? selectedIds.filter((id) => id !== techniqueId)
-      : atBudget
-        ? selectedIds
-        : [...selectedIds, techniqueId];
+    const next = nextSelection(selectedIds, techniqueId, isSelected, atBudget);
     if (next === selectedIds) return;
     updateDraft.mutate({
       draftId: draft.id,
@@ -105,64 +110,54 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
   })).filter((group) => group.options.length > 0);
 
   return (
-    <div className="space-y-6">
-      <div
-        className={cn(
-          'w-fit rounded-lg border px-4 py-2 text-sm font-medium',
-          atBudget
-            ? 'border-primary bg-primary/10 text-primary'
-            : 'border-muted-foreground/30 text-muted-foreground'
-        )}
-      >
+    <div>
+      <p className="ledger-line" role="status">
         {selectedIds.length} of {picks} chosen
-      </div>
+      </p>
 
       {grouped.map((group) => (
-        <div key={group.category} className="space-y-3">
-          <h4 className="text-sm font-semibold text-muted-foreground">{group.label}</h4>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div key={group.category}>
+          <h3 className="section-h">{group.label}</h3>
+          <EntryList label={`${group.label} techniques`}>
             {group.options.map((technique) => {
               const isSelected = selectedIds.includes(technique.id);
-              const disabled = !isSelected && atBudget;
+              const closed = atBudget && !isSelected;
+              let tag = 'Pool';
+              if (closed) {
+                tag = 'Budget reached';
+              } else if (technique.is_tradition_technique) {
+                tag = `${traditionName} technique`;
+              }
               return (
-                <Card
+                <Entry
                   key={technique.id}
-                  className={cn(
-                    'transition-all',
-                    disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-                    isSelected && 'ring-2 ring-primary',
-                    !isSelected && !disabled && 'hover:ring-1 hover:ring-primary/50'
-                  )}
-                  onClick={() => !disabled && toggle(technique.id)}
+                  name={technique.name}
+                  tag={tag}
+                  chosen={isSelected}
+                  closed={closed}
+                  open={isSelected}
                 >
-                  <CardHeader className="space-y-1 p-3">
-                    <CardTitle className="flex items-center justify-between gap-2 text-sm">
-                      <span>
-                        {technique.codex_entry_id != null ? (
-                          <CodexTerm entryId={technique.codex_entry_id}>{technique.name}</CodexTerm>
-                        ) : (
-                          technique.name
-                        )}
-                      </span>
-                      {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
-                    </CardTitle>
-                    {technique.is_tradition_technique && (
-                      <Badge variant="outline" className="w-fit text-xs">
-                        {traditionName} technique
-                      </Badge>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-2 px-3 pb-3 pt-0">
-                    <CardDescription className="text-xs">{technique.description}</CardDescription>
-                    <TechniqueEffectSummaryDisplay
-                      summary={technique.effect_summary}
-                      variant="full"
+                  <p>{technique.description}</p>
+                  <TechniqueEffectSummaryDisplay
+                    summary={technique.effect_summary}
+                    variant="full"
+                  />
+                  <CodexLine entryId={technique.codex_entry_id} name={technique.name} />
+                  {/* At budget and not chosen: no doors at all, as Heritage
+                      does for an unaffordable species. A "Choose" button that
+                      silently refuses is worse than no button. */}
+                  {!closed && (
+                    <EntryDoors
+                      chooseLabel={`Choose ${technique.name}`}
+                      onChoose={() => toggle(technique.id)}
+                      chosen={isSelected}
+                      onSetAside={() => toggle(technique.id)}
                     />
-                  </CardContent>
-                </Card>
+                  )}
+                </Entry>
               );
             })}
-          </div>
+          </EntryList>
         </div>
       ))}
     </div>

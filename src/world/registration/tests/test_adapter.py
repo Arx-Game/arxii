@@ -9,7 +9,7 @@ against the real endpoint lives in ``test_signup_journey.py``.
 
 import json
 
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
 
 from evennia_extensions.adapters import ArxAccountAdapter
 from evennia_extensions.factories import AccountFactory
@@ -87,3 +87,57 @@ class IsOpenForSignupTests(TestCase):
         first_read = request.body
         self.assertTrue(self.adapter.is_open_for_signup(request))
         self.assertEqual(first_read, request.body)
+
+
+class NewUserTypeclassTests(TestCase):
+    """Sentry ARX2-8: allauth's default ``new_user`` is ``get_user_model()()``.
+
+    That is the base ``AccountDB``; Evennia pins ``db_typeclass_path`` to the
+    class it was instantiated as, so every web-signup account stayed on ``AccountDB``
+    forever and lacked the ``Account`` typeclass (no ``puppet``, no
+    ``get_available_characters``, no ``cached_primary_persona_ids``).
+    """
+
+    def test_new_user_is_the_configured_account_typeclass(self):
+        from django.conf import settings
+        from evennia.utils.utils import class_from_module
+
+        user = ArxAccountAdapter().new_user(_json_post_request({}))
+
+        self.assertIsInstance(user, class_from_module(settings.BASE_ACCOUNT_TYPECLASS))
+        self.assertEqual(user.db_typeclass_path, settings.BASE_ACCOUNT_TYPECLASS)
+
+
+class ClientIpTests(SimpleTestCase):
+    """allauth's per-IP rate limits key on Caddy's X-Real-IP, never a forgeable header (#3591)."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.adapter = ArxAccountAdapter()
+
+    def test_prefers_x_real_ip(self):
+        request = self.factory.get(
+            "/",
+            HTTP_X_REAL_IP="203.0.113.7",
+            HTTP_X_FORWARDED_FOR="198.51.100.9, 203.0.113.7",
+            REMOTE_ADDR="127.0.0.1",
+        )
+        self.assertEqual(self.adapter.get_client_ip(request), "203.0.113.7")
+
+    def test_falls_back_to_parent_without_x_real_ip(self):
+        request = self.factory.get(
+            "/", HTTP_X_FORWARDED_FOR="198.51.100.9", REMOTE_ADDR="127.0.0.1"
+        )
+        self.assertEqual(self.adapter.get_client_ip(request), "198.51.100.9")
+
+    def test_plain_remote_addr(self):
+        request = self.factory.get("/", REMOTE_ADDR="192.0.2.4")
+        self.assertEqual(self.adapter.get_client_ip(request), "192.0.2.4")
+
+    def test_garbage_x_real_ip_falls_back_to_parent(self):
+        request = self.factory.get("/", HTTP_X_REAL_IP="not-an-ip", REMOTE_ADDR="192.0.2.4")
+        self.assertEqual(self.adapter.get_client_ip(request), "192.0.2.4")
+
+    def test_x_real_ip_is_canonicalised(self):
+        request = self.factory.get("/", HTTP_X_REAL_IP="2001:DB8::1", REMOTE_ADDR="127.0.0.1")
+        self.assertEqual(self.adapter.get_client_ip(request), "2001:db8::1")

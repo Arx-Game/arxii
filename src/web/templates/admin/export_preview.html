@@ -87,6 +87,7 @@
                                data-app-label="{{ model.app_label }}"
                                data-model-name="{{ model.model_name }}"
                                checked
+                               aria-label="Include {{ model.app_label }}.{{ model.model_name }} in export"
                                title="Include {{ model.app_label }}.{{ model.model_name }} in export">
                     </td>
                 </tr>
@@ -141,7 +142,8 @@
                                    class="export-preview-checkbox"
                                    data-app-label="{{ model.app_label }}"
                                    data-model-name="{{ model.model_name }}"
-                                   title="Include {{ model.app_label }}.{{ model.model_name }} in export">
+                                   aria-label="Include {{ model.app_label }}.{{ model.model_name }} in export"
+                               title="Include {{ model.app_label }}.{{ model.model_name }} in export">
                         </td>
                     </tr>
                     {% endfor %}
@@ -194,7 +196,7 @@
         input.type = 'hidden';
         input.name = 'models';
         input.value = modelKey;
-        input.setAttribute('data-model-key', modelKey);
+        input.dataset.modelKey = modelKey;
         hiddenInputs.appendChild(input);
     }
 

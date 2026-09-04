@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useReviewRosterApplication, useRosterApplicationDetail } from '@/staff/queries';
+import { toDisplayString } from '@/lib/displayValue';
 
 interface InfoRowProps {
   label: string;
@@ -30,9 +31,7 @@ function formatPolicyLabel(key: string): string {
 
 function formatPolicyValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+  return toDisplayString(value);
 }
 
 export function StaffRosterApplicationDetailPage() {

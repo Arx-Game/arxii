@@ -1,0 +1,432 @@
+# SonarCloud rule policy — the source of truth for which rules this project runs.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# `sonar.issue.ignore.multicriteria` in sonar-project.properties DOES NOT WORK here.
+# This project uses SonarCloud Automatic Analysis (`sonar.autoscan.enabled = true`),
+# which reads that file for `sonar.exclusions` but ignores rule-scoped issue filters
+# entirely. Three such entries sat in the repo for months with careful rationale
+# comments while all three rules kept firing on exactly the files they named (#3548).
+#
+# The working lever is a custom Quality Profile per language. This file declares it;
+# `tools/sonar_profile.py` reconciles it to SonarCloud via the web API. CI runs
+# `--check` and fails on drift, so a rule cannot be re-enabled silently in the web UI.
+#
+#   uv run python tools/sonar_profile.py --check    # verify (CI does this)
+#   uv run python tools/sonar_profile.py --apply    # push this file to SonarCloud
+#
+# HOW TO DECIDE WHETHER A RULE BELONGS HERE
+# -----------------------------------------
+# Two questions, from the 2026-09-01 ruling:
+#
+#   1. Does it catch a defect?
+#   2. Does complying genuinely make the code better to read or maintain?
+#
+# Ceremony is NEITHER — and a rule can be worse than neutral, when complying costs
+# readability and buys nothing. Readability alone is a sufficient reason to KEEP a
+# rule: that a function does not break says nothing about its quality.
+#
+# Prefer ruff/ESLint over SonarCloud for anything deterministic and cheap. They run
+# locally, fast, and blocking in pre-commit; SonarCloud is post-hoc and advisory. A
+# rule a linter already owns does not belong in the profile at all.
+#
+# Every entry needs a `why`. An entry without a stated reason is indistinguishable
+# from an oversight.
+
+organization: arx-game
+project: Arx-Game_arxii
+
+# Profiles are COPIES of the built-in "Sonar way", not children of it: SonarCloud does
+# not permit deactivating a rule inherited from a parent profile. The trade-off is that
+# new "Sonar way" rules do not arrive automatically — `--check` reports the drift so it
+# is a visible decision rather than a silent one.
+profiles:
+  py: "Arx II Python"
+  ts: "Arx II TypeScript"
+  js: "Arx II JavaScript"
+  css: "Arx II CSS"
+  web: "Arx II Web"
+
+disabled:
+  # ---------------------------------------------------------------- provably inert
+  - rule: typescript:S6759
+    name: React props should be read-only
+    why: >
+      Enforces nothing on this codebase. 875 of its 879 findings are on components that
+      destructure props in the signature, and `tsc --strict` confirms `Readonly<>` on a
+      destructured parameter blocks no mutation — only the props-object form does, and
+      even there it is shallow (it stops `props.items = []` but not `props.items.push()`).
+      The frontend contains zero prop reassignments. Off by default across the ecosystem;
+      React's own TypeScript docs use plain inline types.
+
+  - rule: typescript:S7773
+    name: Number static methods should be preferred over global equivalents
+    why: >
+      `parseInt` and `Number.parseInt` are the same function object. No defect is
+      possible and readability is unchanged either way.
+
+  # ------------------------------------------------- false positive for our conventions
+  - rule: python:S7632
+    name: Issue suppression comment should have the correct format
+    why: >
+      Flags our own custom linter tokens — `# noqa: OBJECTDB_PARAM`, `# noqa: IDENT_DASH`,
+      `# noqa: STRING_LITERAL` — which CLAUDE.md mandates and tools/lint_*.py consume.
+      The rule is structurally wrong here; the comments are correct.
+
+  # --------------------------------------------------- ruff already enforces this rule
+  - rule: python:S1172
+    name: Unused function parameters should be removed
+    why: >
+      ruff `ARG001`/`ARG002` already covers it, and 88 of the 99 findings sit on a line
+      that ALREADY carries an explicit `# noqa: ARG001` with a written reason ("signature
+      is fixed by the stdlib", "handler interfaces require specific signatures"). Removing
+      the parameter would break the interface contract. SonarCloud is re-litigating
+      decisions this repo already made and recorded.
+
+  - rule: python:S107
+    name: Functions should not have too many parameters
+    why: >
+      ruff `PLR0913` already enforces it, and a per-site `# noqa: PLR0913` with a reason
+      is the established escape hatch for service functions.
+
+  # ------------------------------- ruff deliberately exempts this; Sonar contradicts it
+  - rule: python:S1135
+    name: Track uses of "TODO" tags
+    why: >
+      ruff ignores `FIX002`/`TD002`/`TD003` deliberately — "TODOs document planned work".
+      An inventory of TODOs is not a quality signal, and CLAUDE.md treats stubs and
+      placeholders as intentional.
+  - rule: typescript:S1135
+    name: Track uses of "TODO" tags
+    why: Same decision as python:S1135, applied to the frontend.
+
+  - rule: python:S125
+    name: Sections of code should not be commented out
+    why: ruff ignores `ERA001` deliberately — "sometimes needed for reference".
+
+  - rule: python:S6546
+    name: Union type expressions should be preferred over typing.Union
+    why: ruff ignores `UP007` deliberately — "backwards compatibility".
+
+  - rule: python:S6553
+    name: "'null=True' should not be used on string-based fields in Django models"
+    why: ruff ignores `DJ001` deliberately — "we inherit Evennia patterns".
+
+  - rule: python:S1066
+    name: Mergeable "if" statements should be combined
+    why: >
+      ruff `SIM102` is being re-enabled for this (#3548 phase 2), so Sonar's copy is a
+      duplicate of a check that will run locally and blocking.
+
+  # ------------------------------------------------------- ceremony: costs, buys nothing
+  - rule: python:S1192
+    name: String literals should not be duplicated
+    why: >
+      Most findings are Django lazy model references ("accounts.AccountDB"), factory
+      paths, and template names — all of which explode loudly at boot or on use if
+      mistyped, so the rule catches nothing, while the constant it demands COSTS
+      readability: you now jump to a definition to learn which model an FK points at.
+      A minority of findings are duplicated user-facing strings, where inconsistent
+      edits would be a real (if minor) silent drift — but the rule cannot tell the two
+      apart, and the ceremony case regenerates with every new model. Ruled 2026-09-01:
+      the lazy-reference noise is the more annoying of the two.
+
+  # ------------------------- carried over from the dead multicriteria block (#3548)
+  # These three rules had `sonar.issue.ignore.multicriteria` entries in
+  # sonar-project.properties that never took effect. Two are safe to reject globally;
+  # the third keeps its coverage and is handled per-instance instead (see below).
+  - rule: pythonenterprise:S8443
+    name: Command class should inherit from django BaseCommand
+    why: >
+      Our makemigrations command intentionally extends Django's own makemigrations
+      Command (which IS a BaseCommand) to suppress phantom Evennia migrations. The
+      original ignore was scoped to **/management/commands/makemigrations.py; disabling
+      globally loses nothing, since CLAUDE.md bars new management commands anyway.
+
+  - rule: Web:ItemTagNotWithinContainerTagCheck
+    name: Item tag should be within a container tag
+    why: >
+      Fragment-analysis false positive on our admin overrides: {% block
+      object-tools-items %} renders INSIDE Django's stock <ul class="object-tools">,
+      so a bare <li> at block top level is the correct and only valid Django idiom.
+      The original ignore was scoped to src/web/templates/admin/*.html; every Web-language
+      file we have is such a template, so the global disable is the same set.
+
+  # --------------------------------------------------- style opinions with no defect
+  - rule: typescript:S6772
+    name: Spacing between inline elements should be explicit
+    why: JSX formatting opinion; Prettier already owns whitespace here.
+  - rule: typescript:S6582
+    name: Optional chaining should be preferred
+    why: >
+      Idiom preference with no defect behind it. Auto-fixable, so if we want it, it
+      belongs in ESLint (`@typescript-eslint/prefer-optional-chaining`) where it is
+      local and blocking — not as a SonarCloud finding.
+  - rule: typescript:S3863
+    name: Imports from the same module should be merged
+    why: >
+      Cosmetic. Same reasoning as S6582 — if wanted, `import/no-duplicates` in ESLint,
+      auto-fixed on save rather than reported after the fact.
+  - rule: typescript:S4323
+    name: Type aliases should be used
+    why: Naming preference; no defect and no clear readability win.
+  - rule: typescript:S4782
+    name: Optional property declarations should not use both '?' and 'undefined'
+    why: Redundant-syntax opinion; TypeScript treats the two forms identically here.
+
+  # ------------------------------------- tail triage (#3548): ruff/ESLint already owns it
+  - rule: python:S1854
+    name: Unused assignments should be removed
+    why: ruff `F841` already enforces this, locally and blocking.
+  - rule: python:S2208
+    name: Wildcard imports should not be used
+    why: ruff `F403`/`F405` already enforce this; CLAUDE.md also bars them outright.
+  - rule: python:S3626
+    name: Jump statements should not be redundant
+    why: >
+      ruff `RET505`-`RET508` cover this and the codebase is already clean under them -
+      they are what enforces our guard-clause style.
+  - rule: typescript:S3626
+    name: Jump statements should not be redundant
+    why: Same as python:S3626, on the frontend.
+  - rule: python:S1186
+    name: Functions and methods should not be empty
+    why: >
+      ruff owns empty-body detection, and CLAUDE.md treats stubs and placeholders as
+      intentional - an empty body is frequently a deliberate seam here.
+  - rule: python:S108
+    name: Nested blocks of code should not be left empty
+    why: Same reasoning as python:S1186.
+
+  # ------------------------------------------ tail triage (#3548): consistency with rules
+  # we already rejected for the same reason
+  - rule: typescript:S107
+    name: Functions should not have too many parameters
+    why: >
+      The TypeScript twin of python:S107, which is disabled above because ruff `PLR0913`
+      owns it. Leaving one on and the other off would be incoherent.
+  - rule: javascript:S7773
+    name: Number static methods should be preferred over global equivalents
+    why: The JavaScript twin of typescript:S7773 - `parseInt` IS `Number.parseInt`.
+
+  # ------------------------------------------------- tail triage (#3548): cosmetic, no defect
+  - rule: typescript:S6754
+    name: useState return should be destructured and named symmetrically
+    why: Naming preference. No defect, and the asymmetric names it flags are readable.
+  - rule: typescript:S7763
+    name: Re-exports should use "export...from" syntax
+    why: Syntax preference with no behavioural difference.
+  - rule: typescript:S6564
+    name: Redundant type aliases should not be used
+    why: Cosmetic. A named alias is often the clearer form even when structurally redundant.
+  - rule: typescript:S6571
+    name: Type constituents of unions should not be redundant
+    why: Cosmetic; TypeScript already collapses these.
+  - rule: typescript:S7744
+    name: Unnecessary fallback objects should not be used when spreading
+    why: Cosmetic; the explicit fallback often documents intent.
+  - rule: typescript:S7778
+    name: Multiple consecutive calls should be merged
+    why: Cosmetic.
+  - rule: typescript:S7721
+    name: Functions should be moved to the highest possible scope
+    why: >
+      Debatable - a closure defined where it is used is frequently clearer than one
+      hoisted away from its only caller.
+  - rule: typescript:S7780
+    name: String literals with escaped backslashes should use String.raw
+    why: Cosmetic.
+  - rule: typescript:S7758
+    name: Unicode-aware string methods should be used
+    why: >
+      No defect in this codebase - the flagged sites operate on ASCII identifiers and
+      keys, not user text.
+  - rule: typescript:S3735
+    name: '"void" should not be used'
+    why: >
+      Cosmetic. `void` on a deliberately-ignored promise is the idiom that documents the
+      intent, which is the opposite of what this rule assumes.
+  - rule: typescript:S2301
+    name: Methods should not contain selector parameters
+    why: >
+      A design opinion, not a defect. A boolean parameter is sometimes the honest shape;
+      ruff's equivalent (`FBT`) is likewise ignored on the Python side.
+  - rule: python:S7496
+    name: Creation of collections with literals or comprehensions
+    why: Cosmetic style preference.
+  - rule: python:S6796
+    name: Generic functions should use the PEP 695 type parameter syntax
+    why: >
+      Modernization churn. ruff's `UP007` (the same family, non-PEP604 unions) is already
+      ignored for backwards compatibility.
+
+# Rules deliberately KEPT despite being noisy, so nobody "cleans them up" later.
+# These are not configuration — they are a record of decisions, read by humans.
+keep:
+  - rule: typescript:S3358
+    why: >
+      Nested ternaries. Only 14 of 157 findings are the readable flat-chain form; 143
+      are multi-line nests. Being migrated to ESLint `no-nested-ternary` in phase 2
+      (verified: finds 142 of the 157), after which this Sonar rule can be disabled.
+  - rule: python:S3776
+    why: >
+      Cognitive complexity is nesting-WEIGHTED, which ruff's cyclomatic `C901` is not.
+      This is the rule that actually measures "flat is better than nested". No linter
+      equivalent — it stays.
+  - rule: typescript:S3776
+    why: Same as python:S3776.
+  - rule: typescript:S6479
+    why: >
+      Array index as JSX key. Genuinely silent: React reuses component state across
+      reordered rows, so the wrong data renders in the wrong row with no error. Moving
+      to eslint-plugin-react `no-array-index-key` in phase 3.
+  - rule: python:S8786
+    why: Regex non-linear backtracking (ReDoS). Silent until it is a hang.
+
+# Instance-level false positives — NOT rule-level.
+#
+# Some rules are right in general and wrong in one place. Turning them off in the
+# profile would lose real coverage, so those single findings are marked false-positive
+# on the issue itself, which survives re-analysis:
+#
+#   uv run python tools/sonarcloud_triage.py --rule <key> --path "<glob>" [--dry-run]
+#
+# This is the tier `sonar.issue.ignore.multicriteria` was reaching for and could not
+# deliver under Automatic Analysis. Record each standing suppression here.
+false_positives:
+  - rule: pythonsecurity:S2083
+    path: "src/cli/arx.py"
+    status: avoided-by-construction
+    why: >
+      Recorded so nobody reintroduces it. "I/O function calls should not be vulnerable
+      to path injection attacks" (CWE-22) was raised as a BLOCKER on _rewrite_env_keys
+      when that helper was extracted (PR #3602), with the flow:
+      source `env_file.read_text()` -> `updated` -> sink `env_file.write_text(...)`.
+
+      The claim was wrong. The tainted value in that flow is the CONTENT argument, not
+      the path: SonarCloud models `pathlib.Path.write_text`'s single positional argument
+      as a path, when it is the data to write - the path is the bound receiver. That
+      receiver is `SRC_DIR / ".env"` or `env_file.parent.parent / "frontend" / ".env"`,
+      both built from module constants with no caller-supplied component. There was no
+      path injection to have. (For the record: the arx CLI is NOT dev-only - `arx test`
+      runs in CI and `arx manage collectstatic` runs on the production box during
+      deploy - though nothing outside a developer's shell invokes `arx ngrok`. None of
+      that was load-bearing; the path is constant whoever runs it.)
+
+      Rather than carry a permanent per-instance disposition, the code no longer hands
+      content to `Path.write_text` at all. Every write in src/cli/arx.py goes through
+      `Path.open(..., encoding="utf-8")` and `write`/`writelines`, which are not path
+      APIs and so cannot be mis-modelled this way; the backup/restore pair uses
+      `shutil.copyfile`. Each of those is a real improvement on its own - explicit
+      encoding instead of the locale default, and a byte-exact backup that no longer
+      normalises CRLF so a restore actually restores (pinned by
+      `TestEnvBackupRoundTrip` in core_management/tests/test_arx_cli.py).
+
+      The rule stays ACTIVE: S2083 is a genuine high-severity taint rule.
+
+      One real problem the flow pointed at IS fixed rather than argued away: the values
+      written come from the ngrok API's tunnel URL, and a newline in one would have
+      ended the KEY=value line and let the remainder land in .env as its own setting.
+      `_rewrite_env_keys` now rejects any value containing a newline or carriage return
+      before writing anything, covered by two tests that fail when the guard is removed.
+
+  - rule: typescript:S6819
+    path: "frontend/src/scenes/components/TargetPicker.tsx"
+    why: >
+      "Use <input type=checkbox> instead of the checkbox role" on a styled
+      button carrying role="checkbox" and aria-checked. That IS the ARIA checkbox
+      pattern, correctly implemented, and ActionPanel's tests assert
+      getByRole('checkbox') against it. A native input cannot carry this control's
+      presentation - a full-width row with a name, a tick glyph and selected-state
+      styling - without being visually hidden inside a label, which is a rebuild of
+      working accessible markup to satisfy a preference. Removing the role instead is
+      what broke four tests in #3598; the semantics were deliberate.
+
+  - rule: typescript:S6819
+    path: "frontend/src/character-creation/components/LineageStage.tsx"
+    why: >
+      Rule conflict, not a defect. This role="presentation" is the fix #3598 made for
+      S1082/S6848: the span exists only to swallow the card's click so toggling the
+      Switch does not also select the card, and keyboard users tab straight to the
+      Switch inside it. S6819 objects to the role while proposing "<img alt=...>",
+      which is meaningless for a click-swallowing span. Removing the role reopens two
+      findings and misreports a non-interactive wrapper to assistive tech.
+
+  - rule: typescript:S6819
+    path: "frontend/src/stories/components/EpisodeNode.tsx"
+    why: >
+      "Use <button> instead of the button role." The node is genuinely clickable and
+      #3606 gave it role="button", tabIndex and an Enter/Space handler. It cannot become
+      a native button: its content is two <p> elements plus a React Flow <Handle> div,
+      and a button's content model is phrasing content, so the native form would be
+      invalid HTML. The ARIA form is correct and keyboard-reachable.
+
+  - rule: typescript:S6853
+    path: "frontend/src/components/ui/label.tsx"
+    why: >
+      "A form label must be associated with a control", raised on the shared shadcn
+      Label primitive. A generic wrapper cannot know its control: association is the
+      caller's job via htmlFor, forwarded through the spread props. No edit to this file
+      satisfies the rule without breaking its purpose. The rule stays active and does
+      catch real cases at call sites - PetitionPage's radios were one, fixed in #3608.
+
+  - rule: typescript:S6478
+    path: "frontend/src/character-creation/components/StageErrorBoundary.tsx"
+    why: >
+      "Move this component definition out of the parent component and pass data as
+      props", raised on react-error-boundary's `fallbackRender` prop. That prop IS a
+      render function - it is the library's supported channel for a fallback that needs
+      values from the enclosing scope (here currentStage and onNavigateToStage), and
+      `FallbackComponent` has no way to receive them. Hoisting would mean either a
+      factory that still defines a component per call or a context added solely to
+      appease the rule. Switching from FallbackComponent to fallbackRender in #3609 was
+      the right change for remount behaviour and did not clear this; the rule does not
+      distinguish a render prop from a component defined in render.
+
+  - rule: typescript:S6767
+    path: "frontend/src/combat/components/CombatRail.tsx"
+    why: >
+      "'sceneId' PropType is defined but prop is never used." True today: SceneDetailPage
+      passes it and the component ignores it. NOT removed, because the prop carries a
+      written reservation ("reserved for rail-level scene-scoped affordances"), which
+      makes it a deliberate placeholder rather than an oversight, and CLAUDE.md is
+      explicit that placeholders are asked about before removal rather than deleted on an
+      agent's judgement. Revisit with whoever reserved it.
+
+  - rule: typescript:S6479
+    path: "frontend/src/*"
+    why: >
+      "JSX list components should not use array indexes as key" is a real rule with a
+      real failure mode - React matches elements by key, so an index key makes state
+      stick to a POSITION rather than to an item, and a reorder moves someone's typed
+      text into the wrong row. It stays ACTIVE in the profile for exactly that reason.
+
+      Every one of its 72 sites was read (#3548). Thirteen were genuine and are fixed:
+      seven took a real composite key (pact.kind + counterpart, entry.stage, item.label,
+      ...) and six in FormattedContent are documented in place. The remaining sites are
+      ones where the index is the CORRECT key, and inventing a content-derived one would
+      be actively worse:
+
+      - 21 are editable form rows. The row is addressed by position, and a key derived
+        from its content would change as the user types, remounting the input and
+        dropping focus mid-keystroke.
+      - 15 already use a composite `${data}-${index}` key where the index only
+        disambiguates rows that legitimately repeat.
+      - 7 are fixed-length loading placeholders with nothing to identify.
+      - The rest render lists whose API payloads carry no id and whose rows repeat by
+        design (effect rows, ledger entries). Four of these files already carried
+        written comments saying so before this pass - "carries no client-only ids, so
+        an index key is the only option", "Effect rows may repeat kinds ... so we key
+        by index", "Rows are addressed by position (not by `key`, which the user is
+        actively editing)".
+
+      Marked per-instance rather than disabled rule-wide so a genuinely new violation
+      still gets flagged.
+
+  - rule: python:S3516
+    path: "*/serializers.py"
+    why: >
+      "Method always returns the same value" fires on idiomatic DRF validators and
+      updaters that return their input (validate -> attrs, validate_x -> x,
+      update -> instance). The rule is genuinely useful outside serializer modules, so
+      it stays ACTIVE in the profile and only the serializer instances are marked.

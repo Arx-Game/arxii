@@ -23,10 +23,12 @@ import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
 
 import { useEpisodeList, useTransitionList } from '../queries';
+import { formatRoutingRules } from '../routingRules';
 import type { EpisodeList, Transition } from '../types';
 import type { EpisodeLike } from './EpisodeFormDialog';
 import { EpisodeNode } from './EpisodeNode';
 import type { EpisodeNodeData, EpisodeNodeType } from './EpisodeNode';
+import { RoutingEdge } from './RoutingEdge';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,6 +46,25 @@ const FRONTIER_NODE_HEIGHT = 36;
 // ---------------------------------------------------------------------------
 
 const nodeTypes = { episodeNode: EpisodeNode };
+const edgeTypes = { routingEdge: RoutingEdge };
+
+// ---------------------------------------------------------------------------
+// Edge label helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Rule labels on transitions (#3563): a transition with authored routing
+ * rules shows the rule text ("beat = OUTCOME"); one without falls back to
+ * the connective + summary it already showed.
+ */
+export function edgeLabelFor(t: Transition): { label: string; fullLabel: string } {
+  const rules = formatRoutingRules(t.required_outcomes);
+  const connType = (t.connection_type as string | undefined) ?? '';
+  const summary = t.connection_summary ?? '';
+  const fullLabel = rules || [connType.toUpperCase(), summary].filter(Boolean).join(': ');
+  const label = fullLabel.length > 40 ? `${fullLabel.slice(0, 37)}…` : fullLabel;
+  return { label, fullLabel };
+}
 
 // ---------------------------------------------------------------------------
 // Dagre layout helper
@@ -54,7 +75,7 @@ interface LayoutResult {
   edges: Edge[];
 }
 
-function computeLayout(
+export function computeLayout(
   episodes: EpisodeList[],
   transitions: Transition[],
   chapterTitles: Map<string, string>,
@@ -102,6 +123,7 @@ function computeLayout(
       title: ep.title,
       episode: episodeLike,
       onEpisodeClick,
+      routingProblems: ep.routing_problems ?? [],
     };
 
     return {
@@ -135,21 +157,17 @@ function computeLayout(
     const src = String(t.source_episode);
     const tgt = t.target_episode != null ? String(t.target_episode) : FRONTIER_NODE_ID;
     const isFrontier = t.target_episode == null;
-    const isGMChoice = t.mode === 'gm_choice';
-
-    const connType = (t.connection_type as string | undefined) ?? '';
-    const summary = t.connection_summary ?? '';
-    const rawLabel = [connType.toUpperCase(), summary].filter(Boolean).join(': ');
-    const label = rawLabel.length > 40 ? `${rawLabel.slice(0, 37)}…` : rawLabel;
+    const { label, fullLabel } = edgeLabelFor(t);
 
     return {
       id: `e-${t.id}`,
       source: src,
       target: tgt,
-      label: label || undefined,
+      type: 'routingEdge' as const,
+      data: { label, fullLabel },
       animated: false,
       style: {
-        strokeDasharray: isGMChoice || isFrontier ? '6 3' : undefined,
+        strokeDasharray: isFrontier ? '6 3' : undefined,
         stroke: isFrontier ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
         strokeWidth: 1.5,
       },
@@ -157,8 +175,6 @@ function computeLayout(
         type: MarkerType.ArrowClosed,
         color: isFrontier ? 'hsl(var(--muted-foreground))' : 'hsl(var(--foreground))',
       },
-      labelStyle: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' },
-      labelBgStyle: { fill: 'hsl(var(--background))', fillOpacity: 0.85 },
     } satisfies Edge;
   });
 
@@ -267,6 +283,7 @@ export function EpisodeDAG({
         nodes={rfNodes}
         edges={rfEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesDraggable={editMode}
         nodesConnectable={editMode}
         elementsSelectable={true}

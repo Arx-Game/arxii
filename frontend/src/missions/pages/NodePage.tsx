@@ -1,8 +1,11 @@
 /**
  * NodePage — edit one MissionNode, list its authored options.
  *
- * Routes: /staff/missions/:id/nodes/:nodeId. PATCH on save via D2's
- * MissionNodeViewSet. Options listed with click-through to OptionPage.
+ * Mounted twice: /staff/missions/:id/nodes/:nodeId (StaffRoute) and
+ * /stories/scenarios/:id/nodes/:nodeId (GMRoute, #3565) - studioPaths
+ * derives which mount is live from the current URL. PATCH on save via
+ * D2's MissionNodeViewSet. Options listed with click-through to
+ * OptionPage.
  *
  * Scope (E3): node settings + flavor text + option list. Cross-tool
  * picker for attached_challenges and challenge-contributed-option
@@ -10,7 +13,7 @@
  * visibility_rule will hook into OptionPage in E4.
  */
 
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
@@ -34,14 +37,17 @@ import { getMissionNode } from '../api';
 import { useServerDraft } from '../hooks/useServerDraft';
 import {
   missionKeys,
+  useMissionNodes,
   useMissionOptions,
   useMissionTemplate,
   usePatchMissionNode,
 } from '../queries';
+import { studioBaseFromPath, studioPaths } from '../studioPaths';
 import type { MissionNode } from '../types';
 import { useQuery } from '@tanstack/react-query';
 
 const CONFLICT_MODES: Array<MissionNode['conflict_mode']> = ['group_vote', 'joint'];
+const BEAT_OUTCOMES: Array<'success' | 'failure'> = ['success', 'failure'];
 
 export function NodePage() {
   const { id: idStr, nodeId } = useParams<{ id: string; nodeId: string }>();
@@ -51,6 +57,9 @@ export function NodePage() {
   const { data: node, isLoading, isError } = useNode(numericNodeId);
   const { data: optionsPage } = useMissionOptions({ node: numericNodeId });
   const navigate = useNavigate();
+  const location = useLocation();
+  const base = studioBaseFromPath(location.pathname);
+  const paths = studioPaths(base, templateId ?? 0, template?.story_id);
 
   if (Number.isNaN(numericNodeId)) {
     return <div className="p-6 text-destructive">Bad node id.</div>;
@@ -64,8 +73,8 @@ export function NodePage() {
           role="alert"
         >
           <p className="font-medium">Couldn't load this node.</p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate('/staff/missions')}>
-            ← Back to Mission Studio
+          <Button variant="outline" className="mt-3" onClick={() => navigate(paths.browser)}>
+            ← Back to {paths.browserLabel}
           </Button>
         </div>
       </div>
@@ -76,10 +85,10 @@ export function NodePage() {
     <div className="container mx-auto space-y-4 px-4 py-6">
       <StudioBreadcrumb
         crumbs={[
-          { label: 'Missions', to: '/staff/missions' },
+          { label: paths.browserLabel, to: paths.browser },
           {
             label: template?.name ?? (templateId ? `#${templateId}` : '…'),
-            to: `/staff/missions?id=${templateId ?? ''}`,
+            to: paths.canvas,
           },
           { label: node ? `Node "${node.key}"` : '…' },
         ]}
@@ -96,8 +105,8 @@ export function NodePage() {
                 key={opt.id}
                 to={
                   templateId !== undefined && Number.isFinite(templateId)
-                    ? `/staff/missions/${templateId}/nodes/${numericNodeId}/options/${opt.id}`
-                    : '/staff/missions'
+                    ? paths.option(numericNodeId, opt.id)
+                    : paths.browser
                 }
                 className="flex items-center justify-between rounded border px-2 py-1 text-sm hover:bg-muted"
               >
@@ -136,9 +145,20 @@ function NodeEditor({ node }: { node: MissionNode }) {
     flavor_text_needs_rewrite: n.flavor_text_needs_rewrite ?? false,
     conflict_mode: n.conflict_mode,
     is_entry: n.is_entry ?? false,
+    track_successes: n.track_successes ?? 0,
+    track_failures: n.track_failures ?? 0,
+    track_success_target: n.track_success_target ?? null,
+    track_failure_target: n.track_failure_target ?? null,
+    track_success_beat_outcome: n.track_success_beat_outcome ?? '',
+    track_failure_beat_outcome: n.track_failure_beat_outcome ?? '',
   }));
   const patchNode = usePatchMissionNode();
   const qc = useQueryClient();
+  // Track targets route to another node in the same template (or terminal
+  // when null) - the option-page precedent for a node picker (branch_target)
+  // doesn't exist yet, so this is the first one (#3568).
+  const { data: otherNodesPage } = useMissionNodes({ template: node.template });
+  const otherNodes = (otherNodesPage?.results ?? []).filter((n) => n.id !== node.id);
 
   const onSave = () => {
     patchNode.mutate(
@@ -213,6 +233,139 @@ function NodeEditor({ node }: { node: MissionNode }) {
             onCheckedChange={(v) => setDraft({ ...draft, is_entry: v })}
           />
           <Label htmlFor="node-is-entry">Entry node</Label>
+        </div>
+        <div className="border-t pt-3 md:col-span-2">
+          <div className="mb-2 text-sm font-medium">Progress track</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="node-track-successes">Successes needed</Label>
+              <Input
+                id="node-track-successes"
+                type="number"
+                min={0}
+                value={draft.track_successes}
+                onChange={(e) =>
+                  setDraft({ ...draft, track_successes: Number(e.target.value || 0) })
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="node-track-failures">Failures allowed</Label>
+              <Input
+                id="node-track-failures"
+                type="number"
+                min={0}
+                value={draft.track_failures}
+                onChange={(e) =>
+                  setDraft({ ...draft, track_failures: Number(e.target.value || 0) })
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor="node-track-success-target">On track success, go to</Label>
+              <Select
+                value={
+                  draft.track_success_target !== null
+                    ? String(draft.track_success_target)
+                    : 'terminal'
+                }
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    track_success_target: v === 'terminal' ? null : Number(v),
+                  })
+                }
+              >
+                <SelectTrigger id="node-track-success-target">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="terminal">Terminal (end run)</SelectItem>
+                  {otherNodes.map((n) => (
+                    <SelectItem key={n.id} value={String(n.id)}>
+                      {n.key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="node-track-failure-target">On track failure, go to</Label>
+              <Select
+                value={
+                  draft.track_failure_target !== null
+                    ? String(draft.track_failure_target)
+                    : 'terminal'
+                }
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    track_failure_target: v === 'terminal' ? null : Number(v),
+                  })
+                }
+              >
+                <SelectTrigger id="node-track-failure-target">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="terminal">Terminal (end run)</SelectItem>
+                  {otherNodes.map((n) => (
+                    <SelectItem key={n.id} value={String(n.id)}>
+                      {n.key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="node-track-success-outcome">Success beat outcome</Label>
+              <Select
+                value={draft.track_success_beat_outcome || 'derive'}
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    track_success_beat_outcome: v === 'derive' ? '' : (v as 'success' | 'failure'),
+                  })
+                }
+              >
+                <SelectTrigger id="node-track-success-outcome">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="derive">(derive)</SelectItem>
+                  {BEAT_OUTCOMES.map((o) => (
+                    <SelectItem key={o} value={o}>
+                      {o}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="node-track-failure-outcome">Failure beat outcome</Label>
+              <Select
+                value={draft.track_failure_beat_outcome || 'derive'}
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    track_failure_beat_outcome: v === 'derive' ? '' : (v as 'success' | 'failure'),
+                  })
+                }
+              >
+                <SelectTrigger id="node-track-failure-outcome">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="derive">(derive)</SelectItem>
+                  {BEAT_OUTCOMES.map((o) => (
+                    <SelectItem key={o} value={o}>
+                      {o}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
         <div className="flex items-center justify-end gap-2 md:col-span-2">
           <Button onClick={onSave} disabled={!dirty || patchNode.isPending}>

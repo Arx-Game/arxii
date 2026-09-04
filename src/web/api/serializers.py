@@ -208,3 +208,9 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "selected_entry_id",
             "selected_entry",
         ]
+
+
+class AccountSecuritySettingsSerializer(serializers.Serializer):
+    """The account's own security switches (#3591). One field for now."""
+
+    block_telnet_login_with_2fa = serializers.BooleanField()

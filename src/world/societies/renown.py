@@ -687,7 +687,9 @@ def bump_society_reputation(persona: Persona, society, delta: int) -> int | None
     reputation) or a zero delta; otherwise returns the new clamped value.
     Callers: stakes' FACTION-subject resolution writer (#1760) and the
     criminal-consequence layer, where a reported crime stings the enforcing
-    society's regard (#1765).
+    society's regard (#1765). Re-evaluates the character's open beats after a
+    non-zero write, so a FACTION_STANDING_AT_LEAST beat can flip in the same
+    request (#3570).
     """
     if delta == 0 or not persona.is_established_or_primary:
         return None
@@ -698,6 +700,11 @@ def bump_society_reputation(persona: Persona, society, delta: int) -> int | None
     )
     reputation.value = max(REPUTATION_MIN, min(REPUTATION_MAX, reputation.value + delta))
     reputation.save(update_fields=["value"])
+
+    from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
+
+    on_character_state_changed(persona.character_sheet)
+
     return reputation.value
 
 
@@ -738,7 +745,8 @@ def bump_organization_reputation(persona: Persona, organization, delta: int) -> 
     The relational / targeted channel: a direct hit to a specific organization (e.g. the victim
     of a crime), **independent of that org's philosophy**. The first gameplay writer of
     ``OrganizationReputation``. No-op for non-established personas or a zero delta; otherwise
-    returns the new clamped value.
+    returns the new clamped value. Re-evaluates the character's open beats after a non-zero
+    write, so a FACTION_STANDING_AT_LEAST beat can flip in the same request (#3570).
     """
     if delta == 0 or not persona.is_established_or_primary:
         return None
@@ -749,6 +757,11 @@ def bump_organization_reputation(persona: Persona, organization, delta: int) -> 
     )
     reputation.value = max(REPUTATION_MIN, min(REPUTATION_MAX, reputation.value + delta))
     reputation.save(update_fields=["value"])
+
+    from world.stories.services.reactivity import on_character_state_changed  # noqa: PLC0415
+
+    on_character_state_changed(persona.character_sheet)
+
     return reputation.value
 
 

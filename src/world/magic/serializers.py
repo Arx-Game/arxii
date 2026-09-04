@@ -7,6 +7,7 @@ and character-specific magic data.
 Affinities and Resonances are proper domain models in the magic app.
 """
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field
@@ -161,6 +162,83 @@ class ConsequencePoolCatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConsequencePool
         fields = ["id", "name", "description"]
+
+
+class ConsequencePoolEntryOutcomeTierSerializer(serializers.Serializer):
+    """The outcome-tier triple embedded in a ConsequencePoolDetailSerializer entry
+    (#3562); schema typing only. ConsequencePoolDetailSerializer builds the dict
+    directly rather than instantiating this serializer."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    success_level = serializers.IntegerField()
+
+
+class ConsequencePoolEntrySerializer(serializers.Serializer):
+    """One resolved Consequence row in a ConsequencePoolDetailSerializer's ``entries``
+    list (#3562); schema typing only. See ``get_entries`` below for the builder."""
+
+    consequence_id = serializers.IntegerField()
+    name = serializers.CharField()
+    outcome_tier = ConsequencePoolEntryOutcomeTierSerializer(allow_null=True)
+    effect_types = serializers.ListField(child=serializers.CharField())
+    character_loss = serializers.BooleanField()
+
+
+class ConsequencePoolDetailSerializer(serializers.ModelSerializer):
+    """Detail view of any ``ConsequencePool``'s resolved consequences (#3562), the
+    beat-authoring picker's pool preview. ``entries`` is built from
+    ``resolve_pool_consequences`` (parent inheritance plus the pool's own entries,
+    minus anything excluded), not straight from ``ConsequencePoolEntry`` rows, so
+    it matches what actually fires when the pool is applied."""
+
+    entries = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConsequencePool
+        fields = ["id", "name", "description", "entries"]
+
+    @extend_schema_field(ConsequencePoolEntrySerializer(many=True))
+    def get_entries(self, pool: ConsequencePool) -> list[dict]:
+        """Two bulk queries replace one per-entry lookup each (#3562 review):
+        ``resolve_pool_consequences`` returns bare ``Consequence`` rows that
+        carry no prefetched ``outcome_tier``/``effects``, so reading
+        ``consequence.outcome_tier`` or ``consequence.effects.all()`` per
+        entry in a loop is O(entries) queries. Load both maps once instead."""
+        from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+        from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+        from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+        consequences = resolve_pool_consequences(pool)
+        consequence_ids = [c.id for c in consequences]
+        tier_ids = {c.outcome_tier_id for c in consequences if c.outcome_tier_id is not None}
+
+        tiers_by_id = {tier.id: tier for tier in CheckOutcome.objects.filter(id__in=tier_ids)}
+
+        effect_types_by_consequence: dict[int, list[str]] = defaultdict(list)
+        effects = ConsequenceEffect.objects.filter(consequence_id__in=consequence_ids).order_by(
+            "execution_order"
+        )
+        for effect in effects:
+            effect_types_by_consequence[effect.consequence_id].append(effect.effect_type)
+
+        entries = []
+        for consequence in consequences:
+            tier = tiers_by_id.get(consequence.outcome_tier_id)
+            entries.append(
+                {
+                    "consequence_id": consequence.id,
+                    "name": consequence.label,
+                    "outcome_tier": (
+                        None
+                        if tier is None
+                        else {"id": tier.id, "name": tier.name, "success_level": tier.success_level}
+                    ),
+                    "effect_types": effect_types_by_consequence.get(consequence.id, []),
+                    "character_loss": consequence.character_loss,
+                }
+            )
+        return entries
 
 
 class EffectTypeSerializer(serializers.ModelSerializer):
@@ -2464,16 +2542,16 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         read_only_fields = fields
 
     def _threshold(self) -> "AudereThreshold | None":
-        """Memoize the global threshold config once per serializer instance.
+        """The global threshold config.
 
-        SharedMemoryModel's identity map does not cache ``.first()`` queries,
-        so without this each SerializerMethodField would hit the DB per row.
+        No memo on the serializer (ADR-0260) and none needed: ``cached_singleton()``
+        stashes the discovered pk on the manager and serves ``get(pk=...)`` from the
+        identity map afterwards, so repeat calls cost no SQL. (A raw ``.first()``
+        would, which is what the manager method exists to solve.)
         """
         from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
-        if not hasattr(self, "_threshold_cache"):
-            self._threshold_cache = AudereThreshold.objects.cached_singleton()
-        return self._threshold_cache
+        return AudereThreshold.objects.cached_singleton()
 
     def get_intensity_bonus(self, obj: object) -> int:  # noqa: ARG002
         """Intensity bonus the offer would grant (from the global threshold config)."""
@@ -2604,20 +2682,19 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
         return "This is permanent. The crossing cannot be undone — and survival is not promised."
 
     def _eligible_paths_for_obj(self, obj: object) -> list:
-        """Compute eligible paths once per object pk; memoize on serializer instance."""
+        """The active child paths this offer could cross into.
+
+        Recomputed by each of the two callers below rather than cached on the
+        serializer (ADR-0260). This endpoint lists a character's *pending* Crossing
+        offers, so it renders one row at a time in practice; a second pass over a
+        handful of candidate paths is not worth state whose lifetime is invisible.
+        """
         from world.magic.audere_majora import eligible_paths_for_threshold  # noqa: PLC0415
 
-        cache_attr = "_eligible_paths_cache"
-        if not hasattr(self, cache_attr):
-            setattr(self, cache_attr, {})
-        cache: dict = getattr(self, cache_attr)
-        pk = obj.pk  # type: ignore[union-attr]
-        if pk not in cache:
-            cache[pk] = eligible_paths_for_threshold(
-                obj.character_sheet.character,  # type: ignore[union-attr]
-                obj.threshold,  # type: ignore[union-attr]
-            )
-        return cache[pk]
+        return eligible_paths_for_threshold(
+            obj.character_sheet.character,  # type: ignore[union-attr]
+            obj.threshold,  # type: ignore[union-attr]
+        )
 
     @extend_schema_field(EligiblePathSerializer(many=True))
     def get_eligible_paths(self, obj: object) -> list:
@@ -3061,63 +3138,55 @@ _ERR_NO_ACTIVE_CHARACTER = "You must have an active character to draft a ritual 
 _ERR_REQUEST_CONTEXT_REQUIRED = "Request context is required."
 
 
+def _fetch_reference(model, pk, error_field: str):
+    """Resolve one reference FK, naming the field that pointed at a missing row."""
+    try:
+        return model.objects.get(pk=pk)
+    except model.DoesNotExist:
+        msg = f"{model.__name__} {pk} not found."
+        raise serializers.ValidationError({error_field: msg}) from None
+
+
+def _parse_reference_spec(raw: dict, valid_kinds: set):
+    """One reference spec: a kind, and exactly one of the three ref FKs."""
+    from world.covenants.models import Covenant, CovenantRole  # noqa: PLC0415
+    from world.magic.types.sessions import RitualSessionReferenceSpec  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    candidates = [
+        (Covenant, raw.get("ref_covenant_id"), "ref_covenant_id"),
+        (CovenantRole, raw.get("ref_covenant_role_id"), "ref_covenant_role_id"),
+        (Organization, raw.get("ref_organization_id"), "ref_organization_id"),
+    ]
+    given = [(model, pk, field) for model, pk, field in candidates if pk is not None]
+    kind = raw.get("kind")
+    if kind not in valid_kinds or len(given) != 1:
+        raise serializers.ValidationError(_ERR_REFERENCE_SPEC_INVALID)
+
+    model, pk, error_field = given[0]
+    referent = _fetch_reference(model, pk, error_field)
+    return RitualSessionReferenceSpec(
+        kind=kind,
+        ref_covenant=referent if model is Covenant else None,
+        ref_covenant_role=referent if model is CovenantRole else None,
+        ref_organization=referent if model is Organization else None,
+    )
+
+
 def _parse_reference_specs(raw_specs: list[dict]) -> list:
     """Convert raw dicts to RitualSessionReferenceSpec instances.
 
     Validates that each spec has a kind and exactly one ref FK. Raises
     serializers.ValidationError if any spec is malformed.
     """
-    from world.covenants.models import Covenant, CovenantRole  # noqa: PLC0415
     from world.magic.constants import ReferenceKind  # noqa: PLC0415
-    from world.magic.types.sessions import RitualSessionReferenceSpec  # noqa: PLC0415
-    from world.societies.models import Organization  # noqa: PLC0415
 
-    specs = []
-    valid_kinds = {ReferenceKind.COVENANT, ReferenceKind.COVENANT_ROLE, ReferenceKind.ORGANIZATION}
-    for raw in raw_specs:
-        kind = raw.get("kind")
-        covenant_id = raw.get("ref_covenant_id")
-        role_id = raw.get("ref_covenant_role_id")
-        organization_id = raw.get("ref_organization_id")
-        has_covenant = covenant_id is not None
-        has_role = role_id is not None
-        has_organization = organization_id is not None
-        provided_count = sum([has_covenant, has_role, has_organization])
-        if kind not in valid_kinds or provided_count != 1:
-            raise serializers.ValidationError(_ERR_REFERENCE_SPEC_INVALID)
-        ref_covenant = None
-        ref_covenant_role = None
-        ref_organization = None
-        if has_covenant:
-            try:
-                ref_covenant = Covenant.objects.get(pk=covenant_id)
-            except Covenant.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"ref_covenant_id": f"Covenant {covenant_id} not found."}
-                ) from None
-        elif has_role:
-            try:
-                ref_covenant_role = CovenantRole.objects.get(pk=role_id)
-            except CovenantRole.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"ref_covenant_role_id": f"CovenantRole {role_id} not found."}
-                ) from None
-        else:
-            try:
-                ref_organization = Organization.objects.get(pk=organization_id)
-            except Organization.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"ref_organization_id": f"Organization {organization_id} not found."}
-                ) from None
-        specs.append(
-            RitualSessionReferenceSpec(
-                kind=kind,
-                ref_covenant=ref_covenant,
-                ref_covenant_role=ref_covenant_role,
-                ref_organization=ref_organization,
-            )
-        )
-    return specs
+    valid_kinds = {
+        ReferenceKind.COVENANT,
+        ReferenceKind.COVENANT_ROLE,
+        ReferenceKind.ORGANIZATION,
+    }
+    return [_parse_reference_spec(raw, valid_kinds) for raw in raw_specs]
 
 
 class RitualSessionDraftSerializer(serializers.Serializer):

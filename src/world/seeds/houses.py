@@ -30,14 +30,16 @@ def seed_nobiliary_particles() -> None:
     loaddata — #946).
     """
     from world.realms.models import Realm  # noqa: PLC0415
-    from world.roster.models import Family  # noqa: PLC0415
+    from world.roster.constants import NOBLE_KIND_NAME  # noqa: PLC0415
+    from world.roster.seeds import ensure_family_kinds  # noqa: PLC0415
     from world.societies.houses.models import NobiliaryParticle  # noqa: PLC0415
 
+    noble_kind = ensure_family_kinds()[NOBLE_KIND_NAME]
     for realm in Realm.objects.filter(theme__in=CANON_NOBILIARY_PARTICLES):
         for tier_floor, born, taken_in in CANON_NOBILIARY_PARTICLES[realm.theme]:
             NobiliaryParticle.objects.update_or_create(
                 realm=realm,
-                family_type=Family.FamilyType.NOBLE,
+                kind=noble_kind,
                 tier_floor=tier_floor,
                 defaults={"particle": born, "taken_in_particle": taken_in},
             )
@@ -179,7 +181,8 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
     """Phase D: a set-aside claimable barony + the realm's charter template."""
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
-    from world.roster.models import Family  # noqa: PLC0415
+    from world.roster.constants import NOBLE_KIND_NAME  # noqa: PLC0415
+    from world.roster.seeds import ensure_family_kinds  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.societies.houses.constants import TitleTier  # noqa: PLC0415
     from world.societies.houses.models import (  # noqa: PLC0415
@@ -192,6 +195,7 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
         Title,
     )
 
+    noble_kind = ensure_family_kinds()[NOBLE_KIND_NAME]
     farmland, _ = HoldingKind.objects.get_or_create(
         name="Farmland PLACEHOLDER",
         defaults={
@@ -205,7 +209,7 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
         defaults={
             "description": "PLACEHOLDER: the standard charter for a landed barony of Arx.",
             "realm": realm,
-            "family_type": Family.FamilyType.NOBLE,
+            "kind": noble_kind,
             "society": society,
             "liege": crown,
             "default_succession_law": law,

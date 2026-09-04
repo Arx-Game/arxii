@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toDisplayString } from '@/lib/displayValue';
 import {
   Select,
   SelectContent,
@@ -157,6 +158,13 @@ function NodeView({
   );
 }
 
+/** Which boolean operator a filter node is, read off its shape. */
+function operatorOf(value: FilterNode): 'and' | 'or' | 'not' {
+  if (isAnd(value)) return 'and';
+  if ('or' in value) return 'or';
+  return 'not';
+}
+
 function GroupView({
   value,
   onChange,
@@ -172,7 +180,7 @@ function GroupView({
   depth: number;
   builderId: string;
 }) {
-  const op: 'and' | 'or' | 'not' = isAnd(value) ? 'and' : 'or' in value ? 'or' : 'not';
+  const op: 'and' | 'or' | 'not' = operatorOf(value);
   const children = childrenOf(value);
 
   const setOp = (nextOp: 'and' | 'or' | 'not') => {
@@ -272,8 +280,7 @@ function inferValueKind(value: unknown): ValueKind {
 
 function displayValue(value: unknown, kind: ValueKind): string {
   if (kind === 'json') return JSON.stringify(value ?? null);
-  if (value === undefined || value === null) return '';
-  return String(value);
+  return toDisplayString(value);
 }
 
 /** `value` may be "self" or "self.<dotted>" (evaluator.py's `_resolve_value`) — both are plain strings here. */

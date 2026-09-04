@@ -1,9 +1,14 @@
 """Transition eligibility service for the stories system.
 
 Public API:
-    get_eligible_transitions(progress) — returns the transitions from the
+    get_eligible_transitions(progress), returns the transitions from the
         current episode whose progression requirements AND routing predicates
         are all satisfied.
+    routing_requirement_met(req), whether one routing requirement is
+        currently satisfied.
+
+See services/routing.py for the authoring-time routing report (dead ends and
+ambiguity, #3563).
 """
 
 from django.db.models import Prefetch
@@ -73,19 +78,15 @@ def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
 
 
 def _expire_overdue_beats_for_episode(episode: Episode) -> None:
-    """Lazily expire overdue beats scoped to a single episode.
+    """Lazily expire overdue beats scoped to a single episode (#3558: a real completion).
 
     Called at the top of get_eligible_transitions so that eligibility checks
     reflect current deadline state even if no global cron has fired.
-
-    Uses .save() (not .update()) to update SharedMemoryModel's identity-map
-    cache in place — bulk .update() bypasses the ORM layer and leaves stale
-    Python objects in memory, which would break the subsequent FK walks in
-    progression_requirements and routing predicates.
     """
     from django.utils import timezone  # noqa: PLC0415
 
     from world.stories.constants import BeatOutcome  # noqa: PLC0415
+    from world.stories.services.beats import _expire_each  # noqa: PLC0415
 
     now = timezone.now()
     overdue = episode.beats.filter(
@@ -93,9 +94,7 @@ def _expire_overdue_beats_for_episode(episode: Episode) -> None:
         deadline__isnull=False,
         deadline__lt=now,
     )
-    for beat in overdue:
-        beat.outcome = BeatOutcome.EXPIRED
-        beat.save(update_fields=["outcome", "updated_at"])
+    _expire_each(list(overdue), now=now)
 
 
 def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
@@ -104,10 +103,10 @@ def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
     An empty requirement set is unconditionally satisfied (the transition has
     no routing predicate, so it fires whenever progression requirements pass).
     """
-    return all(_routing_req_met(req) for req in routing_reqs)
+    return all(routing_requirement_met(req) for req in routing_reqs)
 
 
-def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
+def routing_requirement_met(req: TransitionRequiredOutcome) -> bool:
     """Whether one routing requirement is currently satisfied.
 
     Stake-level requirement (#1770 PR2): satisfied iff the stake's single
@@ -126,4 +125,6 @@ def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
 
         outcome = StakeOutcome.objects.filter(stake_id=req.stake_id).first()
         return outcome is not None and outcome.column == req.required_stake_column
-    return req.beat.outcome == req.required_outcome
+    if req.beat.outcome != req.required_outcome:
+        return False
+    return not req.required_outcome_key or req.beat.outcome_key == req.required_outcome_key

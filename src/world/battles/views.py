@@ -125,14 +125,12 @@ class BattleViewSet(ReadOnlyModelViewSet):
                         to_attr="cached_active_conditions",
                     ),
                     # #3389: BattleParticipantSerializer.get_declared_this_round
-                    # reads this to_attr against the request-wide current_round_id
-                    # (stashed once by BattleDetailSerializer.to_representation)
-                    # instead of a per-participant query.
+                    # reads this to_attr against the current_round
+                    # BattleDetailSerializer.to_representation puts in the shared
+                    # serializer context, instead of a per-participant query.
                     Prefetch(
                         "declarations",
-                        queryset=BattleActionDeclaration.objects.only(
-                            "id", "battle_round_id", "participant_id"
-                        ),
+                        queryset=BattleActionDeclaration.objects.all(),
                         to_attr="cached_declarations",
                     ),
                 ),

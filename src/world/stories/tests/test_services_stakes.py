@@ -10,6 +10,12 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.items.factories import ItemTemplateFactory
+from world.missions.factories import (
+    MissionNodeFactory,
+    MissionOptionFactory,
+    MissionTemplateFactory,
+)
 from world.societies.constants import RenownRisk
 from world.societies.factories import LegendSourceTypeFactory
 from world.societies.models import LegendEvent
@@ -17,6 +23,7 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     StakeResolutionColumn,
+    StakeRewardSink,
     StakeSeverity,
     StoryMaturity,
     StoryScope,
@@ -33,7 +40,7 @@ from world.stories.factories import (
     TransitionFactory,
     seed_default_risk_calibrations,
 )
-from world.stories.models import RiskCalibration, TransitionRequiredOutcome
+from world.stories.models import RiskCalibration, StakeResolution, TransitionRequiredOutcome
 from world.stories.services.beats import record_outcome_tier_completion
 from world.stories.services.stakes import (
     activate_stakes_contract,
@@ -91,6 +98,55 @@ class ValidateStakesReadinessTests(TestCase):
         report = validate_stakes_readiness(BeatFactory(risk=RenownRisk.NONE))
         self.assertFalse(report.is_staked)
         self.assertTrue(report.is_ready)
+
+    def test_no_pools_carries_no_advisories(self):
+        report = validate_stakes_readiness(BeatFactory(risk=RenownRisk.NONE))
+        self.assertEqual(report.advisories, ())
+
+    def test_success_pool_missing_success_row_advises_without_blocking(self):
+        """A success pool with only a failure-polarity row (#3559): advisory, not blocked."""
+        fail_tier = CheckOutcomeFactory(success_level=-2)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(
+            pool=pool, consequence=ConsequenceFactory(outcome_tier=fail_tier)
+        )
+        beat = self._ready_shape_high(win_reward=400)
+        beat.success_consequences = pool
+        beat.save()
+
+        report = validate_stakes_readiness(beat)
+
+        self.assertIn("success pool has no success-polarity row", report.advisories)
+        self.assertTrue(report.is_ready)
+
+    def test_failure_pool_missing_failure_row_advises_without_blocking(self):
+        win_tier = CheckOutcomeFactory(success_level=3)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(
+            pool=pool, consequence=ConsequenceFactory(outcome_tier=win_tier)
+        )
+        beat = self._ready_shape_high(win_reward=400)
+        beat.failure_consequences = pool
+        beat.save()
+
+        report = validate_stakes_readiness(beat)
+
+        self.assertIn("failure pool has no failure-polarity row", report.advisories)
+        self.assertTrue(report.is_ready)
+
+    def test_pool_with_matching_polarity_row_carries_no_advisory(self):
+        win_tier = CheckOutcomeFactory(success_level=3)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(
+            pool=pool, consequence=ConsequenceFactory(outcome_tier=win_tier)
+        )
+        beat = self._ready_shape_high(win_reward=400)
+        beat.success_consequences = pool
+        beat.save()
+
+        report = validate_stakes_readiness(beat)
+
+        self.assertEqual(report.advisories, ())
 
     def test_missing_target_level_blocks(self):
         beat = self._staked_beat(target_level=None)
@@ -187,6 +243,24 @@ class ValidateStakesReadinessTests(TestCase):
         beat = self._ready_shape_high(win_reward=400)
         self.assertTrue(validate_stakes_readiness(beat).is_ready)
 
+    def test_item_reward_amount_counts_toward_the_ceiling(self):
+        """An ITEM line's pinned amount (the template's value) bands exactly like
+        a MONEY line's amount (#3566, HIGH ceiling 1500)."""
+        beat = self._ready_shape_high(win_reward=0)
+        win = StakeResolution.objects.get(stake__beat=beat, column=StakeResolutionColumn.WIN)
+        template = ItemTemplateFactory(value=4000)
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.ITEM, item_template=template, amount=4000
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(report.is_ready)
+        self.assertTrue(
+            any(
+                "declared win reward 4000 exceeds the high ceiling 1500" in p
+                for p in report.problems
+            )
+        )
+
     def test_reward_ceiling_zero_skips_banding(self):
         """reward_ceiling == 0 means banding unconfigured — zero-reward contracts stay ready."""
         # .save() (not queryset .update()) so the idmapper-cached row changes
@@ -227,6 +301,101 @@ class ValidateStakesReadinessTests(TestCase):
         )
         self.assertFalse(fight_beat.stakes.filter(severity=StakeSeverity.REMOVAL).exists())
         self.assertTrue(validate_stakes_readiness(beat).is_ready)
+
+
+class NamedBranchReadinessTests(TestCase):
+    """Readiness problems for named branches (#3561): a LOSS/WIN column with a
+    named branch (non-blank outcome_key) needs a default (blank outcome_key)
+    branch for the machine-grading fallback, and, when the beat requires a
+    mission, every named outcome_key must match an option key the beat's
+    scenario actually declares.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+
+    def _staked_beat(self, risk=RenownRisk.HIGH, target_level=4, required_mission=None):
+        return BeatFactory(
+            risk=risk,
+            target_level=target_level,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            required_mission=required_mission,
+        )
+
+    def test_named_branch_without_default_blocks(self):
+        beat = self._staked_beat()
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="captured"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertIn(
+            f"loss on stake #{stake.pk} has a named branch but no default branch",
+            report.problems,
+        )
+        self.assertFalse(report.is_ready)
+
+    def test_named_branch_with_default_carries_no_problem(self):
+        beat = self._staked_beat()
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="captured"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(
+            any("has a named branch but no default branch" in p for p in report.problems)
+        )
+
+    def test_named_key_not_declared_by_scenario_blocks(self):
+        template = MissionTemplateFactory()
+        node = MissionNodeFactory(template=template)
+        MissionOptionFactory(node=node, key="surrendered")
+        beat = self._staked_beat(required_mission=template)
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="no-such-branch"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertIn(
+            f"stake #{stake.pk} names branch 'no-such-branch' that no option of "
+            "the beat's scenario declares",
+            report.problems,
+        )
+
+    def test_named_key_declared_by_scenario_carries_no_problem(self):
+        template = MissionTemplateFactory()
+        node = MissionNodeFactory(template=template)
+        MissionOptionFactory(node=node, key="surrendered")
+        beat = self._staked_beat(required_mission=template)
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="surrendered"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(
+            any("that no option of the beat's scenario declares" in p for p in report.problems)
+        )
+
+    def test_no_scenario_named_key_carries_no_declared_key_problem(self):
+        beat = self._staked_beat(required_mission=None)
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, outcome_key="")
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="")
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="whatever"
+        )
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(
+            any("that no option of the beat's scenario declares" in p for p in report.problems)
+        )
 
 
 class ActivationTests(EvenniaTestCase):

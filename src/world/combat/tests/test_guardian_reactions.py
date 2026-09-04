@@ -35,11 +35,12 @@ test_interpose_damage_path.py.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings, tag
 
-from world.combat.constants import CombatManeuver, ParticipantStatus
+from world.combat.constants import CombatManeuver, ParticipantStatus, RiskLevel
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -305,24 +306,31 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         # (reactive_anima_cost) the technique branch reads.
         ensure_force_field_content()
 
-    def test_technique_guardian_barrier_debits_anima_and_zeroes_damage(self) -> None:
-        """Clean success: guardian's cast check rolled, anima debited, ally damage zeroed."""
-        from types import SimpleNamespace
+    def _build_guardian_and_ally(self, *, starting_anima: int, confirm: bool):
+        """Build a technique-guardian + protected ally sharing a LETHAL encounter.
 
+        Shared by the affordability/consent matrix below (#3573) as well as the
+        original clean-success journey test - returns the pieces each caller
+        needs to assert on: ``(ally_participant, ally_vitals, anima,
+        expected_cost, encounter)``. Encounter defaults to
+        ``RiskLevel.LETHAL`` (``is_lethal`` reads that field, models.py:233) so
+        the consented-deficit tests exercise the life-force-drawing path by
+        default; a caller wanting the non-lethal branch flips ``risk_level``
+        on the returned encounter afterward, before it's ever read.
+        """
         from evennia import create_object
 
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.combat.services import apply_damage_to_participant
         from world.magic.effect_palette_content import FORCE_FIELD_TECHNIQUE_NAME
         from world.magic.factories import CharacterAnimaFactory
         from world.magic.models import CharacterTechnique, Technique
-        from world.magic.services.anima import resolve_cast_check_type
 
         room = create_object("typeclasses.rooms.Room", key="TechGuardianBarrierRoom", nohome=True)
         encounter = CombatEncounterFactory(
             status=RoundStatus.RESOLVING,
             round_number=1,
             room=room,
+            risk_level=RiskLevel.LETHAL,
         )
 
         guardian_sheet = CharacterSheetFactory()
@@ -349,7 +357,6 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
         CharacterTechnique.objects.create(character=guardian_sheet, technique=aegis_field)
 
-        starting_anima = 10
         anima = CharacterAnimaFactory(
             character=guardian.sheet_data,
             current=starting_anima,
@@ -377,7 +384,24 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
             focused_ally_target=ally_participant,
             focused_action=aegis_field,
             is_ready=True,
+            confirm_soulfray_risk=confirm,
         )
+
+        return ally_participant, ally_vitals, anima, expected_cost, encounter
+
+    def test_technique_guardian_barrier_debits_anima_and_zeroes_damage(self) -> None:
+        """Clean success: guardian's cast check rolled, anima debited, ally damage zeroed."""
+        from world.combat.services import apply_damage_to_participant
+        from world.magic.effect_palette_content import FORCE_FIELD_TECHNIQUE_NAME
+        from world.magic.models import Technique
+        from world.magic.services.anima import resolve_cast_check_type
+
+        starting_anima = 10
+        ally_participant, ally_vitals, anima, expected_cost, _encounter = (
+            self._build_guardian_and_ally(starting_anima=starting_anima, confirm=False)
+        )
+        guardian = anima.character.character
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
 
         expected_check_type = resolve_cast_check_type(guardian, aegis_field.action_template)
         captured_check_types: list = []
@@ -429,8 +453,6 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         ``apply_damage_to_participant`` dispatch chain the sibling test
         above exercises) to keep this a focused unit test of the threading.
         """
-        from types import SimpleNamespace
-
         from evennia import create_object
 
         from flows.events.payloads import DamagePreApplyPayload, DamageSource
@@ -489,3 +511,82 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         self.assertIsNone(situation_ctx.target)
         self.assertIsInstance(situation_ctx.resolution, CombatRoundContext)
         self.assertEqual(situation_ctx.resolution.participant, guardian_participant)
+
+    def test_unconsented_guardian_out_of_anima_fizzles_unchanged(self) -> None:
+        from world.combat.services import apply_damage_to_participant
+
+        ally_participant, ally_vitals, anima, _cost, _enc = self._build_guardian_and_ally(
+            starting_anima=0, confirm=False
+        )
+        with patch("world.combat.services.perform_check") as check:
+            apply_damage_to_participant(ally_participant, 40)
+        check.assert_not_called()
+        ally_vitals.refresh_from_db()
+        anima.refresh_from_db()
+        self.assertEqual(ally_vitals.health, 60)
+        self.assertEqual(anima.current, 0)
+
+    def test_consented_guardian_out_of_anima_fires_and_accrues_soulfray(self) -> None:
+        from world.combat.services import apply_damage_to_participant
+
+        ally_participant, ally_vitals, _anima, _cost, _enc = self._build_guardian_and_ally(
+            starting_anima=0, confirm=True
+        )
+        with (
+            patch(
+                "world.combat.services.perform_check",
+                return_value=SimpleNamespace(success_level=2),
+            ),
+            patch("world.combat.services.accumulate_soulfray") as accrue,
+            patch("world.combat.services._broadcast_commitment_line") as line,
+        ):
+            apply_damage_to_participant(ally_participant, 40)
+        ally_vitals.refresh_from_db()
+        self.assertEqual(ally_vitals.health, 100)
+        accrue.assert_called_once()
+        self.assertEqual(accrue.call_args.kwargs["deficit"], _cost)
+        self.assertTrue(accrue.call_args.kwargs["lethal"])
+        self.assertIn("tears at their own soul", line.call_args.args[1])
+
+    def test_consented_guardian_affordable_fire_still_accrues(self) -> None:
+        from world.combat.services import apply_damage_to_participant
+
+        ally_participant, _v, anima, cost, _enc = self._build_guardian_and_ally(
+            starting_anima=10, confirm=True
+        )
+        with (
+            patch(
+                "world.combat.services.perform_check",
+                return_value=SimpleNamespace(success_level=2),
+            ),
+            patch("world.combat.services.accumulate_soulfray") as accrue,
+            patch("world.combat.services._broadcast_commitment_line") as line,
+        ):
+            apply_damage_to_participant(ally_participant, 40)
+        anima.refresh_from_db()
+        self.assertEqual(anima.current, 10 - cost)
+        accrue.assert_called_once()
+        self.assertEqual(accrue.call_args.kwargs["deficit"], 0)
+        line.assert_not_called()
+
+    def test_consented_fire_in_non_lethal_encounter_draws_no_deficit(self) -> None:
+        from world.combat.services import apply_damage_to_participant
+
+        ally_participant, _v, _anima, _cost, enc = self._build_guardian_and_ally(
+            starting_anima=0, confirm=True
+        )
+        # Make the encounter non-lethal the way the model does (is_lethal reads
+        # risk_level, models.py:233) - is_lethal is a cached_property, so this
+        # must happen before anything reads it.
+        enc.risk_level = RiskLevel.MODERATE
+        enc.save(update_fields=["risk_level"])
+        with (
+            patch(
+                "world.combat.services.perform_check",
+                return_value=SimpleNamespace(success_level=2),
+            ),
+            patch("world.combat.services.accumulate_soulfray") as accrue,
+        ):
+            apply_damage_to_participant(ally_participant, 40)
+        self.assertEqual(accrue.call_args.kwargs["deficit"], 0)
+        self.assertFalse(accrue.call_args.kwargs["lethal"])

@@ -17,7 +17,16 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
   const [historyIndex, setHistoryIndex] = useState(0);
 
   const currentEntryId = history[historyIndex];
-  const { data: entry, isLoading, isError } = useCodexEntry(currentEntryId);
+  // A 404 here means the entry does not exist or the viewer's characters have
+  // no knowledge row for it. Either way it is this dialog's problem to report,
+  // not the page's (a heritage card once took down a whole chargen stage).
+  const {
+    data: entry,
+    isLoading,
+    isError,
+  } = useCodexEntry(currentEntryId, undefined, {
+    throwOnError: false,
+  });
 
   const navigateToEntry = (id: number) => {
     const newHistory = history.slice(0, historyIndex + 1);
@@ -37,6 +46,95 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < history.length - 1;
 
+  const renderEntry = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      );
+    }
+    if (isError) {
+      return (
+        <div role="alert" className="py-4 text-center text-muted-foreground">
+          Codex entry {currentEntryId} is not available. It may not exist, or none of your
+          characters have learned it yet.
+        </div>
+      );
+    }
+    if (entry) {
+      return (
+        <>
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>{entry.name}</DialogTitle>
+              {(canGoBack || canGoForward) && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={goBack}
+                    disabled={!canGoBack}
+                    aria-label="Go back"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={goForward}
+                    disabled={!canGoForward}
+                    aria-label="Go forward"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </DialogHeader>
+          {entry.art_url && (
+            <img
+              src={entry.art_url}
+              alt={entry.name}
+              className="mb-2 h-40 w-full rounded-md object-cover"
+            />
+          )}
+          {entry.perspective_of && (
+            <p className="text-sm italic text-muted-foreground">
+              As told by {entry.perspective_of}
+            </p>
+          )}
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{entry.summary}</p>
+            {entry.lore_content && (
+              <LoreSection
+                content={entry.lore_content}
+                links={entry.lore_links}
+                onNavigate={navigateToEntry}
+              />
+            )}
+            {entry.mechanics_content && (
+              <OOCSection
+                content={entry.mechanics_content}
+                links={entry.mechanics_links}
+                onNavigate={navigateToEntry}
+              />
+            )}
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/codex?entry=${entry.id}`} onClick={() => onOpenChange(false)}>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View in Codex
+              </Link>
+            </Button>
+          </div>
+        </>
+      );
+    }
+    return <div className="py-4 text-center text-muted-foreground">Entry not found</div>;
+  };
+
   return (
     <Dialog
       open={open}
@@ -49,84 +147,7 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
         onOpenChange(open);
       }}
     >
-      <DialogContent className="sm:max-w-md">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-        ) : isError ? (
-          <div className="py-4 text-center text-muted-foreground">Unable to load entry</div>
-        ) : entry ? (
-          <>
-            <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle>{entry.name}</DialogTitle>
-                {(canGoBack || canGoForward) && (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={goBack}
-                      disabled={!canGoBack}
-                      aria-label="Go back"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={goForward}
-                      disabled={!canGoForward}
-                      aria-label="Go forward"
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </DialogHeader>
-            {entry.art_url && (
-              <img
-                src={entry.art_url}
-                alt={entry.name}
-                className="mb-2 h-40 w-full rounded-md object-cover"
-              />
-            )}
-            {entry.perspective_of && (
-              <p className="text-sm italic text-muted-foreground">
-                As told by {entry.perspective_of}
-              </p>
-            )}
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">{entry.summary}</p>
-              {entry.lore_content && (
-                <LoreSection
-                  content={entry.lore_content}
-                  links={entry.lore_links}
-                  onNavigate={navigateToEntry}
-                />
-              )}
-              {entry.mechanics_content && (
-                <OOCSection
-                  content={entry.mechanics_content}
-                  links={entry.mechanics_links}
-                  onNavigate={navigateToEntry}
-                />
-              )}
-              <Button asChild variant="outline" size="sm">
-                <Link to={`/codex?entry=${entry.id}`} onClick={() => onOpenChange(false)}>
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  View in Codex
-                </Link>
-              </Button>
-            </div>
-          </>
-        ) : (
-          <div className="py-4 text-center text-muted-foreground">Entry not found</div>
-        )}
-      </DialogContent>
+      <DialogContent className="sm:max-w-md">{renderEntry()}</DialogContent>
     </Dialog>
   );
 }

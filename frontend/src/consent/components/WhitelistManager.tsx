@@ -41,7 +41,7 @@ function WhitelistManagerInner({ tenureId, categoryId }: Props) {
               {entry.allowed_tenure_name ?? entry.allowed_tenure}
               <button
                 type="button"
-                aria-label={`Remove ${entry.allowed_tenure_name ?? `tenure ${entry.allowed_tenure}`} from allowlist`}
+                aria-label={`Remove ${tenureLabel(entry.allowed_tenure_name, entry.allowed_tenure)} from allowlist`}
                 className="ml-1 text-muted-foreground hover:text-foreground"
                 onClick={() =>
                   removeWhitelist.mutate({
@@ -94,6 +94,11 @@ function WhitelistManagerInner({ tenureId, categoryId }: Props) {
       </div>
     </div>
   );
+}
+
+/** A tenure's display name, falling back to its id when unnamed. */
+function tenureLabel(name: string | null | undefined, id: string | number): string {
+  return name ?? `tenure ${id}`;
 }
 
 export function WhitelistManager(props: Props) {

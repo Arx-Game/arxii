@@ -15,7 +15,7 @@ the consequence a player or staff member experiences when the row is absent.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -239,6 +239,65 @@ def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDe
     return tuple(registry)
 
 
+def _probe_typeclassed_accounts() -> ProbeResult:
+    """No account row has ``db_typeclass_path`` = the base ``AccountDB`` model.
+
+    Consumer: every view that reads typeclass state off ``request.user``
+    (``get_available_characters`` behind the ``X-Character-ID`` header,
+    ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
+    ``ArxAccountAdapter.new_user`` stops signup making such rows; Django's
+    ``create_superuser`` still does, and rows from before the adapter fix stay
+    on ``AccountDB`` until repointed by hand (ADR-0260: no data migration for a handful of
+    pre-launch rows). A hit here is one of those.
+    """
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    base_model_rows = tuple(
+        AccountDB.objects.filter(
+            db_typeclass_path__in=("", "evennia.accounts.models.AccountDB")
+        ).values_list("username", flat=True)
+    )
+    detail = (
+        f"Account(s) whose typeclass path is the base AccountDB model, not "
+        f"typeclasses.accounts.Account: {', '.join(base_model_rows)}. "
+        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS by hand: "
+        "AccountDB.objects.filter(username=...).update(db_typeclass_path=...) in "
+        "`arx manage shell`."
+        if base_model_rows
+        else ""
+    )
+    return ProbeResult(present=not base_model_rows, missing=base_model_rows, detail=detail)
+
+
+def _probe_mfa_secrets_key() -> ProbeResult:
+    """``MFA_SECRETS_KEY`` parses and still decrypts the oldest stored 2FA secret.
+
+    Consumer: every 2FA sign-in and every recovery-code read
+    (``ArxMFAAdapter.decrypt``, ADR-0267). A key rotated without re-encrypting,
+    or a wrong key deployed, locks every enrolled player out at once; nothing
+    else on the site notices until the first player fails to log in.
+    """
+    from allauth.mfa.models import Authenticator  # noqa: PLC0415
+    from django.conf import settings  # noqa: PLC0415
+
+    from evennia_extensions.mfa_adapter import ArxMFAAdapter, fernet_from_setting  # noqa: PLC0415
+
+    try:
+        fernet_from_setting(settings.MFA_SECRETS_KEY)
+    except ValueError as exc:
+        return ProbeResult(present=False, missing=("MFA_SECRETS_KEY",), detail=str(exc))
+    oldest = (
+        Authenticator.objects.filter(type=Authenticator.Type.TOTP).order_by("created_at").first()
+    )
+    if oldest is None:
+        return ProbeResult(present=True)
+    try:
+        ArxMFAAdapter().decrypt(oldest.data["secret"])
+    except ValueError as exc:
+        return ProbeResult(present=False, missing=("MFA_SECRETS_KEY",), detail=str(exc))
+    return ProbeResult(present=True)
+
+
 def _probe_audere_majora_thresholds() -> ProbeResult:
     """`AudereMajoraThreshold` rows exist for every tier-crossing boundary level.
 
@@ -401,6 +460,64 @@ def _probe_capability_bridges() -> ProbeResult:
         "bridge that evaluates to zero DE) - see the Capabilities tuning panel."
     )
     return ProbeResult(present=unbridged == 0, detail=detail)
+
+
+def _probe_encounter_outcome_mappings() -> ProbeResult:
+    """`EncounterOutcomeMapping` rows exist for every `EncounterOutcome` x `RiskLevel` pair.
+
+    Consumer: `world/combat/beat_wiring.py classify_battle_outcome()`. VICTORY/DEFEAT
+    grade a story beat; FLED/ABANDONED grade a scenario ENCOUNTER option's route
+    instead (#3565) - either way a missing pair means the outcome never resolves
+    (a fight linked to a story beat, or a scenario run's ENCOUNTER pick); the error
+    log names the pair (#3559, #3565).
+    """
+    from world.combat.constants import EncounterOutcome, RiskLevel  # noqa: PLC0415
+    from world.combat.models import EncounterOutcomeMapping  # noqa: PLC0415
+
+    expected = {(outcome, risk) for outcome in EncounterOutcome.values for risk in RiskLevel.values}
+    existing = set(EncounterOutcomeMapping.objects.values_list("outcome", "risk_level"))
+    missing = tuple(f"{o}/{r}" for (o, r) in sorted(expected - existing))
+    detail = f"Missing EncounterOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_battle_outcome_mappings() -> ProbeResult:
+    """`BattleOutcomeMapping` rows exist for every `BattleOutcome` except UNRESOLVED.
+
+    Consumer: `world/battles/beat_wiring.py classify_battle_conclusion_outcome()`. A
+    missing outcome means a battle linked to a story beat concludes and the beat
+    never resolves; the error log names the outcome (#3559). UNRESOLVED is not a
+    graded conclusion (`resolve_battle_beats` is only reached once a battle has
+    concluded to one of the other four), so it is excluded from the expected set.
+    """
+    from world.battles.constants import BattleOutcome  # noqa: PLC0415
+    from world.battles.models import BattleOutcomeMapping  # noqa: PLC0415
+
+    expected = {outcome for outcome in BattleOutcome.values if outcome != BattleOutcome.UNRESOLVED}
+    existing = set(BattleOutcomeMapping.objects.values_list("outcome", flat=True))
+    missing = tuple(sorted(expected - existing))
+    detail = f"Missing BattleOutcomeMapping row(s): {', '.join(missing)}." if missing else ""
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _beginnings_without_upbringing() -> ProbeResult:
+    """Every active `Beginnings` row has at least one active `OriginTemplate`.
+
+    Consumer: the Lineage stage / `get_lineage_errors` (#3617). A beginning with
+    no Upbringing offers a player no options at all in Lineage and they cannot
+    finish CG for that beginning.
+    """
+    from world.character_creation.models import Beginnings  # noqa: PLC0415
+
+    missing = tuple(
+        Beginnings.objects.filter(is_active=True)
+        .exclude(origin_templates__is_active=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    detail = "" if not missing else f"{len(missing)} active beginning(s) have no active Upbringing."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
 def _declarations() -> tuple[ContentDependency, ...]:
@@ -1072,6 +1189,37 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=CustomProbe(fn=_probe_escalation_curves),
         ),
         ContentDependency(
+            key="encounter-outcome-mappings",
+            label="Encounter outcome-tier mappings",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/beat_wiring.py:69 classify_battle_outcome()",
+            consequence=(
+                "An EncounterOutcome x RiskLevel pair with no authored "
+                "EncounterOutcomeMapping row means the fight's outcome never "
+                "resolves what it's grading: VICTORY/DEFEAT grade a story "
+                "beat (concludes with the beat never resolved), FLED/ABANDONED "
+                "grade a scenario ENCOUNTER option's route instead (#3565, "
+                "concludes with the run left paused) - the error log names "
+                "the pair, but nothing grades until a GM authors the missing "
+                "row."
+            ),
+            probe=CustomProbe(fn=_probe_encounter_outcome_mappings),
+        ),
+        ContentDependency(
+            key="battle-outcome-mappings",
+            label="Battle outcome-tier mappings",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/battles/beat_wiring.py:31 classify_battle_conclusion_outcome()",
+            consequence=(
+                "A resolved BattleOutcome (any value except UNRESOLVED) with no "
+                "authored BattleOutcomeMapping row means a battle linked to a "
+                "story beat concludes and the beat never resolves - the error "
+                "log names the outcome, but nothing grades the beat until a GM "
+                "authors the missing row."
+            ),
+            probe=CustomProbe(fn=_probe_battle_outcome_mappings),
+        ),
+        ContentDependency(
             key="capability-power-bridges",
             label="Capability combat-power bridges",
             tier=DependencyTier.REQUIRED,
@@ -1148,36 +1296,110 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=AnyRowProbe(label="AudereThreshold"),
         ),
+        ContentDependency(
+            key="typeclassed-accounts",
+            label="Accounts load as the Account typeclass",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "web/api/mixins.py:63 get_available_characters (X-Character-ID auth); "
+                "world/checks/views.py:135 played_character_sheet_ids; "
+                "world/combat/views.py:1207 played_character_sheet_ids"
+            ),
+            consequence=(
+                "An account whose typeclass path is the base AccountDB model has no typeclass "
+                "attributes, so every persona-aware endpoint answers 500 for that "
+                "player or staff member (Sentry ARX2-8: the first outside player's "
+                "signup account). createsuperuser still makes such rows, and "
+                "pre-adapter signup rows stay on AccountDB until fixed by hand."
+            ),
+            probe=CustomProbe(fn=_probe_typeclassed_accounts),
+        ),
+        ContentDependency(
+            key="mfa-secrets-key",
+            label="2FA secrets key decrypts stored authenticators",
+            tier=DependencyTier.REQUIRED,
+            consumer="evennia_extensions/mfa_adapter.py ArxMFAAdapter.decrypt (every 2FA sign-in)",
+            consequence=(
+                "Every player with two-factor authentication on fails to sign in, and their "
+                "recovery codes fail too, until MFA_SECRETS_KEY is restored or staff delete "
+                "their authenticators in the admin (ADR-0267)."
+            ),
+            probe=CustomProbe(fn=_probe_mfa_secrets_key),
+        ),
+        ContentDependency(
+            key="game-clock",
+            label="Game clock (IC time anchor)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/game_clock/views.py:55 ClockViewSet.list(); "
+                "world/events/services.py:46 derive_ic_time_from_real(); "
+                "world/conditions/services.py:698 _compute_ingame_time_expires()"
+            ),
+            consequence=(
+                "GET /api/clock/ answers 503 NOT_CONFIGURED, the Hall's Time plate "
+                "reads 'Time is currently frozen', and every IC-date reader (event "
+                "scheduling, in-game-time condition expiry, journals) gets None and "
+                "skips. Seed it once through Django admin (add is allowed only while "
+                "no row exists) or POST /api/clock/adjust/ as staff."
+            ),
+            probe=AnyRowProbe(label="GameClock"),
+        ),
+        ContentDependency(
+            key="character_creation.beginnings_have_upbringing",
+            label="Beginnings without an Upbringing",
+            tier=DependencyTier.REQUIRED,
+            consumer="LineageStage / get_lineage_errors (#3617)",
+            consequence=(
+                "A player who picks this beginning reaches Lineage with no "
+                "options and cannot finish CG."
+            ),
+            probe=CustomProbe(fn=_beginnings_without_upbringing),
+        ),
     )
+
+
+def _name_batch_label(probe: ContentProbe) -> str | None:
+    """The model label whose row names this probe wants batch-fetched, or None.
+
+    `AnyRowProbe`, `FilteredRowProbe` and `CustomProbe` all resolve themselves and
+    never read `known_names`, so they return None here even when they do name a
+    model label.
+    """
+    if not probe.participates_in_name_batch():
+        return None
+    return probe.model_label()
+
+
+def _batch_known_names(dependencies: Sequence[ContentDependency]) -> dict[str, frozenset[str]]:
+    """One `values_list("name", flat=True)` per distinct model label, never one per probe.
+
+    The names are returned in their authored case. A shared model label can carry
+    both case-sensitive and case-insensitive declarations, so casefolding is left
+    to each probe's `resolve()`.
+    """
+    named_labels = {
+        label for dep in dependencies if (label := _name_batch_label(dep.probe)) is not None
+    }
+    return {
+        label: frozenset(apps.get_model("arxii", label).objects.values_list("name", flat=True))
+        for label in named_labels
+    }
 
 
 def collect_required_content() -> RequiredContentSnapshot:
     """Resolve every declared `ContentDependency` into a `RequiredContentSnapshot`.
 
-    Batches every `NamedRowsProbe` sharing a model label onto a single
-    `values_list("name", flat=True)` query - one per distinct label, never one
-    per declaration - and passes the exact-case result to each such probe's
-    `resolve()`, which casefolds on its own when `case_insensitive=True`. The
-    names are not lowercased here: a shared model label can carry both
-    case-sensitive and case-insensitive declarations (e.g. `ConditionTemplate`
-    is all case-insensitive today, but nothing stops a future case-sensitive
-    declaration on the same model), so the exact case must survive to
-    `resolve()` for it to decide. `AnyRowProbe`, `FilteredRowProbe`, and
-    `CustomProbe` all resolve themselves - none of them read `known_names`.
+    `_batch_known_names` does the name batching (one query per distinct model
+    label, never one per declaration) and passes the exact-case result to each
+    such probe's `resolve()`, which casefolds on its own when
+    `case_insensitive=True`. The names are not lowercased here: a shared model
+    label can carry both case-sensitive and case-insensitive declarations (e.g.
+    `ConditionTemplate` is all case-insensitive today, but nothing stops a future
+    case-sensitive declaration on the same model), so the exact case must survive
+    to `resolve()` for it to decide.
     """
     dependencies = build_registry(_declarations())
-
-    named_labels: set[str] = set()
-    for dependency in dependencies:
-        probe = dependency.probe
-        label = probe.model_label()
-        if probe.participates_in_name_batch() and label is not None:
-            named_labels.add(label)
-
-    known_names_by_label: dict[str, frozenset[str]] = {}
-    for label in named_labels:
-        model = apps.get_model("arxii", label)
-        known_names_by_label[label] = frozenset(model.objects.values_list("name", flat=True))
+    known_names_by_label = _batch_known_names(dependencies)
 
     missing_required: list[DependencyRow] = []
     present_required: list[DependencyRow] = []
@@ -1185,17 +1407,13 @@ def collect_required_content() -> RequiredContentSnapshot:
     present_tuning: list[DependencyRow] = []
 
     for dependency in dependencies:
-        probe = dependency.probe
-        known_names: frozenset[str] | None = None
-        probe_label = probe.model_label()
-        if probe.participates_in_name_batch() and probe_label is not None:
-            known_names = known_names_by_label[probe_label]
-        result = probe.resolve(known_names)
-        row = DependencyRow(dependency=dependency, result=result)
+        label = _name_batch_label(dependency.probe)
+        known_names = known_names_by_label[label] if label is not None else None
+        row = DependencyRow(dependency=dependency, result=dependency.probe.resolve(known_names))
         if dependency.tier == DependencyTier.REQUIRED:
-            (present_required if result.present else missing_required).append(row)
+            (present_required if row.result.present else missing_required).append(row)
         else:
-            (present_tuning if result.present else missing_tuning).append(row)
+            (present_tuning if row.result.present else missing_tuning).append(row)
 
     return RequiredContentSnapshot(
         missing_required=missing_required,

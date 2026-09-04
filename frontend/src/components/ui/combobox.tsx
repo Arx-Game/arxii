@@ -114,17 +114,19 @@ export function Combobox({
 
   const renderItems = () => {
     if (!hasGroups) {
-      return items.map(renderItem);
+      return items.map((item) => renderItem(item));
     }
 
     const grouped = groupItems(items);
     return Array.from(grouped.entries()).map(([groupName, groupItems]) =>
       groupName ? (
         <Command.Group key={groupName} heading={groupName}>
-          {groupItems.map(renderItem)}
+          {groupItems.map((item) => renderItem(item))}
         </Command.Group>
       ) : (
-        <React.Fragment key="__ungrouped">{groupItems.map(renderItem)}</React.Fragment>
+        <React.Fragment key="__ungrouped">
+          {groupItems.map((item) => renderItem(item))}
+        </React.Fragment>
       )
     );
   };

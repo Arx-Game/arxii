@@ -129,6 +129,8 @@ NEVER reach the box; standing credentials — see "Credential hygiene"):**
 as `ARXII_*` on that step ONLY; rendered to the 0600 on-box EnvironmentFile;
 long-lived, rotate on suspicion):**
 - `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
+  `ARXII_MFA_SECRETS_KEY` (Fernet key for 2FA secrets; generate with the
+  python one-liner in `src/.env.example`),
   `ARXII_CLOUDINARY_CLOUD_NAME`, `ARXII_CLOUDINARY_API_KEY`,
   `ARXII_CLOUDINARY_API_SECRET` (three discrete secrets — settings.py's
   `cloudinary.config()` reads each individually via `env()`, so a single
@@ -173,7 +175,10 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   (settings.py only calls `sentry_sdk.init()` when this is non-empty).
   `SENTRY_ENVIRONMENT` (prod: `production`; rehearsal: `rehearsal`) and
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
-  checkout) are derived on-box, not operator-supplied.
+  checkout) are derived on-box, not operator-supplied. Reading errors *back*
+  out of Sentry is a separate credential (`SENTRY_AUTH_TOKEN`, an internal-
+  integration token) used only by CI and developer tooling, never by the game
+  process — see `docs/operations/sentry-triage.md`.
 
 **Pre-stored by the operator — ansible-step-only, never written to the app's
 own EnvironmentFile (#3153; a third category alongside "on-box runtime"
@@ -430,6 +435,10 @@ server: the `ARXII_OPS_SSH_PUBKEY` Environment Variable) and both gates
 fail closed. Full setup + session workflow:
 `docs/operations/ops-access.md`.
 
+The game's log files live in `/var/log/arxii` (owned `arxii:adm`, pruned after
+30 days by systemd-tmpfiles), so `arxops` reads them with plain `tail`/`grep`;
+see "Reading the game logs" in that doc.
+
 ## Generating the SSH admin key (one-time)
 
 The button creates a brand-new Linode instance and Ansible needs to SSH into it
@@ -668,7 +677,7 @@ site.yml converge, not a bare Postgres install.
 
 ## Pull prod data down (dev/local)
 
-`just pull-prod confirm=yes` fetches the LATEST prod DB dump and restores it
+`just pull-prod yes` fetches the LATEST prod DB dump and restores it
 into your LOCAL dev Postgres (drop/recreate + `arx manage migrate`) — one
 command instead of the previous manual multi-step (#2236 Phase 4). It runs
 `infra/scripts/pull_prod_db.sh`, which:
@@ -684,6 +693,19 @@ command instead of the previous manual multi-step (#2236 Phase 4). It runs
   `--i-understand-this-overwrites-local` flag (mirrors `restore.sh`'s gate
   style); `just pull-prod` with no `confirm=yes` refuses and changes
   nothing.
+- Can only ever drop a LOCAL database. `DATABASE_URL`'s host must resolve
+  entirely to loopback/RFC1918/link-local addresses (every A record is
+  checked, not just the first); a public address or an unresolvable host
+  refuses before anything is dropped. So a hand-re-pointed `DATABASE_URL`
+  cannot turn this into a remote drop — `restore.sh` is the remote-target
+  tool, with its own operator-supplied `RESTORE_*` gating.
+
+**Firewall note (devcontainer):** the egress allowlist in
+`.devcontainer/init-firewall.sh` must include the bucket's endpoint host
+(`us-east-1.linodeobjects.com` for the `us-east` region) or the first S3 call
+dies on a connect timeout. It is allowlisted there already; a different
+region needs the matching entry added and
+`sudo /usr/local/bin/arxii-firewall.sh` re-run.
 
 **One-time setup** — after a successful stand-up, get the dev_reader
 credentials and bucket config from Terraform outputs and add them to

@@ -18,7 +18,18 @@ from world.clues.factories import RoomClueFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
-from world.stories.factories import BeatFactory, StoryFactory, StoryProtectedSubjectFactory
+from world.societies.constants import RenownRisk
+from world.stories.constants import BeatKind, StakeResolutionColumn, StakeSeverity
+from world.stories.factories import (
+    BeatFactory,
+    BeatStagedBattleFactory,
+    StakeFactory,
+    StakeOutcomeFactory,
+    StakeResolutionFactory,
+    StoryFactory,
+    StoryProtectedSubjectFactory,
+)
+from world.stories.models import StakeContractActivation
 
 
 class GMStoryRailViewTests(APITestCase):
@@ -34,7 +45,7 @@ class GMStoryRailViewTests(APITestCase):
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
         self.story = StoryFactory()
-        self.beat = BeatFactory(episode__chapter__story=self.story)
+        self.beat = BeatFactory(episode__chapter__story=self.story, clock_size=2)
         self.scene.running_beat = self.beat
         self.scene.save(update_fields=["running_beat"])
 
@@ -49,6 +60,7 @@ class GMStoryRailViewTests(APITestCase):
         self.assertEqual(beat["kind"], self.beat.kind)
         self.assertEqual(beat["risk"], self.beat.risk)
         self.assertEqual(beat["outcome"], self.beat.outcome)
+        self.assertEqual(beat["clock_size"], self.beat.clock_size)
 
     def test_co_gm_with_no_story_standing_gets_empty_protected_subjects(self) -> None:
         """The leak test (#3434 spec) - must not skip this."""
@@ -59,6 +71,14 @@ class GMStoryRailViewTests(APITestCase):
         self.assertIsNone(response.data["beat"]["internal_description"])
         self.assertIsNone(response.data["beat"]["opponent_lines"])
         self.assertIsNone(response.data["beat"]["staged_templates"])
+
+    def test_co_gm_with_no_story_standing_gets_null_staged_battle(self) -> None:
+        self.beat.kind = BeatKind.ENCOUNTER
+        self.beat.save(update_fields=["kind"])
+        BeatStagedBattleFactory(beat=self.beat)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["beat"]["staged_battle"])
 
     def test_story_owner_gm_sees_protected_subjects_and_internal_text(self) -> None:
         self.story.owners.add(self.gm_account)
@@ -72,6 +92,83 @@ class GMStoryRailViewTests(APITestCase):
         )
         self.assertIsNotNone(response.data["beat"]["opponent_lines"])
         self.assertIsNotNone(response.data["beat"]["staged_templates"])
+
+    def test_story_owner_gm_sees_staged_battle(self) -> None:
+        self.story.owners.add(self.gm_account)
+        self.beat.kind = BeatKind.ENCOUNTER
+        self.beat.save(update_fields=["kind"])
+        staged = BeatStagedBattleFactory(beat=self.beat, name="Ambush at the Ford")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        staged_battle = response.data["beat"]["staged_battle"]
+        self.assertIsNotNone(staged_battle)
+        self.assertEqual(staged_battle["blueprint_name"], staged.blueprint.name)
+        self.assertEqual(staged_battle["name"], "Ambush at the Ford")
+        self.assertEqual(staged_battle["party_side_role"], staged.party_side_role)
+        self.assertEqual(staged_battle["unit_line_count"], staged.unit_lines.count())
+
+    def test_story_owner_gm_sees_stakes_with_outcome_and_activation(self) -> None:
+        """A story-standing GM sees the contract's stakes (with the fired
+        outcome after resolution) and the locked activation (#3561)."""
+        self.story.owners.add(self.gm_account)
+        stake = StakeFactory(
+            beat=self.beat,
+            severity=StakeSeverity.DIRE,
+            player_summary="A dueling scar, worn for all to see.",
+        )
+        resolution = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="",
+            narrative_summary="It goes badly.",
+        )
+        StakeOutcomeFactory(stake=stake, column=StakeResolutionColumn.LOSS, resolution=resolution)
+        activation = StakeContractActivation.objects.create(
+            beat=self.beat,
+            party_average_level=4,
+            declared_target_level=4,
+            declared_risk=RenownRisk.HIGH,
+            effective_risk=RenownRisk.HIGH,
+            is_ready=True,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        stakes = response.data["stakes"]
+        self.assertEqual(len(stakes), 1)
+        self.assertEqual(stakes[0]["id"], stake.pk)
+        self.assertEqual(stakes[0]["player_summary"], stake.player_summary)
+        self.assertEqual(stakes[0]["severity"], stake.severity)
+        self.assertEqual(stakes[0]["subject_kind"], stake.subject_kind)
+        self.assertEqual(stakes[0]["outcome"]["column"], StakeResolutionColumn.LOSS)
+        self.assertEqual(stakes[0]["outcome"]["outcome_key"], "")
+        self.assertEqual(stakes[0]["outcome"]["resolution_summary"], "It goes badly.")
+        self.assertEqual(response.data["activation"]["effective_risk"], RenownRisk.HIGH)
+        self.assertTrue(response.data["activation"]["is_ready"])
+        self.assertIsNotNone(response.data["activation"]["locked_at"])
+        self.assertEqual(
+            StakeContractActivation.objects.get(pk=activation.pk).effective_risk, RenownRisk.HIGH
+        )
+
+    def test_co_gm_with_no_story_standing_gets_empty_stakes_and_no_activation(self) -> None:
+        """The leak test's #3561 sibling - stakes and activation gate exactly
+        like protected_subjects does."""
+        StakeFactory(beat=self.beat, severity=StakeSeverity.DIRE)
+        StakeContractActivation.objects.create(
+            beat=self.beat,
+            party_average_level=4,
+            declared_target_level=4,
+            declared_risk=RenownRisk.HIGH,
+            effective_risk=RenownRisk.HIGH,
+            is_ready=True,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["stakes"], [])
+        self.assertIsNone(response.data["activation"])
 
     def test_clue_placements_absent_for_non_staff(self) -> None:
         RoomClueFactory(room_profile__objectdb=self.room)

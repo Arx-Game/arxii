@@ -1,7 +1,17 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import type { SceneDetail } from '../types';
+
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // Roster + active-character resolution (mirrors PersonaContextMenu.test.tsx)
 vi.mock('@/roster/queries', () => ({
@@ -66,6 +76,58 @@ vi.mock('@/gm-adjudication/queries', () => ({
   useItemTemplateCatalog: vi.fn((_search: string, _enabled: boolean) => ({
     data: [{ id: 21, name: 'Silver Locket' }],
   })),
+  // The `risk` argument gates `difficulty_guide` the way the real endpoint
+  // does (a guide only comes back for the risk it was authored against);
+  // needed so the "no running beat leaves the band at its default" test
+  // (#3564) actually exercises the null-guide path.
+  useDiscovery: vi.fn((_q: string, risk: string | null, _enabled: boolean) => ({
+    data: {
+      kinds: [
+        {
+          id: 11,
+          name: 'Chase',
+          description: 'A pursuit through the rooftops.',
+          minimum_gm_level: 'junior',
+          check_fits: [{ check_type: { id: 7, name: 'Sprint' }, fit_notes: 'footspeed' }],
+          difficulty_guide:
+            risk === 'high'
+              ? { risk: 'high', recommended_difficulty: 'hard', guidance_text: 'Real stakes' }
+              : null,
+          all_guides: [
+            { risk: 'high', recommended_difficulty: 'hard', guidance_text: 'Real stakes' },
+          ],
+          pool_guides: [
+            {
+              pool: { id: 3, name: 'Chase pool' },
+              selection_criteria: 'when they run',
+              is_default: true,
+            },
+          ],
+        },
+      ],
+      templates: [
+        {
+          id: 5,
+          name: 'Rooftop chase',
+          category: 1,
+          category_name: 'Pursuit',
+          description_template: 'Tiles',
+        },
+      ],
+      challenges: [
+        {
+          id: 9,
+          name: 'Chase the courier',
+          category: 1,
+          category_name: 'Pursuit',
+          severity: 4,
+          description_template: '',
+          goal: 'Catch him',
+        },
+      ],
+    },
+    isLoading: false,
+  })),
 }));
 
 vi.mock('sonner', () => ({
@@ -78,6 +140,7 @@ vi.mock('sonner', () => ({
 import { GMAdjudicationPanel } from './GMAdjudicationPanel';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { toast } from 'sonner';
+import { DIFFICULTY_BANDS } from '@/gm-adjudication/types';
 
 function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
   return {
@@ -99,12 +162,14 @@ function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     position_edges: [],
     running_beat: null,
     declared_risk: null,
+    clock: null,
     ...overrides,
   };
 }
 
 beforeEach(() => {
   mutateAsync.mockClear();
+  mockNavigate.mockClear();
   (toast.success as ReturnType<typeof vi.fn>).mockClear();
   (toast.error as ReturnType<typeof vi.fn>).mockClear();
 });
@@ -270,6 +335,92 @@ test('Situation tab in Challenge mode dispatches place_challenge with target_obj
   });
 });
 
+// ---------------------------------------------------------------------------
+// #3564 - SituationFinder mounted in the Call Check and Situation tabs.
+// ---------------------------------------------------------------------------
+
+test('Call Check: picking a fitting check selects it and pre-fills the band from the running risk', async () => {
+  const user = userEvent.setup();
+  render(
+    <GMAdjudicationPanel
+      scene={makeScene({ running_beat: { id: 1, risk: 'high', clock_size: 0 } })}
+    />
+  );
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(screen.getByRole('button', { name: 'Use this check' }));
+
+  expect(screen.getByTestId('gm-check-type-select')).toHaveValue('7');
+  expect(screen.getByLabelText('Difficulty')).toHaveValue('hard');
+
+  await user.click(screen.getByTestId('gm-check-submit'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kwargs: expect.objectContaining({ check_type_ref: 7, difficulty: 'hard' }),
+    })
+  );
+});
+
+test('Call Check: no running beat leaves the band at its default', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene({ running_beat: null })} />);
+
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(screen.getByRole('button', { name: 'Use this check' }));
+
+  expect(screen.getByLabelText('Difficulty')).toHaveValue('normal');
+});
+
+test('Situation: Place on a finder template dispatches set_situation with its id', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.click(screen.getByTestId('gm-tab-situation'));
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(
+    within(screen.getByTestId('finder-template')).getByRole('button', { name: 'Place' })
+  );
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'set_situation' },
+    kwargs: { situation_template_id: 5 },
+  });
+});
+
+test('Situation: Place on a finder challenge dispatches place_challenge with its id', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.click(screen.getByTestId('gm-tab-situation'));
+  await user.click(screen.getByTestId('finder-toggle'));
+  await user.click(
+    within(screen.getByTestId('finder-challenge')).getByRole('button', { name: 'Place' })
+  );
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ref: { backend: 'registry', registry_key: 'place_challenge' },
+      kwargs: expect.objectContaining({ challenge_template_id: 9 }),
+    })
+  );
+});
+
+test('DIFFICULTY_BANDS matches the guide values the server can send', () => {
+  expect(DIFFICULTY_BANDS.map((band) => band.value)).toEqual([
+    'trivial',
+    'easy',
+    'normal',
+    'hard',
+    'daunting',
+    'harrowing',
+  ]);
+});
+
 test('a failed dispatch surfaces the refusal message via toast.error', async () => {
   mutateAsync.mockResolvedValueOnce({
     backend: 'registry',
@@ -430,6 +581,8 @@ test('Run Beat tab lists runnable beats on open, and Run dispatches run_beat (#3
             risk: 'high',
             opponent_line_count: 2,
             staged_template_count: 0,
+            has_scenario: false,
+            staged_battle_name: null,
           },
         ],
       },
@@ -459,6 +612,140 @@ test('Run Beat tab lists runnable beats on open, and Run dispatches run_beat (#3
       kwargs: { beat_id: 12 },
     })
   );
+  expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+test('Run Beat tab labels a staged battle "Start siege" and opens the battle on success (#3569)', async () => {
+  mutateAsync
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: {
+        beats: [
+          {
+            id: 12,
+            story_title: 'The Long Watch',
+            episode_title: 'Ambush at Dusk',
+            kind: 'encounter',
+            risk: 'high',
+            opponent_line_count: 0,
+            staged_template_count: 0,
+            has_scenario: false,
+            staged_battle_name: 'Siege of the Gate',
+          },
+        ],
+      },
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'Beat #12 is now running in this scene.',
+      data: { beat_id: 12, battle_id: 5, battle_scene_id: 77 },
+    });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  await waitFor(() => expect(screen.getByTestId('gm-runbeat-row-12')).toBeInTheDocument());
+  expect(
+    within(screen.getByTestId('gm-runbeat-row-12')).getByText(/Siege of the Gate/)
+  ).toBeInTheDocument();
+  expect(screen.getByTestId('gm-runbeat-run-12')).toHaveTextContent('Start siege');
+
+  await user.click(screen.getByTestId('gm-runbeat-run-12'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      ref: { backend: 'registry', registry_key: 'run_beat' },
+      kwargs: { beat_id: 12 },
+    })
+  );
+  await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/scenes/77/battle'));
+});
+
+test('Run Beat tab keeps "Run" for a plain encounter beat and does not navigate (#3569)', async () => {
+  mutateAsync
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'listed',
+      data: {
+        beats: [
+          {
+            id: 13,
+            story_title: 'The Long Watch',
+            episode_title: 'Ambush at Dusk',
+            kind: 'encounter',
+            risk: 'high',
+            opponent_line_count: 2,
+            staged_template_count: 0,
+            has_scenario: false,
+            staged_battle_name: null,
+          },
+        ],
+      },
+    })
+    .mockResolvedValueOnce({
+      backend: 'registry',
+      deferred: false,
+      success: true,
+      message: 'Beat #13 is now running in this scene.',
+      data: { beat_id: 13 },
+    });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  await waitFor(() => expect(screen.getByTestId('gm-runbeat-row-13')).toBeInTheDocument());
+  expect(screen.getByTestId('gm-runbeat-run-13')).toHaveTextContent('Run');
+
+  await user.click(screen.getByTestId('gm-runbeat-run-13'));
+
+  await waitFor(() =>
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      ref: { backend: 'registry', registry_key: 'run_beat' },
+      kwargs: { beat_id: 13 },
+    })
+  );
+  expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+test('Run Beat tab appends the authored clock size to the row descriptor (#3567)', async () => {
+  mutateAsync.mockResolvedValueOnce({
+    backend: 'registry',
+    deferred: false,
+    success: true,
+    message: 'listed',
+    data: {
+      beats: [
+        {
+          id: 14,
+          story_title: 'The Long Watch',
+          episode_title: 'Ambush at Dusk',
+          kind: 'encounter',
+          risk: 'high',
+          opponent_line_count: 2,
+          staged_template_count: 0,
+          has_scenario: false,
+          staged_battle_name: null,
+          clock_size: 4,
+        },
+      ],
+    },
+  });
+
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-runbeat'));
+
+  const row = await screen.findByTestId('gm-runbeat-row-14');
+  expect(row).toHaveTextContent('clock 4');
 });
 
 test('Condition tab Remove mode lists active instances then dispatches gm_remove_condition (#3431)', async () => {

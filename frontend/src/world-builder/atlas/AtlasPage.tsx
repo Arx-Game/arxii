@@ -103,6 +103,52 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
    * view swap, deliberately NOT recorded into Recent (no `name` passed). */
   const handleNavigateRoom = (roomId: number) => handleSelect({ kind: 'roomdoc', id: roomId });
 
+  const renderView = () => {
+    if (view?.kind === 'area' || view?.kind === 'roomgrid') {
+      return (
+        <AreaPage
+          areaId={view.id}
+          onDescend={handleSelect}
+          onOpenAreaDoc={(id) => handleSelect({ kind: 'areadoc', id })}
+          highlightRoomId={highlightRoomId}
+        />
+      );
+    }
+    if (view?.kind === 'roomdoc') {
+      return (
+        <RoomDocument
+          roomId={view.id}
+          onNavigateRoom={handleNavigateRoom}
+          onDeleted={(deletedAreaId) => handleSelect({ kind: 'roomgrid', id: deletedAreaId })}
+        />
+      );
+    }
+    if (view?.kind === 'areadoc') {
+      return (
+        <AreaDocument
+          areaId={view.id}
+          onDeleted={(parentAreaId) => {
+            // Land on the parent's grid; a deleted root falls back to the
+            // first root (the same default the view==null effect uses).
+            if (parentAreaId != null) {
+              handleSelect({ kind: 'area', id: parentAreaId });
+            } else {
+              const firstRoot = rootsPage?.results?.[0];
+              if (firstRoot) {
+                handleSelect({ kind: areaViewKind(firstRoot.level), id: firstRoot.id });
+              }
+            }
+          }}
+        />
+      );
+    }
+    return (
+      <div className="p-8 text-sm text-muted-foreground" data-testid="atlas-loading">
+        Loading the atlas…
+      </div>
+    );
+  };
+
   return (
     <div className="grid h-screen grid-cols-[270px_1fr]" data-testid="atlas-page">
       <IndexRail
@@ -143,40 +189,7 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
           </button>
         </FolioCrumb>
 
-        {view?.kind === 'area' || view?.kind === 'roomgrid' ? (
-          <AreaPage
-            areaId={view.id}
-            onDescend={handleSelect}
-            onOpenAreaDoc={(id) => handleSelect({ kind: 'areadoc', id })}
-            highlightRoomId={highlightRoomId}
-          />
-        ) : view?.kind === 'roomdoc' ? (
-          <RoomDocument
-            roomId={view.id}
-            onNavigateRoom={handleNavigateRoom}
-            onDeleted={(deletedAreaId) => handleSelect({ kind: 'roomgrid', id: deletedAreaId })}
-          />
-        ) : view?.kind === 'areadoc' ? (
-          <AreaDocument
-            areaId={view.id}
-            onDeleted={(parentAreaId) => {
-              // Land on the parent's grid; a deleted root falls back to the
-              // first root (the same default the view==null effect uses).
-              if (parentAreaId != null) {
-                handleSelect({ kind: 'area', id: parentAreaId });
-              } else {
-                const firstRoot = rootsPage?.results?.[0];
-                if (firstRoot) {
-                  handleSelect({ kind: areaViewKind(firstRoot.level), id: firstRoot.id });
-                }
-              }
-            }}
-          />
-        ) : (
-          <div className="p-8 text-sm text-muted-foreground" data-testid="atlas-loading">
-            Loading the atlas…
-          </div>
-        )}
+        {renderView()}
       </main>
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>

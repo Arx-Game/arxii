@@ -66,6 +66,7 @@ class BeatSerializerFieldsTest(APITestCase):
             "required_society",
             "required_organization",
             "required_standing",
+            "required_npc_sheet",
             "agm_eligible",
             "deadline",
             "created_at",
@@ -109,6 +110,19 @@ class BeatSerializerCreateValidationTest(APITestCase):
         response = self._post_beat(self._base_beat_data())
         assert response.status_code == status.HTTP_201_CREATED
 
+    def test_clock_size_round_trips(self):
+        """clock_size (#3567) is writable and round-trips through the create response."""
+        data = {**self._base_beat_data(), "clock_size": 3}
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["clock_size"] == 3
+
+    def test_negative_clock_size_rejected(self):
+        """clock_size (#3567) is a PositiveSmallIntegerField -- negatives are rejected."""
+        data = {**self._base_beat_data(), "clock_size": -1}
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
     def test_character_level_beat_creates_successfully(self):
         """CHARACTER_LEVEL_AT_LEAST beat with required_level is accepted."""
         data = {
@@ -144,6 +158,24 @@ class BeatSerializerCreateValidationTest(APITestCase):
         response = self._post_beat(data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["required_standing"] == 100
+
+    def test_npc_regard_beat_with_required_npc_sheet_creates_successfully(self):
+        """NPC_REGARD_AT_LEAST beat with required_npc_sheet/required_standing
+        is accepted and both fields round-trip in the response (#3570).
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        npc_sheet = CharacterSheetFactory()
+        data = {
+            **self._base_beat_data(),
+            "predicate_type": BeatPredicateType.NPC_REGARD_AT_LEAST,
+            "required_npc_sheet": npc_sheet.pk,
+            "required_standing": 50,
+        }
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["required_npc_sheet"] == npc_sheet.pk
+        assert response.data["required_standing"] == 50
 
     # ---------- missing required config -------------------------------------
 
@@ -189,6 +221,21 @@ class BeatSerializerCreateValidationTest(APITestCase):
         }
         response = self._post_beat(data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @suppress_permission_errors
+    def test_npc_regard_without_required_npc_sheet_rejected(self):
+        """NPC_REGARD_AT_LEAST without required_npc_sheet returns 400, keyed
+        required_npc_sheet (#3570).
+        """
+        data = {
+            **self._base_beat_data(),
+            "predicate_type": BeatPredicateType.NPC_REGARD_AT_LEAST,
+            "required_standing": 50,
+            # required_npc_sheet intentionally omitted
+        }
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "required_npc_sheet" in response.data
 
     # ---------- extra config forbidden for type -----------------------------
 
@@ -273,6 +320,29 @@ class BeatSerializerCreateValidationTest(APITestCase):
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["required_level"] == 10
+
+    @suppress_permission_errors
+    def test_faction_beat_patch_with_required_npc_sheet_rejected(self):
+        """PATCH on a FACTION_STANDING_AT_LEAST beat that sets required_npc_sheet
+        (wrong config field for that predicate_type) returns 400 (#3570).
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.societies.factories import SocietyFactory
+
+        beat = BeatFactory(
+            episode=self.episode,
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_society=SocietyFactory(),
+            required_standing=100,
+        )
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("beat-detail", kwargs={"pk": beat.pk})
+        response = self.client.patch(
+            url,
+            json.dumps({"required_npc_sheet": CharacterSheetFactory().pk}),
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 class BeatViewSetPermissionsTest(APITestCase):

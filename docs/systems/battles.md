@@ -38,7 +38,13 @@ All models use `SharedMemoryModel` from `evennia.utils.idmapper.models`.
 | `round_limit` | PositiveSmallIntegerField | Default 10; auto-concludes at expiry |
 | `outcome` | CharField | `BattleOutcome` choice; default UNRESOLVED |
 | `concluded_at` | DateTimeField (null) | Timestamp when concluded |
+| `is_paused` | BooleanField | Default False; set when a participant disconnects (#1899) - see `maybe_pause_battle_for_disconnect` |
 | `afk_peril_override` | BooleanField | Default False; when True, Surrounded peril escalates every round regardless of declaration (#1733, see ADR-0074) |
+| `risk_level` | CharField | `RiskLevel` choice; default LOW. Stakes axis for companion death-gating (#1873) - EXTREME/LETHAL make companion death possible on defeat. Mirrors `CombatEncounter.risk_level` |
+| `region` | FK → `arxii.Area` (null, `on_delete=SET_NULL`) | Optional region anchor for ambient weather resolution (#1715); battles are otherwise location-less (ADR-0081) - this is additive, not a return to room-graph coupling |
+| `weather_override` | FK → `WeatherType` (null, `on_delete=SET_NULL`, `related_name="overriding_battles"`) | Battle-wide cast-set weather (#1715); takes precedence over ambient (via `region`) when present; cleared at round-boundary expiry |
+| `weather_override_expires_round` | PositiveIntegerField (null) | Absolute round number `weather_override` expires at (#1715); cleared alongside it at round-boundary expiry |
+| `story_beat` | FK → `stories.Beat` (null, `on_delete=SET_NULL`, `related_name="resolving_battles"`) | The one Beat this battle resolves (#3559), mirroring `CombatEncounter.story_beat`. See [Stakes / Beat Wiring](#stakes--beat-wiring-1785-3559). |
 | `created_at` | DateTimeField (auto) | |
 
 **Properties:**
@@ -598,7 +604,7 @@ Telnet: `battle declare move <place> with <technique>` (self-move),
 `battle declare move <unit> to <place> with <technique>` (commander order),
 `battle declare move withdraw with <technique>`.
 
-## Stakes / Beat Wiring (#1785)
+## Stakes / Beat Wiring (#1785, #3559)
 
 `world.battles.beat_wiring` wires a concluded `Battle` into the same
 `record_outcome_tier_completion` seam #1746 built for `CombatEncounter` —
@@ -608,25 +614,35 @@ reusing the stakes-contract engine (`world.stories.services.stakes`,
 ### `BattleOutcomeMapping`
 
 A designer-authored map from `BattleOutcome` to a `traits.CheckOutcome` tier
-(`outcome` unique, `check_outcome` nullable FK). Unlike combat's
-`EncounterOutcomeMapping`, there's no separate risk-level axis —
+(`outcome` unique, `check_outcome` a required FK, `on_delete=PROTECT`). Unlike
+combat's `EncounterOutcomeMapping`, there's no separate risk-level axis -
 `BattleOutcome`'s four values already encode decisive-vs-marginal severity.
-Starts empty; a missing row or a null `check_outcome` resolves to
-`PENDING_GM_REVIEW`. Admin-registered (`world/battles/admin.py`).
+Starts empty; a missing row is required content, not an alternate resolution
+path (#3559) - `resolve_battle_beats` logs an error and leaves the beat open,
+surfaced on the admin sentinel (#3444). Admin-registered
+(`world/battles/admin.py`).
 
-### `classify_battle_conclusion_outcome(battle) -> CheckOutcome | None`
+### `classify_battle_conclusion_outcome(battle) -> CheckOutcome`
 
 Looks up the `BattleOutcomeMapping` row for `battle.outcome`. Raises
-`ValueError` if called before the battle has a graded outcome.
+`ValueError` if called before the battle has a graded outcome, or
+`BattleOutcomeMapping.DoesNotExist` if no row is authored for the outcome
+(#3559 - the caller, `resolve_battle_beats`, catches this and logs).
 
 ### `activate_stakes_for_battle(battle) -> None`
 
 Called from `begin_battle_round` the first time a battle opens round 1.
 Collects every currently-`ACTIVE` `BattleParticipant`'s character sheet
-(no-ops if none), and for each staked `UNSATISFIED` beat linked to
+(no-ops if none). **Scoped to `battle.story_beat` when routed (#3569):** when
+`battle.story_beat` is set and is itself a staked, still-`UNSATISFIED` beat
+(and `risk != RenownRisk.NONE`), activation locks only that one beat - a
+battle explicitly pre-staged onto a beat via session prep (`RunBeatAction`'s
+`_run_battle_beat`, see stories.md's "Run Beat") must not also lock a sibling
+staked beat that merely happens to share the battle's scene. Otherwise it
+falls back to the pre-#3569 rule: every staked `UNSATISFIED` beat linked to
 `battle.scene` (via `staked_unsatisfied_beats_for_scene`,
-`world.stories.services.stakes`), boundary-screens it
-(`check_stake_boundaries`) and locks it with
+`world.stories.services.stakes`). Either way, each candidate beat is
+boundary-screened (`check_stake_boundaries`) and locked with
 `activate_stakes_contract(beat, sheets, scale_by_party_level=False)`.
 
 **`scale_by_party_level=False`**: a war's stakes reflect the objective being
@@ -640,13 +656,15 @@ prices at its declared risk unconditionally. See **ADR-0080**.
 Called directly from `conclude_battle` — not via a flow event/`TriggerDefinition`
 like combat's `ENCOUNTER_COMPLETED` wiring, since `Battle` has no location
 (`Battle.scene.location` is `None`, per #1733) and `conclude_battle` is already
-the single call-site choke point for battle conclusion. Finds every
-`UNSATISFIED` `OUTCOME_TIER` beat linked to `battle.scene` (identical
-`Scene → EpisodeScene → Episode → Beat` discovery to combat's wiring),
-classifies `battle.outcome` once, and resolves every linked beat to that same
-tier (one `Battle` grades as one outcome, applied uniformly — per-front
-independent grading is **#1760**'s job, not duplicated here). No `withdrawal`
-path: `BattleOutcome` has no FLED/ABANDONED-equivalent value.
+the single call-site choke point for battle conclusion.
+`beat_for_scene_conclusion` (`world.stories.services.beats`, #3559) picks at
+most **one** beat the battle may grade: `battle.story_beat` when it's set and
+still an `UNSATISFIED` `OUTCOME_TIER` beat, else the battle scene's
+`running_beat` when that is itself the objective (`kind=ENCOUNTER`) - the
+legacy every-`EpisodeScene`-linked-beat scan is gone. Classifies
+`battle.outcome` and resolves that one beat; per-front independent grading is
+still **#1760**'s job. No `withdrawal` path: `BattleOutcome` has no
+FLED/ABANDONED-equivalent value.
 
 ## Legend Wiring (#2184)
 
@@ -699,7 +717,7 @@ Multi-write operations use `@transaction.atomic`.
 | `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
 | `open_siege_engine_encounter` | `(*, battle_place, participant, opponent_kwargs, tier=OpponentTier.ELITE) -> CombatEncounter` | Binds `battle_place` to a discrete siege-engine skirmish — same bridge and `create_lethal_duel` call as `open_champion_duel`, no Champion-role requirement (#1713). Raises `PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
-| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
+| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves the one story beat this battle grades, if any, via `resolve_battle_beats` (#1785, #3559). Does NOT call `complete_story` - a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
 | `create_battle_vehicle` | `(*, battle, side, place_name, vehicle_kind=VehicleKind.SHIP, is_structural=True) -> BattleVehicle` | Creates a vessel/mount: a paired `BattleUnit` + `BattlePlace`, plus a hull `Fortification` if `is_structural` (#1714). The unit's own `place` stays `None`; other units/participants embed by pointing their own `place` FK at `vehicle.place`. |
 | `places_overlap` | `(place_a, place_b) -> bool` | Whether two `BattlePlace` footprints intersect on the battle map: distance between `(x, y)` centers < sum of `footprint_radius` values (#1714, ADR-0085). |
@@ -1254,6 +1272,32 @@ ref being present. Mirrors `SceneTacticalMap`'s dispatch idiom exactly
 (`useDispatchPlayerAction`); a failed dispatch (`result.success === false`) shows
 error styling and leaves the form/state alone; a successful dispatch resets its form
 and invalidates the battle detail + for-scene queries so `BattleMapCanvas` refetches.
+
+### Beat-staged battles (#3569)
+
+A second, GM-authoring-time entry point onto this same staging layer: a story
+author pre-stages an ENCOUNTER beat's battle ahead of the table
+(`world.stories.models.BeatStagedBattle`/`BeatStagedBattleUnit` - blueprint,
+optional region/name, party side, unit lines by template/side/place; see
+stories.md's "Session prep"), and `RunBeatAction` (`run_beat`,
+`actions/definitions/gm_story.py::_run_battle_beat`) instantiates it into the
+GM's live scene in one press instead of the GM working through
+`create_battle`/`stage_battle_map`/`spawn_battle_units`/
+`enlist_battle_participant` by hand. It reuses this layer's own services
+directly rather than re-deriving them: `stage_battle` (blueprint clone +
+`location=scene.location`), `spawn_units_from_template` (per authored unit
+line, resolving `place_name` against the staged blueprint's places - an
+unknown name logs and spawns unplaced), and `world.battles.services
+.enlist_participant` (the running scene's present, non-GM participants, onto
+`staged.party_side_role`). What it adds on top: `battle.story_beat = beat`
+(so `activate_stakes_for_battle`/`resolve_battle_beats` scope to this one
+beat, see "Stakes / Beat Wiring" above), an `EpisodeScene` link from the
+battle's scene to the beat's episode, and an `is_gm` grant for the running
+account on the battle's scene (mirroring `CreateBattleAction`). Idempotent:
+re-running a beat whose battle already exists and hasn't concluded returns
+that same battle (`already_staged=True`) rather than staging a second one.
+See stories.md's "Run Beat" section for the full field-by-field contract and
+the web `GMAdjudicationPanel` Run Beat tab's "Start siege" affordance.
 
 ## Web surface (#2009)
 

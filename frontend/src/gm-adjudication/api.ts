@@ -13,6 +13,7 @@ import type {
   ChallengeTemplateCatalogEntry,
   CheckTypeCatalogEntry,
   ConditionTemplateCatalogEntry,
+  DiscoveryResult,
   GMSummonOfferEntry,
   ItemTemplateCatalogEntry,
   SituationTemplateCatalogEntry,
@@ -76,4 +77,19 @@ export async function fetchSummonOfferInbox(): Promise<GMSummonOfferEntry[]> {
   const res = await apiFetch('/api/gm/summon-offers/');
   await throwOnBadResponse(res, 'Failed to load pending summons');
   return (await res.json()) as GMSummonOfferEntry[];
+}
+
+/**
+ * GET /api/gm/discovery/: kind-first catalog browse (#3564). Empty q =
+ * kinds only. Same search as telnet `setsituation find`.
+ */
+export async function getDiscovery(q: string, risk: string | null): Promise<DiscoveryResult> {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (risk) params.set('risk', risk);
+  const qs = params.toString();
+  const query = qs ? `?${qs}` : '';
+  const res = await apiFetch(`/api/gm/discovery/${query}`);
+  await throwOnBadResponse(res, 'Failed to load discovery catalog');
+  return (await res.json()) as DiscoveryResult;
 }

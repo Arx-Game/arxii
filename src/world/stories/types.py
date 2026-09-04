@@ -184,7 +184,6 @@ class EligibleTransitionEntry(TypedDict):
     """A single eligible Transition surfaced in the GM queue."""
 
     transition_id: int
-    mode: str
 
 
 class EpisodeReadyEntry(TypedDict):
@@ -363,11 +362,41 @@ class StakesReadinessReport:
     is_ready: the contract is complete enough to activate at declared risk;
         False means activation auto-downgrades effective risk to NONE.
     problems: human-readable reasons is_ready is False (empty when ready).
+    advisories: informational notes that never affect is_ready - e.g. a pool
+        with no row of one polarity, so an in-range clamp still fires nothing
+        on that side (#3559). Empty when there's nothing to flag.
     """
 
     is_staked: bool
     is_ready: bool
     problems: tuple[str, ...] = ()
+    # Consumer: the GM readiness endpoint #3562 adds. This branch (#3559)
+    # deliberately adds only the data - no endpoint surfaces it yet.
+    advisories: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RoutingReport:
+    """Authoring-time routing report for one episode (#3563). Advisory only.
+
+    ``dead_ends``: failure-shaped outcomes (FAILURE, EXPIRED with a deadline,
+    a stake's LOSS) that no outbound transition accepts, one line each.
+    ``ambiguities``: pairs of outbound transitions whose rules never
+    contradict, so both could be eligible at once (lowest (order, pk) wins,
+    #3565). ``ambiguous_pairs`` carries the same pairs as ids.
+    """
+
+    dead_ends: tuple[str, ...] = ()
+    ambiguities: tuple[str, ...] = ()
+    ambiguous_pairs: tuple[tuple[int, int], ...] = ()
+
+    @property
+    def problems(self) -> tuple[str, ...]:
+        return self.dead_ends + self.ambiguities
+
+    @property
+    def is_ambiguous(self) -> bool:
+        return bool(self.ambiguous_pairs)
 
 
 @dataclass(frozen=True)

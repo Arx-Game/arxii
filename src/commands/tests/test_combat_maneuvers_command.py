@@ -15,6 +15,14 @@ from actions.constants import ActionBackend
 from actions.types import ActionResult, DispatchResult
 from commands.combat_maneuvers import CmdCombat
 from commands.exceptions import CommandError
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
+)
+from world.combat.models import PendingOpponentAttack
 
 _DISPATCH = "commands.command.dispatch_player_action"
 
@@ -112,6 +120,126 @@ class CmdCombatRoutingTests(TestCase):
         cmd.caller.msg.assert_called_once()
         self.assertIn("Combat actions", cmd.caller.msg.call_args.args[0])
 
+    def test_bare_combat_lists_pending_windups(self) -> None:
+        cmd = _make_cmd("")
+        participant = MagicMock()
+        participant.encounter.round_number = 2
+        pending = MagicMock()
+        pending.target_id = 1
+        pending.opponent.name = "Ogre"
+        pending.target.character_sheet.character = "Kira"
+        pending.resolves_round = 3
+        pending.called_out = True
+        pending.downgrades = 1
+        with (
+            patch.object(cmd, "_combat_participant_or_none", return_value=participant),
+            patch.object(cmd, "_render_resource_state", return_value=[]),
+            patch("world.combat.models.CombatRoundAction.objects") as actions,
+            patch.object(cmd, "_pending_windups", return_value=[pending]),
+        ):
+            actions.select_related.return_value.filter.return_value.first.return_value = None
+            cmd.func()
+        text = cmd.caller.msg.call_args.args[0]
+        self.assertIn("Wind-ups", text)
+        self.assertIn("Ogre -> Kira, lands in 1 (called out, 1 stagger)", text)
+
+
+class CmdCombatPendingWindupsQueryTests(TestCase):
+    """DB-backed coverage of `_pending_windups`' scope/select_related/order (#3572).
+
+    The mock-based hub test above never exercises the real ORM query. This
+    covers encounter scoping, `select_related` (via a zero-query assertion on
+    the nested attributes the render step reads), and the `resolves_round,
+    id` ordering.
+    """
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(round_number=2)
+        pool = ThreatPoolFactory()
+        self.entry = ThreatPoolEntryFactory(pool=pool)
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter, threat_pool=pool, name="Ogre"
+        )
+        self.target = CombatParticipantFactory(encounter=self.encounter)
+
+    def _pending(self, encounter: object, **overrides: object) -> PendingOpponentAttack:
+        fields = {
+            "encounter": encounter,
+            "opponent": self.opponent,
+            "threat_entry": self.entry,
+            "target": self.target,
+            "declared_round": 1,
+            "resolves_round": 2,
+        }
+        fields.update(overrides)
+        return PendingOpponentAttack.objects.create(**fields)
+
+    def test_scopes_to_encounter_and_orders_by_round_then_id(self) -> None:
+        row_round_4 = self._pending(self.encounter, resolves_round=4)
+        row_round_2_first = self._pending(self.encounter, resolves_round=2)
+        row_round_2_second = self._pending(self.encounter, resolves_round=2)
+        other_encounter = CombatEncounterFactory()
+        self._pending(other_encounter, declared_round=0, resolves_round=1)
+
+        result = CmdCombat._pending_windups(self.encounter)
+
+        self.assertEqual(result, [row_round_2_first, row_round_2_second, row_round_4])
+        # select_related("opponent", "target__character_sheet__character") must
+        # make these nested reads free (no N+1 per wind-up row).
+        with self.assertNumQueries(0):
+            _ = result[0].opponent.name
+            _ = str(result[0].target.character_sheet.character)
+
+
+class CmdCombatRenderWindupLinesTests(TestCase):
+    """DB-backed coverage of `_render_windup_lines`' formatting branches (#3572)."""
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(round_number=2)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        pool = ThreatPoolFactory()
+        self.entry = ThreatPoolEntryFactory(pool=pool)
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter, threat_pool=pool, name="Ogre"
+        )
+        self.target = CombatParticipantFactory(encounter=self.encounter)
+
+    def _pending(self, **overrides: object) -> PendingOpponentAttack:
+        fields = {
+            "encounter": self.encounter,
+            "opponent": self.opponent,
+            "threat_entry": self.entry,
+            "target": self.target,
+            "declared_round": 1,
+            "resolves_round": 2,
+        }
+        fields.update(overrides)
+        return PendingOpponentAttack.objects.create(**fields)
+
+    def test_render_covers_zero_round_plural_stagger_no_notes_and_no_target(self) -> None:
+        # resolves_round == the current round, no notes: "lands this round", no "(...)".
+        lands_now = self._pending(resolves_round=2, called_out=False, downgrades=0)
+        # Plural stagger count, no called-out note.
+        staggers = self._pending(resolves_round=5, called_out=False, downgrades=2)
+        # Room-targeting (target=None): "no one in particular".
+        no_target = self._pending(target=None, resolves_round=3)
+
+        lines = CmdCombat._render_windup_lines(
+            self.participant,
+            [lands_now, staggers, no_target],
+        )
+
+        target_name = str(self.target.character_sheet.character)
+        self.assertEqual(
+            lines,
+            [
+                "|wWind-ups|n:",
+                f"  Ogre -> {target_name}, lands this round",
+                f"  Ogre -> {target_name}, lands in 3 (2 staggers)",
+                "  Ogre -> no one in particular, lands in 1",
+            ],
+        )
+
 
 class CmdCombatArgResolutionTests(TestCase):
     def test_cover_resolves_ally_kwarg(self) -> None:
@@ -131,6 +259,22 @@ class CmdCombatArgResolutionTests(TestCase):
         cmd = _make_cmd("interpose")
         cmd._subverb, cmd._rest = "interpose", ""
         self.assertEqual(cmd.resolve_action_args(), {"ally_participant_id": None})
+
+    def test_interpose_soulfray_token_sets_consent(self) -> None:
+        cmd = _make_cmd("interpose Kira with Aegis Field soulfray")
+        with (
+            patch.object(cmd, "_resolve_ally_pk", return_value=5),
+            patch.object(cmd, "_find_technique_id", return_value=7),
+        ):
+            kwargs = cmd._resolve_interpose_args("Kira with Aegis Field soulfray")
+        self.assertEqual(kwargs["ally_participant_id"], 5)
+        self.assertEqual(kwargs["technique_id"], 7)
+        self.assertTrue(kwargs["confirm_soulfray_risk"])
+
+    def test_interpose_without_token_has_no_consent_key(self) -> None:
+        cmd = _make_cmd("interpose")
+        kwargs = cmd._resolve_interpose_args("")
+        self.assertNotIn("confirm_soulfray_risk", kwargs)
 
     def test_combo_resolves_combo_kwarg(self) -> None:
         cmd = _make_cmd("combo Whirlwind")

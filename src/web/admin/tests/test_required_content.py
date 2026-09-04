@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from web.admin.tuning import required_content as rc
 from world.conditions.factories import ConditionTemplateFactory
+from world.game_clock.factories import GameClockFactory
 
 
 def _dep(key: str, probe: rc.ContentProbe, tier: rc.DependencyTier) -> rc.ContentDependency:
@@ -235,6 +236,78 @@ class TestRealDeclarations(TestCase):
             with self.subTest(key=dep.key):
                 self.assertNotEqual(dep.label, dep.probe.model_label())
 
+    def test_base_model_account_rows_are_a_required_dependency(self) -> None:
+        """An account whose typeclass path is the base AccountDB model 500s every persona-aware
+        endpoint (Sentry ARX2-8). Django's ``create_superuser`` still makes them,
+        so the ops panel has to say so rather than let the next one surface as a
+        Sentry issue."""
+        from evennia.accounts.models import AccountDB
+
+        dep = next(d for d in rc._declarations() if d.key == "typeclassed-accounts")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        self.assertTrue(dep.probe.resolve(None).present)
+        AccountDB.objects.create_superuser("rc_base_root", "rcbase@example.com", "pw-123456")
+        result = dep.probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("rc_base_root", result.detail)
+
+    def test_mfa_secrets_key_probe_reports_a_key_that_cannot_decrypt(self) -> None:
+        """A rotated-without-re-encrypt key locks every 2FA user out (#3591, ADR-0267)."""
+        from allauth.mfa.models import Authenticator
+        from cryptography.fernet import Fernet
+        from django.test import override_settings
+
+        from evennia_extensions.factories import AccountFactory
+        from evennia_extensions.mfa_adapter import ArxMFAAdapter
+
+        dep = next(d for d in rc._declarations() if d.key == "mfa-secrets-key")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        # No rows yet: a parseable key is enough.
+        self.assertTrue(dep.probe.resolve(None).present)
+        account = AccountFactory(username="rc_mfa_user")
+        Authenticator.objects.create(
+            user=account,
+            type=Authenticator.Type.TOTP,
+            data={"secret": ArxMFAAdapter().encrypt("JBSWY3DPEHPK3PXP")},
+        )
+        self.assertTrue(dep.probe.resolve(None).present)
+        with override_settings(MFA_SECRETS_KEY=Fernet.generate_key().decode()):
+            result = dep.probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("MFA_SECRETS_KEY", result.detail)
+        with override_settings(MFA_SECRETS_KEY="not-a-key"):
+            self.assertFalse(dep.probe.resolve(None).present)
+
+    def test_game_clock_singleton_is_a_required_dependency(self) -> None:
+        """An unset clock 503s `GET /api/clock/` and blanks every IC-date reader.
+
+        Seen on play.arx2.com 2026-09-02: the Hall's Time plate fell back to
+        "frozen" and nothing on the ops dashboard said why.
+        """
+        dep = next(d for d in rc._declarations() if d.key == "game-clock")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        self.assertIsInstance(dep.probe, rc.AnyRowProbe)
+        self.assertEqual(dep.probe.model_label(), "GameClock")
+        # Break the invariant and watch the probe say so, then seed and watch it clear.
+        self.assertFalse(dep.probe.resolve(None).present)
+        GameClockFactory()
+        self.assertTrue(dep.probe.resolve(None).present)
+
+    def test_active_beginning_without_upbringing_is_reported(self) -> None:
+        """A Beginning with no active Upbringing strands a player in Lineage (#3617)."""
+        from world.character_creation.factories import BeginningsFactory, OriginTemplateFactory
+
+        lonely = BeginningsFactory(name="Lonely")
+        key = "character_creation.beginnings_have_upbringing"
+        dep = next(d for d in rc._declarations() if d.key == key)
+        result = dep.probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("Lonely", result.missing)
+
+        OriginTemplateFactory(beginning=lonely)
+        result = dep.probe.resolve(None)
+        self.assertNotIn("Lonely", result.missing)
+
     def test_collector_runs_against_the_real_table(self) -> None:
         snapshot = rc.collect_required_content()
         total = (
@@ -387,6 +460,79 @@ class TestAudereMajoraThresholdsProbe(TestCase):
         for level in (5, 10, 15, 20):
             ensure_audere_majora_threshold(boundary_level=level)
         result = rc._probe_audere_majora_thresholds()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestEncounterOutcomeMappingsProbe(TestCase):
+    """Every EncounterOutcome x RiskLevel pair must have a mapping row (#3559, #3565).
+
+    VICTORY/DEFEAT grade a story beat; FLED/ABANDONED grade a scenario
+    ENCOUNTER option's route instead (#3565) - the probe covers all four
+    values either way.
+    """
+
+    def test_missing_when_one_pair_is_absent(self) -> None:
+        from world.combat.constants import EncounterOutcome, RiskLevel
+        from world.combat.models import EncounterOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Missing Pair Tier", success_level=1)
+        for outcome in EncounterOutcome.values:
+            for risk in RiskLevel.values:
+                if outcome == EncounterOutcome.DEFEAT and risk == RiskLevel.LETHAL:
+                    continue  # deliberately left absent
+                EncounterOutcomeMapping.objects.create(
+                    outcome=outcome, risk_level=risk, check_outcome=tier
+                )
+        result = rc._probe_encounter_outcome_mappings()
+        self.assertFalse(result.present)
+        self.assertIn("defeat/lethal", result.missing)
+
+    def test_present_when_every_pair_is_covered(self) -> None:
+        from world.combat.constants import EncounterOutcome, RiskLevel
+        from world.combat.models import EncounterOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Complete Pair Tier", success_level=1)
+        for outcome in EncounterOutcome.values:
+            for risk in RiskLevel.values:
+                EncounterOutcomeMapping.objects.create(
+                    outcome=outcome, risk_level=risk, check_outcome=tier
+                )
+        result = rc._probe_encounter_outcome_mappings()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestBattleOutcomeMappingsProbe(TestCase):
+    """Every BattleOutcome except UNRESOLVED must have a mapping row (#3559)."""
+
+    def test_missing_when_one_outcome_is_absent(self) -> None:
+        from world.battles.constants import BattleOutcome
+        from world.battles.models import BattleOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Missing Outcome Tier", success_level=1)
+        for outcome in BattleOutcome.values:
+            if outcome in (BattleOutcome.UNRESOLVED, BattleOutcome.DEFENDER_DECISIVE):
+                continue  # UNRESOLVED is never graded; DEFENDER_DECISIVE deliberately absent
+            BattleOutcomeMapping.objects.create(outcome=outcome, check_outcome=tier)
+        result = rc._probe_battle_outcome_mappings()
+        self.assertFalse(result.present)
+        self.assertIn(BattleOutcome.DEFENDER_DECISIVE, result.missing)
+
+    def test_present_when_every_resolved_outcome_is_covered(self) -> None:
+        from world.battles.constants import BattleOutcome
+        from world.battles.models import BattleOutcomeMapping
+        from world.traits.models import CheckOutcome
+
+        tier = CheckOutcome.objects.create(name="Complete Outcome Tier", success_level=1)
+        for outcome in BattleOutcome.values:
+            if outcome == BattleOutcome.UNRESOLVED:
+                continue
+            BattleOutcomeMapping.objects.create(outcome=outcome, check_outcome=tier)
+        result = rc._probe_battle_outcome_mappings()
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
 

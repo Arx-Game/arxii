@@ -63,6 +63,26 @@ _INTO_SEPARATOR = " into "
 # omitting the "into" clause entirely.
 _REDIRECT_AWAY_KEYWORD = "away"
 
+# Trailing consent token (#3573): ``interpose ... soulfray`` records the
+# guardian's consent to keep the reaction firing past zero anima at the cost
+# of Soulfray. Stripped off the raw text before the ally/with/into parsing.
+_SOULFRAY_TOKEN = "soulfray"  # noqa: S105 - a maneuver keyword, not a credential
+
+
+def _split_padded(text: str, separator: str) -> tuple[str, str] | None:
+    """Split ``text`` on ``separator``, padding so a leading clause may be empty.
+
+    Padding lets a bare ``with <technique>`` match the " with " separator at
+    position 0. Both slices come off the SAME padded string, so the indexes stay
+    consistent. Returns ``None`` when the separator is absent.
+    """
+    padded = f" {text} "
+    index = padded.lower().find(separator)
+    if index == -1:
+        return None
+    return padded[:index].strip(), padded[index + len(separator) :].strip()
+
+
 _NOT_IN_ACTIVE_ROUND = "You are not in an active combat round."
 
 # ``_require_rest`` argument-description literal, shared by cover/succor/rally.
@@ -76,11 +96,13 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat                      - show your combat status + available actions
         combat flee                 - declare a desperate flee this round
         combat cover <ally>         - cover an ally's escape
-        combat interpose [ally] [with <technique>] [into <destination>] - guard an
-                                     ally (or any ally) from harm, optionally carrying a
+        combat interpose [ally] [with <technique>] [into <destination>] [soulfray] - guard
+                                     an ally (or any ally) from harm, optionally carrying a
                                      known protective technique; a REDIRECT technique's
                                      saved damage destination (enemy name, object name,
                                      or "away", the default) is declared with "into"
+                                     - add "soulfray" to keep guarding past zero anima at
+                                     the cost of Soulfray
         combat succor <ally>        - shelter an ally from environmental hazards
         combat use <item> [on <target>] - use a held on-use item this round
         combat rally <ally>         - inspire an ally, bolstering their next action
@@ -126,7 +148,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         return ActionRef(backend=ActionBackend.REGISTRY, registry_key=_SUBVERBS[self._subverb])
 
-    def resolve_action_args(self) -> dict[str, Any]:  # noqa: PLR0911
+    def resolve_action_args(self) -> dict[str, Any]:
         """Resolve name arguments (ally / opponent / combo) into dispatch kwargs."""
         if self._subverb == "cover":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
@@ -176,34 +198,40 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         string way: ``into away`` (or omitting the clause entirely) is the
         default fallback; any other name resolves first against an active
         opponent, then a room object, in `_resolve_redirect_destination`.
+
+        A trailing ``soulfray`` token (#3573) records the guardian's consent
+        to keep the reaction firing past zero anima at the cost of Soulfray;
+        stripped off the raw text before any of the above parsing runs.
         """
-        # Pad with spaces so a bare "with <technique>" (no ally clause) still
-        # matches the " with " separator at position 0; both slices come off the
-        # SAME padded string so the indexes stay consistent.
-        padded = f" {text} "
-        ally_text = text
-        rest_text = ""
-        with_index = padded.lower().find(_WITH_SEPARATOR)
-        if with_index != -1:
-            ally_text = padded[:with_index].strip()
-            rest_text = padded[with_index + len(_WITH_SEPARATOR) :].strip()
+        text = text.strip()
+        consent = text.lower() == _SOULFRAY_TOKEN or text.lower().endswith(f" {_SOULFRAY_TOKEN}")
+        if consent:
+            text = text[: -len(_SOULFRAY_TOKEN)].strip()
+
+        ally_text, rest_text = text, ""
+        with_clause = _split_padded(text, _WITH_SEPARATOR)
+        if with_clause is not None:
+            ally_text, rest_text = with_clause
             if not rest_text:
                 msg = "Usage: combat interpose [ally] with <technique> [into <destination>]."
                 raise CommandError(msg)
 
-        technique_text = rest_text
-        destination_text = ""
-        if rest_text:
-            padded_rest = f" {rest_text} "
-            into_index = padded_rest.lower().find(_INTO_SEPARATOR)
-            if into_index != -1:
-                technique_text = padded_rest[:into_index].strip()
-                destination_text = padded_rest[into_index + len(_INTO_SEPARATOR) :].strip()
-                if not technique_text or not destination_text:
-                    msg = "Usage: combat interpose [ally] with <technique> into <destination>."
-                    raise CommandError(msg)
+        technique_text, destination_text = rest_text, ""
+        into_clause = _split_padded(rest_text, _INTO_SEPARATOR) if rest_text else None
+        if into_clause is not None:
+            technique_text, destination_text = into_clause
+            if not technique_text or not destination_text:
+                msg = "Usage: combat interpose [ally] with <technique> into <destination>."
+                raise CommandError(msg)
 
-        ally_text = ally_text.strip()
+        return self._interpose_kwargs(
+            ally_text.strip(), technique_text, destination_text, consent=consent
+        )
+
+    def _interpose_kwargs(
+        self, ally_text: str, technique_text: str, destination_text: str, *, consent: bool
+    ) -> dict[str, Any]:
+        """Turn the parsed interpose clauses into the declare_interpose payload."""
         kwargs: dict[str, Any] = {
             "ally_participant_id": self._resolve_ally_pk(ally_text) if ally_text else None,
         }
@@ -211,6 +239,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             kwargs["technique_id"] = self._find_technique_id(technique_text)
         if destination_text:
             kwargs.update(self._resolve_redirect_destination(destination_text))
+        if consent:
+            kwargs["confirm_soulfray_risk"] = True
         return kwargs
 
     def _resolve_redirect_destination(self, name: str) -> dict[str, Any]:
@@ -461,11 +491,49 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             condition__name="Berserk",
         ).first()
 
+    @staticmethod
+    def _pending_windups(encounter: Any) -> list[Any]:
+        """Pending wind-ups on *encounter*, soonest-landing first (#3572)."""
+        from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+
+        return list(
+            PendingOpponentAttack.objects.filter(encounter=encounter)
+            .select_related("opponent", "target__character_sheet__character")
+            .order_by("resolves_round", "id")
+        )
+
+    @staticmethod
+    def _render_windup_lines(participant: Any, pending: list[Any]) -> list[str]:
+        if not pending:
+            return []
+        from world.combat.constants import WINDUP_NO_TARGET_LABEL  # noqa: PLC0415
+
+        round_number = participant.encounter.round_number
+        lines = ["|wWind-ups|n:"]
+        for row in pending:
+            target = (
+                str(row.target.character_sheet.character)
+                if row.target_id
+                else WINDUP_NO_TARGET_LABEL
+            )
+            left = max(row.resolves_round - round_number, 0)
+            landing = "lands this round" if left == 0 else f"lands in {left}"
+            notes = []
+            if row.called_out:
+                notes.append("called out")
+            if row.downgrades:
+                plural = "" if row.downgrades == 1 else "s"
+                notes.append(f"{row.downgrades} stagger{plural}")
+            suffix = f" ({', '.join(notes)})" if notes else ""
+            lines.append(f"  {row.opponent.name} -> {target}, {landing}{suffix}")
+        return lines
+
     def _show_status_hub(self) -> None:
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally] [with <technique>] [into <dest>], "
+            "flee, cover <ally>, "
+            "interpose [ally] [with <technique>] [into <dest>] [soulfray], "
             "succor <ally>, "
             "use <item> [on <target>], "
             "rally <ally>, demoralize <opp>, taunt <opp>, parley <opp>, "
@@ -498,4 +566,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
                 ready = "ready" if action.is_ready else "not ready"
                 maneuver = action.maneuver or "action"
                 lines.append(f"Declared: {maneuver} ({ready}).")
+            lines.extend(
+                self._render_windup_lines(participant, self._pending_windups(participant.encounter))
+            )
         self.msg("\n".join(lines))

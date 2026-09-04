@@ -9,6 +9,11 @@ Anchor-based IC time derivation. IC time = `anchor_ic_time + (now - anchor_real_
 - `anchor_real_time`, `anchor_ic_time` — the anchor pair
 - `time_ratio` — IC seconds per real second (default 3.0)
 - `paused` — emergency stop
+- **Not seeded.** `GameClock.get_active()` returns `None` until staff create the row:
+  Django admin (add is allowed only while no row exists) or `POST /api/clock/adjust/`.
+  While absent, `GET /api/clock/` answers 503 `NOT_CONFIGURED` and every IC-date reader
+  gets `None`; the ops dashboard's Required-content panel flags it as `game-clock`
+  (`web/admin/tuning/required_content.py`, REQUIRED tier).
 
 ### GameClockHistory
 Audit log for clock adjustments. Stores old/new anchor values, who changed it, and why.

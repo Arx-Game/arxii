@@ -1,15 +1,18 @@
 """Mission → Story Beat seam.
 
 When a ``MissionInstance`` with ``source_beat`` set reaches a terminal route,
-``on_mission_complete_for_beat`` completes the linked ``Beat`` automatically:
-
-  * A graded ``outcome_tier`` (CHECK/JOINT terminal) drives
-    ``record_outcome_tier_completion`` (PR1), which derives
-    ``BeatOutcome.SUCCESS``/``FAILURE`` from ``success_level`` and fires the
-    beat's consequence pool at the matching tier.
-  * A null ``outcome_tier`` (BRANCH terminal, or ``route=None``) drives
-    ``record_gm_marked_outcome`` with ``SUCCESS`` — reaching a terminal branch
-    node means the mission was navigated to completion.
+``on_mission_complete_for_beat`` completes the linked ``Beat`` automatically.
+``beat_outcome_for_route`` (#3560, #3565) decides what the run reports: the
+terminal route's authored ``beat_outcome`` wins when set; otherwise a graded
+route derives SUCCESS/FAILURE from the tier's ``success_level`` sign, and a
+tier-less terminal (BRANCH, or ``route=None``) is SUCCESS - reaching a
+terminal node means the party navigated the scenario to an ending. An
+OUTCOME_TIER beat records that outcome (plus the graded tier, when there is
+one) via ``record_scenario_outcome``; any other predicate type still routes
+through ``record_gm_marked_outcome``. Either way, the option that ended the
+run is threaded through as ``outcome_key`` so an authored
+``TransitionRequiredOutcome.required_outcome_key`` downstream of the beat can
+branch on which ending fired.
 
 Free-run instances (``source_beat_id is None``) are a no-op, as before. The
 trigger-record log (``MissionBeatTriggerRecord``) is retained for
@@ -17,11 +20,10 @@ observability.
 
 The three deferred questions from the original 5b.3 stub are now resolved:
 
-  1. Which ``BeatOutcome``: derived from ``outcome_tier.success_level`` sign
-     (graded) or ``SUCCESS`` (BRANCH), matching PR1's convention.
+  1. Which ``BeatOutcome``: ``beat_outcome_for_route`` above.
   2. ``required_mission``/``predicate_type``: independent columns; the engine
-     dispatches on ``route.outcome_tier`` presence. Mismatches are logged,
-     not raised. No new predicate type.
+     dispatches on ``beat.predicate_type``. Mismatches are logged, not
+     raised. No new predicate type.
   3. ``StoryProgress`` scope: resolved via ``beat.episode.chapter.story`` →
      ``get_active_progress_for_story``. ``None`` (story not started) is a
      safe no-op.
@@ -40,7 +42,10 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from world.character_sheets.models import CharacterSheet
-    from world.missions.models import MissionInstance, MissionOptionRoute
+    from world.missions.models import MissionInstance, MissionOption, MissionOptionRoute
+    from world.scenes.models import Persona
+    from world.stories.constants import BeatOutcome
+    from world.traits.models import CheckOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +53,31 @@ logger = logging.getLogger(__name__)
 _MISSION_BEAT_TRIGGERS: list[MissionBeatTriggerRecord] = []
 
 
+def beat_outcome_for_route(
+    route: MissionOptionRoute | None,
+) -> tuple[BeatOutcome, CheckOutcome | None]:
+    """What the linked beat records for a terminal route (#3560).
+
+    Authored ``beat_outcome`` wins. Otherwise a graded route derives from the
+    tier's success_level, and a tier-less terminal (BRANCH, or a terminal with
+    no route row) is SUCCESS: the party navigated the scenario to an ending.
+    """
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+
+    tier = route.outcome_tier if route is not None and route.outcome_tier_id is not None else None
+    if route is not None and route.beat_outcome:
+        return BeatOutcome(route.beat_outcome), tier
+    if tier is not None:
+        return (BeatOutcome.SUCCESS if tier.success_level > 0 else BeatOutcome.FAILURE), tier
+    return BeatOutcome.SUCCESS, None
+
+
 def on_mission_complete_for_beat(
     instance: MissionInstance,
     *,
     route: MissionOptionRoute | None = None,
+    option: MissionOption | None = None,
+    beat_outcome: BeatOutcome | None = None,
 ) -> MissionBeatTriggerRecord | None:
     """Record a Mission → Beat terminal trigger and complete the linked Beat.
 
@@ -60,8 +86,16 @@ def on_mission_complete_for_beat(
     Args:
         instance: The terminating ``MissionInstance``.
         route: The terminal ``MissionOptionRoute`` (or ``None`` for a BRANCH
-            terminal that has no route object). Its ``outcome_tier``
-            determines which completion path fires.
+            terminal that has no route object). Feeds ``beat_outcome_for_route``.
+        option: The ``MissionOption`` that ended the run. Its ``key`` is
+            recorded as the beat completion's ``outcome_key`` (#3560) so an
+            authored ``required_outcome_key`` transition downstream can route
+            on which ending fired. ``None`` when no single option resolved
+            the terminal (defensive only - every real terminal has one).
+        beat_outcome: When given (#3568, a track node's authored terminal
+            outcome), overrides the outcome ``beat_outcome_for_route`` would
+            otherwise derive from ``route`` - the route's graded tier (when
+            any) still records as ``outcome_tier``.
 
     Returns:
         The recorded ``MissionBeatTriggerRecord``, or ``None`` when the
@@ -75,31 +109,48 @@ def on_mission_complete_for_beat(
         triggered_at=timezone.now(),
     )
     _MISSION_BEAT_TRIGGERS.append(record)
-    _complete_linked_beat(instance, route)
+    _complete_linked_beat(instance, route, option, beat_outcome=beat_outcome)
     return record
+
+
+def _run_personas(instance: MissionInstance) -> list[Persona]:
+    """Primary personas of the run's participants, for GROUP-scope legend pools."""
+    return [
+        participant.character.primary_persona
+        for participant in instance.participants.select_related("character")
+    ]
 
 
 def _complete_linked_beat(
     instance: MissionInstance,
     route: MissionOptionRoute | None,
+    option: MissionOption | None,
+    *,
+    beat_outcome: BeatOutcome | None = None,
 ) -> None:
     """Complete the instance's linked Beat via the stories service.
 
-    Resolves ``StoryProgress`` from the beat's story chain, then dispatches:
+    Resolves ``StoryProgress`` from the beat's story chain, derives the
+    ending via ``beat_outcome_for_route``, then dispatches:
 
-      * graded ``outcome_tier`` → ``record_outcome_tier_completion``
-      * no tier (``route is None`` or ``route.outcome_tier is None``) →
-        ``record_gm_marked_outcome(SUCCESS)``
+      * OUTCOME_TIER beat → ``record_scenario_outcome`` (carries the graded
+        tier, when there is one, plus ``option.key`` as ``outcome_key``).
+      * any other predicate type → ``record_gm_marked_outcome`` (also carries
+        ``outcome_key``; GM_MARKED beats still resolve through the GM's own
+        manual call otherwise).
+
+    ``beat_outcome`` (#3568), when given, replaces the outcome derived from
+    ``route``; the route's tier (if any) still records as ``outcome_tier``.
 
     Predicate-type mismatches and missing progress are logged and skipped —
     a beat-completion failure must never roll back the mission completion
     (the instance is already COMPLETE when this runs).
     """
-    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+    from world.stories.constants import BeatOutcome, BeatPredicateType  # noqa: PLC0415
     from world.stories.models import Beat  # noqa: PLC0415
     from world.stories.services.beats import (  # noqa: PLC0415
         record_gm_marked_outcome,
-        record_outcome_tier_completion,
+        record_scenario_outcome,
     )
     from world.stories.services.progress import (  # noqa: PLC0415
         get_active_progress_for_story,
@@ -135,28 +186,37 @@ def _complete_linked_beat(
         )
         return
 
-    has_tier = route is not None and route.outcome_tier_id is not None
+    outcome, tier = beat_outcome_for_route(route)
+    if beat_outcome is not None:
+        outcome = beat_outcome
+    key = option.key if option is not None else ""
+    participants = _run_personas(instance)
 
     try:
-        if has_tier:
-            record_outcome_tier_completion(
+        if beat.predicate_type == BeatPredicateType.OUTCOME_TIER:
+            record_scenario_outcome(
                 progress=progress,
                 beat=beat,
-                outcome_tier=route.outcome_tier,
+                outcome=outcome,
+                outcome_tier=tier,
+                outcome_key=key,
+                participants=participants,
             )
         else:
             record_gm_marked_outcome(
                 progress=progress,
                 beat=beat,
-                outcome=BeatOutcome.SUCCESS,
+                outcome=outcome,
+                outcome_key=key,
+                participants=participants,
             )
     except ValueError:
         logger.warning(
             "MissionBeat: predicate-type mismatch for beat %s "
-            "(type=%s, has_tier=%s); skipping completion.",
+            "(type=%s, outcome=%s); skipping completion.",
             beat.pk,
             beat.predicate_type,
-            has_tier,
+            outcome,
         )
 
 

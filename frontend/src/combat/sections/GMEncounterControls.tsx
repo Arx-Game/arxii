@@ -252,6 +252,16 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
     });
   }
 
+  const renderPause = () => {
+    if (pause.isPending) {
+      return 'Working…';
+    }
+    if (encounter.is_paused) {
+      return 'Unpause';
+    }
+    return 'Pause';
+  };
+
   return (
     <div
       className="space-y-3 rounded-md border border-border bg-card p-3"
@@ -271,7 +281,7 @@ function ActiveGMControls({ encounter }: { encounter: EncounterDetail }) {
           disabled={pause.isPending}
           data-testid="pause-toggle-btn"
         >
-          {pause.isPending ? 'Working…' : encounter.is_paused ? 'Unpause' : 'Pause'}
+          {renderPause()}
         </Button>
       </div>
 

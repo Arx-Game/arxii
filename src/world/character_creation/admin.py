@@ -15,6 +15,7 @@ from world.character_creation.models import (
     DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
+    OriginTemplateSlotChoice,
     StartingArea,
 )
 from world.codex.models import BeginningsCodexGrant
@@ -76,7 +77,6 @@ class BeginningsAdmin(admin.ModelAdmin):
         "starting_area",
         "trust_required",
         "is_active",
-        "family_known",
         "grants_species_languages",
         "species_count",
         "social_rank",
@@ -86,7 +86,6 @@ class BeginningsAdmin(admin.ModelAdmin):
     list_filter = [
         "starting_area",
         "is_active",
-        "family_known",
         "grants_species_languages",
     ]
     search_fields = ["name", "description"]
@@ -103,7 +102,7 @@ class BeginningsAdmin(admin.ModelAdmin):
         (
             "Species Selection",
             {
-                "fields": ["allowed_species", "family_known", "cg_point_cost"],
+                "fields": ["allowed_species", "cg_point_cost"],
                 "description": "Select species (parent species include all subtypes)",
             },
         ),
@@ -136,27 +135,56 @@ class OriginTemplateSlotInline(admin.TabularInline):
     model = OriginTemplateSlot
     extra = 1
     ordering = ["sort_order"]
+    show_change_link = True
+    fields = ["name", "prompt", "applies_to", "allows_text", "is_required", "sort_order"]
 
 
 @admin.register(OriginTemplate)
 class OriginTemplateAdmin(admin.ModelAdmin):
-    """Admin for origin-story templates (#2478)."""
+    """Admin for Upbringings (#2478, #3617)."""
 
-    list_display = ["name", "beginning", "is_active", "sort_order"]
+    list_display = [
+        "name",
+        "beginning",
+        "cg_point_cost",
+        "allows_claim_family",
+        "allows_name_family",
+        "allows_no_family",
+        "is_active",
+        "sort_order",
+    ]
     list_filter = ["is_active", "beginning__starting_area"]
     search_fields = ["name", "frame_narrative"]
     ordering = ["beginning", "sort_order", "name"]
+    filter_horizontal = ["claimable_kinds"]
+    autocomplete_fields = ["named_family_kind"]
     inlines = [OriginTemplateSlotInline]
+
+
+class OriginTemplateSlotChoiceInline(admin.TabularInline):
+    model = OriginTemplateSlotChoice
+    extra = 1
+    ordering = ["sort_order"]
+
+
+@admin.register(OriginTemplateSlot)
+class OriginTemplateSlotAdmin(admin.ModelAdmin):
+    """Prompts get their own page so their choices can be edited inline (#3617)."""
+
+    list_display = ["name", "template", "applies_to", "allows_text", "is_required", "sort_order"]
+    list_filter = ["applies_to", "template__beginning__starting_area"]
+    search_fields = ["name", "prompt"]
+    inlines = [OriginTemplateSlotChoiceInline]
 
 
 @admin.register(CharacterOriginSlot)
 class CharacterOriginSlotAdmin(admin.ModelAdmin):
     """Read-only admin for character origin-slot answers (#2478)."""
 
-    list_display = ["sheet", "slot", "value"]
+    list_display = ["sheet", "slot", "value", "choice"]
     list_filter = ["slot__template__beginning__starting_area"]
     search_fields = ["value"]
-    readonly_fields = ["sheet", "slot", "value"]
+    readonly_fields = ["sheet", "slot", "value", "choice"]
     autocomplete_fields = ["sheet"]
 
 

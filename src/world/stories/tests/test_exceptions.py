@@ -1,7 +1,6 @@
 from django.test import TestCase
 
 from world.stories.exceptions import (
-    AmbiguousTransitionError,
     BeatNotResolvableError,
     NoEligibleTransitionError,
     ProgressionRequirementNotMetError,
@@ -25,10 +24,6 @@ class StoryExceptionTests(TestCase):
         exc = NoEligibleTransitionError()
         self.assertIn("no transition", exc.user_message.lower())
 
-    def test_ambiguous_transition_safe_message(self) -> None:
-        exc = AmbiguousTransitionError()
-        self.assertIn("multiple", exc.user_message.lower())
-
     def test_progression_requirement_not_met_safe_message(self) -> None:
         exc = ProgressionRequirementNotMetError()
         self.assertIn("progression", exc.user_message.lower())
@@ -36,7 +31,6 @@ class StoryExceptionTests(TestCase):
     def test_subclasses_inherit_from_story_error(self) -> None:
         self.assertTrue(issubclass(BeatNotResolvableError, StoryError))
         self.assertTrue(issubclass(NoEligibleTransitionError, StoryError))
-        self.assertTrue(issubclass(AmbiguousTransitionError, StoryError))
         self.assertTrue(issubclass(ProgressionRequirementNotMetError, StoryError))
 
     def test_user_message_does_not_leak_args(self) -> None:

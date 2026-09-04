@@ -15,7 +15,11 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { EntitySearchResult } from '@/components/EntitySearchField';
+import { searchEntries as searchCodexEntriesApi } from '@/codex/api';
 import { throwApiError } from '@/lib/errors';
+import type { MissionTemplate } from '@/missions/types';
+import type { components } from '@/generated/api';
 import type {
   AggregateBeatContribution,
   ApproveClaimBody,
@@ -24,6 +28,7 @@ import type {
   Beat,
   BeatCompletion,
   BeatCreateBody,
+  BeatReadiness,
   BeatUpdateBody,
   CanonReview,
   CanonReviewChangesBody,
@@ -33,6 +38,8 @@ import type {
   ChapterList,
   ClearanceDecisionBody,
   ClearanceResolveBody,
+  ConsequencePoolCatalog,
+  ConsequencePoolDetail,
   ContributeBeatBody,
   CreateEventBody,
   CustodyClearance,
@@ -64,6 +71,21 @@ import type {
   ResolveEpisodeBody,
   SessionRequest,
   StaffWorkloadResponse,
+  Stake,
+  StakeContractActivation,
+  StakeRequestBody,
+  StakeResolution,
+  StakeResolutionRequestBody,
+  StakeResolutionUpdateBody,
+  StakeRewardLine,
+  StakeRewardLineRequestBody,
+  StakeRewardLineUpdateBody,
+  StakeUpdateBody,
+  StakesSummary,
+  PaginatedStakeList,
+  PaginatedStakeResolutionList,
+  PaginatedStakeRewardLineList,
+  PaginatedStakeTemplateList,
   Story,
   StoryCreateBody,
   StoryGMOffer,
@@ -386,6 +408,81 @@ export async function updateBeat(id: number, data: BeatUpdateBody): Promise<Beat
 export async function deleteBeat(id: number): Promise<void> {
   const res = await apiFetch(`/api/beats/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete beat ${id}`);
+}
+
+export interface CreateBeatScenarioBody {
+  name: string;
+  summary: string;
+  risk_tier: number;
+}
+
+/**
+ * POST /api/beats/{id}/scenario/
+ * Returns 201 MissionTemplate on create, 200 when the beat already has one.
+ * 400 on `required_mission` (the beat uses a catalog mission, not a
+ * bespoke scenario) or `name` (taken).
+ */
+export async function createBeatScenario(
+  beatId: number,
+  body: CreateBeatScenarioBody
+): Promise<MissionTemplate> {
+  const res = await apiFetch(`/api/beats/${beatId}/scenario/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to create scenario for beat ${beatId}`);
+  return res.json() as Promise<MissionTemplate>;
+}
+
+/**
+ * GET /api/beats/{id}/readiness/ (#3562) - the GM readiness dashboard for
+ * this beat (Lead GM or staff only). Drives `BeatFormDialog`'s readiness
+ * strip in edit mode.
+ */
+export async function getBeatReadiness(id: number): Promise<BeatReadiness> {
+  const res = await apiFetch(`/api/beats/${id}/readiness/`);
+  if (!res.ok) await throwApiError(res, `Failed to load readiness for beat ${id}`);
+  return res.json() as Promise<BeatReadiness>;
+}
+
+/**
+ * GET /api/stake-activations/?beat=&resolved_at_isnull=true (#3562) - the
+ * beat's open stakes-contract activations, if any. A non-empty result means
+ * the beat's stakes contract (risk / target_level / consequence pools) is
+ * locked: `PATCH /api/beats/{id}/` rejects changes to those fields while an
+ * activation is open. Returns the flattened `results` list, not the raw
+ * paginated envelope - callers only ever want "is there an open one."
+ */
+export async function listOpenBeatActivations(beatId: number): Promise<StakeContractActivation[]> {
+  const res = await apiFetch(`/api/stake-activations/?beat=${beatId}&resolved_at_isnull=true`);
+  if (!res.ok) await throwApiError(res, `Failed to load open activations for beat ${beatId}`);
+  const data = (await res.json()) as PaginatedResponse<StakeContractActivation>;
+  return data.results;
+}
+
+/**
+ * GET /api/magic/consequence-pool-catalog/?scope=beat (#3562) - every
+ * ConsequencePool a beat's success/failure/expired outcome may fire,
+ * widened from the technique-scoped catalog `character-creation/api.ts`'s
+ * `getConsequencePoolCatalog` reads (which only sees children of the two
+ * technique base pools). Feeds `ConsequencePoolPicker`'s `<select>`.
+ */
+export async function listBeatConsequencePools(): Promise<ConsequencePoolCatalog[]> {
+  const res = await apiFetch('/api/magic/consequence-pool-catalog/?scope=beat');
+  if (!res.ok) await throwApiError(res, 'Failed to load consequence pools');
+  return res.json() as Promise<ConsequencePoolCatalog[]>;
+}
+
+/**
+ * GET /api/magic/consequence-pool-catalog/{id}/ (#3562) - a single pool's
+ * resolved entries (parent inheritance plus the pool's own entries), the
+ * preview `ConsequencePoolPicker` renders under its `<select>`.
+ */
+export async function getConsequencePoolDetail(id: number): Promise<ConsequencePoolDetail> {
+  const res = await apiFetch(`/api/magic/consequence-pool-catalog/${id}/`);
+  if (!res.ok) await throwApiError(res, `Failed to load consequence pool ${id}`);
+  return res.json() as Promise<ConsequencePoolDetail>;
 }
 
 // ---------------------------------------------------------------------------
@@ -767,6 +864,11 @@ export interface OutcomeInputBody {
   beat: number;
   /** Beat-level rows only; blank/omitted on stake-level rows (#1770 PR2). */
   required_outcome?: string;
+  /**
+   * Beat-level rows only (#3565): the scenario option key this row routes
+   * on, e.g. "negotiate". Blank/omitted = any option.
+   */
+  required_outcome_key?: string;
   /** Stake-level routing (#1770 PR2): route on the stake's StakeOutcome column. */
   stake?: number;
   required_stake_column?: string;
@@ -775,7 +877,6 @@ export interface OutcomeInputBody {
 export interface SaveTransitionWithOutcomesBody {
   source_episode: number;
   target_episode: number | null;
-  mode: string;
   connection_type: string;
   connection_summary: string;
   order: number;
@@ -1419,4 +1520,261 @@ export async function revokeClearance(id: number): Promise<CustodyClearance> {
     throw err;
   }
   return res.json() as Promise<CustodyClearance>;
+}
+
+// ---------------------------------------------------------------------------
+// Stakes - the stakes-contract editor (#1770 pillars 1/2/3/5/7/8; ASSET
+// subject + npc_regard_delta + transitions_subject_asset widened #3561).
+// Access delegation and locking mirror BeatViewSet's ownership chain and the
+// #3562 open-activation lock; see the ViewSet docstrings in
+// world/stories/views.py for the full gate list.
+// ---------------------------------------------------------------------------
+
+export interface ListStakesParams {
+  beat?: number;
+  subject_kind?: string;
+  severity?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stakes/ */
+export async function listStakes(params?: ListStakesParams): Promise<PaginatedStakeList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stakes/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stakes');
+  return res.json() as Promise<PaginatedStakeList>;
+}
+
+/** POST /api/stakes/ */
+export async function createStake(body: StakeRequestBody): Promise<Stake> {
+  const res = await apiFetch('/api/stakes/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to create stake');
+  return res.json() as Promise<Stake>;
+}
+
+/** PATCH /api/stakes/{id}/ */
+export async function updateStake(id: number, body: StakeUpdateBody): Promise<Stake> {
+  const res = await apiFetch(`/api/stakes/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to update stake ${id}`);
+  return res.json() as Promise<Stake>;
+}
+
+/** DELETE /api/stakes/{id}/ */
+export async function deleteStake(id: number): Promise<void> {
+  const res = await apiFetch(`/api/stakes/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to delete stake ${id}`);
+}
+
+export interface ListStakeResolutionsParams {
+  stake?: number;
+  column?: string;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stake-resolutions/ */
+export async function listStakeResolutions(
+  params?: ListStakeResolutionsParams
+): Promise<PaginatedStakeResolutionList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stake-resolutions/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stake resolutions');
+  return res.json() as Promise<PaginatedStakeResolutionList>;
+}
+
+/** POST /api/stake-resolutions/ */
+export async function createStakeResolution(
+  body: StakeResolutionRequestBody
+): Promise<StakeResolution> {
+  const res = await apiFetch('/api/stake-resolutions/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to create stake resolution');
+  return res.json() as Promise<StakeResolution>;
+}
+
+/** PATCH /api/stake-resolutions/{id}/ */
+export async function updateStakeResolution(
+  id: number,
+  body: StakeResolutionUpdateBody
+): Promise<StakeResolution> {
+  const res = await apiFetch(`/api/stake-resolutions/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to update stake resolution ${id}`);
+  return res.json() as Promise<StakeResolution>;
+}
+
+/** DELETE /api/stake-resolutions/{id}/ */
+export async function deleteStakeResolution(id: number): Promise<void> {
+  const res = await apiFetch(`/api/stake-resolutions/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to delete stake resolution ${id}`);
+}
+
+export interface ListStakeRewardLinesParams {
+  resolution?: number;
+  sink?: string;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stake-reward-lines/ */
+export async function listStakeRewardLines(
+  params?: ListStakeRewardLinesParams
+): Promise<PaginatedStakeRewardLineList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stake-reward-lines/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stake reward lines');
+  return res.json() as Promise<PaginatedStakeRewardLineList>;
+}
+
+/** POST /api/stake-reward-lines/ */
+export async function createStakeRewardLine(
+  body: StakeRewardLineRequestBody
+): Promise<StakeRewardLine> {
+  const res = await apiFetch('/api/stake-reward-lines/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to create stake reward line');
+  return res.json() as Promise<StakeRewardLine>;
+}
+
+/** PATCH /api/stake-reward-lines/{id}/ */
+export async function updateStakeRewardLine(
+  id: number,
+  body: StakeRewardLineUpdateBody
+): Promise<StakeRewardLine> {
+  const res = await apiFetch(`/api/stake-reward-lines/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to update stake reward line ${id}`);
+  return res.json() as Promise<StakeRewardLine>;
+}
+
+/** DELETE /api/stake-reward-lines/{id}/ */
+export async function deleteStakeRewardLine(id: number): Promise<void> {
+  const res = await apiFetch(`/api/stake-reward-lines/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to delete stake reward line ${id}`);
+}
+
+export interface ListStakeTemplatesParams {
+  subject_kind?: string;
+  is_active?: boolean;
+  severity?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/stake-templates/ - the GM-facing stake catalog (read-only here; staff-authored). */
+export async function listStakeTemplates(
+  params?: ListStakeTemplatesParams
+): Promise<PaginatedStakeTemplateList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/stake-templates/${qs}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load stake templates');
+  return res.json() as Promise<PaginatedStakeTemplateList>;
+}
+
+/** GET /api/beats/{id}/stakes-summary/ - what this beat wagers (#1770 pillar 9). */
+export async function getStakesSummary(beatId: number): Promise<StakesSummary> {
+  const res = await apiFetch(`/api/beats/${beatId}/stakes-summary/`);
+  if (!res.ok) await throwApiError(res, `Failed to load stakes summary for beat ${beatId}`);
+  return res.json() as Promise<StakesSummary>;
+}
+
+/**
+ * GET /api/assets/?name= (#3561) - name search over NPCAsset for the stakes
+ * editor's ASSET subject picker. Staff and any GMProfile holder (any level)
+ * see every asset by name; other authenticated users still only see the
+ * assets they personally promoted (world.assets.views.NPCAssetViewSet's
+ * pre-existing "my assets" scope, widened for GM/staff callers) - see that
+ * ViewSet's docstring.
+ */
+export async function searchNpcAssets(query: string): Promise<EntitySearchResult[]> {
+  const res = await apiFetch(`/api/assets/?name=${encodeURIComponent(query)}`);
+  if (!res.ok) await throwApiError(res, 'Failed to search NPC assets');
+  const data = (await res.json()) as PaginatedResponse<components['schemas']['NPCAsset']>;
+  return data.results.map((row) => ({
+    id: row.id,
+    name: row.asset_persona_name,
+    hint: row.status_display,
+  }));
+}
+
+/**
+ * GET /api/items/templates/?name= (#3566) - name search over the
+ * item-template catalog for the ITEM reward-line picker. Mirrors
+ * gm-adjudication/api.ts's getItemTemplateCatalog, adapted to
+ * EntitySearchResult (hint = the template's gold value, the amount the
+ * server pins an ITEM reward line's payout to).
+ */
+export async function searchItemTemplates(query: string): Promise<EntitySearchResult[]> {
+  const params = new URLSearchParams({ name: query });
+  const res = await apiFetch(`/api/items/templates/?${params.toString()}`);
+  if (!res.ok) await throwApiError(res, 'Failed to search item templates');
+  const data = (await res.json()) as PaginatedResponse<components['schemas']['ItemTemplateList']>;
+  return data.results.map((row) => ({
+    id: row.id,
+    name: row.name,
+    hint: String(row.value),
+  }));
+}
+
+/** GET /api/items/templates/{id}/ (#3566) - resolves an item template id to its display name. */
+export async function resolveItemTemplateById(id: number): Promise<EntitySearchResult | null> {
+  const res = await apiFetch(`/api/items/templates/${id}/`);
+  if (!res.ok) return null;
+  const row = (await res.json()) as components['schemas']['ItemTemplateDetail'];
+  return { id: row.id, name: row.name, hint: String(row.value) };
+}
+
+/**
+ * GET /api/clues/search/?q= (#3566) - GM-only clue search for the CLUE
+ * reward-line picker; a bare array response, not paginated. No retrieve-by-id
+ * route exists, so unlike item templates there is no `resolveById` adapter -
+ * an existing CLUE line's name comes from `StakeRewardLine.clue_name` instead.
+ */
+export async function searchClues(query: string): Promise<EntitySearchResult[]> {
+  const res = await apiFetch(`/api/clues/search/?q=${encodeURIComponent(query)}`);
+  if (!res.ok) await throwApiError(res, 'Failed to search clues');
+  const data = (await res.json()) as components['schemas']['ClueSearchResult'][];
+  return data.map((row) => ({ id: row.id, name: row.name, hint: row.target_kind }));
+}
+
+/**
+ * Codex entry search for the CODEX reward-line picker (#3566) - reuses the
+ * codex app's own `searchEntries` rather than a new endpoint.
+ */
+export async function searchCodexEntries(query: string): Promise<EntitySearchResult[]> {
+  const entries = await searchCodexEntriesApi(query);
+  return entries.map((entry) => ({ id: entry.id, name: entry.name }));
 }

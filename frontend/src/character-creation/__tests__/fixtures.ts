@@ -17,6 +17,7 @@ import type {
   Family,
   GiftDetail,
   HeightBand,
+  OriginTemplate,
   Path,
   Resonance,
   ResonanceAssociation,
@@ -38,7 +39,6 @@ export const mockBeginnings: Beginnings = {
   name: 'Normal Upbringing',
   description: 'Raised in the city with a conventional background.',
   art_image: null,
-  family_known: true,
   allowed_species_ids: [1, 2],
   grants_species_languages: true,
   cg_point_cost: 0,
@@ -51,7 +51,6 @@ export const mockBeginningsUnknownFamily: Beginnings = {
   name: 'Sleeper',
   description: 'Awakened from magical slumber with no memory of origins.',
   art_image: null,
-  family_known: false,
   allowed_species_ids: [1, 2, 3],
   grants_species_languages: false,
   cg_point_cost: 0,
@@ -136,7 +135,8 @@ export const mockSpeciesList: Species[] = [mockSpeciesHuman, mockSpeciesElf, moc
 export const mockNobleFamily: Family = {
   id: 1,
   name: 'Valardin',
-  family_type: 'noble',
+  kind: { id: 2, name: 'Noble', styles_as_house: true },
+  influence: 0,
   description: 'An honorable noble house known for martial prowess.',
   born_particle: 'du',
   taken_in_particle: 'dau',
@@ -145,7 +145,8 @@ export const mockNobleFamily: Family = {
 export const mockNobleFamily2: Family = {
   id: 2,
   name: 'Velenosa',
-  family_type: 'noble',
+  kind: { id: 2, name: 'Noble', styles_as_house: true },
+  influence: 0,
   description: 'A cunning noble house with southern roots.',
   born_particle: 'za',
   taken_in_particle: 'zas',
@@ -154,13 +155,147 @@ export const mockNobleFamily2: Family = {
 export const mockCommonerFamily: Family = {
   id: 3,
   name: 'Smith',
-  family_type: 'commoner',
+  kind: { id: 1, name: 'Commoner', styles_as_house: false },
+  influence: 0,
   description: 'A common family of craftspeople.',
   born_particle: '',
   taken_in_particle: '',
 };
 
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
+
+// =============================================================================
+// Upbringings (OriginTemplate, #3617)
+// =============================================================================
+
+export const mockUpbringingNamed: OriginTemplate = {
+  id: 101,
+  name: 'Caretaker family',
+  frame_narrative: 'You were raised by a family who took you in and gave you their name.',
+  is_active: true,
+  sort_order: 1,
+  cg_point_cost: 6,
+  trust_required: 0,
+  allows_claim_family: false,
+  allows_name_family: true,
+  allows_no_family: false,
+  claimable_kind_ids: [],
+  named_family_kind: 1,
+  slots: [
+    {
+      id: 201,
+      name: 'family_trade',
+      prompt: 'What trade did your adoptive family practice?',
+      example: 'Weaving, smithing, farming...',
+      sort_order: 1,
+      is_required: true,
+      applies_to: 'any',
+      allows_text: true,
+      choices: [],
+    },
+  ],
+};
+
+export const mockUpbringingClaim: OriginTemplate = {
+  id: 102,
+  name: 'Ward of the House',
+  frame_narrative: 'You grew up a ward of a noble house, claimed as one of its own.',
+  is_active: true,
+  sort_order: 2,
+  cg_point_cost: 0,
+  trust_required: 0,
+  allows_claim_family: true,
+  allows_name_family: false,
+  allows_no_family: false,
+  claimable_kind_ids: [2],
+  named_family_kind: null,
+  slots: [
+    {
+      id: 202,
+      name: 'upbringing_favor',
+      prompt: 'What favor does the house show you?',
+      example: '',
+      sort_order: 1,
+      is_required: false,
+      applies_to: 'claimed',
+      allows_text: false,
+      choices: [
+        {
+          id: 301,
+          name: 'A private tutor',
+          description: 'A dedicated tutor sharpened your mind.',
+          cg_point_cost: 2,
+          cost_per_influence: 0,
+          sort_order: 1,
+        },
+        {
+          id: 302,
+          name: "A seat at the house's table",
+          description: "Standing scales with the house's reach.",
+          cg_point_cost: 0,
+          cost_per_influence: 1,
+          sort_order: 2,
+        },
+      ],
+    },
+  ],
+};
+
+export const mockUpbringingUnknown: OriginTemplate = {
+  id: 103,
+  name: 'Unknown Origins',
+  frame_narrative: 'Your true family origins are shrouded in mystery.',
+  is_active: true,
+  sort_order: 3,
+  cg_point_cost: 0,
+  trust_required: 0,
+  allows_claim_family: false,
+  allows_name_family: false,
+  allows_no_family: true,
+  claimable_kind_ids: [],
+  named_family_kind: null,
+  slots: [],
+};
+
+/** Allows both claim and name paths, with one shared prompt and one claim-only prompt. */
+export const mockUpbringingMultiPath: OriginTemplate = {
+  id: 104,
+  name: 'Open Upbringing',
+  frame_narrative: 'Your family origins are yours to define.',
+  is_active: true,
+  sort_order: 4,
+  cg_point_cost: 0,
+  trust_required: 0,
+  allows_claim_family: true,
+  allows_name_family: true,
+  allows_no_family: false,
+  claimable_kind_ids: [2],
+  named_family_kind: 1,
+  slots: [
+    {
+      id: 203,
+      name: 'childhood_home',
+      prompt: 'Describe your childhood home.',
+      example: '',
+      sort_order: 1,
+      is_required: false,
+      applies_to: 'any',
+      allows_text: true,
+      choices: [],
+    },
+    {
+      id: 204,
+      name: 'house_expectation',
+      prompt: 'What does the house expect of you?',
+      example: '',
+      sort_order: 2,
+      is_required: false,
+      applies_to: 'claimed',
+      allows_text: true,
+      choices: [],
+    },
+  ],
+};
 
 // =============================================================================
 // Height Bands
@@ -238,6 +373,8 @@ export const mockEmptyDraft: CharacterDraft = {
   birthday_month: null,
   birthday_day: null,
   family: null,
+  selected_origin_template: null,
+  family_path: '',
   claimed_kin_slot: null,
   claimed_kin_pool: null,
   defer_parents: false,
@@ -289,6 +426,8 @@ export const mockDraftWithHeritage: CharacterDraft = {
   selected_species: mockSpeciesHuman,
   selected_gender: { id: 2, key: 'female', display_name: 'Female' },
   age: 25,
+  selected_origin_template: mockUpbringingUnknown,
+  family_path: 'none',
   cg_points_spent: 0,
   cg_points_remaining: 100,
   stage_completion: {
@@ -305,6 +444,8 @@ export const mockDraftWithFamily: CharacterDraft = {
   selected_beginnings: mockBeginnings,
   selected_species: mockSpeciesElf,
   family: mockNobleFamily,
+  selected_origin_template: mockUpbringingClaim,
+  family_path: 'claimed',
   cg_points_spent: 0,
   cg_points_remaining: 100,
   stat_bonuses: { agility: 1, intellect: 1 },
@@ -314,6 +455,34 @@ export const mockDraftWithFamily: CharacterDraft = {
     2: true,
     3: true,
   } as Record<Stage, boolean>,
+};
+
+// =============================================================================
+// Lineage-stage drafts (#3617): a draft mid-Lineage with area + beginnings
+// picked but no Upbringing yet, and one with an Upbringing already selected.
+// =============================================================================
+
+export const mockDraftWithHeritageNoUpbringing: CharacterDraft = {
+  ...mockDraftWithArea,
+  id: 7,
+  current_stage: 3 as Stage,
+  selected_species: mockSpeciesHuman,
+  selected_gender: { id: 2, key: 'female', display_name: 'Female' },
+  age: 25,
+  selected_origin_template: null,
+  family_path: '',
+  stage_completion: {
+    ...mockEmptyDraft.stage_completion,
+    1: true,
+    2: true,
+  } as Record<Stage, boolean>,
+};
+
+export const mockDraftWithUpbringing: CharacterDraft = {
+  ...mockDraftWithHeritageNoUpbringing,
+  id: 8,
+  selected_origin_template: mockUpbringingClaim,
+  family_path: 'claimed',
 };
 
 export const mockCompleteDraft: CharacterDraft = {
@@ -620,7 +789,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
 // =============================================================================
 
 export const mockCGExplanations: Record<string, string> = {
-  origin_heading: 'Choose Your Origin',
+  origin_heading: 'Where does the story begin?',
   origin_intro: "Select the city or region where your character's story begins.",
   origin_lore_intro: 'You are one of the Gifted.',
   heritage_heading: 'Heritage',
@@ -633,6 +802,9 @@ export const mockCGExplanations: Record<string, string> = {
   heritage_cg_points_explanation: 'CG points are spent on character options.',
   lineage_heading: 'Lineage',
   lineage_intro: "Choose your character's family.",
+  upbringing_heading: 'Your Upbringing',
+  upbringing_intro: 'Choose how you were raised, then settle your family.',
+  family_path_heading: 'Your Family',
   distinctions_heading: 'Distinctions',
   distinctions_intro: 'Select advantages and disadvantages.',
   distinctions_budget_explanation: 'Balance your distinction budget.',
@@ -662,4 +834,10 @@ export const mockCGExplanations: Record<string, string> = {
   review_heading: 'Review & Submit',
   review_intro: 'Review your character before submitting for approval.',
   review_xp_explanation: 'Unspent CG points convert to bonus XP.',
+  arrival_title: 'Creating a Character and Starting their Story',
+  arrival_intro:
+    'You will be creating one of the Gifted, those who carry magic in their blood and ' +
+    'have caught their first Glimpse of who one day they might become.',
+  arrival_door: 'Begin',
+  arrival_quiet: 'Return to the Hall',
 };

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -21,6 +21,7 @@ from world.scenes.constants import (
     PoseKind,
     ReactionValence,
     RoundStatus,
+    SceneClockClosedReason,
     ScenePrivacyMode,
     SceneRoundMode,
     SceneRoundParticipantStatus,
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+ACCOUNT_MODEL = "accounts.AccountDB"
 INTERACTION_MODEL = "arxii.Interaction"
 PLAYER_DATA_MODEL = "arxii.PlayerData"
 SCENE_ROUND_PARTICIPANT_MODEL = "arxii.SceneRoundParticipant"
@@ -106,7 +108,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     )
 
     participants = models.ManyToManyField(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         through="SceneParticipation",
         related_name="participated_scenes",
         help_text="Accounts that have participated in this scene",
@@ -247,6 +249,46 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             clear_very_attracted(sheets)
 
 
+class SceneClock(SharedMemoryModel):
+    """An authored countdown on the beat a scene is running (#3567).
+
+    Opened by ``RunBeatAction`` when ``beat.clock_size > 0``; ticked by
+    ``clock_services.tick_scene_clock`` (combat round starts and the GM's
+    ``advance_clock`` gesture); closed when it fills (the beat then completes
+    EXPIRED), when the beat completes by any other route, or when the scene
+    that opened it ends. One open clock per beat: ``scene`` records where it
+    was opened, ``beat`` is the key (a staged battle's private scene runs the
+    same beat and reads the same clock). Play state: resettable.
+    """
+
+    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="clocks")
+    beat = models.ForeignKey("arxii.Beat", on_delete=models.CASCADE, related_name="scene_clocks")
+    size = models.PositiveSmallIntegerField()
+    filled = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_reason = models.CharField(
+        max_length=20, choices=SceneClockClosedReason.choices, blank=True, default=""
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["beat"],
+                condition=models.Q(closed_at__isnull=True),
+                name="unique_open_clock_per_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Clock {self.filled}/{self.size} on beat {self.beat_id}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.closed_at is None
+
+
 class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Links accounts to scenes they participate in
@@ -258,7 +300,7 @@ class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="participations",
     )
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="scene_participations",
     )
@@ -312,13 +354,19 @@ class SceneUnseenObserver(SharedMemoryModel):
         return f"unseen observer on {self.scene_id} ({self.source_label})"
 
 
-class Persona(CachedPropertiesMixin, SharedMemoryModel):
+class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
     """A face the character shows the world.
 
     Every character has at least one primary persona (their 'real' identity).
     Established personas are persistent alter egos with their own reputation
     and relationships. Temporary personas are throwaway disguises.
     """
+
+    # A new mask or established persona must show up in the playing account's
+    # ``cached_persona_ids`` on the next request (#3597).
+    related_cache_fields: ClassVar[list[str]] = [
+        "character_sheet.roster_entry.current_tenure.player_data.account"
+    ]
 
     character_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
@@ -526,7 +574,7 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
             return f"{char_name} #{tenure.player_number}"
         return f"{self.name} ({char_name} #{tenure.player_number})"
 
-    def display_to_staff(self) -> str:  # noqa: PLR0911
+    def display_to_staff(self) -> str:
         """Full staff context — persona, character, player number, account.
 
         - First tenure: 'Bob (Thomas, played by Fred)'
@@ -848,13 +896,13 @@ class BlockContactFlag(SharedMemoryModel):
     """
 
     blocker_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="The account that did the blocking (the target of the contact attempt).",
     )
     blocked_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
         help_text="The blocked account that attempted contact (the initiator).",
@@ -907,7 +955,7 @@ class Interaction(SharedMemoryModel):
         "interaction has a persona, even if it's just the character's primary persona.",
     )
     writer_account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1177,7 +1225,7 @@ class InteractionReaction(SharedMemoryModel):
         help_text="Denormalized from interaction for composite FK with partitioned table",
     )
     account = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         on_delete=models.CASCADE,
         related_name="interaction_reactions",
     )
@@ -1511,7 +1559,7 @@ class SceneRoundDefaultsConfig(SharedMemoryModel):
     )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

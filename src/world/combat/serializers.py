@@ -46,13 +46,12 @@ from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
-from world.mechanics.constants import EngagementType
-from world.mechanics.engagement import CharacterEngagement
 from world.scenes.constants import PersonaType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.mechanics.engagement import CharacterEngagement
     from world.scenes.models import Persona
 
 # ---------------------------------------------------------------------------
@@ -422,26 +421,24 @@ class ParticipantSerializer(serializers.ModelSerializer):
     def _combat_engagement(self, obj: CombatParticipant) -> CharacterEngagement | None:
         """Resolve the participant's COMBAT CharacterEngagement, if any.
 
-        Reads the reverse OneToOne accessor (``character.engagement``) rather
-        than a fresh ``.filter()`` — the descriptor caches the result (even
-        the no-row case) on the identity-mapped ObjectDB instance, so the
-        three escalation fields share at most one query per character and the
-        warm API path pays zero (no prefetch machinery; the idmapper is the
-        cache layer). ``None`` when the character has no engagement, or its
-        engagement is non-COMBAT (challenge/mission stakes are not combat
-        escalation).
+        Delegates to ``world.combat.services.active_combat_engagement_for``
+        (#3573), which reads the reverse OneToOne accessor
+        (``character.engagement``) rather than a fresh ``.filter()`` - the
+        descriptor caches the result (even the no-row case) on the
+        identity-mapped ObjectDB instance, so the three escalation fields
+        share at most one query per character and the warm API path pays
+        zero (no prefetch machinery; the idmapper is the cache layer).
+
+        A participant whose ``character_sheet`` descriptor raises (bare or
+        partially-constructed row) resolves to None here, before delegating.
         """
+        from world.combat.services import active_combat_engagement_for  # noqa: PLC0415
+
         try:
-            engagement = obj.character_sheet.character.engagement
-        except (AttributeError, CharacterEngagement.DoesNotExist):
+            character = obj.character_sheet.character
+        except AttributeError:
             return None
-        # Queryset deletes null the pk on the cached instance without clearing
-        # the reverse accessor; treat a pk-less engagement as gone.
-        if engagement.pk is None:
-            return None
-        if engagement.engagement_type != EngagementType.COMBAT:
-            return None
-        return engagement
+        return active_combat_engagement_for(character)
 
     def get_escalation_level(self, obj: CombatParticipant) -> int | None:
         """Escalation pressure on this combatant — public dramatic state."""
@@ -901,6 +898,29 @@ class EngagementLockSerializer(serializers.Serializer):
     started_round = serializers.IntegerField()
 
 
+class PendingAttackSerializer(serializers.Serializer):
+    """Schema-only shape of get_pending_attacks rows on EncounterDetailSerializer (#3572).
+
+    Never instantiated for serialization (same idiom as EngagementLockSerializer):
+    exists so drf-spectacular emits a concrete component. Threat-entry internals
+    (damage, defense check, cooldown) are deliberately absent; the row carries only
+    what the telegraph already announced plus the downgrade state.
+    """
+
+    id = serializers.IntegerField()
+    opponent_id = serializers.IntegerField()
+    opponent_name = serializers.CharField()
+    target_participant_id = serializers.IntegerField(allow_null=True)
+    target_name = serializers.CharField(allow_null=True)
+    declared_round = serializers.IntegerField()
+    resolves_round = serializers.IntegerField()
+    rounds_until_landing = serializers.IntegerField()
+    downgrades = serializers.IntegerField()
+    called_out = serializers.BooleanField()
+    damage_scale = serializers.FloatField()
+    cancelled = serializers.BooleanField()
+
+
 class EncounterDetailSerializer(serializers.ModelSerializer):
     """Full encounter state with covenant-filtered action visibility."""
 
@@ -920,6 +940,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
     engagement_locks = serializers.SerializerMethodField()
+    pending_attacks = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
     position_nodes = serializers.SerializerMethodField()
@@ -977,6 +998,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_gm",
             "clashes",
             "engagement_locks",
+            "pending_attacks",
             "resolution_order",
             "escalation_curve",
             "escalation_curve_name",
@@ -1218,6 +1240,41 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "started_round": lock.started_round,
             }
             for lock in locks
+        ]
+
+    @extend_schema_field(PendingAttackSerializer(many=True))
+    def get_pending_attacks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Pending wind-ups on this encounter, soonest-landing first (#3572).
+
+        Rows are deleted on maturation, so presence means pending. One query.
+        """
+        from world.combat.constants import WINDUP_FIZZLE_DOWNGRADES  # noqa: PLC0415
+        from world.combat.models import PendingOpponentAttack  # noqa: PLC0415
+        from world.combat.services import windup_damage_scale  # noqa: PLC0415
+
+        rows = (
+            PendingOpponentAttack.objects.filter(encounter=obj)
+            .select_related("opponent", "target__character_sheet__character")
+            .order_by("resolves_round", "id")
+        )
+        return [
+            {
+                "id": row.pk,
+                "opponent_id": row.opponent_id,
+                "opponent_name": row.opponent.name,
+                "target_participant_id": row.target_id,
+                "target_name": (
+                    str(row.target.character_sheet.character) if row.target_id else None
+                ),
+                "declared_round": row.declared_round,
+                "resolves_round": row.resolves_round,
+                "rounds_until_landing": max(row.resolves_round - obj.round_number, 0),
+                "downgrades": row.downgrades,
+                "called_out": row.called_out,
+                "damage_scale": windup_damage_scale(row.downgrades),
+                "cancelled": row.downgrades >= WINDUP_FIZZLE_DOWNGRADES,
+            }
+            for row in rows
         ]
 
     @extend_schema_field(PositionAdjacencyItemSerializer(many=True))
@@ -1514,11 +1571,14 @@ class AddOpponentSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"non_field_errors": exc.user_message}) from exc
 
         position_id = attrs.get("position_id")
-        if position_id is not None and encounter is not None:
-            if not Position.objects.filter(pk=position_id, room=encounter.room).exists():
-                raise serializers.ValidationError(
-                    {"position_id": "That position is not in this encounter's room."}
-                )
+        if (
+            position_id is not None
+            and encounter is not None
+            and not Position.objects.filter(pk=position_id, room=encounter.room).exists()
+        ):
+            raise serializers.ValidationError(
+                {"position_id": "That position is not in this encounter's room."}
+            )
         return attrs
 
 

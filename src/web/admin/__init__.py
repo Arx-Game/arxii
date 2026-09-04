@@ -1,6 +1,8 @@
 """Custom Django admin site for Arx II with app grouping."""
 
+from django.conf import settings
 from django.contrib import admin
+from django.urls import reverse
 
 from core.app_domains import domain_of
 
@@ -14,6 +16,61 @@ class ArxAdminSite(admin.AdminSite):
     site_header = "Arx II Administration"
     site_title = "Arx II Admin"
     index_title = "Game Management"
+
+    def login(self, request, extra_context=None):
+        """Route admin sign-in through allauth so 2FA staff can't skip it.
+
+        Django's stock ``AdminSite.login`` calls ``auth.login()`` directly and
+        never runs allauth's login stages, so a 2FA-enrolled staff account
+        could be entered here on its password alone. allauth's decorator
+        sends an anonymous visitor to ``settings.LOGIN_URL`` (the React
+        ``/login`` page) with ``?next=``, and the site login carries the 2FA
+        stage (#3591, decision 11).
+
+        The import is deferred: this module is imported from
+        ``server/conf/settings.py`` itself, before Django's app registry is
+        ready, and ``allauth.account.decorators`` transitively imports
+        ``django.contrib.auth.base_user`` at module load time.
+        """
+        from allauth.account.decorators import secure_admin_login  # noqa: PLC0415
+
+        return secure_admin_login(super().login)(request, extra_context)
+
+    def admin_view(self, view, cacheable=False):
+        """Send an anonymous visitor straight to the site login, not `/admin/login/`.
+
+        Django's stock ``admin_view`` gates every staff page behind
+        ``has_permission`` and, on an anonymous request, redirects hard-coded to
+        ``reverse("admin:login")``. That would still show the correct login page
+        eventually -- our overridden ``login`` above forwards there -- but only
+        after a redundant hop through the admin's own login URL. Redirecting
+        straight to ``settings.LOGIN_URL`` here collapses that into the single
+        redirect players and staff otherwise get everywhere else in the site
+        (#3591, decision 11).
+
+        Only the anonymous case is short-circuited. A signed-in request (wrong
+        permissions, inactive staff, or anything else) falls straight through to
+        Django's own wrapped view, which still runs ``has_permission``,
+        ``csrf_protect``, and ``never_cache``, and still reaches ``login()`` ->
+        allauth's ``secure_admin_login`` -> ``PermissionDenied`` -> a 403 for a
+        signed-in non-staff user. Redirecting that case to the site login too
+        would drop the 403 and risk a redirect loop if the login page ever
+        auto-forwards an already-signed-in visitor to ``next``.
+        """
+        wrapped = super().admin_view(view, cacheable)
+
+        def redirect_anonymous_to_site_login(request, *args, **kwargs):
+            if request.user.is_anonymous:
+                # Deferred like Django's own admin_view defers this same import:
+                # it keeps django.contrib.admin from pulling in
+                # django.contrib.auth.models at import time.
+                from django.contrib.auth.views import redirect_to_login  # noqa: PLC0415
+
+                if request.path != reverse("admin:logout", current_app=self.name):
+                    return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
+            return wrapped(request, *args, **kwargs)
+
+        return redirect_anonymous_to_site_login
 
     # The single Django app_label the #2906 collapse merged every first-party
     # model onto (see ``world/apps.py``'s ``ArxiiConfig.label``). This is the

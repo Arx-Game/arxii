@@ -8,7 +8,7 @@ Terminal routes (null destination) complete the run WITHOUT emitting any
 reward lines.
 
 Real factory objects, no ORM mocks. ``force_check_outcome`` pins the rolled
-outcome tier deterministically. ``apply_resolution`` (the reuse boundary) is
+outcome tier deterministically. ``apply_all_effects`` (the reuse boundary) is
 spied to assert the consequence composition without wiring the full
 ConsequenceEffect machinery.
 """
@@ -54,7 +54,7 @@ from world.missions.services import resolve_option
 from world.missions.services.run import grant_rescue_mission
 from world.traits.factories import CheckOutcomeFactory
 
-_APPLY = "world.missions.services.resolution.apply_resolution"
+_APPLY = "world.missions.services.resolution.apply_all_effects"
 
 
 class ResolveCheckOptionTests(TestCase):
@@ -111,8 +111,8 @@ class ResolveCheckOptionTests(TestCase):
         self.assertEqual(deed.actor, self.sheet)
         # Authored consequence applied (exactly one call).
         self.assertEqual(mocked.call_count, 1)
-        pending = mocked.call_args_list[0].args[0]
-        self.assertEqual(pending.selected_consequence, self.success_conseq)
+        consequence = mocked.call_args_list[0].args[0]
+        self.assertEqual(consequence, self.success_conseq)
 
     def test_fail_routes_to_b_with_synthetic_fallback(self) -> None:
         with force_check_outcome(self.failure), patch(_APPLY) as mocked:
@@ -121,12 +121,12 @@ class ResolveCheckOptionTests(TestCase):
         self.assertEqual(self.instance.current_node, self.node_b)
         self.assertEqual(deed.outcome, self.failure)
         # Synthetic fallback consequence: unsaved (pk is None), tier = rolled.
-        pending = mocked.call_args_list[0].args[0]
-        self.assertIsNone(pending.selected_consequence.pk)
-        self.assertEqual(pending.selected_consequence.outcome_tier, self.failure)
+        consequence = mocked.call_args_list[0].args[0]
+        self.assertIsNone(consequence.pk)
+        self.assertEqual(consequence.outcome_tier, self.failure)
 
     def test_synthetic_fallback_does_not_crash_and_emits_deed(self) -> None:
-        # No mock here: apply_resolution must genuinely no-op on the unsaved
+        # No mock here: apply_all_effects must genuinely no-op on the unsaved
         # fallback (returns []) and the deed must still be emitted.
         with force_check_outcome(self.failure):
             deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
@@ -191,8 +191,8 @@ class ResolveCheckOptionTests(TestCase):
         with force_check_outcome(rand_outcome), patch(_APPLY) as mocked:
             deed = resolve_option(self.instance, self.entry, self.check_option, self.actor)
         self.assertEqual(deed.route_candidate, cand)
-        pending = mocked.call_args_list[0].args[0]
-        self.assertEqual(pending.selected_consequence, cand_conseq)
+        consequence = mocked.call_args_list[0].args[0]
+        self.assertEqual(consequence, cand_conseq)
 
     def test_candidate_falls_back_to_route_consequence(self) -> None:
         # A candidate without its own consequence uses the route's (#941 fallback).
@@ -208,8 +208,8 @@ class ResolveCheckOptionTests(TestCase):
         MissionOptionRouteCandidateFactory(route=rand_route, target_node=self.node_a, weight=1)
         with force_check_outcome(rand_outcome), patch(_APPLY) as mocked:
             resolve_option(self.instance, self.entry, self.check_option, self.actor)
-        pending = mocked.call_args_list[0].args[0]
-        self.assertEqual(pending.selected_consequence, route_conseq)
+        consequence = mocked.call_args_list[0].args[0]
+        self.assertEqual(consequence, route_conseq)
 
     def test_non_random_route_leaves_candidate_null(self) -> None:
         with force_check_outcome(self.success):

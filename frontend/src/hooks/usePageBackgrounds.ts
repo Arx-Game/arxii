@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { CSSProperties } from 'react';
 import { apiFetch } from '@/evennia_replacements/api';
-import { getGradientColors } from '@/character-creation/components/StartingAreaCard';
+import { getGradientColors } from '@/character-creation/utils';
 
 export type PageBackgroundSlot = 'homepage' | 'roster' | 'cg_stage' | 'game_client';
 

@@ -10,11 +10,21 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from world.battles.constants import BattleSideRole
 from world.stories.serializers import (
     BeatOpponentLineSerializer,
     BeatStagedTemplateSerializer,
     StoryProtectedSubjectSerializer,
 )
+
+
+class GMStoryRailStagedBattleSerializer(serializers.Serializer):
+    """The running beat's staged battle, story-standing viewers only (#3569)."""
+
+    blueprint_name = serializers.CharField()
+    name = serializers.CharField(allow_blank=True)
+    party_side_role = serializers.ChoiceField(choices=BattleSideRole.choices)
+    unit_line_count = serializers.IntegerField()
 
 
 class GMStoryRailBeatSerializer(serializers.Serializer):
@@ -25,12 +35,42 @@ class GMStoryRailBeatSerializer(serializers.Serializer):
     risk = serializers.CharField()
     outcome = serializers.CharField()
     predicate_type = serializers.CharField()
+    clock_size = serializers.IntegerField()
     success_consequences_authored = serializers.BooleanField()
     failure_consequences_authored = serializers.BooleanField()
     expired_consequences_authored = serializers.BooleanField()
     internal_description = serializers.CharField(allow_null=True)
     opponent_lines = BeatOpponentLineSerializer(many=True, allow_null=True)
     staged_templates = BeatStagedTemplateSerializer(many=True, allow_null=True)
+    staged_battle = GMStoryRailStagedBattleSerializer(allow_null=True)
+
+
+class GMStoryRailStakeOutcomeSerializer(serializers.Serializer):
+    """The fired branch for one stake, if the contract has resolved it."""
+
+    column = serializers.CharField()
+    outcome_key = serializers.CharField()
+    resolution_summary = serializers.CharField()
+
+
+class GMStoryRailStakeSerializer(serializers.Serializer):
+    """One stake on the running beat's contract, story-standing viewers only."""
+
+    id = serializers.IntegerField()
+    player_summary = serializers.CharField()
+    severity = serializers.IntegerField()
+    subject_kind = serializers.CharField()
+    outcome = GMStoryRailStakeOutcomeSerializer(allow_null=True)
+
+
+class GMStoryRailActivationSerializer(serializers.Serializer):
+    """The running beat's lock state: the open activation, or the most recent
+    resolved one when none is open.
+    """
+
+    locked_at = serializers.DateTimeField()
+    effective_risk = serializers.CharField()
+    is_ready = serializers.BooleanField()
 
 
 class GMStoryRailParticipantSerializer(serializers.Serializer):
@@ -56,3 +96,5 @@ class GMStoryRailSerializer(serializers.Serializer):
     protected_subjects = StoryProtectedSubjectSerializer(many=True)
     clue_placements = GMStoryRailClueSerializer(many=True)
     participants = GMStoryRailParticipantSerializer(many=True)
+    stakes = GMStoryRailStakeSerializer(many=True)
+    activation = GMStoryRailActivationSerializer(allow_null=True)

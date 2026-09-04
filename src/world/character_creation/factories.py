@@ -12,9 +12,14 @@ from world.character_creation.models import (
     CharacterDraft,
     DraftApplication,
     DraftApplicationComment,
+    OriginTemplate,
+    OriginTemplateSlot,
+    OriginTemplateSlotChoice,
     StartingArea,
 )
 from world.realms.models import Realm
+from world.roster.constants import COMMONER_KIND_NAME
+from world.roster.factories import FamilyKindFactory
 
 
 class RealmFactory(factory_django.DjangoModelFactory):
@@ -54,7 +59,6 @@ class BeginningsFactory(factory_django.DjangoModelFactory):
     starting_area = factory.SubFactory(StartingAreaFactory)
     is_active = True
     trust_required = 0
-    family_known = True
     grants_species_languages = True
     sort_order = 0
     cg_point_cost = 0
@@ -113,3 +117,47 @@ class BeginningTraditionFactory(factory_django.DjangoModelFactory):
     beginning = factory.SubFactory(BeginningsFactory)
     tradition = factory.SubFactory("world.magic.factories.TraditionFactory")
     sort_order = 0
+
+
+class OriginTemplateFactory(factory_django.DjangoModelFactory):
+    """An Upbringing (#3617). Defaults to the name-your-own path on the Commoner kind."""
+
+    class Meta:
+        model = OriginTemplate
+
+    beginning = factory.SubFactory(BeginningsFactory)
+    name = factory.Sequence(lambda n: f"Upbringing {n}")
+    frame_narrative = "You were raised somewhere, by someone."
+    allows_name_family = True
+    named_family_kind = factory.SubFactory(FamilyKindFactory, name=COMMONER_KIND_NAME)
+
+
+class OriginTemplateSlotFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = OriginTemplateSlot
+
+    template = factory.SubFactory(OriginTemplateFactory)
+    name = factory.Sequence(lambda n: f"Prompt {n}")
+    prompt = "What did your family keep running?"
+    sort_order = factory.Sequence(lambda n: n)
+
+
+class OriginTemplateSlotChoiceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = OriginTemplateSlotChoice
+
+    slot = factory.SubFactory(OriginTemplateSlotFactory, allows_text=False)
+    name = factory.Sequence(lambda n: f"Choice {n}")
+    sort_order = factory.Sequence(lambda n: n)
+
+
+def make_unknown_upbringing(beginning: Beginnings) -> OriginTemplate:
+    """The amnesiac shape: one 'Unknown' Upbringing, none path, no prompts (#3617)."""
+    return OriginTemplateFactory(
+        beginning=beginning,
+        name="Unknown",
+        frame_narrative="You have no past you can speak of.",
+        allows_name_family=False,
+        named_family_kind=None,
+        allows_no_family=True,
+    )

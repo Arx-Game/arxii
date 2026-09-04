@@ -44,6 +44,7 @@ from world.scenes.action_constants import (
 _DAMAGE_TYPE_MODEL_PATH = "arxii.DamageType"
 _CONSEQUENCE_POOL_MODEL = "arxii.ConsequencePool"
 _CHALLENGE_TEMPLATE_MODEL = "arxii.ChallengeTemplate"
+OBJECTDB_MODEL = "objects.ObjectDB"
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 TRAIT_MODEL = "arxii.Trait"
@@ -629,7 +630,7 @@ class ObjectProperty(SharedMemoryModel):
     # Affordances (flammable, volatile, aerial) attach to any physical object —
     # that breadth is the model's whole point.
     object = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         related_name="object_properties",
     )
@@ -1161,7 +1162,7 @@ class SituationTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
 
 class SituationChallengeLink(NaturalKeyMixin, SharedMemoryModel):
-    """Through-table linking Challenges to Situations with ordering and dependencies.
+    """Through-table linking Challenges to Situations with ordering.
 
     NK is (situation_template, challenge_template) — the pre-existing
     ``situation_challenge_unique`` constraint already enforces exactly that, so
@@ -1187,13 +1188,6 @@ class SituationChallengeLink(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     display_order = models.PositiveIntegerField(default=0)
-    depends_on = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="dependents",
-    )
 
     objects = NaturalKeyManager()
 
@@ -1220,9 +1214,8 @@ class SituationTrapLink(NaturalKeyMixin, SharedMemoryModel):
     Instantiated into a real ``room_features.Trap`` row by
     ``instantiate_situation``. Carries only authorable fields — no
     ``is_armed``/``detected_by`` (always fresh per instantiated Trap), no
-    ``position`` (traps minted from a link are always room-wide), no
-    ``depends_on`` (traps are independent hazards, not a sequenced chain
-    like SituationChallengeLink).
+    ``position`` (traps minted from a link are always room-wide): traps are
+    independent hazards, not a sequenced chain.
 
     NK is (situation_template, name). Unlike its challenge sibling this link had
     no uniqueness of its own, so registering it in ``CONTENT_MODELS`` (#2865)
@@ -1289,7 +1282,7 @@ class SituationInstance(SharedMemoryModel):
     # challenge-only situation at a bare object is supported and test-pinned
     # (test_location_without_room_profile_is_fine_when_only_challenges).
     location = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         related_name="situation_instances",
     )
@@ -1335,14 +1328,14 @@ class ChallengeInstance(SharedMemoryModel):
     # ChallengeInstance explicitly does NOT require a RoomProfile (see
     # `instantiate_situation`'s docstring), so it can sit at a bare object.
     location = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         related_name="challenge_instances",
     )
     # ObjectDB by design (#2608)  noqa: OBJECTDB_FIELD
     # The authored prop embodying the challenge — a door, a rope, a rockfall.
     target_object = models.ForeignKey(
-        "objects.ObjectDB",
+        OBJECTDB_MODEL,
         on_delete=models.CASCADE,
         related_name="challenge_target_instances",
         help_text="The object embodying this challenge in the world.",

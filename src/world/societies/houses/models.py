@@ -61,9 +61,11 @@ class NobiliaryParticle(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="nobiliary_particles",
     )
-    family_type = models.CharField(
-        max_length=20,
-        help_text="roster.Family.FamilyType value this particle applies to.",
+    kind = models.ForeignKey(
+        "arxii.FamilyKind",
+        on_delete=models.PROTECT,
+        related_name="particles",
+        help_text="The family kind this particle applies to (#3617).",
     )
     tier_floor = models.CharField(
         max_length=20,
@@ -93,15 +95,15 @@ class NobiliaryParticle(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["realm", "family_type", "tier_floor"],
+                fields=["realm", "kind", "tier_floor"],
                 name="societies_particle_unique_per_realm_type_band",
             ),
         ]
-        ordering = ["realm", "family_type", "tier_floor"]
+        ordering = ["realm", "kind", "tier_floor"]
 
     def __str__(self) -> str:
         band = f" ({self.tier_floor}+)" if self.tier_floor else ""
-        return f"{self.realm} {self.family_type}{band}: '{self.particle}'"
+        return f"{self.realm} {self.kind}{band}: '{self.particle}'"
 
 
 class HouseRecognitionRule(SharedMemoryModel):
@@ -936,9 +938,11 @@ class HouseTemplate(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="house_templates",
     )
-    family_type = models.CharField(
-        max_length=20,
-        help_text="roster.Family.FamilyType the defined family gets.",
+    kind = models.ForeignKey(
+        "arxii.FamilyKind",
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+        help_text="The kind the defined family gets (#3617).",
     )
     society = models.ForeignKey(
         "arxii.Society",
@@ -1583,6 +1587,12 @@ class OrgPact(SharedMemoryModel):
         return self.ratified_at is not None and self.dissolved_at is None
 
 
+# How a betrothal ended up, as shown in ``Betrothal.__str__``.
+_BETROTHAL_WED = "wed"
+_BETROTHAL_BROKEN = "broken"
+_BETROTHAL_PROMISED = "promised"
+
+
 class Betrothal(SharedMemoryModel):
     """A promised union (#2999): negotiated terms held in draft until the wedding.
 
@@ -1624,8 +1634,16 @@ class Betrothal(SharedMemoryModel):
         ordering = ["-created_at"]
         verbose_name_plural = "Betrothals"
 
+    def _state_label(self) -> str:
+        """Where a betrothal ended up: married, called off, or still standing."""
+        if self.wed_at:
+            return _BETROTHAL_WED
+        if self.broken_at:
+            return _BETROTHAL_BROKEN
+        return _BETROTHAL_PROMISED
+
     def __str__(self) -> str:
-        state = "wed" if self.wed_at else "broken" if self.broken_at else "promised"
+        state = self._state_label()
         return f"{self.kinsperson_a} & {self.kinsperson_b} ({state})"
 
     @property

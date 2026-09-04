@@ -299,7 +299,7 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         When prefetched, Django populates this directly. When accessed without
         prefetch, falls back to a fresh query.
         """
-        return list(self.mutually_exclusive_with.only("id", "name"))
+        return list(self.mutually_exclusive_with.all())
 
     @cached_property
     def cached_codex_grants(self) -> list:

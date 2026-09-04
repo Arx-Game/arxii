@@ -417,7 +417,6 @@ class BeginningsModelTests(TestCase):
         assert beginnings.starting_area == self.area
         assert beginnings.trust_required == 0
         assert beginnings.is_active is True
-        assert beginnings.family_known is True
         assert beginnings.grants_species_languages is True
         assert beginnings.social_rank == 0
         assert beginnings.cg_point_cost == 0
@@ -433,10 +432,8 @@ class BeginningsModelTests(TestCase):
         beginnings = BeginningsFactory(
             starting_area=self.area,
             grants_species_languages=False,
-            family_known=False,
         )
         assert beginnings.grants_species_languages is False
-        assert beginnings.family_known is False
 
     def test_is_accessible_by_inactive_returns_false(self):
         """Inactive beginnings are not accessible to anyone."""

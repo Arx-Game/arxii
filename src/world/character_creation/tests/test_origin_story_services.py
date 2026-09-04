@@ -26,6 +26,7 @@ class OriginStoryServiceTest(TestCase):
             beginning=self.beginning,
             name="Escape",
             frame_narrative="Your story begins with escape from Salvation.",
+            allows_no_family=True,
         )
         self.slot1 = OriginTemplateSlot.objects.create(
             template=self.template,

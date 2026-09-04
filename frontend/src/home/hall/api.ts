@@ -40,12 +40,16 @@ export async function mintGMCharacter(
 
 /**
  * GET the requesting account's own GM profile (#3478 Task 1). 404s for a
- * staff account with no approved `GMProfile` row — callers treat that as
- * "no editable GM profile," not an error to surface (see `GMSlot`, which
- * hides its edit affordance rather than rendering the 404).
+ * staff account with no approved `GMProfile` row (or a non-staff account
+ * with no GM profile at all, #3562) - resolved to `null` rather than
+ * thrown, since callers treat "no profile" as an expected, silent result
+ * (see `GMSlot`, which hides its edit affordance on `null` rather than
+ * rendering an error; `BeatFormDialog`'s risk cap, which disables the risk
+ * control on `null` rather than erroring the form).
  */
-export async function fetchGMProfileMine(): Promise<GMProfileMine> {
+export async function fetchGMProfileMine(): Promise<GMProfileMine | null> {
   const res = await apiFetch('/api/gm/profiles/mine/');
+  if (res.status === 404) return null;
   if (!res.ok) await throwApiError(res, 'Failed to load your GM profile.');
   return (await res.json()) as GMProfileMine;
 }

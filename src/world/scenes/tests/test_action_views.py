@@ -844,6 +844,47 @@ class CastEndpointTestCase(APITestCase):
         # the key must be present in the result payload.
         assert "power_ledger" in response.data["result"]
 
+    def test_immediate_cast_defaults_soulfray_consented_false(self) -> None:
+        """#3573: omitting soulfray_consented reaches _resolve_and_pose_cast as False.
+
+        The web cast path's confirm_soulfray_risk defaults True (must never halt on
+        the caster's own soulfray warning), so soulfray_consented must be threaded
+        as an explicit bool rather than derived from confirm_soulfray_risk - a client
+        that never mentions soulfray_consented must not be silently stamped consented.
+        """
+        technique = make_castable_technique()
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+        }
+        with patch(
+            "world.scenes.cast_services._resolve_and_pose_cast",
+            return_value=(None, None, None),
+        ) as mock_resolve:
+            response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert mock_resolve.call_args.kwargs["soulfray_consented"] is False
+
+    def test_immediate_cast_forwards_soulfray_consented_true(self) -> None:
+        """#3573: soulfray_consented=true in the request reaches _resolve_and_pose_cast."""
+        technique = make_castable_technique()
+        CharacterTechniqueFactory(character=self.identity, technique=technique)
+        data = {
+            "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
+            "technique_id": technique.pk,
+            "soulfray_consented": True,
+        }
+        with patch(
+            "world.scenes.cast_services._resolve_and_pose_cast",
+            return_value=(None, None, None),
+        ) as mock_resolve:
+            response = self.client.post(self._cast_url(), data, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert mock_resolve.call_args.kwargs["soulfray_consented"] is True
+
     def test_benign_cast_at_other_pc_is_pending(self) -> None:
         """Benign behavior-altering cast at another PC returns PENDING request (consent flow)."""
         technique = make_castable_technique(hostile=False)
@@ -1195,6 +1236,32 @@ class CastableTechniquesEndpointTestCase(APITestCase):
         assert len(response.data) >= 1
         result = next(t for t in response.data if t["id"] == benign.pk)
         assert result["hostile"] is False
+
+    def test_includes_reactive_anima_cost_for_ward_bearing_technique(self) -> None:
+        """#3573: a ward-bearing technique's reactive_anima_cost is exposed; a
+        mundane technique's is None. Same resolution PlayerAction.reactive_anima_cost
+        uses (protective_condition_and_flavor), so the standalone cast UI can offer
+        a Soulfray consent toggle before the caster commits to holding the ward."""
+        from world.magic.effect_palette_content import (
+            FORCE_FIELD_TECHNIQUE_NAME,
+            ensure_force_field_content,
+        )
+        from world.magic.models import Technique
+
+        ensure_force_field_content()
+        aegis_field = Technique.objects.get(name=FORCE_FIELD_TECHNIQUE_NAME)
+        CharacterTechniqueFactory(character=self.identity, technique=aegis_field)
+        expected = aegis_field.condition_applications.get().condition.reactive_anima_cost
+
+        mundane = make_castable_technique(hostile=False)
+        CharacterTechniqueFactory(character=self.identity, technique=mundane)
+
+        response = self.client.get(self._url(), {"initiator_persona": self.persona.pk})
+        assert response.status_code == status.HTTP_200_OK
+        warded_result = next(t for t in response.data if t["id"] == aegis_field.pk)
+        assert warded_result["reactive_anima_cost"] == expected
+        mundane_result = next(t for t in response.data if t["id"] == mundane.pk)
+        assert mundane_result["reactive_anima_cost"] is None
 
     def test_does_not_return_other_characters_techniques(self) -> None:
         """Techniques known only by another character do not appear."""

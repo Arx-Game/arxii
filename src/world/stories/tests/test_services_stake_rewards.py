@@ -2,9 +2,13 @@
 
 Covers the E2E win payout (money + resonance to every participant), the
 anti-farming gate (no activation / unready / effective NONE pays nothing while
-loss consequences keep firing), the GM constrained pick honoring the same
-gate, and the StakeRewardLine serializer gates (lock, ownership, sink shape).
+loss consequences keep firing), GROUP-scope machine grading honoring the same
+gate with explicit participants, and the StakeRewardLine serializer gates
+(lock, ownership, sink shape). #3561 retired the GM constrained pick; every
+payout now flows through machine grading.
 """
+
+from unittest import mock
 
 from django.urls import reverse
 from evennia.utils.test_resources import EvenniaTestCase
@@ -17,12 +21,22 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.clues.constants import ClueTargetKind
+from world.clues.factories import ClueFactory
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CodexEntryFactory
+from world.codex.models import CharacterCodexKnowledge
 from world.currency.models import CurrencyTransfer
 from world.currency.services import get_or_create_purse
-from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
+from world.items.factories import ItemTemplateFactory
+from world.items.models import ItemInstance
 from world.magic.constants import GainSource
 from world.magic.factories import ResonanceFactory
 from world.magic.models import CharacterResonance, ResonanceGrant
+from world.roster.factories import RosterEntryFactory
+from world.secrets.factories import SecretFactory
 from world.societies.constants import RenownRisk
 from world.societies.factories import LegendSourceTypeFactory
 from world.societies.models import LegendEvent
@@ -50,7 +64,6 @@ from world.stories.factories import (
 )
 from world.stories.models import StakeContractActivation, StakeOutcome, TransitionRequiredOutcome
 from world.stories.services.beats import record_outcome_tier_completion
-from world.stories.services.stake_resolution import resolve_stake_by_gm_pick
 from world.stories.services.stakes import activate_stakes_contract
 from world.traits.factories import CheckOutcomeFactory
 
@@ -239,8 +252,8 @@ class AntiFarmingGateTests(EvenniaTestCase):
         self.assertEqual(purse.balance, 0)
 
 
-def _group_story_ready_pending_beat():
-    """A GROUP-scope story with a ready, activated HIGH beat pending GM review."""
+def _group_story_ready_beat():
+    """A GROUP-scope story with a ready, activated HIGH beat awaiting completion."""
     story = StoryFactory(scope=StoryScope.GROUP)
     chapter = ChapterFactory(story=story)
     episode = EpisodeFactory(chapter=chapter)
@@ -259,46 +272,162 @@ def _group_story_ready_pending_beat():
     _add_removal_jeopardy(beat)
     party_sheet = _level_sheet(CharacterSheetFactory(), 4)
     activation = activate_stakes_contract(beat, [party_sheet])
-    record_outcome_tier_completion(
-        progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-    )
-    return stake, activation
+    return beat, progress, stake, activation
 
 
-class GMPickRewardTests(EvenniaTestCase):
-    """The constrained pick honors the same anti-farming gate (#1770 PR3)."""
+class GroupRewardMachineGradingTests(EvenniaTestCase):
+    """GROUP-scope machine grading honors the same anti-farming gate, threading
+    explicit participants the same way the retired GM constrained pick did
+    (#1770 PR3; #3561 folded this coverage onto the machine path)."""
 
     @classmethod
     def setUpTestData(cls):
         seed_default_risk_calibrations()
-        cls.gm_profile = GMProfileFactory()
+        cls.win_tier = CheckOutcomeFactory(name="Group Reward Triumph", success_level=3)
 
-    def test_group_pick_win_with_participants_pays(self):
-        stake, activation = _group_story_ready_pending_beat()
+    def test_group_win_with_participants_pays(self):
+        beat, progress, _stake, activation = _group_story_ready_beat()
         self.assertTrue(activation.is_ready)
         persona = CharacterSheetFactory().primary_persona
 
-        resolve_stake_by_gm_pick(
-            stake,
-            column=StakeResolutionColumn.WIN,
-            gm_profile=self.gm_profile,
-            participants=[persona],
+        record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=self.win_tier, participants=[persona]
         )
 
         purse = get_or_create_purse(persona.character_sheet)
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 300)
 
-    def test_group_pick_win_without_participants_skips_payout(self):
-        stake, _activation = _group_story_ready_pending_beat()
+    def test_group_win_without_participants_skips_payout(self):
+        beat, progress, stake, _activation = _group_story_ready_beat()
 
-        outcome = resolve_stake_by_gm_pick(
-            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
 
+        outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
         # No participants resolved -> the payout is skipped, never a crash.
         self.assertFalse(ResonanceGrant.objects.exists())
+
+
+class ItemClueCodexRewardDeliveryTests(EvenniaTestCase):
+    """ITEM/CLUE/CODEX WIN-reward delivery (#3566), mirroring WinRewardE2ETests'
+    money+resonance coverage for the three newer sinks. ITEM has no roster-entry
+    dependency (a held ItemInstance is a sheet fact); CLUE/CODEX both grant
+    *knowledge*, a roster-entry fact; an NPC participant without one is
+    skipped for those two sinks while MONEY/ITEM still pay.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+        cls.win_tier = CheckOutcomeFactory(name="Item Clue Codex Triumph", success_level=3)
+
+    def test_item_reward_mints_one_instance_held_by_the_participant(self):
+        sheet, beat, progress, _stake, win = _character_story_ready_beat(money=0)
+        template = ItemTemplateFactory(value=300)
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.ITEM, item_template=template, amount=300
+        )
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        self.assertEqual(
+            ItemInstance.objects.filter(template=template, holder_character_sheet=sheet).count(),
+            1,
+        )
+
+    def test_clue_with_codex_target_grants_the_codex_entry(self):
+        sheet, beat, progress, _stake, win = _character_story_ready_beat(money=0)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        entry = CodexEntryFactory()
+        clue = ClueFactory(target_kind=ClueTargetKind.CODEX, target_codex_entry=entry)
+        # amount=300 hits the HIGH reward-band floor (#1770 PR3 pillar 6); CLUE
+        # delivery itself never reads amount, only the band cares about it.
+        StakeRewardLineFactory(resolution=win, sink=StakeRewardSink.CLUE, clue=clue, amount=300)
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        knowledge = CharacterCodexKnowledge.objects.get(roster_entry=roster_entry, entry=entry)
+        self.assertEqual(knowledge.status, CodexKnowledgeStatus.KNOWN)
+
+    def test_codex_reward_grants_the_entry(self):
+        sheet, beat, progress, _stake, win = _character_story_ready_beat(money=0)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        entry = CodexEntryFactory()
+        StakeRewardLineFactory(  # amount=300 hits the HIGH reward-band floor
+            resolution=win, sink=StakeRewardSink.CODEX, codex_entry=entry, amount=300
+        )
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        knowledge = CharacterCodexKnowledge.objects.get(roster_entry=roster_entry, entry=entry)
+        self.assertEqual(knowledge.status, CodexKnowledgeStatus.KNOWN)
+
+    def test_npc_participant_without_roster_entry_skips_codex_but_money_pays(self):
+        """A sheet with no roster entry (NPC-shaped) is skipped for CLUE/CODEX,
+        never for MONEY (#3566's knowledge-vs-currency split)."""
+        sheet, beat, progress, _stake, win = _character_story_ready_beat(money=300)
+        entry = CodexEntryFactory()
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.CODEX, codex_entry=entry, amount=1
+        )
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        self.assertFalse(CharacterCodexKnowledge.objects.filter(entry=entry).exists())
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 300)
+
+    def test_one_raising_line_does_not_stop_the_others(self):
+        sheet, beat, progress, _stake, win = _character_story_ready_beat(money=300)
+        RosterEntryFactory(character_sheet=sheet)
+        entry = CodexEntryFactory()
+        StakeRewardLineFactory(
+            resolution=win, sink=StakeRewardSink.CODEX, codex_entry=entry, amount=1
+        )
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+
+        with mock.patch(
+            "world.stories.services.stake_resolution.grant_codex_entry",
+            side_effect=RuntimeError("boom"),
+        ):
+            record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 300)  # the money line still paid
+        self.assertFalse(CharacterCodexKnowledge.objects.filter(entry=entry).exists())
+
+    def test_repeat_codex_delivery_is_idempotent(self):
+        sheet, beat, progress, stake, win = _character_story_ready_beat(money=0)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        entry = CodexEntryFactory()
+        StakeRewardLineFactory(  # amount=300 hits the HIGH reward-band floor
+            resolution=win, sink=StakeRewardSink.CODEX, codex_entry=entry, amount=300
+        )
+        _level_sheet(sheet, 4)
+        activate_stakes_contract(beat, [sheet])
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        from world.stories.services.stake_resolution import _deliver_reward_line
+
+        line = win.reward_lines.get()
+        _deliver_reward_line(line, sheet.primary_persona, stake)  # repeat delivery
+
+        self.assertEqual(
+            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry, entry=entry).count(),
+            1,
+        )
 
 
 class StakeRewardLineSerializerTests(APITestCase):
@@ -383,12 +512,131 @@ class StakeRewardLineSerializerTests(APITestCase):
             line.clean()
 
 
+class ItemAndClueRewardGateTests(APITestCase):
+    """ITEM/CLUE sink authoring gates (#3566).
+
+    ITEM is cap-gated (``GMLevelCap.allow_item_rewards``, seeded True for
+    EXPERIENCED/SENIOR and False below) and pins ``amount`` to the template's
+    value. CLUE is refused for a non-resolvable target kind and gated by the
+    same clue-authoring policy ``AuthorClueAction`` uses
+    (``clue_target_kind_allowed``: SENIOR+ only, SECRET stays staff-only).
+    CODEX carries neither gate.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.caps = seed_default_gm_level_caps()
+        cls.staff = AccountFactory(is_staff=True)
+        cls.gm_account = AccountFactory(is_staff=False)  # GM: allow_item_rewards=False
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.GM)
+        cls.experienced_account = AccountFactory(is_staff=False)  # allow_item_rewards=True
+        GMProfileFactory(account=cls.experienced_account, level=GMLevel.EXPERIENCED)
+        cls.senior_account = AccountFactory(is_staff=False)  # SENIOR: clue-authoring eligible
+        GMProfileFactory(account=cls.senior_account, level=GMLevel.SENIOR)
+        story = StoryFactory(
+            owners=[cls.staff, cls.gm_account, cls.experienced_account, cls.senior_account]
+        )
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode)
+        stake = StakeFactory(beat=beat)
+        cls.win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+
+    def _post_line(self, user, **extra):
+        self.client.force_authenticate(user=user)
+        payload = {"resolution": self.win.pk, **extra}
+        return self.client.post(reverse("stakerewardline-list"), payload, format="json")
+
+    def test_item_reward_gm_without_flag_rejected(self):
+        template = ItemTemplateFactory(value=100)
+        resp = self._post_line(
+            self.gm_account, sink=StakeRewardSink.ITEM, item_template=template.pk
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("item_template", resp.data)
+        self.assertIn("GM level", str(resp.data))
+
+    def test_item_reward_gm_with_flag_pins_amount_from_template_even_if_omitted(self):
+        template = ItemTemplateFactory(value=150)
+        resp = self._post_line(
+            self.experienced_account, sink=StakeRewardSink.ITEM, item_template=template.pk
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["amount"], 150)
+        self.assertEqual(resp.data["item_template_name"], template.name)
+
+    def test_item_reward_differing_supplied_amount_rejected(self):
+        template = ItemTemplateFactory(value=150)
+        resp = self._post_line(
+            self.experienced_account,
+            sink=StakeRewardSink.ITEM,
+            item_template=template.pk,
+            amount=999,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", resp.data)
+
+    def test_item_reward_zero_value_template_rejected(self):
+        template = ItemTemplateFactory(value=0)
+        resp = self._post_line(
+            self.experienced_account, sink=StakeRewardSink.ITEM, item_template=template.pk
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("item_template", resp.data)
+
+    def test_item_reward_staff_without_flag_allowed(self):
+        template = ItemTemplateFactory(value=75)
+        resp = self._post_line(self.staff, sink=StakeRewardSink.ITEM, item_template=template.pk)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_clue_reward_secret_target_by_senior_non_staff_rejected(self):
+        secret = SecretFactory()
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.SECRET, target_codex_entry=None, target_secret=secret
+        )
+        resp = self._post_line(
+            self.senior_account, sink=StakeRewardSink.CLUE, clue=clue.pk, amount=1
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("clue", resp.data)
+
+    def test_clue_reward_item_target_kind_rejected(self):
+        template = ItemTemplateFactory()
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.ITEM,
+            target_codex_entry=None,
+            target_item_template=template,
+        )
+        resp = self._post_line(
+            self.senior_account, sink=StakeRewardSink.CLUE, clue=clue.pk, amount=1
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("clue", resp.data)
+        self.assertIn("codex entry, rescue, secret or persona link", str(resp.data))
+
+    def test_clue_reward_below_senior_rejected(self):
+        clue = ClueFactory()  # default: resolvable CODEX target
+        resp = self._post_line(self.gm_account, sink=StakeRewardSink.CLUE, clue=clue.pk, amount=1)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("clue", resp.data)
+
+    def test_codex_reward_by_any_owner_allowed(self):
+        entry = CodexEntryFactory()
+        resp = self._post_line(
+            self.gm_account, sink=StakeRewardSink.CODEX, codex_entry=entry.pk, amount=1
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["codex_entry_name"], entry.name)
+
+
 class CompletedBeatEditRefusalTests(APITestCase):
     """#1770 PR3 review finding 1a: contract editing ends when the beat completes.
 
-    The open-activation lock alone leaves a hole — the completion tail closes
-    the activation while stakes still pend for a GM pick, which would reopen
-    reward-line (and resolution) editing on a contract that already ran.
+    The open-activation lock alone leaves a hole: every stake resolves
+    synchronously inside the same atomic completion tail that closes the
+    activation (there is no pending-decision window), but without the
+    completed-beat check reward-line (and resolution) editing could reopen
+    right after that tail runs, on a contract that already ran.
     """
 
     @classmethod
@@ -409,7 +657,7 @@ class CompletedBeatEditRefusalTests(APITestCase):
         from world.stories.models import Beat
 
         beat = Beat.objects.get(pk=self.beat.pk)
-        beat.outcome = BeatOutcome.PENDING_GM_REVIEW
+        beat.outcome = BeatOutcome.FAILURE
         beat.save(update_fields=["outcome"])
 
     def test_reward_line_create_refused_after_completion(self):
@@ -450,23 +698,20 @@ class CompletedBeatEditRefusalTests(APITestCase):
 class PayTimeBandRecheckTests(EvenniaTestCase):
     """#1770 PR3 review finding 1b: the payout re-verifies the reward band.
 
-    The activation's frozen is_ready verdict can go stale in the
-    pending-GM-pick window; an out-of-band live total skips the payout.
+    The activation's frozen is_ready verdict can go stale between activation
+    and completion; an out-of-band live total skips the payout.
     """
 
     @classmethod
     def setUpTestData(cls):
         seed_default_risk_calibrations()
-        cls.gm_profile = GMProfileFactory()
+        cls.win_tier = CheckOutcomeFactory(name="Band Recheck Triumph", success_level=3)
 
     def test_out_of_band_at_pay_time_skips_payout(self):
         sheet, beat, progress, stake, win = _character_story_ready_beat(money=300)
         _level_sheet(sheet, 4)
         activation = activate_stakes_contract(beat, [sheet])
         self.assertTrue(activation.is_ready)
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
 
         # Simulate the bypass: the line changes after the contract ran
         # (e.g. via admin or a pre-fix API); HIGH's ceiling is 1500.
@@ -474,10 +719,9 @@ class PayTimeBandRecheckTests(EvenniaTestCase):
         line.amount = 5000
         line.save(update_fields=["amount"])
 
-        outcome = resolve_stake_by_gm_pick(
-            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
 
+        outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
         purse = get_or_create_purse(sheet)
         purse.refresh_from_db()
@@ -524,77 +768,3 @@ class ClaimBeforePayTests(EvenniaTestCase):
         purse = get_or_create_purse(sheet)
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 300)  # paid once, not 600
-
-
-class GMPickGateAndActivationTests(EvenniaTestCase):
-    """GM picks honor the anti-farming gate and resolve under the activation
-    the stake actually pended with (#1770 PR3 review findings 3 + 5)."""
-
-    @classmethod
-    def setUpTestData(cls):
-        seed_default_risk_calibrations()
-        cls.gm_profile = GMProfileFactory()
-
-    def _pend(self, progress, beat):
-        record_outcome_tier_completion(
-            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
-        )
-
-    def test_pick_under_unready_activation_skips_payout(self):
-        sheet, beat, progress, stake, _win = _character_story_ready_beat(
-            target_level=None, money=300
-        )
-        _level_sheet(sheet, 4)
-        activation = activate_stakes_contract(beat, [sheet])
-        self.assertFalse(activation.is_ready)
-        self._pend(progress, beat)
-
-        outcome = resolve_stake_by_gm_pick(
-            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
-
-        self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
-        purse = get_or_create_purse(sheet)
-        purse.refresh_from_db()
-        self.assertEqual(purse.balance, 0)
-
-    def test_pick_under_effective_none_activation_skips_payout(self):
-        sheet, beat, progress, stake, _win = _character_story_ready_beat(money=300)
-        _level_sheet(sheet, 12)  # target 4 + 8 over -> effective NONE
-        activation = activate_stakes_contract(beat, [sheet])
-        self.assertEqual(activation.effective_risk, RenownRisk.NONE)
-        self._pend(progress, beat)
-
-        resolve_stake_by_gm_pick(
-            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
-
-        purse = get_or_create_purse(sheet)
-        purse.refresh_from_db()
-        self.assertEqual(purse.balance, 0)
-
-    def test_pick_uses_activation_of_the_pended_completion(self):
-        """A new activation opened AFTER the pend (beat re-engaged) must not
-        change the pended stake's gate or its audit row."""
-        sheet, beat, progress, stake, _win = _character_story_ready_beat(money=300)
-        _level_sheet(sheet, 4)
-        pended_under = activate_stakes_contract(beat, [sheet])
-        self.assertEqual(pended_under.effective_risk, RenownRisk.HIGH)
-        self._pend(progress, beat)
-
-        # Beat re-engaged by a grossly over-leveled party: a NEW open
-        # activation at effective NONE. The old selection logic (open
-        # activation first) would starve the pended stake's payout.
-        overleveled = _level_sheet(CharacterSheetFactory(), 12)
-        later = activate_stakes_contract(beat, [overleveled])
-        self.assertIsNone(later.resolved_at)
-        self.assertEqual(later.effective_risk, RenownRisk.NONE)
-
-        outcome = resolve_stake_by_gm_pick(
-            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
-        )
-
-        self.assertEqual(outcome.activation_id, pended_under.pk)
-        purse = get_or_create_purse(sheet)
-        purse.refresh_from_db()
-        self.assertEqual(purse.balance, 300)

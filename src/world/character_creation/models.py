@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Prefetch
@@ -33,6 +35,7 @@ from world.character_creation.constants import (
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
     CommentType,
+    FamilyPath,
     Stage,
     StartingAreaAccessLevel,
 )
@@ -44,6 +47,11 @@ from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from world.skills.models import SkillPointBudget
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +235,8 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     Replaces SpecialHeritage with a universal system that provides worldbuilding
     context for all paths (not just special ones). Each Beginnings option can
-    gate which species are available and whether family is selectable.
+    gate which species are available; family paths are gated per-Upbringing
+    instead, on ``OriginTemplate`` (#3617).
 
     Examples:
     - Arx: "Normal Upbringing", "Sleeper", "Misbegotten"
@@ -267,10 +276,6 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     sort_order = models.PositiveIntegerField(
         default=0,
         help_text="Display order in selection UI (lower = first)",
-    )
-    family_known = models.BooleanField(
-        default=True,
-        help_text="Whether family is selectable in Lineage stage (False = 'Unknown')",
     )
     allowed_species = models.ManyToManyField(
         _SPECIES_MODEL,
@@ -416,7 +421,7 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             .prefetch_related(
                 Prefetch(
                     "tradition__codex_grants",
-                    queryset=TraditionCodexGrant.objects.only("tradition_id", "entry_id"),
+                    queryset=TraditionCodexGrant.objects.all(),
                     to_attr="cached_codex_grants",
                 ),
             )
@@ -547,7 +552,7 @@ class OriginTemplateManager(NaturalKeyManager):
 
 
 class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
-    """Authored origin-story frame for a Beginning (#2478).
+    """The Upbringing a player picks within a beginning (#2478, #3617).
 
     Content model — authored in the lore repo, exported/imported via
     ``CONTENT_MODELS``. No factory-seeded catalog. Multiple templates per
@@ -556,6 +561,10 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     No slug field — natural key is (beginning, name), mirroring ``Beginnings``
     itself (``["starting_area", "name"]``) and ``BeginningTradition``
     (``["beginning", "tradition"]``).
+
+    Carries a CG point cost, a trust gate, and three switches for how a
+    character's family record can relate to this Upbringing: claim a
+    staff-authored family, name a new one, or have none at all (#3617).
     """
 
     beginning = models.ForeignKey(
@@ -574,14 +583,54 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     sort_order = models.PositiveSmallIntegerField(
         default=0, help_text="Display order when multiple templates exist."
     )
+    cg_point_cost = models.IntegerField(
+        default=0,
+        help_text="Flat CG cost of this Upbringing (#3617). Negative refunds, like a drawback.",
+    )
+    trust_required = models.IntegerField(
+        default=0, help_text="Minimum trust to see/select this Upbringing (#3617)."
+    )
+    allows_claim_family = models.BooleanField(
+        default=False, help_text="Player may claim a staff-authored family (#3617)."
+    )
+    allows_name_family = models.BooleanField(
+        default=False, help_text="Player may name a new family with no authority (#3617)."
+    )
+    allows_no_family = models.BooleanField(
+        default=False, help_text="Player has no family; the tarot surname ritual applies (#3617)."
+    )
+    claimable_kinds = models.ManyToManyField(
+        "arxii.FamilyKind",
+        blank=True,
+        related_name="claimable_in_templates",
+        help_text="Kinds offered on the claim path; empty = every kind (#3617).",
+    )
+    named_family_kind = models.ForeignKey(
+        "arxii.FamilyKind",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="named_in_templates",
+        help_text="Kind a player-named family gets; required when naming is allowed (#3617).",
+    )
 
     objects = OriginTemplateManager()
 
     class Meta:
-        verbose_name = "Origin Template"
-        verbose_name_plural = "Origin Templates"
+        verbose_name = "Upbringing"
+        verbose_name_plural = "Upbringings"
         unique_together = [["beginning", "name"]]
         ordering = ["beginning", "sort_order", "name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(allows_claim_family=True)
+                    | models.Q(allows_name_family=True)
+                    | models.Q(allows_no_family=True)
+                ),
+                name="origintemplate_at_least_one_family_path",
+            )
+        ]
 
     class NaturalKeyConfig:
         fields = ["beginning", "name"]
@@ -589,6 +638,38 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def allowed_family_paths(self) -> list[str]:
+        """The family paths this Upbringing permits, in display order (#3617)."""
+        paths: list[str] = []
+        if self.allows_claim_family:
+            paths.append(FamilyPath.CLAIMED)
+        if self.allows_name_family:
+            paths.append(FamilyPath.NAMED)
+        if self.allows_no_family:
+            paths.append(FamilyPath.NONE)
+        return paths
+
+    def is_accessible_by(self, account: AccountDB) -> bool:
+        """Trust gate, mirroring ``Beginnings.is_accessible_by``."""
+        if not self.is_active:
+            return False
+        if account.is_staff:
+            return True
+        if self.trust_required > 0:
+            try:
+                account_trust = account.trust
+            except AttributeError:
+                return False
+            return account_trust >= self.trust_required
+        return True
+
+    def clean(self) -> None:
+        super().clean()
+        if self.allows_name_family and self.named_family_kind_id is None:
+            raise ValidationError(
+                {"named_family_kind": "Required when naming a family is allowed."}
+            )
 
 
 class OriginTemplateSlotManager(NaturalKeyManager):
@@ -618,12 +699,22 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Required slots are marked in the post-CG finish-later editor.",
     )
+    applies_to = models.CharField(
+        max_length=10,
+        choices=FamilyPath.choices,
+        default=FamilyPath.ANY,
+        help_text="Which family path shows this prompt; 'any' shows it always (#3617).",
+    )
+    allows_text = models.BooleanField(
+        default=True,
+        help_text="Player may write a free-text answer (the 'other' box on a pick-list) (#3617).",
+    )
 
     objects = OriginTemplateSlotManager()
 
     class Meta:
-        verbose_name = "Origin Template Slot"
-        verbose_name_plural = "Origin Template Slots"
+        verbose_name = "Upbringing Prompt"
+        verbose_name_plural = "Upbringing Prompts"
         unique_together = [["template", "name"]]
         ordering = ["template", "sort_order", "name"]
 
@@ -633,6 +724,47 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class OriginTemplateSlotChoiceManager(NaturalKeyManager):
+    """Manager for OriginTemplateSlotChoice with natural key support."""
+
+
+class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """One authored answer on a pick-list prompt, with its price (#3617).
+
+    Price on the claim path is ``cg_point_cost + cost_per_influence * family.influence``;
+    on the name and none paths influence is 0. Mirrors ``HouseAspectOption``.
+    """
+
+    slot = models.ForeignKey(OriginTemplateSlot, on_delete=models.CASCADE, related_name="choices")
+    name = models.CharField(max_length=100, help_text="Choice label (part of natural key).")
+    description = models.TextField(blank=True, help_text="Player-facing blurb.")
+    cg_point_cost = models.IntegerField(default=0, help_text="Flat CG cost of this choice.")
+    cost_per_influence = models.IntegerField(
+        default=0, help_text="CG cost per point of the claimed family's influence."
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = OriginTemplateSlotChoiceManager()
+
+    class Meta:
+        verbose_name = "Upbringing Prompt Choice"
+        verbose_name_plural = "Upbringing Prompt Choices"
+        unique_together = [["slot", "name"]]
+        ordering = ["slot", "sort_order", "name"]
+
+    class NaturalKeyConfig:
+        fields = ["slot", "name"]
+        dependencies = ["arxii.OriginTemplateSlot"]
+
+    def __str__(self) -> str:
+        return f"{self.slot}: {self.name}"
+
+    def cost_for(self, influence: int) -> int:
+        """Price of this choice against a family of ``influence`` (#3617)."""
+        return self.cg_point_cost + self.cost_per_influence * influence
 
 
 class CharacterOriginSlot(SharedMemoryModel):
@@ -655,10 +787,18 @@ class CharacterOriginSlot(SharedMemoryModel):
         help_text="The catalog slot this answer fills.",
     )
     value = models.TextField(help_text="The player's authored answer.")
+    choice = models.ForeignKey(
+        OriginTemplateSlotChoice,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="character_rows",
+        help_text="The picked choice on a pick-list prompt; null for a pure write-in (#3617).",
+    )
 
     class Meta:
-        verbose_name = "Character Origin Slot"
-        verbose_name_plural = "Character Origin Slots"
+        verbose_name = "Character Upbringing Answer"
+        verbose_name_plural = "Character Upbringing Answers"
         unique_together = [["sheet", "slot"]]
         ordering = ["slot__sort_order"]
 
@@ -789,6 +929,22 @@ class CharacterDraft(SharedMemoryModel):
         blank=True,
         related_name="character_drafts",
         help_text="Selected family (null for orphan or special heritage).",
+    )
+    # Stage 3: Lineage (#3617) - the Upbringing and the family path taken under it.
+    selected_origin_template = models.ForeignKey(
+        "OriginTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="The Upbringing chosen for this beginning.",
+    )
+    family_path = models.CharField(
+        max_length=10,
+        choices=FamilyPath.choices,
+        blank=True,
+        default="",
+        help_text="Chosen family path when the Upbringing allows more than one.",
     )
     # Kinship slot claim (#2062): the appable node or pool this OC fills.
     claimed_kin_slot = models.ForeignKey(
@@ -927,6 +1083,61 @@ class CharacterDraft(SharedMemoryModel):
         expiry_threshold = timezone.now() - timedelta(days=60)
         return self.updated_at < expiry_threshold
 
+    def resolve_family_path(self) -> str:
+        """The effective family path: the single allowed one, else the chosen one, else ''."""
+        template = self.selected_origin_template
+        if template is None:
+            return ""
+        allowed = template.allowed_family_paths()
+        if len(allowed) == 1:
+            return allowed[0]
+        return self.family_path if self.family_path in allowed else ""
+
+    def visible_origin_slot_ids(self) -> set[int]:
+        """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).
+
+        A slot applies when ``applies_to`` is ANY or matches the resolved
+        path; a slot scoped to a path the draft is not currently on is
+        hidden, and its answer/choice must be ignored everywhere (pricing,
+        finalize persistence), mirroring ``validators._get_prompt_errors``.
+        """
+        template = self.selected_origin_template
+        if template is None:
+            return set()
+        path = self.resolve_family_path()
+        return {
+            slot_id
+            for slot_id, applies_to in template.slots.values_list("id", "applies_to")
+            if applies_to in (FamilyPath.ANY, path)
+        }
+
+    def calculate_upbringing_cost(self) -> int:
+        """Upbringing flat cost + each picked choice priced against the claimed family (#3617).
+
+        Only choices on slots visible under the resolved family path are
+        priced: a choice on a slot the current path hides was answered
+        before a path switch and must not be charged for (#3617 review).
+        """
+        template = self.selected_origin_template
+        if template is None:
+            return 0
+        path = self.resolve_family_path()
+        influence = self.family.influence if (path == FamilyPath.CLAIMED and self.family) else 0
+        visible_slot_ids = self.visible_origin_slot_ids()
+        picks = self.draft_data.get("origin_choices") or {}
+        ids = [
+            int(choice_id)
+            for slot_id, choice_id in picks.items()
+            if choice_id is not None and int(slot_id) in visible_slot_ids
+        ]
+        total = template.cg_point_cost
+        if ids:
+            for choice in OriginTemplateSlotChoice.objects.filter(
+                pk__in=ids, slot__template=template, is_active=True
+            ):
+                total += choice.cost_for(influence)
+        return total
+
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """
         Determine the starting room for this character.
@@ -980,8 +1191,8 @@ class CharacterDraft(SharedMemoryModel):
         """
         Check completion status of each stage.
 
-        Returns dict mapping stage number to completion boolean.
-        Uses get_stage_validation_errors() so both share cached computation.
+        Returns dict mapping stage number to completion boolean. Derived from
+        get_stage_validation_errors(): a stage is complete when it has no errors.
         """
         errors = self.get_stage_validation_errors()
         return {
@@ -993,17 +1204,19 @@ class CharacterDraft(SharedMemoryModel):
         Get validation errors for each stage.
 
         Returns dict mapping stage number to list of error messages.
-        Empty list means the stage is complete. Result is cached on the
-        instance so get_stage_completion() and serializer share computation.
-        """
-        if hasattr(self, "_cached_stage_errors"):
-            return self._cached_stage_errors
+        Empty list means the stage is complete.
 
+        Computed on every call, never cached on the instance. CharacterDraft is
+        a SharedMemoryModel, and Evennia's idmapper holds strong references, so
+        a memo here is process-wide, not per-request: the first request to
+        serialize a draft would freeze its verdict, and every later response —
+        the PATCH echo that completes a stage, a reload, and can_submit() — would
+        replay it. That showed up as finished stages still wearing the stepper's
+        "incomplete" badge and a complete draft refused at submit.
+        """
         from world.character_creation.validators import get_all_stage_errors  # noqa: PLC0415
 
-        errors = get_all_stage_errors(self)
-        self._cached_stage_errors = errors
-        return errors
+        return get_all_stage_errors(self)
 
     def _is_heritage_complete(self) -> bool:
         """Check if heritage stage is complete."""
@@ -1081,6 +1294,16 @@ class CharacterDraft(SharedMemoryModel):
                     "cost": self.selected_beginnings.cg_point_cost,
                 }
             )
+        if self.selected_origin_template_id is not None:
+            upbringing_cost = self.calculate_upbringing_cost()
+            if upbringing_cost:
+                breakdown.append(
+                    {
+                        "category": "upbringing",
+                        "item": self.selected_origin_template.name,
+                        "cost": upbringing_cost,
+                    }
+                )
         for d in self.draft_data.get("distinctions", []):
             cost = d.get("cost", 0)
             if cost:
@@ -1207,6 +1430,43 @@ class CharacterDraft(SharedMemoryModel):
         """Check Stage 5 (Path) completion status."""
         return not self.get_stage_validation_errors().get(self.Stage.PATH, [])
 
+    def _check_allocation_ceiling(self, values: Iterable[int], maximum: int, noun: str) -> None:
+        """No single allocation may exceed the character-generation ceiling."""
+        for value in values:
+            if value > maximum:
+                msg = f"{noun} value ({value}) exceeds maximum allowed ({maximum})."
+                raise serializers.ValidationError(msg)
+
+    def _check_specialization_parents(
+        self, skills: dict, specializations: dict, budget: SkillPointBudget
+    ) -> None:
+        """A specialization only unlocks once its parent skill sits at the threshold.
+
+        The per-row ``get(pk=...)`` is deliberate, not an N+1: Specialization is a
+        SharedMemoryModel over an authored catalog, so a pk lookup is answered from
+        the identity map and costs no query once the catalog is warm (see
+        ``core.managers.CachedAllMixin``, #1846). A ``pk__in`` batch is not a pk
+        lookup, so it would bypass the map and issue a query on every call instead.
+        """
+        from world.skills.models import Specialization  # noqa: PLC0415
+
+        for spec_id, spec_value in specializations.items():
+            if spec_value <= 0:
+                continue
+            try:
+                spec = Specialization.objects.get(pk=int(spec_id))
+            except Specialization.DoesNotExist:
+                msg = f"Invalid specialization ID: {spec_id}."
+                raise serializers.ValidationError(msg) from None
+            parent_value = skills.get(str(spec.parent_skill_id), 0)
+            if parent_value < budget.specialization_unlock_threshold:
+                msg = (
+                    f"Specialization '{spec.name}' requires parent skill "
+                    f"at {budget.specialization_unlock_threshold} or higher "
+                    f"(current: {parent_value})."
+                )
+                raise serializers.ValidationError(msg)
+
     def validate_path_skills(self) -> None:
         """
         Validate skill point allocation data.
@@ -1225,52 +1485,22 @@ class CharacterDraft(SharedMemoryModel):
         - Specializations only where parent >= threshold
         - No values exceed CG max
         """
-        from world.skills.models import SkillPointBudget, Specialization  # noqa: PLC0415
+        from world.skills.models import SkillPointBudget  # noqa: PLC0415
 
         budget = SkillPointBudget.get_active_budget()
         skills = self.draft_data.get("skills", {})
         specializations = self.draft_data.get("specializations", {})
 
-        # Calculate total points spent
-        skill_points = sum(skills.values())
-        spec_points = sum(specializations.values())
-        total_spent = skill_points + spec_points
-
+        total_spent = sum(skills.values()) + sum(specializations.values())
         if total_spent > budget.total_points:
             msg = f"Total skill points ({total_spent}) exceeds budget ({budget.total_points})."
             raise serializers.ValidationError(msg)
 
-        # Validate no skill values exceed CG max
-        for value in skills.values():
-            if value > budget.max_skill_value:
-                msg = f"Skill value ({value}) exceeds maximum allowed ({budget.max_skill_value})."
-                raise serializers.ValidationError(msg)
-
-        # Validate no specialization values exceed CG max
-        for value in specializations.values():
-            if value > budget.max_specialization_value:
-                msg = (
-                    f"Specialization value ({value}) exceeds maximum allowed "
-                    f"({budget.max_specialization_value})."
-                )
-                raise serializers.ValidationError(msg)
-
-        # Validate specializations have parent at threshold
-        for spec_id, spec_value in specializations.items():
-            if spec_value > 0:
-                try:
-                    spec = Specialization.objects.get(pk=int(spec_id))
-                    parent_value = skills.get(str(spec.parent_skill_id), 0)
-                    if parent_value < budget.specialization_unlock_threshold:
-                        msg = (
-                            f"Specialization '{spec.name}' requires parent skill "
-                            f"at {budget.specialization_unlock_threshold} or higher "
-                            f"(current: {parent_value})."
-                        )
-                        raise serializers.ValidationError(msg)
-                except Specialization.DoesNotExist:
-                    msg = f"Invalid specialization ID: {spec_id}."
-                    raise serializers.ValidationError(msg) from None
+        self._check_allocation_ceiling(skills.values(), budget.max_skill_value, "Skill")
+        self._check_allocation_ceiling(
+            specializations.values(), budget.max_specialization_value, "Specialization"
+        )
+        self._check_specialization_parents(skills, specializations, budget)
 
     def _is_distinctions_complete(self) -> bool:
         """Check if distinctions stage is complete."""

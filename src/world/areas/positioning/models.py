@@ -151,11 +151,11 @@ class Position(PositionNodeBase):
 
     @cached_property
     def passable_edges_as_a(self) -> list[PositionEdge]:
-        return list(self.edges_as_a.filter(is_passable=True).only("position_a_id", "position_b_id"))
+        return list(self.edges_as_a.filter(is_passable=True))
 
     @cached_property
     def passable_edges_as_b(self) -> list[PositionEdge]:
-        return list(self.edges_as_b.filter(is_passable=True).only("position_a_id", "position_b_id"))
+        return list(self.edges_as_b.filter(is_passable=True))
 
     @cached_property
     def all_edges_as_a(self) -> list[PositionEdge]:

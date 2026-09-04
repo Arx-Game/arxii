@@ -26,3 +26,5 @@ class EvenniaExtensionsConfig(AppConfig):
         )
 
         install_lifecycle_hook_guards()
+
+        from evennia_extensions import checks  # noqa: F401, PLC0415  (registers the system check)

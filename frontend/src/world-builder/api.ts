@@ -1,4 +1,4 @@
-import { apiFetch } from '@/evennia_replacements/api';
+import { apiFetch, withQuery } from '@/evennia_replacements/api';
 import { throwApiError } from '@/lib/errors';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 
@@ -34,7 +34,7 @@ export function fetchWorldBuilderAreas(
   if (params.hasParent !== undefined) search.set('has_parent', String(params.hasParent));
   if (params.parent !== undefined) search.set('parent', String(params.parent));
   const qs = search.toString();
-  return getJson(`/api/world-builder/areas/${qs ? `?${qs}` : ''}`, 'Failed to load areas.');
+  return getJson(withQuery(`/api/world-builder/areas/`, qs), 'Failed to load areas.');
 }
 
 export function fetchWorldBuilderArea(areaId: number): Promise<WorldBuilderArea> {

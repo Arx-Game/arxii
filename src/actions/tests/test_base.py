@@ -482,6 +482,8 @@ class ActionRegistryTests(TestCase):
             # #3425 — session prep on story beats: opponent/staging lines + Run Beat.
             "run_beat",
             "gm_list_runnable_beats",
+            # #3567 - scene clocks: the GM advance-clock gesture.
+            "advance_clock",
             # #2118 — GM adjudication toolkit: catalog check invocation, awards, conditions.
             "gm_invoke_check",
             "gm_award_progression",

@@ -24,6 +24,12 @@
     margin-bottom: 20px;
 }
 
+/* The group heading is an <h2> wrapping a real <button> (#3548): the heading keeps
+   its document semantics, the button takes the interaction. */
+.app-group-heading {
+    margin: 0;
+}
+
 /* Collapsible functionality */
 .app-group-header.collapsible {
     cursor: pointer;
@@ -31,6 +37,14 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    /* Button reset - this class moved from the <h2> onto a <button>. */
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
 }
 
 .app-group-header.collapsible:hover {

@@ -6,6 +6,7 @@ from django.contrib import admin
 
 from world.roster.models import (
     Family,
+    FamilyKind,
     FamilyMembership,
     KinSlotPool,
     Kinsperson,
@@ -28,10 +29,17 @@ from world.roster.models import (
 @admin.register(Family)
 class FamilyAdmin(admin.ModelAdmin):
     autocomplete_fields = ["created_by"]
-    list_display = ["name", "family_type", "is_playable", "created_by_cg"]
-    list_filter = ["family_type", "is_playable", "created_by_cg"]
+    list_display = ["name", "kind", "influence", "is_playable", "created_by_cg"]
+    list_filter = ["kind", "is_playable", "created_by_cg"]
     search_fields = ["name", "description"]
-    ordering = ["family_type", "name"]
+    ordering = ["kind", "name"]
+
+
+@admin.register(FamilyKind)
+class FamilyKindAdmin(admin.ModelAdmin):
+    list_display = ["name", "styles_as_house", "is_active", "sort_order"]
+    list_editable = ["styles_as_house", "is_active", "sort_order"]
+    search_fields = ["name"]
 
 
 class ParentageUpInline(admin.TabularInline):
@@ -78,7 +86,7 @@ class KinspersonAdmin(admin.ModelAdmin):
         "species",
         "is_deceased",
         "is_appable",
-        "family__family_type",
+        "family__kind",
     ]
     search_fields = ["name", "description", "family__name"]
     raw_id_fields = ["sheet", "functionary", "deferred_definer"]
@@ -96,7 +104,7 @@ class ParentageEdgeAdmin(admin.ModelAdmin):
 @admin.register(KinSlotPool)
 class KinSlotPoolAdmin(admin.ModelAdmin):
     list_display = ["family", "description", "count_remaining"]
-    list_filter = ["family__family_type"]
+    list_filter = ["family__kind"]
     search_fields = ["family__name", "description"]
     filter_horizontal = ["parents", "allowed_genders"]
 

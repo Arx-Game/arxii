@@ -43,6 +43,7 @@ import {
   BATTLE_ACTION_TARGET_SHAPES,
   type BattleActionKind,
   type BattleActionScope,
+  type BattleActionTargetShape,
 } from '../constants';
 import type { BattleDetail, BattlePersonaSummary, BattleRoundSummary } from '../types';
 
@@ -273,6 +274,75 @@ interface DeclarationProps {
   myParticipant: NonNullable<BattleDetail['participants']>[number];
 }
 
+/**
+ * A move targets a place when the commander orders a unit there, and the acting
+ * unit itself otherwise. Every other action kind has a fixed scope.
+ */
+function scopeFor(actionKind: BattleActionKind, moveIsCommanderOrder: boolean): BattleActionScope {
+  if (actionKind !== 'move') return FORCED_SCOPE_FOR_KIND[actionKind];
+  return moveIsCommanderOrder ? 'place' : 'unit';
+}
+
+/** The target-picker state a declaration reads from, whatever shape it turns out to need. */
+interface TargetSelection {
+  targetUnitId: number | '';
+  targetAllyId: number | '';
+  targetPlaceId: number | '';
+  targetFortificationId: number | '';
+  repositionDx: string;
+  repositionDy: string;
+  moveIsCommanderOrder: boolean;
+}
+
+/**
+ * The target kwargs one action shape needs, or null when a required pick is missing.
+ *
+ * Every shape names the fields it requires; an unfilled one makes the whole
+ * declaration incomplete rather than sending a partial target. A move only
+ * needs a unit when it is a commander's order — otherwise you are moving
+ * yourself.
+ */
+function targetKwargs(
+  shape: BattleActionTargetShape,
+  selection: TargetSelection
+): Record<string, unknown> | null {
+  const required: Array<[string, number | string]> = [];
+  switch (shape) {
+    case 'enemy_unit':
+      required.push(['target_unit', selection.targetUnitId]);
+      break;
+    case 'ally':
+      required.push(['target_ally', selection.targetAllyId]);
+      break;
+    case 'place':
+      required.push(['target_place', selection.targetPlaceId]);
+      break;
+    case 'fortification':
+      required.push(['target_fortification', selection.targetFortificationId]);
+      break;
+    case 'move':
+      required.push(['target_place', selection.targetPlaceId]);
+      if (selection.moveIsCommanderOrder) {
+        required.push(['target_unit', selection.targetUnitId]);
+      }
+      break;
+    case 'reposition':
+      required.push(
+        ['target_place', selection.targetPlaceId],
+        ['reposition_dx', selection.repositionDx],
+        ['reposition_dy', selection.repositionDy]
+      );
+      break;
+  }
+
+  const kwargs: Record<string, unknown> = {};
+  for (const [key, value] of required) {
+    if (value === '') return null;
+    kwargs[key] = value;
+  }
+  return kwargs;
+}
+
 function BattleDeclarationSection({
   sceneId,
   battleId,
@@ -301,12 +371,7 @@ function BattleDeclarationSection({
   const { data: castableTechniques = [] } = useCastableTechniques(myPersonaId);
 
   const targetShape = BATTLE_ACTION_TARGET_SHAPES[actionKind];
-  const scope: BattleActionScope =
-    actionKind === 'move'
-      ? moveIsCommanderOrder
-        ? 'place'
-        : 'unit'
-      : FORCED_SCOPE_FOR_KIND[actionKind];
+  const scope: BattleActionScope = scopeFor(actionKind, moveIsCommanderOrder);
 
   const opposingUnits = detail.units.filter((u) => u.side_id !== myParticipant.side_id);
   const ownUnits = detail.units.filter((u) => u.side_id === myParticipant.side_id);
@@ -333,44 +398,17 @@ function BattleDeclarationSection({
 
   function buildKwargs(): Record<string, unknown> | null {
     if (techniqueId === '') return null;
-    const kwargs: Record<string, unknown> = {
-      technique_id: techniqueId,
-      action_kind: actionKind,
-      scope,
-    };
-    switch (targetShape) {
-      case 'enemy_unit':
-        if (targetUnitId === '') return null;
-        kwargs.target_unit = targetUnitId;
-        break;
-      case 'ally':
-        if (targetAllyId === '') return null;
-        kwargs.target_ally = targetAllyId;
-        break;
-      case 'place':
-        if (targetPlaceId === '') return null;
-        kwargs.target_place = targetPlaceId;
-        break;
-      case 'fortification':
-        if (targetFortificationId === '') return null;
-        kwargs.target_fortification = targetFortificationId;
-        break;
-      case 'move':
-        if (targetPlaceId === '') return null;
-        kwargs.target_place = targetPlaceId;
-        if (moveIsCommanderOrder) {
-          if (targetUnitId === '') return null;
-          kwargs.target_unit = targetUnitId;
-        }
-        break;
-      case 'reposition':
-        if (targetPlaceId === '' || repositionDx === '' || repositionDy === '') return null;
-        kwargs.target_place = targetPlaceId;
-        kwargs.reposition_dx = repositionDx;
-        kwargs.reposition_dy = repositionDy;
-        break;
-    }
-    return kwargs;
+    const targets = targetKwargs(targetShape, {
+      targetUnitId,
+      targetAllyId,
+      targetPlaceId,
+      targetFortificationId,
+      repositionDx,
+      repositionDy,
+      moveIsCommanderOrder,
+    });
+    if (targets === null) return null;
+    return { technique_id: techniqueId, action_kind: actionKind, scope, ...targets };
   }
 
   const kwargs = buildKwargs();

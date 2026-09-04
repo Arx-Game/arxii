@@ -1,8 +1,10 @@
 /**
- * Stage 3: Lineage (Family) Selection
+ * Stage 3: Lineage - Upbringing + Family Selection (#3617)
  *
- * Family selection filtered by area, orphan option, or "Unknown" for special heritage.
- * Includes tarot naming ritual for familyless characters (unknown origins and orphans).
+ * Rebuilt around Upbringings (`OriginTemplate`): a per-beginning catalog row
+ * with its own CG cost, trust gate, typed prompts, and choice of family paths
+ * (claim a staff-authored family, name a new one, or none - the tarot naming
+ * ritual). See docs/systems/character_creation.md's Lineage step section.
  */
 
 import { Button } from '@/components/ui/button';
@@ -19,20 +21,21 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { HelpCircle, Shuffle, Users } from 'lucide-react';
+import { Shuffle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   useCGExplanations,
   useClaimableTitles,
   useFamilies,
+  useFamilySlots,
   useGenders,
   useHouseClaim,
   useNamingRitualConfig,
+  useOriginTemplates,
   useSpecies,
   useTarotCards,
   useUpdateDraft,
-  useFamilySlots,
 } from '../queries';
 import { submitHouseClaim, type ClaimableTitle, type HouseClaimPayload } from '../api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -40,18 +43,50 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { ChapterLeaf } from '../folio';
+import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
-import { Stage } from '../types';
+import { UpbringingPicker } from './lineage/UpbringingPicker';
+import { UpbringingPrompts } from './lineage/UpbringingPrompts';
+import { FamilyPathSection } from './lineage/FamilyPathSection';
 
 interface LineageStageProps {
   draft: CharacterDraft;
   onStageSelect: (stage: Stage) => void;
 }
 
+/**
+ * A nobiliary particle joins its family name with a space unless it ends in an
+ * apostrophe, which elides ("d'Ancien", not "d' Ancien").
+ */
+function joinParticle(particle: string | null | undefined, familyName: string): string {
+  if (!particle) return familyName;
+  return particle.endsWith("'") ? `${particle}${familyName}` : `${particle} ${familyName}`;
+}
+
+/** A lineage card shows its reversed face only while selected and flipped. */
+function surnameFace(
+  card: { surname_upright: string; surname_reversed: string },
+  isSelected: boolean,
+  isReversed: boolean
+): string {
+  if (isSelected && isReversed) return card.surname_reversed;
+  return card.surname_upright;
+}
+
 export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
-  const { data: families, isLoading: familiesLoading } = useFamilies(draft.selected_area?.id);
+  const beginningId = draft.selected_beginnings?.id ?? null;
+  const { data: templates, isLoading: templatesLoading } = useOriginTemplates(beginningId);
+  const template = draft.selected_origin_template;
+  const path = resolveFamilyPath(draft);
+  const { data: families, isLoading: familiesLoading } = useFamilies(
+    draft.selected_area?.id,
+    template?.claimable_kind_ids ?? [],
+    path === 'claimed'
+  );
+  const influence = path === 'claimed' ? (draft.family?.influence ?? 0) : 0;
 
   // If no area selected, prompt user
   if (!draft.selected_area) {
@@ -63,41 +98,6 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       >
         <p className="mb-4 text-muted-foreground">Please select a starting area first.</p>
         <Button onClick={() => onStageSelect(Stage.ORIGIN)}>Go to Origin Selection</Button>
-      </motion.div>
-    );
-  }
-
-  // If beginnings has family_known = false, family is Unknown (e.g., Sleeper, Misbegotten)
-  if (draft.selected_beginnings && !draft.selected_beginnings.family_known) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-8"
-      >
-        <div>
-          <h2 className="theme-heading text-2xl font-bold">{copy?.lineage_heading ?? ''}</h2>
-          <p className="mt-2 text-muted-foreground">Your character's family background.</p>
-        </div>
-
-        <Card className="max-w-md">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <HelpCircle className="h-5 w-5 text-amber-500" />
-              <CardTitle className="text-base">Unknown Origins</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardDescription>
-              As a {draft.selected_beginnings.name}, your true family origins are shrouded in
-              mystery. This may be discovered through gameplay.
-            </CardDescription>
-          </CardContent>
-        </Card>
-
-        <TarotNamingRitual draft={draft} />
       </motion.div>
     );
   }
@@ -116,161 +116,52 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     );
   }
 
-  // Normal upbringing - family selection
-  const isOrphan = draft.draft_data.lineage_is_orphan ?? false;
-
-  const handleFamilySelect = (familyId: string) => {
-    if (familyId === 'orphan') {
-      updateDraft.mutate({
-        draftId: draft.id,
-        data: { family_id: null, draft_data: { lineage_is_orphan: true } },
-      });
-    } else {
-      updateDraft.mutate({
-        draftId: draft.id,
-        data: {
-          family_id: parseInt(familyId, 10),
-          draft_data: { lineage_is_orphan: false },
-        },
-      });
-    }
-  };
-
-  const noblesFamilies = families?.filter((f) => f.family_type === 'noble') ?? [];
-  const commonerFamilies = families?.filter((f) => f.family_type === 'commoner') ?? [];
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.LINEAGE}
+      title={copy?.upbringing_heading ?? STAGE_LABELS[Stage.LINEAGE]}
+      intro={copy?.upbringing_intro}
+      wide
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.lineage_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.lineage_intro ?? ''}</p>
-      </div>
+      <div className="space-y-8">
+        {templatesLoading && <div className="h-10 animate-pulse rounded bg-muted" />}
 
-      {/* Orphan option */}
-      <Card
-        className={cn(
-          'max-w-md cursor-pointer transition-all',
-          isOrphan && 'ring-2 ring-primary',
-          !isOrphan && 'hover:ring-1 hover:ring-primary/50'
+        {!templatesLoading && (templates?.length ?? 0) === 0 && (
+          <p className="text-muted-foreground">
+            No upbringings are authored for this beginning yet. Please contact staff.
+          </p>
         )}
-        onClick={() => handleFamilySelect('orphan')}
-      >
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-base">Orphan / No Family</CardTitle>
-            </div>
-            <span role="presentation" onClick={(e) => e.stopPropagation()}>
-              <Switch
-                checked={isOrphan}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    handleFamilySelect('orphan');
-                  } else {
-                    updateDraft.mutate({
-                      draftId: draft.id,
-                      data: {
-                        draft_data: { lineage_is_orphan: false },
-                      },
-                    });
-                  }
-                }}
-              />
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <CardDescription>
-            Your character has no known family, or has been disowned.
-          </CardDescription>
-        </CardContent>
-      </Card>
 
-      {/* Tarot naming ritual for orphans */}
-      {isOrphan && <TarotNamingRitual draft={draft} />}
+        {templates && templates.length > 0 && (
+          <UpbringingPicker
+            templates={templates}
+            selectedId={template?.id ?? null}
+            onSelect={(t) =>
+              updateDraft.mutate({ draftId: draft.id, data: { selected_origin_template_id: t.id } })
+            }
+          />
+        )}
 
-      {/* Family selection (disabled if orphan selected) */}
-      {!isOrphan && (
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Select Family</h3>
-
-          {familiesLoading ? (
-            <div className="h-10 animate-pulse rounded bg-muted" />
-          ) : (
-            <div className="space-y-6">
-              {/* Noble Houses */}
-              {noblesFamilies.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-muted-foreground">Noble Houses</Label>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {noblesFamilies.map((family) => (
-                      <FamilyCard
-                        key={family.id}
-                        family={family}
-                        isSelected={draft.family?.id === family.id}
-                        onSelect={() => handleFamilySelect(family.id.toString())}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Commoner Families */}
-              {commonerFamilies.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-muted-foreground">
-                    Commoner Families
-                  </Label>
-                  <Select
-                    value={draft.family?.id?.toString() ?? ''}
-                    onValueChange={handleFamilySelect}
-                  >
-                    <SelectTrigger className="w-full max-w-xs">
-                      <SelectValue placeholder="Select a family" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {commonerFamilies.map((family) => (
-                        <SelectItem key={family.id} value={family.id.toString()}>
-                          {family.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {families?.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No families available for this area. You may select orphan or contact staff.
-                </p>
-              )}
-            </div>
-          )}
-
-          {draft.family && (
-            <FamilyNamePreview
-              firstName={draft.draft_data.first_name}
-              family={families?.find((f) => f.id === draft.family?.id)}
+        {template && (
+          <>
+            <UpbringingPrompts
+              draft={draft}
+              template={template}
+              path={path}
+              influence={influence}
             />
-          )}
-
-          {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
-
-          {!draft.claimed_kin_slot && !draft.claimed_kin_pool && !draft.defer_parents && (
-            <InventedParentsCard draft={draft} />
-          )}
-
-          {!draft.family && <HouseFoundingPanel draft={draft} />}
-        </section>
-      )}
-    </motion.div>
+            <FamilyPathSection
+              draft={draft}
+              template={template}
+              path={path}
+              families={families}
+              familiesLoading={familiesLoading}
+              copy={copy}
+            />
+          </>
+        )}
+      </div>
+    </ChapterLeaf>
   );
 }
 
@@ -279,7 +170,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
 // their line's colors in the Appearance stage (#2815)
 // =============================================================================
 
-function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
+export function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
   const updateDraft = useUpdateDraft();
   const { data: genders } = useGenders();
   const { data: species } = useSpecies();
@@ -419,7 +310,7 @@ function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
 
 const PRINCIPLE_AXES = ['mercy', 'method', 'status', 'change', 'allegiance', 'power'] as const;
 
-function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
+export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
   const queryClient = useQueryClient();
   const { data: titles = [] } = useClaimableTitles();
   const { data: claim } = useHouseClaim(draft.id);
@@ -687,15 +578,19 @@ function composeParticledName(
   particle: string,
   familyName: string
 ): string {
-  const surname = particle
-    ? particle.endsWith("'")
-      ? `${particle}${familyName}`
-      : `${particle} ${familyName}`
-    : familyName;
+  const surname = joinParticle(particle, familyName);
   return firstName ? `${firstName} ${surname}` : surname;
 }
 
-function FamilyNamePreview({ firstName, family }: { firstName?: string; family?: Family }) {
+export function FamilyNamePreview({
+  firstName,
+  family,
+}: {
+  firstName?: string;
+  // Narrowed to what this preview reads: a real Family from the API, or a
+  // synthetic stand-in for a not-yet-saved 'named' family path (#3617).
+  family?: Pick<Family, 'name' | 'born_particle' | 'taken_in_particle'>;
+}) {
   if (!family) return null;
   const fullName = composeParticledName(firstName, family.born_particle, family.name);
   return (
@@ -730,7 +625,7 @@ interface KinSlotPickerProps {
   familyId: number;
 }
 
-function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
+export function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
   const updateDraft = useUpdateDraft();
   const { data: openings, isLoading } = useFamilySlots(familyId);
 
@@ -847,7 +742,7 @@ interface TarotNamingRitualProps {
   draft: CharacterDraft;
 }
 
-function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
+export function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
   const updateDraft = useUpdateDraft();
   const { data: cards, isLoading } = useTarotCards();
   const { data: ritualConfig } = useNamingRitualConfig();
@@ -1087,12 +982,8 @@ interface TarotCardItemProps {
   onSelect: () => void;
 }
 
-function TarotCardItem({ card, isSelected, isReversed, onSelect }: TarotCardItemProps) {
-  const surname = isSelected
-    ? isReversed
-      ? card.surname_reversed
-      : card.surname_upright
-    : card.surname_upright;
+export function TarotCardItem({ card, isSelected, isReversed, onSelect }: TarotCardItemProps) {
+  const surname = surnameFace(card, isSelected, isReversed);
 
   const description =
     isSelected && isReversed && card.description_reversed
@@ -1131,7 +1022,7 @@ interface FamilyCardProps {
   onSelect: () => void;
 }
 
-function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
+export function FamilyCard({ family, isSelected, onSelect }: FamilyCardProps) {
   return (
     <Card
       className={cn(

@@ -11,6 +11,7 @@
  */
 
 import { memo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Handle, Position } from '@xyflow/react';
 import type { Node, NodeProps } from '@xyflow/react';
 import type { EpisodeLike } from './EpisodeFormDialog';
@@ -26,6 +27,8 @@ export interface EpisodeNodeData extends Record<string, unknown> {
   episode?: EpisodeLike;
   /** Callback fired when user clicks the node */
   onEpisodeClick?: (episode: EpisodeLike) => void;
+  /** GM-only routing report lines; empty or absent for players */
+  routingProblems?: string[];
 }
 
 // Alias for the React Flow Node type specialised to our data.
@@ -53,9 +56,17 @@ function EpisodeNodeComponent({ data }: NodeProps<EpisodeNodeType>) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className="cursor-pointer rounded-md border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/60 hover:bg-accent"
       style={{ minWidth: 120, maxWidth: 200 }}
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       data-testid="dag-episode-node"
       data-episode-id={data.episode?.id}
     >
@@ -64,6 +75,17 @@ function EpisodeNodeComponent({ data }: NodeProps<EpisodeNodeType>) {
         {data.breadcrumb}
       </p>
       <p className="truncate text-xs font-semibold text-foreground">{data.title}</p>
+      {data.routingProblems && data.routingProblems.length > 0 && (
+        <p
+          className="mt-0.5 flex items-center gap-1 text-[10px] text-destructive"
+          title={data.routingProblems.join('\n')}
+          data-testid="dag-episode-warning"
+        >
+          <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+          {data.routingProblems.length} routing{' '}
+          {data.routingProblems.length === 1 ? 'problem' : 'problems'}
+        </p>
+      )}
       <Handle type="source" position={Position.Bottom} className="!opacity-0" />
     </div>
   );

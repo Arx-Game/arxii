@@ -77,12 +77,63 @@ class TransitionRequiredOutcomeViewSetTest(APITestCase):
             beat=cls.other_beat,
         )
 
-    def test_list_returns_all_for_authenticated_user(self):
-        """Authenticated user can list required outcomes."""
+    @suppress_permission_errors
+    def test_player_list_is_empty_and_retrieve_is_404(self):
+        """A player who neither owns nor leads any story sees no rows (#3563).
+
+        The raw routing-rule endpoint has no story scoping in its own right;
+        IsLeadGMOnTransitionStoryOrStaff.has_permission returns True for
+        every SAFE_METHOD, so without a queryset filter a player could list
+        every story's routing predicates. Unscoped 200-with-zero-rows for
+        list, 404 (not 403) for retrieve of a row outside their scope, since
+        DRF's get_object() 404s before has_object_permission ever runs.
+        """
         self.client.force_authenticate(user=self.player_account)
         url = reverse("transitionrequiredoutcome-list")
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
+        assert response.data["results"] == []
+
+        detail_url = reverse(
+            "transitionrequiredoutcome-detail", kwargs={"pk": self.required_outcome.pk}
+        )
+        detail_response = self.client.get(detail_url)
+        assert detail_response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_lead_gm_and_owner_and_staff_can_read(self):
+        """Lead GM, story owner, and staff can each read the scoped rows (#3563)."""
+        owner_only_account = AccountFactory()
+        owner_only_story = StoryFactory(owners=[owner_only_account])
+        owner_only_chapter = ChapterFactory(story=owner_only_story)
+        owner_only_ep1 = EpisodeFactory(chapter=owner_only_chapter, order=1)
+        owner_only_ep2 = EpisodeFactory(chapter=owner_only_chapter, order=2)
+        owner_only_transition = TransitionFactory(
+            source_episode=owner_only_ep1,
+            target_episode=owner_only_ep2,
+        )
+        owner_only_beat = BeatFactory(episode=owner_only_ep1)
+        owner_only_required_outcome = TransitionRequiredOutcomeFactory(
+            transition=owner_only_transition,
+            beat=owner_only_beat,
+        )
+
+        for account, pk in (
+            (self.lead_gm_account, self.required_outcome.pk),
+            (owner_only_account, owner_only_required_outcome.pk),
+            (self.staff_account, self.required_outcome.pk),
+        ):
+            self.client.force_authenticate(user=account)
+            detail_url = reverse("transitionrequiredoutcome-detail", kwargs={"pk": pk})
+            response = self.client.get(detail_url)
+            assert response.status_code == status.HTTP_200_OK
+
+        self.client.force_authenticate(user=self.staff_account)
+        list_url = reverse("transitionrequiredoutcome-list")
+        list_response = self.client.get(list_url)
+        assert list_response.status_code == status.HTTP_200_OK
+        pks = [item["id"] for item in list_response.data["results"]]
+        assert self.required_outcome.pk in pks
+        assert self.other_required_outcome.pk in pks
 
     def test_list_filtered_by_transition(self):
         """Filtering by transition returns only matching required outcomes."""
