@@ -167,6 +167,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
   stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
+- **Combos are no longer a blind button (#3553).** `scan_round_combos` lists every combo
+  taking shape this round slot by slot (requirement, filler, open), with the
+  `bonus_damage`/`bypass_soak` rider; a known combo with open slots is listed as a
+  "needs one more: Defense" hint while the round is open (knowledge counts before the
+  knower declares; unknown combos stay hidden until complete). Web `ComboRow` is a slot
+  strip with avatars; telnet `combat combos` prints the same composition. No new models.
 - **Ward your allies (#2208, ADR-0118).** Aegis Field / Mirror Ward / Phase Step each gained
   an ALLY-single (Aegis Ward, Mirror Vigil, Phase Guard — castable in or out of combat) and an
   ALLY-`FILTERED_GROUP` party-preparation variant (Aegis Communion, Mirror Communion, Phase

@@ -166,7 +166,7 @@ import * as combatQueries from '@/combat/queries';
 import * as inventoryHooks from '@/inventory/hooks/useInventory';
 import { YourTurn } from '../sections/YourTurn';
 import type { YourTurnProps } from '../sections/YourTurn';
-import type { AvailableCombo, EncounterDetail, Opponent, Participant } from '../types';
+import type { EncounterDetail, Opponent, Participant, RoundCombo, RoundComboSlot } from '../types';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ const mockManeuverMutateAsync = vi.fn();
 
 function setupMocks(
   options: {
-    combos?: AvailableCombo[];
+    combos?: RoundCombo[];
     combosLoading?: boolean;
     inventory?: Array<{ id: number; display_name: string; is_usable: boolean }>;
   } = {}
@@ -284,6 +284,51 @@ function makeParticipant(
 /** The viewer's own participant fixture — character_sheet_id matches defaultProps.characterSheetId. */
 function makeSelfParticipant(id: number): Participant {
   return makeParticipant(id, 'Hero', 'active', 100);
+}
+
+function makeComboSlot(
+  overrides: Partial<RoundComboSlot> & { slot_number: number }
+): RoundComboSlot {
+  return {
+    effect_type: 'Attack',
+    resonance: null,
+    archetype: '',
+    participant_id: null,
+    character_name: null,
+    technique_name: null,
+    ...overrides,
+  };
+}
+
+/** A round combo fixture; defaults to a complete two-slot fill by two allies (#3553). */
+function makeCombo(
+  overrides: Partial<RoundCombo> & { combo_id: number; combo_name: string }
+): RoundCombo {
+  const slots = overrides.slots ?? [
+    makeComboSlot({
+      slot_number: 1,
+      participant_id: 1,
+      character_name: 'Ally One',
+      technique_name: 'Firebolt',
+    }),
+    makeComboSlot({
+      slot_number: 2,
+      participant_id: 2,
+      character_name: 'Ally Two',
+      technique_name: 'Cleave',
+    }),
+  ];
+  const filled = slots.filter((slot) => slot.participant_id !== null).length;
+  return {
+    known_by_participant: true,
+    slot_count: slots.length,
+    filled_count: filled,
+    complete: filled === slots.length,
+    bonus_damage: 0,
+    bypass_soak: false,
+    ...overrides,
+    slots,
+  };
 }
 
 function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetail {
@@ -472,7 +517,7 @@ describe('YourTurn — Task 7.2 combo upgrade', () => {
 
   it('renders combo upgrade row when combos are available', () => {
     setupMocks({
-      combos: [{ combo_id: 1, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 }],
+      combos: [makeCombo({ combo_id: 1, combo_name: 'Tidewall' })],
     });
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
@@ -485,8 +530,15 @@ describe('YourTurn — Task 7.2 combo upgrade', () => {
   it('renders known combo as enabled and unknown as disabled', () => {
     setupMocks({
       combos: [
-        { combo_id: 1, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 },
-        { combo_id: 2, combo_name: 'Storm Ring', known_by_participant: false, slot_count: 3 },
+        makeCombo({ combo_id: 1, combo_name: 'Tidewall' }),
+        makeCombo({
+          combo_id: 2,
+          combo_name: 'Storm Ring',
+          known_by_participant: false,
+          slots: [1, 2, 3].map((n) =>
+            makeComboSlot({ slot_number: n, participant_id: n, character_name: `Ally ${n}` })
+          ),
+        }),
       ],
     });
 
@@ -497,9 +549,85 @@ describe('YourTurn — Task 7.2 combo upgrade', () => {
     expect(screen.getByTestId('combo-upgrade-btn-2')).toHaveAttribute('title', 'Combo not known');
   });
 
+  it('renders the slot strip with fillers, marks the viewer, and shows the rider', () => {
+    setupMocks({
+      combos: [
+        makeCombo({
+          combo_id: 3,
+          combo_name: 'Pincer',
+          bonus_damage: 7,
+          bypass_soak: true,
+          slots: [
+            makeComboSlot({
+              slot_number: 1,
+              participant_id: 5,
+              character_name: 'Hero',
+              technique_name: 'Firebolt',
+            }),
+            makeComboSlot({
+              slot_number: 2,
+              effect_type: 'Defense',
+              resonance: 'Fire',
+              archetype: 'shield',
+              participant_id: 1,
+              character_name: 'Ally One',
+              technique_name: 'Bulwark',
+            }),
+          ],
+        }),
+      ],
+    });
+    const encounter = makeEncounter({
+      participants: [makeSelfParticipant(5), makeParticipant(1, 'Ally One')],
+    });
+
+    render(<YourTurn {...defaultProps({ encounter })} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('combo-slot-3-1')).toHaveTextContent('Hero (you)');
+    expect(screen.getByTestId('combo-slot-3-1')).toHaveTextContent('Attack · Firebolt');
+    expect(screen.getByTestId('combo-slot-3-2')).toHaveTextContent('Ally One');
+    expect(screen.getByTestId('combo-slot-3-2')).toHaveTextContent(
+      'Defense (Fire, Shield role) · Bulwark'
+    );
+    expect(screen.getByTestId('combo-rider-3')).toHaveTextContent('+7 damage, bypasses soak');
+    expect(screen.getByTestId('combo-upgrade-btn-3')).not.toBeDisabled();
+    expect(screen.queryByTestId('combo-hint-3')).not.toBeInTheDocument();
+  });
+
+  it('lists a partial known combo as a hint with its open slots, not a button', () => {
+    setupMocks({
+      combos: [
+        makeCombo({
+          combo_id: 4,
+          combo_name: 'Storm Ring',
+          slots: [
+            makeComboSlot({
+              slot_number: 1,
+              participant_id: 1,
+              character_name: 'Ally One',
+              technique_name: 'Firebolt',
+            }),
+            makeComboSlot({ slot_number: 2, effect_type: 'Defense' }),
+            makeComboSlot({ slot_number: 3, effect_type: 'Attack', resonance: 'Storm' }),
+          ],
+        }),
+      ],
+    });
+
+    render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('combo-slot-4-2')).toHaveTextContent('Open');
+    expect(screen.getByTestId('combo-slot-4-2')).toHaveTextContent('Defense');
+    expect(screen.getByTestId('combo-hint-4')).toHaveTextContent(
+      'Needs 2 more: Defense, Attack (Storm)'
+    );
+    expect(screen.queryByTestId('combo-upgrade-btn-4')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('combo-rider-4')).not.toBeInTheDocument();
+  });
+
   it('calls upgradeCombo mutation when a known combo is clicked', async () => {
     setupMocks({
-      combos: [{ combo_id: 5, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 }],
+      combos: [makeCombo({ combo_id: 5, combo_name: 'Tidewall' })],
     });
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
@@ -1779,14 +1907,14 @@ describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
 
   it('labels the Combo Upgrades section for a first-timer', () => {
     setupMocks({
-      combos: [{ combo_id: 1, combo_name: 'Tidewall', known_by_participant: true, slot_count: 2 }],
+      combos: [makeCombo({ combo_id: 1, combo_name: 'Tidewall' })],
     });
 
     render(<YourTurn {...defaultProps()} />, { wrapper: createWrapper() });
 
     expect(screen.getByText('Combo Upgrades')).toHaveAttribute(
       'title',
-      'Upgrade your Focused Action into a known multi-slot combo, if you qualify this round.'
+      'Upgrade your Focused Action into a known multi-slot combo, if you qualify this round. A combo with open slots shows what an ally still needs to declare.'
     );
   });
 

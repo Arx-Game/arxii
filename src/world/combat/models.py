@@ -1128,6 +1128,22 @@ class ComboSlot(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.combo.name} Slot {self.slot_number}"
 
+    @property
+    def requirement_label(self) -> str:
+        """What this slot asks of a declared action, as a player reads it (#3553).
+
+        ``"Attack"``, ``"Attack (Fire)"``, ``"Attack (Fire, Shield role)"``.
+        """
+        qualifiers: list[str] = []
+        if self.resonance_requirement_id is not None:
+            qualifiers.append(self.resonance_requirement.name)
+        if self.required_archetype:
+            qualifiers.append(f"{RoleArchetype(self.required_archetype).label} role")
+        label = self.required_action_type.name
+        if qualifiers:
+            label = f"{label} ({', '.join(qualifiers)})"
+        return label
+
 
 class ComboLearning(SharedMemoryModel):
     """Record that a PC knows a particular combo."""

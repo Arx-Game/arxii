@@ -170,11 +170,13 @@ from world.combat.types import (
     ClashRoundResult,
     CombatTechniqueResolution,
     CombatTechniqueResult,
+    ComboSlotFill,
     ComboSlotMatch,
     DefenseResult,
     OpponentDamageResult,
     ParticipantDamageResult,
     PreparedClashContribution,
+    RoundCombo,
     RoundResolutionResult,
 )
 from world.conditions.constants import Allegiance
@@ -6673,54 +6675,84 @@ def _participant_has_archetype(participant: CombatParticipant, archetype: str) -
     return False
 
 
-def _try_match_all_slots(
+def _unused_matches(
+    slot: ComboSlot,
+    actions: list[CombatRoundAction],
+    assignment: dict[int, CombatRoundAction],
+    gift_resonance_ids: dict[int, set[int]],
+) -> list[CombatRoundAction]:
+    """Actions not yet assigned to a slot that satisfy ``slot``."""
+    used_action_ids = {action.pk for action in assignment.values()}
+    return [
+        action
+        for action in actions
+        if action.pk not in used_action_ids
+        and _action_matches_slot(action, slot, gift_resonance_ids)
+    ]
+
+
+def _best_slot_assignment(
     slots: list[ComboSlot],
     actions: list[CombatRoundAction],
     gift_resonance_ids: dict[int, set[int]],
-) -> list[ComboSlotMatch] | None:
-    """Try to assign one action per slot using backtracking.
+) -> dict[int, CombatRoundAction]:
+    """Assign distinct actions to slots, filling as many slots as possible.
 
-    Returns a list of ``ComboSlotMatch`` if all slots match, or ``None``.
-    Backtracking ensures order-independent matching for combos with 2-5 slots.
+    Backtracking over "this action fills the slot" and "the slot stays open"
+    keeps matching order-independent for combos with 2-5 slots, and the
+    fullest assignment wins, so a party sees the true number of open slots
+    (#3553) and a complete fill is found whenever one exists. Keyed by slot pk.
     """
+    assignment: dict[int, CombatRoundAction] = {}
+    best: dict[int, CombatRoundAction] = {}
+
+    def backtrack(slot_idx: int) -> None:
+        nonlocal best
+        if len(best) == len(slots):
+            return
+        if slot_idx >= len(slots):
+            if len(assignment) > len(best):
+                best = dict(assignment)
+            return
+        slot = slots[slot_idx]
+        for action in _unused_matches(slot, actions, assignment, gift_resonance_ids):
+            assignment[slot.pk] = action
+            backtrack(slot_idx + 1)
+            del assignment[slot.pk]
+        backtrack(slot_idx + 1)
+
+    backtrack(0)
+    return best
+
+
+def _fill_slots(
+    slots: list[ComboSlot],
+    actions: list[CombatRoundAction],
+    gift_resonance_ids: dict[int, set[int]],
+) -> list[ComboSlotFill]:
+    """One ``ComboSlotFill`` per slot, in slot order, from the fullest assignment."""
     # #2051 invariant: combos are never solo — each slot must be filled by a
     # distinct PC-controlled action. CombatRoundAction requires a
     # CombatParticipant (PC) FK; companions materialize as CombatOpponent and
     # cannot produce one. This filter is defense-in-depth against future
     # companion-action surfaces.
     pc_actions = [a for a in actions if a.participant_id is not None]
-    actions = pc_actions
+    best = _best_slot_assignment(slots, pc_actions, gift_resonance_ids)
 
-    assignment: dict[int, CombatRoundAction] = {}
-    used_action_ids: set[int] = set()
-
-    def backtrack(slot_idx: int) -> bool:
-        if slot_idx >= len(slots):
-            return True
-        slot = slots[slot_idx]
-        for action in actions:
-            if action.pk in used_action_ids:
-                continue
-            if _action_matches_slot(action, slot, gift_resonance_ids):
-                assignment[slot.pk] = action
-                used_action_ids.add(action.pk)
-                if backtrack(slot_idx + 1):
-                    return True
-                del assignment[slot.pk]
-                used_action_ids.discard(action.pk)
-        return False
-
-    if not backtrack(0):
-        return None
-
-    return [
-        ComboSlotMatch(
-            slot_number=slot.slot_number,
-            participant=assignment[slot.pk].participant,
-            action=assignment[slot.pk],
+    fills: list[ComboSlotFill] = []
+    for slot in slots:
+        action = best.get(slot.pk)
+        match = (
+            None
+            if action is None
+            else ComboSlotMatch(
+                slot_number=slot.slot_number,
+                participant=action.participant,
+                action=action,
+            )
         )
-        for slot in slots
-    ]
+        fills.append(ComboSlotFill(slot=slot, match=match))
+    return fills
 
 
 def _prefetch_clash_state(
@@ -6803,7 +6835,7 @@ def _combo_passes_clash_prereqs(
     return True
 
 
-def _build_available_combo(  # noqa: PLR0913 - prefetched availability inputs
+def _build_round_combo(  # noqa: PLR0913 - prefetched availability inputs
     combo: ComboDefinition,
     *,
     actions: list[CombatRoundAction],
@@ -6813,11 +6845,13 @@ def _build_available_combo(  # noqa: PLR0913 - prefetched availability inputs
     max_probing: int,
     encounter_clash_flavors: set[str],
     active_window_condition_template_ids: set[int],
-) -> AvailableCombo | None:
-    """Return an ``AvailableCombo`` if ``combo`` is fully available, else None.
+) -> RoundCombo | None:
+    """Return the ``RoundCombo`` for ``combo`` if it is taking shape this round, else None.
 
     Applies the availability gates in order: slots present, minimum probing,
-    known-or-discoverable, clash-state prerequisites, and slot matching.
+    known-or-discoverable, clash-state prerequisites, then slot filling. A
+    partial fill is returned only for a combo a PC in the encounter knows
+    (#3553); an unknown, discoverable combo surfaces only once it is complete.
     """
     slots: list[ComboSlot] = combo.cached_slots
     # #2051 runtime belt: combos are never solo — skip any definition with fewer
@@ -6842,30 +6876,36 @@ def _build_available_combo(  # noqa: PLR0913 - prefetched availability inputs
     ):
         return None
 
-    # Backtracking slot matching: each slot must be filled by a distinct action
-    slot_matches = _try_match_all_slots(slots, actions, gift_resonance_ids)
-    if slot_matches is None:
-        return None
-
-    return AvailableCombo(
+    # Backtracking slot filling: each slot is filled by a distinct action, or open.
+    slot_fills = _fill_slots(slots, actions, gift_resonance_ids)
+    round_combo = RoundCombo(
         combo=combo,
-        slot_matches=slot_matches,
+        slot_fills=slot_fills,
         known_by_participant=known_by_any,
     )
+    if round_combo.filled_count == 0:
+        return None
+    if not round_combo.complete and not known_by_any:
+        return None
+    return round_combo
 
 
-def detect_available_combos(
+def scan_round_combos(
     encounter: CombatEncounter,
     round_number: int,
-) -> list[AvailableCombo]:
-    """Scan declared actions to find combos whose slots are all satisfied.
+) -> list[RoundCombo]:
+    """List every combo taking shape in this round's declared actions (#3553).
 
-    A combo is available when:
-    - Every slot is matched by a distinct participant's focused action.
+    A combo is listed, with each slot marked filled or open, when:
+    - At least one slot is filled by a participant's focused action, and every
+      slot is filled by a distinct participant's action.
     - The combo's ``minimum_probing`` (if set) is met by at least one active
       opponent in the encounter.
-    - At least one participating PC knows the combo (``ComboLearning``) **or**
-      the combo is ``discoverable_via_combat``.
+    - A PC in the encounter knows the combo (``ComboLearning``), **or** the
+      combo is ``discoverable_via_combat`` and every slot is filled. Knowledge
+      counts before the knower declares, so a party can see "one more Attack
+      completes Pincer" while the round is still open; an unknown combo is
+      never hinted at.
     - Clash-state prerequisites are satisfied (two prefetches per call, not per combo):
       - If ``required_clash_flavor`` is set, an active ``Clash`` of that flavor
         must exist in the encounter.
@@ -6878,7 +6918,8 @@ def detect_available_combos(
         round_number: The round whose actions to scan.
 
     Returns:
-        List of ``AvailableCombo`` instances with slot→participant mappings.
+        List of ``RoundCombo`` instances, one per combo, each with a
+        slot-by-slot fill.
     """
     actions = list(
         CombatRoundAction.objects.filter(
@@ -6888,6 +6929,7 @@ def detect_available_combos(
         ).select_related(
             "participant",
             "participant__character_sheet",
+            "participant__character_sheet__character",
             "focused_action",
             "focused_action__effect_type",
             "focused_action__gift",
@@ -6918,14 +6960,21 @@ def detect_available_combos(
                 "slots",
                 queryset=ComboSlot.objects.select_related(
                     "required_action_type",
+                    "resonance_requirement",
                 ).order_by("slot_number"),
                 to_attr="cached_slots",
             ),
         )
     )
 
-    # Pre-fetch which characters know which combos (one query)
-    participant_sheet_ids = {a.participant.character_sheet_id for a in actions}
+    # Pre-fetch which characters know which combos (one query). Every active
+    # PC in the encounter counts, declared or not (#3553).
+    participant_sheet_ids = set(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        ).values_list("character_sheet_id", flat=True)
+    )
     known_combos_qs = ComboLearning.objects.filter(
         character_sheet_id__in=participant_sheet_ids,
     ).values_list("combo_id", "character_sheet_id")
@@ -6949,10 +6998,10 @@ def detect_available_combos(
         encounter, active_opponents
     )
 
-    available: list[AvailableCombo] = []
+    round_combos: list[RoundCombo] = []
 
     for combo in combos:
-        result = _build_available_combo(
+        result = _build_round_combo(
             combo,
             actions=actions,
             gift_resonance_ids=gift_resonance_ids,
@@ -6963,24 +7012,23 @@ def detect_available_combos(
             active_window_condition_template_ids=active_window_condition_template_ids,
         )
         if result is not None:
-            available.append(result)
+            round_combos.append(result)
 
-    return available
+    return round_combos
 
 
-def run_combo_detection(
+def detect_available_combos(
     encounter: CombatEncounter,
     round_number: int,
 ) -> list[AvailableCombo]:
-    """Public entry point for combo detection during the DECLARING phase.
+    """Scan declared actions to find combos whose slots are all satisfied.
 
-    Call this between action declaration and resolution to detect available
-    combos and allow players to upgrade actions. ``resolve_round`` also
-    calls ``detect_available_combos`` internally for informational reporting,
-    but combo upgrades via ``upgrade_action_to_combo`` should happen during
-    DECLARING — before resolution begins.
+    The complete fills from ``scan_round_combos``; see it for the gates.
+
+    Returns:
+        List of ``AvailableCombo`` instances with slot→participant mappings.
     """
-    return detect_available_combos(encounter, round_number)
+    return [rc.as_available() for rc in scan_round_combos(encounter, round_number) if rc.complete]
 
 
 def upgrade_action_to_combo(

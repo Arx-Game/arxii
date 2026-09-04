@@ -531,9 +531,12 @@ module).
 - **Passive slots** — up to 2 `<ActionDeclarationCard>`s with
   `slot: "passive-<category>"`, one per non-focused category. The matching
   passive slot is hidden when `focused_category` is set.
-- **Combo upgrades** — surfaces `AvailableCombo` results from the existing
-  `detect_available_combos` service. The "Combo: Tidewall" button-row in
-  mockups is rendered here.
+- **Combo upgrades** — surfaces `RoundCombo` rows from `scan_round_combos`
+  (#3553): each combo taking shape this round as a slot strip (requirement,
+  filler avatar/name/technique, "(you)" for the viewer), the
+  `bonus_damage`/`bypass_soak` rider, the "Upgrade to Tidewall" button when the
+  fill is complete, and a "Needs one more: Defense" hint when a known combo
+  still has open slots. `detect_available_combos` is the complete-fill subset.
 - **Clash contribution mode** — when an active `Clash` has the player as a
   current contributor (or eligible), the focused card displays "→ Commit to
   clash" as the action target and exposes a Strain commitment slider. When the

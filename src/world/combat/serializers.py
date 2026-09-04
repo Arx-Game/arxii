@@ -51,6 +51,7 @@ from world.scenes.constants import PersonaType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.combat.types import ComboSlotFill
     from world.mechanics.engagement import CharacterEngagement
     from world.scenes.models import Persona
 
@@ -1375,6 +1376,45 @@ class RemoveOpponentSerializer(serializers.Serializer):
     """Write serializer for removing an NPC opponent from an encounter (#3382)."""
 
     opponent_id = serializers.IntegerField()
+
+
+class ComboSlotFillSerializer(serializers.Serializer):
+    """One slot of a combo taking shape this round (#3553): the ask, and who fills it.
+
+    Reads a ``ComboSlotFill``. The filler fields are null while the slot is open.
+    """
+
+    slot_number = serializers.IntegerField(source="slot.slot_number")
+    effect_type = serializers.CharField(source="slot.required_action_type.name")
+    resonance = serializers.SerializerMethodField()
+    archetype = serializers.CharField(source="slot.required_archetype")
+    participant_id = serializers.IntegerField(allow_null=True)
+    character_name = serializers.CharField(allow_null=True)
+    technique_name = serializers.CharField(allow_null=True)
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_resonance(self, fill: ComboSlotFill) -> str | None:
+        if fill.slot.resonance_requirement_id is None:
+            return None
+        return fill.slot.resonance_requirement.name
+
+
+class RoundComboSerializer(serializers.Serializer):
+    """A combo taking shape this round, with its slot composition and rider (#3553).
+
+    Reads a ``RoundCombo``. ``complete`` is the upgrade condition; a partial
+    fill is listed so the party can see what would complete it.
+    """
+
+    combo_id = serializers.IntegerField(source="combo.pk")
+    combo_name = serializers.CharField(source="combo.name")
+    known_by_participant = serializers.BooleanField()
+    slot_count = serializers.IntegerField()
+    filled_count = serializers.IntegerField()
+    complete = serializers.BooleanField()
+    bonus_damage = serializers.IntegerField(source="combo.bonus_damage")
+    bypass_soak = serializers.BooleanField(source="combo.bypass_soak")
+    slots = ComboSlotFillSerializer(source="slot_fills", many=True)
 
 
 class UpgradeComboSerializer(serializers.Serializer):

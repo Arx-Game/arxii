@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { ActionDeclarationCard } from '@/actions/ActionDeclarationCard';
 import type {
   ActionContext,
@@ -53,13 +54,14 @@ import {
 } from '../queries';
 import { isDispatchFailure } from '../types';
 import type {
-  AvailableCombo,
   DispatchActionRequest,
   DispatchResult,
   EncounterDetail,
   Participant,
   PositionNode,
   RoundActionTyped,
+  RoundCombo,
+  RoundComboSlot,
 } from '../types';
 import type { components } from '@/generated/api';
 
@@ -474,36 +476,152 @@ function buildClashJob(
 }
 
 // ---------------------------------------------------------------------------
-// ComboRow — renders one available combo as a button
+// ComboRow — one combo taking shape this round: slot strip, rider, and either
+// the upgrade button (complete) or what it still needs (partial) (#3553)
 // ---------------------------------------------------------------------------
 
+/** "Attack", "Attack (Fire)", "Attack (Fire, Shield role)" — mirrors ComboSlot.requirement_label. */
+function slotRequirementLabel(slot: RoundComboSlot): string {
+  const qualifiers: string[] = [];
+  if (slot.resonance) qualifiers.push(slot.resonance);
+  if (slot.archetype) {
+    qualifiers.push(`${slot.archetype.charAt(0).toUpperCase()}${slot.archetype.slice(1)} role`);
+  }
+  return qualifiers.length > 0
+    ? `${slot.effect_type} (${qualifiers.join(', ')})`
+    : slot.effect_type;
+}
+
+/** "+5 damage, bypasses soak" or null when the combo carries no rider. */
+function comboRiderLabel(combo: RoundCombo): string | null {
+  const parts: string[] = [];
+  if (combo.bonus_damage > 0) parts.push(`+${combo.bonus_damage} damage`);
+  if (combo.bypass_soak) parts.push('bypasses soak');
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+interface ComboSlotChipProps {
+  comboId: number;
+  slot: RoundComboSlot;
+  participant: Participant | null;
+  isSelf: boolean;
+}
+
+function ComboSlotChip({ comboId, slot, participant, isSelf }: ComboSlotChipProps) {
+  const filled = slot.participant_id !== null;
+  return (
+    <div
+      data-testid={`combo-slot-${comboId}-${slot.slot_number}`}
+      className={cn(
+        'flex min-w-0 items-center gap-1.5 rounded border px-1.5 py-1 text-[11px]',
+        filled ? 'border-border bg-background' : 'border-dashed border-border bg-muted/40'
+      )}
+    >
+      {filled && slot.character_name !== null ? (
+        <PersonaAvatar
+          source={{
+            name: slot.character_name,
+            thumbnailUrl: participant?.thumbnail_url ?? null,
+            thumbnailMediaUrl: participant?.thumbnail_media_url ?? null,
+          }}
+          size="sm"
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground"
+        >
+          ?
+        </span>
+      )}
+      <div className="min-w-0">
+        <p className="truncate font-medium text-foreground">
+          {filled ? slot.character_name : 'Open'}
+          {isSelf ? ' (you)' : ''}
+        </p>
+        <p className="truncate text-muted-foreground">
+          {slotRequirementLabel(slot)}
+          {slot.technique_name ? ` · ${slot.technique_name}` : ''}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 interface ComboRowProps {
-  combo: AvailableCombo;
+  combo: RoundCombo;
+  participants: Participant[];
+  myParticipantId: number | null;
   onUpgrade: (comboId: number) => void;
   isLoading: boolean;
 }
 
-function ComboRow({ combo, onUpgrade, isLoading }: ComboRowProps) {
+function ComboRow({ combo, participants, myParticipantId, onUpgrade, isLoading }: ComboRowProps) {
   const isDisabled = !combo.known_by_participant || isLoading;
   const title = !combo.known_by_participant ? 'Combo not known' : undefined;
+  const rider = comboRiderLabel(combo);
+  const openSlots = combo.slots.filter((slot) => slot.participant_id === null);
+  const needs = openSlots.map(slotRequirementLabel).join(', ');
+  const needsCount = openSlots.length === 1 ? 'one more' : `${openSlots.length} more`;
 
   return (
-    <button
-      type="button"
-      disabled={isDisabled}
-      title={title}
-      onClick={() => onUpgrade(combo.combo_id)}
-      data-testid={`combo-upgrade-btn-${combo.combo_id}`}
-      className={cn(
-        'w-full rounded border px-3 py-1.5 text-left text-xs font-medium transition-colors',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        isDisabled
-          ? 'border-border bg-muted text-muted-foreground'
-          : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
-      )}
+    <div
+      data-testid={`combo-row-${combo.combo_id}`}
+      className="space-y-1.5 rounded border border-border p-2"
     >
-      Upgrade to {combo.combo_name} ({combo.slot_count} slots)
-    </button>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">
+          {combo.combo_name}
+          {!combo.known_by_participant && (
+            <span className="ml-1 font-normal text-muted-foreground">(not known)</span>
+          )}
+        </p>
+        {rider && (
+          <p
+            className="text-[11px] text-muted-foreground"
+            data-testid={`combo-rider-${combo.combo_id}`}
+          >
+            {rider}
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {combo.slots.map((slot) => (
+          <ComboSlotChip
+            key={slot.slot_number}
+            comboId={combo.combo_id}
+            slot={slot}
+            participant={participants.find((p) => p.id === slot.participant_id) ?? null}
+            isSelf={slot.participant_id !== null && slot.participant_id === myParticipantId}
+          />
+        ))}
+      </div>
+      {combo.complete ? (
+        <button
+          type="button"
+          disabled={isDisabled}
+          title={title}
+          onClick={() => onUpgrade(combo.combo_id)}
+          data-testid={`combo-upgrade-btn-${combo.combo_id}`}
+          className={cn(
+            'w-full rounded border px-3 py-1.5 text-left text-xs font-medium transition-colors',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            isDisabled
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+          )}
+        >
+          Upgrade to {combo.combo_name} ({combo.slot_count} slots)
+        </button>
+      ) : (
+        <p
+          className="text-[11px] text-muted-foreground"
+          data-testid={`combo-hint-${combo.combo_id}`}
+        >
+          Needs {needsCount}: {needs}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -2055,12 +2173,13 @@ export function YourTurn({
         </div>
       )}
 
-      {/* Combo upgrade row — shown when combos are available */}
+      {/* Combos taking shape this round — complete fills carry the upgrade
+          button, partial fills of a known combo say what they still need (#3553). */}
       {availableCombos !== undefined && availableCombos.length > 0 && (
         <div className="space-y-2" data-testid="combo-upgrade-section">
           <p
             className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Upgrade your Focused Action into a known multi-slot combo, if you qualify this round."
+            title="Upgrade your Focused Action into a known multi-slot combo, if you qualify this round. A combo with open slots shows what an ally still needs to declare."
           >
             Combo Upgrades
           </p>
@@ -2068,6 +2187,8 @@ export function YourTurn({
             <ComboRow
               key={combo.combo_id}
               combo={combo}
+              participants={participants}
+              myParticipantId={myParticipantId}
               onUpgrade={(id) => upgradeCombo(id)}
               isLoading={combosLoading || upgradePending}
             />

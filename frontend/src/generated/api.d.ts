@@ -4523,8 +4523,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Get available combos for the current round. */
-    get: operations['combat_available_combos_retrieve'];
+    /**
+     * @description List the combos taking shape this round, slot by slot (#3553).
+     *
+     *     Complete fills are the upgrade candidates; partial fills of a known
+     *     combo show which slots are still open.
+     */
+    get: operations['combat_available_combos_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -26799,6 +26804,20 @@ export interface components {
      */
     ColumnEnum: 'win' | 'loss' | 'withdrawal';
     /**
+     * @description One slot of a combo taking shape this round (#3553): the ask, and who fills it.
+     *
+     *     Reads a ``ComboSlotFill``. The filler fields are null while the slot is open.
+     */
+    ComboSlotFill: {
+      slot_number: number;
+      effect_type: string;
+      readonly resonance: string | null;
+      archetype: string;
+      participant_id: number | null;
+      character_name: string | null;
+      technique_name: string | null;
+    };
+    /**
      * @description * `message` - Message
      *     * `status_change` - Status Change
      * @enum {string}
@@ -41712,6 +41731,23 @@ export interface components {
       readonly display_name: string;
     };
     /**
+     * @description A combo taking shape this round, with its slot composition and rider (#3553).
+     *
+     *     Reads a ``RoundCombo``. ``complete`` is the upgrade condition; a partial
+     *     fill is listed so the party can see what would complete it.
+     */
+    RoundCombo: {
+      combo_id: number;
+      combo_name: string;
+      known_by_participant: boolean;
+      slot_count: number;
+      filled_count: number;
+      complete: boolean;
+      bonus_damage: number;
+      bypass_soak: boolean;
+      slots: components['schemas']['ComboSlotFill'][];
+    };
+    /**
      * @description Read-shape for SanctumDetails surfaced on the player's "My Sanctums" view.
      *
      *     Pending payout fields are per-(sanctum, viewing-user) — they read
@@ -51969,7 +52005,7 @@ export interface operations {
       };
     };
   };
-  combat_available_combos_retrieve: {
+  combat_available_combos_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -51986,7 +52022,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EncounterDetail'];
+          'application/json': components['schemas']['RoundCombo'][];
         };
       };
     };

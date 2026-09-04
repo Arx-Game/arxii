@@ -6592,8 +6592,12 @@ paths:
           description: ''
   /api/combat/{id}/available_combos/:
     get:
-      operationId: combat_available_combos_retrieve
-      description: Get available combos for the current round.
+      operationId: combat_available_combos_list
+      description: |-
+        List the combos taking shape this round, slot by slot (#3553).
+
+        Complete fills are the upgrade candidates; partial fills of a known
+        combo show which slots are still open.
       parameters:
       - in: path
         name: id
@@ -6610,7 +6614,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EncounterDetail'
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoundCombo'
           description: ''
   /api/combat/{id}/begin_round/:
     post:
@@ -45088,6 +45094,40 @@ components:
         * `win` - Win
         * `loss` - Loss
         * `withdrawal` - Withdrawal
+    ComboSlotFill:
+      type: object
+      description: |-
+        One slot of a combo taking shape this round (#3553): the ask, and who fills it.
+
+        Reads a ``ComboSlotFill``. The filler fields are null while the slot is open.
+      properties:
+        slot_number:
+          type: integer
+        effect_type:
+          type: string
+        resonance:
+          type: string
+          nullable: true
+          readOnly: true
+        archetype:
+          type: string
+        participant_id:
+          type: integer
+          nullable: true
+        character_name:
+          type: string
+          nullable: true
+        technique_name:
+          type: string
+          nullable: true
+      required:
+      - archetype
+      - character_name
+      - effect_type
+      - participant_id
+      - resonance
+      - slot_number
+      - technique_name
     CommentTypeEnum:
       enum:
       - message
@@ -73363,6 +73403,44 @@ components:
       required:
       - display_name
       - id
+    RoundCombo:
+      type: object
+      description: |-
+        A combo taking shape this round, with its slot composition and rider (#3553).
+
+        Reads a ``RoundCombo``. ``complete`` is the upgrade condition; a partial
+        fill is listed so the party can see what would complete it.
+      properties:
+        combo_id:
+          type: integer
+        combo_name:
+          type: string
+        known_by_participant:
+          type: boolean
+        slot_count:
+          type: integer
+        filled_count:
+          type: integer
+        complete:
+          type: boolean
+        bonus_damage:
+          type: integer
+        bypass_soak:
+          type: boolean
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComboSlotFill'
+      required:
+      - bonus_damage
+      - bypass_soak
+      - combo_id
+      - combo_name
+      - complete
+      - filled_count
+      - known_by_participant
+      - slot_count
+      - slots
     SanctumDetails:
       type: object
       description: |-
