@@ -1,15 +1,15 @@
 /**
- * AftermathDigest — per-participant post-encounter digest (#3551).
+ * AftermathDigest, the per-participant post-encounter digest (#3551).
  *
  * Rendered under EncounterOutcomeBanner once an encounter concludes: the
  * consequence roulette, conditions carried out of the fight, legend earned,
  * how the running beat resolved, and whether peril is still tracked in scene
  * rounds. A GM sees one digest per participant carrying a non-null
- * aftermath payload; a player sees only their own — that split is driven
+ * aftermath payload; a player sees only their own, and that split is driven
  * purely by which participants the server sends an aftermath for, not by a
  * permission check in this component.
  *
- * Legend is reported plainly ("Deed remembered") — never framed as a fight
+ * Legend is reported plainly ("Deed remembered"), never framed as a fight
  * payout; it settles at the end, per the bards-make-songs test.
  */
 
@@ -21,7 +21,7 @@ export type AftermathDigest = NonNullable<components['schemas']['Participant']['
 
 export interface AftermathDigestProps {
   digest: AftermathDigest;
-  /** Character name header — shown only when the viewer sees several digests at once. */
+  /** Character name header, shown only when the viewer sees several digests at once. */
   title?: string;
 }
 

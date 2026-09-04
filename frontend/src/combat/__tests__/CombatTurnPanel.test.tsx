@@ -616,6 +616,63 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
     expect(screen.queryByTestId('aftermath-digest')).not.toBeInTheDocument();
     expect(screen.queryByTestId('aftermath-dismiss')).not.toBeInTheDocument();
   });
+
+  it('renders the consequence roulette and a character-name title for each of several digests', () => {
+    const aftermathWithConsequence = {
+      outcome: 'victory',
+      consequence: {
+        outcome_display: [
+          { label: 'Solid Hit', tier_name: 'moderate', weight: 1, is_selected: true },
+        ],
+        modifiers: [],
+        modifier_total: 0,
+        summary: 'A clean strike.',
+      },
+      conditions: [],
+      legend: [],
+      beat: null,
+      peril_round_active: false,
+    } as unknown as NonNullable<Participant['aftermath']>;
+
+    const secondAftermath = {
+      outcome: 'victory',
+      consequence: null,
+      conditions: [],
+      legend: [],
+      beat: null,
+      peril_round_active: false,
+    } as unknown as NonNullable<Participant['aftermath']>;
+
+    mockEncounter({
+      status: 'completed',
+      outcome: 'victory',
+      participants: [
+        makeParticipant({
+          id: 1,
+          character_sheet_id: 100,
+          character_name: 'Aerande',
+          aftermath: aftermathWithConsequence,
+        }),
+        makeParticipant({
+          id: 2,
+          character_sheet_id: 200,
+          character_name: 'Ravi',
+          aftermath: secondAftermath,
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getAllByTestId('aftermath-digest')).toHaveLength(2);
+    expect(screen.getByTestId('aftermath-consequence')).toBeInTheDocument();
+    expect(screen.getByTestId('outcome-roulette')).toBeInTheDocument();
+    // Titles only render once there's more than one digest to distinguish (#3551).
+    expect(screen.getByText('Aerande')).toBeInTheDocument();
+    expect(screen.getByText('Ravi')).toBeInTheDocument();
+  });
 });
 
 describe('CombatTurnPanel — forced escape banner wiring (#983)', () => {
