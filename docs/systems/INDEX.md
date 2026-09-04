@@ -7410,6 +7410,28 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     consumed components bought nothing. `PendingOpponentAttack` (the NPC mirror) has
     the same pre-existing gap, deliberately NOT fixed here — out of scope, no
     consumed-cost consequence.
+  - **Aftermath digest (#3551):** `deliver_aftermath_digests`, the last step
+    `complete_encounter` runs, sends one private Narrator OUTCOME interaction
+    (`PERCEIVED_ONLY`, pushed only to that character's persona) plus a `character.msg`
+    telnet line to every ACTIVE or FLED participant; REMOVED participants get nothing,
+    but an ABANDONED encounter still delivers (only the aftermath rules/pools/counters
+    step is skipped for ABANDONED, not delivery). `build_aftermath_digest`
+    (`world/combat/aftermath.py`) assembles the digest by reading, not writing: the
+    aftermath `ConsequenceOutcome` row, conditions still held that were applied during
+    the encounter (a condition cleared mid-fight leaves no row and is not reported,
+    since the pose log already narrated it), any `LegendEntry` rows created in the
+    window, and a `BeatCompletion` for the running story beat (skipped entirely when
+    the encounter carries a `scenario_deed`, since a scenario ENCOUNTER route has no
+    beat line). All of it is scoped to `aftermath_window` -
+    `[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)` - so a later fight in
+    the same scene is never picked up by a read-time rebuild. `render_aftermath_digest`
+    turns the digest into player text; the legend line ("Deed remembered: ...") only
+    ever reports an authored deed row, since legend settles at a story's end from its
+    outcomes, never per fight. `ParticipantSerializer.aftermath`
+    (`world/combat/serializers.py`) exposes the same digest over the API: null unless
+    the encounter is COMPLETED with a `completed_at` and the viewer passes
+    `_can_view_vitals` (owner, scene GM, or staff); the `beat` entry is additionally
+    null for a SECRET beat unless the viewer is GM or staff.
   - **The declaring round is skipped**, not resolved: `resolve_round` collects
     `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
     excludes them from that round's PC resolution loop — that round's

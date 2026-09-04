@@ -382,6 +382,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   ever. Condition cleansing (dispel/severity-decay) stays unrestricted — only the HP mend is
   double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
   yet — a wound→treat→attrition journey is fair game for the journeys list.
+- **Aftermath digest (#3551).** `complete_encounter`'s last step delivers a private,
+  per-participant summary of what the fight changed: a Narrator OUTCOME interaction
+  (PERCEIVED_ONLY, pushed only to that character) plus a telnet `character.msg`, built
+  by `build_aftermath_digest` (`world/combat/aftermath.py`) purely from rows the
+  completion seam already wrote (aftermath `ConsequenceOutcome`, conditions still held,
+  `LegendEntry`, `BeatCompletion`), never a new persisted row. ACTIVE and FLED
+  participants get one; REMOVED does not, but an ABANDONED (GM force-end) encounter
+  still delivers. Also on `ParticipantSerializer.aftermath` for the web client, gated
+  to the owner, scene GM, or staff on a COMPLETED encounter, with a SECRET beat's line
+  further gated to GM/staff. `SceneDetailPage`'s `lingeringEncounterId` keeps the combat
+  rail mounted long enough for the player to read and dismiss it.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

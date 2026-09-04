@@ -332,3 +332,17 @@ weather modifier (too broad — this is WIND specifically, not the general expos
 **BondCombatBonus**:
 The relationship co-combat passive (#2021, ADR-0109). While a PC and a bonded character (relationship above `BondCombatConfig.min_developed_absolute_value`) are co-combatants and the ally is `ParticipantStatus.ACTIVE`, the PC gains `int(mechanical_bonus)` (cube root of developed absolute value) as a `ModifierContribution(RELATIONSHIP)` on every combat check. Soul-tethered pairs get `soul_tether_multiplier × mechanical_bonus`. Directed (one-sided): only the character who invested gets the bonus. Drops when the ally falls (handing off to #2013's grief spike). Also scales INTERPOSE/SUCCOR capability checks via `bond_bonus(actor, protected)` → `extra_modifiers`.
 _Avoid_: bond buff, ally bonus (use "bond combat bonus" or "co-combat passive")
+
+**Aftermath digest** (#3551):
+The per-participant summary of what a fight changed, assembled at `complete_encounter`'s
+conclusion from rows the completion seam already wrote (aftermath `ConsequenceOutcome`,
+`ConditionInstance`, `LegendEntry`, `BeatCompletion`), never persisted as its own row.
+`build_aftermath_digest` reads those rows inside `AFTERMATH_ATTRIBUTION_WINDOW` of
+`completed_at` so a read-time rebuild does not pick up a later fight in the same scene;
+`render_aftermath_digest` turns the digest into the private Narrator line and telnet
+message `deliver_aftermath_digests` sends to each ACTIVE or FLED participant. Conditions
+cleared mid-fight report nothing (their rows are gone and the pose log already narrated
+them); only conditions still held that were applied during the encounter show. The legend
+line ("Deed remembered") only ever reports an authored deed row, since legend settles at
+the end of a story from its outcomes, never per fight.
+_Avoid_: aftermath report, post-combat summary, combat recap
