@@ -13,6 +13,7 @@
  * auto-derived at finalization. Age is set in AppearanceStage.
  */
 
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   ChapterLeaf,
   ChoiceRow,
@@ -163,6 +164,11 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         open={isChosen}
       >
         {paragraphs(s.description)}
+        {s.codex_entry_id != null && (
+          <p className="ledger-line">
+            <CodexTerm entryId={s.codex_entry_id}>Codex: {s.name}</CodexTerm>
+          </p>
+        )}
         {!overBudget && (
           <EntryDoors
             chooseLabel={`Choose ${s.name}`}
@@ -246,6 +252,11 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             >
               {paragraphs(b.description)}
               {!b.family_known && <p className="ledger-line">Family unknown at the start.</p>}
+              {b.codex_entry_ids?.length > 0 && (
+                <p className="ledger-line">
+                  <CodexTerm entryId={b.codex_entry_ids[0]}>Codex: {b.name}</CodexTerm>
+                </p>
+              )}
               {!closed && (
                 <EntryDoors
                   chooseLabel={`Choose ${b.name}`}

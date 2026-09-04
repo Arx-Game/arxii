@@ -357,6 +357,36 @@ describe('HeritageStage', () => {
       expect(screen.queryByText(/hover/i)).not.toBeInTheDocument();
     });
 
+    it("links a beginning's name to its codex entry only when one exists", async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      const beginningWithCodex = {
+        ...mockBeginnings,
+        id: 10,
+        name: 'Duskborn Rite',
+        codex_entry_ids: [7],
+      };
+      const beginningWithoutCodex = {
+        ...mockBeginningsUnknownFamily,
+        id: 11,
+        codex_entry_ids: [],
+      };
+      seedQueryData(queryClient, characterCreationKeys.beginnings(mockStartingArea.id), [
+        beginningWithCodex,
+        beginningWithoutCodex,
+      ]);
+
+      renderWithCharacterCreationProviders(
+        <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      const list = await screen.findByRole('list', { name: 'Beginnings' });
+      expect(within(list).getByText('Codex: Duskborn Rite')).toBeInTheDocument();
+      // Only the entry with a codex entry id gets a "Codex:" line.
+      expect(within(list).getAllByText(/^Codex:/).length).toBe(1);
+    });
+
     it('lists the chosen values in the rail and offers gender as a pressed row', async () => {
       const queryClient = createTestQueryClient();
       seedHeritageStageData(queryClient);
