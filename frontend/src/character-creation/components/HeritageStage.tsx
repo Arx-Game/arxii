@@ -1,25 +1,28 @@
 /**
- * Stage 2: Heritage Selection
+ * Stage 2: Heritage (#3630).
  *
- * Handles:
- * - Beginnings selection (worldbuilding path)
- * - Species selection (gated by Beginnings' allowed_species)
- * - Gender selection (3 options)
+ * Beginnings, species, and gender as index entries: reading is free, and an
+ * option enters the draft only when the player chooses it (never on hover,
+ * Decision 6). A parent species with subspecies is a door to a nested list of
+ * its children, not a choice on its own; a leaf species is choosable. Choosing
+ * a different beginnings clears the species pick, since the new beginnings
+ * may not allow the one already chosen. The record rail lists the choices; it
+ * explains nothing (Decision 8).
  *
- * Family selection has moved to LineageStage (Stage 3).
- * Pronouns are auto-derived at finalization.
- * Age is set in AppearanceStage.
+ * Family selection has moved to LineageStage (Stage 3). Pronouns are
+ * auto-derived at finalization. Age is set in AppearanceStage.
  */
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CodexTerm } from '@/codex/components/CodexTerm';
-import { cn } from '@/lib/utils';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Check, CheckCircle2, ChevronLeft } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-
-import { ChapterLeaf } from '../folio';
+import {
+  ChapterLeaf,
+  ChoiceRow,
+  Entry,
+  EntryDoors,
+  EntryList,
+  Marginalia,
+  Note,
+  RecordRail,
+} from '../folio';
 import {
   useBeginnings,
   useBeginningsPerspectives,
@@ -29,534 +32,261 @@ import {
   useSpecies,
   useUpdateDraft,
 } from '../queries';
-import type { Beginnings, CharacterDraft, GenderOption, Species } from '../types';
-import { Stage, STAGE_LABELS } from '../types';
-import { getGradientColors } from '../utils';
-import { CGPointsWidget } from './CGPointsWidget';
+import type { Beginnings, CharacterDraft, Species } from '../types';
+import { Stage } from '../types';
 import { PerspectivesPanel } from './PerspectivesPanel';
-import { SpeciesCard } from './SpeciesCard';
-import { StatBonusBadges } from './StatBonusBadges';
 
 interface HeritageStageProps {
   draft: CharacterDraft;
   onStageSelect: (stage: Stage) => void;
 }
 
+/** The cost line for a Beginnings option, plain and unhedged. */
+function costTag(cost: number): string {
+  return cost === 0 ? 'No cost' : `${cost} CG points`;
+}
+
+/**
+ * A species' stat bonuses as a gloss line (e.g. "+1 strength, −1 wits").
+ * Empty when the species carries no bonuses.
+ */
+export function formatStatBonuses(bonuses: Record<string, number>): string {
+  return Object.entries(bonuses)
+    .filter(([, value]) => value !== 0)
+    .map(([stat, value]) => `${value > 0 ? '+' : '−'}${Math.abs(value)} ${stat}`)
+    .join(', ');
+}
+
+function paragraphs(text: string) {
+  return text.split(/\n\s*\n/).map((para, i) => <p key={i}>{para}</p>);
+}
+
+type SpeciesEntryItem =
+  | { kind: 'leaf'; species: Species }
+  | { kind: 'group'; parentId: number; name: string; children: Species[] };
+
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
-  const [hoveredBeginnings, setHoveredBeginnings] = useState<Beginnings | null>(null);
-  const [hoveredSpecies, setHoveredSpecies] = useState<Species | null>(null);
-  const [selectedParent, setSelectedParent] = useState<number | null>(null);
-
-  // Fetch CG budget, beginnings, species, and genders
   const { data: cgBudget } = useCGPointBudget();
   const { data: beginnings, isLoading: beginningsLoading } = useBeginnings(draft.selected_area?.id);
   const { data: allSpecies, isLoading: speciesLoading } = useSpecies();
   const { data: genders, isLoading: gendersLoading } = useGenders();
+  const { data: perspectives } = useBeginningsPerspectives(draft.selected_beginnings?.id);
 
-  const detailBeginnings =
-    hoveredBeginnings ?? draft.selected_beginnings ?? beginnings?.[0] ?? null;
+  const remaining = draft.cg_points_remaining;
+  const starting = cgBudget?.starting_points ?? 100;
 
-  // Filter species based on selected beginnings' allowed_species_ids
+  // Species allowed by the selected beginnings (unchanged filter:
+  // allowed_species_ids only ever lists leaves, never a parent "hub").
   const allowedIds = draft.selected_beginnings?.allowed_species_ids;
-  const filteredSpecies = useMemo(
-    () => allSpecies?.filter((species) => allowedIds?.includes(species.id)),
-    [allSpecies, allowedIds]
-  );
+  const filteredSpecies = allSpecies?.filter((species) => allowedIds?.includes(species.id));
 
-  // Group species into standalones (no parent) and parent groups (with subspecies)
-  const speciesGroups = useMemo(() => {
-    const standalones: Species[] = [];
-    const parentGroups = new Map<number, { name: string; children: Species[] }>();
-
-    for (const species of filteredSpecies ?? []) {
-      if (!species.parent) {
-        standalones.push(species);
-      } else {
-        const group = parentGroups.get(species.parent);
-        if (group) {
-          group.children.push(species);
-        } else {
-          parentGroups.set(species.parent, {
-            name: species.parent_name ?? 'Unknown',
-            children: [species],
-          });
-        }
-      }
+  // Group into standalones (no parent) and parent groups (with subspecies).
+  // A parent group is synthesized from its children's parent/parent_name
+  // fields, not a separate Species row — the API never returns a selectable
+  // "hub" species alongside its own subspecies in the allowed set.
+  const standalones: Species[] = [];
+  const parentGroups = new Map<number, { name: string; children: Species[] }>();
+  for (const species of filteredSpecies ?? []) {
+    if (!species.parent) {
+      standalones.push(species);
+      continue;
     }
+    const group = parentGroups.get(species.parent);
+    if (group) {
+      group.children.push(species);
+    } else {
+      parentGroups.set(species.parent, {
+        name: species.parent_name ?? 'Unknown',
+        children: [species],
+      });
+    }
+  }
+  const topLevel: SpeciesEntryItem[] = [
+    ...standalones.map((species): SpeciesEntryItem => ({ kind: 'leaf', species })),
+    ...Array.from(parentGroups.entries()).map(
+      ([parentId, group]): SpeciesEntryItem => ({ kind: 'group', parentId, ...group })
+    ),
+  ];
 
-    return { standalones, parentGroups };
-  }, [filteredSpecies]);
-
-  // Reset drill-down and hovered species when beginnings changes
-  const selectedBeginningsId = draft.selected_beginnings?.id;
-  useEffect(() => {
-    setSelectedParent(null);
-    setHoveredSpecies(null);
-  }, [selectedBeginningsId]);
-
-  // If no area selected, prompt user to go back
+  // If no area selected, prompt user to go back.
   if (!draft.selected_area) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="py-12 text-center"
-      >
-        <p className="mb-4 text-muted-foreground">Please select a starting area first.</p>
-        <Button onClick={() => onStageSelect(Stage.ORIGIN)}>Go to Origin Selection</Button>
-      </motion.div>
-    );
-  }
-
-  const handleBeginningsSelect = (beginningsOption: Beginnings) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        selected_beginnings_id: beginningsOption.id,
-        // Clear species when changing beginnings
-        selected_species_id: null,
-      },
-    });
-  };
-
-  const handleSpeciesSelect = (speciesId: number) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        selected_species_id: speciesId,
-      },
-    });
-  };
-
-  const handleGenderChange = (gender: GenderOption) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        selected_gender_id: gender.id,
-      },
-    });
-  };
-
-  // Calculate CG points
-  const startingPoints = cgBudget?.starting_points ?? 100;
-  const spentPoints = draft.cg_points_spent ?? 0;
-  const remainingPoints = draft.cg_points_remaining ?? startingPoints;
-
-  const renderSpecies = () => {
-    if (speciesLoading) {
-      return (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="h-40 animate-pulse rounded-lg bg-muted" />
-          <div className="h-40 animate-pulse rounded-lg bg-muted" />
-        </div>
-      );
-    }
-    if (selectedParent === null) {
-      return (
-        <>
-          {/* Top-level: standalones + parent groups */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {speciesGroups.standalones.map((species) => (
-              <SpeciesCard
-                key={species.id}
-                species={species}
-                isSelected={draft.selected_species?.id === species.id}
-                onSelect={() => handleSpeciesSelect(species.id)}
-                disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
-                onHover={setHoveredSpecies}
-              />
-            ))}
-            {Array.from(speciesGroups.parentGroups.entries()).map(
-              ([parentId, { name, children }]) => (
-                <SpeciesGroupCard
-                  key={`parent-${parentId}`}
-                  parentName={name}
-                  childCount={children.length}
-                  isChildSelected={children.some((c) => c.id === draft.selected_species?.id)}
-                  onClick={() => setSelectedParent(parentId)}
-                  onHover={() => setHoveredSpecies(null)}
-                />
-              )
-            )}
-            {speciesGroups.standalones.length === 0 && speciesGroups.parentGroups.size === 0 && (
-              <Card>
-                <CardContent className="py-8">
-                  <p className="text-center text-sm text-muted-foreground">
-                    No species available for this beginnings path.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </>
-      );
-    }
-    return (
       <>
-        {/* Drill-down: breadcrumb + subspecies */}
-        <button
-          type="button"
-          className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => {
-            setSelectedParent(null);
-            setHoveredSpecies(null);
-          }}
-        >
-          <ChevronLeft className="h-4 w-4" />
-          All Species
-          <span className="mx-1 text-muted-foreground/50">/</span>
-          <span className="text-foreground">
-            {speciesGroups.parentGroups.get(selectedParent)?.name}
-          </span>
+        <p className="ledger-line">Please select a starting area first.</p>
+        <button type="button" className="btn-quiet" onClick={() => onStageSelect(Stage.ORIGIN)}>
+          Go to Origin selection
         </button>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {speciesGroups.parentGroups.get(selectedParent)?.children.map((species) => (
-            <SpeciesCard
-              key={species.id}
-              species={species}
-              isSelected={draft.selected_species?.id === species.id}
-              onSelect={() => handleSpeciesSelect(species.id)}
-              disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
-              onHover={setHoveredSpecies}
-            />
-          ))}
-        </div>
       </>
     );
-  };
-
-  return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
-      {/* Main Content */}
-      <ChapterLeaf
-        stage={Stage.HERITAGE}
-        title={copy?.heritage_heading ?? STAGE_LABELS[Stage.HERITAGE]}
-        intro={copy?.heritage_intro}
-        wide
-      >
-        <div className="space-y-8">
-          {copy?.heritage_lore_intro && (
-            <p className="mt-2 text-sm text-muted-foreground">{copy.heritage_lore_intro}</p>
-          )}
-
-          {/* Beginnings Selection */}
-          <section className="space-y-4">
-            <div>
-              <h3 className="theme-heading text-lg font-semibold">
-                {copy?.heritage_beginnings_heading ?? ''}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {copy?.heritage_beginnings_desc ?? ''}
-              </p>
-            </div>
-            {beginningsLoading ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-40 animate-pulse rounded-lg bg-muted" />
-              </div>
-            ) : (
-              <>
-                <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-                  {/* Left: Beginnings cards */}
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-                    {beginnings?.map((option) => (
-                      <Card
-                        key={option.id}
-                        className={cn(
-                          'cursor-pointer transition-all',
-                          draft.selected_beginnings?.id === option.id && 'ring-2 ring-primary',
-                          draft.selected_beginnings?.id !== option.id &&
-                            'hover:ring-1 hover:ring-primary/50',
-                          detailBeginnings?.id === option.id &&
-                            draft.selected_beginnings?.id !== option.id &&
-                            'ring-1 ring-primary/30',
-                          !option.is_accessible && 'cursor-not-allowed opacity-50'
-                        )}
-                        onClick={() => option.is_accessible && handleBeginningsSelect(option)}
-                        onMouseEnter={() => option.is_accessible && setHoveredBeginnings(option)}
-                        onMouseLeave={() => setHoveredBeginnings(null)}
-                      >
-                        {option.art_image && (
-                          <div className="h-24 overflow-hidden rounded-t-lg">
-                            <img
-                              src={option.art_image}
-                              alt={option.name}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        )}
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">
-                            {option.codex_entry_ids?.length > 0 ? (
-                              <CodexTerm entryId={option.codex_entry_ids[0]}>
-                                {option.name}
-                              </CodexTerm>
-                            ) : (
-                              option.name
-                            )}
-                          </CardTitle>
-                          {option.cg_point_cost > 0 && (
-                            <span className="text-xs text-amber-600">
-                              +{option.cg_point_cost} CG Points
-                            </span>
-                          )}
-                        </CardHeader>
-                        <CardContent>
-                          <CardDescription className="line-clamp-3">
-                            {option.description}
-                          </CardDescription>
-                        </CardContent>
-                      </Card>
-                    ))}
-                    {(!beginnings || beginnings.length === 0) && (
-                      <Card>
-                        <CardContent className="py-8">
-                          <p className="text-center text-sm text-muted-foreground">
-                            No beginnings options available for this area.
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-
-                  {/* Right: Detail panel (desktop only) */}
-                  {detailBeginnings && (
-                    <div className="hidden lg:block">
-                      <BeginningsDetailPanel
-                        beginnings={detailBeginnings}
-                        isSelected={draft.selected_beginnings?.id === detailBeginnings.id}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Mobile: Detail panel below cards */}
-                {detailBeginnings && (
-                  <div className="mt-2 lg:hidden">
-                    <BeginningsDetailPanel
-                      beginnings={detailBeginnings}
-                      isSelected={draft.selected_beginnings?.id === detailBeginnings.id}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          {/* Species Selection - only show if beginnings selected */}
-          {draft.selected_beginnings && (
-            <section className="space-y-4">
-              <div>
-                <h3 className="theme-heading text-lg font-semibold">
-                  {copy?.heritage_species_heading ?? ''}
-                </h3>
-                <p className="text-sm text-muted-foreground">{copy?.heritage_species_desc ?? ''}</p>
-              </div>
-              {renderSpecies()}
-
-              {/* Mobile: Species detail below cards */}
-              {draft.selected_species && (
-                <div className="mt-2 lg:hidden">
-                  <SpeciesDetailPanel species={draft.selected_species} />
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Gender Selection */}
-          <section className="space-y-4">
-            <h3 className="theme-heading text-lg font-semibold">
-              {copy?.heritage_gender_heading ?? ''}
-            </h3>
-            {gendersLoading ? (
-              <div className="flex gap-2">
-                <div className="h-10 w-20 animate-pulse rounded bg-muted" />
-                <div className="h-10 w-20 animate-pulse rounded bg-muted" />
-                <div className="h-10 w-32 animate-pulse rounded bg-muted" />
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {genders?.map((gender) => (
-                  <Button
-                    key={gender.id}
-                    variant={draft.selected_gender?.id === gender.id ? 'default' : 'outline'}
-                    onClick={() => handleGenderChange(gender)}
-                  >
-                    {gender.display_name}
-                  </Button>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Pronouns will be derived from your gender choice. You can customize them in-game.
-            </p>
-          </section>
-        </div>
-      </ChapterLeaf>
-
-      {/* Sidebar: CG Points Widget + Species Detail */}
-      <div className="hidden lg:block">
-        <div className="sticky top-4 space-y-4">
-          <CGPointsWidget
-            starting={startingPoints}
-            spent={spentPoints}
-            remaining={remainingPoints}
-          />
-          {draft.selected_beginnings && (
-            <SpeciesDetailPanel species={hoveredSpecies ?? draft.selected_species ?? null} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SpeciesDetailPanel({ species }: { species: Species | null }) {
-  if (!species) {
-    return (
-      <Card className="bg-muted/30">
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Hover over a species to see its full description.
-        </CardContent>
-      </Card>
-    );
   }
 
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={species.id}
-        initial={{ opacity: 0, x: 10 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -10 }}
-        transition={{ duration: 0.25 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">
-              {species.codex_entry_id != null ? (
-                <CodexTerm entryId={species.codex_entry_id}>{species.name}</CodexTerm>
-              ) : (
-                species.name
-              )}
-            </CardTitle>
-            {species.parent_name && <CardDescription>{species.parent_name}</CardDescription>}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
-              {species.description}
-            </p>
-            <StatBonusBadges statBonuses={species.stat_bonuses} showHeader />
-          </CardContent>
-        </Card>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
+  const loading = beginningsLoading || speciesLoading || gendersLoading;
+  if (loading)
+    return (
+      <p className="ledger-line" aria-busy="true">
+        Loading heritage…
+      </p>
+    );
 
-function SpeciesGroupCard({
-  parentName,
-  childCount,
-  isChildSelected,
-  onClick,
-  onHover,
-}: {
-  parentName: string;
-  childCount: number;
-  isChildSelected: boolean;
-  onClick: () => void;
-  onHover?: () => void;
-}) {
+  const chooseBeginning = (b: Beginnings) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { selected_beginnings_id: b.id, selected_species_id: null },
+    });
+  };
+
+  const clearBeginning = () => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { selected_beginnings_id: null, selected_species_id: null },
+    });
+  };
+
+  const chooseSpecies = (id: number) => {
+    updateDraft.mutate({ draftId: draft.id, data: { selected_species_id: id } });
+  };
+
+  const renderLeafSpecies = (s: Species) => {
+    const isChosen = draft.selected_species?.id === s.id;
+    const overBudget = remaining < 0 && !isChosen;
+    const gloss = formatStatBonuses(s.stat_bonuses) || undefined;
+    return (
+      <Entry
+        key={s.id}
+        name={s.name}
+        gloss={gloss}
+        tag={overBudget ? 'No CG points remain' : 'Available'}
+        chosen={isChosen}
+        closed={overBudget}
+        open={isChosen}
+      >
+        {paragraphs(s.description)}
+        {!overBudget && (
+          <EntryDoors
+            chooseLabel={`Choose ${s.name}`}
+            onChoose={() => chooseSpecies(s.id)}
+            chosen={isChosen}
+          />
+        )}
+      </Entry>
+    );
+  };
+
+  const renderSpeciesEntry = (item: SpeciesEntryItem) => {
+    if (item.kind === 'leaf') return renderLeafSpecies(item.species);
+    return (
+      <Entry
+        key={`parent-${item.parentId}`}
+        name={item.name}
+        tag={`${item.children.length} kinds`}
+        chosen={false}
+        closed
+      >
+        <EntryList label={`${item.name} kinds`}>{item.children.map(renderLeafSpecies)}</EntryList>
+      </Entry>
+    );
+  };
+
+  const rail = (
+    <>
+      <RecordRail
+        rows={[
+          { label: 'Origin', value: draft.selected_area.name },
+          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Species', value: draft.selected_species?.name },
+          { label: 'Gender', value: draft.selected_gender?.display_name },
+          { label: 'CG points', value: `${draft.cg_points_spent} of ${starting} spent` },
+        ]}
+        ledger="Stage 2 of 11"
+      />
+      <Marginalia id="note-heritage">
+        {perspectives && perspectives.length > 0 ? (
+          <PerspectivesPanel perspectives={perspectives} />
+        ) : (
+          // PLACEHOLDER: Apostate rewrite
+          <Note lead="Beginnings">set which species and families are open to you.</Note>
+        )}
+      </Marginalia>
+    </>
+  );
+
   return (
-    <Card
-      className={cn(
-        'relative cursor-pointer transition-all',
-        isChildSelected && 'ring-2 ring-primary',
-        !isChildSelected && 'hover:ring-1 hover:ring-primary/50'
-      )}
-      onClick={onClick}
-      onMouseEnter={onHover}
+    <ChapterLeaf
+      stage={Stage.HERITAGE}
+      title={copy?.heritage_heading ?? 'Your Heritage'}
+      intro={copy?.heritage_intro}
+      aside={rail}
     >
-      {isChildSelected && (
-        <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Check className="h-4 w-4" />
+      {copy?.heritage_lore_intro && (
+        <div className="leaf-body">
+          <p>{copy.heritage_lore_intro}</p>
         </div>
       )}
 
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg">{parentName}</CardTitle>
-      </CardHeader>
-
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          {childCount} subspecies <span className="text-primary">→</span>
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function BeginningsDetailPanel({
-  beginnings,
-  isSelected,
-}: {
-  beginnings: Beginnings;
-  isSelected: boolean;
-}) {
-  const [color1, color2] = getGradientColors(beginnings.name);
-  const { data: perspectives } = useBeginningsPerspectives(beginnings.id);
-
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={beginnings.id}
-        initial={{ opacity: 0, x: 10 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -10 }}
-        transition={{ duration: 0.25 }}
-        className="sticky top-4"
-      >
-        <Card className="overflow-hidden">
-          {/* Header with art image or gradient fallback */}
-          <div
-            className="relative flex h-32 items-end p-6"
-            style={{
-              background: beginnings.art_image
-                ? `url(${beginnings.art_image}) center/cover`
-                : `linear-gradient(135deg, ${color1}, ${color2})`,
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            <h3 className="theme-heading relative text-2xl font-bold text-white drop-shadow-lg">
-              {beginnings.codex_entry_ids?.length > 0 ? (
-                <CodexTerm entryId={beginnings.codex_entry_ids[0]}>{beginnings.name}</CodexTerm>
-              ) : (
-                beginnings.name
+      <h2 className="section-h" id="beginnings">
+        {copy?.heritage_beginnings_heading ?? 'Beginnings'}
+      </h2>
+      {copy?.heritage_beginnings_desc && (
+        <p className="section-desc">{copy.heritage_beginnings_desc}</p>
+      )}
+      <EntryList label="Beginnings">
+        {beginnings?.map((b) => {
+          const isChosen = draft.selected_beginnings?.id === b.id;
+          const closed = !b.is_accessible;
+          return (
+            <Entry
+              key={b.id}
+              name={b.name}
+              tag={closed ? 'Not available to your account' : costTag(b.cg_point_cost)}
+              chosen={isChosen}
+              closed={closed}
+              open={isChosen}
+            >
+              {paragraphs(b.description)}
+              {!b.family_known && <p className="ledger-line">Family unknown at the start.</p>}
+              {!closed && (
+                <EntryDoors
+                  chooseLabel={`Choose ${b.name}`}
+                  onChoose={() => chooseBeginning(b)}
+                  chosen={isChosen}
+                  onSetAside={clearBeginning}
+                />
               )}
-            </h3>
-            {isSelected && (
-              <CheckCircle2 className="relative ml-auto h-6 w-6 text-white drop-shadow-lg" />
-            )}
-          </div>
-          <CardContent className="p-6">
-            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
-              {beginnings.description}
-            </p>
-            {beginnings.cg_point_cost > 0 && (
-              <p className="mt-4 text-sm text-amber-600">+{beginnings.cg_point_cost} CG Points</p>
-            )}
-            {!beginnings.is_accessible && (
-              <p className="mt-4 text-sm text-destructive">
-                This beginning is not currently accessible to your account.
-              </p>
-            )}
-            <PerspectivesPanel perspectives={perspectives} />
-          </CardContent>
-        </Card>
-      </motion.div>
-    </AnimatePresence>
+            </Entry>
+          );
+        })}
+      </EntryList>
+
+      {draft.selected_beginnings && (
+        <>
+          <h2 className="section-h" id="species">
+            {copy?.heritage_species_heading ?? 'Species'}
+          </h2>
+          {copy?.heritage_species_desc && (
+            <p className="section-desc">{copy.heritage_species_desc}</p>
+          )}
+          <EntryList label="Species">{topLevel.map(renderSpeciesEntry)}</EntryList>
+        </>
+      )}
+
+      <h2 className="section-h" id="gender">
+        {copy?.heritage_gender_heading ?? 'Gender'}
+      </h2>
+      <ChoiceRow
+        label="Gender"
+        options={(genders ?? []).map((g) => ({ value: g.id, label: g.display_name }))}
+        value={draft.selected_gender?.id ?? null}
+        onChange={(id) => {
+          if (id !== null) {
+            updateDraft.mutate({ draftId: draft.id, data: { selected_gender_id: id } });
+          }
+        }}
+      />
+      <p className="ledger-line">
+        Pronouns will be derived from your gender choice. You can customize them in-game.
+      </p>
+    </ChapterLeaf>
   );
 }

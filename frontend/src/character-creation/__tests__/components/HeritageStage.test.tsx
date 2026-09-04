@@ -4,7 +4,7 @@
  * Tests for heritage selection, species, gender, pronouns, and age.
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { HeritageStage } from '../../components/HeritageStage';
@@ -164,12 +164,13 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        // "Sleeper" appears in both the card and the detail panel; target the card
+        // "Sleeper" appears both as the entry name and in the record rail;
+        // target the entry (folio markup marks the chosen entry `li.chosen`).
         const cards = screen.getAllByText('Sleeper');
-        const beginningsCard = cards
-          .map((el) => el.closest('[class*="cursor-pointer"]'))
-          .find(Boolean);
-        expect(beginningsCard).toHaveClass('ring-2');
+        const beginningsEntry = cards
+          .map((el) => el.closest('li'))
+          .find((el) => el?.classList.contains('chosen'));
+        expect(beginningsEntry).toBeTruthy();
       });
     });
 
@@ -188,11 +189,15 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Beginnings')).toBeInTheDocument();
+        // The record rail also carries a "Beginnings" row label, so target
+        // the section heading specifically (folio markup).
+        expect(screen.getByRole('heading', { name: 'Beginnings' })).toBeInTheDocument();
       });
 
-      // Species section should not appear until beginnings is selected
-      expect(screen.queryByText('Species')).not.toBeInTheDocument();
+      // Species section should not appear until beginnings is selected. The
+      // record rail always carries a "Species" row label, so target the
+      // section heading specifically.
+      expect(screen.queryByRole('heading', { name: 'Species' })).not.toBeInTheDocument();
     });
   });
 
@@ -230,8 +235,10 @@ describe('HeritageStage', () => {
         { queryClient }
       );
 
-      // Loading state for species
-      expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
+      // Loading state: the folio stage gates its whole body behind one
+      // ledger line while any of beginnings/species/genders is loading,
+      // rather than a per-section skeleton.
+      expect(screen.getByText(/loading heritage/i)).toBeInTheDocument();
     });
   });
 
@@ -264,8 +271,8 @@ describe('HeritageStage', () => {
 
       await waitFor(() => {
         const femaleButton = screen.getByRole('button', { name: 'Female' });
-        // Selected button should have default variant (not outline)
-        expect(femaleButton).not.toHaveClass('border-input');
+        // ChoiceRow marks the pressed option via aria-pressed (folio markup).
+        expect(femaleButton).toHaveAttribute('aria-pressed', 'true');
       });
     });
   });
@@ -333,6 +340,33 @@ describe('HeritageStage', () => {
       expect(
         screen.getByText(/define your character's beginnings, species, and identity/i)
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('Folio markup', () => {
+    it('lists beginnings as entries with their point cost as the tag and no hover panel', async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      renderWithCharacterCreationProviders(
+        <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+      const list = await screen.findByRole('list', { name: 'Beginnings' });
+      expect(within(list).getByText(mockBeginnings.name)).toBeInTheDocument();
+      expect(within(list).getAllByText(/no cost/i).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/hover/i)).not.toBeInTheDocument();
+    });
+
+    it('lists the chosen values in the rail and offers gender as a pressed row', async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      renderWithCharacterCreationProviders(
+        <HeritageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+      const rail = await screen.findByRole('heading', { name: 'Your choices so far' });
+      expect(rail).toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Gender' })).toBeInTheDocument();
     });
   });
 });

@@ -1,10 +1,12 @@
 import type { PerspectiveEntry } from '../types';
 
 /**
- * A holder's perspective opinions, grouped under "On {subject}" headings (#3281).
+ * A holder's perspective opinions, grouped under "On {subject}" notes (#3281).
  *
  * Content renders straight from the shop-window payload: these entries are
  * usually non-public pre-finalize, so linking into CodexModal would 404.
+ * Mounted inside a `Marginalia` note-group (#3630), so it renders bare
+ * `.note` spans rather than its own heading/frame.
  */
 export function PerspectivesPanel({
   perspectives,
@@ -15,16 +17,12 @@ export function PerspectivesPanel({
     return null;
   }
   return (
-    <div className="mt-6 space-y-4">
-      <h4 className="theme-heading text-lg font-semibold">Perspectives</h4>
+    <>
       {perspectives.map((entry) => (
-        <div key={entry.entry_id}>
-          <p className="text-sm font-medium">On {entry.subject_name}</p>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-            {entry.lore_content}
-          </p>
-        </div>
+        <span className="note" key={entry.entry_id}>
+          <b>On {entry.subject_name}</b> <span>{entry.lore_content}</span>
+        </span>
       ))}
-    </div>
+    </>
   );
 }
