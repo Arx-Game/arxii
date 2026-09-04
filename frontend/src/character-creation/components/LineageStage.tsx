@@ -82,7 +82,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   const path = resolveFamilyPath(draft);
   const { data: families, isLoading: familiesLoading } = useFamilies(
     draft.selected_area?.id,
-    template?.claimable_kind_ids ?? []
+    template?.claimable_kind_ids ?? [],
+    path === 'claimed'
   );
   const influence = path === 'claimed' ? (draft.family?.influence ?? 0) : 0;
 

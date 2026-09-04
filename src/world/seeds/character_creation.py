@@ -143,6 +143,12 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "someone whose origins are still unknown — family ties bring kin, "
         "obligations, and a name people already have opinions about."
     ),
+    "upbringing_heading": "Your Upbringing",
+    "upbringing_intro": (
+        "Choose how you were raised within your beginning, answer what it asks of you, "
+        "and settle your family: name your own, claim one, or carry none."
+    ),
+    "family_path_heading": "Your Family",
     "distinctions_heading": "Your Distinctions",
     "distinctions_intro": (
         "Distinctions are the advantages and disadvantages that make your character "

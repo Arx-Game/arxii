@@ -307,6 +307,24 @@ describe('LineageStage', () => {
       });
     });
 
+    it('clicking an already-picked pick-list choice PATCHes origin_choices with null', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithUpbringing,
+        family: mockNobleFamily,
+        draft_data: { origin_choices: { '202': 302 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      await userEvent.click(await screen.findByText("A seat at the house's table"));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { origin_choices: { '202': null } },
+      });
+    });
+
     it('hides a prompt scoped to the claimed path when on the named path', async () => {
       const draft = createMockDraft({
         ...mockDraftWithHeritageNoUpbringing,
