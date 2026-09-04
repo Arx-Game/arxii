@@ -5180,6 +5180,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/escalation-curves/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only escalation curve catalog for the GM settings picker (#3552).
+     *
+     *     Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+     *     name and description are authored encounter design a player should not
+     *     browse. ``?search=`` matches the name.
+     */
+    get: operations['combat_escalation_curves_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/escalation-curves/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only escalation curve catalog for the GM settings picker (#3552).
+     *
+     *     Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+     *     name and description are authored encounter design a player should not
+     *     browse. ``?search=`` matches the name.
+     */
+    get: operations['combat_escalation_curves_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/threat-pools/': {
     parameters: {
       query?: never;
@@ -28895,6 +28941,19 @@ export interface components {
      * @enum {string}
      */
     EscalatesToRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /**
+     * @description Read-only escalation curve catalog row for the GM settings picker (#3552).
+     *
+     *     GM-gated at the viewset (curve names and descriptions are authored
+     *     encounter design, the same reasoning as the bestiary catalog, #3424).
+     */
+    EscalationCurve: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /** @description First round the escalation tick fires (>=2 keeps round one calm). */
+      readonly start_round: number;
+    };
     EstateClaim: {
       readonly id: number;
       settlement: number;
@@ -33735,6 +33794,11 @@ export interface components {
      *     to be able to look at an opponent and gauge whether they're punching up
      *     or down, so unlike soak_value/probing_threshold this is not wrapped in a
      *     SerializerMethodField behind ``_is_gm_or_staff``.
+     *
+     *     Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+     *     are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+     *     are public derived booleans, since the room narration has already told
+     *     everyone the boss enraged or its wall broke.
      */
     Opponent: {
       readonly id: number;
@@ -33752,6 +33816,18 @@ export interface components {
       /** @description Probing threshold — GM/staff only. */
       readonly probing_threshold: number | null;
       current_phase?: number;
+      readonly phase_count: number | null;
+      readonly damage_multiplier: string | null;
+      readonly break_bar_current: number | null;
+      readonly break_bar_threshold: number | null;
+      readonly vulnerability_rounds_remaining: number | null;
+      readonly morale: number | null;
+      readonly max_morale: number | null;
+      readonly morale_state: string | null;
+      /** @description Public: the enrage line has fired (a transition raised the multiplier). */
+      readonly is_enraged: boolean;
+      /** @description Public: the break celebration named this boss and the window is open. */
+      readonly is_wall_broken: boolean;
       status?: components['schemas']['OpponentStatusEnum'];
       /**
        * @description Active conditions on this opponent's in-world ObjectDB.
@@ -33814,6 +33890,11 @@ export interface components {
      *     to be able to look at an opponent and gauge whether they're punching up
      *     or down, so unlike soak_value/probing_threshold this is not wrapped in a
      *     SerializerMethodField behind ``_is_gm_or_staff``.
+     *
+     *     Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+     *     are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+     *     are public derived booleans, since the room narration has already told
+     *     everyone the boss enraged or its wall broke.
      */
     OpponentRequest: {
       name: string;
@@ -35167,6 +35248,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Era'][];
+    };
+    PaginatedEscalationCurveList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['EscalationCurve'][];
     };
     PaginatedEstateClaimList: {
       /** @example 123 */
@@ -52755,6 +52851,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DuelChallenge'];
+        };
+      };
+    };
+  };
+  combat_escalation_curves_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEscalationCurveList'];
+        };
+      };
+    };
+  };
+  combat_escalation_curves_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Escalation Curve. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EscalationCurve'];
         };
       };
     };
