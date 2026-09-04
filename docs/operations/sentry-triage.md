@@ -31,10 +31,34 @@ Two paths feed the project:
   come from the game loop, not a view. A traceback that precedes an API 500 (the
   ARX2-8 shape) shows up here.
 
+What deliberately does **not** reach Sentry is twistd's captured standard IO
+(events carrying `log_io`). twistd redirects the daemons' streams into Twisted's
+log as `[("stdout", info), ("stderr", error)]`, so the console log handler turns
+every Python record — INFO included — into an error-level Twisted event.
+Forwarding those made each Sentry send that logged on its way out produce a
+fresh error event, which produced another send: the feedback loop that took
+production down on 2026-09-04 (#3633). Django records still arrive through the
+stdlib integration above, so nothing is lost by skipping them here.
+
 Request bodies are never sent (`max_request_body_size="never"`); cookies, the
 logged-in user and client IPs are withheld (`send_default_pii=False`); local
 variables in tracebacks are sent, with password/token/cookie/IP-named values
 blanked by the SDK's scrubber.
+
+## Reading the tags
+
+- `server_name` is the box: `arxii-prod` for production, `arxii-stage` for a
+  dress rehearsal. `roles/base` sets the hostname and sentry_sdk picks it up
+  from `socket.gethostname()`. An event reading `localhost` predates that —
+  the machines were never named until the hostname task landed — so
+  `server_name` is only trustworthy from the first converge after it.
+- `release` is the deployed commit SHA, stamped into the EnvironmentFile by
+  `app_deploy`. It is the fastest way to tell a production event from one a
+  developer generated locally.
+- `url` is built from the **client-supplied `Host` header**, so it can name a
+  domain we do not own. A `DisallowedHost` titled with someone else's hostname
+  is host-header probing or a hand-run `curl`, not a misconfiguration — check
+  `browser`/User-Agent before chasing it.
 
 ## Closing an issue with rigor
 

@@ -2,6 +2,17 @@
 base_service_user: arxii
 base_service_group: arxii
 base_app_root: /opt/arxii
+# Box hostname. Ubuntu images boot as `localhost` unless something sets one,
+# and until now nothing did — which is what made every production Sentry
+# event carry `server_name: localhost` (sentry_sdk falls back to
+# socket.gethostname() when no server_name is passed).
+#
+# Derived from the inventory host key, so it needs no operator decision and
+# a second host gets a distinct name for free: standup.sh's gen_inventory
+# writes `prod`, rehearse.sh writes `stage` (see lib.sh), giving arxii-prod
+# and arxii-stage. Hyphen, never an en/em-dash — this is a name that gets
+# looked up.
+base_hostname: "arxii-{{ inventory_hostname }}"
 # Game cgroup memory cap (the game service runs in this slice). A leak gets
 # the slice OOM-killed/restarted instead of taking the box (and Postgres)
 # down — Postgres is isolated separately in its own role.
