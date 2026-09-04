@@ -571,6 +571,26 @@ ADR-0160 for the ratified rationale (diversity-weighted accrual replacing
 the flat per-actor chip, the proportional lieutenant gate, the
 Soulfray-derived pacing floor).
 
+#### Narrated engine state (#3552)
+
+Two room lines cover engine-driven state the table could not otherwise see,
+both dual-dispatched via `_dual_dispatch_combat_narration` (persisted OUTCOME
+interaction over WS plus `room.msg_contents` for telnet parity):
+
+- **Phase line** - fires inside `check_and_advance_boss_phase`, right after
+  `_surge_on_phase_transition`, so it lands wherever that function is called
+  from `_check_boss_transitions` (after `assess_break_bar`, alongside the
+  other boss-transition steps in the ordering above). Uses the phase's
+  authored `BossPhase.description` when set, else a generic shift line, plus
+  an enrage line when the new phase raises `damage_multiplier`. Not
+  curve-gated, unlike the dramatic surge for the same transition.
+- **Held-back line** - fires in `resolve_round` immediately after
+  `_resolve_actions`, before the combo post-pass. Names every ACTIVE PC in
+  `resolution_order` with no `CombatRoundAction` and no `SustainedAction`
+  declared this round, under TIMED or MANUAL pace only (`PaceMode.READY`
+  cannot reach round resolution until every ACTIVE participant has readied a
+  `CombatRoundAction`, so a silent skip is impossible there).
+
 #### `ActionOutcomeDetailsView._build_outcome_detail` — derive from existing data
 
 ```python

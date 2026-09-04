@@ -160,6 +160,14 @@ A phase transition, enrage, or break-bar break; each fires its own `SurgeTrigger
 (`BOSS_PHASE` / `BOSS_ENRAGE` / `BOSS_BREAK`) for every ACTIVE PC, once per boss per phase.
 _Avoid_: boss event, phase spike
 
+**Phase line** (#3552):
+The room narration a boss phase transition broadcasts: the phase's authored `BossPhase.description` when set, else a generic shift line, plus an enrage line when the new phase hits harder. Not curve-gated; distinct from the boss beat's generic surge narration, which never names the boss.
+_Avoid_: phase announcement, transition surge
+
+**Held back** (#3552):
+An ACTIVE PC in the resolution order with no `CombatRoundAction` this round under TIMED or MANUAL pace; the round's OUTCOME output names them ("X holds back."). A sustaining participant is committing, not holding back.
+_Avoid_: skipped, idle, AFK
+
 **Edge / Setback** (GM fiat, #3387):
 A curated, catalog-safe one-round nudge a GM applies through the existing `gm_apply_condition` lever — two authored `ConditionTemplate` rows (`world/conditions/gm_edge_content.py`) delivering a ±10 `ConditionCheckModifier` scoped to the Combat `CheckCategory`, `scales_with_severity=True`, expiring at the end of the round applied. Not a new mechanism — no bespoke GM-fiat modifier system exists or should exist alongside it.
 _Avoid_: buff/debuff (generic — Edge/Setback name this specific GM-fiat lever), bonus/penalty

@@ -91,9 +91,11 @@ from world.combat.constants import (
     DEFENSE_REDUCED_THRESHOLD,
     ELEVATION_ADVANTAGE_TARGET_NAME,
     ENEMY_LANE_CAP_PERCENT,
+    ENRAGE_NARRATION,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
+    HELD_BACK_NARRATION,
     INTERPOSE_BASE_FATIGUE_COST,
     JOUST_DECISIVE_MARGIN,
     LANCE_UNMOUNTED_PENALTY,
@@ -101,6 +103,7 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PACING_FLOOR_ROUND_PADDING,
     PENETRATION_CHECK_TYPE_NAME,
+    PHASE_SHIFT_NARRATION,
     REACTIONS_PER_ROUND,
     SENT_FLYING_IMPACT_FRACTION,
     SUSTAINED_BASE_ABSORPTION,
@@ -7439,6 +7442,9 @@ def check_and_advance_boss_phase(
       opponent's ``probing_threshold``.
     - A dramatic surge fires for every ACTIVE PC (#3445): BOSS_ENRAGE when the
       phase raises damage_multiplier, else BOSS_PHASE.
+    - The room is told (#3552): the phase's authored ``description`` when set,
+      else a generic shift line; an enraging transition adds an enrage line.
+      Not curve-gated, unlike the surge.
 
     Args:
         opponent: The boss opponent to check.
@@ -7463,6 +7469,9 @@ def check_and_advance_boss_phase(
             _apply_phase_transition(opponent, phase)
             _spawn_reinforcements(opponent.encounter, phase)
             _surge_on_phase_transition(opponent, phase, previous_multiplier)
+            _narrate_phase_transition(
+                opponent, phase, enraged=phase.damage_multiplier > previous_multiplier
+            )
             return phase
 
     return None
@@ -7486,6 +7495,28 @@ def _surge_on_phase_transition(
         opponent=opponent,
         enraged=phase.damage_multiplier > previous_multiplier,
     )
+
+
+def _narrate_phase_transition(
+    opponent: CombatOpponent,
+    phase: BossPhase,
+    *,
+    enraged: bool,
+) -> None:
+    """Tell the room a boss just changed phase (#3552).
+
+    The dramatic surge for the same transition is generic (ADR-0098 never names
+    the subject) and curve-gated, so until now a phase change was invisible at
+    the table. ``BossPhase.description`` is authored per phase for exactly this
+    moment (copied from ``CreaturePhaseTemplate`` at spawn) and had no reader.
+    Dual-dispatched so telnet sees the same line.
+    """
+    line = phase.description.strip() or PHASE_SHIFT_NARRATION.format(name=opponent.name)
+    _dual_dispatch_combat_narration(opponent.encounter, line)
+    if enraged:
+        _dual_dispatch_combat_narration(
+            opponent.encounter, ENRAGE_NARRATION.format(name=opponent.name)
+        )
 
 
 def _apply_phase_transition(opponent: CombatOpponent, phase: BossPhase) -> None:
@@ -8997,6 +9028,30 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
                 for npc_action in npc_actions.get(entity.pk, [])
             )
     return outcomes
+
+
+def _narrate_held_back(
+    encounter: CombatEncounter,
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
+    pc_actions: dict[int, CombatRoundAction],
+    sustaining_participant_ids: frozenset[int],
+) -> None:
+    """Name every PC the resolve loop skipped for having declared nothing (#3552).
+
+    Only under TIMED and MANUAL pace: READY cannot resolve until every ACTIVE
+    participant has readied a ``CombatRoundAction``, so a silent skip is
+    impossible there. A participant who declared a ``SustainedAction`` this
+    round is committing, not holding back.
+    """
+    if encounter.pace_mode not in (PaceMode.TIMED, PaceMode.MANUAL):
+        return
+    for entity_type, entity in resolution_order:
+        if entity_type != ENTITY_TYPE_PC or not isinstance(entity, CombatParticipant):
+            continue
+        if entity.pk in sustaining_participant_ids or entity.pk in pc_actions:
+            continue
+        name = str(entity.character_sheet.character)
+        _dual_dispatch_combat_narration(encounter, HELD_BACK_NARRATION.format(name=name))
 
 
 def _check_boss_transitions(
@@ -11605,6 +11660,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         offense_check_fn,
         sustaining_participant_ids=sustaining_participant_ids,
     )
+
+    # --- Held-back line (#3552): a PC in the order with nothing declared was
+    # skipped silently under TIMED/MANUAL. Say so, with the other OUTCOME lines.
+    _narrate_held_back(enc, resolution_order, pc_actions, sustaining_participant_ids)
 
     # --- Combo post-resolution: joint narration + discovery + use-count (#2017) ---
     result.action_outcomes = _process_combo_outcomes(
