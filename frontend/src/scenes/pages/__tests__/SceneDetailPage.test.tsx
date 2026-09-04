@@ -12,9 +12,14 @@
  * Pattern: mocks modelled after StoryDetailPage.test.tsx.
  */
 
-import { Routes, Route } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { Routes, Route, MemoryRouter } from 'react-router-dom';
 import { describe, it, vi, beforeEach, expect } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
+import { store } from '@/store/store';
 import { SceneDetailPage } from '../SceneDetailPage';
 import { fetchPlaces } from '../../actionQueries';
 
@@ -185,9 +190,22 @@ vi.mock('@/combat/queries', async (importOriginal) => {
 });
 
 vi.mock('@/combat/components/CombatRail', () => ({
-  CombatRail: ({ sceneId, encounterId }: { sceneId: number; encounterId: number }) => (
+  CombatRail: ({
+    sceneId,
+    encounterId,
+    onDismissOutcome,
+  }: {
+    sceneId: number;
+    encounterId: number;
+    onDismissOutcome?: () => void;
+  }) => (
     <div data-testid="combat-rail-stub" data-scene-id={sceneId} data-encounter-id={encounterId}>
       CombatRail [{encounterId}]
+      {onDismissOutcome && (
+        <button type="button" data-testid="combat-rail-dismiss-stub" onClick={onDismissOutcome}>
+          Dismiss
+        </button>
+      )}
     </div>
   ),
 }));
@@ -554,6 +572,53 @@ describe('SceneDetailPage', () => {
       </Routes>,
       { initialEntries: ['/scenes/1'] }
     );
+
+    expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
+  });
+
+  it('keeps CombatRail mounted on the lingering encounter id until dismissed (#3551)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: { id: 7 },
+      isLoading: false,
+      isError: false,
+    });
+
+    // renderWithProviders' own rerender re-renders a bare element with no
+    // providers, which would unmount+remount the whole tree and lose the
+    // page's lingering-encounter state, so this keeps one stable provider tree
+    // across both render calls (same pattern as Compass.test.tsx).
+    const queryClient = new QueryClient();
+    function wrap(ui: ReactNode) {
+      return (
+        <Provider store={store}>
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/scenes/1']}>{ui}</MemoryRouter>
+          </QueryClientProvider>
+        </Provider>
+      );
+    }
+    const page = (
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>
+    );
+
+    const { getByTestId, queryByTestId, rerender } = render(wrap(page));
+
+    expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
+
+    // The list poll drops the completed encounter from useEncounterForScene.
+    mockUseEncounterForScene.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+    rerender(wrap(page));
+
+    const lingeringRail = getByTestId('combat-rail-stub');
+    expect(lingeringRail).toHaveAttribute('data-encounter-id', '7');
+
+    fireEvent.click(getByTestId('combat-rail-dismiss-stub'));
 
     expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
   });

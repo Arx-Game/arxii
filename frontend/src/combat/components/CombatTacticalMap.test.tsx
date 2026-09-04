@@ -220,6 +220,7 @@ describe('CombatTacticalMap', () => {
             intensity_modifier: null,
             control_modifier: null,
             current_position: { id: 101, name: 'North Wall' },
+            aftermath: null,
           },
         ],
         opponents: [
@@ -569,6 +570,7 @@ describe('CombatTacticalMap', () => {
             intensity_modifier: null,
             control_modifier: null,
             current_position: null,
+            aftermath: null,
           },
         ],
         opponents: [],
