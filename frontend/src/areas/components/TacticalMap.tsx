@@ -65,10 +65,25 @@ export interface PositionEdgeLike extends TacticalEdge {
   gating_challenge_name: string | null;
 }
 
+/**
+ * A pair of occupants the map should tie together (#3555): today, an active
+ * engagement lock. Drawn as an animated overlay edge between the two positions
+ * when they differ; a same-position pair is already adjacent on the node, so
+ * only the occupants' own `locked` marks show it.
+ */
+export interface OccupantLink {
+  id: string;
+  positionAId: number;
+  positionBId: number;
+  label: string;
+}
+
 export interface TacticalMapProps {
   nodes: PositionNodeLike[];
   edges: PositionEdgeLike[];
   occupantsByPosition: Map<number, OccupantSummary[]>;
+  /** Engagement locks to draw between positions (#3555). Omit for none. */
+  links?: OccupantLink[];
   moveActions: PlayerAction[];
   onDispatchMove: (action: PlayerAction) => void;
   /**
@@ -108,6 +123,7 @@ export function TacticalMap({
   nodes,
   edges,
   occupantsByPosition,
+  links,
   moveActions,
   onDispatchMove,
   onPickPosition,
@@ -177,21 +193,34 @@ export function TacticalMap({
     [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition, onGMPlace]
   );
 
-  const flowEdges: Edge[] = useMemo(
-    () =>
-      edges.map((edge, index) => {
-        const { style, label } = edgeStyle(edge);
-        return {
-          id: `edge-${edge.position_a_id}-${edge.position_b_id}-${index}`,
-          source: String(edge.position_a_id),
-          target: String(edge.position_b_id),
-          type: 'straight',
-          style,
-          label,
-        };
-      }),
-    [edges]
-  );
+  const flowEdges: Edge[] = useMemo(() => {
+    const graphEdges: Edge[] = edges.map((edge, index) => {
+      const { style, label } = edgeStyle(edge);
+      return {
+        id: `edge-${edge.position_a_id}-${edge.position_b_id}-${index}`,
+        source: String(edge.position_a_id),
+        target: String(edge.position_b_id),
+        type: 'straight',
+        style,
+        label,
+      };
+    });
+    // Engagement-lock overlay (#3555): a rose, animated edge between the two
+    // locked combatants' positions. Same-position pairs draw nothing here;
+    // their `locked` occupant marks already sit side by side on one node.
+    const linkEdges: Edge[] = (links ?? [])
+      .filter((link) => link.positionAId !== link.positionBId)
+      .map((link) => ({
+        id: `link-${link.id}`,
+        source: String(link.positionAId),
+        target: String(link.positionBId),
+        type: 'straight',
+        animated: true,
+        ariaLabel: link.label,
+        style: { stroke: 'var(--color-rose-500, #f43f5e)', strokeWidth: 2 },
+      }));
+    return [...graphEdges, ...linkEdges];
+  }, [edges, links]);
 
   return (
     <div className="h-full w-full" data-testid="tactical-map">

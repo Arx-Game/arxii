@@ -269,6 +269,163 @@ describe('CombatTacticalMap', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Tactical overlays (#3555): the encounter's engagement locks and declared
+  // cover maneuver resolve into occupant marks and a lock link on the map.
+  // ---------------------------------------------------------------------------
+
+  const overlayParticipants = [
+    {
+      id: 1,
+      character_sheet_id: 10,
+      character_name: 'Aerande',
+      status: 'active',
+      health: 10,
+      max_health: 10,
+      character_status: null,
+      available_strain: null,
+      fatigue: null,
+      active_conditions: [],
+      thumbnail_url: null,
+      thumbnail_media_url: null,
+      escalation_level: null,
+      intensity_modifier: null,
+      control_modifier: null,
+      current_position: { id: 101, name: 'North Wall' },
+    },
+    {
+      id: 3,
+      character_sheet_id: 30,
+      character_name: 'Sir Alaric',
+      status: 'active',
+      health: 10,
+      max_health: 10,
+      character_status: null,
+      available_strain: null,
+      fatigue: null,
+      active_conditions: [],
+      thumbnail_url: null,
+      thumbnail_media_url: null,
+      escalation_level: null,
+      intensity_modifier: null,
+      control_modifier: null,
+      current_position: { id: 101, name: 'North Wall' },
+    },
+  ];
+  const overlayOpponents = [
+    {
+      id: 2,
+      objectdb_id: null,
+      name: 'Rival Knight',
+      tier: 'mook',
+      health: 10,
+      max_health: 10,
+      soak_value: null,
+      probing_threshold: null,
+      current_phase: 0,
+      status: 'active',
+      active_conditions: [],
+      thumbnail_url: null,
+      thumbnail_media_url: null,
+      current_position: { id: 102, name: 'Center' },
+      mirrors_participant_id: null,
+    },
+  ];
+  const overlayNodes = [101, 102].map((id) => ({
+    id,
+    name: id === 101 ? 'North Wall' : 'Center',
+    kind: 'feature',
+    elevation_anchor_id: null,
+    layout_x: null,
+    layout_y: null,
+    rampart_element: null,
+    rampart_integrity: null,
+    rampart_max_integrity: null,
+    rampart_crack_state: null,
+  }));
+  const overlayEdges = [
+    {
+      position_a_id: 101,
+      position_b_id: 102,
+      is_passable: true,
+      blocks_flight: false,
+      gating_challenge_name: null,
+    },
+  ];
+
+  it('marks both sides of an engagement lock and links their positions', () => {
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: overlayParticipants,
+        opponents: overlayOpponents,
+        position_nodes: overlayNodes,
+        position_edges: overlayEdges,
+        engagement_locks: [
+          {
+            id: 5,
+            opponent_id: 2,
+            participant_id: 1,
+            status: 'active',
+            initiated_by: 'pc_challenge',
+            started_round: 1,
+          },
+        ],
+      } as Partial<EncounterDetail>),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+
+    const wall = screen.getByTestId('tactical-map-node-101');
+    expect(within(wall).getByTestId('occupant-mark-locked')).toHaveAttribute(
+      'title',
+      'Aerande: locked with Rival Knight'
+    );
+    const center = screen.getByTestId('tactical-map-node-102');
+    expect(within(center).getByTestId('occupant-mark-locked')).toHaveAttribute(
+      'title',
+      'Rival Knight: locked with Aerande'
+    );
+    expect(screen.getByTestId('rf__edge-link-lock-5')).toBeInTheDocument();
+  });
+
+  it('marks the coverer and the covered ally from a declared cover maneuver', () => {
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: overlayParticipants,
+        opponents: overlayOpponents,
+        position_nodes: overlayNodes,
+        position_edges: overlayEdges,
+        current_round_actions: [
+          {
+            participant: 3,
+            participant_name: 'Sir Alaric',
+            is_ready: true,
+            maneuver: 'cover',
+            focused_ally_target: 1,
+            combo_upgrade: null,
+          },
+        ],
+      } as Partial<EncounterDetail>),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+
+    const wall = screen.getByTestId('tactical-map-node-101');
+    expect(within(wall).getByTestId('occupant-mark-covering')).toHaveAttribute(
+      'title',
+      'Sir Alaric: covering Aerande'
+    );
+    expect(within(wall).getByTestId('occupant-mark-covered')).toHaveAttribute(
+      'title',
+      'Aerande: covered by Sir Alaric'
+    );
+    expect(screen.queryByTestId(/^rf__edge-link-/)).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
   // Dispatch contract (#2423) — the endpoint resolves HTTP 200 + success:false
   // for a business-rule rejection, so a resolved promise is not itself proof
   // of success.

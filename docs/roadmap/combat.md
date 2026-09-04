@@ -267,6 +267,14 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
   obstacles are visible. See [areas.md](../systems/areas.md#frontend-built--wired).
+- **Tactical map draws what the encounter already knows (#3555).** Engagement locks,
+  cover and distance were in `EncounterDetail` but not on the map. Now: both sides of
+  an engagement lock carry a `locked` glyph on their avatar and an animated link edge
+  joins their positions (the combatants list badges the PC row too, not just the
+  opponent row); every occupant of a rampart-covered node gets a behind-cover glyph, and
+  a declared cover maneuver marks coverer and covered ally; the target picker's
+  out-of-reach buttons say how far ("2 positions away", or "no path") via
+  `hopDistance` in `combat/reach.ts`. Frontend only, no model change.
 - **Cast-position targeting for the position-consuming effect palette (#2206).**
   Barricade/Phase Jump/Force Grip previously embedded a placeholder
   `destination_position_id=0` at seed time (no runtime destination selection); a player

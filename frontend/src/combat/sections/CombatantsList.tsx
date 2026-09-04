@@ -142,9 +142,11 @@ function HpBar({ health, maxHealth, className }: HpBarProps) {
 
 interface ParticipantRowProps {
   participant: Participant;
+  /** Name of the opponent this PC is engagement-locked to, if any (#3555). */
+  lockedToName?: string;
 }
 
-function ParticipantRow({ participant }: ParticipantRowProps) {
+function ParticipantRow({ participant, lockedToName }: ParticipantRowProps) {
   return (
     <div
       className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/30"
@@ -173,6 +175,14 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
               className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
             >
               {participant.current_position.name}
+            </span>
+          )}
+          {lockedToName && (
+            <span
+              data-testid="engagement-lock-badge"
+              className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary"
+            >
+              Locked: {lockedToName}
             </span>
           )}
         </div>
@@ -351,12 +361,18 @@ export function CombatantsList({
 }: CombatantsListProps) {
   const { participants, opponents, engagement_locks: engagementLocks } = encounter;
 
-  // Map opponent id -> locked PC's display name (#3386, read-only visibility).
+  // Map opponent id -> locked PC's display name (#3386, read-only visibility),
+  // and participant id -> locked opponent's name for the PC row (#3555).
   const lockedOpponentNames = new Map<number, string>();
+  const lockedParticipantNames = new Map<number, string>();
   for (const lock of engagementLocks ?? []) {
     const pc = participants.find((p) => p.id === lock.participant_id);
     if (pc) {
       lockedOpponentNames.set(lock.opponent_id, pc.character_name);
+    }
+    const npc = opponents.find((o) => o.id === lock.opponent_id);
+    if (npc) {
+      lockedParticipantNames.set(lock.participant_id, npc.name);
     }
   }
 
@@ -407,7 +423,11 @@ export function CombatantsList({
                 Players
               </p>
               {participants.map((p) => (
-                <ParticipantRow key={p.id} participant={p} />
+                <ParticipantRow
+                  key={p.id}
+                  participant={p}
+                  lockedToName={lockedParticipantNames.get(p.id)}
+                />
               ))}
             </div>
           )}

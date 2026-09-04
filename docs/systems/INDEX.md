@@ -7565,7 +7565,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   `EncounterDetailSerializer.get_engagement_locks` is schema-typed via
   `@extend_schema_field(EngagementLockSerializer(many=True))` (mirrors
   `get_clashes`/`ClashStateSerializer`), and `CombatantsList.tsx` renders a
-  read-only "Locked: `<PC name>`" badge on the paired opponent row.
+  read-only "Locked: `<name>`" badge on both rows of the pair (opponent row
+  since #3386, PC row since #3555). **Map overlays (#3555):** `CombatTacticalMap`
+  also draws the lock as a `locked` glyph on both occupants' avatars plus an
+  animated link edge between their positions, a behind-cover glyph on every
+  occupant of a rampart-covered node, and `covering`/`covered` glyphs from the
+  round's declared cover maneuver; the target picker's out-of-reach buttons now
+  show the hop count (`hopDistance` in `combat/reach.ts`, "2 positions away" /
+  "no path"). See [areas.md](areas.md#frontend-built--wired).
   **Lock-lifecycle close-out (#3386):** fleeing while locked now breaks
   the lock (`LockBreakReason.FLEE`, `_resolve_flee` in `world/combat/services.py`)
   alongside the pre-existing defeat-breaks-lock and disengage-breaks-lock paths —

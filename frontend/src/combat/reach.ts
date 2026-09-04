@@ -84,6 +84,40 @@ export function isPositionReachable(
 }
 
 /**
+ * Shortest hop count from `startPositionId` to `targetPositionId` over the
+ * adjacency graph (#3555), or null when no path exists. Zero when they are the
+ * same position. The target picker shows this on out-of-reach targets so
+ * "two positions away" and "five positions away" stop looking the same.
+ *
+ * Unplaced endpoints (null/undefined) also return null: the reach rules treat
+ * those as reachable, so there is no distance to show.
+ */
+export function hopDistance(
+  adjacency: PositionAdjacencyItem[],
+  startPositionId: number | null | undefined,
+  targetPositionId: number | null | undefined
+): number | null {
+  if (startPositionId == null || targetPositionId == null) return null;
+  if (startPositionId === targetPositionId) return 0;
+
+  const visited = new Set<number>([startPositionId]);
+  const frontier: Array<{ id: number; depth: number }> = [{ id: startPositionId, depth: 0 }];
+
+  while (frontier.length > 0) {
+    const { id, depth } = frontier.shift()!;
+    const entry = adjacency.find((a) => a.position_id === id);
+    for (const neighborId of entry?.adjacent_position_ids ?? []) {
+      if (neighborId === targetPositionId) return depth + 1;
+      if (!visited.has(neighborId)) {
+        visited.add(neighborId);
+        frontier.push({ id: neighborId, depth: depth + 1 });
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Bounded BFS over the adjacency graph. Returns true if `targetPositionId`
  * is reachable from `startPositionId` within `maxHops` edges.
  */
@@ -93,22 +127,6 @@ function isReachableWithinHops(
   targetPositionId: number,
   maxHops: number
 ): boolean {
-  const visited = new Set<number>([startPositionId]);
-  const frontier: Array<{ id: number; depth: number }> = [{ id: startPositionId, depth: 0 }];
-
-  while (frontier.length > 0) {
-    const { id, depth } = frontier.shift()!;
-    if (depth >= maxHops) continue;
-
-    const entry = adjacency.find((a) => a.position_id === id);
-    const neighbors = entry?.adjacent_position_ids ?? [];
-    for (const neighborId of neighbors) {
-      if (neighborId === targetPositionId) return true;
-      if (!visited.has(neighborId)) {
-        visited.add(neighborId);
-        frontier.push({ id: neighborId, depth: depth + 1 });
-      }
-    }
-  }
-  return false;
+  const distance = hopDistance(adjacency, startPositionId, targetPositionId);
+  return distance !== null && distance <= maxHops;
 }

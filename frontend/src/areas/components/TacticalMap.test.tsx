@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import { TacticalMap } from './TacticalMap';
 import type { PositionEdgeLike, PositionNodeLike } from './TacticalMap';
@@ -234,5 +234,116 @@ describe('TacticalMap', () => {
     );
     const nodeEl = screen.getByTestId('tactical-map-node-1');
     expect(nodeEl.querySelector('[data-testid="rampart-ring"]')).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tactical overlays (#3555): engagement-lock links, occupant marks, cover.
+  // ---------------------------------------------------------------------------
+
+  it('draws an engagement-lock edge between two locked occupants on different nodes', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        links={[
+          { id: 'lock-5', positionAId: 1, positionBId: 2, label: 'Aerande locked with Knight' },
+        ]}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('rf__edge-link-lock-5')).toBeInTheDocument();
+    expect(screen.getByLabelText('Aerande locked with Knight')).toBeInTheDocument();
+  });
+
+  it('draws no lock edge when the locked pair shares one node', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary'), node(2)]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={new Map()}
+        links={[{ id: 'lock-5', positionAId: 1, positionBId: 1, label: 'same node' }]}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId('rf__edge-link-lock-5')).not.toBeInTheDocument();
+  });
+
+  it('renders each occupant mark as a titled glyph on the avatar', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary')]}
+        edges={[]}
+        occupantsByPosition={
+          new Map([
+            [
+              1,
+              [
+                {
+                  name: 'Aerande',
+                  marks: [
+                    { kind: 'locked' as const, title: 'Aerande: locked with Knight' },
+                    { kind: 'covered' as const, title: 'Aerande: covered by Sir Alaric' },
+                  ],
+                },
+                {
+                  name: 'Sir Alaric',
+                  marks: [{ kind: 'covering' as const, title: 'Sir Alaric: covering Aerande' }],
+                },
+              ],
+            ],
+          ])
+        }
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    const nodeEl = screen.getByTestId('tactical-map-node-1');
+    expect(within(nodeEl).getByTestId('occupant-mark-locked')).toHaveAttribute(
+      'title',
+      'Aerande: locked with Knight'
+    );
+    expect(within(nodeEl).getByTestId('occupant-mark-covered')).toHaveAttribute(
+      'title',
+      'Aerande: covered by Sir Alaric'
+    );
+    expect(within(nodeEl).getByTestId('occupant-mark-covering')).toHaveAttribute(
+      'title',
+      'Sir Alaric: covering Aerande'
+    );
+    expect(within(nodeEl).queryByTestId('occupant-mark-cover')).not.toBeInTheDocument();
+  });
+
+  it('marks every occupant of a rampart-covered node as behind cover', () => {
+    render(
+      <TacticalMap
+        nodes={[
+          node(1, 'feature', 'Wall', {
+            rampart_element: 'Stone',
+            rampart_integrity: 6,
+            rampart_max_integrity: 24,
+            rampart_crack_state: 'crumbling',
+          }),
+          node(2),
+        ]}
+        edges={[edge(1, 2)]}
+        occupantsByPosition={
+          new Map([
+            [1, [{ name: 'Aerande' }, { name: 'Sir Alaric' }]],
+            [2, [{ name: 'Knight' }]],
+          ])
+        }
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    const covered = screen.getByTestId('tactical-map-node-1');
+    const glyphs = within(covered).getAllByTestId('occupant-mark-cover');
+    expect(glyphs).toHaveLength(2);
+    expect(glyphs[0]).toHaveAttribute('title', 'Aerande: behind Stone rampart');
+    const open = screen.getByTestId('tactical-map-node-2');
+    expect(within(open).queryByTestId('occupant-mark-cover')).not.toBeInTheDocument();
   });
 });

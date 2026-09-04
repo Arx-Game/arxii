@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isTargetReachable } from '../reach';
+import { hopDistance, isTargetReachable } from '../reach';
 import type { PositionAdjacencyItem } from '../types';
 
 // A simple two-position adjacency graph: position 1 ↔ position 2,
@@ -100,5 +100,45 @@ describe('isTargetReachable — reach "adjacent"', () => {
 describe('isTargetReachable — unknown reach values', () => {
   it('defaults to true for unrecognised reach strings (lenient)', () => {
     expect(isTargetReachable('melee', 1, 3, adjacency)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hopDistance (#3555) — the number the target picker shows on out-of-reach
+// targets. A chain 1 - 2 - 4 - 5 plus the disconnected 3 above.
+// ---------------------------------------------------------------------------
+
+const chain: PositionAdjacencyItem[] = [
+  { position_id: 1, adjacent_position_ids: [2] },
+  { position_id: 2, adjacent_position_ids: [1, 4] },
+  { position_id: 3, adjacent_position_ids: [] },
+  { position_id: 4, adjacent_position_ids: [2, 5] },
+  { position_id: 5, adjacent_position_ids: [4] },
+];
+
+describe('hopDistance', () => {
+  it('is 0 for the same position', () => {
+    expect(hopDistance(chain, 1, 1)).toBe(0);
+  });
+
+  it('is 1 for an adjacent position', () => {
+    expect(hopDistance(chain, 1, 2)).toBe(1);
+  });
+
+  it('counts the shortest path across several hops', () => {
+    expect(hopDistance(chain, 1, 5)).toBe(3);
+  });
+
+  it('is null when no path connects the two positions', () => {
+    expect(hopDistance(chain, 1, 3)).toBeNull();
+  });
+
+  it('is null when either endpoint is unplaced', () => {
+    expect(hopDistance(chain, null, 2)).toBeNull();
+    expect(hopDistance(chain, 1, undefined)).toBeNull();
+  });
+
+  it('is null for a position the adjacency graph does not know', () => {
+    expect(hopDistance(chain, 1, 99)).toBeNull();
   });
 });
