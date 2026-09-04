@@ -1,18 +1,15 @@
 /**
- * Stage 4: Distinctions Selection
+ * Stage 4: Distinctions (#3630).
  *
- * Players select advantages and disadvantages (distinctions) that shape
- * their character. Categories are displayed as tabs, with search filtering
- * and lock status indicators.
- *
- * Selections are stored locally and auto-saved when navigating away.
+ * Advantages and disadvantages as an instrument: a category choice row, then
+ * the category's distinctions as stat rows with the purse at the head.
+ * Pressing a distinction's name writes what it does into the margin
+ * (replacing the hover detail panel, Decision 6). Selections are stored
+ * locally and auto-saved when navigating away.
  */
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   useDistinctionCategories,
@@ -20,38 +17,50 @@ import {
   useDraftDistinctions,
   useSyncDistinctions,
 } from '@/hooks/useDistinctions';
-import type { Distinction, EffectSummary } from '@/types/distinctions';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { ChapterLeaf } from '../folio';
-import { useCGExplanations, useUpdateDraft } from '../queries';
+import type { Distinction } from '@/types/distinctions';
+import {
+  ChapterLeaf,
+  ChoiceRow,
+  ConfirmDialog,
+  InstrumentFrame,
+  InstrumentGroup,
+  Marginalia,
+  Note,
+  RecordRail,
+  StatRow,
+} from '../folio';
+import { useCGExplanations, useCGPointBudget, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
-import { Stage, STAGE_LABELS } from '../types';
-import { CGPointsWidget } from './CGPointsWidget';
+import { Stage } from '../types';
 
 interface DistinctionsStageProps {
   draft: CharacterDraft;
   onRegisterBeforeLeave?: (check: () => Promise<boolean>) => (() => void) | void;
 }
 
-const ALL_CATEGORY_SLUG = '__all__';
-
 /** Format a cost value with a +/- prefix for display. */
 function formatCost(cost: number): string {
   return `${cost > 0 ? '+' : ''}${cost}`;
 }
 
+/** Why the raise button is disabled, if it is; `undefined` when it isn't. */
+function increaseTitleFor(distinction: Distinction, rank: number): string | undefined {
+  if (distinction.is_locked) return distinction.lock_reason ?? 'Locked';
+  if (rank >= distinction.max_rank) return `At ${distinction.max_rank}, the most it can be`;
+  return undefined;
+}
+
 export function DistinctionsStage({ draft, onRegisterBeforeLeave }: DistinctionsStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
+  const { data: cgBudget } = useCGPointBudget();
   const syncDistinctions = useSyncDistinctions(draft.id);
 
-  const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredDistinction, setHoveredDistinction] = useState<Distinction | null>(null);
-  const [activeDistinction, setActiveDistinction] = useState<Distinction | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [why, setWhy] = useState<Distinction | null>(null);
+  const [announce, setAnnounce] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Local state for selections - store full objects with rank to display across category switches
   const [localSelections, setLocalSelections] = useState<
@@ -140,22 +149,17 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     return onRegisterBeforeLeave(saveBeforeLeave) ?? undefined;
   }, [onRegisterBeforeLeave, hasChanges, localSelections, syncDistinctions]);
 
-  // Build categories list with "All" option prepended
-  const categoriesWithAll = useMemo(() => {
-    if (!categories) return [];
-    return [{ slug: ALL_CATEGORY_SLUG, name: 'All' }, ...categories];
-  }, [categories]);
-
-  // When "All" is selected, don't pass category filter
-  const categoryFilter = selectedCategory === ALL_CATEGORY_SLUG ? undefined : selectedCategory;
+  // The category row defaults to the first category, as the tabs did before it.
+  const effectiveCategory = category ?? categories?.[0]?.slug ?? null;
+  const currentCategory = categories?.find((c) => c.slug === effectiveCategory);
 
   const { data: distinctions, isLoading: distinctionsLoading } = useDistinctions(
     {
-      category: categoryFilter,
-      search: searchQuery || undefined,
+      category: effectiveCategory ?? undefined,
+      search: search || undefined,
       draftId: draft.id,
     },
-    { enabled: !!selectedCategory }
+    { enabled: !!effectiveCategory }
   );
 
   // Calculate total cost from local selections
@@ -188,438 +192,192 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSelections, draft.id, isInitialized]);
 
-  const handleToggleDistinction = (distinction: Distinction) => {
-    if (distinction.is_locked) return;
-    setActiveDistinction(distinction);
+  const rankOf = (id: number) => localSelections.get(id)?.rank ?? 0;
 
+  const setRank = (distinction: Distinction, rawValue: number) => {
+    const value = Math.max(0, Math.min(distinction.max_rank, rawValue));
     setLocalSelections((prev) => {
       const next = new Map(prev);
-      const existing = next.get(distinction.id);
-
-      if (!existing) {
-        // Not selected -> select at rank 1
-        next.set(distinction.id, { distinction, rank: 1 });
-      } else if (existing.rank < distinction.max_rank) {
-        // Increment rank
-        next.set(distinction.id, { distinction, rank: existing.rank + 1 });
-      } else {
-        // At max rank -> deselect
+      if (value <= 0) {
         next.delete(distinction.id);
+      } else {
+        next.set(distinction.id, { distinction, rank: value });
       }
       return next;
     });
-  };
-
-  const handleRemoveDistinction = (distinctionId: number) => {
-    setLocalSelections((prev) => {
-      const next = new Map(prev);
-      next.delete(distinctionId);
-      return next;
-    });
+    setAnnounce(`${distinction.name} ${value}.`);
   };
 
   const handleReset = () => {
     setLocalSelections(new Map());
+    setConfirmReset(false);
   };
 
   // CG Points calculation
-  const startingPoints = 100;
-  const spentPoints = totalCost;
-  const remainingPoints = startingPoints - totalCost;
+  const starting = cgBudget?.starting_points ?? 100;
+  const spent = totalCost;
+  const chosenCount = localSelections.size;
+  const chosenList = [...localSelections.values()];
 
   if (categoriesLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const renderCardContent = () => {
-    if (!isInitialized) {
-      return (
-        <div className="flex items-center justify-center py-4">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-    if (localSelections.size > 0) {
-      return (
-        <div className="space-y-2">
-          {[...localSelections.values()].map((entry) => (
-            <SelectedDistinctionItem
-              key={entry.distinction.id}
-              distinction={entry.distinction}
-              rank={entry.rank}
-              onRemove={() => handleRemoveDistinction(entry.distinction.id)}
-            />
-          ))}
-        </div>
-      );
-    }
-    return (
-      <p className="py-4 text-center text-sm text-muted-foreground">
-        No distinctions selected yet. Browse the categories above to add some.
+      <p className="ledger-line" aria-busy="true">
+        Loading distinctions…
       </p>
     );
-  };
-
-  const renderDistinctionList = () => {
-    if (distinctionsLoading) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-    if (!distinctions || distinctions.length === 0) {
-      return (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-center text-sm text-muted-foreground">
-              {searchQuery
-                ? 'No distinctions match your search.'
-                : 'No distinctions available in this category.'}
-            </p>
-          </CardContent>
-        </Card>
-      );
-    }
-    return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {distinctions.map((distinction) => {
-          const entry = localSelections.get(distinction.id);
-          return (
-            <DistinctionCard
-              key={distinction.id}
-              distinction={distinction}
-              isSelected={!!entry}
-              selectedRank={entry?.rank}
-              onToggle={() => handleToggleDistinction(distinction)}
-              onHover={setHoveredDistinction}
-            />
-          );
-        })}
-      </div>
-    );
-  };
-
-  return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
-      {/* Main Content */}
-      <ChapterLeaf
-        stage={Stage.DISTINCTIONS}
-        title={copy?.distinctions_heading ?? STAGE_LABELS[Stage.DISTINCTIONS]}
-        intro={copy?.distinctions_intro}
-        wide
-      >
-        <div className="space-y-6">
-          {localSelections.size > 0 && (
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={handleReset}>
-                <RotateCcw className="mr-1 h-3 w-3" />
-                Reset
-              </Button>
-            </div>
-          )}
-
-          {/* Category Tabs */}
-          <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-            <div className="overflow-x-auto">
-              <TabsList className="inline-flex w-auto min-w-full justify-start">
-                {categoriesWithAll.map((category) => (
-                  <TabsTrigger
-                    key={category.slug}
-                    value={category.slug}
-                    className="whitespace-nowrap"
-                  >
-                    {category.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative mt-4">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, description, or effects..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-              {searchQuery && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
-                  onClick={() => setSearchQuery('')}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Distinction List */}
-            {categoriesWithAll.map((category) => (
-              <TabsContent key={category.slug} value={category.slug} className="mt-4 space-y-3">
-                {renderDistinctionList()}
-              </TabsContent>
-            ))}
-          </Tabs>
-
-          {/* Mobile: Distinction detail below grid */}
-          {activeDistinction && (
-            <div className="lg:hidden">
-              <DistinctionDetailPanel distinction={activeDistinction} />
-            </div>
-          )}
-
-          {/* Selected Distinctions Panel */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center justify-between text-base">
-                <span>Selected Distinctions</span>
-                <Badge variant="secondary">
-                  {localSelections.size} selected ({totalCost} points)
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>{renderCardContent()}</CardContent>
-          </Card>
-        </div>
-      </ChapterLeaf>
-
-      {/* Sidebar: CG Points Widget + Hover Detail */}
-      <div className="hidden lg:block">
-        <div className="sticky top-4 space-y-4">
-          <CGPointsWidget
-            starting={startingPoints}
-            spent={spentPoints}
-            remaining={remainingPoints}
-          />
-          <DistinctionDetailPanel distinction={hoveredDistinction} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-/** Detail panel showing full distinction info on hover (desktop) or tap (mobile) */
-function DistinctionDetailPanel({ distinction }: { distinction: Distinction | null }) {
-  if (!distinction) {
-    return (
-      <Card className="bg-muted/30">
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Hover over a distinction to see its full description and effects.
-        </CardContent>
-      </Card>
-    );
   }
 
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={distinction.id}
-        initial={{ opacity: 0, x: 10 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -10 }}
-        transition={{ duration: 0.25 }}
-      >
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">
-                {distinction.codex_entry_ids?.length > 0 ? (
-                  <CodexTerm entryId={distinction.codex_entry_ids[0]}>{distinction.name}</CodexTerm>
-                ) : (
-                  distinction.name
-                )}
-              </CardTitle>
-              <Badge variant="outline" className="text-xs">
-                {formatCost(distinction.cost_per_rank)}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-0">
-            <p className="text-xs text-muted-foreground">{distinction.description}</p>
-            {distinction.effects_summary.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium">Effects:</p>
-                <div className="flex flex-wrap gap-1">
-                  {distinction.effects_summary.map((effect, idx) => (
-                    <EffectBadge key={idx} effect={effect} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {distinction.max_rank > 1 && (
-              <p className="text-xs text-muted-foreground">Max rank: {distinction.max_rank}</p>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
+  const list = distinctions ?? [];
 
-interface DistinctionCardProps {
-  distinction: Distinction;
-  isSelected?: boolean;
-  selectedRank?: number;
-  onToggle: () => void;
-  onHover: (distinction: Distinction | null) => void;
-}
-
-/** How a distinction card reads at a glance: chosen, unavailable, or offered. */
-function cardStateClass(isSelected?: boolean, isLocked?: boolean): string {
-  if (isSelected) return 'bg-primary/10 ring-2 ring-primary';
-  if (isLocked) return 'cursor-not-allowed opacity-50';
-  return 'hover:ring-1 hover:ring-primary/50';
-}
-
-function DistinctionCard({
-  distinction,
-  isSelected,
-  selectedRank,
-  onToggle,
-  onHover,
-}: DistinctionCardProps) {
-  const isLocked = distinction.is_locked;
-
-  return (
-    <Card
-      className={`cursor-pointer transition-all ${cardStateClass(isSelected, isLocked)}`}
-      onClick={() => {
-        if (isLocked) return;
-        onToggle();
-      }}
-      onMouseEnter={() => onHover(distinction)}
-      onMouseLeave={() => onHover(null)}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-sm font-medium">
-            {distinction.codex_entry_ids?.length > 0 ? (
-              <CodexTerm entryId={distinction.codex_entry_ids[0]}>{distinction.name}</CodexTerm>
-            ) : (
-              distinction.name
-            )}
-          </CardTitle>
-          <div className="flex items-center gap-1">
-            {isSelected && <Check className="h-4 w-4 text-primary" />}
-            {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
-            <Badge variant="outline" className="text-xs">
-              {formatCost(distinction.cost_per_rank * (selectedRank || 1))}
-            </Badge>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2 pt-0">
-        <CardDescription className="line-clamp-2 text-xs">
-          {distinction.description}
-        </CardDescription>
-        {isLocked && distinction.lock_reason && (
-          <p className="text-xs italic text-destructive">{distinction.lock_reason}</p>
-        )}
-        {distinction.effects_summary.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {(isSelected
-              ? distinction.effects_summary
-              : distinction.effects_summary.slice(0, 2)
-            ).map((effect, idx) => (
-              <EffectBadge key={idx} effect={effect} />
+  const rail = (
+    <>
+      <RecordRail
+        rows={[
+          { label: 'Origin', value: draft.selected_area?.name },
+          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Species', value: draft.selected_species?.name },
+          { label: 'Distinctions', value: `${chosenCount} chosen, ${spent} points` },
+        ]}
+        ledger="Stage 4 of 11"
+      />
+      <Marginalia id="note-dist">
+        <span className="note" id="why-note" role="status">
+          {why ? (
+            <>
+              <b>{why.name}.</b> {why.description}
+              {why.effects_summary.map((effect, i) => (
+                <Fragment key={i}>
+                  <br />
+                  {effect.text}
+                </Fragment>
+              ))}
+              <br />
+              Up to rank {why.max_rank}.
+              {why.codex_entry_ids.length > 0 && (
+                <>
+                  <br />
+                  <CodexTerm entryId={why.codex_entry_ids[0]}>Codex: {why.name}</CodexTerm>
+                </>
+              )}
+            </>
+          ) : (
+            // PLACEHOLDER: Apostate rewrite
+            <>
+              <b>Distinctions.</b> Select a distinction’s name to read what it does.
+            </>
+          )}
+        </span>
+        {chosenList.length > 0 && (
+          <Note lead="Selected">
+            {chosenList.map((entry, i) => (
+              <Fragment key={entry.distinction.id}>
+                {i > 0 && <br />}
+                {entry.distinction.name} · rank {entry.rank}
+              </Fragment>
             ))}
-            {!isSelected && distinction.effects_summary.length > 2 && (
-              <Badge variant="secondary" className="text-xs">
-                +{distinction.effects_summary.length - 2} more effects
-              </Badge>
-            )}
-          </div>
+          </Note>
         )}
-        {distinction.max_rank > 1 && (
-          <RankPips maxRank={distinction.max_rank} currentRank={selectedRank ?? 0} />
-        )}
-      </CardContent>
-    </Card>
+      </Marginalia>
+    </>
   );
-}
-
-interface SelectedDistinctionItemProps {
-  distinction: Distinction;
-  rank: number;
-  onRemove: () => void;
-}
-
-function SelectedDistinctionItem({ distinction, rank, onRemove }: SelectedDistinctionItemProps) {
-  const totalCost = distinction.cost_per_rank * rank;
 
   return (
-    <div className="flex items-center justify-between rounded-md border p-2">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">{distinction.name}</span>
-        {distinction.max_rank > 1 && <RankPips maxRank={distinction.max_rank} currentRank={rank} />}
-        <Badge variant="outline" className="text-xs">
-          {formatCost(totalCost)}
-        </Badge>
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-        onClick={onRemove}
-      >
-        <X className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
-
-interface EffectBadgeProps {
-  effect: EffectSummary;
-}
-
-/**
- * Renders an effect badge.
- * Per-effect codex links were removed in #2477; distinction-level lore
- * now comes from codex_entry_ids on the Distinction itself.
- */
-function EffectBadge({ effect }: EffectBadgeProps) {
-  return (
-    <Badge variant="secondary" className="text-xs">
-      {effect.text}
-    </Badge>
-  );
-}
-
-interface RankPipsProps {
-  maxRank: number;
-  currentRank: number;
-}
-
-/**
- * Visual rank indicator showing filled/empty circles.
- * Only rendered for multi-rank distinctions (maxRank > 1).
- */
-function RankPips({ maxRank, currentRank }: RankPipsProps) {
-  if (maxRank <= 1) return null;
-
-  return (
-    <div className="flex items-center gap-1">
-      {Array.from({ length: maxRank }, (_, i) => (
-        <div
-          key={i}
-          className={`h-2 w-2 rounded-full border ${
-            i < currentRank
-              ? 'border-primary bg-primary'
-              : 'border-muted-foreground/50 bg-transparent'
-          }`}
+    <ChapterLeaf
+      stage={Stage.DISTINCTIONS}
+      title={copy?.distinctions_heading ?? 'Your Distinctions'}
+      intro={copy?.distinctions_intro}
+      aside={rail}
+    >
+      <span className="vh" role="status">
+        {announce}
+      </span>
+      <h2 className="section-h" id="dist-cat">
+        Category
+      </h2>
+      <ChoiceRow
+        label="Category"
+        options={(categories ?? []).map((c) => ({ value: c.slug, label: c.name }))}
+        value={effectiveCategory}
+        onChange={(slug) => slug && setCategory(slug)}
+      />
+      <div className="instr-search">
+        <label htmlFor="dist-search" className="vh">
+          Search distinctions
+        </label>
+        <input
+          id="dist-search"
+          type="search"
+          placeholder="Search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-      ))}
-    </div>
+      </div>
+      <InstrumentFrame
+        label="Distinctions"
+        ledger={{
+          left: `${chosenCount} chosen`,
+          right: (
+            <>
+              Points remaining: <b>{starting - spent}</b> of <b>{starting}</b>
+              {starting - spent < 0 && <>, over by {spent - starting}</>}
+            </>
+          ),
+          over: starting - spent < 0,
+        }}
+      >
+        {distinctionsLoading ? (
+          <p className="ledger-line" aria-busy="true">
+            Loading distinctions…
+          </p>
+        ) : (
+          currentCategory && (
+            <InstrumentGroup
+              title={currentCategory.name}
+              gloss={currentCategory.description || undefined}
+            >
+              {list.map((d) => (
+                <StatRow
+                  key={d.id}
+                  id={`lbl-dist-${d.id}`}
+                  name={d.name}
+                  sub={`${formatCost(d.cost_per_rank)} per rank${d.is_locked ? ' · locked' : ''}`}
+                  value={rankOf(d.id)}
+                  max={d.max_rank}
+                  onChange={(v) => setRank(d, v)}
+                  canDecrease={rankOf(d.id) > 0}
+                  canIncrease={!d.is_locked && rankOf(d.id) < d.max_rank}
+                  increaseTitle={increaseTitleFor(d, rankOf(d.id))}
+                  onWhy={() => setWhy(d)}
+                  whyOpen={why?.id === d.id}
+                />
+              ))}
+            </InstrumentGroup>
+          )
+        )}
+        {!distinctionsLoading && list.length === 0 && (
+          <p className="ledger-line">No distinctions match.</p>
+        )}
+      </InstrumentFrame>
+      <p className="ledger-line">
+        <button
+          type="button"
+          className="btn-quiet"
+          onClick={() => setConfirmReset(true)}
+          disabled={chosenCount === 0}
+        >
+          Clear all distinctions
+        </button>
+      </p>
+      <ConfirmDialog
+        open={confirmReset}
+        title="Clear all distinctions"
+        confirmLabel="Clear all"
+        cancelLabel="Keep them"
+        onConfirm={handleReset}
+        onCancel={() => setConfirmReset(false)}
+      >
+        This removes every distinction you have chosen on this stage.
+      </ConfirmDialog>
+    </ChapterLeaf>
   );
 }
