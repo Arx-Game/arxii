@@ -22,7 +22,7 @@ from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
-    from world.combat.types import RoundCombo
+    from world.combat.types import ComboSlotFill, RoundCombo
 
 # subverb -> registry action key. ``yield`` reuses the existing YieldAction.
 _SUBVERBS: dict[str, str] = {
@@ -605,29 +605,41 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
     @staticmethod
     def _render_round_combo(round_combo: RoundCombo, own_participant_pk: int) -> list[str]:
         """Render one combo: header with fill count and rider, then a line per slot."""
-        combo = round_combo.combo
-        known = "known" if round_combo.known_by_participant else "not known"
-        if round_combo.complete:
-            progress = "ready to chain"
-        else:
-            progress = f"{round_combo.filled_count} of {round_combo.slot_count} slots filled"
-        rider: list[str] = []
-        if combo.bonus_damage:
-            rider.append(f"+{combo.bonus_damage} damage")
-        if combo.bypass_soak:
-            rider.append("bypasses soak")
-        suffix = f"; {', '.join(rider)}" if rider else ""
-        lines = [f"  {combo.name} ({known}): {progress}{suffix}"]
-        for fill in round_combo.slot_fills:
-            if fill.match is None:
-                filler = "open"
-            else:
-                who = "you" if fill.participant_id == own_participant_pk else fill.character_name
-                filler = f"{who} ({fill.technique_name})"
-            lines.append(f"    {fill.slot.slot_number}. {fill.slot.requirement_label} - {filler}")
+        lines = [_round_combo_header(round_combo)]
+        lines.extend(
+            f"    {_round_combo_slot_line(fill, own_participant_pk)}"
+            for fill in round_combo.slot_fills
+        )
         open_slots = round_combo.open_slots
         if open_slots:
             needs = ", ".join(slot.requirement_label for slot in open_slots)
             count = "one more" if len(open_slots) == 1 else f"{len(open_slots)} more"
             lines.append(f"    Needs {count}: {needs}")
         return lines
+
+
+def _round_combo_header(round_combo: RoundCombo) -> str:
+    """``  Pincer (known): 1 of 2 slots filled; +7 damage, bypasses soak``."""
+    combo = round_combo.combo
+    known = "known" if round_combo.known_by_participant else "not known"
+    if round_combo.complete:
+        progress = "ready to chain"
+    else:
+        progress = f"{round_combo.filled_count} of {round_combo.slot_count} slots filled"
+    rider: list[str] = []
+    if combo.bonus_damage:
+        rider.append(f"+{combo.bonus_damage} damage")
+    if combo.bypass_soak:
+        rider.append("bypasses soak")
+    suffix = f"; {', '.join(rider)}" if rider else ""
+    return f"  {combo.name} ({known}): {progress}{suffix}"
+
+
+def _round_combo_slot_line(fill: ComboSlotFill, own_participant_pk: int) -> str:
+    """``1. Attack - you (Firebolt)`` or ``2. Defense - open``."""
+    if fill.match is None:
+        filler = "open"
+    else:
+        who = "you" if fill.participant_id == own_participant_pk else fill.character_name
+        filler = f"{who} ({fill.technique_name})"
+    return f"{fill.slot.slot_number}. {fill.slot.requirement_label} - {filler}"

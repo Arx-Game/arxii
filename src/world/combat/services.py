@@ -6675,27 +6675,35 @@ def _participant_has_archetype(participant: CombatParticipant, archetype: str) -
     return False
 
 
-def _fill_slots(
+def _unused_matches(
+    slot: ComboSlot,
+    actions: list[CombatRoundAction],
+    assignment: dict[int, CombatRoundAction],
+    gift_resonance_ids: dict[int, set[int]],
+) -> list[CombatRoundAction]:
+    """Actions not yet assigned to a slot that satisfy ``slot``."""
+    used_action_ids = {action.pk for action in assignment.values()}
+    return [
+        action
+        for action in actions
+        if action.pk not in used_action_ids
+        and _action_matches_slot(action, slot, gift_resonance_ids)
+    ]
+
+
+def _best_slot_assignment(
     slots: list[ComboSlot],
     actions: list[CombatRoundAction],
     gift_resonance_ids: dict[int, set[int]],
-) -> list[ComboSlotFill]:
+) -> dict[int, CombatRoundAction]:
     """Assign distinct actions to slots, filling as many slots as possible.
 
     Backtracking over "this action fills the slot" and "the slot stays open"
     keeps matching order-independent for combos with 2-5 slots, and the
     fullest assignment wins, so a party sees the true number of open slots
-    (#3553) and a complete fill is found whenever one exists.
+    (#3553) and a complete fill is found whenever one exists. Keyed by slot pk.
     """
-    # #2051 invariant: combos are never solo — each slot must be filled by a
-    # distinct PC-controlled action. CombatRoundAction requires a
-    # CombatParticipant (PC) FK; companions materialize as CombatOpponent and
-    # cannot produce one. This filter is defense-in-depth against future
-    # companion-action surfaces.
-    actions = [a for a in actions if a.participant_id is not None]
-
     assignment: dict[int, CombatRoundAction] = {}
-    used_action_ids: set[int] = set()
     best: dict[int, CombatRoundAction] = {}
 
     def backtrack(slot_idx: int) -> None:
@@ -6707,18 +6715,29 @@ def _fill_slots(
                 best = dict(assignment)
             return
         slot = slots[slot_idx]
-        for action in actions:
-            if action.pk in used_action_ids:
-                continue
-            if _action_matches_slot(action, slot, gift_resonance_ids):
-                assignment[slot.pk] = action
-                used_action_ids.add(action.pk)
-                backtrack(slot_idx + 1)
-                del assignment[slot.pk]
-                used_action_ids.discard(action.pk)
+        for action in _unused_matches(slot, actions, assignment, gift_resonance_ids):
+            assignment[slot.pk] = action
+            backtrack(slot_idx + 1)
+            del assignment[slot.pk]
         backtrack(slot_idx + 1)
 
     backtrack(0)
+    return best
+
+
+def _fill_slots(
+    slots: list[ComboSlot],
+    actions: list[CombatRoundAction],
+    gift_resonance_ids: dict[int, set[int]],
+) -> list[ComboSlotFill]:
+    """One ``ComboSlotFill`` per slot, in slot order, from the fullest assignment."""
+    # #2051 invariant: combos are never solo — each slot must be filled by a
+    # distinct PC-controlled action. CombatRoundAction requires a
+    # CombatParticipant (PC) FK; companions materialize as CombatOpponent and
+    # cannot produce one. This filter is defense-in-depth against future
+    # companion-action surfaces.
+    pc_actions = [a for a in actions if a.participant_id is not None]
+    best = _best_slot_assignment(slots, pc_actions, gift_resonance_ids)
 
     fills: list[ComboSlotFill] = []
     for slot in slots:
