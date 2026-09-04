@@ -21,7 +21,7 @@ describe('ContentsRail', () => {
         onStageSelect={vi.fn()}
       />
     );
-    const nav = screen.getByRole('navigation', { name: /chapters of your character/i });
+    const nav = screen.getByRole('navigation', { name: /character creation stages/i });
     expect(nav.querySelectorAll('li')).toHaveLength(11);
     expect(screen.getByText('7')).toBeInTheDocument();
     const current = screen.getByRole('link', { current: 'step' });

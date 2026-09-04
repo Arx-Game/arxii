@@ -1,10 +1,10 @@
 /**
- * Chapter the First: Origin (#3540).
+ * Stage 1: Origin (#3540).
  *
  * One question, then the starting realms as index entries (each the capital
  * of its realm, prose verbatim from the StartingArea row). Reading is free;
  * the realm enters when the player chooses (never on hover, Decision 6), and
- * choosing a different realm asks first because it clears the chapters that
+ * choosing a different realm asks first because it clears the stages that
  * depended on it. The record rail lists the choice; it says nothing else
  * (Decision 8).
  */
@@ -80,7 +80,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
   if (isLoading)
     return (
       <p className="ledger-line" aria-busy="true">
-        Opening the record.
+        Loading starting realms…
       </p>
     );
   if (error)

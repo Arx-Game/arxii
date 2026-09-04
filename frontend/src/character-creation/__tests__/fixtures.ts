@@ -662,8 +662,10 @@ export const mockCGExplanations: Record<string, string> = {
   review_heading: 'Review & Submit',
   review_intro: 'Review your character before submitting for approval.',
   review_xp_explanation: 'Unspent CG points convert to bonus XP.',
-  arrival_title: 'One stands before us',
-  arrival_intro: 'You are one of the Gifted, arriving to begin your story.',
-  arrival_door: 'Open the record',
-  arrival_quiet: 'or return to the Hall',
+  arrival_title: 'Creating a Character and Starting their Story',
+  arrival_intro:
+    'You will be creating one of the Gifted, those who carry magic in their blood and ' +
+    'have caught their first Glimpse of who one day they might become.',
+  arrival_door: 'Begin',
+  arrival_quiet: 'Return to the Hall',
 };

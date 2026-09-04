@@ -115,7 +115,7 @@ describe('OriginStage', () => {
       error: null,
     } as unknown as ReturnType<typeof useStartingAreas>);
     renderOrigin();
-    expect(screen.getByText('Opening the record.')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText('Loading starting realms…')).toHaveAttribute('aria-busy', 'true');
   });
 
   it('shows the read-failure line when the starting realms cannot be read', () => {

@@ -1,8 +1,8 @@
 /**
  * The contents rail (#3540): progress as a table of contents, never a stepper.
- * Eleven chapters with written / current / unwritten state, the validation
- * reason as an "n.b." note, and the restart door beneath. Free navigation is
- * preserved (every chapter is a link). Replaces StageStepper.
+ * The eleven stages with complete / current / not-yet-started state, the
+ * validation reason as an "n.b." note, and the restart door beneath. Free
+ * navigation is preserved (every stage is a link). Replaces StageStepper.
  */
 
 import type { ReactNode } from 'react';
@@ -46,9 +46,9 @@ function stateOf(stage: Stage, current: Stage, done: boolean): 'current' | 'done
 const STATE_CLASS = { current: 'toc-current', done: 'toc-done', later: 'toc-later' } as const;
 const STATE_MARK = { current: '¶', done: '◆', later: '' } as const;
 const STATE_SR = {
-  current: ', current chapter',
-  done: ', written',
-  later: ', not yet written',
+  current: ', current stage',
+  done: ', complete',
+  later: ', not yet started',
 } as const;
 
 export function ContentsRail({
@@ -64,7 +64,7 @@ export function ContentsRail({
         <span aria-hidden="true">¶</span> {stageEyebrow(currentStage)} ·{' '}
         {STAGE_LABELS[currentStage]} <span className="toc-summary-note">· all stages</span>
       </summary>
-      <nav aria-label="Chapters of your character">
+      <nav aria-label="Character creation stages">
         <p className="toc-title">Stages</p>
         <ol className="toc-list">
           {CHAPTERS.map(({ stage, numeral }) => {

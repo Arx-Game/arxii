@@ -167,13 +167,13 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('navigation', { name: /chapters of your character/i })
+          screen.getByRole('navigation', { name: /character creation stages/i })
         ).toBeInTheDocument();
       });
 
       // The contents rail lists every chapter. Origin's own record rail
       // (Task 4) also has a row labeled "Origin", so scope to the nav.
-      const nav = screen.getByRole('navigation', { name: /chapters of your character/i });
+      const nav = screen.getByRole('navigation', { name: /character creation stages/i });
       expect(within(nav).getByText('Origin')).toBeInTheDocument();
     });
 
@@ -242,7 +242,7 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('navigation', { name: /chapters of your character/i })
+          screen.getByRole('navigation', { name: /character creation stages/i })
         ).toBeInTheDocument();
       });
 
@@ -283,10 +283,12 @@ describe('CharacterCreationPage', () => {
         explanations: mockCGExplanations,
       });
       renderWithCharacterCreationProviders(<CharacterCreationPage />, { queryClient });
-      const plate = await screen.findByRole('region', { name: /one stands before us/i });
+      const plate = await screen.findByRole('region', {
+        name: /creating a character and starting their story/i,
+      });
       expect(plate).toHaveClass('plate-night');
       expect(screen.getByText(mockCGExplanations.arrival_intro)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /open the record/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^begin$/i })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
     });
   });
@@ -362,7 +364,7 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('navigation', { name: /chapters of your character/i })
+          screen.getByRole('navigation', { name: /character creation stages/i })
         ).toBeInTheDocument();
       });
     });

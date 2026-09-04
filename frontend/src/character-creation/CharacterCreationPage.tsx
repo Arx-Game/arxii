@@ -160,7 +160,7 @@ export function CharacterCreationPage() {
           title={copy?.arrival_title ?? 'Creating a Character and Starting their Story'}
           backgroundImage={backgroundUrl}
           door={{
-            label: createDraft.isPending ? 'Opening the record…' : (copy?.arrival_door ?? 'Begin'),
+            label: createDraft.isPending ? 'Starting…' : (copy?.arrival_door ?? 'Begin'),
             onClick: () => createDraft.mutate(),
             disabled: createDraft.isPending,
           }}
