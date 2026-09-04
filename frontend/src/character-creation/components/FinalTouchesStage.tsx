@@ -8,7 +8,7 @@
  * are stored locally and auto-saved when navigating away.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChapterLeaf,
   Field,
@@ -57,7 +57,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const [announce, setAnnounce] = useState('');
 
   // The value actually flushed to draft_data.goals: plain DraftGoal[], no local keys.
-  const goals = keyedGoals.map((kg) => kg.goal);
+  const goals = useMemo(() => keyedGoals.map((kg) => kg.goal), [keyedGoals]);
 
   const hasChangesRef = useRef(false);
   const goalsRef = useRef(goals);

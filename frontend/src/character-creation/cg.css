@@ -880,6 +880,9 @@
   .interview .stat-row {
     grid-template-columns: 1fr 2.25rem auto;
   }
+  .interview .goal-row {
+    grid-template-columns: 1fr 5rem auto;
+  }
   .interview .stat-pips {
     display: none;
   }
