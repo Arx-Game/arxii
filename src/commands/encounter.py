@@ -32,6 +32,7 @@ _USAGE = (
     "                                           - change risk level (#3383)\n"
     "  encounter pace <timed|ready|manual>     - change pace mode (#3383)\n"
     "  encounter timer <minutes>               - change the TIMED round timer (#3383)\n"
+    "  encounter curve <name|none>            - set or clear the escalation curve (#3552)\n"
     "  encounter duel <character> <name> <tier> <pool>\n"
     "                                           - propose a lethal duel (#3068)"
 )
@@ -49,6 +50,7 @@ _STAKES_USAGE = "Usage: encounter stakes <local|regional|national|continental|wo
 _RISK_USAGE = "Usage: encounter risk <low|moderate|high|extreme|lethal>"
 _PACE_USAGE = "Usage: encounter pace <timed|ready|manual>"
 _TIMER_USAGE = "Usage: encounter timer <minutes>"
+_CURVE_USAGE = "Usage: encounter curve <name|none>"
 
 # Token-count thresholds for argument parsing.
 _MIN_ADD_TOKENS = 2
@@ -73,6 +75,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "risk": "_handle_risk",
     "pace": "_handle_pace",
     "timer": "_handle_timer",
+    "curve": "_handle_curve",
     "duel": "_handle_duel",
 }
 
@@ -259,6 +262,13 @@ class CmdEncounter(ArxNamespaceCommand):
 
         minutes = self._require_arg(rest, _TIMER_USAGE)
         self._run_action(UpdateEncounterSettingsAction, pace_timer_minutes=minutes.split()[0])
+
+    def _handle_curve(self, rest: str) -> None:
+        """Parse ``curve <name|none>`` and dispatch UpdateEncounterSettingsAction (#3552)."""
+        from actions.definitions.gm_combat import UpdateEncounterSettingsAction  # noqa: PLC0415
+
+        name = self._require_arg(rest, _CURVE_USAGE)
+        self._run_action(UpdateEncounterSettingsAction, escalation_curve=name.strip())
 
     def _handle_duel(self, rest: str) -> None:
         """Parse ``duel <character> <name> <tier> <pool>`` and propose a lethal duel (#3068).
