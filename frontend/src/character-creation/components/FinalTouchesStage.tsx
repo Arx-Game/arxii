@@ -39,13 +39,14 @@ const BASE_GOAL_POINTS = 30;
  * The in-code twin of the `finaltouches_how_note` copy key
  * (`world/seeds/character_creation.py`). It states the mechanics a player
  * cannot infer from the form: the pool, the invoke bonus, and the per-day
- * cap. Keep the two identical.
+ * cap. Continues the margin note's lead "Goals", so it starts mid-sentence.
+ * Keep the two identical.
  */
 // PLACEHOLDER: Apostate rewrite
 const HOW_GOALS_WORK =
-  'Each goal takes points from a pool of thirty. During play a goal can be invoked to add ' +
-  'its point value as a bonus to a roll, up to twice your total goal points per day. Spend ' +
-  'more on the goals that matter most; a goal with no points is a note to yourself, not a ' +
+  'take points from a pool of thirty. During play a goal can be invoked to add its point ' +
+  'value as a bonus to a roll, up to twice your total goal points per day. Spend more on ' +
+  'the goals that matter most; a goal with no points is a note to yourself, not a ' +
   'commitment.';
 
 /**

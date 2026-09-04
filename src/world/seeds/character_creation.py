@@ -283,10 +283,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "identity_quote_heading": "Quote",
     "identity_personality_heading": "Personality",
     "identity_worship_heading": "Worship",
+    # Continues the margin note's lead "Goals", so it starts mid-sentence.
     "finaltouches_how_note": (
-        "Each goal takes points from a pool of thirty. During play a goal can be invoked to "
-        "add its point value as a bonus to a roll, up to twice your total goal points per "
-        "day. Spend more on the goals that matter most; a goal with no points is a note to "
+        "take points from a pool of thirty. During play a goal can be invoked to add its "
+        "point value as a bonus to a roll, up to twice your total goal points per day. "
+        "Spend more on the goals that matter most; a goal with no points is a note to "
         "yourself, not a commitment."
     ),  # PLACEHOLDER: Apostate rewrite
 }

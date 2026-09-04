@@ -10,6 +10,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   useDistinctionCategories,
   useDistinctions,
@@ -20,7 +21,6 @@ import type { Distinction } from '@/types/distinctions';
 import {
   ChapterLeaf,
   ChoiceRow,
-  CodexLine,
   ConfirmDialog,
   InstrumentFrame,
   InstrumentGroup,
@@ -318,7 +318,15 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               ))}
               <br />
               Up to rank {why.max_rank}.
-              <CodexLine entryId={why.codex_entry_ids?.[0]} name={why.name} />
+              {/* Inline rather than the folio's CodexLine: this note is a
+                  <span>, and CodexLine's own <p> would nest a block inside
+                  it. Render-or-vanish either way. */}
+              {why.codex_entry_ids.length > 0 && (
+                <>
+                  <br />
+                  <CodexTerm entryId={why.codex_entry_ids[0]}>Codex: {why.name}</CodexTerm>
+                </>
+              )}
             </>
           ) : (
             // PLACEHOLDER: Apostate rewrite
