@@ -8331,6 +8331,8 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
         interaction_result=interaction_result,
+        hit_text=technique.hit_narration,
+        miss_text=technique.miss_narration,
     )
     # Rendered unconditionally rather than under `if audience.concealed`: it is a pure
     # string build over data already in hand, and branching here would put the
@@ -8943,6 +8945,8 @@ def _resolve_npc_action(
         technique_name=npc_action.threat_entry.name,
         target_label=npc_target_label,
         outcome=outcome,
+        hit_text=npc_action.threat_entry.hit_narration,
+        miss_text=npc_action.threat_entry.miss_narration,
     )
     broadcast_action_outcome(encounter=opponent.encounter, narration=npc_narration)
 
