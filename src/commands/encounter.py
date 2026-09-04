@@ -32,7 +32,7 @@ _USAGE = (
     "                                           - change risk level (#3383)\n"
     "  encounter pace <timed|ready|manual>     - change pace mode (#3383)\n"
     "  encounter timer <minutes>               - change the TIMED round timer (#3383)\n"
-    "  encounter curve <name|none>            - set or clear the escalation curve (#3552)\n"
+    "  encounter curve <name|none>             - set or clear the escalation curve (#3552)\n"
     "  encounter duel <character> <name> <tier> <pool>\n"
     "                                           - propose a lethal duel (#3068)"
 )
