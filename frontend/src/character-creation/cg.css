@@ -941,7 +941,6 @@
 .interview .btn-quiet {
   display: inline-block;
   color: var(--cg-accent);
-  font-style: italic;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 4px;
