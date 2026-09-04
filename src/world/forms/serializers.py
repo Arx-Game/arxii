@@ -126,19 +126,11 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
         return obj.resonance.name if obj.resonance_id is not None else None
 
     def get_is_active(self, obj: AlternateSelf) -> bool:
-        if not hasattr(self, "_active_alternate_self_id"):
-            from world.roster.selectors import puppeted_sheet_for  # noqa: PLC0415
-
-            # request is absent from serializer context during schema generation.
-            # puppeted_sheet_for is the canonical user→puppet→sheet resolver
-            # (handles AnonymousUser and truthy non-character puppets).
-            request = self.context.get("request")
-            sheet = puppeted_sheet_for(request.user) if request is not None else None
-            active = sheet.active_alternate_self_or_none if sheet is not None else None
-            self._active_alternate_self_id = (
-                active.alternate_self_id if active is not None else None
-            )
-        return self._active_alternate_self_id == obj.pk
+        """Whether this is the alternate self the character is currently wearing."""
+        # AlternateSelfViewSet.get_serializer_context resolves the id once for the
+        # whole page; nothing is kept on the serializer (ADR-0260). None (no context
+        # entry, or nobody puppeted) never equals a pk, so the flag is simply False.
+        return self.context.get("active_alternate_self_id") == obj.pk
 
 
 class ShiftFormRequestSerializer(serializers.Serializer):

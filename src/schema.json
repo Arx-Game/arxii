@@ -39278,6 +39278,8 @@ components:
           readOnly: true
         is_active:
           type: boolean
+          description: Whether this is the alternate self the character is currently
+            wearing.
           readOnly: true
       required:
       - form_name
@@ -39983,13 +39985,8 @@ components:
           readOnly: true
         declared_this_round:
           type: boolean
-          description: |-
-            Whether this participant already has a declaration in the CURRENT round (#3389).
-
-            Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
-            against ``current_round_id`` stashed once by
-            ``BattleDetailSerializer.to_representation`` — never a per-participant
-            query, so this stays flat regardless of roster size.
+          description: Whether this participant already has a declaration in the CURRENT
+            round (#3389).
           readOnly: true
       required:
       - character_sheet_id

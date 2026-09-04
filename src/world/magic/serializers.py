@@ -2542,16 +2542,16 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         read_only_fields = fields
 
     def _threshold(self) -> "AudereThreshold | None":
-        """Memoize the global threshold config once per serializer instance.
+        """The global threshold config.
 
-        SharedMemoryModel's identity map does not cache ``.first()`` queries,
-        so without this each SerializerMethodField would hit the DB per row.
+        No memo on the serializer (ADR-0260) and none needed: ``cached_singleton()``
+        stashes the discovered pk on the manager and serves ``get(pk=...)`` from the
+        identity map afterwards, so repeat calls cost no SQL. (A raw ``.first()``
+        would, which is what the manager method exists to solve.)
         """
         from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
-        if not hasattr(self, "_threshold_cache"):
-            self._threshold_cache = AudereThreshold.objects.cached_singleton()
-        return self._threshold_cache
+        return AudereThreshold.objects.cached_singleton()
 
     def get_intensity_bonus(self, obj: object) -> int:  # noqa: ARG002
         """Intensity bonus the offer would grant (from the global threshold config)."""
@@ -2682,20 +2682,19 @@ class PendingAudereMajoraOfferSerializer(_PendingOfferCharacterMixin, serializer
         return "This is permanent. The crossing cannot be undone — and survival is not promised."
 
     def _eligible_paths_for_obj(self, obj: object) -> list:
-        """Compute eligible paths once per object pk; memoize on serializer instance."""
+        """The active child paths this offer could cross into.
+
+        Recomputed by each of the two callers below rather than cached on the
+        serializer (ADR-0260). This endpoint lists a character's *pending* Crossing
+        offers, so it renders one row at a time in practice; a second pass over a
+        handful of candidate paths is not worth state whose lifetime is invisible.
+        """
         from world.magic.audere_majora import eligible_paths_for_threshold  # noqa: PLC0415
 
-        cache_attr = "_eligible_paths_cache"
-        if not hasattr(self, cache_attr):
-            setattr(self, cache_attr, {})
-        cache: dict = getattr(self, cache_attr)
-        pk = obj.pk  # type: ignore[union-attr]
-        if pk not in cache:
-            cache[pk] = eligible_paths_for_threshold(
-                obj.character_sheet.character,  # type: ignore[union-attr]
-                obj.threshold,  # type: ignore[union-attr]
-            )
-        return cache[pk]
+        return eligible_paths_for_threshold(
+            obj.character_sheet.character,  # type: ignore[union-attr]
+            obj.threshold,  # type: ignore[union-attr]
+        )
 
     @extend_schema_field(EligiblePathSerializer(many=True))
     def get_eligible_paths(self, obj: object) -> list:

@@ -72,3 +72,22 @@ should use.
   is read-only; the probe names the row instead.
 - **Falling back from selection to `get_all_puppets()`.** Reintroduces the session
   dependency; a live puppet without a selection is not a web state.
+
+## Enforcement widened (2026-09-03, #3622)
+
+The `view-memo` hook originally saw only the class-level `_thing: T | None = None`
+declaration. The same memo written lazily inside a method - `if not hasattr(self,
+"_thing"): self._thing = ...` - passed it, and eight of those were live across
+`character_creation`, `npc_services`, `progression`, `forms`, `battles` and `magic`.
+The hook now rejects both spellings inside any class whose own name or a base's ends
+in `Serializer`, `ViewSet`, `View` or `APIView`. The eight were removed, not
+suppressed, in three shapes: a row resolved during validation travels in
+`validated_data`; a fact about the request is resolved by the view and passed in
+`context=`; and a computation cheap enough to repeat is simply repeated.
+
+The same instinct applied to a **model** is worse, not better. Concrete models here
+are `SharedMemoryModel`, and Evennia's idmapper holds strong references, so a memo
+on a model instance outlives the request and serves the first request's answer to
+every later one. That is what `CharacterDraft._cached_stage_errors` did to character
+creation: finished stages kept the stepper's "incomplete" badge, and `can_submit()`
+refused a complete draft.

@@ -470,7 +470,7 @@ class PathIntentViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         serializer = PathIntentDeclareSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        path = serializer.validated_path
+        path = serializer.validated_data["path"]
 
         result = SetPathIntentAction().run(actor=character, path_id=path.pk)
         if not result.success:
@@ -544,7 +544,7 @@ class SelectPathViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         serializer = SelectPathSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        path = serializer.validated_path
+        path = serializer.validated_data["path"]
 
         result = SelectPathAction().run(actor=character, path_id=path.pk)
         if not result.success:

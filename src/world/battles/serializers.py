@@ -268,16 +268,15 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         ).exists()
 
     def get_declared_this_round(self, obj: BattleParticipant) -> bool:
-        """Whether this participant already has a declaration in the CURRENT round (#3389).
-
-        Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
-        against ``current_round_id`` stashed once by
-        ``BattleDetailSerializer.to_representation`` — never a per-participant
-        query, so this stays flat regardless of roster size.
-        """
-        current_round_id = self.context.get("current_round_id")
-        if current_round_id is None:
+        """Whether this participant already has a declaration in the CURRENT round (#3389)."""
+        # Reads cached_declarations (the view's Prefetch, world/battles/views.py)
+        # against the current_round BattleDetailSerializer.to_representation put in
+        # the shared context — never a per-participant query, so this stays flat
+        # regardless of roster size.
+        current_round = self.context.get("current_round")
+        if current_round is None:
             return False
+        current_round_id = current_round.id
         # cached_declarations is a to_attr Prefetch set only when the view's
         # queryset prefetches it (world/battles/views.py); the
         # obj.declarations.all() fallback keeps this serializer usable outside
@@ -389,27 +388,24 @@ class BattleDetailSerializer(serializers.ModelSerializer):
         ]
 
     def to_representation(self, instance: Battle) -> dict:
-        """Resolve ``current_round`` once and stash its id in context (#3389).
+        """Resolve ``current_round`` once and put it in context (#3389).
 
         ``Battle.current_round`` is a plain query-backed property, not a
-        cached one — computing it here once and reusing it in ``get_round``
-        (below) and in the nested ``BattleParticipantSerializer.
-        get_declared_this_round`` (via the shared ``context`` dict every
-        nested field serializer reads from the same root) keeps this at two
-        queries total for the whole aggregate, never one per participant.
+        cached one — resolving it here once and reading it back from the
+        shared ``context`` dict in ``get_round`` (below) and in the nested
+        ``BattleParticipantSerializer.get_declared_this_round`` keeps this at
+        one query for the whole aggregate, never one per participant. The
+        context is DRF's channel for exactly this; nothing is stashed on the
+        serializer instance (ADR-0260).
         """
-        self._current_round = instance.current_round
-        self.context["current_round_id"] = (
-            self._current_round.id if self._current_round is not None else None
-        )
+        self.context["current_round"] = instance.current_round
         return super().to_representation(instance)
 
-    def get_round(self, obj: Battle) -> dict | None:
+    def get_round(self, obj: Battle) -> dict | None:  # noqa: ARG002
         """The battle's current (latest non-completed) round, or None."""
-        # _current_round is stashed by to_representation on this same serializer
-        # instance, not a model field — hasattr guards a caller reaching
-        # get_round without going through to_representation first.
-        current = self._current_round if hasattr(self, "_current_round") else obj.current_round
+        # Always present: to_representation above puts it in the context before any
+        # field on this serializer renders.
+        current = self.context["current_round"]
         if current is None:
             return None
         return {"number": current.round_number, "status": current.status}

@@ -423,8 +423,8 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
 
         gm_profile = request.user.gm_profile_or_none
         summons = create_summons(
-            body.offer,
-            body.target_persona,
+            body.validated_data["offer"],
+            body.validated_data["target_persona"],
             message=body.validated_data.get("message", ""),
             expires_at=body.validated_data.get("expires_at"),
             created_by=gm_profile,

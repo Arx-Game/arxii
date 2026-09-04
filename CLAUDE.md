@@ -340,9 +340,15 @@ Code quality (always-on; full list in `django_notes.md`):
 - **No Django signals** — explicit, testable service-function calls instead (see ADR-0009).
 - **No per-request memos on views, serializers or requests** (see ADR-0260). Account
   data is a `cached_property` on the `Account` typeclass, cleared through
-  `related_cache_fields`; request data is an explicit argument or attached once by
-  middleware. Enforced by `tools/lint_view_memo.py` (`view-memo` hook);
-  `# noqa: VIEW_MEMO` suppresses and must say why.
+  `related_cache_fields`; request data is an explicit argument (a serializer
+  `context=`, or `validated_data` for a row a serializer resolved while validating)
+  or attached once by middleware. Both spellings are rejected: the class-level
+  `_thing: T | None = None`, and the lazy `if not hasattr(self, "_thing"):
+  self._thing = ...` inside a method. Enforced by `tools/lint_view_memo.py`
+  (`view-memo` hook); `# noqa: VIEW_MEMO` suppresses and must say why. The same
+  instinct on a **model** is worse, not better: models are idmapper-shared, so a
+  memo there outlives the request and answers every later one with the first
+  request's result (`CharacterDraft.get_stage_validation_errors`, #3622).
 - **Data migrations are required where authored content is at risk** — a `RunPython`
   backfill accompanies any migration that drops or renames an authored-content column
   (see ADR-0237, which supersedes ADR-0013). Play-state tables still need none.

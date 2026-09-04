@@ -1,10 +1,17 @@
-"""Reject None-defaulted private class attributes on views and serializers (#3597, ADR-0260).
+"""Reject per-request state kept on views and serializers (#3597, ADR-0260).
 
-The shape ``_thing: T | None = None`` at class level, filled lazily during a
-request so later methods reuse it, is a per-request memo hiding as a class
-attribute. It is thread-safe only because DRF builds a fresh view per request,
-its state is invisible in every signature, reordering two method calls
-silently changes the query count, and the class-level default looks shared.
+Two spellings of one mistake:
+
+1. ``_thing: T | None = None`` at class level, filled lazily during a request so
+   later methods reuse it: a per-request memo hiding as a class attribute.
+2. ``if not hasattr(self, "_thing"): self._thing = ...`` inside a method, which
+   is the same memo without even a declaration to notice.
+
+Both are thread-safe only because DRF builds a fresh view/serializer per request,
+their state is invisible in every signature, reordering two method calls silently
+changes the query count, and the first spelling's class-level default looks shared.
+An attribute that outlives the request (a memo on an idmapper-cached model, say)
+is worse still: it serves one request's answer to every later one.
 
 Data about the account belongs on the ``Account`` typeclass as a
 ``cached_property`` (identity-mapped, cleared through ``related_cache_fields``).
@@ -23,6 +30,10 @@ from pathlib import Path
 import sys
 
 SUPPRESSION_TOKEN = "noqa: view_memo"  # noqa: S105
+
+# A class is a view or serializer when its own name, or one of its bases, ends in
+# one of these. Test classes (``...Tests``, ``APITestCase``) deliberately do not.
+VIEW_SUFFIXES = ("Serializer", "ViewSet", "View", "APIView")
 
 
 def has_suppression(line: str) -> bool:
@@ -49,23 +60,88 @@ def _private_none_default(stmt: ast.stmt) -> tuple[int, int, str] | None:
     return (stmt.lineno, stmt.col_offset, target.id)
 
 
+def _base_name(base: ast.expr) -> str:
+    """The trailing identifier of a base class expression (``a.b.Cls`` -> ``Cls``)."""
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    if isinstance(base, ast.Name):
+        return base.id
+    return ""
+
+
+def _is_view_or_serializer(node: ast.ClassDef) -> bool:
+    """Whether ``node`` names a DRF view or serializer, by its own name or a base's."""
+    names = [node.name, *(_base_name(base) for base in node.bases)]
+    return any(name.endswith(VIEW_SUFFIXES) for name in names)
+
+
+def _self_attribute_target(target: ast.expr) -> str | None:
+    """Return the attribute name when ``target`` is ``self._name`` (not dunder)."""
+    if not isinstance(target, ast.Attribute):
+        return None
+    if not isinstance(target.value, ast.Name) or target.value.id != "self":
+        return None
+    if not target.attr.startswith("_") or target.attr.startswith("__"):
+        return None
+    return target.attr
+
+
+def _lazy_state(stmt: ast.stmt) -> list[tuple[int, int, str]]:
+    """Return every ``self._name = ...`` write and ``hasattr(self, ...)`` read in a method."""
+    hits: list[tuple[int, int, str]] = []
+    for node in ast.walk(stmt):
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+            targets = [node.target]
+        for target in targets:
+            name = _self_attribute_target(target)
+            if name is not None:
+                hits.append((node.lineno, node.col_offset, name))
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in {"hasattr", "setattr"}
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "self"
+        ):
+            hits.append((node.lineno, node.col_offset, f"{node.func.id}(self, ...)"))
+    # ast.walk is breadth-first; report in source order so the output reads top-down.
+    return sorted(hits)
+
+
 class MemoVisitor(ast.NodeVisitor):
-    """Collect every unsuppressed private None-default attribute in a class body."""
+    """Collect every unsuppressed per-request memo in a view or serializer class."""
 
     def __init__(self, lines: list[str]) -> None:
         super().__init__()
         self.lines = lines
         self.errors: list[tuple[int, int, str]] = []
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        for stmt in node.body:
-            hit = _private_none_default(stmt)
-            if hit is None:
-                continue
+    def _record(self, hits: list[tuple[int, int, str]]) -> None:
+        """Keep the hits whose own line carries no suppression comment."""
+        for hit in hits:
             line_index = hit[0] - 1
             if line_index < len(self.lines) and has_suppression(self.lines[line_index]):
                 continue
             self.errors.append(hit)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        for stmt in node.body:
+            hit = _private_none_default(stmt)
+            if hit is not None:
+                self._record([hit])
+            # The lazy spelling is only checked on views and serializers, where DRF
+            # guarantees the per-request instance that makes it look harmless. A
+            # plain class assigning to self in a method is ordinary object state.
+            if (
+                _is_view_or_serializer(node)
+                and isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and stmt.name != "__init__"
+            ):
+                self._record(_lazy_state(stmt))
         self.generic_visit(node)
 
 
@@ -96,10 +172,11 @@ def main(argv: list[str]) -> int:
         for lineno, col, name in check_file(Path(filename)):
             failed = True
             print(
-                f"{filename}:{lineno}:{col + 1}: `{name}` is a None-defaulted private class "
-                "attribute, the per-request memo shape ADR-0260 rejects. Account data goes "
-                "on the Account typeclass as a cached_property; request data is passed as an "
-                "explicit argument or attached by middleware. Suppress with "
+                f"{filename}:{lineno}:{col + 1}: `{name}` keeps per-request state on a view "
+                "or serializer, the shape ADR-0260 rejects. Account data goes on the Account "
+                "typeclass as a cached_property; request data is passed as an explicit "
+                "argument (serializer `context=`, or `validated_data` for a row resolved "
+                "during validation) or attached by middleware. Suppress with "
                 "`# noqa: VIEW_MEMO` plus a reason only for constant configuration."
             )
     return 1 if failed else 0
