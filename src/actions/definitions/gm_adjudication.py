@@ -608,7 +608,8 @@ def _narrate_gm_condition(
     Only called when a note was given: a note-less apply stays silent and the GM
     narrates with the composer if they want to. The target is named by the face they
     are presenting (#981), never ``target.key``. A condition others cannot see routes
-    the line to the target alone.
+    the line to the target alone. The direct text send is the telnet companion;
+    ``record_interaction`` reaches only web clients.
     """
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
@@ -619,14 +620,20 @@ def _narrate_gm_condition(
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     target_persona = active_persona_for_sheet(target.sheet_data)
+    narration = f"{target_persona.name} is now {template.name}. {note}"
     record_interaction(
         character=actor,
-        content=f"{target_persona.name} is now {template.name}. {note}",
+        content=narration,
         mode=InteractionMode.OUTCOME,
         scene=get_active_scene(actor.location),
         persona=get_or_create_narrator_persona(),
         receivers=None if template.is_visible_to_others else [target_persona],
     )
+    if template.is_visible_to_others:
+        if actor.location is not None:
+            actor.location.msg_contents(narration)
+    else:
+        target.msg(narration)
 
 
 @dataclass

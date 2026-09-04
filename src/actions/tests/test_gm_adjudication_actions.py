@@ -9,6 +9,7 @@ stat/skill pair, an integer difficulty, or any consequence-pool reference from a
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest import mock
 
 from django.test import TestCase
 
@@ -916,6 +917,35 @@ class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):
         line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
         receiver_ids = list(line.receivers.values_list("persona_id", flat=True))
         self.assertEqual(receiver_ids, [active_persona_for_sheet(self.target.sheet_data).pk])
+
+    def test_note_reaches_room_telnet_clients(self) -> None:
+        with mock.patch.object(self.room, "msg_contents") as msg_contents:
+            GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=self.target,
+                condition_ref=self.condition_template.name,
+                note="The wine was poisoned.",
+            )
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        msg_contents.assert_called_once_with(
+            f"{presenting} is now {self.condition_template.name}. The wine was poisoned."
+        )
+
+    def test_hidden_condition_note_is_not_sent_to_the_room(self) -> None:
+        hidden = ConditionTemplateFactory(name="Adjudication Marked", is_visible_to_others=False)
+        with (
+            mock.patch.object(self.room, "msg_contents") as msg_contents,
+            mock.patch.object(self.target, "msg") as target_msg,
+        ):
+            GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=self.target,
+                condition_ref=hidden.name,
+                note="A brand only you can feel.",
+            )
+        msg_contents.assert_not_called()
+        target_msg.assert_called_once()
+        assert "A brand only you can feel." in target_msg.call_args.args[0]
 
 
 class GMRemoveConditionActionTests(GMAdjudicationActionsTestBase):
