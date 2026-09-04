@@ -48,6 +48,7 @@ from world.combat.models import (
     CreatureTemplate,
     DuelChallenge,
     EngagementLock,
+    EscalationCurve,
     ThreatPool,
 )
 from world.combat.permissions import (
@@ -66,6 +67,7 @@ from world.combat.serializers import (
     EncounterDetailSerializer,
     EncounterListSerializer,
     EncounterSettingsSerializer,
+    EscalationCurveSerializer,
     InterposeSerializer,
     JoinEncounterSerializer,
     OpponentDefaultsResponseSerializer,
@@ -241,6 +243,22 @@ class CreatureTemplateViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsGMOrStaff]
     filter_backends = [DjangoFilterBackend]
     filterset_class = CreatureTemplateFilter
+    pagination_class = StandardResultsSetPagination
+
+
+class EscalationCurveViewSet(ReadOnlyModelViewSet):
+    """Read-only escalation curve catalog for the GM settings picker (#3552).
+
+    Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+    name and description are authored encounter design a player should not
+    browse. ``?search=`` matches the name.
+    """
+
+    serializer_class = EscalationCurveSerializer
+    queryset = EscalationCurve.objects.all().order_by("name")
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [SearchFilter]
+    search_fields = ["name"]
     pagination_class = StandardResultsSetPagination
 
 

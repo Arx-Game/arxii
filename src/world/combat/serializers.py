@@ -822,6 +822,19 @@ class CreatureTemplateSerializer(serializers.ModelSerializer):
         return obj.threat_pool.name if obj.threat_pool_id else None
 
 
+class EscalationCurveSerializer(serializers.ModelSerializer):
+    """Read-only escalation curve catalog row for the GM settings picker (#3552).
+
+    GM-gated at the viewset (curve names and descriptions are authored
+    encounter design, the same reasoning as the bestiary catalog, #3424).
+    """
+
+    class Meta:
+        model = EscalationCurve
+        fields = ["id", "name", "description", "start_round"]
+        read_only_fields = fields
+
+
 # ---------------------------------------------------------------------------
 # List and detail serializers
 # ---------------------------------------------------------------------------
@@ -1626,14 +1639,22 @@ class EncounterSettingsSerializer(serializers.Serializer):
     """Write serializer for the GM-driven settings update (#3383).
 
     Every field is optional so a PATCH may change any subset of
-    ``stakes_level``/``risk_level``/``pace_mode``/``pace_timer_minutes`` —
-    mirrors ``update_encounter_settings``'s all-optional-kwargs shape.
+    ``stakes_level``/``risk_level``/``pace_mode``/``pace_timer_minutes``/
+    ``escalation_curve`` - mirrors ``update_encounter_settings``'s
+    all-optional-kwargs shape. ``escalation_curve`` is tri-state: omitted
+    leaves it unchanged, ``null`` clears it, a pk sets it (#3552).
     """
 
     stakes_level = serializers.ChoiceField(choices=StakesLevel.choices, required=False)
     risk_level = serializers.ChoiceField(choices=RiskLevel.choices, required=False)
     pace_mode = serializers.ChoiceField(choices=PaceMode.choices, required=False)
     pace_timer_minutes = serializers.IntegerField(min_value=1, required=False)
+    escalation_curve = serializers.PrimaryKeyRelatedField(
+        queryset=EscalationCurve.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Set the escalation curve; null clears it (#3552).",
+    )
 
 
 class DeclareClashContributionSerializer(serializers.Serializer):
