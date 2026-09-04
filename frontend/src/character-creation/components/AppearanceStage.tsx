@@ -296,8 +296,9 @@ export function AppearanceStage({
           <Note lead="Physical features">Select your character&apos;s physical features.</Note>
         )}
         <Note lead="Physical description">(Optional, appended to automatic descriptions)</Note>
+        {/* Moved from MarkingsEditor.tsx, which has no margin of its own. */}
         <Note lead="Markings">
-          Tattoos, scars, brands, birthmarks — what your character&apos;s skin remembers. Clothing
+          Tattoos, scars, brands, birthmarks: what your character&apos;s skin remembers. Clothing
           conceals a marking at the regions it covers; revealing garments and the in-game reveal
           bare it. Optional.
         </Note>
@@ -319,7 +320,8 @@ export function AppearanceStage({
         hint={
           draft.selected_species?.eternal_youth
             ? 'Your species keeps its eternal youth; apparent age locks in the early twenties.'
-            : copy?.appearance_age_hint
+            : // Unseeded copy key today; renders nothing until staff write it.
+              copy?.appearance_age_hint
         }
       >
         <input
@@ -490,7 +492,7 @@ export function AppearanceStage({
       </Field>
 
       <h2 className="section-h">{copy?.appearance_markings_heading ?? 'Markings'}</h2>
-      <MarkingsEditor draftId={draft.id} />
+      <MarkingsEditor />
     </ChapterLeaf>
   );
 }

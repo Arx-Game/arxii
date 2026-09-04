@@ -53,15 +53,7 @@ const EMPTY_FORM: DraftMarkingCreate = {
 
 const MARKINGS_QUERY_KEY = ['draft-markings'] as const;
 
-interface MarkingsEditorProps {
-  /**
-   * Accepted for interface parity with the stage; the draft-markings
-   * endpoints scope to the session's active draft server-side already.
-   */
-  draftId?: number;
-}
-
-export function MarkingsEditor({ draftId: _draftId }: MarkingsEditorProps) {
+export function MarkingsEditor() {
   const queryClient = useQueryClient();
   const { data: markings = [] } = useQuery({
     queryKey: MARKINGS_QUERY_KEY,
