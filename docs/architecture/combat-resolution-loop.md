@@ -1526,14 +1526,17 @@ step earlier in `complete_encounter` but still reaches this step, so an
 ABANDONED encounter still delivers a digest.
 
 `build_aftermath_digest` never writes anything; it reads rows the completion
-seam already wrote earlier in the same transaction, scoped to `aftermath_window`
-(`[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`) so a read-time
-rebuild of the digest, or a later fight in the same scene, cannot bleed into it:
-the aftermath `ConsequenceOutcome` for that character, conditions still held
-that were applied during the encounter (a condition cleared mid-fight leaves no
-row, and the pose log already narrated the clearing, so it is not reported),
-any `LegendEntry` rows created in the window, and a `BeatCompletion` for the
-encounter's `story_beat` or the scene's running beat. A `scenario_deed`-carrying
+seam already wrote earlier in the same transaction. The aftermath
+`ConsequenceOutcome`, any `LegendEntry` rows, and the `BeatCompletion` for the
+encounter's `story_beat` or the scene's running beat are all scoped to
+`aftermath_window`, `[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`,
+so a read-time rebuild of the digest, or a later fight in the same scene, cannot
+bleed into them. Conditions still held that were applied during the encounter
+(a condition cleared mid-fight leaves no row, and the pose log already narrated
+the clearing, so it is not reported) are scoped to `[encounter.created_at,
+completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`: the same upper edge, so a
+condition a later fight in the same scene applies cannot bleed into an earlier
+digest either. A `scenario_deed`-carrying
 encounter (a scenario ENCOUNTER route) skips the beat lookup entirely - that
 route has no beat line. `render_aftermath_digest`'s "Deed remembered" line only
 ever reports an authored deed row (a defeated opponent's `aftermath_pool`, or

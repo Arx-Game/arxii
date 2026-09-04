@@ -22,8 +22,11 @@ COMBO_MIN_SLOTS: int = 2
 
 # Aftermath digest attribution window (#3551): the conclusion's rows (aftermath
 # ConsequenceOutcome, LegendEntry, BeatCompletion) all land inside complete_encounter's
-# own transaction, so this window only has to exclude a later fight in the same scene
-# when a digest is rebuilt at read time.
+# own transaction, so this window's upper edge only has to exclude a later fight
+# in the same scene when a digest is rebuilt at read time. The same upper edge
+# also bounds the conditions lookup (build_aftermath_digest filters
+# applied_at__lt end), so a condition a later fight applies cannot bleed into
+# an earlier encounter's digest either.
 AFTERMATH_ATTRIBUTION_WINDOW = timedelta(minutes=1)
 
 

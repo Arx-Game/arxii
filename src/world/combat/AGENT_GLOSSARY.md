@@ -337,8 +337,11 @@ _Avoid_: bond buff, ally bonus (use "bond combat bonus" or "co-combat passive")
 The per-participant summary of what a fight changed, assembled at `complete_encounter`'s
 conclusion from rows the completion seam already wrote (aftermath `ConsequenceOutcome`,
 `ConditionInstance`, `LegendEntry`, `BeatCompletion`), never persisted as its own row.
-`build_aftermath_digest` reads those rows inside `AFTERMATH_ATTRIBUTION_WINDOW` of
-`completed_at` so a read-time rebuild does not pick up a later fight in the same scene;
+`build_aftermath_digest` reads the consequence, legend and beat rows bounded by
+`[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)` so a read-time rebuild
+does not pick up a later fight in the same scene; conditions are bounded by
+`[encounter.created_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`, so that same
+upper edge also keeps a later fight's condition out of an earlier digest.
 `render_aftermath_digest` turns the digest into the private Narrator line and telnet
 message `deliver_aftermath_digests` sends to each ACTIVE or FLED participant. Conditions
 cleared mid-fight report nothing (their rows are gone and the pose log already narrated

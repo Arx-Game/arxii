@@ -7422,9 +7422,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     since the pose log already narrated it), any `LegendEntry` rows created in the
     window, and a `BeatCompletion` for the running story beat (skipped entirely when
     the encounter carries a `scenario_deed`, since a scenario ENCOUNTER route has no
-    beat line). All of it is scoped to `aftermath_window` -
-    `[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)` - so a later fight in
-    the same scene is never picked up by a read-time rebuild. `render_aftermath_digest`
+    beat line). The consequence, legend and beat rows are scoped to `aftermath_window`,
+    `[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`; the conditions
+    lookup is scoped to `[encounter.created_at, completed_at +
+    AFTERMATH_ATTRIBUTION_WINDOW)`, so the window's upper edge also keeps a later
+    fight's condition out of an earlier digest at read time. `render_aftermath_digest`
     turns the digest into player text; the legend line ("Deed remembered: ...") only
     ever reports an authored deed row, since legend settles at a story's end from its
     outcomes, never per fight. `ParticipantSerializer.aftermath`

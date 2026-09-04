@@ -49,7 +49,12 @@ def build_aftermath_digest(
 
     Everything below is read from rows complete_encounter already wrote earlier
     in its own transaction (aftermath ConsequenceOutcome, LegendEntry, BeatCompletion);
-    this function never writes anything itself.
+    this function never writes anything itself. Consequence, legend and beat rows
+    are bounded by aftermath_window's [completed_at, completed_at +
+    AFTERMATH_ATTRIBUTION_WINDOW). Conditions are bounded by
+    [encounter.created_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW) so the
+    window's upper edge also excludes a later fight's condition in the same scene,
+    not just a later fight's consequence/legend/beat rows.
     """
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
@@ -77,7 +82,7 @@ def build_aftermath_digest(
 
     conditions = list(
         get_active_conditions(character)
-        .filter(applied_at__gte=encounter.created_at)
+        .filter(applied_at__gte=encounter.created_at, applied_at__lt=end)
         .order_by("-condition__display_priority", "pk")
     )
 

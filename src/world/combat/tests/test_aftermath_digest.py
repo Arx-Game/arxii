@@ -105,6 +105,12 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         new_condition = ConditionInstanceFactory(target=character)
 
         complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+        encounter.refresh_from_db()
+
+        later_fight_condition = ConditionInstanceFactory(target=character)
+        ConditionInstance.objects.filter(pk=later_fight_condition.pk).update(
+            applied_at=encounter.completed_at + timedelta(minutes=5)
+        )
 
         digest = build_aftermath_digest(encounter, participant)
         self.assertEqual([c.pk for c in digest.conditions], [new_condition.pk])
