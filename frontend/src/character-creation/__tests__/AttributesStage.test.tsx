@@ -3,12 +3,13 @@
  *
  * Tests for the attributes allocation stage, including:
  * - Stat rendering (12 stats in 4 categories)
- * - Points budget display
- * - Validation
+ * - The purse at the head of the frame
+ * - Disabled raise-button titles
+ * - The margin gloss (pressing a statistic's name)
  * - Value changes (1-5 scale, no internal conversion)
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -25,7 +26,7 @@ const createTestQueryClient = () =>
     },
   });
 
-// Mock useUpdateDraft and useStatDefinitions hooks
+// Mock the query hooks AttributesStage and SkillsSection consume.
 const mockUpdateDraftMutate = vi.fn();
 vi.mock('../queries', () => ({
   useUpdateDraft: () => ({
@@ -54,6 +55,12 @@ vi.mock('../queries', () => ({
     isLoading: false,
   }),
   useCGExplanations: () => ({ data: undefined, isLoading: false }),
+  // SkillsSection is imported by AttributesStage; mockEmptyDraft has no
+  // selected_path so SkillsSection never actually mounts, but the module
+  // still needs every hook it consumes to exist.
+  useSkills: () => ({ data: undefined, isLoading: false, error: null }),
+  useSkillPointBudget: () => ({ data: undefined, isLoading: false, error: null }),
+  usePathSkillSuggestions: () => ({ data: undefined, isLoading: false, error: null }),
 }));
 
 /** Helper: default stats object with all 12 stats at value 2. */
@@ -95,18 +102,18 @@ describe('AttributesStage', () => {
 
       renderAttributesStage(draft);
 
-      expect(screen.getByText('strength')).toBeInTheDocument();
-      expect(screen.getByText('agility')).toBeInTheDocument();
-      expect(screen.getByText('stamina')).toBeInTheDocument();
-      expect(screen.getByText('charm')).toBeInTheDocument();
-      expect(screen.getByText('presence')).toBeInTheDocument();
-      expect(screen.getByText('composure')).toBeInTheDocument();
-      expect(screen.getByText('intellect')).toBeInTheDocument();
-      expect(screen.getByText('wits')).toBeInTheDocument();
-      expect(screen.getByText('stability')).toBeInTheDocument();
-      expect(screen.getByText('luck')).toBeInTheDocument();
-      expect(screen.getByText('perception')).toBeInTheDocument();
-      expect(screen.getByText('willpower')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^strength$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^agility$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^stamina$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^charm$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^presence$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^composure$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^intellect$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^wits$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^stability$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^luck$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^perception$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^willpower$/i })).toBeInTheDocument();
     });
 
     it('renders category headers', () => {
@@ -135,115 +142,9 @@ describe('AttributesStage', () => {
       const statValues = screen.getAllByText('2');
       expect(statValues.length).toBeGreaterThanOrEqual(12);
     });
-
-    it('displays correct points remaining with default stats', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: 5,
-        stats_budget: 29,
-        draft_data: { stats: defaultStats() },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByLabelText('5 points remaining')).toBeInTheDocument();
-    });
-
-    it('displays stat descriptions on hover', async () => {
-      const user = userEvent.setup();
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        draft_data: { stats: defaultStats() },
-      };
-
-      renderAttributesStage(draft);
-
-      // Hover over strength stat card
-      const strengthCard = screen.getByText('strength').closest('[class*="cursor-pointer"]');
-      if (strengthCard) {
-        await user.hover(strengthCard);
-        await waitFor(() => {
-          expect(screen.getByText('Raw physical power and muscle.')).toBeInTheDocument();
-        });
-      }
-    });
-  });
-
-  describe('Points Budget', () => {
-    it('shows 0 remaining when all points spent', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: 0,
-        stats_budget: 29,
-        draft_data: {
-          stats: {
-            ...defaultStats(),
-            strength: 3,
-            agility: 3,
-            wits: 3,
-            willpower: 3,
-            luck: 3,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByLabelText('0 points remaining')).toBeInTheDocument();
-    });
-
-    it('shows negative remaining when over budget', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: -3,
-        stats_budget: 29,
-        draft_data: {
-          stats: {
-            ...defaultStats(),
-            strength: 5,
-            agility: 5,
-            stamina: 4,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByLabelText('-3 points remaining')).toBeInTheDocument();
-    });
-
-    it('shows positive remaining when under budget', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: 4,
-        stats_budget: 29,
-        draft_data: {
-          stats: {
-            ...defaultStats(),
-            strength: 3,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByLabelText('4 points remaining')).toBeInTheDocument();
-    });
   });
 
   describe('Display Values', () => {
-    it('displays value 2 directly (no division)', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        draft_data: { stats: defaultStats() },
-      };
-
-      renderAttributesStage(draft);
-
-      const statValues = screen.getAllByText('2');
-      expect(statValues.length).toBeGreaterThanOrEqual(12);
-    });
-
     it('displays value 5 directly', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
@@ -281,8 +182,51 @@ describe('AttributesStage', () => {
     });
   });
 
+  describe('The purse and its instruments', () => {
+    it('shows the purse at the head of the frame', () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: defaultStats() },
+        stats_points_remaining: 16,
+        stats_budget: 40,
+      };
+      renderAttributesStage(draft);
+      expect(screen.getByText(/points remaining/i).closest('.instr-ledger')).toHaveClass('head');
+      expect(screen.getByText('16')).toBeInTheDocument();
+    });
+
+    it('explains a disabled raise button in its title', () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: { ...defaultStats(), strength: 5 } },
+        stats_points_remaining: 0,
+        stats_budget: 40,
+      };
+      renderAttributesStage(draft);
+      expect(screen.getByRole('button', { name: /raise strength/i })).toHaveAttribute(
+        'title',
+        'At 5, the most it can be'
+      );
+      expect(screen.getByRole('button', { name: /raise agility/i })).toHaveAttribute(
+        'title',
+        'No points remain; lower another to raise this one'
+      );
+    });
+
+    it('writes the pressed statistic into the margin', async () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: defaultStats() },
+      };
+      renderAttributesStage(draft);
+      await userEvent.click(screen.getByRole('button', { name: /^strength$/i }));
+      const margin = within(screen.getByRole('complementary'));
+      expect(margin.getByRole('status')).toHaveTextContent('Raw physical power and muscle.');
+    });
+  });
+
   describe('Stat Modification', () => {
-    it('calls updateDraft with direct value when increasing stat', async () => {
+    it('calls updateDraft with direct value when increasing a stat', async () => {
       const user = userEvent.setup();
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
@@ -291,31 +235,23 @@ describe('AttributesStage', () => {
 
       renderAttributesStage(draft);
 
-      // Find first plus button (for strength)
-      const plusButtons = screen.getAllByRole('button');
-      const strengthPlusButton = plusButtons.find((btn) => btn.querySelector('svg.lucide-plus'));
+      await user.click(screen.getByRole('button', { name: /raise charm/i }));
 
-      if (strengthPlusButton) {
-        await user.click(strengthPlusButton);
-
-        await waitFor(() => {
-          expect(mockUpdateDraftMutate).toHaveBeenCalledWith(
-            expect.objectContaining({
-              draftId: draft.id,
-              data: expect.objectContaining({
-                draft_data: expect.objectContaining({
-                  stats: expect.objectContaining({
-                    strength: 3, // Increased from 2 to 3 (no * 10)
-                  }),
-                }),
+      expect(mockUpdateDraftMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draftId: draft.id,
+          data: expect.objectContaining({
+            draft_data: expect.objectContaining({
+              stats: expect.objectContaining({
+                charm: 3,
               }),
-            })
-          );
-        });
-      }
+            }),
+          }),
+        })
+      );
     });
 
-    it('calls updateDraft with direct value when decreasing stat', async () => {
+    it('calls updateDraft with direct value when decreasing a stat', async () => {
       const user = userEvent.setup();
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
@@ -324,113 +260,27 @@ describe('AttributesStage', () => {
         draft_data: {
           stats: {
             ...defaultStats(),
-            strength: 3,
+            charm: 3,
           },
         },
       };
 
       renderAttributesStage(draft);
 
-      // Find first minus button (for strength)
-      const minusButtons = screen.getAllByRole('button');
-      const strengthMinusButton = minusButtons.find((btn) => btn.querySelector('svg.lucide-minus'));
+      await user.click(screen.getByRole('button', { name: /lower charm/i }));
 
-      if (strengthMinusButton) {
-        await user.click(strengthMinusButton);
-
-        await waitFor(() => {
-          expect(mockUpdateDraftMutate).toHaveBeenCalledWith(
-            expect.objectContaining({
-              draftId: draft.id,
-              data: expect.objectContaining({
-                draft_data: expect.objectContaining({
-                  stats: expect.objectContaining({
-                    strength: 2, // Decreased from 3 to 2 (no * 10)
-                  }),
-                }),
+      expect(mockUpdateDraftMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draftId: draft.id,
+          data: expect.objectContaining({
+            draft_data: expect.objectContaining({
+              stats: expect.objectContaining({
+                charm: 2,
               }),
-            })
-          );
-        });
-      }
-    });
-  });
-
-  describe('Validation Feedback', () => {
-    it('shows complete state when points remaining = 0', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: 0,
-        stats_budget: 29,
-        draft_data: {
-          stats: {
-            ...defaultStats(),
-            strength: 3,
-            agility: 3,
-            wits: 3,
-            willpower: 3,
-            luck: 3,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByLabelText('0 points remaining')).toBeInTheDocument();
-    });
-
-    it('shows over budget state when points remaining < 0', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: -3,
-        stats_budget: 29,
-        draft_data: {
-          stats: {
-            ...defaultStats(),
-            strength: 5,
-            agility: 5,
-            stamina: 4,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByLabelText('-3 points remaining')).toBeInTheDocument();
-      expect(screen.getByText(/Over budget by 3/i)).toBeInTheDocument();
-    });
-
-    it('shows warning message when points unspent', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: 5,
-        stats_budget: 29,
-        draft_data: { stats: defaultStats() },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByText(/You have 5 unspent points/i)).toBeInTheDocument();
-    });
-
-    it('shows warning message when over budget', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        stats_points_remaining: -3,
-        stats_budget: 29,
-        draft_data: {
-          stats: {
-            ...defaultStats(),
-            strength: 5,
-            agility: 5,
-            stamina: 4,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByText(/You are 3 points over budget/i)).toBeInTheDocument();
+            }),
+          }),
+        })
+      );
     });
   });
 });

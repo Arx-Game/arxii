@@ -113,8 +113,17 @@ DEFAULT_STAT_NAMES: tuple[str, ...] = (
 # frontend/src/character-creation/components/*Stage.tsx. Staff can edit any row
 # in the admin afterward without a migration; this dict only supplies the
 # fresh-deploy default so a new DB never ships blank stages.
+#
+# `character_creation.cgexplanation` rows are content-repo-owned (#2698): this
+# dict is the dev sample only, looked up via `authored_or_sample` and skipped
+# once a staff/content-repo row with the same key exists. A copy fix made here
+# (e.g. the em-dash rewrite below, #3540) reaches production only when Apostate
+# edits the corresponding row in the admin or the content repo.
 CG_EXPLANATION_COPY: dict[str, str] = {
-    "origin_heading": "Choose Your Origin",
+    "origin_heading": "Where does the story begin?",
+    # The Folio Origin chapter (#3540 Decision 8) deliberately renders only
+    # origin_heading; this row is kept authored content for other surfaces
+    # (e.g. telnet, an admin preview) that still want an intro paragraph.
     "origin_intro": (
         "Where does your story begin? Your starting realm shapes who your character "
         "already knows, what they take for granted, and which conflicts will find "
@@ -122,7 +131,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     ),
     "heritage_heading": "Your Heritage",
     "heritage_intro": (
-        "Beginnings, species, and gender decide what your character is — and what "
+        "Beginnings, species, and gender decide what your character is, and what "
         "the world assumes about them before they say a word."
     ),
     "heritage_beginnings_heading": "Your Beginnings",
@@ -133,19 +142,19 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "heritage_species_heading": "Choose Your Species",
     "heritage_species_desc": (
         "Species carries its own stat leanings and how other characters read your "
-        "character on sight — pick the one whose instincts suit your concept."
+        "character on sight; pick the one whose instincts suit your concept."
     ),
     "heritage_gender_heading": "Gender & Pronouns",
     "lineage_heading": "Family & Lineage",
     "lineage_intro": (
         "Claim a family within your starting area, go an orphan, or step forward as "
-        "someone whose origins are still unknown — family ties bring kin, "
+        "someone whose origins are still unknown. Family ties bring kin, "
         "obligations, and a name people already have opinions about."
     ),
     "distinctions_heading": "Your Distinctions",
     "distinctions_intro": (
         "Distinctions are the advantages and disadvantages that make your character "
-        "specific — a sharp mind, a bad leg, a secret debt. Spend your points "
+        "specific: a sharp mind, a bad leg, a secret debt. Spend your points "
         "deliberately; disadvantages give points back but shape play."
     ),
     "attributes_heading": "Attribute Scores",
@@ -156,7 +165,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     ),
     "path_heading": "Choose Your Path",
     "path_intro": (
-        "Your path is the road your character walks toward greatness — a "
+        "Your path is the road your character walks toward greatness, a "
         "narrative class shaping the skills, techniques, and story beats "
         "available as they grow."
     ),
@@ -169,7 +178,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "anima_check_heading": "Anima Check",
     "anima_check_intro": (
         "Every cast rolls a check built from a stat and a skill you choose now. "
-        "This is purely mechanical — how your magic looks and feels in a scene is "
+        "This is purely mechanical: how your magic looks and feels in a scene is "
         "always yours to describe."
     ),
     "identity_heading": "Name & Identity",
@@ -184,14 +193,14 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     ),
     "finaltouches_heading": "Goals & Motivations",
     "finaltouches_intro": (
-        "Choose the goals and motivations that drive your character forward — "
-        "checks that align with a goal earn a bonus, so pick what your character "
+        "Choose the goals and motivations that drive your character forward. "
+        "Checks that align with a goal earn a bonus, so pick what your character "
         "actually wants."
     ),
     "review_heading": "Your Testament",
     "review_intro": (
         "You are preparing the testament your character will carry into the "
-        "Ritual of the Durance — the moment they stand before the assembly and "
+        "Ritual of the Durance, the moment they stand before the assembly and "
         "speak who they are. The words you choose here are what they will "
         "present. The actual rite happens later, in play; for now, this is your "
         "chance to see your character whole before submitting them for review."
@@ -203,38 +212,43 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "review_banner_submitted": "Your testament has been submitted for review.",
     "review_approved_enter_world": "Enter the World",
     "origin_lore_intro": (
-        "You are one of the Gifted — those who carry magic in their blood "
+        "You are one of the Gifted, those who carry magic in their blood "
         "and stand bound to the Durance, the arc of trials that shapes every "
         "Gifted life. The world you enter is one of the Shroud's making: a "
         "thinning veil between what is and what should not be. The words you "
-        "choose for your character now are the beginning of their testament — "
+        "choose for your character now are the beginning of their testament: "
         "the oration they will one day speak at their Durance."
     ),
     "heritage_lore_intro": (
         "What your character is born as shapes how the world reads them. "
-        "The Gifted are not one people — they are human, Sleeper, Misbegotten, "
+        "The Gifted are not one people; they are human, Sleeper, Misbegotten, "
         "and more, each heritage carrying its own relationship to the Shroud "
         "and the magic that runs through them."
     ),
     "path_lore_durance": (
-        "Your path is the road your character walks through their Durance — "
+        "Your path is the road your character walks through their Durance: "
         "the life-arc that defines who they become among the Gifted. Each "
         "path shapes the skills, techniques, and story beats available as "
         "they grow through their trials."
     ),
     "gift_lore_intro": (
-        "The Gift is the magic your character carries — a power drawn from "
+        "The Gift is the magic your character carries, a power drawn from "
         "the Shroud and shaped by the tradition that taught them. Your "
         "tradition is the school or lineage that trained them; your gift is "
         "the specific power they wield. Choose the resonance that sings "
         "truest to who they are."
     ),
     "roster_lore_intro": (
-        "Every character on this roster is one of the Gifted — a person who "
+        "Every character on this roster is one of the Gifted, a person who "
         "carries magic and stands bound to the Durance. Taking one on means "
         "stepping into their life, their trials, and their place in the "
         "world's thinning veil."
     ),
+    # Folio chapter copy (#3540). PLACEHOLDER: Apostate rewrite.
+    "arrival_eyebrow": "The Durance · Chapter the First",
+    "arrival_title": "One stands before us",
+    "arrival_door": "Open the record",
+    "arrival_quiet": "or return to the Hall",
 }
 
 

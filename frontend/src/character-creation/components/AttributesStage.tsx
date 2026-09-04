@@ -1,171 +1,174 @@
 /**
- * Stage 7: Attributes & Skills
+ * Chapter the Seventh: Attributes & Skills (#3540).
  *
- * 12 primary statistics in 4 categories, allocated with a point budget,
- * plus skill point allocation (moved in from the Path stage, #2426 Task 9).
- * Values are 1-5 directly (no internal scaling).
+ * Twelve statistics in a framed instrument with the purse at its head, then
+ * the skills frame. A statistic's name is a door: pressing it writes what the
+ * number governs into the margin (replacing the hover card). The record rail
+ * lists the spend; it characterises nothing (Decision 8).
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import {
+  ChapterLeaf,
+  InstrumentFrame,
+  InstrumentGroup,
+  Marginalia,
+  RecordRail,
+  StatRow,
+} from '../folio';
 import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../queries';
-import { getDefaultStats } from '../types';
+import { getDefaultStats, Stage } from '../types';
 import type { CharacterDraft, Stats } from '../types';
-import { FreePointsWidget } from './FreePointsWidget';
 import { SkillsSection } from './SkillsSection';
-import { StatCard } from './StatCard';
-import { StatModal } from './StatModal';
 
 interface AttributesStageProps {
   draft: CharacterDraft;
 }
 
-/** Stat categories with display labels and member stats. */
-const STAT_CATEGORIES: { label: string; stats: (keyof Stats)[] }[] = [
-  { label: 'Physical', stats: ['strength', 'agility', 'stamina'] },
-  { label: 'Social', stats: ['charm', 'presence', 'composure'] },
-  { label: 'Mental', stats: ['intellect', 'wits', 'stability'] },
-  { label: 'Meta', stats: ['luck', 'perception', 'willpower'] },
+const STAT_MAX = 5;
+
+/** Why the raise button is disabled, if it is; `undefined` when it isn't. */
+function increaseTitleFor(atCap: boolean, out: boolean): string | undefined {
+  if (atCap) return `At ${STAT_MAX}, the most it can be`;
+  if (out) return 'No points remain; lower another to raise this one';
+  return undefined;
+}
+
+/** Stat categories; the gloss is the category's plain reading. */
+// PLACEHOLDER: Apostate rewrite
+const STAT_CATEGORIES: { label: string; gloss: string; stats: (keyof Stats)[] }[] = [
+  { label: 'Physical', gloss: 'the body', stats: ['strength', 'agility', 'stamina'] },
+  { label: 'Social', gloss: 'the company', stats: ['charm', 'presence', 'composure'] },
+  { label: 'Mental', gloss: 'the mind', stats: ['intellect', 'wits', 'stability'] },
+  { label: 'Meta', gloss: 'the self', stats: ['luck', 'perception', 'willpower'] },
 ];
 
 export function AttributesStage({ draft }: AttributesStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
-  const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
+  const { data: statDefinitions, isLoading } = useStatDefinitions();
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
-  const pointsRemaining = draft.stats_points_remaining;
+  const remaining = draft.stats_points_remaining;
   const budget = draft.stats_budget;
-  const statBonuses = draft.stat_bonuses ?? {};
+  const bonuses = draft.stat_bonuses ?? {};
+  const [why, setWhy] = useState<string | null>(null);
+  const [announce, setAnnounce] = useState('');
 
-  // State for hover (desktop) and tap (mobile) interactions
-  const [hoveredStat, setHoveredStat] = useState<string | null>(null);
-  const [selectedStat, setSelectedStat] = useState<string | null>(null);
+  const descriptions = useMemo(
+    () => Object.fromEntries((statDefinitions ?? []).map((s) => [s.name, s.description])),
+    [statDefinitions]
+  );
 
-  // Build a map of stat name -> description from API data
-  const statDescriptions = useMemo(() => {
-    if (!statDefinitions) return {};
-    return Object.fromEntries(statDefinitions.map((s) => [s.name, s.description]));
-  }, [statDefinitions]);
-
-  const handleStatChange = (statName: string, newValue: number) => {
+  const change = (stat: keyof Stats, value: number) => {
     updateDraft.mutate({
       draftId: draft.id,
-      data: {
-        draft_data: {
-          stats: {
-            ...stats,
-            [statName]: newValue,
-          },
-        },
-      },
+      data: { draft_data: { stats: { ...stats, [stat]: value } } },
     });
+    const left = remaining - (value - stats[stat]);
+    setAnnounce(`${stat} ${value}. ${left} points remain.`);
   };
 
-  if (statsLoading) {
+  if (isLoading)
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <p className="ledger-line" aria-busy="true">
+        Opening the record.
+      </p>
     );
-  }
+
+  const spent = budget - remaining;
+  const rail = (
+    <>
+      <RecordRail
+        rows={[
+          { label: 'Origin', value: draft.selected_area?.name },
+          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Species', value: draft.selected_species?.name },
+          { label: 'Family', value: draft.family?.name },
+          { label: 'Path', value: draft.selected_path?.name },
+          { label: 'Tradition', value: draft.selected_tradition?.name },
+          { label: 'Statistics', value: `${spent} of ${budget} spent` },
+        ]}
+        ledger="Seven of eleven chapters begun."
+      />
+      <Marginalia id="note-why">
+        <span className="note" id="why-note" role="status">
+          {why ? (
+            <>
+              <b className="capitalize">On {why}.</b> {descriptions[why] ?? ''}
+            </>
+          ) : (
+            // PLACEHOLDER: Apostate rewrite
+            <>
+              <b>On the instruments.</b> Press a statistic’s name for what it governs.
+            </>
+          )}
+        </span>
+      </Marginalia>
+    </>
+  );
 
   return (
-    <>
-      <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
-        {/* Main content */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-          className="space-y-8"
-        >
-          {/* Header section */}
-          <div>
-            <h2 className="theme-heading text-2xl font-bold">{copy?.attributes_heading ?? ''}</h2>
-            <p className="mt-2 text-muted-foreground">{copy?.attributes_intro ?? ''}</p>
-          </div>
+    <ChapterLeaf
+      stage={Stage.ATTRIBUTES}
+      title="Attributes & Skills"
+      intro={copy?.attributes_intro}
+      aside={rail}
+    >
+      <span className="vh" role="status">
+        {announce}
+      </span>
+      <h2 className="section-h" id="scores">
+        {copy?.attributes_heading ?? 'Attribute Scores'}
+      </h2>
+      <InstrumentFrame
+        label="Statistics"
+        ledger={{
+          left: `Twelve statistics, one to ${STAT_MAX} each`,
+          right: (
+            <>
+              Points remaining: <b>{remaining}</b> of <b>{budget}</b>
+              {remaining < 0 && <>, over by {Math.abs(remaining)}</>}
+            </>
+          ),
+          over: remaining < 0,
+        }}
+      >
+        {STAT_CATEGORIES.map((cat) => (
+          <InstrumentGroup key={cat.label} title={cat.label} gloss={cat.gloss}>
+            {cat.stats.map((stat) => {
+              const value = stats[stat];
+              const atCap = value >= STAT_MAX;
+              const out = remaining <= 0;
+              return (
+                <StatRow
+                  key={stat}
+                  id={`lbl-${stat}`}
+                  name={stat}
+                  value={value}
+                  bonus={bonuses[stat] || undefined}
+                  max={STAT_MAX}
+                  onChange={(v) => change(stat, v)}
+                  canDecrease={value > 1}
+                  canIncrease={!atCap && !out}
+                  increaseTitle={increaseTitleFor(atCap, out)}
+                  onWhy={() => setWhy(stat)}
+                  whyOpen={why === stat}
+                  gloss={why === stat ? descriptions[stat] : undefined}
+                />
+              );
+            })}
+          </InstrumentGroup>
+        ))}
+      </InstrumentFrame>
 
-          {/* Stats grouped by category */}
-          <div className="space-y-6">
-            {STAT_CATEGORIES.map((category) => (
-              <div key={category.label}>
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  {category.label}
-                </h3>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  {category.stats.map((stat) => {
-                    const allocated = stats[stat];
-                    const bonus = statBonuses[stat] || 0;
-                    return (
-                      <StatCard
-                        key={stat}
-                        name={stat}
-                        value={allocated}
-                        bonus={bonus !== 0 ? bonus : undefined}
-                        onChange={(val) => handleStatChange(stat, val)}
-                        onHover={setHoveredStat}
-                        onTap={() => setSelectedStat(stat)}
-                        canDecrease={allocated > 1}
-                        canIncrease={allocated < 5 && pointsRemaining > 0}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Points warning (if over/under) */}
-          {pointsRemaining !== 0 && (
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4">
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                {pointsRemaining > 0
-                  ? `You have ${pointsRemaining} unspent points. Continue or spend them here.`
-                  : `You are ${Math.abs(pointsRemaining)} points over budget. Lower some stats.`}
-              </p>
-            </div>
-          )}
-        </motion.div>
-
-        {/* Sidebar - desktop only */}
-        <div className="hidden lg:block">
-          <div className="sticky top-4 space-y-4">
-            <FreePointsWidget pointsRemaining={pointsRemaining} budget={budget} />
-            {hoveredStat && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="capitalize">{hoveredStat}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    {statDescriptions[hoveredStat] || ''}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Skills Section - appears after attributes, requires a path to suggest from */}
       {draft.selected_path && (
-        <div className="mt-8 border-t pt-8">
+        <>
+          <h2 className="section-h" id="skills">
+            Skills
+          </h2>
           <SkillsSection draft={draft} />
-        </div>
+        </>
       )}
-
-      {/* Mobile modal */}
-      <StatModal
-        stat={
-          selectedStat
-            ? { name: selectedStat, description: statDescriptions[selectedStat] || '' }
-            : null
-        }
-        onClose={() => setSelectedStat(null)}
-      />
-    </>
+    </ChapterLeaf>
   );
 }

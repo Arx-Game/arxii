@@ -40,8 +40,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { ChapterLeaf } from '../folio';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
-import { Stage } from '../types';
+import { Stage, STAGE_LABELS } from '../types';
 
 interface LineageStageProps {
   draft: CharacterDraft;
@@ -89,35 +90,32 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   // If beginnings has family_known = false, family is Unknown (e.g., Sleeper, Misbegotten)
   if (draft.selected_beginnings && !draft.selected_beginnings.family_known) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-8"
+      <ChapterLeaf
+        stage={Stage.LINEAGE}
+        title={copy?.lineage_heading ?? STAGE_LABELS[Stage.LINEAGE]}
+        wide
       >
-        <div>
-          <h2 className="theme-heading text-2xl font-bold">{copy?.lineage_heading ?? ''}</h2>
+        <div className="space-y-8">
           <p className="mt-2 text-muted-foreground">Your character's family background.</p>
+
+          <Card className="max-w-md">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <HelpCircle className="h-5 w-5 text-amber-500" />
+                <CardTitle className="text-base">Unknown Origins</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>
+                As a {draft.selected_beginnings.name}, your true family origins are shrouded in
+                mystery. This may be discovered through gameplay.
+              </CardDescription>
+            </CardContent>
+          </Card>
+
+          <TarotNamingRitual draft={draft} />
         </div>
-
-        <Card className="max-w-md">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <HelpCircle className="h-5 w-5 text-amber-500" />
-              <CardTitle className="text-base">Unknown Origins</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardDescription>
-              As a {draft.selected_beginnings.name}, your true family origins are shrouded in
-              mystery. This may be discovered through gameplay.
-            </CardDescription>
-          </CardContent>
-        </Card>
-
-        <TarotNamingRitual draft={draft} />
-      </motion.div>
+      </ChapterLeaf>
     );
   }
 
@@ -159,138 +157,136 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   const commonerFamilies = families?.filter((f) => f.family_type === 'commoner') ?? [];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.LINEAGE}
+      title={copy?.lineage_heading ?? STAGE_LABELS[Stage.LINEAGE]}
+      intro={copy?.lineage_intro}
+      wide
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">{copy?.lineage_heading ?? ''}</h2>
-        <p className="mt-2 text-muted-foreground">{copy?.lineage_intro ?? ''}</p>
-      </div>
-
-      {/* Orphan option */}
-      <Card
-        className={cn(
-          'max-w-md cursor-pointer transition-all',
-          isOrphan && 'ring-2 ring-primary',
-          !isOrphan && 'hover:ring-1 hover:ring-primary/50'
-        )}
-        onClick={() => handleFamilySelect('orphan')}
-      >
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-base">Orphan / No Family</CardTitle>
+      <div className="space-y-8">
+        {/* Orphan option */}
+        <Card
+          className={cn(
+            'max-w-md cursor-pointer transition-all',
+            isOrphan && 'ring-2 ring-primary',
+            !isOrphan && 'hover:ring-1 hover:ring-primary/50'
+          )}
+          onClick={() => handleFamilySelect('orphan')}
+        >
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-base">Orphan / No Family</CardTitle>
+              </div>
+              {/* Swallows the card click so toggling the switch does not also select the card. */}
+              <span role="presentation" onClick={(e) => e.stopPropagation()}>
+                <Switch
+                  checked={isOrphan}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      handleFamilySelect('orphan');
+                    } else {
+                      updateDraft.mutate({
+                        draftId: draft.id,
+                        data: {
+                          draft_data: { lineage_is_orphan: false },
+                        },
+                      });
+                    }
+                  }}
+                />
+              </span>
             </div>
-            {/* Swallows the card click so toggling the switch does not also select the card. */}
-            <span role="presentation" onClick={(e) => e.stopPropagation()}>
-              <Switch
-                checked={isOrphan}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    handleFamilySelect('orphan');
-                  } else {
-                    updateDraft.mutate({
-                      draftId: draft.id,
-                      data: {
-                        draft_data: { lineage_is_orphan: false },
-                      },
-                    });
-                  }
-                }}
-              />
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <CardDescription>
-            Your character has no known family, or has been disowned.
-          </CardDescription>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>
+              Your character has no known family, or has been disowned.
+            </CardDescription>
+          </CardContent>
+        </Card>
 
-      {/* Tarot naming ritual for orphans */}
-      {isOrphan && <TarotNamingRitual draft={draft} />}
+        {/* Tarot naming ritual for orphans */}
+        {isOrphan && <TarotNamingRitual draft={draft} />}
 
-      {/* Family selection (disabled if orphan selected) */}
-      {!isOrphan && (
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Select Family</h3>
+        {/* Family selection (disabled if orphan selected) */}
+        {!isOrphan && (
+          <section className="space-y-4">
+            <h3 className="theme-heading text-lg font-semibold">Select Family</h3>
 
-          {familiesLoading ? (
-            <div className="h-10 animate-pulse rounded bg-muted" />
-          ) : (
-            <div className="space-y-6">
-              {/* Noble Houses */}
-              {noblesFamilies.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-muted-foreground">Noble Houses</Label>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {noblesFamilies.map((family) => (
-                      <FamilyCard
-                        key={family.id}
-                        family={family}
-                        isSelected={draft.family?.id === family.id}
-                        onSelect={() => handleFamilySelect(family.id.toString())}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Commoner Families */}
-              {commonerFamilies.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-muted-foreground">
-                    Commoner Families
-                  </Label>
-                  <Select
-                    value={draft.family?.id?.toString() ?? ''}
-                    onValueChange={handleFamilySelect}
-                  >
-                    <SelectTrigger className="w-full max-w-xs">
-                      <SelectValue placeholder="Select a family" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {commonerFamilies.map((family) => (
-                        <SelectItem key={family.id} value={family.id.toString()}>
-                          {family.name}
-                        </SelectItem>
+            {familiesLoading ? (
+              <div className="h-10 animate-pulse rounded bg-muted" />
+            ) : (
+              <div className="space-y-6">
+                {/* Noble Houses */}
+                {noblesFamilies.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">
+                      Noble Houses
+                    </Label>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {noblesFamilies.map((family) => (
+                        <FamilyCard
+                          key={family.id}
+                          family={family}
+                          isSelected={draft.family?.id === family.id}
+                          onSelect={() => handleFamilySelect(family.id.toString())}
+                        />
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                    </div>
+                  </div>
+                )}
 
-              {families?.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No families available for this area. You may select orphan or contact staff.
-                </p>
-              )}
-            </div>
-          )}
+                {/* Commoner Families */}
+                {commonerFamilies.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">
+                      Commoner Families
+                    </Label>
+                    <Select
+                      value={draft.family?.id?.toString() ?? ''}
+                      onValueChange={handleFamilySelect}
+                    >
+                      <SelectTrigger className="w-full max-w-xs">
+                        <SelectValue placeholder="Select a family" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {commonerFamilies.map((family) => (
+                          <SelectItem key={family.id} value={family.id.toString()}>
+                            {family.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-          {draft.family && (
-            <FamilyNamePreview
-              firstName={draft.draft_data.first_name}
-              family={families?.find((f) => f.id === draft.family?.id)}
-            />
-          )}
+                {families?.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No families available for this area. You may select orphan or contact staff.
+                  </p>
+                )}
+              </div>
+            )}
 
-          {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
+            {draft.family && (
+              <FamilyNamePreview
+                firstName={draft.draft_data.first_name}
+                family={families?.find((f) => f.id === draft.family?.id)}
+              />
+            )}
 
-          {!draft.claimed_kin_slot && !draft.claimed_kin_pool && !draft.defer_parents && (
-            <InventedParentsCard draft={draft} />
-          )}
+            {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
 
-          {!draft.family && <HouseFoundingPanel draft={draft} />}
-        </section>
-      )}
-    </motion.div>
+            {!draft.claimed_kin_slot && !draft.claimed_kin_pool && !draft.defer_parents && (
+              <InventedParentsCard draft={draft} />
+            )}
+
+            {!draft.family && <HouseFoundingPanel draft={draft} />}
+          </section>
+        )}
+      </div>
+    </ChapterLeaf>
   );
 }
 

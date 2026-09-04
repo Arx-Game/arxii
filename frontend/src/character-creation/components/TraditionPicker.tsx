@@ -12,7 +12,7 @@ import { CodexTerm } from '@/codex/components/CodexTerm';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { CheckCircle2, LinkIcon, Loader2, Sparkles } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useSelectTradition, useTraditionPerspectives, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
 import { PerspectivesPanel } from './PerspectivesPanel';
@@ -42,18 +42,6 @@ function TraditionCard({
   onSelect,
   onHover,
 }: TraditionCardProps) {
-  const [showGlow, setShowGlow] = useState(false);
-  const prevSelected = useRef(isSelected);
-
-  useEffect(() => {
-    if (isSelected && !prevSelected.current) {
-      setShowGlow(true);
-      const timer = setTimeout(() => setShowGlow(false), 600);
-      return () => clearTimeout(timer);
-    }
-    prevSelected.current = isSelected;
-  }, [isSelected]);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -63,8 +51,7 @@ function TraditionCard({
       <Card
         className={cn(
           'relative cursor-pointer transition-all hover:shadow-md',
-          isSelected && 'ring-2 ring-primary',
-          showGlow && 'animate-selection-glow'
+          isSelected && 'ring-2 ring-primary'
         )}
         onClick={() => onSelect(tradition.id)}
         onMouseEnter={() => onHover(tradition)}
