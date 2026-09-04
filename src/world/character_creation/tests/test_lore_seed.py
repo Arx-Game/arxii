@@ -59,3 +59,30 @@ class TestLoreOnboardingSeed(TestCase):
         for key, text in CG_EXPLANATION_COPY.items():
             assert "—" not in text, f"{key} carries an em-dash"
             assert "–" not in text, f"{key} carries an en-dash"
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_folio_stage_internal_keys_seed_cg_explanations(self):
+        """Folio stage-internal copy keys (#3630 Plan B) each seed a non-empty
+        CGExplanation row. None of these have a content-repo counterpart yet,
+        so sample seeding is forced on for this check (mirrors the
+        `*_lore_intro` keys above)."""
+        _seed_cg_explanations()
+        stage_internal_keys = (
+            "gift_tradition_heading",
+            "appearance_age_heading",
+            "appearance_birthday_heading",
+            "appearance_height_heading",
+            "appearance_build_heading",
+            "appearance_features_heading",
+            "appearance_description_heading",
+            "appearance_markings_heading",
+            "identity_name_heading",
+            "identity_concept_heading",
+            "identity_quote_heading",
+            "identity_personality_heading",
+            "identity_worship_heading",
+            "finaltouches_how_note",
+        )
+        for key in stage_internal_keys:
+            explanation = CGExplanation.objects.get(key=key)
+            assert explanation.text, f"{key} seeded an empty CGExplanation"

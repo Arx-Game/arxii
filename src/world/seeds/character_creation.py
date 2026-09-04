@@ -268,6 +268,25 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     ),
     "arrival_door": "Begin",
     "arrival_quiet": "Return to the Hall",
+    # Folio stage-internal copy (#3630 Plan B): section headings and one
+    # explanatory note for stages moved onto the folio primitives.
+    "gift_tradition_heading": "Tradition",
+    "appearance_age_heading": "Age",
+    "appearance_birthday_heading": "Birthday",
+    "appearance_height_heading": "Height",
+    "appearance_build_heading": "Build",
+    "appearance_features_heading": "Physical features",
+    "appearance_description_heading": "Physical description",
+    "appearance_markings_heading": "Markings",
+    "identity_name_heading": "Name",
+    "identity_concept_heading": "Concept",
+    "identity_quote_heading": "Quote",
+    "identity_personality_heading": "Personality",
+    "identity_worship_heading": "Worship",
+    "finaltouches_how_note": (
+        "Each goal takes points from a pool of thirty. Spend more on the goals that matter "
+        "most; a goal with no points is a note to yourself, not a commitment."
+    ),  # PLACEHOLDER: Apostate rewrite
 }
 
 
