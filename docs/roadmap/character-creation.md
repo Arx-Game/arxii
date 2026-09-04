@@ -1,5 +1,11 @@
 # Character Creation & Identity
 
+## Built (2026-09-04, #3540: character creation gets the Folio treatment)
+
+Folio treatment (#3540): interview shell, Origin / Attributes & Skills / Review
+chapters, two night moments; the other stages adopt the frame with old internals
+(Plan B); interface chrome is OOC by ruling (2026-09-04).
+
 ## Built (2026-07-25, #2698 — character-creation family stops inventing content; ratchet at zero)
 
 The last 11 `CONTENT_MODELS` entries the seeder guard (`world.seeds.tests

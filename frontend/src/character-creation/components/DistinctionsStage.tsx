@@ -25,8 +25,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { ChapterLeaf } from '../folio';
 import { useCGExplanations, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
+import { Stage, STAGE_LABELS } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 
 interface DistinctionsStageProps {
@@ -305,91 +307,88 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
       {/* Main Content */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-6"
+      <ChapterLeaf
+        stage={Stage.DISTINCTIONS}
+        title={copy?.distinctions_heading ?? STAGE_LABELS[Stage.DISTINCTIONS]}
+        intro={copy?.distinctions_intro}
+        wide
       >
-        <div>
-          <div className="flex items-center justify-between">
-            <h2 className="theme-heading text-2xl font-bold">{copy?.distinctions_heading ?? ''}</h2>
-            {localSelections.size > 0 && (
+        <div className="space-y-6">
+          {localSelections.size > 0 && (
+            <div className="flex justify-end">
               <Button variant="outline" size="sm" onClick={handleReset}>
                 <RotateCcw className="mr-1 h-3 w-3" />
                 Reset
               </Button>
-            )}
-          </div>
-          <p className="mt-2 text-muted-foreground">{copy?.distinctions_intro ?? ''}</p>
-        </div>
+            </div>
+          )}
 
-        {/* Category Tabs */}
-        <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-          <div className="overflow-x-auto">
-            <TabsList className="inline-flex w-auto min-w-full justify-start">
-              {categoriesWithAll.map((category) => (
-                <TabsTrigger
-                  key={category.slug}
-                  value={category.slug}
-                  className="whitespace-nowrap"
+          {/* Category Tabs */}
+          <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
+            <div className="overflow-x-auto">
+              <TabsList className="inline-flex w-auto min-w-full justify-start">
+                {categoriesWithAll.map((category) => (
+                  <TabsTrigger
+                    key={category.slug}
+                    value={category.slug}
+                    className="whitespace-nowrap"
+                  >
+                    {category.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative mt-4">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, description, or effects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                  onClick={() => setSearchQuery('')}
                 >
-                  {category.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
 
-          {/* Search Input */}
-          <div className="relative mt-4">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, description, or effects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
-                onClick={() => setSearchQuery('')}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+            {/* Distinction List */}
+            {categoriesWithAll.map((category) => (
+              <TabsContent key={category.slug} value={category.slug} className="mt-4 space-y-3">
+                {renderDistinctionList()}
+              </TabsContent>
+            ))}
+          </Tabs>
 
-          {/* Distinction List */}
-          {categoriesWithAll.map((category) => (
-            <TabsContent key={category.slug} value={category.slug} className="mt-4 space-y-3">
-              {renderDistinctionList()}
-            </TabsContent>
-          ))}
-        </Tabs>
+          {/* Mobile: Distinction detail below grid */}
+          {activeDistinction && (
+            <div className="lg:hidden">
+              <DistinctionDetailPanel distinction={activeDistinction} />
+            </div>
+          )}
 
-        {/* Mobile: Distinction detail below grid */}
-        {activeDistinction && (
-          <div className="lg:hidden">
-            <DistinctionDetailPanel distinction={activeDistinction} />
-          </div>
-        )}
-
-        {/* Selected Distinctions Panel */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-base">
-              <span>Selected Distinctions</span>
-              <Badge variant="secondary">
-                {localSelections.size} selected ({totalCost} points)
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>{renderCardContent()}</CardContent>
-        </Card>
-      </motion.div>
+          {/* Selected Distinctions Panel */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <span>Selected Distinctions</span>
+                <Badge variant="secondary">
+                  {localSelections.size} selected ({totalCost} points)
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>{renderCardContent()}</CardContent>
+          </Card>
+        </div>
+      </ChapterLeaf>
 
       {/* Sidebar: CG Points Widget + Hover Detail */}
       <div className="hidden lg:block">

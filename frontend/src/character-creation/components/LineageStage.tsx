@@ -43,7 +43,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { resolveFamilyPath, Stage } from '../types';
+import { ChapterLeaf } from '../folio';
+import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
 import { UpbringingPicker } from './lineage/UpbringingPicker';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
@@ -116,52 +117,51 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
+    <ChapterLeaf
+      stage={Stage.LINEAGE}
+      title={copy?.upbringing_heading ?? STAGE_LABELS[Stage.LINEAGE]}
+      intro={copy?.upbringing_intro}
+      wide
     >
-      <div>
-        <h2 className="theme-heading text-2xl font-bold">
-          {copy?.upbringing_heading ?? 'Your Upbringing'}
-        </h2>
-        <p className="mt-2 text-muted-foreground">{copy?.upbringing_intro ?? ''}</p>
-      </div>
+      <div className="space-y-8">
+        {templatesLoading && <div className="h-10 animate-pulse rounded bg-muted" />}
 
-      {templatesLoading && <div className="h-10 animate-pulse rounded bg-muted" />}
+        {!templatesLoading && (templates?.length ?? 0) === 0 && (
+          <p className="text-muted-foreground">
+            No upbringings are authored for this beginning yet. Please contact staff.
+          </p>
+        )}
 
-      {!templatesLoading && (templates?.length ?? 0) === 0 && (
-        <p className="text-muted-foreground">
-          No upbringings are authored for this beginning yet. Please contact staff.
-        </p>
-      )}
-
-      {templates && templates.length > 0 && (
-        <UpbringingPicker
-          templates={templates}
-          selectedId={template?.id ?? null}
-          onSelect={(t) =>
-            updateDraft.mutate({ draftId: draft.id, data: { selected_origin_template_id: t.id } })
-          }
-        />
-      )}
-
-      {template && (
-        <>
-          <UpbringingPrompts draft={draft} template={template} path={path} influence={influence} />
-          <FamilyPathSection
-            draft={draft}
-            template={template}
-            path={path}
-            families={families}
-            familiesLoading={familiesLoading}
-            copy={copy}
+        {templates && templates.length > 0 && (
+          <UpbringingPicker
+            templates={templates}
+            selectedId={template?.id ?? null}
+            onSelect={(t) =>
+              updateDraft.mutate({ draftId: draft.id, data: { selected_origin_template_id: t.id } })
+            }
           />
-        </>
-      )}
-    </motion.div>
+        )}
+
+        {template && (
+          <>
+            <UpbringingPrompts
+              draft={draft}
+              template={template}
+              path={path}
+              influence={influence}
+            />
+            <FamilyPathSection
+              draft={draft}
+              template={template}
+              path={path}
+              families={families}
+              familiesLoading={familiesLoading}
+              copy={copy}
+            />
+          </>
+        )}
+      </div>
+    </ChapterLeaf>
   );
 }
 

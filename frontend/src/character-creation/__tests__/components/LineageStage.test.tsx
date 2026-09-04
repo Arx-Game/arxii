@@ -22,11 +22,13 @@ import {
   mockUpbringingMultiPath,
   mockUpbringingNamed,
   mockUpbringingUnknown,
+  mockCGExplanations,
   createMockDraft,
 } from '../fixtures';
 import {
   renderWithCharacterCreationProviders,
   createTestQueryClient,
+  seedCharacterCreationQueries,
   seedQueryData,
 } from '../testUtils';
 import { characterCreationKeys } from '../../queries';
@@ -342,8 +344,9 @@ describe('LineageStage', () => {
   });
 
   describe('Page Header', () => {
-    it('displays stage title and description', async () => {
+    it('titles the chapter leaf with the authored Upbringing copy', async () => {
       const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, { explanations: mockCGExplanations });
 
       renderWithCharacterCreationProviders(
         <LineageStage
@@ -353,7 +356,10 @@ describe('LineageStage', () => {
         { queryClient }
       );
 
-      expect(screen.getByText('Your Upbringing')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Your Upbringing' })).toBeInTheDocument();
+      expect(
+        screen.getByText('Choose how you were raised, then settle your family.')
+      ).toBeInTheDocument();
     });
   });
 });

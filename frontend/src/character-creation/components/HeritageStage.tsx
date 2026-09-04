@@ -19,6 +19,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, CheckCircle2, ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { ChapterLeaf } from '../folio';
 import {
   useBeginnings,
   useBeginningsPerspectives,
@@ -29,11 +30,11 @@ import {
   useUpdateDraft,
 } from '../queries';
 import type { Beginnings, CharacterDraft, GenderOption, Species } from '../types';
-import { Stage } from '../types';
+import { Stage, STAGE_LABELS } from '../types';
+import { getGradientColors } from '../utils';
 import { CGPointsWidget } from './CGPointsWidget';
 import { PerspectivesPanel } from './PerspectivesPanel';
 import { SpeciesCard } from './SpeciesCard';
-import { getGradientColors } from './StartingAreaCard';
 import { StatBonusBadges } from './StatBonusBadges';
 
 interface HeritageStageProps {
@@ -230,170 +231,171 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
       {/* Main Content */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-8"
+      <ChapterLeaf
+        stage={Stage.HERITAGE}
+        title={copy?.heritage_heading ?? STAGE_LABELS[Stage.HERITAGE]}
+        intro={copy?.heritage_intro}
+        wide
       >
-        <div>
-          <h2 className="theme-heading text-2xl font-bold">{copy?.heritage_heading ?? ''}</h2>
-          <p className="mt-2 text-muted-foreground">{copy?.heritage_intro ?? ''}</p>
+        <div className="space-y-8">
           {copy?.heritage_lore_intro && (
             <p className="mt-2 text-sm text-muted-foreground">{copy.heritage_lore_intro}</p>
           )}
-        </div>
 
-        {/* Beginnings Selection */}
-        <section className="space-y-4">
-          <div>
-            <h3 className="theme-heading text-lg font-semibold">
-              {copy?.heritage_beginnings_heading ?? ''}
-            </h3>
-            <p className="text-sm text-muted-foreground">{copy?.heritage_beginnings_desc ?? ''}</p>
-          </div>
-          {beginningsLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="h-40 animate-pulse rounded-lg bg-muted" />
-              <div className="h-40 animate-pulse rounded-lg bg-muted" />
+          {/* Beginnings Selection */}
+          <section className="space-y-4">
+            <div>
+              <h3 className="theme-heading text-lg font-semibold">
+                {copy?.heritage_beginnings_heading ?? ''}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {copy?.heritage_beginnings_desc ?? ''}
+              </p>
             </div>
-          ) : (
-            <>
-              <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-                {/* Left: Beginnings cards */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-                  {beginnings?.map((option) => (
-                    <Card
-                      key={option.id}
-                      className={cn(
-                        'cursor-pointer transition-all',
-                        draft.selected_beginnings?.id === option.id && 'ring-2 ring-primary',
-                        draft.selected_beginnings?.id !== option.id &&
-                          'hover:ring-1 hover:ring-primary/50',
-                        detailBeginnings?.id === option.id &&
+            {beginningsLoading ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="h-40 animate-pulse rounded-lg bg-muted" />
+                <div className="h-40 animate-pulse rounded-lg bg-muted" />
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+                  {/* Left: Beginnings cards */}
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                    {beginnings?.map((option) => (
+                      <Card
+                        key={option.id}
+                        className={cn(
+                          'cursor-pointer transition-all',
+                          draft.selected_beginnings?.id === option.id && 'ring-2 ring-primary',
                           draft.selected_beginnings?.id !== option.id &&
-                          'ring-1 ring-primary/30',
-                        !option.is_accessible && 'cursor-not-allowed opacity-50'
-                      )}
-                      onClick={() => option.is_accessible && handleBeginningsSelect(option)}
-                      onMouseEnter={() => option.is_accessible && setHoveredBeginnings(option)}
-                      onMouseLeave={() => setHoveredBeginnings(null)}
-                    >
-                      {option.art_image && (
-                        <div className="h-24 overflow-hidden rounded-t-lg">
-                          <img
-                            src={option.art_image}
-                            alt={option.name}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                      )}
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">
-                          {option.codex_entry_ids?.length > 0 ? (
-                            <CodexTerm entryId={option.codex_entry_ids[0]}>{option.name}</CodexTerm>
-                          ) : (
-                            option.name
-                          )}
-                        </CardTitle>
-                        {option.cg_point_cost > 0 && (
-                          <span className="text-xs text-amber-600">
-                            +{option.cg_point_cost} CG Points
-                          </span>
+                            'hover:ring-1 hover:ring-primary/50',
+                          detailBeginnings?.id === option.id &&
+                            draft.selected_beginnings?.id !== option.id &&
+                            'ring-1 ring-primary/30',
+                          !option.is_accessible && 'cursor-not-allowed opacity-50'
                         )}
-                      </CardHeader>
-                      <CardContent>
-                        <CardDescription className="line-clamp-3">
-                          {option.description}
-                        </CardDescription>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {(!beginnings || beginnings.length === 0) && (
-                    <Card>
-                      <CardContent className="py-8">
-                        <p className="text-center text-sm text-muted-foreground">
-                          No beginnings options available for this area.
-                        </p>
-                      </CardContent>
-                    </Card>
+                        onClick={() => option.is_accessible && handleBeginningsSelect(option)}
+                        onMouseEnter={() => option.is_accessible && setHoveredBeginnings(option)}
+                        onMouseLeave={() => setHoveredBeginnings(null)}
+                      >
+                        {option.art_image && (
+                          <div className="h-24 overflow-hidden rounded-t-lg">
+                            <img
+                              src={option.art_image}
+                              alt={option.name}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">
+                            {option.codex_entry_ids?.length > 0 ? (
+                              <CodexTerm entryId={option.codex_entry_ids[0]}>
+                                {option.name}
+                              </CodexTerm>
+                            ) : (
+                              option.name
+                            )}
+                          </CardTitle>
+                          {option.cg_point_cost > 0 && (
+                            <span className="text-xs text-amber-600">
+                              +{option.cg_point_cost} CG Points
+                            </span>
+                          )}
+                        </CardHeader>
+                        <CardContent>
+                          <CardDescription className="line-clamp-3">
+                            {option.description}
+                          </CardDescription>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {(!beginnings || beginnings.length === 0) && (
+                      <Card>
+                        <CardContent className="py-8">
+                          <p className="text-center text-sm text-muted-foreground">
+                            No beginnings options available for this area.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* Right: Detail panel (desktop only) */}
+                  {detailBeginnings && (
+                    <div className="hidden lg:block">
+                      <BeginningsDetailPanel
+                        beginnings={detailBeginnings}
+                        isSelected={draft.selected_beginnings?.id === detailBeginnings.id}
+                      />
+                    </div>
                   )}
                 </div>
 
-                {/* Right: Detail panel (desktop only) */}
+                {/* Mobile: Detail panel below cards */}
                 {detailBeginnings && (
-                  <div className="hidden lg:block">
+                  <div className="mt-2 lg:hidden">
                     <BeginningsDetailPanel
                       beginnings={detailBeginnings}
                       isSelected={draft.selected_beginnings?.id === detailBeginnings.id}
                     />
                   </div>
                 )}
-              </div>
-
-              {/* Mobile: Detail panel below cards */}
-              {detailBeginnings && (
-                <div className="mt-2 lg:hidden">
-                  <BeginningsDetailPanel
-                    beginnings={detailBeginnings}
-                    isSelected={draft.selected_beginnings?.id === detailBeginnings.id}
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        {/* Species Selection - only show if beginnings selected */}
-        {draft.selected_beginnings && (
-          <section className="space-y-4">
-            <div>
-              <h3 className="theme-heading text-lg font-semibold">
-                {copy?.heritage_species_heading ?? ''}
-              </h3>
-              <p className="text-sm text-muted-foreground">{copy?.heritage_species_desc ?? ''}</p>
-            </div>
-            {renderSpecies()}
-
-            {/* Mobile: Species detail below cards */}
-            {draft.selected_species && (
-              <div className="mt-2 lg:hidden">
-                <SpeciesDetailPanel species={draft.selected_species} />
-              </div>
+              </>
             )}
           </section>
-        )}
 
-        {/* Gender Selection */}
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">
-            {copy?.heritage_gender_heading ?? ''}
-          </h3>
-          {gendersLoading ? (
-            <div className="flex gap-2">
-              <div className="h-10 w-20 animate-pulse rounded bg-muted" />
-              <div className="h-10 w-20 animate-pulse rounded bg-muted" />
-              <div className="h-10 w-32 animate-pulse rounded bg-muted" />
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {genders?.map((gender) => (
-                <Button
-                  key={gender.id}
-                  variant={draft.selected_gender?.id === gender.id ? 'default' : 'outline'}
-                  onClick={() => handleGenderChange(gender)}
-                >
-                  {gender.display_name}
-                </Button>
-              ))}
-            </div>
+          {/* Species Selection - only show if beginnings selected */}
+          {draft.selected_beginnings && (
+            <section className="space-y-4">
+              <div>
+                <h3 className="theme-heading text-lg font-semibold">
+                  {copy?.heritage_species_heading ?? ''}
+                </h3>
+                <p className="text-sm text-muted-foreground">{copy?.heritage_species_desc ?? ''}</p>
+              </div>
+              {renderSpecies()}
+
+              {/* Mobile: Species detail below cards */}
+              {draft.selected_species && (
+                <div className="mt-2 lg:hidden">
+                  <SpeciesDetailPanel species={draft.selected_species} />
+                </div>
+              )}
+            </section>
           )}
-          <p className="text-xs text-muted-foreground">
-            Pronouns will be derived from your gender choice. You can customize them in-game.
-          </p>
-        </section>
-      </motion.div>
+
+          {/* Gender Selection */}
+          <section className="space-y-4">
+            <h3 className="theme-heading text-lg font-semibold">
+              {copy?.heritage_gender_heading ?? ''}
+            </h3>
+            {gendersLoading ? (
+              <div className="flex gap-2">
+                <div className="h-10 w-20 animate-pulse rounded bg-muted" />
+                <div className="h-10 w-20 animate-pulse rounded bg-muted" />
+                <div className="h-10 w-32 animate-pulse rounded bg-muted" />
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {genders?.map((gender) => (
+                  <Button
+                    key={gender.id}
+                    variant={draft.selected_gender?.id === gender.id ? 'default' : 'outline'}
+                    onClick={() => handleGenderChange(gender)}
+                  >
+                    {gender.display_name}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Pronouns will be derived from your gender choice. You can customize them in-game.
+            </p>
+          </section>
+        </div>
+      </ChapterLeaf>
 
       {/* Sidebar: CG Points Widget + Species Detail */}
       <div className="hidden lg:block">

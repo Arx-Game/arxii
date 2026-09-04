@@ -789,7 +789,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
 // =============================================================================
 
 export const mockCGExplanations: Record<string, string> = {
-  origin_heading: 'Choose Your Origin',
+  origin_heading: 'Where does the story begin?',
   origin_intro: "Select the city or region where your character's story begins.",
   origin_lore_intro: 'You are one of the Gifted.',
   heritage_heading: 'Heritage',
@@ -802,6 +802,9 @@ export const mockCGExplanations: Record<string, string> = {
   heritage_cg_points_explanation: 'CG points are spent on character options.',
   lineage_heading: 'Lineage',
   lineage_intro: "Choose your character's family.",
+  upbringing_heading: 'Your Upbringing',
+  upbringing_intro: 'Choose how you were raised, then settle your family.',
+  family_path_heading: 'Your Family',
   distinctions_heading: 'Distinctions',
   distinctions_intro: 'Select advantages and disadvantages.',
   distinctions_budget_explanation: 'Balance your distinction budget.',
@@ -831,4 +834,10 @@ export const mockCGExplanations: Record<string, string> = {
   review_heading: 'Review & Submit',
   review_intro: 'Review your character before submitting for approval.',
   review_xp_explanation: 'Unspent CG points convert to bonus XP.',
+  arrival_title: 'Creating a Character and Starting their Story',
+  arrival_intro:
+    'You will be creating one of the Gifted, those who carry magic in their blood and ' +
+    'have caught their first Glimpse of who one day they might become.',
+  arrival_door: 'Begin',
+  arrival_quiet: 'Return to the Hall',
 };

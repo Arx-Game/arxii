@@ -13,11 +13,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { useAccount } from '@/store/hooks';
-import { AnimatePresence } from 'framer-motion';
-import { AlertCircle, Plus, RotateCcw } from 'lucide-react';
+import { pageBackgroundStyle, usePageBackgrounds } from '@/hooks/usePageBackgrounds';
+import { AlertCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -33,24 +32,26 @@ import {
   PathStage,
   ReviewStage,
   StageErrorBoundary,
-  StageStepper,
 } from './components';
+import { CHAPTERS, CodexWord, ContentsRail, NightPlate, PageTurn } from './folio';
 import {
   useCanCreateCharacter,
+  useCGExplanations,
   useCreateDraft,
   useDeleteDraft,
   useDraft,
   useUpdateDraft,
 } from './queries';
-import { Stage } from './types';
+import { Stage, STAGE_LABELS } from './types';
 import { getRealmTheme } from './utils';
-import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
+import './cg.css';
 
 export function CharacterCreationPage() {
-  const { data: backgrounds } = usePageBackgrounds();
   const account = useAccount();
   const { data: canCreate, isLoading: canCreateLoading } = useCanCreateCharacter();
   const { data: draft, isLoading: draftLoading } = useDraft();
+  const { data: copy } = useCGExplanations();
+  const { data: backgrounds } = usePageBackgrounds();
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
   const deleteDraft = useDeleteDraft();
@@ -113,13 +114,6 @@ export function CharacterCreationPage() {
     });
   }, [draft, deleteDraft, createDraft]);
 
-  // Auto-create draft if user can create and doesn't have one
-  useEffect(() => {
-    if (!isLoading && canCreate?.can_create && !draft && !createDraft.isPending) {
-      // Don't auto-create, let user click the button
-    }
-  }, [isLoading, canCreate, draft, createDraft.isPending]);
-
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -152,32 +146,36 @@ export function CharacterCreationPage() {
     );
   }
 
-  // No draft yet - show start button
+  // No draft yet: the arrival plate, the first of the two night moments.
   if (!draft) {
+    const backgroundUrl = backgrounds
+      ? pageBackgroundStyle(backgrounds, 'cg_stage', 'Character Creation')
+          ?.backgroundImage?.toString()
+          .replace(/^url\((.*)\)$/, '$1')
+      : undefined;
     return (
-      <div className="container mx-auto max-w-5xl px-4 py-8">
-        <div className="py-12 text-center">
-          <h1 className="text-3xl font-bold">Create a New Character</h1>
-          <p className="mx-auto mt-4 max-w-lg text-muted-foreground">
-            Begin your journey by creating a character. You'll define their origin, heritage,
-            abilities, and story through a guided process.
-          </p>
-          <Button
-            size="lg"
-            className="mt-8"
-            onClick={() => createDraft.mutate()}
-            disabled={createDraft.isPending}
-          >
-            {createDraft.isPending ? (
-              'Creating...'
-            ) : (
-              <>
-                <Plus className="mr-2 h-5 w-5" />
-                Start Character Creation
-              </>
-            )}
-          </Button>
-        </div>
+      <div className="interview">
+        <NightPlate
+          titleId="arrival-title"
+          title={copy?.arrival_title ?? 'Creating a Character and Starting their Story'}
+          backgroundImage={backgroundUrl}
+          door={{
+            label: createDraft.isPending ? 'Starting…' : (copy?.arrival_door ?? 'Begin'),
+            onClick: () => createDraft.mutate(),
+            disabled: createDraft.isPending,
+          }}
+          quiet={{ label: copy?.arrival_quiet ?? 'Return to the Hall', to: '/' }}
+        >
+          {copy?.arrival_intro ? (
+            <p className="plate-sub">{copy.arrival_intro}</p>
+          ) : (
+            <p className="plate-sub">
+              You will be creating one of the <CodexWord name="Gifted">Gifted</CodexWord>, those who
+              carry magic in their blood and have caught their first{' '}
+              <CodexWord name="Glimpse">Glimpse</CodexWord> of who one day they might become.
+            </p>
+          )}
+        </NightPlate>
       </div>
     );
   }
@@ -186,7 +184,7 @@ export function CharacterCreationPage() {
   const renderStage = () => {
     switch (draft.current_stage) {
       case Stage.ORIGIN:
-        return <OriginStage draft={draft} />;
+        return <OriginStage draft={draft} onStageSelect={handleStageSelect} />;
       case Stage.HERITAGE:
         return <HeritageStage draft={draft} onStageSelect={handleStageSelect} />;
       case Stage.LINEAGE:
@@ -214,87 +212,86 @@ export function CharacterCreationPage() {
       case Stage.REVIEW:
         return <ReviewStage draft={draft} isStaff={isStaff} onStageSelect={handleStageSelect} />;
       default:
-        return <OriginStage draft={draft} />;
+        return <OriginStage draft={draft} onStageSelect={handleStageSelect} />;
     }
   };
 
-  return (
-    <div
-      className="container mx-auto max-w-5xl px-4 py-8"
-      style={pageBackgroundStyle(backgrounds, 'cg_stage', 'Character Creation')}
-    >
-      <header className="mb-8">
-        <h1 className="theme-heading text-3xl font-bold">Character Creation</h1>
-      </header>
+  const currentIndex = CHAPTERS.findIndex((c) => c.stage === draft.current_stage);
+  const prev = CHAPTERS[currentIndex - 1]?.stage;
+  const nextStage = CHAPTERS[currentIndex + 1]?.stage;
 
-      <div className="mb-8 flex items-start gap-4">
-        <div className="flex-1">
-          <StageStepper
+  const restartDoor = (
+    <button type="button" onClick={() => setRestartDialogOpen(true)}>
+      Restart character creation
+    </button>
+  );
+
+  return (
+    <div className="interview">
+      <div className="interview-grid">
+        <ContentsRail
+          currentStage={draft.current_stage}
+          stageCompletion={draft.stage_completion}
+          stageErrors={draft.stage_errors ?? {}}
+          onStageSelect={handleStageSelect}
+          restartSlot={restartDoor}
+        />
+        <div className="chapter-column" id={`chapter-${draft.current_stage}`}>
+          <StageErrorBoundary
             currentStage={draft.current_stage}
-            stageCompletion={draft.stage_completion}
-            stageErrors={draft.stage_errors ?? {}}
-            onStageSelect={handleStageSelect}
-          />
+            onNavigateToStage={handleStageSelect}
+          >
+            {renderStage()}
+          </StageErrorBoundary>
+          {/* Stages that own their own PageTurn (Origin, Review) render nothing here. */}
+          {draft.current_stage !== Stage.ORIGIN && draft.current_stage !== Stage.REVIEW && (
+            <PageTurn
+              back={
+                prev !== undefined
+                  ? { label: `Back: ${STAGE_LABELS[prev]}`, onClick: () => handleStageSelect(prev) }
+                  : undefined
+              }
+              next={
+                nextStage !== undefined
+                  ? {
+                      label: `Next: ${STAGE_LABELS[nextStage]}`,
+                      onClick: () => handleStageSelect(nextStage),
+                    }
+                  : undefined
+              }
+            />
+          )}
         </div>
-        <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground">
-              <RotateCcw className="mr-1.5 h-4 w-4" />
-              <span className="hidden sm:inline">Restart</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Restart Character Creation?</DialogTitle>
-              <DialogDescription>
-                This will permanently delete all your current progress, selections, stats, magic,
-                appearance, everything, and start a completely fresh character. This cannot be
-                undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setRestartDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleRestart}
-                disabled={deleteDraft.isPending || createDraft.isPending}
-              >
-                {deleteDraft.isPending || createDraft.isPending
-                  ? 'Restarting...'
-                  : 'Delete & Restart'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
-      <main className="min-h-[400px]">
-        <StageErrorBoundary
-          currentStage={draft.current_stage}
-          onNavigateToStage={handleStageSelect}
-        >
-          <AnimatePresence mode="wait">{renderStage()}</AnimatePresence>
-        </StageErrorBoundary>
-      </main>
-
-      {/* Navigation buttons */}
-      <footer className="mt-12 flex justify-between border-t pt-6">
-        <Button
-          variant="outline"
-          disabled={draft.current_stage === Stage.ORIGIN}
-          onClick={() => handleStageSelect((draft.current_stage - 1) as Stage)}
-        >
-          Previous
-        </Button>
-        <Button
-          disabled={draft.current_stage === Stage.REVIEW}
-          onClick={() => handleStageSelect((draft.current_stage + 1) as Stage)}
-        >
-          Next
-        </Button>
-      </footer>
+      <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
+        <DialogContent className="rounded-none">
+          <DialogHeader>
+            <DialogTitle className="theme-heading">Restart character creation</DialogTitle>
+            <DialogDescription>
+              This deletes everything you have chosen so far and starts a fresh character. This
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-none"
+              onClick={() => setRestartDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-none"
+              onClick={handleRestart}
+              disabled={deleteDraft.isPending || createDraft.isPending}
+            >
+              {deleteDraft.isPending || createDraft.isPending ? 'Restarting…' : 'Restart'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
