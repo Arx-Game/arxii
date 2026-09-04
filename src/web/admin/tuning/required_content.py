@@ -500,6 +500,26 @@ def _probe_battle_outcome_mappings() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _beginnings_without_upbringing() -> ProbeResult:
+    """Every active `Beginnings` row has at least one active `OriginTemplate`.
+
+    Consumer: the Lineage stage / `get_lineage_errors` (#3617). A beginning with
+    no Upbringing offers a player no options at all in Lineage and they cannot
+    finish CG for that beginning.
+    """
+    from world.character_creation.models import Beginnings  # noqa: PLC0415
+
+    missing = tuple(
+        Beginnings.objects.filter(is_active=True)
+        .exclude(origin_templates__is_active=True)
+        .order_by("name")
+        .values_list("name", flat=True)
+        .distinct()
+    )
+    detail = "" if not missing else f"{len(missing)} active beginning(s) have no active Upbringing."
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _declarations() -> tuple[ContentDependency, ...]:
     """Every hard-coded row dependency the sentinel tracks.
 
@@ -1323,6 +1343,17 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "no row exists) or POST /api/clock/adjust/ as staff."
             ),
             probe=AnyRowProbe(label="GameClock"),
+        ),
+        ContentDependency(
+            key="character_creation.beginnings_have_upbringing",
+            label="Beginnings without an Upbringing",
+            tier=DependencyTier.REQUIRED,
+            consumer="LineageStage / get_lineage_errors (#3617)",
+            consequence=(
+                "A player who picks this beginning reaches Lineage with no "
+                "options and cannot finish CG."
+            ),
+            probe=CustomProbe(fn=_beginnings_without_upbringing),
         ),
     )
 

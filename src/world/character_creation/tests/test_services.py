@@ -159,6 +159,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             age=25,
@@ -169,7 +170,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             build=self.build,
             draft_data={
                 "first_name": "Incomplete",
-                "lineage_is_orphan": True,  # Complete heritage/lineage
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
@@ -221,14 +221,16 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             beginning=self.beginnings,
             name="Escape",
             frame_narrative="Your story begins with escape from Salvation.",
+            allows_no_family=True,
         )
         slot = OriginTemplateSlot.objects.create(
             template=template, name="Who helped?", prompt="Who aided your flight?"
         )
 
         draft = self._create_complete_draft(first_name="Origin Test")
+        draft.selected_origin_template = template
         draft.draft_data["origin_slots"] = {str(slot.id): "Mira cut the lock."}
-        draft.save(update_fields=["draft_data"])
+        draft.save(update_fields=["selected_origin_template", "draft_data"])
 
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
@@ -236,19 +238,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         assert "escape from Salvation" in sheet.background
         assert "Mira cut the lock" in sheet.background
         assert CharacterOriginSlot.objects.filter(sheet=sheet).count() == 1
-
-    def test_finalize_legacy_background_still_works(self) -> None:
-        """A draft with legacy draft_data['background'] and no origin slots
-        still writes background verbatim (backward compat)."""
-        draft = self._create_base_draft(
-            first_name="Legacy BG",
-            background="A plain free-text background.",
-        )
-        draft.draft_data.pop("origin_slots", None)
-        draft.save(update_fields=["draft_data"])
-
-        character = finalize_character(draft, add_to_roster=True)
-        assert character.sheet_data.background == "A plain free-text background."
 
     def test_finalize_converts_unspent_cg_points_to_xp(self):
         """Test that unspent CG points are converted to locked XP."""
@@ -321,6 +310,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -335,7 +325,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
                 "first_name": "Physical",
                 "description": "A test character with physical stats",
                 "stats": DEFAULT_STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
@@ -1434,6 +1423,7 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
@@ -1447,7 +1437,6 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
                 "first_name": "Solitary",
                 "description": "A test character",
                 "stats": DEFAULT_STATS,
-                "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,

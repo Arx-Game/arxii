@@ -1466,6 +1466,11 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 
 - **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
+- **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
+  `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes
+  for family standing, subordination, patronage, and culture-specific facts through this
+  layer: [family-authoring-recipes.md](family-authoring-recipes.md) (recipes 4-7 and 9
+  use the houses layer); design record: ADR-0268, ADR-0269.
 - **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`)
 - **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
@@ -2135,6 +2140,12 @@ Multi-stage character creation flow with draft system.
   the same change so a sibling domain service can reuse `_send_email`/`_get_staff_emails`
   without subclassing `RosterEmailService` itself, whose approve/deny methods take a
   roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
+- **Lineage stage: Upbringings (#3617):** the Lineage stage offers per-beginning
+  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost, a trust
+  gate, and a family path (claim a staff-authored family, name a new one, or
+  none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
+  new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
+  the design decisions: ADR-0268, ADR-0269.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
@@ -2327,7 +2338,9 @@ Character lifecycle management with web-first applications and player anonymity.
 Person-node genealogy: typed parentage/union edges, truth-vs-public-record via
 Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 
-- **Models:** `Family`, `Kinsperson` (5 definition tiers; heredity stubs
+- **Models:** `Family` (`kind` FK `FamilyKind`, `influence`, #3617),
+  `FamilyKind` (authored rows: Commoner, Noble, Crime, or any kind staff add;
+  `styles_as_house`), `Kinsperson` (5 definition tiers; heredity stubs
   `species`/`power_band`, #2815), `FamilyMembership`, `UnionKind`/`Union`,
   `ParentageEdge` (6 kinds; step/in-law DERIVED; `is_ritual_invoker` marks the
   Tree of Souls dominant line), `KinspersonTraitValue` (lazily-pinned parent

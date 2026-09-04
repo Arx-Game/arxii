@@ -24,6 +24,7 @@ class OriginTemplateModelTest(TestCase):
             beginning=self.beginning,
             name="Escape from Salvation",
             frame_narrative="Your story begins with escape from Salvation...",
+            allows_no_family=True,
         )
         assert template.is_active is True
         assert template.sort_order == 0
@@ -37,21 +38,31 @@ class OriginTemplateModelTest(TestCase):
             beginning=self.beginning,
             name="Escape",
             frame_narrative="...",
+            allows_no_family=True,
         )
         assert template.natural_key() == ("Test Area", "Test Beginning", "Escape")
 
     def test_multiple_templates_per_beginning(self) -> None:
         """Multiple templates allowed per beginning (Decision 1)."""
-        OriginTemplate.objects.create(beginning=self.beginning, name="Escape", frame_narrative="A")
-        OriginTemplate.objects.create(beginning=self.beginning, name="Capture", frame_narrative="B")
+        OriginTemplate.objects.create(
+            beginning=self.beginning, name="Escape", frame_narrative="A", allows_no_family=True
+        )
+        OriginTemplate.objects.create(
+            beginning=self.beginning, name="Capture", frame_narrative="B", allows_no_family=True
+        )
         assert OriginTemplate.objects.filter(beginning=self.beginning).count() == 2
 
     def test_unique_name_per_beginning(self) -> None:
         """Template name is unique within a beginning."""
-        OriginTemplate.objects.create(beginning=self.beginning, name="Escape", frame_narrative="A")
+        OriginTemplate.objects.create(
+            beginning=self.beginning, name="Escape", frame_narrative="A", allows_no_family=True
+        )
         with self.assertRaises(IntegrityError):
             OriginTemplate.objects.create(
-                beginning=self.beginning, name="Escape", frame_narrative="B"
+                beginning=self.beginning,
+                name="Escape",
+                frame_narrative="B",
+                allows_no_family=True,
             )
 
 
@@ -62,7 +73,7 @@ class OriginTemplateSlotModelTest(TestCase):
         self.area = StartingArea.objects.create(name="Test Area 2")
         self.beginning = Beginnings.objects.create(name="Test Beginning 2", starting_area=self.area)
         self.template = OriginTemplate.objects.create(
-            beginning=self.beginning, name="Escape", frame_narrative="..."
+            beginning=self.beginning, name="Escape", frame_narrative="...", allows_no_family=True
         )
 
     def test_create_slot(self) -> None:
@@ -109,7 +120,7 @@ class CharacterOriginSlotModelTest(TestCase):
         self.area = StartingArea.objects.create(name="Test Area 3")
         self.beginning = Beginnings.objects.create(name="Test Beginning 3", starting_area=self.area)
         self.template = OriginTemplate.objects.create(
-            beginning=self.beginning, name="Escape", frame_narrative="..."
+            beginning=self.beginning, name="Escape", frame_narrative="...", allows_no_family=True
         )
         self.slot = OriginTemplateSlot.objects.create(
             template=self.template, name="Who helped?", prompt="..."

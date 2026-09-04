@@ -293,6 +293,21 @@ class TestRealDeclarations(TestCase):
         GameClockFactory()
         self.assertTrue(dep.probe.resolve(None).present)
 
+    def test_active_beginning_without_upbringing_is_reported(self) -> None:
+        """A Beginning with no active Upbringing strands a player in Lineage (#3617)."""
+        from world.character_creation.factories import BeginningsFactory, OriginTemplateFactory
+
+        lonely = BeginningsFactory(name="Lonely")
+        key = "character_creation.beginnings_have_upbringing"
+        dep = next(d for d in rc._declarations() if d.key == key)
+        result = dep.probe.resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("Lonely", result.missing)
+
+        OriginTemplateFactory(beginning=lonely)
+        result = dep.probe.resolve(None)
+        self.assertNotIn("Lonely", result.missing)
+
     def test_collector_runs_against_the_real_table(self) -> None:
         snapshot = rc.collect_required_content()
         total = (

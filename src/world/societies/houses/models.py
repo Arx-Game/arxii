@@ -61,9 +61,11 @@ class NobiliaryParticle(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="nobiliary_particles",
     )
-    family_type = models.CharField(
-        max_length=20,
-        help_text="roster.Family.FamilyType value this particle applies to.",
+    kind = models.ForeignKey(
+        "arxii.FamilyKind",
+        on_delete=models.PROTECT,
+        related_name="particles",
+        help_text="The family kind this particle applies to (#3617).",
     )
     tier_floor = models.CharField(
         max_length=20,
@@ -93,15 +95,15 @@ class NobiliaryParticle(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["realm", "family_type", "tier_floor"],
+                fields=["realm", "kind", "tier_floor"],
                 name="societies_particle_unique_per_realm_type_band",
             ),
         ]
-        ordering = ["realm", "family_type", "tier_floor"]
+        ordering = ["realm", "kind", "tier_floor"]
 
     def __str__(self) -> str:
         band = f" ({self.tier_floor}+)" if self.tier_floor else ""
-        return f"{self.realm} {self.family_type}{band}: '{self.particle}'"
+        return f"{self.realm} {self.kind}{band}: '{self.particle}'"
 
 
 class HouseRecognitionRule(SharedMemoryModel):
@@ -936,9 +938,11 @@ class HouseTemplate(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="house_templates",
     )
-    family_type = models.CharField(
-        max_length=20,
-        help_text="roster.Family.FamilyType the defined family gets.",
+    kind = models.ForeignKey(
+        "arxii.FamilyKind",
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+        help_text="The kind the defined family gets (#3617).",
     )
     society = models.ForeignKey(
         "arxii.Society",

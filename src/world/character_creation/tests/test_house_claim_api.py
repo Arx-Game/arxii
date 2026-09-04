@@ -6,7 +6,8 @@ from rest_framework.test import APIClient
 
 from world.areas.factories import AreaFactory
 from world.character_creation.factories import CharacterDraftFactory
-from world.roster.models import Family
+from world.roster.constants import NOBLE_KIND_NAME
+from world.roster.factories import FamilyKindFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.constants import TitleTier
 from world.societies.houses.models import (
@@ -31,7 +32,7 @@ class HouseClaimApiTests(TestCase):
         cls.template = HouseTemplate.objects.create(
             name="API Barony Charter",
             realm=cls.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             society=cls.crown.society,
             liege=cls.crown,
             default_succession_law=cls.law,

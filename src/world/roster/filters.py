@@ -1,7 +1,14 @@
 from django.db.models import Q, QuerySet
 import django_filters
 
-from world.roster.models import Family, RosterApplication, RosterEntry, RosterTenure, TenureGallery
+from world.roster.models import (
+    Family,
+    FamilyKind,
+    RosterApplication,
+    RosterEntry,
+    RosterTenure,
+    TenureGallery,
+)
 from world.roster.models.choices import ApplicationStatus
 
 
@@ -40,10 +47,13 @@ class FamilyFilterSet(django_filters.FilterSet):
 
     has_open_positions = django_filters.BooleanFilter(method="filter_has_open_positions")
     area_id = django_filters.CharFilter(method="filter_by_area")
+    kind = django_filters.ModelMultipleChoiceFilter(
+        field_name="kind", queryset=FamilyKind.objects.all()
+    )
 
     class Meta:
         model = Family
-        fields = ["has_open_positions", "area_id"]
+        fields = ["has_open_positions", "area_id", "kind"]
 
     def filter_has_open_positions(
         self, queryset: QuerySet[Family], name: str, value: bool

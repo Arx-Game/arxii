@@ -12,15 +12,16 @@ from world.currency.services import (
     transfer,
 )
 from world.projects.constants import ProjectKind, ProjectStatus
-from world.roster.constants import MembershipBasis
+from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
 from world.roster.factories import (
     FamilyFactory,
+    FamilyKindFactory,
     KinspersonFactory,
     ParentageEdgeFactory,
     UnionFactory,
     UnionKindFactory,
 )
-from world.roster.models import Family, FamilyMembership
+from world.roster.models import FamilyMembership
 from world.roster.services.kinship import add_membership
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory
@@ -69,7 +70,7 @@ from world.traits.factories import CheckOutcomeFactory
 
 
 def _make_house(family_name: str = "Velaryon"):
-    family = FamilyFactory(name=family_name, family_type=Family.FamilyType.NOBLE)
+    family = FamilyFactory(name=family_name, kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
     org = OrganizationFactory(name=f"House {family_name}", family=family)
     return family, org
 
@@ -81,7 +82,7 @@ class DisplayNameTests(TestCase):
         family, org = _make_house("Argente")
         NobiliaryParticle.objects.create(
             realm=org.society.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             particle="du",
         )
         person = KinspersonFactory(name="Lysande Argente", family=family)
@@ -108,21 +109,22 @@ class CanonNamingTests(TestCase):
         cls.regente, cls.regente_org = _make_house("Regente")
         cls.society = cls.regente_org.society
         cls.realm = cls.society.realm
-        cls.vaelmont = FamilyFactory(name="Vaelmont", family_type=Family.FamilyType.NOBLE)
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        cls.vaelmont = FamilyFactory(name="Vaelmont", kind=noble)
         cls.vaelmont_org = OrganizationFactory(
             name="House Vaelmont", family=cls.vaelmont, society=cls.society
         )
         # Luxen canon rows: du at duchy+, attached D' below, dau taken-in.
         NobiliaryParticle.objects.create(
             realm=cls.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=noble,
             tier_floor=TitleTier.DUCHY,
             particle="du",
             taken_in_particle="dau",
         )
         NobiliaryParticle.objects.create(
             realm=cls.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=noble,
             tier_floor="",
             particle="D'",
             taken_in_particle="dau",
@@ -225,7 +227,7 @@ class CanonNamingTests(TestCase):
         family, org = _make_house("Redcloud")
         NobiliaryParticle.objects.create(
             realm=org.society.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             particle="ul",
             taken_in_particle="",
         )
@@ -240,13 +242,14 @@ class NameAliasTests(TestCase):
     def setUpTestData(cls):
         cls.regente, cls.regente_org = _make_house("Regente")
         cls.realm = cls.regente_org.society.realm
-        cls.vaelmont = FamilyFactory(name="Vaelmont", family_type=Family.FamilyType.NOBLE)
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        cls.vaelmont = FamilyFactory(name="Vaelmont", kind=noble)
         cls.vaelmont_org = OrganizationFactory(
             name="House Vaelmont", family=cls.vaelmont, society=cls.regente_org.society
         )
         NobiliaryParticle.objects.create(
             realm=cls.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=noble,
             particle="du",
             taken_in_particle="dau",
         )

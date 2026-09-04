@@ -17,6 +17,7 @@ import {
   mockCGExplanations,
   mockCompleteDraft,
   mockIncompleteDraft,
+  mockUpbringingUnknown,
 } from './fixtures';
 import { mockPlayerAccount, mockStaffAccount } from './mocks';
 import {
@@ -140,14 +141,26 @@ describe('ReviewStage', () => {
     expect(onStageSelect).toHaveBeenCalledWith(Stage.ORIGIN);
   });
 
-  it('shows "Orphan / No Family" when the draft has no family and is flagged orphan', () => {
-    const orphanDraft = createMockDraft({
+  it('shows "Unknown" as the family when the Upbringing takes the none path', () => {
+    const unknownFamilyDraft = createMockDraft({
       ...mockCompleteDraft,
       family: null,
-      draft_data: { ...mockCompleteDraft.draft_data, lineage_is_orphan: true },
+      selected_origin_template: mockUpbringingUnknown,
+      family_path: 'none',
     });
-    renderReview(orphanDraft);
-    expect(screen.getByRole('button', { name: 'Orphan / No Family' })).toBeInTheDocument();
+    renderReview(unknownFamilyDraft);
+    expect(screen.getByRole('button', { name: 'Unknown' })).toBeInTheDocument();
+  });
+
+  it('shows the chosen Upbringing as a door back to the Lineage chapter', async () => {
+    const onStageSelect = vi.fn();
+    renderReview(mockCompleteDraft, { onStageSelect });
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: mockCompleteDraft.selected_origin_template!.name,
+      })
+    );
+    expect(onStageSelect).toHaveBeenCalledWith(Stage.LINEAGE);
   });
 
   describe('unspent points ledger line', () => {

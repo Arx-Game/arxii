@@ -151,11 +151,11 @@ The CG-only application defining the house behind a set-aside claimable `Title` 
 _Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).
 
 **Aspect (house)**:
-A required, normalized catalog choice on a house template (#2079, ADR-0101) — `HouseAspectDefinition` (prompt, min/max picks) + its `HouseAspectOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationAspect` identity facets at materialization.
+A required, normalized catalog choice on a house template (#2079, ADR-0101): `HouseAspectDefinition` (prompt, min/max picks) + its `HouseAspectOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationAspect` identity facets at materialization. Also the recipe for a culture-specific family fact WITH variants (a house quiddity, #3617): see `docs/systems/family-authoring-recipes.md` Recipe 7.
 _Avoid_: trait, flaw, house perk, custom aspect (there is no free-text path).
 
 **Feature (house)**:
-A structural cultural fact about houses of a template (#2079) — `HouseFeature` (unique slug = stable code anchor) stamped as `OrganizationFeature` at materialization. No player input; orients the founder at CG and anchors future systems (a ledger UI checks slug `black-ledger`).
+A structural cultural fact about houses of a template (#2079): `HouseFeature` (unique slug = stable code anchor) stamped as `OrganizationFeature` at materialization. No player input; orients the founder at CG and anchors future systems (a ledger UI checks slug `black-ledger`). Also the recipe for a FLAT culture-specific family fact (a Letter of Marque, #3617): see `docs/systems/family-authoring-recipes.md` Recipe 7.
 _Avoid_: perk, ability, house power (features may be flavor-only), aspect (that's the choice concept).
 
 **Propaganda Campaign** (`PropagandaCampaignTier` / `PropagandaDetails`, #1621):

@@ -9,9 +9,9 @@ from django.test import TestCase
 from world.areas.factories import AreaFactory
 from world.currency.services import get_or_create_treasury
 from world.military.factories import MilitaryUnitFactory
-from world.roster.constants import MembershipBasis
-from world.roster.factories import FamilyFactory, KinspersonFactory, UnionFactory
-from world.roster.models import Family, FamilyMembership, UnionKind
+from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
+from world.roster.factories import FamilyFactory, FamilyKindFactory, KinspersonFactory, UnionFactory
+from world.roster.models import FamilyMembership, UnionKind
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
     OrganizationFactory,
@@ -59,7 +59,7 @@ NO_LEGEND = {"legend_reader": lambda _persona: 0}
 
 
 def _make_house(name: str):
-    family = FamilyFactory(name=name, family_type=Family.FamilyType.NOBLE)
+    family = FamilyFactory(name=name, kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
     org = OrganizationFactory(name=f"House {name}", family=family)
     return family, org
 
@@ -299,7 +299,7 @@ class BandAndRankTests(TestCase):
         cls.high = StatureBand.objects.create(name="Formidable", rank=1, min_percentile=50)
 
     def _landed(self, name, org_type, perceived):
-        family = FamilyFactory(name=name, family_type=Family.FamilyType.NOBLE)
+        family = FamilyFactory(name=name, kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
         org = OrganizationFactory(name=f"House {name}", family=family, org_type=org_type)
         create_domain(area=AreaFactory(), name=f"{name} Vale", owner_org=org)
         HouseStature.objects.create(
@@ -357,7 +357,7 @@ class BandAndRankTests(TestCase):
 class WeeklyTickTests(TestCase):
     def test_weekly_tick_runs_end_to_end(self):
         StatureBand.objects.create(name="Steady", rank=1, min_percentile=0)
-        family = FamilyFactory(name="Tick", family_type=Family.FamilyType.NOBLE)
+        family = FamilyFactory(name="Tick", kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
         org = OrganizationFactory(name="House Tick", family=family)
         create_domain(area=AreaFactory(), name="Tick Vale", owner_org=org)
         _kin(family, rating=3)

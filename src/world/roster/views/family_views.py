@@ -56,7 +56,11 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
-    queryset = Family.objects.filter(is_playable=True).order_by("family_type", "name")
+    queryset = (
+        Family.objects.filter(is_playable=True)
+        .select_related("kind")
+        .order_by("kind__sort_order", "kind__name", "name")
+    )
     serializer_class = FamilySerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]

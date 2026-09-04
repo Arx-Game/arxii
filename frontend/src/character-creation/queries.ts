@@ -187,11 +187,11 @@ export function usePaths() {
   });
 }
 
-export function useFamilies(areaId: number | undefined) {
+export function useFamilies(areaId: number | undefined, kindIds: number[] = [], enabled = true) {
   return useQuery({
-    queryKey: characterCreationKeys.families(areaId!),
-    queryFn: () => getFamilies(areaId!),
-    enabled: !!areaId,
+    queryKey: [...characterCreationKeys.families(areaId!), kindIds],
+    queryFn: () => getFamilies(areaId!, kindIds),
+    enabled: enabled && areaId !== undefined,
   });
 }
 

@@ -123,7 +123,7 @@ def resolve_particle(family: Family | None, *, taken_in: bool = False) -> str:
     rank = house_tier_rank(house)
     rows = [
         row
-        for row in NobiliaryParticle.objects.filter(realm=realm, family_type=family.family_type)
+        for row in NobiliaryParticle.objects.filter(realm=realm, kind=family.kind)
         if TITLE_TIER_RANK.get(row.tier_floor, 0) <= rank
     ]
     row = max(rows, key=lambda r: TITLE_TIER_RANK.get(r.tier_floor, 0), default=None)

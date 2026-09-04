@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from world.roster.models import Roster
+from world.roster.constants import COMMONER_KIND_NAME, CRIME_KIND_NAME, NOBLE_KIND_NAME
+from world.roster.models import FamilyKind, Roster
 from world.roster.models.choices import RosterType
 
 
@@ -102,6 +103,35 @@ def ensure_rosters() -> dict[str, Roster]:
         )
         rosters[roster_type] = roster
     return rosters
+
+
+# (name, styles_as_house, sort_order): mirrors migration 0219's KINDS tuple
+# (world/migrations/0219_familykind_family_kind_influence.py), which backfills
+# these onto a real deploy. Test tiers build schema straight from model state
+# and never replay migration RunPython (server/conf/sqlite_test_settings.py's
+# data-seeding caveat), so callers that need a canonical kind to exist without
+# assuming a migrated database call ``ensure_family_kinds`` instead of a bare
+# ``FamilyKind.objects.get(name=...)``.
+_FAMILY_KIND_SEED: tuple[tuple[str, bool, int], ...] = (
+    (COMMONER_KIND_NAME, False, 0),
+    (NOBLE_KIND_NAME, True, 1),
+    (CRIME_KIND_NAME, False, 2),
+)
+
+
+def ensure_family_kinds() -> dict[str, FamilyKind]:
+    """Get-or-create the three canonical FamilyKind rows (#3617). Idempotent.
+
+    Returns a mapping of kind name to ``FamilyKind``.
+    """
+    kinds: dict[str, FamilyKind] = {}
+    for name, styles_as_house, sort_order in _FAMILY_KIND_SEED:
+        kind, _created = FamilyKind.objects.get_or_create(
+            name=name,
+            defaults={"styles_as_house": styles_as_house, "sort_order": sort_order},
+        )
+        kinds[name] = kind
+    return kinds
 
 
 def seed_invite_trust_category() -> None:

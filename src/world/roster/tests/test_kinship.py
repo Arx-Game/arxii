@@ -7,6 +7,7 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.constants import (
+    NOBLE_KIND_NAME,
     DefinitionTier,
     MembershipBasis,
     ParentageKind,
@@ -14,6 +15,7 @@ from world.roster.constants import (
 )
 from world.roster.factories import (
     FamilyFactory,
+    FamilyKindFactory,
     KinSlotPoolFactory,
     KinspersonFactory,
     UnionKindFactory,
@@ -260,7 +262,7 @@ class SoulChainTests(TestCase):
 
 class SlotAndPoolTests(TestCase):
     def test_mint_from_pool_decrements_and_links_parents(self) -> None:
-        family = FamilyFactory(family_type="noble")
+        family = FamilyFactory(kind=FamilyKindFactory(name=NOBLE_KIND_NAME))
         parent = KinspersonFactory(family=family)
         pool = KinSlotPoolFactory(family=family, count_remaining=2, parents=[parent])
 

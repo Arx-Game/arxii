@@ -67,7 +67,6 @@ describe('IdentityStage', () => {
       const orphanDraft = createMockDraft({
         ...mockCompleteDraft,
         family: null,
-        draft_data: { ...mockCompleteDraft.draft_data, lineage_is_orphan: true },
       });
 
       renderWithCharacterCreationProviders(<IdentityStage draft={orphanDraft} />, { queryClient });
@@ -106,29 +105,6 @@ describe('IdentityStage', () => {
 
       const textarea = screen.getByLabelText(/personality traits/i) as HTMLTextAreaElement;
       expect(textarea.value).toBe('Bold and adventurous.');
-    });
-  });
-
-  describe('Background Section', () => {
-    it('displays background textarea', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      expect(screen.getByLabelText(/character history/i)).toBeInTheDocument();
-    });
-
-    it('shows current background value', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
-        queryClient,
-      });
-
-      const textarea = screen.getByLabelText(/character history/i) as HTMLTextAreaElement;
-      expect(textarea.value).toBe('Born to humble origins but destined for greatness.');
     });
   });
 

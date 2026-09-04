@@ -3,15 +3,15 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.services import create_character_with_sheet
 from world.consent.factories import SocialConsentPreferenceFactory
-from world.roster.constants import MembershipBasis
+from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
 from world.roster.factories import (
     FamilyFactory,
+    FamilyKindFactory,
     KinspersonFactory,
     MediaFactory,
     RosterEntryFactory,
     RosterTenureFactory,
 )
-from world.roster.models import Family
 from world.roster.services.kinship import add_membership
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import PersonaType
@@ -80,11 +80,12 @@ class PersonaSerializerDisplayNameTestCase(TestCase):
             character_key="Sharlotte Regente",
             primary_persona_name="Sharlotte Regente",
         )
-        family = FamilyFactory(name="Regente", family_type=Family.FamilyType.NOBLE)
+        noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
+        family = FamilyFactory(name="Regente", kind=noble)
         org = OrganizationFactory(name="House Regente", family=family)
         NobiliaryParticle.objects.create(
             realm=org.society.realm,
-            family_type=Family.FamilyType.NOBLE,
+            kind=noble,
             particle="du",
             taken_in_particle="dau",
         )

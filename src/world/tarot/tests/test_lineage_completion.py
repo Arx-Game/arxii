@@ -1,23 +1,27 @@
 """
 Tests for tarot card integration with lineage completion.
 
-Verifies that familyless characters (orphans and unknown-origins) require
-a tarot card selection to complete the lineage stage.
+Verifies that the none family path (no family at all, #3617's amnesiac
+Upbringing) requires a tarot card selection to complete the lineage stage.
 """
 
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.factories import OriginTemplateFactory, make_unknown_upbringing
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
+from world.character_creation.validators import get_lineage_errors
 from world.character_sheets.models import Gender
 from world.realms.models import Realm
+from world.roster.factories import FamilyKindFactory
+from world.roster.models import Family
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 
 
 class LineageCompletionTests(TestCase):
-    """Test _is_lineage_complete() with tarot card requirements."""
+    """Test get_lineage_errors() with tarot card requirements on the none path."""
 
     @classmethod
     def setUpTestData(cls):
@@ -42,27 +46,32 @@ class LineageCompletionTests(TestCase):
             defaults={"display_name": "Lineage Test Gender"},
         )
 
-        # Beginnings where family IS known (normal upbringing)
-        cls.family_known_beginnings = Beginnings.objects.create(
-            name="Lineage Normal Beginnings",
-            description="Normal beginnings with family known",
+        # Beginnings whose Upbringing offers the claim-a-staff-family path.
+        cls.claim_beginnings = Beginnings.objects.create(
+            name="Lineage Claim Beginnings",
+            description="Beginnings offering the claim family path",
             starting_area=cls.area,
             trust_required=0,
             is_active=True,
-            family_known=True,
         )
-        cls.family_known_beginnings.allowed_species.add(cls.species)
+        cls.claim_beginnings.allowed_species.add(cls.species)
+        cls.claim_upbringing = OriginTemplateFactory(
+            beginning=cls.claim_beginnings,
+            allows_name_family=False,
+            named_family_kind=None,
+            allows_claim_family=True,
+        )
 
-        # Beginnings where family is NOT known (e.g. Misbegotten/Sleeper)
-        cls.family_unknown_beginnings = Beginnings.objects.create(
+        # Beginnings whose Upbringing is the amnesiac "Unknown" (none path, #3617).
+        cls.unknown_beginnings = Beginnings.objects.create(
             name="Lineage Unknown Beginnings",
             description="Unknown origins beginnings",
             starting_area=cls.area,
             trust_required=0,
             is_active=True,
-            family_known=False,
         )
-        cls.family_unknown_beginnings.allowed_species.add(cls.species)
+        cls.unknown_beginnings.allowed_species.add(cls.species)
+        cls.unknown_upbringing = make_unknown_upbringing(cls.unknown_beginnings)
 
         cls.tarot_card = TarotCard.objects.create(
             name="The Fool",
@@ -72,68 +81,60 @@ class LineageCompletionTests(TestCase):
         )
 
     def test_family_selected_completes_lineage(self):
-        """Lineage is complete when a family is selected (unchanged behavior)."""
-        from world.roster.models import Family
-
-        family = Family.objects.create(name="Lineage Test Family", origin_realm=self.realm)
+        """Lineage is complete when a claimed family is selected (unchanged behavior)."""
+        kind = FamilyKindFactory()
+        family = Family.objects.create(
+            name="Lineage Test Family", kind=kind, origin_realm=self.realm
+        )
 
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_beginnings=self.family_known_beginnings,
+            selected_beginnings=self.claim_beginnings,
+            selected_origin_template=self.claim_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             family=family,
             draft_data={},
         )
-        assert draft._is_lineage_complete() is True
+        assert get_lineage_errors(draft) == []
 
-    def test_orphan_without_tarot_card_incomplete(self):
-        """Orphan without tarot card -> lineage INCOMPLETE."""
+    def test_none_path_without_tarot_card_incomplete(self):
+        """None path (no family) without a tarot card -> lineage INCOMPLETE."""
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_beginnings=self.family_known_beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            draft_data={"lineage_is_orphan": True},
-        )
-        assert draft._is_lineage_complete() is False
-
-    def test_orphan_with_tarot_card_complete(self):
-        """Orphan with tarot card -> lineage complete."""
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.family_known_beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            draft_data={
-                "lineage_is_orphan": True,
-                "tarot_card_name": self.tarot_card.name,
-                "tarot_reversed": False,
-            },
-        )
-        assert draft._is_lineage_complete() is True
-
-    def test_unknown_origins_without_tarot_card_incomplete(self):
-        """Unknown origins (family_known=False) without tarot card -> lineage INCOMPLETE."""
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.family_unknown_beginnings,
+            selected_beginnings=self.unknown_beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             draft_data={},
         )
-        assert draft._is_lineage_complete() is False
+        assert get_lineage_errors(draft) == ["Select a tarot card for your surname"]
 
-    def test_unknown_origins_with_tarot_card_complete(self):
-        """Unknown origins (family_known=False) with tarot card -> lineage complete."""
+    def test_none_path_with_tarot_card_complete(self):
+        """None path (no family) with a tarot card -> lineage complete."""
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_beginnings=self.family_unknown_beginnings,
+            selected_beginnings=self.unknown_beginnings,
+            selected_origin_template=self.unknown_upbringing,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            draft_data={
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
+            },
+        )
+        assert get_lineage_errors(draft) == []
+
+    def test_none_path_with_reversed_tarot_card_complete(self):
+        """A reversed tarot card also satisfies the requirement."""
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.unknown_beginnings,
+            selected_origin_template=self.unknown_upbringing,
             selected_species=self.species,
             selected_gender=self.gender,
             draft_data={
@@ -141,13 +142,13 @@ class LineageCompletionTests(TestCase):
                 "tarot_reversed": True,
             },
         )
-        assert draft._is_lineage_complete() is True
+        assert get_lineage_errors(draft) == []
 
-    def test_no_beginnings_no_family_incomplete(self):
-        """No beginnings and no family -> lineage incomplete."""
+    def test_no_upbringing_selected_incomplete(self):
+        """No Upbringing selected -> lineage incomplete."""
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
             draft_data={},
         )
-        assert draft._is_lineage_complete() is False
+        assert get_lineage_errors(draft) == ["Choose your upbringing"]

@@ -34,7 +34,9 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [companions](src/world/companions/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
-- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md)
+- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step
+  terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
+  Kind, Influence. Character Creation has no glossary file of its own.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)

@@ -102,7 +102,13 @@ describe('KinshipPanel', () => {
 
   it('renders kin nodes', () => {
     mockKinTree({
-      family: { id: 1, name: 'Valardin', born_particle: '', taken_in_particle: '' },
+      family: {
+        id: 1,
+        name: 'Valardin',
+        kind: { id: 1, name: 'Noble', styles_as_house: true },
+        born_particle: '',
+        taken_in_particle: '',
+      },
       nodes: [
         { id: 2, name: 'Aria' },
         { id: 3, name: 'Bel' },

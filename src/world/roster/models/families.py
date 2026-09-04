@@ -36,6 +36,38 @@ _SECRET_FK = "arxii.Secret"  # noqa: S105 — model path, not a credential
 _GENDER_FK = "arxii.Gender"
 
 
+class FamilyKind(NaturalKeyMixin, SharedMemoryModel):
+    """An authored kind of family (#3617): Commoner, Noble, Crime, Humble, Clan...
+
+    Rows, not a code list, so a new kind is a row staff add. ``styles_as_house``
+    makes materialized orgs named "House <name>" (``world.societies.houses``);
+    nobiliary particles come from ``NobiliaryParticle`` rows authored per realm
+    and kind, independent of this flag.
+    """
+
+    name = models.CharField(max_length=60, unique=True)
+    description = models.TextField(blank=True, help_text="Staff-facing note on the kind.")
+    styles_as_house = models.BooleanField(
+        default=False,
+        help_text="Orgs rooted in this kind are styled 'House <name>' and wear particles.",
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "Family Kind"
+        verbose_name_plural = "Family Kinds"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Family(NaturalKeyMixin, SharedMemoryModel):
     """A family/house surname container that Kinsperson nodes claim membership in.
 
@@ -45,21 +77,24 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
     primary surname. #1884 attaches house Organizations from the org side.
     """
 
-    class FamilyType(models.TextChoices):
-        COMMONER = "commoner", "Commoner"
-        NOBLE = "noble", "Noble"
-        CRIME = "crime", "Crime"
-
     name = models.CharField(
         max_length=100,
         unique=True,
         help_text="Family/house name",
     )
-    family_type = models.CharField(
-        max_length=20,
-        choices=FamilyType.choices,
-        default=FamilyType.COMMONER,
-        help_text="Whether this is a noble house, commoner family, or crime family",
+    kind = models.ForeignKey(
+        FamilyKind,
+        on_delete=models.PROTECT,
+        related_name="families",
+        help_text="Authored kind (#3617): Commoner, Noble, Crime, or any kind staff add.",
+    )
+    influence = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "How much authority this family holds over the world (#3617). 0 = none; "
+            "player-named families are always 0. The price base for claim-path "
+            "Upbringing choices (cost_per_influence x influence)."
+        ),
     )
     description = models.TextField(
         blank=True,

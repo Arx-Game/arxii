@@ -63,8 +63,9 @@ from world.missions.models import (
     MissionTemplate,
 )
 from world.realms.models import Realm
+from world.roster.constants import COMMONER_KIND_NAME
 from world.roster.models.families import Family
-from world.roster.seeds import ensure_rosters
+from world.roster.seeds import ensure_family_kinds, ensure_rosters
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
@@ -145,12 +146,22 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "character on sight; pick the one whose instincts suit your concept."
     ),
     "heritage_gender_heading": "Gender & Pronouns",
+    # No longer rendered by the Lineage step (#3617): the orphan-or-noble menu these
+    # two describe is gone, and the step reads upbringing_heading/_intro below. Kept
+    # as authored content for other surfaces, and because retargeting a key would
+    # leave production showing its old staff-edited row against the new step.
     "lineage_heading": "Family & Lineage",
     "lineage_intro": (
         "Claim a family within your starting area, go an orphan, or step forward as "
         "someone whose origins are still unknown. Family ties bring kin, "
         "obligations, and a name people already have opinions about."
     ),
+    "upbringing_heading": "Your Upbringing",
+    "upbringing_intro": (
+        "Choose how you were raised within your beginning, answer what it asks of you, "
+        "and settle your family: name your own, claim one, or carry none."
+    ),
+    "family_path_heading": "Your Family",
     "distinctions_heading": "Your Distinctions",
     "distinctions_intro": (
         "Distinctions are the advantages and disadvantages that make your character "
@@ -977,7 +988,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "trust_required": 0,
             "is_active": True,
             "sort_order": 0,
-            "family_known": False,
         },
     )
     beginnings_noble, _ = Beginnings.objects.get_or_create(
@@ -988,7 +998,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "trust_required": 0,
             "is_active": True,
             "sort_order": 1,
-            "family_known": True,
         },
     )
     beginnings_luxen, _ = Beginnings.objects.get_or_create(
@@ -999,7 +1008,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "trust_required": 0,
             "is_active": True,
             "sort_order": 2,
-            "family_known": False,
         },
     )
     # Arx beginnings: Human only. Luxen beginnings: Human + Khati.
@@ -2044,11 +2052,12 @@ def _seed_commoner_families(realm: Realm) -> None:
     These are placeholder commoner families — staff can rename or add
     noble houses via the admin.
     """
+    commoner_kind = ensure_family_kinds()[COMMONER_KIND_NAME]
     for name in _COMMONER_FAMILIES:
         Family.objects.get_or_create(
             name=name,
             defaults={
-                "family_type": Family.FamilyType.COMMONER,
+                "kind": commoner_kind,
                 "description": f"A commoner family of {realm.name}.",
                 "is_playable": True,
                 "origin_realm": realm,

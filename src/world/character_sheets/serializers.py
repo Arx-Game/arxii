@@ -93,10 +93,11 @@ from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, Trait
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
-    """Input for CharacterSheetViewSet.set-origin-slot (#2478)."""
+    """Input for CharacterSheetViewSet.set-origin-slot (#2478, #3617)."""
 
     slot_id = serializers.IntegerField()
     value = serializers.CharField(allow_blank=True)
+    choice_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class OriginSlotClearSerializer(serializers.Serializer):

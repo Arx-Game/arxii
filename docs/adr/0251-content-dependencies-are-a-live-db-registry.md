@@ -6,7 +6,7 @@ raise `DoesNotExist` deep in the call stack or silently no-op when the row is ab
 (#3444). The ruling was that missing authored content does not get defensive guards
 sprinkled around the lookups: the fix for unauthored content is to author it, not to
 teach every call site to survive its absence. So `src/web/admin/tuning/required_content.py`
-holds one central `_declarations()` table - 48 rows, tiered REQUIRED (44, a code path
+holds one central `_declarations()` table - 54 rows, tiered REQUIRED (50, a code path
 a player or staff member can hit today breaks or goes silently inert) or TUNING (4, a
 config singleton the game runs without, just with worse numbers) - and
 `collect_required_content()` probes each declared row directly against the live

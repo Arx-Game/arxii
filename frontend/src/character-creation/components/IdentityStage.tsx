@@ -20,7 +20,6 @@ import { ChapterLeaf } from '../folio';
 import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
 import { Stage, STAGE_LABELS } from '../types';
-import { OriginStorySection } from './OriginStorySection';
 import { composeFullName } from '../utils';
 
 const NONE_VALUE = 'none';
@@ -178,9 +177,6 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
             </p>
           </div>
         </section>
-
-        {/* Origin Story (#2478) — replaces free-text Background */}
-        <OriginStorySection draft={draft} />
 
         {/* Worship (#2355) */}
         <section className="space-y-4">

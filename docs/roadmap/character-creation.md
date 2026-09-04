@@ -224,6 +224,8 @@ The 11-stage character creation flow that takes a player from concept to approve
 - **APIs:** Complete viewsets and serializers for all stages, including the Gift-stage catalog reads (`gifts`, `technique-options`, #2426)
 - **Frontend:** Full React components for all 11 stages — OriginStage, HeritageStage, LineageStage, DistinctionsStage, PathStage, GiftStage, AttributesStage, AppearanceStage, IdentityStage, FinalTouchesStage, ReviewStage. GiftStage runs the Tradition → Gift → Technique → Resonance → Anima Check funnel; CG Points widget, Species cards, Tarot selection
 - CG perspective panels (#3281): see the codex roadmap for what was built.
+- Lineage step is per-beginning Upbringings (#3617): costed options, family paths, typed
+  prompts with costed choices; family kinds are rows; recipe doc + ADR-0268/0269
 - **Tests:** Comprehensive coverage of stages, serializers, services, application workflow
 
 ## What's Needed for MVP

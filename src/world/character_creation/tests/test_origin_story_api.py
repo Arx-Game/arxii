@@ -27,6 +27,7 @@ class CGOriginTemplateAPITest(TestCase):
             beginning=self.beginning,
             name="Escape",
             frame_narrative="Your story begins with escape.",
+            allows_no_family=True,
         )
         self.slot = OriginTemplateSlot.objects.create(
             template=self.template,
@@ -39,6 +40,7 @@ class CGOriginTemplateAPITest(TestCase):
             name="Inactive",
             frame_narrative="...",
             is_active=False,
+            allows_no_family=True,
         )
 
     def test_list_templates_for_beginning(self) -> None:
@@ -79,7 +81,7 @@ class PostCGOriginSlotAPITest(TestCase):
         cls.area = StartingArea.objects.create(name="PostCG Area")
         cls.beginning = Beginnings.objects.create(name="PostCG Beginning", starting_area=cls.area)
         cls.template = OriginTemplate.objects.create(
-            beginning=cls.beginning, name="Escape", frame_narrative="..."
+            beginning=cls.beginning, name="Escape", frame_narrative="...", allows_no_family=True
         )
         cls.slot = OriginTemplateSlot.objects.create(
             template=cls.template, name="Who helped?", prompt="..."
@@ -137,3 +139,142 @@ class PostCGOriginSlotAPITest(TestCase):
             format="json",
         )
         assert response.status_code == 404
+
+    def test_player_cannot_change_a_costed_choice_after_approval(self) -> None:
+        """A non-staff caller cannot set a pick-list choice via the sheet API (#3617)."""
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+
+        slot = OriginTemplateSlotFactory(allows_text=False)
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+        assert response.status_code == 403
+
+    def test_player_can_still_edit_a_write_in(self) -> None:
+        """A non-staff caller can still edit a plain write-in slot (#3617)."""
+        from world.character_creation.factories import OriginTemplateSlotFactory
+
+        slot = OriginTemplateSlotFactory()
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+        assert response.status_code == 200
+
+    def test_text_edit_preserves_stored_choice(self) -> None:
+        """A text-only write on a slot with a stored choice keeps that choice (#3617)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+
+        staff_account = AccountFactory(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_account)
+        set_response = staff_client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+        assert set_response.status_code == 200
+
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+        assert response.status_code == 200
+        row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
+        assert row.choice == choice
+        assert row.value == "A fuller account."
+
+    def test_player_cannot_clear_a_choice_backed_slot(self) -> None:
+        """A non-staff caller cannot clear a slot holding a costed choice (#3617)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+
+        staff_account = AccountFactory(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_account)
+        staff_client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+
+        response = self.client.post(
+            self._url("clear-origin-slot"),
+            {"slot_id": slot.id},
+            format="json",
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Upbringing choices are set at character creation."
+        assert CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()
+
+    def test_player_can_clear_a_text_only_slot(self) -> None:
+        """A non-staff caller can still clear a plain write-in slot (#3617)."""
+        from world.character_creation.factories import OriginTemplateSlotFactory
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+
+        response = self.client.post(
+            self._url("clear-origin-slot"),
+            {"slot_id": slot.id},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert not CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()
+
+    def test_staff_can_clear_a_choice_backed_slot(self) -> None:
+        """Staff may clear a slot holding a costed choice (#3617)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+
+        staff_account = AccountFactory(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_account)
+        staff_client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+
+        response = staff_client.post(
+            self._url("clear-origin-slot"),
+            {"slot_id": slot.id},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert not CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()

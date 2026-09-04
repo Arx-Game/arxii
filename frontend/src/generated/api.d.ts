@@ -3214,10 +3214,14 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List active origin-story templates for the CG guided flow (#2478).
+     * @description Serialize with one batched ``claimable_kind_ids`` query, not one per row.
      *
-     *     Filter by ``beginning`` to get templates available for a specific beginning.
-     *     Mirrors ``CGGlimpseTagViewSet``.
+     *     Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
+     *     so there is no ``page`` branch to preserve) but materializes the
+     *     queryset once and passes a template-id -> kind-id grouping into the
+     *     serializer context (no per-request memo on ``self`` - ADR-0260; the
+     *     grouping is a plain argument, not state stashed on the view or
+     *     serializer instance).
      */
     get: operations['character_creation_origin_templates_list'];
     put?: never;
@@ -3236,10 +3240,11 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List active origin-story templates for the CG guided flow (#2478).
+     * @description List active origin-story templates for the CG guided flow (#2478, #3617).
      *
      *     Filter by ``beginning`` to get templates available for a specific beginning.
-     *     Mirrors ``CGGlimpseTagViewSet``.
+     *     Trust-gated: staff see every active row, everyone else only rows whose
+     *     ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
      */
     get: operations['character_creation_origin_templates_retrieve'];
     put?: never;
@@ -3595,7 +3600,13 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Clear a character's origin-story slot answer (#2478). */
+    /**
+     * @description Clear a character's origin-story slot answer (#2478, #3617).
+     *
+     *     A slot holding a costed choice was set at character creation; a
+     *     non-staff caller clearing it here would erase a priced pick for free,
+     *     so that combination is refused the same way setting one is.
+     */
     post: operations['character_sheets_clear_origin_slot_create'];
     delete?: never;
     options?: never;
@@ -3655,7 +3666,13 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Set a character's origin-story slot answer (#2478). */
+    /**
+     * @description Set a character's origin-story slot answer (#2478, #3617).
+     *
+     *     A costed pick-list choice is set at character creation only; a non-staff
+     *     caller sending ``choice_id`` here is refused. A text-only write on a slot
+     *     that already carries a choice keeps that choice (write-ins never clear it).
+     */
     post: operations['character_sheets_set_origin_slot_create'];
     delete?: never;
     options?: never;
@@ -24079,6 +24096,14 @@ export interface components {
       scene_id?: number | null;
     };
     /**
+     * @description * `any` - Any path
+     *     * `claimed` - Claim a staff-authored family
+     *     * `named` - Name your own family
+     *     * `none` - No family
+     * @enum {string}
+     */
+    AppliesToEnum: 'any' | 'claimed' | 'named' | 'none';
+    /**
      * @description * `global` - Global
      *     * `org` - Organization
      *     * `giver` - Giver
@@ -24926,8 +24951,6 @@ export interface components {
       description: string;
       /** @description Cloudinary URL sourced from art (#2408); key name kept for frontend compat. */
       readonly art_image: string | null;
-      /** @description Whether family is selectable in Lineage stage (False = 'Unknown') */
-      family_known?: boolean;
       /**
        * @description Get IDs of species available for this Beginnings, expanding parents to children.
        *
@@ -24951,8 +24974,6 @@ export interface components {
       name: string;
       /** @description Worldbuilding text shown to players */
       description: string;
-      /** @description Whether family is selectable in Lineage stage (False = 'Unknown') */
-      family_known?: boolean;
       /** @description If False, characters don't get species' racial language (Misbegotten) */
       grants_species_languages?: boolean;
       /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */
@@ -25409,7 +25430,7 @@ export interface components {
       readonly name: string;
     };
     /**
-     * @description Origin template for the CG guided flow (#2478).
+     * @description Origin template for the CG guided flow (#2478, #3617).
      *
      *     Backs ``GET /api/character-creation/origin-templates/``.
      */
@@ -25423,6 +25444,19 @@ export interface components {
       readonly is_active: boolean;
       /** @description Display order when multiple templates exist. */
       readonly sort_order: number;
+      /** @description Flat CG cost of this Upbringing (#3617). Negative refunds, like a drawback. */
+      readonly cg_point_cost: number;
+      /** @description Minimum trust to see/select this Upbringing (#3617). */
+      readonly trust_required: number;
+      /** @description Player may claim a staff-authored family (#3617). */
+      readonly allows_claim_family: boolean;
+      /** @description Player may name a new family with no authority (#3617). */
+      readonly allows_name_family: boolean;
+      /** @description Player has no family; the tarot surname ritual applies (#3617). */
+      readonly allows_no_family: boolean;
+      readonly claimable_kind_ids: number[];
+      /** @description Kind a player-named family gets; required when naming is allowed (#3617). */
+      readonly named_family_kind: number | null;
       readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
     /** @description Serializer for CG point budget configuration. */
@@ -26061,6 +26095,16 @@ export interface components {
       /** @description Day of month of the celebrated birthday / waking day. */
       birthday_day?: number | null;
       readonly family: components['schemas']['Family'];
+      readonly selected_origin_template: components['schemas']['CGOriginTemplate'];
+      /**
+       * @description Chosen family path when the Upbringing allows more than one.
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       readonly claimed_kin_slot: number;
       readonly claimed_kin_pool: number;
       defer_parents?: boolean;
@@ -26141,6 +26185,16 @@ export interface components {
       /** @description Day of month of the celebrated birthday / waking day. */
       birthday_day?: number | null;
       family_id?: number | null;
+      selected_origin_template_id?: number | null;
+      /**
+       * @description Chosen family path when the Upbringing allows more than one.
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
       defer_parents?: boolean;
@@ -29255,14 +29309,9 @@ export interface components {
       readonly id: number;
       /** @description Family/house name */
       name: string;
-      /**
-       * @description Whether this is a noble house, commoner family, or crime family
-       *
-       *     * `commoner` - Commoner
-       *     * `noble` - Noble
-       *     * `crime` - Crime
-       */
-      family_type?: components['schemas']['FamilyTypeEnum'];
+      readonly kind: components['schemas']['FamilyKind'];
+      /** @description How much authority this family holds over the world (#3617). 0 = none; player-named families are always 0. The price base for claim-path Upbringing choices (cost_per_influence x influence). */
+      influence?: number;
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
@@ -29274,18 +29323,27 @@ export interface components {
       /** @description Particle a married/adopted/legitimized member wears; '' when none. */
       readonly taken_in_particle: string;
     };
+    /** @description Serializer for a family's authored kind (#3617). */
+    FamilyKind: {
+      readonly id: number;
+      readonly name: string;
+      /** @description Orgs rooted in this kind are styled 'House <name>' and wear particles. */
+      readonly styles_as_house: boolean;
+    };
+    /**
+     * @description * `any` - Any path
+     *     * `claimed` - Claim a staff-authored family
+     *     * `named` - Name your own family
+     *     * `none` - No family
+     * @enum {string}
+     */
+    FamilyPathEnum: 'any' | 'claimed' | 'named' | 'none';
     /** @description Serializer for family selection and display. */
     FamilyRequest: {
       /** @description Family/house name */
       name: string;
-      /**
-       * @description Whether this is a noble house, commoner family, or crime family
-       *
-       *     * `commoner` - Commoner
-       *     * `noble` - Noble
-       *     * `crime` - Crime
-       */
-      family_type?: components['schemas']['FamilyTypeEnum'];
+      /** @description How much authority this family holds over the world (#3617). 0 = none; player-named families are always 0. The price base for claim-path Upbringing choices (cost_per_influence x influence). */
+      influence?: number;
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
@@ -29305,13 +29363,6 @@ export interface components {
       parentage: components['schemas']['ParentageEdge'][];
       unions: components['schemas']['UnionEdge'][];
     };
-    /**
-     * @description * `commoner` - Commoner
-     *     * `noble` - Noble
-     *     * `crime` - Crime
-     * @enum {string}
-     */
-    FamilyTypeEnum: 'commoner' | 'noble' | 'crime';
     /**
      * @description Serializer for judging a fashion presentation (#514).
      *
@@ -30683,8 +30734,8 @@ export interface components {
       readonly id: number;
       name: string;
       description?: string;
-      /** @description roster.Family.FamilyType the defined family gets. */
-      family_type: string;
+      /** @description The kind the defined family gets (#3617). */
+      kind: number;
       /** @description Full-match regex the proposed house name must satisfy — the realm's naming conventions as an automated gate. PLACEHOLDER. */
       name_pattern?: string;
       mercy_min?: number;
@@ -34127,7 +34178,7 @@ export interface components {
      * @enum {string}
      */
     OriginEnum: 'authored' | 'story' | 'player';
-    /** @description Slot prompt within an origin template (#2478). */
+    /** @description Slot prompt within an origin template (#2478, #3617). */
     OriginTemplateSlot: {
       readonly id: number;
       /** @description Slot name (part of natural key). */
@@ -34139,6 +34190,31 @@ export interface components {
       readonly sort_order: number;
       /** @description Required slots are marked in the post-CG finish-later editor. */
       readonly is_required: boolean;
+      /**
+       * @description Which family path shows this prompt; 'any' shows it always (#3617).
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      readonly applies_to: components['schemas']['AppliesToEnum'];
+      /** @description Player may write a free-text answer (the 'other' box on a pick-list) (#3617). */
+      readonly allows_text: boolean;
+      readonly choices: components['schemas']['OriginTemplateSlotChoice'][];
+    };
+    /** @description One priced answer on a pick-list Upbringing prompt (#3617). */
+    OriginTemplateSlotChoice: {
+      readonly id: number;
+      /** @description Choice label (part of natural key). */
+      readonly name: string;
+      /** @description Player-facing blurb. */
+      readonly description: string;
+      /** @description Flat CG cost of this choice. */
+      readonly cg_point_cost: number;
+      /** @description CG cost per point of the claimed family's influence. */
+      readonly cost_per_influence: number;
+      readonly sort_order: number;
     };
     /**
      * @description * `unsatisfied` - Unsatisfied
@@ -37721,6 +37797,16 @@ export interface components {
       /** @description Day of month of the celebrated birthday / waking day. */
       birthday_day?: number | null;
       family_id?: number | null;
+      selected_origin_template_id?: number | null;
+      /**
+       * @description Chosen family path when the Upbringing allows more than one.
+       *
+       *     * `any` - Any path
+       *     * `claimed` - Claim a staff-authored family
+       *     * `named` - Name your own family
+       *     * `none` - No family
+       */
+      family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
       defer_parents?: boolean;
@@ -50089,6 +50175,7 @@ export interface operations {
       query?: {
         area_id?: string;
         has_open_positions?: boolean;
+        kind?: number[];
       };
       header?: never;
       path?: never;
@@ -50423,7 +50510,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Origin Template. */
+        /** @description A unique integer value identifying this Upbringing. */
         id: number;
       };
       cookie?: never;
@@ -72154,6 +72241,7 @@ export interface operations {
       query?: {
         area_id?: string;
         has_open_positions?: boolean;
+        kind?: number[];
       };
       header?: never;
       path?: never;

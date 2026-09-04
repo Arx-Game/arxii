@@ -100,6 +100,7 @@ class TestSeededCharacterCreation(TestCase):
     def test_finalize_character_works_on_seeded_only_db(self) -> None:
         from evennia.accounts.models import AccountDB
 
+        from world.character_creation.factories import make_unknown_upbringing
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.character_sheets.models import CharacterSheet
@@ -138,6 +139,8 @@ class TestSeededCharacterCreation(TestCase):
             name="average_build"
         )
         tarot = TarotCard.objects.get(name="The Fool")
+        # (#3617) An amnesiac Upbringing stands in for the retired orphan flag.
+        unknown_upbringing = make_unknown_upbringing(beginnings)
 
         # The seeded magic cluster / loaded catalog provides the Unbound
         # tradition + a Gift/technique pool for every PROSPECT path (#2426/#2474).
@@ -163,7 +166,6 @@ class TestSeededCharacterCreation(TestCase):
             "first_name": "Seeded",
             "description": "A character finalized against seeded-only content.",
             "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 2),
-            "lineage_is_orphan": True,
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "traits_complete": True,
@@ -178,6 +180,7 @@ class TestSeededCharacterCreation(TestCase):
             account=account,
             selected_area=area,
             selected_beginnings=beginnings,
+            selected_origin_template=unknown_upbringing,
             selected_species=species,
             selected_gender=gender,
             selected_path=path,
