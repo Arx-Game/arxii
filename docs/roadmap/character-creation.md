@@ -13,10 +13,12 @@ Appearance, Identity, and Final Touches moved off the interview shell's carried-
 card/badge/accordion markup onto the folio primitives (entries, instrument frames,
 fields, choice rows). `CGPointsWidget` is retired; the CG points purse now sits at
 the head of the Distinctions and Final Touches instruments instead of a standalone
-sticky card. Three primitives were added to the folio chassis to carry this work:
-`ChoiceRow` (a segmented choice), `Field` (an inscription label over a control), and
-`Paragraphs` (blank-line-separated prose split into paragraphs). Lineage keeps its
-pre-Folio markup, deferred to a Plan C once #3617 lands.
+sticky card. Four primitives were added to the folio chassis to carry this work:
+`ChoiceRow` (a segmented choice), `Field` (an inscription label over a control),
+`Paragraphs` (blank-line-separated prose split into paragraphs), and `CodexLine`
+(the "Codex: {name}" line an entry body carries when the thing it describes has a
+codex entry, and nothing at all when it does not). Lineage keeps its pre-Folio
+markup, deferred to a Plan C once #3617 lands.
 
 ## Built (2026-07-25, #2698 — character-creation family stops inventing content; ratchet at zero)
 

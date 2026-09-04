@@ -1,5 +1,7 @@
 # Species Selection Drill-Down Design
 
+Note (2026-09-04, #3630): `SpeciesCard` was folded into the folio `Entry`; the drill-down now lives in `HeritageStage.tsx` as a closed parent entry with a nested list.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace the flat species grid in character creation with a two-level drill-down that groups subspecies under their parent species.

@@ -284,8 +284,10 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "identity_personality_heading": "Personality",
     "identity_worship_heading": "Worship",
     "finaltouches_how_note": (
-        "Each goal takes points from a pool of thirty. Spend more on the goals that matter "
-        "most; a goal with no points is a note to yourself, not a commitment."
+        "Each goal takes points from a pool of thirty. During play a goal can be invoked to "
+        "add its point value as a bonus to a roll, up to twice your total goal points per "
+        "day. Spend more on the goals that matter most; a goal with no points is a note to "
+        "yourself, not a commitment."
     ),  # PLACEHOLDER: Apostate rewrite
 }
 
