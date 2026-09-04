@@ -3600,7 +3600,13 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Clear a character's origin-story slot answer (#2478). */
+    /**
+     * @description Clear a character's origin-story slot answer (#2478, #3617).
+     *
+     *     A slot holding a costed choice was set at character creation; a
+     *     non-staff caller clearing it here would erase a priced pick for free,
+     *     so that combination is refused the same way setting one is.
+     */
     post: operations['character_sheets_clear_origin_slot_create'];
     delete?: never;
     options?: never;
