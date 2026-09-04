@@ -14,6 +14,17 @@ them into one Sentry event. No state is kept here on purpose.
 Events carrying BRIDGE_MARKER come from log_bridge.TwistedLogHandler (Django
 records re-emitted into Twisted so they reach server.log). Sentry already
 captured those through its stdlib integration, so they are skipped here.
+
+Events carrying ``log_io`` are twistd's captured standard IO and are skipped
+for a different reason: their level is a fiction. ``LogBeginner.beginLoggingTo``
+redirects the daemons' streams as ``[("stdout", info), ("stderr", error)]``, so
+settings.LOGGING's console StreamHandler turns *every* Python log record - INFO
+included - into an error-level Twisted event. Forwarding those made each Sentry
+send that logged anything on its way out (a urllib3 connection retry, a 429)
+produce a fresh error event, which produced another send: an unbounded feedback
+loop that pinned the reactor and stopped the Server ever answering on the
+2026-09-04 deploy. The level here says which stream a line came from, not how
+bad it is, so it is not a level at all.
 """
 
 import sys
@@ -25,6 +36,10 @@ from twisted.logger import LogLevel, formatEvent, globalLogPublisher
 from evennia_extensions.observability.log_bridge import BRIDGE_MARKER
 
 SENTRY_LOGGER_TAG = "evennia.twisted"
+
+# The key twisted.logger.LoggingFile stamps on every line it captures from a
+# redirected sys.stdout / sys.stderr (it emits format="{log_io}", log_io=line).
+CAPTURED_IO_KEY = "log_io"
 
 _FORWARDED_LEVELS = frozenset({LogLevel.error, LogLevel.critical})
 _installed = False
@@ -41,6 +56,8 @@ def _stamp_logger(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any
 def sentry_log_observer(event: dict[str, Any]) -> None:
     """Twisted log observer: send error-level events to Sentry."""
     if event.get(BRIDGE_MARKER):
+        return
+    if CAPTURED_IO_KEY in event:
         return
     if event.get("log_level") not in _FORWARDED_LEVELS:
         return

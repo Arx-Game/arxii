@@ -13,7 +13,7 @@ from typing import Any
 from django.test import SimpleTestCase
 import sentry_sdk
 from sentry_sdk.integrations.dedupe import DedupeIntegration
-from twisted.logger import Logger, LogLevel, globalLogPublisher
+from twisted.logger import Logger, LoggingFile, LogLevel, globalLogPublisher
 
 FAKE_DSN = "https://examplePublicKey@o0.ingest.sentry.invalid/0"
 
@@ -80,6 +80,25 @@ class SentryObserverTests(SimpleTestCase):
 
         evennia_logger.log_info("server started")
         evennia_logger.log_warn("slow tick")
+
+        self.assertEqual(self.events, [])
+
+    def test_twistd_captured_stderr_is_not_forwarded(self) -> None:
+        """twistd redirects sys.stderr into Twisted's log at ERROR level.
+
+        LogBeginner.beginLoggingTo maps ``[("stdout", info), ("stderr", error)]``,
+        so settings.LOGGING's console StreamHandler turns every Python log
+        record - INFO and WARNING included - into an error-level Twisted event
+        once the daemons are running. Forwarding those to Sentry made each
+        failed/throttled Sentry send emit another urllib3 warning, which became
+        another error event: the unbounded feedback loop that stopped the Server
+        answering on the 2026-09-04 deploy. Captured standard IO carries
+        ``log_io``; its level says which stream it came from, not how bad it is.
+        """
+        stderr = LoggingFile(logger=Logger(namespace="stderr"), level=LogLevel.error)
+
+        stderr.write("[INFO] world.game_clock.scheduler GameTickScript already exists\n")
+        stderr.write("[WARNING] urllib3.connectionpool Retrying after connection broken\n")
 
         self.assertEqual(self.events, [])
 

@@ -1,11 +1,17 @@
 """Route Python ``logging`` records into Twisted's log so they reach server.log.
 
-In production the game runs as a twistd daemon with stdout and stderr on
-/dev/null, and settings.LOGGING only ever had a StreamHandler, so every
-Django log line (django.request 500s, world.* warnings, the API exception
-handler's traceback) was discarded. Evennia writes server.log from a
-Twisted file observer, so re-emitting each record as a Twisted event is
-the shortest path into that file (#3599).
+In production the game runs as a twistd daemon and settings.LOGGING only ever
+had a StreamHandler, so every Django log line (django.request 500s, world.*
+warnings, the API exception handler's traceback) reached server.log only by
+accident and at the wrong level: twistd redirects the daemons' streams into
+Twisted's log as ``[("stdout", info), ("stderr", error)]``, so a console
+StreamHandler's INFO lands in server.log marked ``[EE]``. Evennia writes
+server.log from a Twisted file observer, so re-emitting each record as a
+Twisted event is the shortest path into that file at its real level (#3599).
+
+Those accidental stderr copies are still written (each Django line appears in
+server.log twice, once mislabelled) - sentry_twisted skips them by their
+``log_io`` key so they cannot be reported as errors.
 
 Every event is stamped with BRIDGE_MARKER so sentry_twisted skips it:
 Sentry already captured the record through its stdlib logging integration.
