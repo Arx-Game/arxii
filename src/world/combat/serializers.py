@@ -118,10 +118,29 @@ class OpponentSerializer(serializers.ModelSerializer):
     to be able to look at an opponent and gauge whether they're punching up
     or down, so unlike soak_value/probing_threshold this is not wrapped in a
     SerializerMethodField behind ``_is_gm_or_staff``.
+
+    Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+    are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+    are public derived booleans, since the room narration has already told
+    everyone the boss enraged or its wall broke.
     """
 
     soak_value = serializers.SerializerMethodField()
     probing_threshold = serializers.SerializerMethodField()
+    # GM-only boss/morale readouts (#3552) - None for everyone else, the same
+    # gate as soak_value / probing_threshold. Public badges derive from state
+    # the room has already been narrated (phase line, enrage line, break
+    # celebration), never from surge records (curve-gated, ADR-0098).
+    phase_count = serializers.SerializerMethodField()
+    damage_multiplier = serializers.SerializerMethodField()
+    break_bar_current = serializers.SerializerMethodField()
+    break_bar_threshold = serializers.SerializerMethodField()
+    vulnerability_rounds_remaining = serializers.SerializerMethodField()
+    morale = serializers.SerializerMethodField()
+    max_morale = serializers.SerializerMethodField()
+    morale_state = serializers.SerializerMethodField()
+    is_enraged = serializers.SerializerMethodField()
+    is_wall_broken = serializers.SerializerMethodField()
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
@@ -153,6 +172,16 @@ class OpponentSerializer(serializers.ModelSerializer):
             "probing_current",
             "probing_threshold",
             "current_phase",
+            "phase_count",
+            "damage_multiplier",
+            "break_bar_current",
+            "break_bar_threshold",
+            "vulnerability_rounds_remaining",
+            "morale",
+            "max_morale",
+            "morale_state",
+            "is_enraged",
+            "is_wall_broken",
             "status",
             "active_conditions",
             "thumbnail_url",
@@ -176,6 +205,52 @@ class OpponentSerializer(serializers.ModelSerializer):
     def get_probing_threshold(self, obj: CombatOpponent) -> int | None:
         """Probing threshold — GM/staff only."""
         return obj.probing_threshold if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_phase_count(self, obj: CombatOpponent) -> int | None:
+        """How many authored phases this boss has - GM/staff, BOSS tier only."""
+        if not self._is_gm_or_staff() or obj.tier != OpponentTier.BOSS:
+            return None
+        return obj.phases.count()
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_damage_multiplier(self, obj: CombatOpponent) -> str | None:
+        return str(obj.damage_multiplier) if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_break_bar_current(self, obj: CombatOpponent) -> int | None:
+        return obj.break_bar_current if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_break_bar_threshold(self, obj: CombatOpponent) -> int | None:
+        return obj.break_bar_threshold if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_vulnerability_rounds_remaining(self, obj: CombatOpponent) -> int | None:
+        return obj.vulnerability_rounds_remaining if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_morale(self, obj: CombatOpponent) -> int | None:
+        return obj.morale if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_max_morale(self, obj: CombatOpponent) -> int | None:
+        return obj.max_morale if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_morale_state(self, obj: CombatOpponent) -> str | None:
+        """Derived STEADY/FALTER/BREAK - pure arithmetic, no query."""
+        from world.combat.morale import morale_state_for  # noqa: PLC0415
+
+        return morale_state_for(obj).value if self._is_gm_or_staff() else None
+
+    def get_is_enraged(self, obj: CombatOpponent) -> bool:
+        """Public: the enrage line has fired (a transition raised the multiplier)."""
+        return obj.current_phase > 1 and obj.damage_multiplier > 1
+
+    def get_is_wall_broken(self, obj: CombatOpponent) -> bool:
+        """Public: the break celebration named this boss and the window is open."""
+        return obj.vulnerability_rounds_remaining > 0
 
     def get_active_conditions(self, obj: CombatOpponent) -> list[dict[str, Any]]:
         """Active conditions on this opponent's in-world ObjectDB.
