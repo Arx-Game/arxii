@@ -224,14 +224,12 @@ function AddConditionRow({
   const [minimumValue, setMinimumValue] = useState('1');
   const [fameTier, setFameTier] = useState('');
 
-  const refOptions =
-    conditionType === 'species'
-      ? catalogs.species
-      : conditionType === 'resonance_min'
-        ? catalogs.resonances
-        : conditionType === 'distinction'
-          ? catalogs.distinctions
-          : [];
+  const refOptionsByType: Record<string, { id: number; name: string }[]> = {
+    species: catalogs.species,
+    resonance_min: catalogs.resonances,
+    distinction: catalogs.distinctions,
+  };
+  const refOptions = refOptionsByType[conditionType] ?? [];
   const needsRef = refOptions.length > 0 || conditionType === 'renown_min';
   const canAdd =
     conditionType !== '' &&
