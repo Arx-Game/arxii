@@ -37,7 +37,11 @@ from world.progression.models import DevelopmentPoints, ExperiencePointsData, Ma
 from world.progression.types import ProgressionReason
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import DifficultyChoice
+from world.scenes.constants import InteractionMode
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Interaction
+from world.scenes.narrator import NARRATOR_PERSONA_NAME
+from world.scenes.services import active_persona_for_sheet
 from world.societies.factories import OrganizationFactory
 from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
@@ -872,6 +876,46 @@ class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):
             target=self.target, condition=self.condition_template
         )
         self.assertEqual(instance.rounds_remaining, self.condition_template.default_duration_value)
+
+    def test_note_is_broadcast_as_a_narrator_outcome_line(self) -> None:
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+            note="The wine was poisoned.",
+        )
+        self.assertTrue(result.success, result.message)
+        line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        self.assertEqual(line.persona.name, NARRATOR_PERSONA_NAME)
+        self.assertEqual(line.scene, self.scene)
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        self.assertEqual(
+            line.content,
+            f"{presenting} is now {self.condition_template.name}. The wine was poisoned.",
+        )
+        self.assertFalse(line.receivers.exists())
+
+    def test_apply_without_note_broadcasts_nothing(self) -> None:
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(Interaction.objects.filter(mode=InteractionMode.OUTCOME).exists())
+
+    def test_hidden_condition_note_reaches_only_the_target(self) -> None:
+        hidden = ConditionTemplateFactory(name="Adjudication Marked", is_visible_to_others=False)
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=hidden.name,
+            note="A brand only you can feel.",
+        )
+        self.assertTrue(result.success, result.message)
+        line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        receiver_ids = list(line.receivers.values_list("persona_id", flat=True))
+        self.assertEqual(receiver_ids, [active_persona_for_sheet(self.target.sheet_data).pk])
 
 
 class GMRemoveConditionActionTests(GMAdjudicationActionsTestBase):

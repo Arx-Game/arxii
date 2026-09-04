@@ -27,6 +27,8 @@ from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.conditions.models import ConditionTemplate
+
 
 _CATALOG_HINT = "No such check -- try `gm check find <term>`."
 
@@ -598,6 +600,35 @@ def _resolve_condition_bounds(kwargs: dict[str, Any]) -> tuple[int, int | None] 
     return severity, duration_rounds
 
 
+def _narrate_gm_condition(
+    actor: ObjectDB, target: ObjectDB, template: ConditionTemplate, note: str
+) -> None:
+    """Broadcast the GM's note as a Narrator OUTCOME line (#3554).
+
+    Only called when a note was given: a note-less apply stays silent and the GM
+    narrates with the composer if they want to. The target is named by the face they
+    are presenting (#981), never ``target.key``. A condition others cannot see routes
+    the line to the target alone.
+    """
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        get_active_scene,
+        record_interaction,
+    )
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    target_persona = active_persona_for_sheet(target.sheet_data)
+    record_interaction(
+        character=actor,
+        content=f"{target_persona.name} is now {template.name}. {note}",
+        mode=InteractionMode.OUTCOME,
+        scene=get_active_scene(actor.location),
+        persona=get_or_create_narrator_persona(),
+        receivers=None if template.is_visible_to_others else [target_persona],
+    )
+
+
 @dataclass
 class GMApplyConditionAction(Action):
     """JUNIOR-tier GM action: apply an authored ``ConditionTemplate`` by fiat (#2118).
@@ -610,7 +641,8 @@ class GMApplyConditionAction(Action):
     ``template.default_duration_value``); the model defines no upper bound on
     either field, so Decision 5 is honored by failing loud on a non-positive
     value rather than silently clamping one. ``note`` is narration only (stored as
-    ``source_description``) -- it never becomes a mechanical effect. Gated on
+    ``source_description`` and, when given, broadcast as a Narrator OUTCOME line,
+    #3554) -- it never becomes a mechanical effect. Gated on
     ``IsSceneGMPrerequisite`` + ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)``.
     """
 
@@ -657,6 +689,9 @@ class GMApplyConditionAction(Action):
                 success=False,
                 message=f"{template.name} was not applied ({result.message}).",
             )
+
+        if note:
+            _narrate_gm_condition(actor, target, template, note)
 
         return ActionResult(success=True, message=f"{target.key} is now {template.name}.")
 
