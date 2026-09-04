@@ -607,9 +607,11 @@ def _narrate_gm_condition(
 
     Only called when a note was given: a note-less apply stays silent and the GM
     narrates with the composer if they want to. The target is named by the face they
-    are presenting (#981), never ``target.key``. A condition others cannot see routes
-    the line to the target alone. The direct text send is the telnet companion;
-    ``record_interaction`` reaches only web clients.
+    are presenting (#981), never ``target.key``, when they have one. A condition
+    others cannot see routes the line to the target alone. The direct text send is
+    the telnet companion; ``record_interaction`` reaches only web clients. A
+    sheetless target (a prop, an unsheeted NPC) is named by its key; a hidden
+    condition on one records nothing, since there is no bearer to tell.
     """
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
@@ -619,8 +621,13 @@ def _narrate_gm_condition(
     from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-    target_persona = active_persona_for_sheet(target.sheet_data)
-    narration = f"{target_persona.name} is now {template.name}. {note}"
+    sheet = target.character_sheet
+    target_persona = active_persona_for_sheet(sheet) if sheet is not None else None
+    if target_persona is None and not template.is_visible_to_others:
+        return  # a hidden condition on a sheetless object has no bearer to tell
+
+    label = target_persona.name if target_persona is not None else target.key
+    narration = f"{label} is now {template.name}. {note}"
     record_interaction(
         character=actor,
         content=narration,
@@ -629,9 +636,9 @@ def _narrate_gm_condition(
         persona=get_or_create_narrator_persona(),
         receivers=None if template.is_visible_to_others else [target_persona],
     )
-    if template.is_visible_to_others:
-        if actor.location is not None:
-            actor.location.msg_contents(narration)
+    room = actor.location if template.is_visible_to_others else None
+    if room is not None:
+        room.msg_contents(narration)
     else:
         target.msg(narration)
 
