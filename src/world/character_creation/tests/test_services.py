@@ -228,8 +228,9 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         )
 
         draft = self._create_complete_draft(first_name="Origin Test")
+        draft.selected_origin_template = template
         draft.draft_data["origin_slots"] = {str(slot.id): "Mira cut the lock."}
-        draft.save(update_fields=["draft_data"])
+        draft.save(update_fields=["selected_origin_template", "draft_data"])
 
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data

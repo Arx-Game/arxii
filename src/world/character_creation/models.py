@@ -1093,15 +1093,43 @@ class CharacterDraft(SharedMemoryModel):
             return allowed[0]
         return self.family_path if self.family_path in allowed else ""
 
+    def visible_origin_slot_ids(self) -> set[int]:
+        """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).
+
+        A slot applies when ``applies_to`` is ANY or matches the resolved
+        path; a slot scoped to a path the draft is not currently on is
+        hidden, and its answer/choice must be ignored everywhere (pricing,
+        finalize persistence), mirroring ``validators._get_prompt_errors``.
+        """
+        template = self.selected_origin_template
+        if template is None:
+            return set()
+        path = self.resolve_family_path()
+        return {
+            slot_id
+            for slot_id, applies_to in template.slots.values_list("id", "applies_to")
+            if applies_to in (FamilyPath.ANY, path)
+        }
+
     def calculate_upbringing_cost(self) -> int:
-        """Upbringing flat cost + each picked choice priced against the claimed family (#3617)."""
+        """Upbringing flat cost + each picked choice priced against the claimed family (#3617).
+
+        Only choices on slots visible under the resolved family path are
+        priced: a choice on a slot the current path hides was answered
+        before a path switch and must not be charged for (#3617 review).
+        """
         template = self.selected_origin_template
         if template is None:
             return 0
         path = self.resolve_family_path()
         influence = self.family.influence if (path == FamilyPath.CLAIMED and self.family) else 0
+        visible_slot_ids = self.visible_origin_slot_ids()
         picks = self.draft_data.get("origin_choices") or {}
-        ids = [int(v) for v in picks.values() if v is not None]
+        ids = [
+            int(choice_id)
+            for slot_id, choice_id in picks.items()
+            if choice_id is not None and int(slot_id) in visible_slot_ids
+        ]
         total = template.cg_point_cost
         if ids:
             for choice in OriginTemplateSlotChoice.objects.filter(

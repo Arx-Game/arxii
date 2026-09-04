@@ -199,3 +199,82 @@ class PostCGOriginSlotAPITest(TestCase):
         row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
         assert row.choice == choice
         assert row.value == "A fuller account."
+
+    def test_player_cannot_clear_a_choice_backed_slot(self) -> None:
+        """A non-staff caller cannot clear a slot holding a costed choice (#3617)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+
+        staff_account = AccountFactory(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_account)
+        staff_client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+
+        response = self.client.post(
+            self._url("clear-origin-slot"),
+            {"slot_id": slot.id},
+            format="json",
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Upbringing choices are set at character creation."
+        assert CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()
+
+    def test_player_can_clear_a_text_only_slot(self) -> None:
+        """A non-staff caller can still clear a plain write-in slot (#3617)."""
+        from world.character_creation.factories import OriginTemplateSlotFactory
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+
+        response = self.client.post(
+            self._url("clear-origin-slot"),
+            {"slot_id": slot.id},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert not CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()
+
+    def test_staff_can_clear_a_choice_backed_slot(self) -> None:
+        """Staff may clear a slot holding a costed choice (#3617)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import (
+            OriginTemplateSlotChoiceFactory,
+            OriginTemplateSlotFactory,
+        )
+        from world.character_creation.models import CharacterOriginSlot
+
+        slot = OriginTemplateSlotFactory()
+        choice = OriginTemplateSlotChoiceFactory(slot=slot)
+
+        staff_account = AccountFactory(is_staff=True)
+        staff_client = APIClient()
+        staff_client.force_authenticate(user=staff_account)
+        staff_client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "", "choice_id": choice.id},
+            format="json",
+        )
+
+        response = staff_client.post(
+            self._url("clear-origin-slot"),
+            {"slot_id": slot.id},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert not CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()

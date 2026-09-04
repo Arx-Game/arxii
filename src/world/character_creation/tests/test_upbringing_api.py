@@ -13,7 +13,12 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
 )
 from world.character_creation.models import CharacterDraft
-from world.roster.factories import FamilyKindFactory
+from world.roster.factories import (
+    FamilyFactory,
+    FamilyKindFactory,
+    KinSlotPoolFactory,
+    KinspersonFactory,
+)
 
 
 class UpbringingListTest(TestCase):
@@ -148,3 +153,41 @@ class DraftUpbringingPatchTest(TestCase):
         self.client.patch(self.url, {"selected_origin_template_id": second.id}, format="json")
         draft = CharacterDraft.objects.get(pk=self.draft.pk)
         assert "new_family_name" not in draft.draft_data
+
+    def test_switching_family_path_clears_claimed_family_and_kin_claims(self):
+        """A PATCH that switches paths drops the old path's family/kin claims (#3617 review)."""
+        self.client.patch(
+            self.url, {"selected_origin_template_id": self.template.id}, format="json"
+        )
+        self.client.patch(self.url, {"family_path": FamilyPath.CLAIMED}, format="json")
+        draft = CharacterDraft.objects.get(pk=self.draft.pk)
+        draft.family = FamilyFactory()
+        draft.claimed_kin_slot = KinspersonFactory()
+        draft.claimed_kin_pool = KinSlotPoolFactory()
+        draft.save(update_fields=["family", "claimed_kin_slot", "claimed_kin_pool"])
+
+        res = self.client.patch(self.url, {"family_path": FamilyPath.NAMED}, format="json")
+        assert res.status_code == 200
+
+        draft.refresh_from_db()
+        assert draft.family_path == FamilyPath.NAMED
+        assert draft.family is None
+        assert draft.claimed_kin_slot is None
+        assert draft.claimed_kin_pool is None
+
+    def test_patching_the_same_family_path_is_a_noop(self):
+        self.client.patch(
+            self.url, {"selected_origin_template_id": self.template.id}, format="json"
+        )
+        self.client.patch(self.url, {"family_path": FamilyPath.CLAIMED}, format="json")
+        draft = CharacterDraft.objects.get(pk=self.draft.pk)
+        family = FamilyFactory()
+        draft.family = family
+        draft.save(update_fields=["family"])
+
+        res = self.client.patch(self.url, {"family_path": FamilyPath.CLAIMED}, format="json")
+        assert res.status_code == 200
+
+        draft.refresh_from_db()
+        assert draft.family_path == FamilyPath.CLAIMED
+        assert draft.family == family

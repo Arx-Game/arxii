@@ -16,7 +16,12 @@ from world.character_creation.factories import (
 from world.character_creation.services import select_origin_template, set_family_path
 from world.character_creation.validators import get_lineage_errors
 from world.roster.constants import CRIME_KIND_NAME, NOBLE_KIND_NAME
-from world.roster.factories import FamilyFactory, FamilyKindFactory
+from world.roster.factories import (
+    FamilyFactory,
+    FamilyKindFactory,
+    KinSlotPoolFactory,
+    KinspersonFactory,
+)
 
 
 def _draft_for(template, **extra):
@@ -73,6 +78,16 @@ class LineagePathValidationTest(TestCase):
         assert get_lineage_errors(draft) == ["That family is not from your starting area"]
         draft.family = FamilyFactory(kind=crime, origin_realm=realm)
         assert get_lineage_errors(draft) == []
+
+    def test_claim_path_rejects_a_non_playable_family(self):
+        crime = FamilyKindFactory(name=CRIME_KIND_NAME)
+        template = OriginTemplateFactory(
+            allows_name_family=False, named_family_kind=None, allows_claim_family=True
+        )
+        realm = template.beginning.starting_area.realm
+        draft = _draft_for(template)
+        draft.family = FamilyFactory(kind=crime, origin_realm=realm, is_playable=False)
+        assert get_lineage_errors(draft) == ["That family is not open to this upbringing"]
 
     def test_trust_gated_upbringing_is_rejected(self):
         template = OriginTemplateFactory(trust_required=5)
@@ -178,6 +193,25 @@ class UpbringingPricingTest(TestCase):
         draft.draft_data["origin_choices"] = {str(slot.id): head.id}
         assert draft.calculate_upbringing_cost() == 2
 
+    def test_hidden_slot_choice_is_excluded_after_path_switch(self):
+        """A claim-only choice picked before a path switch is not priced (#3617 review)."""
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Role", allows_text=False, applies_to=FamilyPath.CLAIMED
+        )
+        choice = OriginTemplateSlotChoiceFactory(slot=slot, cost_per_influence=3)
+        family = FamilyFactory(influence=2, origin_realm=template.beginning.starting_area.realm)
+        draft = _draft_for(template, family_path=FamilyPath.CLAIMED, family=family)
+        draft.draft_data["origin_choices"] = {str(slot.id): choice.id}
+        draft.save(update_fields=["draft_data"])
+        assert draft.calculate_upbringing_cost() == template.cg_point_cost + 6
+
+        set_family_path(draft, FamilyPath.NAMED)
+        draft.draft_data["new_family_name"] = "Vale"
+        draft.save(update_fields=["draft_data"])
+
+        assert draft.calculate_upbringing_cost() == template.cg_point_cost
+
     def test_over_budget_shows_on_the_heritage_stage(self):
         self.template.cg_point_cost = 10_000
         self.template.save()
@@ -212,3 +246,39 @@ class SelectionServiceTest(TestCase):
             set_family_path(draft, FamilyPath.NONE)
         set_family_path(draft, FamilyPath.NAMED)
         assert draft.family_path == FamilyPath.NAMED
+
+    def test_set_family_path_switch_clears_stale_family_state(self):
+        """Switching paths drops the old path's family/kin claims (#3617 review).
+
+        Prompts (origin_slots) are not path-anchored the same way: a slot with
+        ``applies_to=ANY`` still applies after the switch, so they survive.
+        """
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        family = FamilyFactory()
+        kin_slot = KinspersonFactory()
+        kin_pool = KinSlotPoolFactory()
+        draft = _draft_for(
+            template,
+            family_path=FamilyPath.CLAIMED,
+            family=family,
+            claimed_kin_slot=kin_slot,
+            claimed_kin_pool=kin_pool,
+            draft_data={"new_family_name": "stale", "origin_slots": {"1": "kept"}},
+        )
+        set_family_path(draft, FamilyPath.NAMED)
+        draft.refresh_from_db()
+        assert draft.family_path == FamilyPath.NAMED
+        assert draft.family is None
+        assert draft.claimed_kin_slot is None
+        assert draft.claimed_kin_pool is None
+        assert "new_family_name" not in draft.draft_data
+        assert draft.draft_data["origin_slots"] == {"1": "kept"}
+
+    def test_set_family_path_same_path_is_a_noop(self):
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=True)
+        family = FamilyFactory()
+        draft = _draft_for(template, family_path=FamilyPath.CLAIMED, family=family)
+        set_family_path(draft, FamilyPath.CLAIMED)
+        draft.refresh_from_db()
+        assert draft.family_path == FamilyPath.CLAIMED
+        assert draft.family == family

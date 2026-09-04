@@ -3,13 +3,14 @@
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.constants import FamilyPath
 from world.character_creation.factories import (
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
 )
 from world.character_creation.models import CharacterOriginSlot
-from world.character_creation.services import finalize_character
+from world.character_creation.services import finalize_character, set_family_path
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.roster.constants import COMMONER_KIND_NAME, CRIME_KIND_NAME
 from world.roster.factories import FamilyFactory, FamilyKindFactory
@@ -123,3 +124,89 @@ class NoFamilyFinalizeTest(FinalizationTestMixin, TestCase):
 
         assert sheet.family is None
         assert sheet.tarot_card == self.tarot_card
+
+
+class PathSwitchFinalizeTest(FinalizationTestMixin, TestCase):
+    """A path switch after a claim invalidates that claim, all the way to finalize (#3617)."""
+
+    def setUp(self) -> None:
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="path_switch_finalize")
+        self._setup_finalization_base(self, prefix="Path Switch", height_min=700, height_max=800)
+
+    def test_switching_from_claimed_to_named_finalizes_with_the_new_family(self) -> None:
+        """The stale claimed family is dropped; the character gets the NEW named one."""
+        crime = FamilyKindFactory(name=CRIME_KIND_NAME)
+        template = OriginTemplateFactory(
+            beginning=self.beginnings, allows_claim_family=True, allows_name_family=True
+        )
+        claimed_family = FamilyFactory(kind=crime, origin_realm=self.area.realm)
+        draft = self._create_base_draft()
+        draft.selected_origin_template = template
+        draft.family_path = FamilyPath.CLAIMED
+        draft.family = claimed_family
+        draft.save()
+
+        set_family_path(draft, FamilyPath.NAMED)
+        draft.draft_data["new_family_name"] = "The Newcomers"
+        draft.save(update_fields=["draft_data"])
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        new_family = Family.objects.get(name="The Newcomers")
+        assert sheet.family == new_family
+        assert sheet.family != claimed_family
+
+    def test_switching_to_none_path_finalizes_with_no_family(self) -> None:
+        crime = FamilyKindFactory(name=CRIME_KIND_NAME)
+        template = OriginTemplateFactory(
+            beginning=self.beginnings,
+            allows_name_family=False,
+            named_family_kind=None,
+            allows_claim_family=True,
+            allows_no_family=True,
+        )
+        claimed_family = FamilyFactory(kind=crime, origin_realm=self.area.realm)
+        draft = self._create_base_draft()
+        draft.selected_origin_template = template
+        draft.family_path = FamilyPath.CLAIMED
+        draft.family = claimed_family
+        draft.save()
+
+        set_family_path(draft, FamilyPath.NONE)
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        assert sheet.family is None
+
+    def test_hidden_slot_choice_is_not_persisted_after_path_switch(self) -> None:
+        """A costed claim-only choice picked before switching to NAMED is dropped, not stored."""
+        crime = FamilyKindFactory(name=CRIME_KIND_NAME)
+        template = OriginTemplateFactory(
+            beginning=self.beginnings, allows_claim_family=True, allows_name_family=True
+        )
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Role", allows_text=False, applies_to=FamilyPath.CLAIMED
+        )
+        choice = OriginTemplateSlotChoiceFactory(slot=slot, cost_per_influence=3)
+        claimed_family = FamilyFactory(kind=crime, influence=2, origin_realm=self.area.realm)
+        draft = self._create_base_draft()
+        draft.selected_origin_template = template
+        draft.family_path = FamilyPath.CLAIMED
+        draft.family = claimed_family
+        draft.draft_data["origin_choices"] = {str(slot.id): choice.id}
+        draft.save()
+        assert draft.calculate_upbringing_cost() == template.cg_point_cost + 6
+
+        set_family_path(draft, FamilyPath.NAMED)
+        draft.draft_data["new_family_name"] = "Vale"
+        draft.save(update_fields=["draft_data"])
+        assert draft.calculate_upbringing_cost() == template.cg_point_cost
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        assert not CharacterOriginSlot.objects.filter(sheet=sheet, slot=slot).exists()

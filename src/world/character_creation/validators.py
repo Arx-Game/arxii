@@ -192,6 +192,8 @@ def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
     family = draft.family
     if family is None:
         return ["Select a family"]
+    if not family.is_playable:
+        return ["That family is not open to this upbringing"]
     kinds = list(template.claimable_kinds.all())
     if kinds and family.kind not in kinds:
         return ["That family is not open to this upbringing"]
