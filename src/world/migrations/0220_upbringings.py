@@ -5,84 +5,17 @@ import django.db.models.deletion
 
 import core.natural_keys
 
-STARTER_KNOWN = ("Known family", "You were raised by a family you can name.")
-STARTER_UNKNOWN = ("Unknown", "Your origins are unknown to you.")
-
-
-def create_starter_for(origin_template_model, commoner, beginning, *, family_known):
-    """One starter Upbringing per beginning, derived from the retired flag (#3617)."""
-    if family_known:
-        name, frame = STARTER_KNOWN
-        return origin_template_model.objects.create(
-            beginning=beginning,
-            name=name,
-            frame_narrative=frame,
-            allows_claim_family=True,
-            allows_name_family=True,
-            named_family_kind=commoner,
-        )
-    name, frame = STARTER_UNKNOWN
-    return origin_template_model.objects.create(
-        beginning=beginning,
-        name=name,
-        frame_narrative=frame,
-        allows_no_family=True,
-    )
-
-
-def apply_family_known(OriginTemplate, commoner, beginning, *, family_known):  # noqa: N803
-    """Carry one Beginning's retired flag onto its Upbringings (#3617).
-
-    No existing OriginTemplate rows: create a single starter Upbringing.
-    Otherwise widen every existing row with the family path the flag implies,
-    rather than adding a new one, so a beginning already carrying authored
-    Upbringings keeps its row count.
-    """
-    templates = list(OriginTemplate.objects.filter(beginning=beginning))
-    if not templates:
-        create_starter_for(OriginTemplate, commoner, beginning, family_known=family_known)
-        return
-    for template in templates:
-        if family_known:
-            template.allows_claim_family = True
-            template.allows_name_family = True
-            template.named_family_kind = commoner
-        else:
-            template.allows_no_family = True
-        template.save()
-
-
-def backfill_upbringings(apps, schema_editor):
-    """Carry ``Beginnings.family_known`` into starter/existing Upbringings (#3617).
-
-    Restructure migration under ADR-0237: every Beginning either gets its
-    existing OriginTemplate rows widened with the family path implied by the
-    retired flag, or (when it has none) a single starter Upbringing created
-    for it, so no beginning is left without a selectable family path.
-    """
-    Beginnings = apps.get_model("arxii", "Beginnings")
-    OriginTemplate = apps.get_model("arxii", "OriginTemplate")
-    FamilyKind = apps.get_model("arxii", "FamilyKind")
-    commoner = FamilyKind.objects.get_or_create(
-        name="Commoner", defaults={"styles_as_house": False, "sort_order": 0}
-    )[0]
-    for beginning in Beginnings.objects.all():
-        apply_family_known(OriginTemplate, commoner, beginning, family_known=beginning.family_known)
-
-
-def unbackfill_upbringings(apps, schema_editor):
-    Beginnings = apps.get_model("arxii", "Beginnings")
-    OriginTemplate = apps.get_model("arxii", "OriginTemplate")
-    for beginning in Beginnings.objects.all():
-        beginning.family_known = (
-            OriginTemplate.objects.filter(beginning=beginning)
-            .exclude(allows_claim_family=False, allows_name_family=False)
-            .exists()
-        )
-        beginning.save(update_fields=["family_known"])
-
 
 class Migration(migrations.Migration):
+    """The Upbringings rework (#3617). Schema only - no data migration.
+
+    ``Beginnings.family_known`` is True on every row, so retiring it carries no
+    per-row information: the family path it implied is expressed as the
+    ``allows_claim_family`` column default below and the flag is simply dropped.
+    Nothing here writes a row, so nothing queues deferred FK trigger events, and
+    the ALTER TABLE that adds the constraint is legal. See ADR-0237.
+    """
+
     dependencies = [
         ("arxii", "0219_familykind_family_kind_influence"),
     ]
@@ -195,11 +128,17 @@ class Migration(migrations.Migration):
                 to="arxii.origintemplate",
             ),
         ),
+        # Added with default=True so the Upbringings that already exist come out
+        # satisfying the "at least one family path" constraint below. Every
+        # Beginnings row carries family_known=True, so the path the retired flag
+        # implied is a constant, and a constant is a column default rather than a
+        # backfill. The AlterField at the end of this migration puts the field back
+        # to the model's own default=False for rows created from here on (#3617).
         migrations.AddField(
             model_name="origintemplate",
             name="allows_claim_family",
             field=models.BooleanField(
-                default=False,
+                default=True,
                 help_text="Player may claim a staff-authored family (#3617).",
             ),
         ),
@@ -337,7 +276,6 @@ class Migration(migrations.Migration):
             name="origintemplateslotchoice",
             unique_together={("slot", "name")},
         ),
-        migrations.RunPython(backfill_upbringings, unbackfill_upbringings),
         migrations.AddConstraint(
             model_name="origintemplate",
             constraint=models.CheckConstraint(
@@ -353,5 +291,17 @@ class Migration(migrations.Migration):
         migrations.RemoveField(
             model_name="beginnings",
             name="family_known",
+        ),
+        # Restores the model's declared default now that the existing rows have
+        # been seeded with True by the AddField above. No SQL: Django applies
+        # field defaults in Python, and the transient column default it used for
+        # the ADD COLUMN was dropped there and then (#3617).
+        migrations.AlterField(
+            model_name="origintemplate",
+            name="allows_claim_family",
+            field=models.BooleanField(
+                default=False,
+                help_text="Player may claim a staff-authored family (#3617).",
+            ),
         ),
     ]

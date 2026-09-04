@@ -33,9 +33,9 @@ ALLOWED_MIGRATIONS: set[str] = {
     "world/migrations/0219_familykind_family_kind_influence.py",
     # #3617: ADR-0237 mandatory restructure backfill, carries
     # Beginnings.family_known into starter Upbringings (OriginTemplate rows) before
-    # the retired flag is dropped. No authored content: it only widens or creates
-    # OriginTemplate rows from data already in the database.
-    "world/migrations/0220_upbringings.py",
+    # the retired flag is dropped in 0222. No authored content: it only widens or
+    # creates OriginTemplate rows from data already in the database.
+    "world/migrations/0221_backfill_upbringings.py",
 }
 
 # Patterns that suggest seed data in migrations
