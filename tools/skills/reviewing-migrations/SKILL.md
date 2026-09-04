@@ -105,19 +105,35 @@ push, re-enqueue. **Never hand-renumber.**
 CI proves the migration runs on an empty database. That is the case that cannot
 fail. To prove the case that can, run it against a copy with rows in it:
 
+Clone the dump into a scratch database and migrate *that*. Do not build one
+from scratch - replaying the whole history takes hours, and the empty database
+it produces is the case that cannot fail anyway.
+
 ```bash
-# scratch database, migrated to the migration BEFORE yours
-PGPASSWORD=arxii psql -h db -U arxii -d postgres -c "CREATE DATABASE arx_migcheck"
+export PGPASSWORD=arxii
+psql -h db -U arxii -d postgres -c "DROP DATABASE IF EXISTS arx_migcheck"
+psql -h db -U arxii -d postgres -c "CREATE DATABASE arx_migcheck"
+pg_dump -h db -U arxii -d arxiidev --no-owner --no-privileges \
+  | psql -h db -U arxii -d arx_migcheck -q -v ON_ERROR_STOP=1
+
 cd src && DATABASE_URL='postgres://arxii:arxii@db:5432/arx_migcheck' \
   DJANGO_SETTINGS_MODULE=server.conf.settings \
-  ../.venv/bin/python -m django migrate --noinput arxii <previous_migration>
-# insert rows into the tables your migration touches, then run it
+  ../.venv/bin/python -m django migrate --noinput arxii
 ```
 
-A failed migration rolls back, so the scratch database stays on the previous
-migration and you can re-run after a fix.
+`pg_dump` reads only, so the dump itself never touches `arxiidev`. A failed
+migration rolls back, so the scratch database stays on the previous migration
+and you can re-run after a fix - which makes it cheap to run the *old* version
+first and watch it fail, then the fix and watch it pass. Do both: a migration
+you have only seen succeed is a migration whose test you have not verified.
 
-Never point this at `arxiidev` itself, and never at production.
+Then check the resulting rows, not just the exit code: the constraint exists,
+the column is gone, the row count is what you expected, and
+`migrate <previous_migration>` reverses cleanly.
+
+Never migrate `arxiidev` itself, and never point any of this at production.
+`CREATE DATABASE ... TEMPLATE arxiidev` fails whenever anything holds a
+connection to it; the `pg_dump` pipe above has no such problem.
 
 ## Checklist
 
