@@ -703,6 +703,31 @@ class AftermathSerializerTests(_CompletionSeamTestBase):
         for row in data["participants"]:
             self.assertIsNone(row["aftermath"])
 
+    def test_completed_without_completed_at_is_none_for_owner(self) -> None:
+        """A pre-#876 legacy row (COMPLETED but completed_at still null) never builds
+
+        a digest: aftermath_window() raises ValueError on a null completed_at, so
+        the completed_at guard must short-circuit before build_aftermath_digest is
+        called, or the detail endpoint would 500 (#3551 fix).
+        """
+        legacy_encounter = self._make_encounter(status=RoundStatus.COMPLETED)
+        legacy_participant = CombatParticipantFactory(
+            encounter=legacy_encounter,
+            character_sheet=self.owner_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.assertIsNone(legacy_encounter.completed_at)
+
+        client = APIClient()
+        client.force_authenticate(user=self.owner_account)
+        response = client.get(f"/api/combat/{legacy_encounter.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+
+        owner_row = next(
+            row for row in response.data["participants"] if row["id"] == legacy_participant.pk
+        )
+        self.assertIsNone(owner_row["aftermath"])
+
     def test_completed_owner_row_has_digest_other_row_is_none(self) -> None:
         """Owner sees their own aftermath dict; another player's row is None for them."""
         tier = CheckOutcomeFactory(name="AftermathSerializerTier", success_level=-1)

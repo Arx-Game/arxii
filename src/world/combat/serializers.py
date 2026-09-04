@@ -558,9 +558,10 @@ class ParticipantSerializer(serializers.ModelSerializer):
         digest = build_aftermath_digest(encounter, obj)
 
         request = self.context.get("request")
-        is_gm_or_staff = (request is not None and request.user.is_staff) or self.context.get(
-            "is_gm", False
-        )
+        is_gm = self.context.get("is_gm")
+        if is_gm is None:
+            is_gm = encounter.scene.is_gm(request.user) if encounter.scene else False
+        is_gm_or_staff = is_gm or (request is not None and request.user.is_staff)
         beat = None
         if digest.beat_completion is not None and (digest.beat_visible_to_player or is_gm_or_staff):
             completion = digest.beat_completion
