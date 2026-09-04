@@ -116,6 +116,40 @@ describe('SkillsSection', () => {
     expect(screen.getByText('40')).toBeInTheDocument();
   });
 
+  it("states the ledger head's left text as a true fact about the budget", () => {
+    renderSkillsSection(draft);
+
+    expect(screen.getByText('Skills rise in steps of ten, to 30')).toBeInTheDocument();
+  });
+
+  it('gives the raise button a reason when the skill is at its cap', () => {
+    const atCapDraft: CharacterDraft = {
+      ...mockEmptyDraft,
+      selected_path: mockPath,
+      draft_data: { skills: { '1': 30 } },
+    };
+    renderSkillsSection(atCapDraft);
+
+    expect(screen.getByRole('button', { name: /raise blades/i })).toHaveAttribute(
+      'title',
+      'At 30, the most it can be'
+    );
+  });
+
+  it('gives the raise button a reason when the purse is empty', () => {
+    const emptyPurseDraft: CharacterDraft = {
+      ...mockEmptyDraft,
+      selected_path: mockPath,
+      draft_data: { skills: { '1': 25, '2': 30 } },
+    };
+    renderSkillsSection(emptyPurseDraft);
+
+    expect(screen.getByRole('button', { name: /raise blades/i })).toHaveAttribute(
+      'title',
+      'No skill points remain; lower another to raise this one'
+    );
+  });
+
   it("labels each skill row's value with the skill name", () => {
     renderSkillsSection(draft);
 

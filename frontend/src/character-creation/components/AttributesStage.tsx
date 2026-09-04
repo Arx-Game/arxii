@@ -127,6 +127,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           right: (
             <>
               Points remaining: <b>{remaining}</b> of <b>{budget}</b>
+              {remaining < 0 && <>, over by {Math.abs(remaining)}</>}
             </>
           ),
           over: remaining < 0,

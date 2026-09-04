@@ -24,7 +24,12 @@ export function ConfirmDialog({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open && typeof el.showModal === 'function') el.showModal();
+    if (open && !el.open) {
+      // jsdom (and some older browsers) lack HTMLDialogElement.showModal; fall back
+      // to the plain `open` attribute so the dialog still appears (#3540 review).
+      if (typeof el.showModal === 'function') el.showModal();
+      else el.setAttribute('open', '');
+    }
     if (!open && el.open) el.close();
   }, [open]);
   return (

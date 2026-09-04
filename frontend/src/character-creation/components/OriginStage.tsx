@@ -10,7 +10,7 @@
  */
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ChapterLeaf,
   ConfirmDialog,
@@ -52,10 +52,6 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
   const [pending, setPending] = useState<StartingArea | null>(null);
 
   const chosen = draft.selected_area;
-
-  useEffect(() => {
-    if (chosen) setRealmTheme(getRealmTheme(chosen));
-  }, [chosen, setRealmTheme]);
 
   const apply = (area: StartingArea | null) => {
     if (area) setRealmTheme(getRealmTheme(area));

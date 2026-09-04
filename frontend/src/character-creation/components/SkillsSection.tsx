@@ -51,6 +51,17 @@ function toNumericMap(values: Record<string, number> | undefined): Record<number
   return Object.keys(numeric).length > 0 ? numeric : null;
 }
 
+/** Why the raise button is disabled, if it is; `undefined` when it isn't (mirrors AttributesStage). */
+function increaseTitleFor(
+  atCap: boolean,
+  purseEmpty: boolean,
+  maxValue: number
+): string | undefined {
+  if (atCap) return `At ${maxValue}, the most it can be`;
+  if (purseEmpty) return 'No skill points remain; lower another to raise this one';
+  return undefined;
+}
+
 /**
  * Accordion panel listing a skill's specializations, gated by the
  * specialization-unlock threshold. Extracted as its own component so the
@@ -83,7 +94,8 @@ function SkillSpecializations({
         {skillValue >= threshold ? (
           skill.specializations.map((spec: Specialization) => {
             const value = specValues[spec.id] || 0;
-            const canIncreaseValue = canIncrease && value < maxValue;
+            const atCap = value >= maxValue;
+            const canIncreaseValue = canIncrease && !atCap;
             return (
               <StatRow
                 key={spec.id}
@@ -96,6 +108,7 @@ function SkillSpecializations({
                 onChange={(newValue) => onSpecChange(spec.id, newValue)}
                 canDecrease={value > 0}
                 canIncrease={canIncreaseValue}
+                increaseTitle={increaseTitleFor(atCap, !canIncrease, maxValue)}
                 spec
               />
             );
@@ -284,7 +297,6 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
 
   const remaining = budget.total_points - totalSpent;
   const canIncrease = remaining >= 10;
-  const visibleSkills = skills;
 
   return (
     <div>
@@ -306,7 +318,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
       <InstrumentFrame
         label="Skills"
         ledger={{
-          left: `${visibleSkills.length} of ${skills.length} skills shown`,
+          left: `Skills rise in steps of ten, to ${budget.max_skill_value}`,
           right: (
             <>
               Skill points remaining: <b>{remaining}</b> of <b>{budget.total_points}</b>
@@ -322,7 +334,8 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
               {categorySkills.map((skill: Skill) => {
                 const skillValue = skillValues[skill.id] || 0;
                 const hasSpecs = skill.specializations.length > 0;
-                const canIncreaseValue = canIncrease && skillValue < budget.max_skill_value;
+                const atCap = skillValue >= budget.max_skill_value;
+                const canIncreaseValue = canIncrease && !atCap;
 
                 return (
                   <div key={skill.id}>
@@ -336,6 +349,7 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
                       onChange={(newValue) => handleSkillChange(skill.id, newValue, skill)}
                       canDecrease={skillValue > 0}
                       canIncrease={canIncreaseValue}
+                      increaseTitle={increaseTitleFor(atCap, !canIncrease, budget.max_skill_value)}
                     />
                     {hasSpecs && (
                       <SkillSpecializations

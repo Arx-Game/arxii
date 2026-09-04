@@ -121,6 +121,9 @@ DEFAULT_STAT_NAMES: tuple[str, ...] = (
 # edits the corresponding row in the admin or the content repo.
 CG_EXPLANATION_COPY: dict[str, str] = {
     "origin_heading": "Where does the story begin?",
+    # The Folio Origin chapter (#3540 Decision 8) deliberately renders only
+    # origin_heading; this row is kept authored content for other surfaces
+    # (e.g. telnet, an admin preview) that still want an intro paragraph.
     "origin_intro": (
         "Where does your story begin? Your starting realm shapes who your character "
         "already knows, what they take for granted, and which conflicts will find "

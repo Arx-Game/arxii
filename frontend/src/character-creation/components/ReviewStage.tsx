@@ -288,14 +288,27 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           />
         )}
         {hasApplication && appStatus === 'revisions_requested' && (
-          <RevisionsActions
-            resubmitComment={resubmitComment}
-            onCommentChange={setResubmitComment}
-            onResubmit={handleResubmit}
-            resubmitPending={resubmit.isPending}
-            onWithdraw={handleWithdraw}
-            withdrawPending={withdraw.isPending}
-          />
+          <>
+            <p className="ledger-line">
+              {getBannerMessage(
+                appStatus,
+                application.data!.reviewer_name,
+                application.data!.expires_at,
+                copy
+              )}
+            </p>
+            <Link className="quiet-link" to="/characters/create/application">
+              View the application thread
+            </Link>
+            <RevisionsActions
+              resubmitComment={resubmitComment}
+              onCommentChange={setResubmitComment}
+              onResubmit={handleResubmit}
+              resubmitPending={resubmit.isPending}
+              onWithdraw={handleWithdraw}
+              withdrawPending={withdraw.isPending}
+            />
+          </>
         )}
         {hasApplication && appStatus === 'approved' && (
           <div className="plate-door">
@@ -307,6 +320,9 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
                 copy
               )}
             </p>
+            <Link className="quiet-link" to="/characters/create/application">
+              View the application thread
+            </Link>
             <button type="button" className="btn" onClick={() => navigate('/game')}>
               {copy?.review_approved_enter_world ?? 'Enter the World'}
             </button>
@@ -351,7 +367,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             onClick: () => {
               const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
               document
-                .getElementById('chapter-11')
+                .getElementById(`chapter-${Stage.REVIEW}`)
                 ?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
             },
           }}
@@ -361,6 +377,9 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             You will be told in the Hall when staff have read it. If they ask for revisions, the
             chapters reopen.
           </p>
+          <Link className="quiet-link" to="/characters/create/application">
+            View the application thread
+          </Link>
           <SubmittedActions
             appStatus={appStatus as 'submitted' | 'in_review'}
             onUnsubmit={handleUnsubmit}

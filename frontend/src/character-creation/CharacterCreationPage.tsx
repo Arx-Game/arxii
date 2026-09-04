@@ -114,13 +114,6 @@ export function CharacterCreationPage() {
     });
   }, [draft, deleteDraft, createDraft]);
 
-  // Auto-create draft if user can create and doesn't have one
-  useEffect(() => {
-    if (!isLoading && canCreate?.can_create && !draft && !createDraft.isPending) {
-      // Don't auto-create, let user click the button
-    }
-  }, [isLoading, canCreate, draft, createDraft.isPending]);
-
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -169,7 +162,7 @@ export function CharacterCreationPage() {
           backgroundImage={backgroundUrl}
           door={{
             label: createDraft.isPending
-              ? 'Opening the record...'
+              ? 'Opening the record…'
               : (copy?.arrival_door ?? 'Open the record'),
             onClick: () => createDraft.mutate(),
             disabled: createDraft.isPending,
@@ -291,7 +284,7 @@ export function CharacterCreationPage() {
               onClick={handleRestart}
               disabled={deleteDraft.isPending || createDraft.isPending}
             >
-              {deleteDraft.isPending || createDraft.isPending ? 'Tearing out...' : 'Tear them out'}
+              {deleteDraft.isPending || createDraft.isPending ? 'Tearing out…' : 'Tear them out'}
             </Button>
           </DialogFooter>
         </DialogContent>

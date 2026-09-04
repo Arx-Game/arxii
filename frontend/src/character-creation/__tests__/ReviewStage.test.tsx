@@ -237,6 +237,34 @@ describe('ReviewStage', () => {
     });
   });
 
+  describe('application thread link', () => {
+    it('shows the revisions message and a thread link when revisions are requested', async () => {
+      vi.mocked(useDraftApplication).mockReturnValue({
+        data: { status: 'revisions_requested', reviewer_name: null, expires_at: null },
+      } as unknown as ReturnType<typeof useDraftApplication>);
+      renderReview(mockCompleteDraft);
+      expect(
+        await screen.findByText(
+          'Revisions requested. Check the application thread for staff feedback.'
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /view the application thread/i })).toHaveAttribute(
+        'href',
+        '/characters/create/application'
+      );
+    });
+
+    it('shows the thread link on the after-plate while submitted', async () => {
+      vi.mocked(useDraftApplication).mockReturnValue({
+        data: { status: 'submitted', reviewer_name: null, expires_at: null },
+      } as unknown as ReturnType<typeof useDraftApplication>);
+      renderReview(mockCompleteDraft);
+      expect(
+        await screen.findByRole('link', { name: /view the application thread/i })
+      ).toHaveAttribute('href', '/characters/create/application');
+    });
+  });
+
   describe('Finalize for My Table (#3268)', () => {
     it('does not show the door when the account owns no active GM table', () => {
       renderReview(mockCompleteDraft, { isStaff: false, account: mockPlayerAccount });
