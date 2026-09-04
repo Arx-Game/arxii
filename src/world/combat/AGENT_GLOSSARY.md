@@ -249,6 +249,14 @@ _Avoid_: main action, primary (use "focused" specifically)
 A supporting action a PC takes alongside the focused action (physical and/or social), up to two per round. The non-focused action type.
 _Avoid_: passive
 
+**Round combo**:
+A combo as the round in progress sees it (`RoundCombo`, from `scan_round_combos`, #3553): every slot listed with its requirement and either the participant filling it or "open". A complete round combo is an available combo (the upgrade candidate); a partial one is shown only when an active PC in the encounter knows the combo, so hidden combos are never hinted at.
+_Avoid_: partial combo (say "round combo with open slots"), combo preview
+
+**Open slot**:
+A combo slot no declared focused action fills yet this round. The "needs one more: Defense" hint is the list of open slots' requirement labels.
+_Avoid_: empty slot, missing slot
+
 **Allegiance**:
 Which side a `CombatOpponent` fights on — `ENEMY` (hostile to PCs, the default) or `ALLY`
 (fights for the party). Allegiance is mutable: a summon spell creates an ALLY opponent; future

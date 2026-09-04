@@ -6723,7 +6723,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   (FK `objects.ObjectDB`, SET_NULL) — mutually exclusive declared REDIRECT-flavor
   destinations, #2210, see the Redirect section above),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
-  `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
+  `ComboDefinition`, `ComboSlot` (`requirement_label` names what a slot asks for, #3553),
+  `ComboLearning` (use_count tracks repeat
   use; written by `fire_combo_discovery` on first combat trigger, #2017),
   `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
   `ClashRound`, `ClashContribution`, `BreakBarContribution` (#2642, see "Boss-fight structure"
@@ -7475,7 +7476,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
   yield, flee, use_item, my_action, available_combos, rally, demoralize, taunt, parley),
-  duel challenge endpoints. **Guard declaration (#2207):** `InterposeSerializer`
+  duel challenge endpoints. **Round combos (#3553):** `available_combos` returns
+  `RoundComboSerializer` rows from `scan_round_combos` — every combo taking shape this round
+  with each slot filled or open (`ComboSlotFill`: requirement + filler), the
+  `bonus_damage`/`bypass_soak` rider and `complete`; `detect_available_combos` is its complete
+  fills. A partial fill is listed only for a combo an active PC in the encounter knows
+  (knowledge counts before the knower declares), so the party sees "needs one more: Defense"
+  while the round is open; unknown combos surface only once complete. Telnet mirror:
+  `combat combos`. **Guard declaration (#2207):** `InterposeSerializer`
   (`world/combat/serializers.py`) only carries `ally_participant_id` — the optional
   `technique_id` (protective technique) and, since #2210, `redirect_opponent_target_id`/
   `redirect_object_target_id` have no bespoke REST verb, so the web Guard panel
