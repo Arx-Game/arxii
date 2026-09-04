@@ -570,6 +570,11 @@
 .interview .entry-prose {
   padding: 0 0 1.4rem 1.7rem;
 }
+.interview .entry-art {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 1rem;
+}
 .interview .entry-prose p {
   margin: 0 0 1rem;
   color: var(--cg-text-soft);

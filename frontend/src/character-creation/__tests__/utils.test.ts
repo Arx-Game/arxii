@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StartingArea } from '../types';
-import { getRealmTheme, statusLabel, statusVariant } from '../utils';
+import { formatHeight, getRealmTheme, statusLabel, statusVariant } from '../utils';
 
 function makeArea(realm_theme: string): StartingArea {
   return {
@@ -57,5 +57,14 @@ describe('statusVariant', () => {
     ['withdrawn', 'destructive'],
   ] as const)('maps "%s" to "%s"', (status, expected) => {
     expect(statusVariant(status)).toBe(expected);
+  });
+});
+
+describe('formatHeight', () => {
+  it.each([
+    [68, `5'8"`],
+    [60, `5'0"`],
+  ])('renders %i inches as %s', (inches, expected) => {
+    expect(formatHeight(inches)).toBe(expected);
   });
 });

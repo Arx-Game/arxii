@@ -69,6 +69,17 @@ export function composeFullName(
 }
 
 /**
+ * Height in inches as feet and inches (68 -> 5'8"), the form players read
+ * heights in. The draft stores and PATCHes plain inches; this is display
+ * only, and the number input on the appearance stage stays in inches.
+ */
+export function formatHeight(inches: number): string {
+  const feet = Math.floor(inches / 12);
+  const remainingInches = inches % 12;
+  return `${feet}'${remainingInches}"`;
+}
+
+/**
  * Generate a gradient background color based on the area name.
  * Creates a consistent but varied appearance for each area.
  */

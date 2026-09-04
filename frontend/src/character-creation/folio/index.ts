@@ -9,5 +9,6 @@ export { Paragraphs } from './Paragraphs';
 export { InstrumentFrame, InstrumentGroup, StatRow } from './InstrumentFrame';
 export { ConfirmDialog } from './ConfirmDialog';
 export { CodexWord } from './CodexWord';
+export { CodexLine } from './CodexLine';
 export { ChoiceRow } from './ChoiceRow';
 export { Field } from './Field';

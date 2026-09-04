@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+import { codexKeys } from '@/codex/queries';
 import {
   ChapterLeaf,
+  CodexLine,
   Entry,
   EntryDoors,
   EntryList,
@@ -15,6 +17,12 @@ import {
 import { ChoiceRow } from '../folio/ChoiceRow';
 import { Field } from '../folio/Field';
 import { Stage } from '../types';
+import { mockCodexEntry } from './fixtures';
+import {
+  createTestQueryClient,
+  renderWithCharacterCreationProviders,
+  seedQueryData,
+} from './testUtils';
 
 describe('ChapterLeaf', () => {
   it('opens with the eyebrow and one h1 and puts the aside in a marginalia landmark', () => {
@@ -184,5 +192,25 @@ describe('Paragraphs', () => {
     render(<Paragraphs text={'First paragraph.\n\nSecond paragraph.'} />);
     expect(screen.getByText('First paragraph.').tagName).toBe('P');
     expect(screen.getByText('Second paragraph.').tagName).toBe('P');
+  });
+});
+
+describe('CodexLine', () => {
+  it('renders the codex line for an entry id and nothing at all without one', () => {
+    const queryClient = createTestQueryClient();
+    // CodexTerm mounts CodexModal, which fetches its entry on mount rather
+    // than on open — seed it so the test never reaches the real codex API.
+    seedQueryData(queryClient, codexKeys.entry(7), mockCodexEntry(7));
+
+    const { rerender, container } = renderWithCharacterCreationProviders(
+      <CodexLine entryId={7} name="Duskborn Rite" />,
+      { queryClient }
+    );
+    expect(screen.getByRole('button', { name: 'Codex: Duskborn Rite' }).closest('p')).toHaveClass(
+      'ledger-line'
+    );
+
+    rerender(<CodexLine entryId={null} name="Duskborn Rite" />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
