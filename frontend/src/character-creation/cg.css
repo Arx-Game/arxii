@@ -759,6 +759,14 @@
 .interview .stat-row.spec {
   padding-left: 1.4rem;
 }
+.interview .goal-row {
+  grid-template-columns: 1fr 6rem auto;
+  align-items: end;
+  gap: 1rem;
+}
+.interview .goal-row .field {
+  margin: 0;
+}
 .interview .stat-name {
   font-weight: 500;
   color: var(--cg-text);
