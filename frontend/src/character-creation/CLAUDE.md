@@ -10,13 +10,25 @@ character-creation/
 ├── types.ts                 # TypeScript type definitions
 ├── api.ts                   # API fetch functions using apiFetch
 ├── queries.ts               # React Query hooks
+├── cg.css                   # Scoped under `.interview`; realm is an ink, paper
+│                              #   pinned to Arx (#3540)
 ├── CharacterCreationPage.tsx # Main page component
+├── folio/                   # Folio chassis primitives (#3540), realm-agnostic
+│   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper
+│   ├── PageTurn.tsx         # Back/next doors between chapters
+│   ├── NightPlate.tsx       # Full-bleed night moment (arrival, submission)
+│   ├── ChapterLeaf.tsx      # Wraps a stage's old internals in the leaf frame
+│   ├── RecordRail.tsx       # Marginalia: record-so-far rows + a Note aside
+│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries
+│   ├── InstrumentFrame.tsx  # InstrumentGroup/StatRow: labeled stat instruments
+│   └── ConfirmDialog.tsx    # Native <dialog> confirm for record-clearing choices
 └── components/
     ├── index.ts             # Component exports
-    ├── StageStepper.tsx     # Navigation breadcrumb
-    ├── StartingAreaCard.tsx  # Area selection card with gradient placeholder
     ├── OriginStage.tsx      # Stage 1: Area selection
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
+    ├── StartingAreaCard.tsx # Only its `getGradientColors` helper is still used, by
+    │                        #   HeritageStage; the card itself no longer renders
+    │                        #   anywhere (until Plan B removes it, see Task 9)
     ├── LineageStage.tsx     # Stage 3: Family selection
     ├── DistinctionsStage.tsx # Stage 4: Distinctions
     ├── PathStage.tsx        # Stage 5: Path selection
@@ -49,9 +61,8 @@ character-creation/
 ## Key Features
 
 - **Free navigation**: All stages clickable, incomplete stages show warning badge
-- **Framer Motion**: Smooth transitions between stages
-- **Visual cards**: Starting areas displayed as cards with crest images or gradient placeholders
 - **Real-time validation**: Stage completion tracked, submit blocked until all required stages complete
+- Progress is a table of contents; the game never speaks for the player (#3540 Decisions 3 and 8)
 - **Staff-only features**: "Add to Roster" button visible only to staff
 - **Player-GM direct-to-roster (#3268)**: a non-staff account that owns at least one active
   GM-role table sees a "Finalize for My Table" button beside Submit, gated by the same

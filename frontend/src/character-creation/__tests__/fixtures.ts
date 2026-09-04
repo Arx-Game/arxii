@@ -620,7 +620,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
 // =============================================================================
 
 export const mockCGExplanations: Record<string, string> = {
-  origin_heading: 'Choose Your Origin',
+  origin_heading: 'Where does the story begin?',
   origin_intro: "Select the city or region where your character's story begins.",
   origin_lore_intro: 'You are one of the Gifted.',
   heritage_heading: 'Heritage',
@@ -662,4 +662,8 @@ export const mockCGExplanations: Record<string, string> = {
   review_heading: 'Review & Submit',
   review_intro: 'Review your character before submitting for approval.',
   review_xp_explanation: 'Unspent CG points convert to bonus XP.',
+  arrival_eyebrow: 'The Durance · Chapter the First',
+  arrival_title: 'One stands before us',
+  arrival_door: 'Open the record',
+  arrival_quiet: 'or return to the Hall',
 };

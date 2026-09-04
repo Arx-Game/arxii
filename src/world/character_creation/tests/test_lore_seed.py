@@ -51,3 +51,10 @@ class TestLoreOnboardingSeed(TestCase):
         _seed_cg_explanations()
         assert CGExplanation.objects.filter(key="origin_lore_intro").exists()
         assert CGExplanation.objects.filter(key="roster_lore_intro").exists()
+
+    def test_folio_keys_in_copy_dict(self):
+        """The Folio chapter keys (#3540) ship with the sample copy, em-dash free."""
+        for key in ("arrival_eyebrow", "arrival_title", "arrival_door", "arrival_quiet"):
+            assert key in CG_EXPLANATION_COPY, f"{key} missing from CG_EXPLANATION_COPY"
+        for key, text in CG_EXPLANATION_COPY.items():
+            assert "—" not in text, f"{key} carries an em-dash"

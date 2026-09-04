@@ -191,7 +191,7 @@ describe('CharacterCreationPage', () => {
 
       await waitFor(() => {
         // Origin stage should be displayed (Stage 1)
-        expect(screen.getByText('Choose Your Origin')).toBeInTheDocument();
+        expect(screen.getByText('Where does the story begin?')).toBeInTheDocument();
       });
     });
 
