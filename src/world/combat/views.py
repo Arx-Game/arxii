@@ -763,8 +763,8 @@ class CombatEncounterViewSet(ModelViewSet):
             return Response(None)
         return Response(RoundActionSerializer(action_obj).data)
 
-    @extend_schema(responses=RoundComboSerializer(many=True))
-    @action(detail=True, methods=[HTTPMethod.GET])
+    @extend_schema(responses={200: RoundComboSerializer(many=True)})
+    @action(detail=True, methods=[HTTPMethod.GET], pagination_class=None, filter_backends=[])
     def available_combos(
         self,
         request: Request,

@@ -10,7 +10,7 @@ import { throwApiError } from '@/lib/errors';
 import type { components } from '@/generated/api';
 import type { PowerLedger } from '@/magic/types';
 import type {
-  AvailableCombo,
+  RoundCombo,
   DispatchActionRequest,
   DispatchResult,
   EncounterDetail,
@@ -429,21 +429,17 @@ export async function postProposeLethalDuel(
 }
 
 // ---------------------------------------------------------------------------
-// Available combos
-//
-// The generated schema types the available_combos response as EncounterDetail,
-// but the actual payload from the backend is a list of combo descriptors.
-// We type the response locally as AvailableCombo[] to match the actual payload.
+// Round combos (#3553)
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch available combo upgrades for the encounter.
+ * Fetch the combos taking shape this round, slot by slot.
  * GET /api/combat/{encounterId}/available_combos/
  */
-export async function fetchAvailableCombos(encounterId: number): Promise<AvailableCombo[]> {
+export async function fetchAvailableCombos(encounterId: number): Promise<RoundCombo[]> {
   const res = await apiFetch(`/api/combat/${encounterId}/available_combos/`);
   if (!res.ok) throw new Error('Failed to load available combos');
-  return res.json() as Promise<AvailableCombo[]>;
+  return res.json() as Promise<RoundCombo[]>;
 }
 
 // ---------------------------------------------------------------------------

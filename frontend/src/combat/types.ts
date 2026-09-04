@@ -93,20 +93,16 @@ export type ClashContributor = components['schemas']['ClashContributor'];
 export type ClashState = components['schemas']['ClashState'];
 
 // ---------------------------------------------------------------------------
-// Local types for available-combos
+// Round combos (#3553)
 //
-// GET /api/combat/{id}/available_combos/ → EncounterDetail (per generated schema),
-// but the actual response is a list of combo descriptors.
-// The backend EncounterViewSet.available_combos action returns the encounter
-// detail (not a separate schema), so we type the actual payload locally here.
+// GET /api/combat/{id}/available_combos/ → RoundCombo[]: every combo taking
+// shape this round, slot by slot. `complete` is the upgrade condition; a
+// partial fill of a known combo lists which slots are still open.
 // ---------------------------------------------------------------------------
 
-export interface AvailableCombo {
-  combo_id: number;
-  combo_name: string;
-  known_by_participant: boolean;
-  slot_count: number;
-}
+export type RoundCombo = components['schemas']['RoundCombo'];
+
+export type RoundComboSlot = components['schemas']['ComboSlotFill'];
 
 // ---------------------------------------------------------------------------
 // Dispatch types (used by useDispatchPlayerAction)
