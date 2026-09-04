@@ -1,24 +1,18 @@
 /**
- * AnimaCheckStep — final pick of the GiftStage funnel (#2426 Task 10).
+ * AnimaCheckStep (#3630) — the final step of the Gift funnel, as choice rows.
  *
  * The player names the stat + skill every one of their casts rolls (the
  * "Anima Check"), plus an optional name for their Anima Ritual. Per Tehom's
  * 2026-07-16 ruling, the copy is explicit that this choice is purely
  * mechanical — how a cast *looks and feels* in a scene is always the
- * player's to describe, never dictated by this pick.
+ * player's to describe, never dictated by this pick. The step's own name
+ * (in GiftStage's funnel) now carries the heading, so this renders only the
+ * intro sentence and the picks.
  */
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useMemo } from 'react';
-import type { UseFormRegisterReturn } from 'react-hook-form';
+import type { UseFormRegister } from 'react-hook-form';
+import { ChoiceRow, Field } from '../../folio';
 import {
   useCGExplanations,
   usePathSkillSuggestions,
@@ -27,15 +21,16 @@ import {
   useUpdateDraft,
 } from '../../queries';
 import type { CharacterDraft } from '../../types';
+import type { GiftFormValues } from '../GiftStage';
 
 interface AnimaCheckStepProps {
   draft: CharacterDraft;
-  /** Registration for the ritual-name text field — owned by GiftStage's shared
-   * form so a single beforeLeave save covers ritual name + motif + glimpse. */
-  ritualNameField: UseFormRegisterReturn<'anima_ritual_name'>;
+  /** GiftStage's shared react-hook-form register — a single beforeLeave save
+   * covers ritual name + motif + glimpse. */
+  register: UseFormRegister<GiftFormValues>;
 }
 
-export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) {
+export function AnimaCheckStep({ draft, register }: AnimaCheckStepProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: statDefinitions } = useStatDefinitions();
@@ -76,87 +71,53 @@ export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) 
     return [suggested, ...skills.filter((skill) => skill.id !== suggestedSkillId)];
   }, [skills, suggestedSkillId]);
 
-  const handleStatChange = (value: string) => {
+  const handleStatChange = (value: number | null) => {
+    if (value == null) return;
     updateDraft.mutate({
       draftId: draft.id,
-      data: {
-        draft_data: {
-          anima_check_stat_id: Number(value),
-        },
-      },
+      data: { draft_data: { anima_check_stat_id: value } },
     });
   };
 
-  const handleSkillChange = (value: string) => {
+  const handleSkillChange = (value: number | null) => {
+    if (value == null) return;
     updateDraft.mutate({
       draftId: draft.id,
-      data: {
-        draft_data: {
-          anima_check_skill_id: Number(value),
-        },
-      },
+      data: { draft_data: { anima_check_skill_id: value } },
     });
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <h3 className="text-lg font-semibold">{copy?.anima_check_heading ?? 'Anima Check'}</h3>
-        <p className="text-sm text-muted-foreground">
-          {copy?.anima_check_intro ??
-            'How does your magic move through you? The stat and skill you choose here are what every cast rolls, and how your casting looks and feels in a scene is always yours to describe.'}
-        </p>
-      </div>
+    <>
+      {copy?.anima_check_intro && <p className="section-desc">{copy.anima_check_intro}</p>}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="anima-stat">Stat</Label>
-          <Select value={statId != null ? String(statId) : ''} onValueChange={handleStatChange}>
-            <SelectTrigger id="anima-stat">
-              <SelectValue placeholder="Choose a stat" />
-            </SelectTrigger>
-            <SelectContent>
-              {sortedStats.map((stat) => (
-                <SelectItem key={stat.id} value={String(stat.id)} className="capitalize">
-                  {stat.name}
-                  {suggestedStat?.id === stat.id ? ' (suggested)' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <ChoiceRow
+        label="Statistic"
+        options={sortedStats.map((stat) => ({
+          value: stat.id,
+          label: suggestedStat?.id === stat.id ? `${stat.name} (suggested)` : stat.name,
+        }))}
+        value={statId}
+        onChange={handleStatChange}
+      />
 
-        <div className="space-y-2">
-          <Label htmlFor="anima-skill">Skill</Label>
-          <Select value={skillId != null ? String(skillId) : ''} onValueChange={handleSkillChange}>
-            <SelectTrigger id="anima-skill">
-              <SelectValue placeholder="Choose a skill" />
-            </SelectTrigger>
-            <SelectContent className="max-h-72 overflow-y-auto">
-              {sortedSkills.map((skill) => (
-                <SelectItem key={skill.id} value={String(skill.id)}>
-                  {skill.name}
-                  {suggestedSkillId === skill.id ? ' (suggested)' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <ChoiceRow
+        label="Skill"
+        options={sortedSkills.map((skill) => ({
+          value: skill.id,
+          label: suggestedSkillId === skill.id ? `${skill.name} (suggested)` : skill.name,
+        }))}
+        value={skillId}
+        onChange={handleSkillChange}
+      />
 
-      <div className="max-w-md space-y-2">
-        <Label htmlFor="anima-ritual-name">Ritual Name (optional)</Label>
-        <Input
-          id="anima-ritual-name"
-          {...ritualNameField}
-          placeholder="e.g. Sunrise Devotions"
-          maxLength={100}
-        />
-        <p className="text-xs text-muted-foreground">
-          Names your Anima Ritual. Defaults to &quot;[Character]&apos;s Anima Ritual&quot; if left
-          blank.
-        </p>
-      </div>
-    </div>
+      <Field
+        id="ritual-name"
+        label="Ritual name"
+        hint="Optional. Defaults to “[Character]’s Anima Ritual” if left blank."
+      >
+        <input id="ritual-name" type="text" maxLength={100} {...register('anima_ritual_name')} />
+      </Field>
+    </>
   );
 }

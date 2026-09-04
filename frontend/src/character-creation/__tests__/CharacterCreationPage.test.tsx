@@ -314,12 +314,15 @@ describe('CharacterCreationPage', () => {
 
       // The funnel's Anima Check step label always renders, independent of
       // any catalog data loading — a reliable signal GiftStage (not the old
-      // MagicStage cantrip UI) is what's mounted.
+      // MagicStage cantrip UI) is what's mounted. Scoped to the funnel's own
+      // entry list — the record rail also carries "Tradition" and
+      // "Techniques" rows (#3630), so an unscoped query is ambiguous.
       await waitFor(() => {
         expect(screen.getByText('Anima Check')).toBeInTheDocument();
       });
-      expect(screen.getByText('Tradition')).toBeInTheDocument();
-      expect(screen.getByText('Techniques')).toBeInTheDocument();
+      const funnel = screen.getByRole('list', { name: 'Gift steps' });
+      expect(within(funnel).getByText('Tradition')).toBeInTheDocument();
+      expect(within(funnel).getByText('Techniques')).toBeInTheDocument();
     });
   });
 

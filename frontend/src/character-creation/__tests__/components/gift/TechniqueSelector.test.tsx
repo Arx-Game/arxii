@@ -95,7 +95,9 @@ describe('TechniqueSelector', () => {
     });
     renderSelector(draft);
 
-    await user.click(screen.getByText('Shadow Strike'));
+    // The name sits in <summary> (toggles the entry open/closed); the
+    // "Choose" door is the actual selection control.
+    await user.click(screen.getByRole('button', { name: 'Choose Shadow Strike' }));
 
     await waitFor(() => {
       expect(updateDraftMock).toHaveBeenCalledWith(
@@ -117,7 +119,9 @@ describe('TechniqueSelector', () => {
     });
     renderSelector(draft);
 
-    await user.click(screen.getByText('Shadow Strike'));
+    // The "Choose" door toggles: clicking it again on an already-chosen
+    // technique deselects it (same handler as EntryDoors' "Clear").
+    await user.click(screen.getByRole('button', { name: 'Choose Shadow Strike' }));
 
     await waitFor(() => {
       expect(updateDraftMock).toHaveBeenCalledWith(
@@ -139,9 +143,9 @@ describe('TechniqueSelector', () => {
     });
     renderSelector(draft);
 
-    // Already at budget (1 of 1) — clicking a different, unselected technique
-    // must not add it.
-    await user.click(screen.getByText('Umbral Wall'));
+    // Already at budget (1 of 1) — clicking a different, unselected technique's
+    // "Choose" door must not add it.
+    await user.click(screen.getByRole('button', { name: 'Choose Umbral Wall' }));
 
     expect(updateDraftMock).not.toHaveBeenCalled();
   });

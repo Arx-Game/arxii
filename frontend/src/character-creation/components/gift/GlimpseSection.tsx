@@ -16,7 +16,6 @@
  * `updateDraft`, like `GiftSelector`'s `selected_gift_id`.
  */
 
-import { Button } from '@/components/ui/button';
 import { GlimpseFlow } from '@/magic/components/glimpse/GlimpseFlow';
 import { useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
@@ -105,14 +104,12 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
 
   if (isCollapsed) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-4">
-        <p className="text-sm text-muted-foreground">
-          The Glimpse is set aside for now; your tag picks are saved.
-        </p>
-        <Button type="button" variant="outline" size="sm" onClick={() => setIsCollapsed(false)}>
+      <p className="ledger-line">
+        The Glimpse is set aside for now; your tag picks are saved.{' '}
+        <button type="button" className="btn-small" onClick={() => setIsCollapsed(false)}>
           Resume
-        </Button>
-      </div>
+        </button>
+      </p>
     );
   }
 
