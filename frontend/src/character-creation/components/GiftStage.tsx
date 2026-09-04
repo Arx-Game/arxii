@@ -1,31 +1,39 @@
 /**
- * Stage 6: Gift
+ * Stage 6: Gift (#3630).
  *
- * Vertical funnel — Tradition → Gift → Techniques → Gift Resonance →
- * Anima Check — with completed steps collapsible. Motif remains an
- * always-visible textarea below the funnel, carried over from the old
- * MagicStage advanced section. The Glimpse is the guided tag-driven flow
- * mounted via `GlimpseSection` (#2427).
+ * The five-step Gift funnel — Tradition, Gift, Techniques, Resonance, Anima
+ * Check — as nested index entries: each step is an `Entry` in an `EntryList`,
+ * closed and unreadable (`gated`) until the step before it is done, and its
+ * own body holds that step's picker. Motif is a field below the funnel;
+ * the Glimpse is the guided tag-driven flow mounted via `GlimpseSection`
+ * (#2427), unchanged. The record rail lists the choices made so far; it
+ * explains nothing (Decision 8).
  */
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CodexTerm } from '@/codex/components/CodexTerm';
-import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
-import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChapterLeaf } from '../folio';
-import { useCGExplanations, useResonances, useUpdateDraft } from '../queries';
+import type { ReactNode } from 'react';
+import {
+  ChapterLeaf,
+  CodexLine,
+  Entry,
+  EntryDoors,
+  EntryList,
+  Field,
+  Marginalia,
+  Note,
+  RecordRail,
+} from '../folio';
+import {
+  useCGExplanations,
+  useCGGifts,
+  useResonances,
+  useSkills,
+  useStatDefinitions,
+  useUpdateDraft,
+} from '../queries';
 import type { CharacterDraft } from '../types';
-import { Stage, STAGE_LABELS } from '../types';
+import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
@@ -37,28 +45,38 @@ interface GiftStageProps {
   onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
 }
 
-interface GiftFormValues {
+export interface GiftFormValues {
   anima_ritual_name: string;
   motif_description: string;
   glimpse_story: string;
 }
 
-type FunnelStepId = 'tradition' | 'gift' | 'techniques' | 'resonance' | 'anima';
+interface FunnelStepProps {
+  n: number;
+  name: string;
+  value?: string;
+  done: boolean;
+  gated: boolean;
+  gateReason: string;
+  open: boolean;
+  children: ReactNode;
+}
 
-const FUNNEL_STEPS: { id: FunnelStepId; label: string }[] = [
-  { id: 'tradition', label: 'Tradition' },
-  { id: 'gift', label: 'Gift' },
-  { id: 'techniques', label: 'Techniques' },
-  { id: 'resonance', label: 'Gift Resonance' },
-  { id: 'anima', label: 'Anima Check' },
-];
-
-function StepLabel({ label, complete }: { label: string; complete: boolean }) {
+/** One step of the Gift funnel: readable once the step before it is done,
+ * choosable only then — its body (the step's own picker) mounts only when
+ * unlocked, so a gated step never fires the queries its picker would make. */
+function FunnelStep({ n, name, value, done, gated, gateReason, open, children }: FunnelStepProps) {
   return (
-    <span className="flex items-center gap-2">
-      {complete && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-      {label}
-    </span>
+    <Entry
+      name={name}
+      gloss={value ?? undefined}
+      tag={gated ? gateReason : `Step ${n} of 5`}
+      chosen={done}
+      closed={gated}
+      open={open}
+    >
+      {!gated && children}
+    </Entry>
   );
 }
 
@@ -70,28 +88,46 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const draftData = draft.draft_data;
   const giftId = draftData.selected_gift_id ?? null;
   const selectedResonanceId = draftData.selected_gift_resonance_id ?? null;
+  const selectedTechniqueIds = draftData.selected_technique_ids ?? [];
+  const picks = draft.starting_technique_picks;
 
-  const completion: Record<FunnelStepId, boolean> = {
+  const completion = {
     tradition: draft.selected_tradition != null,
     gift: giftId != null,
-    techniques: (draftData.selected_technique_ids?.length ?? 0) > 0,
+    techniques: selectedTechniqueIds.length > 0,
     resonance: selectedResonanceId != null,
     anima: draftData.anima_check_stat_id != null && draftData.anima_check_skill_id != null,
   };
 
-  // Open on the first incomplete step (or the last one if every step is done)
-  // so returning to this stage lands the player where they left off.
-  const [openStep, setOpenStep] = useState<FunnelStepId | ''>(() => {
-    const firstIncomplete = FUNNEL_STEPS.find((step) => !completion[step.id]);
-    return firstIncomplete?.id ?? FUNNEL_STEPS[FUNNEL_STEPS.length - 1].id;
-  });
+  // The Gift step's rail/gloss value needs the gift's name, which the draft
+  // only carries as an id — read the same catalog GiftSelector fetches,
+  // gated on a tradition being chosen so it never fires before GiftSelector
+  // itself would (and never races the unmocked network in a test that never
+  // selects a tradition).
+  const { data: cgGifts } = useCGGifts(completion.tradition ? draft.id : undefined);
+  const giftName = cgGifts?.find((gift) => gift.id === giftId)?.name;
+  const resonanceName = resonances.find((r) => r.id === selectedResonanceId)?.name;
+  const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
 
-  const handleSelectResonance = (resonanceId: string) => {
+  // The Anima Check step's gloss and rail row need the names behind the two
+  // ids the draft stores, so read the same two catalogs AnimaCheckStep picks
+  // from. The step itself only mounts once unlocked; these lines have to read
+  // as a chosen value while it is closed.
+  const { data: statDefinitions } = useStatDefinitions();
+  const { data: skills } = useSkills();
+  const animaStatName = statDefinitions?.find(
+    (stat) => stat.id === draftData.anima_check_stat_id
+  )?.name;
+  const animaSkillName = skills?.find((skill) => skill.id === draftData.anima_check_skill_id)?.name;
+  const animaCheckLine =
+    animaStatName && animaSkillName ? `${animaStatName} + ${animaSkillName}` : undefined;
+
+  const handleSelectResonance = (resonanceId: number) => {
     updateDraft.mutate({
       draftId: draft.id,
       data: {
         draft_data: {
-          selected_gift_resonance_id: parseInt(resonanceId, 10),
+          selected_gift_resonance_id: resonanceId,
         },
       },
     });
@@ -128,130 +164,142 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
     }
   }, [onRegisterBeforeLeave, saveFormFields]);
 
+  const rail = (
+    <>
+      <RecordRail
+        rows={[
+          { label: 'Origin', value: draft.selected_area?.name },
+          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Species', value: draft.selected_species?.name },
+          { label: 'Path', value: draft.selected_path?.name },
+          { label: 'Tradition', value: draft.selected_tradition?.name },
+          { label: 'Gift', value: giftName },
+          { label: 'Techniques', value: completion.gift ? techniqueCountLine : undefined },
+          { label: 'Resonance', value: resonanceName },
+          { label: 'Anima check', value: animaCheckLine },
+        ]}
+        ledger="Stage 6 of 11"
+      />
+      <Marginalia id="note-gift">
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Techniques">
+          are capped at {picks} picks at this stage; the budget comes from your distinctions.
+        </Note>
+      </Marginalia>
+    </>
+  );
+
   return (
     <ChapterLeaf
       stage={Stage.GIFT}
-      title={copy?.magic_heading ?? STAGE_LABELS[Stage.GIFT]}
+      title={copy?.magic_heading ?? 'Magic & Gifts'}
       intro={copy?.magic_intro}
-      wide
+      aside={rail}
     >
-      <div className="space-y-8">
-        {copy?.gift_lore_intro && (
-          <p className="mt-2 text-sm text-muted-foreground">{copy.gift_lore_intro}</p>
-        )}
+      {copy?.gift_lore_intro && (
+        <div className="leaf-body">
+          <p>{copy.gift_lore_intro}</p>
+        </div>
+      )}
 
-        <Accordion
-          type="single"
-          collapsible
-          value={openStep}
-          onValueChange={(value) => setOpenStep(value as FunnelStepId | '')}
+      <EntryList label="Gift steps">
+        <FunnelStep
+          n={1}
+          name={copy?.gift_tradition_heading ?? 'Tradition'}
+          value={draft.selected_tradition?.name}
+          done={completion.tradition}
+          gated={false}
+          gateReason=""
+          open={!completion.tradition}
         >
-          <AccordionItem value="tradition">
-            <AccordionTrigger>
-              <StepLabel label={FUNNEL_STEPS[0].label} complete={completion.tradition} />
-            </AccordionTrigger>
-            <AccordionContent>
-              <TraditionStep draft={draft} />
-            </AccordionContent>
-          </AccordionItem>
+          <TraditionStep draft={draft} />
+        </FunnelStep>
 
-          <AccordionItem value="gift" disabled={!completion.tradition}>
-            <AccordionTrigger disabled={!completion.tradition}>
-              <StepLabel label={FUNNEL_STEPS[1].label} complete={completion.gift} />
-            </AccordionTrigger>
-            <AccordionContent>
-              <GiftSelector draft={draft} />
-            </AccordionContent>
-          </AccordionItem>
+        <FunnelStep
+          n={2}
+          name="Gift"
+          value={giftName}
+          done={completion.gift}
+          gated={!completion.tradition}
+          gateReason="Choose a tradition first"
+          open={completion.tradition && !completion.gift}
+        >
+          <GiftSelector draft={draft} />
+        </FunnelStep>
 
-          <AccordionItem value="techniques" disabled={!completion.gift}>
-            <AccordionTrigger disabled={!completion.gift}>
-              <StepLabel label={FUNNEL_STEPS[2].label} complete={completion.techniques} />
-            </AccordionTrigger>
-            <AccordionContent>
-              {giftId != null ? (
-                <TechniqueSelector draft={draft} giftId={giftId} />
-              ) : (
-                <p className="text-sm text-muted-foreground">Select a gift first.</p>
-              )}
-            </AccordionContent>
-          </AccordionItem>
+        <FunnelStep
+          n={3}
+          name="Techniques"
+          value={completion.gift ? techniqueCountLine : undefined}
+          done={completion.techniques}
+          gated={!completion.gift}
+          gateReason="Choose a gift first"
+          open={completion.gift && !completion.techniques}
+        >
+          {giftId != null && <TechniqueSelector draft={draft} giftId={giftId} />}
+        </FunnelStep>
 
-          <AccordionItem value="resonance" disabled={!completion.gift}>
-            <AccordionTrigger disabled={!completion.gift}>
-              <StepLabel label={FUNNEL_STEPS[3].label} complete={completion.resonance} />
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {resonances.map((resonance) => {
-                  const isSelected = selectedResonanceId === resonance.id;
-                  return (
-                    <Card
-                      key={resonance.id}
-                      onClick={() => handleSelectResonance(resonance.id.toString())}
-                      className={cn(
-                        'cursor-pointer transition-colors hover:bg-accent',
-                        isSelected && 'border-primary bg-accent'
-                      )}
-                    >
-                      <CardHeader className="p-3">
-                        <CardTitle className="flex items-center justify-between gap-2 text-sm">
-                          <span>
-                            {resonance.codex_entry_id != null ? (
-                              <CodexTerm entryId={resonance.codex_entry_id}>
-                                {resonance.name}
-                              </CodexTerm>
-                            ) : (
-                              resonance.name
-                            )}
-                          </span>
-                          {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
-                        </CardTitle>
-                      </CardHeader>
-                      {resonance.description && (
-                        <CardContent className="px-3 pb-3 pt-0">
-                          <CardDescription className="text-xs">
-                            {resonance.description}
-                          </CardDescription>
-                        </CardContent>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+        <FunnelStep
+          n={4}
+          name="Resonance"
+          value={resonanceName}
+          done={completion.resonance}
+          gated={!completion.techniques}
+          gateReason="Choose your techniques first"
+          open={completion.techniques && !completion.resonance}
+        >
+          <EntryList label="Resonances">
+            {resonances.map((resonance) => {
+              const isSelected = selectedResonanceId === resonance.id;
+              return (
+                <Entry
+                  key={resonance.id}
+                  name={resonance.name}
+                  tag={resonance.resonance_affinity ?? 'Resonance'}
+                  chosen={isSelected}
+                  open={isSelected}
+                >
+                  {resonance.description && <p>{resonance.description}</p>}
+                  <CodexLine entryId={resonance.codex_entry_id} name={resonance.name} />
+                  <EntryDoors
+                    chooseLabel={`Choose ${resonance.name}`}
+                    onChoose={() => handleSelectResonance(resonance.id)}
+                    chosen={isSelected}
+                  />
+                </Entry>
+              );
+            })}
+          </EntryList>
+        </FunnelStep>
 
-          <AccordionItem value="anima">
-            <AccordionTrigger>
-              <StepLabel label={FUNNEL_STEPS[4].label} complete={completion.anima} />
-            </AccordionTrigger>
-            <AccordionContent>
-              <AnimaCheckStep draft={draft} ritualNameField={register('anima_ritual_name')} />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <FunnelStep
+          n={5}
+          name={copy?.anima_check_heading ?? 'Anima Check'}
+          value={animaCheckLine}
+          done={completion.anima}
+          gated={!completion.resonance}
+          gateReason="Choose a resonance first"
+          open={completion.resonance && !completion.anima}
+        >
+          <AnimaCheckStep draft={draft} register={register} />
+        </FunnelStep>
+      </EntryList>
 
-        {/* Motif — always visible (carried from the old MagicStage advanced section).
-          Glimpse is the guided tag-driven flow below (#2427). */}
-        <section className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="motif-description">{copy?.magic_motif_heading ?? 'Motif'}</Label>
-            <Textarea
-              id="motif-description"
-              {...register('motif_description')}
-              placeholder="Describe the aesthetic of your magic..."
-              rows={3}
-              className="resize-y"
-            />
-          </div>
-          <GlimpseSection
-            draft={draft}
-            glimpseProseField={register('glimpse_story')}
-            heading={copy?.magic_glimpse_heading}
-          />
-        </section>
-      </div>
+      <h2 className="section-h" id="motif-heading">
+        {copy?.magic_motif_heading ?? 'Motif'}
+      </h2>
+      <Field id="motif" label="Motif" hint={copy?.magic_motif_desc}>
+        <textarea id="motif" rows={4} {...register('motif_description')} />
+      </Field>
+
+      <h2 className="section-h" id="glimpse-heading">
+        {copy?.magic_glimpse_heading ?? 'The Glimpse'}
+      </h2>
+      <GlimpseSection
+        draft={draft}
+        glimpseProseField={register('glimpse_story')}
+        heading={copy?.magic_glimpse_heading}
+      />
     </ChapterLeaf>
   );
 }

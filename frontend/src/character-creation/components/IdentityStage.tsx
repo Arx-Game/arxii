@@ -1,28 +1,21 @@
 /**
- * Stage 7: Identity
+ * Stage 9: Identity (#3630).
  *
- * Name, concept, quote, personality, and background fields.
+ * Name, concept, quote and personality as writing fields on the hairline;
+ * worship stays a native select (the catalog is long). The record rail lists
+ * the choices made so far, including the full-name preview this stage
+ * computes; the one mechanically-loaded explanation (a secret worship mints
+ * a Secret others might uncover) lives in the margin rather than under a
+ * section heading (Decision 8).
  */
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChapterLeaf } from '../folio';
+import { ChapterLeaf, Field, Marginalia, Note, RecordRail } from '../folio';
 import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
-import { Stage, STAGE_LABELS } from '../types';
+import { Stage } from '../types';
 import { composeFullName } from '../utils';
-
-const NONE_VALUE = 'none';
 
 interface IdentityStageProps {
   draft: CharacterDraft;
@@ -95,148 +88,142 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
   const familyName = draft.family?.name ?? '';
   const fullNamePreview = composeFullName(localFirstName, familyName, '');
 
+  const rail = (
+    <>
+      <RecordRail
+        rows={[
+          { label: 'Origin', value: draft.selected_area?.name },
+          { label: 'Species', value: draft.selected_species?.name },
+          { label: 'Family', value: draft.family?.name },
+          // Absent (not "not yet chosen") until a first name exists (#3630).
+          ...(fullNamePreview ? [{ label: 'Name', value: fullNamePreview }] : []),
+          { label: 'Public worship', value: draft.public_worship?.name },
+          { label: 'Secret worship', value: draft.secret_worship?.name },
+        ]}
+        ledger="Stage 9 of 11"
+      />
+      <Marginalia id="note-identity">
+        {/* PLACEHOLDER: Apostate rewrite */}
+        <Note lead="Secret worship">
+          is the truth behind the front. Choosing one mints a Secret others might uncover.
+        </Note>
+      </Marginalia>
+    </>
+  );
+
   return (
     <ChapterLeaf
       stage={Stage.IDENTITY}
-      title={copy?.identity_heading ?? STAGE_LABELS[Stage.IDENTITY]}
+      title={copy?.identity_heading ?? 'Name & Identity'}
       intro={copy?.identity_intro}
-      wide
+      aside={rail}
     >
-      <div className="space-y-8">
-        {/* Name */}
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Character Name</h3>
-          <div className="max-w-md space-y-2">
-            <Label htmlFor="first-name">First Name</Label>
-            <Input
-              id="first-name"
-              {...register('first_name')}
-              placeholder="Enter first name"
-              maxLength={20}
-            />
-            <p className="text-xs text-muted-foreground">
-              2-20 characters, letters only, first letter will be capitalized.
-            </p>
-            {fullNamePreview && (
-              <p className="mt-2 text-sm">
-                Full name: <span className="font-semibold">{fullNamePreview}</span>
-              </p>
-            )}
-          </div>
-        </section>
+      <h2 className="section-h">{copy?.identity_name_heading ?? 'Name'}</h2>
+      <Field
+        id="first_name"
+        label="First name"
+        hint="2-20 characters, letters only, first letter will be capitalized."
+      >
+        <input
+          id="first_name"
+          type="text"
+          {...register('first_name')}
+          placeholder="Enter first name"
+          maxLength={20}
+        />
+      </Field>
 
-        {/* Concept */}
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Concept</h3>
-          <div className="max-w-md space-y-2">
-            <Label htmlFor="concept">Character Concept</Label>
-            <Input
-              id="concept"
-              {...register('concept')}
-              placeholder="A short tagline for your character..."
-              maxLength={255}
-            />
-            <p className="text-xs text-muted-foreground">
-              A brief archetype or tagline (e.g., &quot;Ruthless pragmatist with a hidden
-              heart&quot;).
-            </p>
-          </div>
-        </section>
+      <h2 className="section-h">{copy?.identity_concept_heading ?? 'Concept'}</h2>
+      <Field
+        id="concept"
+        label="Character concept"
+        hint="A brief archetype or tagline (e.g., “Ruthless pragmatist with a hidden heart”)."
+      >
+        <input
+          id="concept"
+          type="text"
+          {...register('concept')}
+          placeholder="A short tagline for your character..."
+          maxLength={255}
+        />
+      </Field>
 
-        {/* Quote */}
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Quote</h3>
-          <div className="max-w-md space-y-2">
-            <Label htmlFor="quote">Character Quote</Label>
-            <Input
-              id="quote"
-              {...register('quote')}
-              placeholder="A signature quote or motto..."
-              maxLength={500}
-            />
-            <p className="text-xs text-muted-foreground">
-              A saying, motto, or line that captures your character&apos;s voice.
-            </p>
-          </div>
-        </section>
+      <h2 className="section-h">{copy?.identity_quote_heading ?? 'Quote'}</h2>
+      <Field
+        id="quote"
+        label="Character quote"
+        hint="A saying, motto, or line that captures your character’s voice."
+      >
+        <input
+          id="quote"
+          type="text"
+          {...register('quote')}
+          placeholder="A signature quote or motto..."
+          maxLength={500}
+        />
+      </Field>
 
-        {/* Personality */}
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Personality</h3>
-          <div className="space-y-2">
-            <Label htmlFor="personality">Personality Traits</Label>
-            <Textarea
-              id="personality"
-              {...register('personality')}
-              placeholder="Describe your character's personality..."
-              rows={3}
-              className="resize-y"
-            />
-            <p className="text-xs text-muted-foreground">
-              How does your character think, feel, and behave?
-            </p>
-          </div>
-        </section>
+      <h2 className="section-h">{copy?.identity_personality_heading ?? 'Personality'}</h2>
+      <Field
+        id="personality"
+        label="Personality traits"
+        hint="How does your character think, feel, and behave?"
+      >
+        <textarea
+          id="personality"
+          rows={6}
+          {...register('personality')}
+          placeholder="Describe your character's personality..."
+        />
+      </Field>
 
-        {/* Worship (#2355) */}
-        <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Worship</h3>
-          <div className="max-w-md space-y-2">
-            <Label htmlFor="public-worship">Public Worship</Label>
-            <Select
-              value={draft.public_worship ? String(draft.public_worship.id) : NONE_VALUE}
-              onValueChange={(value) =>
-                handleWorshipChange(
-                  'public_worship_id',
-                  value === NONE_VALUE ? null : Number(value)
-                )
-              }
-            >
-              <SelectTrigger id="public-worship">
-                <SelectValue placeholder="Choose a being (optional)" />
-              </SelectTrigger>
-              <SelectContent className="max-h-60 overflow-y-auto">
-                <SelectItem value={NONE_VALUE}>Unaffiliated</SelectItem>
-                {(beings ?? []).map((being) => (
-                  <SelectItem key={being.id} value={String(being.id)}>
-                    {being.name} ({being.tradition_name})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              The god, spirit, or power your character openly worships. Optional.
-            </p>
-          </div>
-          <div className="max-w-md space-y-2">
-            <Label htmlFor="secret-worship">Secret Worship</Label>
-            <Select
-              value={draft.secret_worship ? String(draft.secret_worship.id) : NONE_VALUE}
-              onValueChange={(value) =>
-                handleWorshipChange(
-                  'secret_worship_id',
-                  value === NONE_VALUE ? null : Number(value)
-                )
-              }
-            >
-              <SelectTrigger id="secret-worship">
-                <SelectValue placeholder="None: my faith is what it appears" />
-              </SelectTrigger>
-              <SelectContent className="max-h-60 overflow-y-auto">
-                <SelectItem value={NONE_VALUE}>None</SelectItem>
-                {(beings ?? []).map((being) => (
-                  <SelectItem key={being.id} value={String(being.id)}>
-                    {being.name} ({being.tradition_name})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              The truth behind the front. Choosing one mints a Secret others might uncover.
-            </p>
-          </div>
-        </section>
-      </div>
+      <h2 className="section-h">{copy?.identity_worship_heading ?? 'Worship'}</h2>
+      <Field
+        id="public_worship"
+        label="Public worship"
+        hint="The god, spirit, or power your character openly worships. Optional."
+      >
+        <select
+          id="public_worship"
+          value={draft.public_worship?.id ?? ''}
+          onChange={(e) =>
+            handleWorshipChange(
+              'public_worship_id',
+              e.target.value === '' ? null : Number(e.target.value)
+            )
+          }
+        >
+          <option value="">None</option>
+          {(beings ?? []).map((being) => (
+            <option key={being.id} value={being.id}>
+              {being.name} ({being.tradition_name})
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field
+        id="secret_worship"
+        label="Secret worship"
+        hint="The god, spirit, or power your character worships in private. Optional."
+      >
+        <select
+          id="secret_worship"
+          value={draft.secret_worship?.id ?? ''}
+          onChange={(e) =>
+            handleWorshipChange(
+              'secret_worship_id',
+              e.target.value === '' ? null : Number(e.target.value)
+            )
+          }
+        >
+          <option value="">None</option>
+          {(beings ?? []).map((being) => (
+            <option key={being.id} value={being.id}>
+              {being.name} ({being.tradition_name})
+            </option>
+          ))}
+        </select>
+      </Field>
     </ChapterLeaf>
   );
 }

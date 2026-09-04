@@ -1,17 +1,28 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+import { codexKeys } from '@/codex/queries';
 import {
   ChapterLeaf,
+  CodexLine,
   Entry,
   EntryDoors,
   EntryList,
   InstrumentFrame,
   InstrumentGroup,
+  Paragraphs,
   RecordRail,
   StatRow,
 } from '../folio';
+import { ChoiceRow } from '../folio/ChoiceRow';
+import { Field } from '../folio/Field';
 import { Stage } from '../types';
+import { mockCodexEntry } from './fixtures';
+import {
+  createTestQueryClient,
+  renderWithCharacterCreationProviders,
+  seedQueryData,
+} from './testUtils';
 
 describe('ChapterLeaf', () => {
   it('opens with the eyebrow and one h1 and puts the aside in a marginalia landmark', () => {
@@ -100,5 +111,106 @@ describe('StatRow', () => {
     const plus = screen.getByRole('button', { name: /raise strength/i });
     expect(plus).toBeDisabled();
     expect(plus).toHaveAttribute('title', 'At 6, the most it can be');
+  });
+});
+
+describe('ChoiceRow', () => {
+  it('presses the chosen option and reports a change', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ChoiceRow
+        label="Gender"
+        options={[
+          { value: 1, label: 'Male' },
+          { value: 2, label: 'Female' },
+        ]}
+        value={1}
+        onChange={onChange}
+      />
+    );
+    expect(screen.getByRole('group', { name: 'Gender' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Male' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Female' }));
+    expect(onChange).toHaveBeenCalledWith(2);
+  });
+
+  it('clears only when clearable', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ChoiceRow
+        label="Build"
+        options={[{ value: 'a', label: 'A' }]}
+        value="a"
+        onChange={onChange}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'A' }));
+    expect(onChange).not.toHaveBeenCalled();
+    rerender(
+      <ChoiceRow
+        label="Build"
+        options={[{ value: 'a', label: 'A' }]}
+        value="a"
+        onChange={onChange}
+        clearable
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'A' }));
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+});
+
+describe('Field', () => {
+  it('labels its control and shows the hint', () => {
+    render(
+      <Field id="f" label="Concept" hint="One line.">
+        <input id="f" type="text" />
+      </Field>
+    );
+    expect(screen.getByLabelText('Concept')).toBeInTheDocument();
+    expect(screen.getByText('One line.')).toHaveClass('hint');
+  });
+});
+
+describe('Entry lead', () => {
+  it('renders the lead before the name, hidden from assistive tech', () => {
+    render(
+      <EntryList label="Paths">
+        <Entry name="Blade" tag="Valor" chosen={false} lead={<i data-testid="ico" />}>
+          <p>prose</p>
+        </Entry>
+      </EntryList>
+    );
+    expect(screen.getByTestId('ico').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('Paragraphs', () => {
+  it('splits blank-line-separated text into separate paragraphs', () => {
+    render(<Paragraphs text={'First paragraph.\n\nSecond paragraph.'} />);
+    expect(screen.getByText('First paragraph.').tagName).toBe('P');
+    expect(screen.getByText('Second paragraph.').tagName).toBe('P');
+  });
+});
+
+describe('CodexLine', () => {
+  it('renders the codex line for an entry id and nothing at all without one', () => {
+    const queryClient = createTestQueryClient();
+    // CodexTerm mounts CodexModal, which fetches its entry on mount rather
+    // than on open — seed it so the test never reaches the real codex API.
+    seedQueryData(queryClient, codexKeys.entry(7), mockCodexEntry(7));
+
+    const { rerender, container } = renderWithCharacterCreationProviders(
+      <CodexLine entryId={7} name="Duskborn Rite" />,
+      { queryClient }
+    );
+    expect(screen.getByRole('button', { name: 'Codex: Duskborn Rite' }).closest('p')).toHaveClass(
+      'ledger-line'
+    );
+
+    rerender(<CodexLine entryId={null} name="Duskborn Rite" />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

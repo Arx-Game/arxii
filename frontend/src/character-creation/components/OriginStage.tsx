@@ -20,6 +20,7 @@ import {
   Marginalia,
   Note,
   PageTurn,
+  Paragraphs,
   RecordRail,
 } from '../folio';
 import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries';
@@ -116,9 +117,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
                 closed={closed}
                 open={isChosen}
               >
-                {area.description.split(/\n\s*\n/).map((para, i) => (
-                  <p key={i}>{para}</p>
-                ))}
+                <Paragraphs text={area.description} />
                 {closed ? (
                   // The trust threshold that gates access is not on the serializer yet.
                   <p className="ledger-line">

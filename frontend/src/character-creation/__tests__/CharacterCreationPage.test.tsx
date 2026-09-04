@@ -54,6 +54,11 @@ vi.mock('../api', () => ({
   // GlimpseSection (#2427) calls useGlimpseTags() unconditionally as part of
   // the always-mounted Glimpse guided flow.
   getGlimpseTags: vi.fn().mockResolvedValue([]),
+  // GiftStage resolves the Anima Check step's stat + skill names from these
+  // two catalogs (#3630), for the step gloss and the record rail, whether or
+  // not that step is the one currently open.
+  getStatDefinitions: vi.fn().mockResolvedValue([]),
+  getSkillsWithSpecializations: vi.fn().mockResolvedValue([]),
 }));
 
 describe('CharacterCreationPage', () => {
@@ -314,12 +319,15 @@ describe('CharacterCreationPage', () => {
 
       // The funnel's Anima Check step label always renders, independent of
       // any catalog data loading — a reliable signal GiftStage (not the old
-      // MagicStage cantrip UI) is what's mounted.
+      // MagicStage cantrip UI) is what's mounted. Scoped to the funnel's own
+      // entry list — the record rail also carries "Tradition" and
+      // "Techniques" rows (#3630), so an unscoped query is ambiguous.
       await waitFor(() => {
         expect(screen.getByText('Anima Check')).toBeInTheDocument();
       });
-      expect(screen.getByText('Tradition')).toBeInTheDocument();
-      expect(screen.getByText('Techniques')).toBeInTheDocument();
+      const funnel = screen.getByRole('list', { name: 'Gift steps' });
+      expect(within(funnel).getByText('Tradition')).toBeInTheDocument();
+      expect(within(funnel).getByText('Techniques')).toBeInTheDocument();
     });
   });
 

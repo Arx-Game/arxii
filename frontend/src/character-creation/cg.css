@@ -515,6 +515,16 @@
   align-items: baseline;
   gap: 0.25rem 0.9rem;
 }
+.interview .entry-lead {
+  display: inline-flex;
+  margin-right: 0.5rem;
+  color: var(--cg-accent);
+  vertical-align: -0.15em;
+}
+.interview .entry-lead svg {
+  width: 1.1em;
+  height: 1.1em;
+}
 .interview .entry-name {
   font-family: 'Cinzel', serif;
   font-weight: 600;
@@ -559,6 +569,11 @@
 }
 .interview .entry-prose {
   padding: 0 0 1.4rem 1.7rem;
+}
+.interview .entry-art {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 1rem;
 }
 .interview .entry-prose p {
   margin: 0 0 1rem;
@@ -650,6 +665,10 @@
 }
 .interview .choice-row button:hover {
   color: var(--cg-accent);
+}
+.interview .choice-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* the instruments: mechanical inputs, deliberately sans */
@@ -744,6 +763,14 @@
 }
 .interview .stat-row.spec {
   padding-left: 1.4rem;
+}
+.interview .goal-row {
+  grid-template-columns: 1fr 6rem auto;
+  align-items: end;
+  gap: 1rem;
+}
+.interview .goal-row .field {
+  margin: 0;
 }
 .interview .stat-name {
   font-weight: 500;
@@ -858,6 +885,9 @@
   .interview .stat-row {
     grid-template-columns: 1fr 2.25rem auto;
   }
+  .interview .goal-row {
+    grid-template-columns: 1fr 5rem auto;
+  }
   .interview .stat-pips {
     display: none;
   }
@@ -882,6 +912,8 @@
   margin-bottom: 0.45rem;
 }
 .interview .field input[type='text'],
+.interview .field input[type='number'],
+.interview .field select,
 .interview .field textarea {
   width: 100%;
   font-family: 'EB Garamond', Georgia, serif;
@@ -892,6 +924,16 @@
   border: none;
   border-bottom: 1px solid var(--cg-hairline-strong);
   padding: 0.35rem 0;
+}
+.interview .field select {
+  appearance: none;
+  cursor: pointer;
+  max-width: 100%;
+  padding-right: 1.6rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 6l4 4 4-4' fill='none' stroke='currentColor' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.2rem center;
+  background-size: 0.9rem;
 }
 .interview .field textarea {
   border: 1px solid var(--cg-hairline-strong);

@@ -1,16 +1,14 @@
 /**
- * GiftSelector — second step of the GiftStage funnel (#2426 Task 10).
+ * GiftSelector (#3630) — gifts as index entries, second step of the Gift
+ * funnel.
  *
  * Lists the gifts pickable for the draft's chosen tradition + path
  * (GET /api/character-creation/gifts/?draft_id=). Selecting a gift resets any
  * previously chosen techniques, since the technique catalog is scoped per-gift.
  */
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CodexTerm } from '@/codex/components/CodexTerm';
-import { cn } from '@/lib/utils';
-import { CheckCircle2, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
+import { CodexLine, Entry, EntryDoors, EntryList } from '../../folio';
 import { useCGGifts, useUpdateDraft } from '../../queries';
 import type { CharacterDraft } from '../../types';
 
@@ -61,68 +59,47 @@ export function GiftSelector({ draft }: GiftSelectorProps) {
   }, [gifts, isFetching]);
 
   if (!draft.selected_tradition) {
-    return (
-      <p className="text-sm text-muted-foreground">Select a tradition above to see your gifts.</p>
-    );
+    return <p className="ledger-line">Select a tradition above to see your gifts.</p>;
   }
 
   if (!draft.selected_path) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Select a Path in the Path stage to see available gifts.
-      </p>
-    );
+    return <p className="ledger-line">Select a Path in the Path stage to see available gifts.</p>;
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-muted-foreground">Loading gifts...</span>
-      </div>
-    );
-  }
-
-  if (!gifts || gifts.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No gifts are available for your tradition and path.
+      <p className="ledger-line" aria-busy="true">
+        Loading gifts…
       </p>
     );
   }
 
+  if (!gifts || gifts.length === 0) {
+    return <p className="ledger-line">No gifts are available for your tradition and path.</p>;
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <EntryList label="Gifts">
       {gifts.map((gift) => {
         const isSelected = selectedGiftId === gift.id;
         return (
-          <Card
+          <Entry
             key={gift.id}
-            className={cn(
-              'cursor-pointer transition-all',
-              isSelected && 'ring-2 ring-primary',
-              !isSelected && 'hover:ring-1 hover:ring-primary/50'
-            )}
-            onClick={() => handleSelect(gift.id)}
+            name={gift.name}
+            tag={gift.kind}
+            chosen={isSelected}
+            open={isSelected}
           >
-            <CardHeader className="p-3">
-              <CardTitle className="flex items-center justify-between gap-2 text-sm">
-                <span>
-                  {gift.codex_entry_id != null ? (
-                    <CodexTerm entryId={gift.codex_entry_id}>{gift.name}</CodexTerm>
-                  ) : (
-                    gift.name
-                  )}
-                </span>
-                {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-3 pt-0">
-              <CardDescription className="text-xs">{gift.description}</CardDescription>
-            </CardContent>
-          </Card>
+            <p>{gift.description}</p>
+            <CodexLine entryId={gift.codex_entry_id} name={gift.name} />
+            <EntryDoors
+              chooseLabel={`Choose ${gift.name}`}
+              onChoose={() => handleSelect(gift.id)}
+              chosen={isSelected}
+            />
+          </Entry>
         );
       })}
-    </div>
+    </EntryList>
   );
 }

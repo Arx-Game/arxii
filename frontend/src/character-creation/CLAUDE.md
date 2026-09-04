@@ -22,6 +22,11 @@ character-creation/
 │   ├── RecordRail.tsx       # Marginalia: record-so-far rows + a Note aside
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries
 │   ├── InstrumentFrame.tsx  # InstrumentGroup/StatRow: labeled stat instruments
+│   ├── ChoiceRow.tsx        # Segmented choice: a few named options, one pressed (#3630)
+│   ├── Field.tsx            # Inscription label over a serif control on a hairline (#3630)
+│   ├── Paragraphs.tsx       # Blank-line-separated prose split into <p> tags (#3630)
+│   ├── CodexWord.tsx        # In-world term linked via CodexTerm when a codex entry exists
+│   ├── CodexLine.tsx        # "Codex: {name}" ledger line in an entry body; nothing without an id
 │   └── ConfirmDialog.tsx    # Native <dialog> confirm for record-clearing choices
 └── components/
     ├── index.ts             # Component exports
@@ -44,13 +49,13 @@ character-creation/
     ├── FinalTouchesStage.tsx # Stage 10: Goals
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
-    ├── TraditionPicker.tsx  # Tradition card grid — mounted inside gift/TraditionStep
-    ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions, mounted in
-    │                        #   HeritageStage's beginning detail panel and
-    │                        #   TraditionPicker's tradition detail panel (#3281)
+    ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
+    ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions; renders as margin
+    │                        #   notes in HeritageStage and inside the chosen tradition's
+    │                        #   entry in TraditionPicker (#3281, #3630)
     ├── gift/                # GiftStage funnel steps (#2426 Task 10)
     │   ├── TraditionStep.tsx    # Wraps TraditionPicker
-    │   ├── GiftSelector.tsx     # Gift catalog cards (GET .../gifts/?draft_id=)
+    │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=)
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
     │   └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
@@ -70,6 +75,11 @@ character-creation/
 
 - **Free navigation**: All stages clickable, incomplete stages show warning badge
 - **Real-time validation**: Stage completion tracked, submit blocked until all required stages complete
+- **Folio primitives** (entries, instrument frames, fields, choice rows) now back Origin,
+  Heritage, Distinctions, Path, Gift, Attributes & Skills, Appearance, Identity, Final
+  Touches, and Review; Lineage alone still carries the pre-Folio card/badge markup, pending
+  Plan C (#3630). `SkillsSection`, mounted inside AttributesStage's frame, still uses the
+  shadcn Accordion for its per-skill specialization panels.
 - Interface chrome is OOC and plain (stages, Next/Back, Selected); in-character text is confined to
   realm/codex prose and the player's own words; the game never speaks for the player (#3540)
 - **Staff-only features**: "Add to Roster" button visible only to staff

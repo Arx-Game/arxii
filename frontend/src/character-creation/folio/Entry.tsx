@@ -18,15 +18,22 @@ interface EntryProps {
   /** A gated entry: readable, not choosable. */
   closed?: boolean;
   open?: boolean;
+  /** An icon or mark shown before the name, decorative only. */
+  lead?: ReactNode;
   children: ReactNode;
 }
 
-export function Entry({ name, gloss, tag, chosen, closed, open, children }: EntryProps) {
+export function Entry({ name, gloss, tag, chosen, closed, open, lead, children }: EntryProps) {
   return (
     <li className={[chosen ? 'chosen' : '', closed ? 'closed' : ''].join(' ').trim()}>
       <details className="entry" open={open}>
         <summary>
           <span className="entry-head">
+            {lead && (
+              <span className="entry-lead" aria-hidden="true">
+                {lead}
+              </span>
+            )}
             <span className="entry-name">{name}</span>
             {gloss && <span className="entry-gloss">{gloss}</span>}
           </span>
@@ -52,7 +59,8 @@ interface EntryDoorsProps {
   chooseLabel: string;
   onChoose: () => void;
   chosen: boolean;
-  onSetAside: () => void;
+  /** Omit for a choice the API cannot clear; the chosen line then reads "Selected." with no button. */
+  onSetAside?: () => void;
   quiet?: { label: string; to: string };
 }
 
@@ -63,10 +71,16 @@ export function EntryDoors({ chooseLabel, onChoose, chosen, onSetAside, quiet }:
         {chooseLabel}
       </button>
       <span className="chosen-line">
-        Selected.{' '}
-        <button type="button" onClick={onSetAside}>
-          Clear
-        </button>
+        {onSetAside ? (
+          <>
+            Selected.{' '}
+            <button type="button" onClick={onSetAside}>
+              Clear
+            </button>
+          </>
+        ) : (
+          'Selected.'
+        )}
       </span>
       {quiet && (
         <Link className="quiet-link" to={quiet.to}>
