@@ -103,6 +103,7 @@ function buildScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     running_beat: { id: 9, risk: 'moderate', clock_size: 0 },
     declared_risk: 'moderate',
     clock: null,
+    art_url: null,
     ...overrides,
   };
 }

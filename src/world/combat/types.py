@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence
+    from world.checks.outcome_models import ConsequenceOutcome
     from world.checks.types import CheckResult
     from world.combat.models import (
         Clash,
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
         ComboDefinition,
         ComboSlot,
     )
-    from world.conditions.models import DamageType
+    from world.conditions.models import ConditionInstance, DamageType
     from world.conditions.types import (
         AppliedConditionResult,
         DamageInteractionResult,
@@ -35,6 +36,8 @@ if TYPE_CHECKING:
     from world.magic.types import TechniqueUseResult
     from world.mechanics.types import ChallengeResolutionResult
     from world.scenes.models import Interaction
+    from world.societies.models import LegendEntry
+    from world.stories.models import BeatCompletion
     from world.traits.models import CheckOutcome
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -444,3 +447,22 @@ class WeaponContribution:
 
     damage: int
     damage_type: DamageType | None
+
+
+@dataclass(frozen=True)
+class AftermathDigest:
+    """What one encounter changed for one participant, assembled at conclusion (#3551).
+
+    Built from rows ``complete_encounter`` already writes; never persisted itself.
+    ``conditions`` are the conditions still held that were applied during the
+    fight (cleared ones leave no row). ``beat_visible_to_player`` is False for a
+    SECRET beat, whose line only a GM or staff may see.
+    """
+
+    outcome: str
+    consequence: ConsequenceOutcome | None
+    conditions: list[ConditionInstance]
+    legend_entries: list[LegendEntry]
+    beat_completion: BeatCompletion | None
+    beat_visible_to_player: bool
+    peril_round_active: bool

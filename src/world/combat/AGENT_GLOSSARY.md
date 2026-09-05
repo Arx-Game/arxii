@@ -59,7 +59,7 @@ _Avoid_: block, guard, intercept, bodyguard
 **Guardian reaction** (#2207):
 The declared protect-with-technique reaction a PC arms via `declare_interpose(participant, ally=None, technique=None)`. Two mechanically distinct resolution branches share the one declaration field (`CombatRoundAction.focused_action`, reused rather than adding a parallel column):
 - **Mundane** (`technique=None`, Interpose's original shape): dispatches through `world.mechanics.reactions.dispatch_capability_reaction(select_best_check_rating=True)`, which picks the higher-rated of the guardian's *real* available reaction approaches (Reflexes vs. Melee Defense, via `compute_check_rating`) — deterministic, zero extra rolls, never inventing an action outside `get_available_actions`'s output (ADR-0032). Costs fatigue on fire.
-- **Technique-guardian** (`technique=<a known, learned Technique classifying to a protective flavor>`): resolved by `world.combat.services._try_technique_interpose`, which rolls the guardian's own cast check (`resolve_cast_check_type`) instead of a capability-reaction challenge, and pays a flat `ConditionTemplate.reactive_anima_cost` (fizzle if unaffordable — no roll, no charge) instead of fatigue. See ADR-0118 for why this rolls outside `use_technique`. Grading (clean/partial/fail) is shared with the mundane path via `_grade_interpose_damage`; a clean BLINK-flavored block relocates the ward to the guardian's position; a REDIRECT-flavored block sends the saved amount to the declared destination — see **Redirect**, below.
+- **Technique-guardian** (`technique=<a known, learned Technique classifying to a protective flavor>`): resolved by `world.combat.services._try_technique_interpose`, which rolls the guardian's own cast check (`resolve_cast_check_type`) instead of a capability-reaction challenge, and pays a flat `ConditionTemplate.reactive_anima_cost` (fizzle if unaffordable: no roll, no charge, narrated to the guardian and the room, #3574) instead of fatigue. See ADR-0118 for why this rolls outside `use_technique`. Grading (clean/partial/fail) is shared with the mundane path via `_grade_interpose_damage`; a clean BLINK-flavored block relocates the ward to the guardian's position; a REDIRECT-flavored block sends the saved amount to the declared destination (see **Redirect**, below).
 
 `world.magic.services.targeting.protective_flavor(technique)` classifies a technique's reactive-trigger handler into `barrier` (absorb_pool) / `blink` (blink_dodge) / `redirect` (reflect_damage) by walking its authored condition→reactive-trigger→flow data — no new authored field. A guardian can also shield an ALLY-allegiance `CombatOpponent` (a summon) — but only via the *any-ally* (`ally=None`) declaration, since `focused_ally_target` FKs `CombatParticipant` and cannot name a `CombatOpponent` directly (a named-ally guard of a summon is a follow-up).
 _Avoid_: guardian ward, protect action
@@ -98,6 +98,7 @@ The two budgets gating the shared interpose fire seam (`_dispatch_interpose_acti
 `begin_declaration_phase`) and `DamagePreApplyPayload.answers_consumed` vs
 `ABSORPTION_CAP_PER_MOMENT` (2, per-landing-hit, regardless of who fired). Standing defenses
 (absorb/reflect/blink — their own `reactive_anima_cost`, ADR-0060) sit outside both budgets.
+A declined guardian is told privately why (#3574, ADR-0271); the table is not.
 _Avoid_: reaction points, action economy (this is specifically the interpose-family reaction
 budget, not a general action-point system).
 
@@ -159,6 +160,14 @@ _Avoid_: intensity bonus (ambiguous with Escalation intensity, above), vulnerabi
 A phase transition, enrage, or break-bar break; each fires its own `SurgeTriggerKind`
 (`BOSS_PHASE` / `BOSS_ENRAGE` / `BOSS_BREAK`) for every ACTIVE PC, once per boss per phase.
 _Avoid_: boss event, phase spike
+
+**Phase line** (#3552):
+The room narration a boss phase transition broadcasts: the phase's authored `BossPhase.description` when set, else a generic shift line, plus an enrage line when the new phase hits harder. Not curve-gated; distinct from the boss beat's generic surge narration, which never names the boss.
+_Avoid_: phase announcement, transition surge
+
+**Held back** (#3552):
+An ACTIVE PC in the resolution order with no `CombatRoundAction` this round under TIMED or MANUAL pace; the round's OUTCOME output names them ("X holds back."). A sustaining participant is committing, not holding back.
+_Avoid_: skipped, idle, AFK
 
 **Edge / Setback** (GM fiat, #3387):
 A curated, catalog-safe one-round nudge a GM applies through the existing `gm_apply_condition` lever — two authored `ConditionTemplate` rows (`world/conditions/gm_edge_content.py`) delivering a ±10 `ConditionCheckModifier` scoped to the Combat `CheckCategory`, `scales_with_severity=True`, expiring at the end of the round applied. Not a new mechanism — no bespoke GM-fiat modifier system exists or should exist alongside it.
@@ -332,3 +341,20 @@ weather modifier (too broad — this is WIND specifically, not the general expos
 **BondCombatBonus**:
 The relationship co-combat passive (#2021, ADR-0109). While a PC and a bonded character (relationship above `BondCombatConfig.min_developed_absolute_value`) are co-combatants and the ally is `ParticipantStatus.ACTIVE`, the PC gains `int(mechanical_bonus)` (cube root of developed absolute value) as a `ModifierContribution(RELATIONSHIP)` on every combat check. Soul-tethered pairs get `soul_tether_multiplier × mechanical_bonus`. Directed (one-sided): only the character who invested gets the bonus. Drops when the ally falls (handing off to #2013's grief spike). Also scales INTERPOSE/SUCCOR capability checks via `bond_bonus(actor, protected)` → `extra_modifiers`.
 _Avoid_: bond buff, ally bonus (use "bond combat bonus" or "co-combat passive")
+
+**Aftermath digest** (#3551):
+The per-participant summary of what a fight changed, assembled at `complete_encounter`'s
+conclusion from rows the completion seam already wrote (aftermath `ConsequenceOutcome`,
+`ConditionInstance`, `LegendEntry`, `BeatCompletion`), never persisted as its own row.
+`build_aftermath_digest` reads the consequence, legend and beat rows bounded by
+`[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)` so a read-time rebuild
+does not pick up a later fight in the same scene; conditions are bounded by
+`[encounter.created_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`, so that same
+upper edge also keeps a later fight's condition out of an earlier digest.
+`render_aftermath_digest` turns the digest into the private Narrator line and telnet
+message `deliver_aftermath_digests` sends to each ACTIVE or FLED participant. Conditions
+cleared mid-fight report nothing (their rows are gone and the pose log already narrated
+them); only conditions still held that were applied during the encounter show. The legend
+line ("Deed remembered") only ever reports an authored deed row, since legend settles at
+the end of a story from its outcomes, never per fight.
+_Avoid_: aftermath report, post-combat summary, combat recap

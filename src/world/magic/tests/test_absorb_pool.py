@@ -10,6 +10,8 @@ Four cases:
   4. anima.current < reactive_anima_cost → fizzle (amount and buffer unchanged).
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
@@ -103,7 +105,7 @@ class AbsorbPoolHandlerTests(TestCase):
         self.assertEqual(instance.absorb_remaining, 20)
 
     def test_fizzle_when_anima_insufficient(self) -> None:
-        """anima.current < reactive_anima_cost → fizzle; amount and buffer unchanged."""
+        """anima.current < reactive_anima_cost -> fizzle; amount/buffer unchanged; payer told."""
         bearer, _anima, instance = _make_bearer_with_buffer(
             anima_current=0,
             reactive_anima_cost=1,
@@ -111,8 +113,74 @@ class AbsorbPoolHandlerTests(TestCase):
         )
         payload = _payload(bearer, amount=30)
 
-        absorb_pool(payload=payload)
+        with (
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            absorb_pool(payload=payload)
 
         self.assertEqual(payload.amount, 30)
         instance.refresh_from_db()
         self.assertEqual(instance.absorb_remaining, 20)
+        # #3574: self-cast ward, payer is the bearer: one private line. Out of
+        # combat there is no encounter, so no room line.
+        private.assert_called_once()
+        self.assertEqual(private.call_args.args[0].pk, bearer.pk)
+        self.assertIn("cannot pay its fee", private.call_args.args[1])
+        self.assertIn(instance.condition.name, private.call_args.args[1])
+        room.assert_not_called()
+
+    def test_fizzle_of_an_ally_ward_tells_caster_and_bearer(self) -> None:
+        bearer, _anima, instance = _make_bearer_with_buffer(
+            anima_current=10, reactive_anima_cost=1, absorb_remaining=20
+        )
+        caster = CharacterSheetFactory().character
+        CharacterAnimaFactory(character=caster.sheet_data, current=0, maximum=10)
+        instance.source_character = caster
+        instance.save(update_fields=["source_character"])
+        payload = _payload(bearer, amount=30)
+
+        with patch("world.scenes.interaction_services.narrate_privately") as private:
+            absorb_pool(payload=payload)
+
+        self.assertEqual(payload.amount, 30)
+        by_pk = {c.args[0].pk: c.args[1] for c in private.call_args_list}
+        self.assertEqual(set(by_pk), {caster.pk, bearer.pk})
+        self.assertIn("cannot pay its fee", by_pk[caster.pk])
+        self.assertIn(str(bearer), by_pk[caster.pk])
+        self.assertIn("does not answer the blow", by_pk[bearer.pk])
+        self.assertNotIn("fee", by_pk[bearer.pk])
+
+    def test_fizzle_inside_an_encounter_adds_a_room_line(self) -> None:
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.services import active_combat_engagement_for, add_participant
+        from world.scenes.constants import RoundStatus
+
+        bearer, _anima, _instance = _make_bearer_with_buffer(
+            anima_current=0, reactive_anima_cost=1, absorb_remaining=20
+        )
+        encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=1)
+        # add_participant creates both the CombatParticipant row AND the
+        # COMBAT CharacterEngagement (_create_participant ->
+        # _ensure_combat_engagement) so active_combat_engagement_for(bearer)
+        # resolves for real, unmocked, below.
+        add_participant(encounter, bearer.sheet_data)
+        self.assertIsNotNone(active_combat_engagement_for(bearer))
+        payload = _payload(bearer, amount=30)
+
+        with (
+            patch("world.scenes.interaction_services.narrate_privately"),
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            absorb_pool(payload=payload)
+
+        room.assert_called_once()
+        self.assertEqual(room.call_args.args[0].pk, encounter.pk)
+        room_line = room.call_args.args[1]
+        self.assertIn("flickers and fails", room_line)
+        self.assertIn(str(bearer), room_line)
+        # Controller ruling: factory-generated character names contain digits,
+        # so assertNotRegex(r"\d") on the raw line cannot pass verbatim. Strip
+        # the known character name first, then assert no digit remains: the
+        # intent (room lines carry no numbers) is preserved.
+        self.assertNotRegex(room_line.replace(str(bearer), ""), r"\d")

@@ -293,6 +293,18 @@ class TestRealDeclarations(TestCase):
         GameClockFactory()
         self.assertTrue(dep.probe.resolve(None).present)
 
+    def test_legend_level_calibration_is_a_required_dependency(self) -> None:
+        """An empty calibration table 500s the Rite of Honors (#3480, #3466)."""
+        from world.societies.factories import LegendLevelCalibrationFactory
+
+        dep = next(d for d in rc._declarations() if d.key == "legend-level-calibration")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        self.assertIsInstance(dep.probe, rc.AnyRowProbe)
+        self.assertEqual(dep.probe.model_label(), "LegendLevelCalibration")
+        self.assertFalse(dep.probe.resolve(None).present)
+        LegendLevelCalibrationFactory()
+        self.assertTrue(dep.probe.resolve(None).present)
+
     def test_active_beginning_without_upbringing_is_reported(self) -> None:
         """A Beginning with no active Upbringing strands a player in Lineage (#3617)."""
         from world.character_creation.factories import BeginningsFactory, OriginTemplateFactory

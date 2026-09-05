@@ -15,7 +15,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.combat.constants import ClashResolution, EncounterOutcome
-from world.magic.narration import power_outcome_clause, signature_clause
+from world.magic.narration import (
+    fill_narration_placeholders,
+    power_outcome_clause,
+    signature_clause,
+)
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction
 
@@ -241,6 +245,8 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     power_ledger: PowerLedger | None = None,
     signature_snippet: str | None = None,
     interaction_result: DamageInteractionResult | None = None,
+    hit_text: str = "",
+    miss_text: str = "",
 ) -> str:
     """Render a one-line, deterministic outcome narration from resolved data.
 
@@ -260,6 +266,12 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     a ``SignatureMotifBonus``, #1728), its cosmetic "— <snippet>" clause is
     appended alongside the power clause — the combat-narration sibling of
     ``render_cast_outcome_narration``'s signature handling.
+
+    When ``hit_text`` / ``miss_text`` are supplied (the technique's or threat entry's
+    authored lines, #3554), the authored line replaces the HEAD sentence only:
+    ``{actor}`` and ``{target}`` are filled in, then the damage figure, tail clauses
+    and suffix clauses are appended exactly as for the default head. Blank means
+    "use the default sentence". The untargeted branch never uses them.
 
     Examples:
         "Kira’s Frost Bolt strikes the Pyromancer for 24 damage."
@@ -292,10 +304,17 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
 
     # Targeted action with no damage and no wounds → miss (or warded bounce).
     if total_damage <= 0 and not wounds:
-        base = f"{actor_label}’s {technique_name} misses {target_label}"
+        if miss_text:
+            base = fill_narration_placeholders(miss_text, actor=actor_label, target=target_label)
+        else:
+            base = f"{actor_label}’s {technique_name} misses {target_label}"
         return f"{base} {suffix}." if suffix else f"{base}."
 
-    head = f"{actor_label}’s {technique_name} strikes {target_label} for {total_damage} damage"
+    if hit_text:
+        blow = fill_narration_placeholders(hit_text, actor=actor_label, target=target_label)
+    else:
+        blow = f"{actor_label}’s {technique_name} strikes {target_label}"
+    head = f"{blow} for {total_damage} damage"
     tail = _build_tail_clauses(
         wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
     )
