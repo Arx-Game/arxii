@@ -68,6 +68,26 @@ class MakemigrationsResolutionTests(SimpleTestCase):
             assert commands[name] == "django_linear_migrations", name
 
 
+class SquashmigrationsResolutionTests(SimpleTestCase):
+    def test_squashmigrations_resolves_to_core_management(self) -> None:
+        """Django's and django-linear-migrations' squash must both lose (ADR-0272)."""
+        assert get_commands()["squashmigrations"] == "core_management"
+
+    def test_range_arguments_are_refused(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("squashmigrations", "arxii", "0001_initial", "0002_x")
+
+    def test_other_app_labels_are_refused(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("squashmigrations", "objects")
+
+
 class MigrateResolutionTests(SimpleTestCase):
     def test_migrate_resolves_to_core_management(self) -> None:
         """The generation guard (ADR-0272) only runs if our ``migrate`` wins resolution."""

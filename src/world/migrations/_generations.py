@@ -5,7 +5,9 @@ every migration name generation ``n`` ended with (its generated files plus the
 incrementals that followed), snapshotted when generation ``n + 1`` was cut.
 ``COMMITS[n]`` is the last commit on ``main`` whose files were generation ``n``:
 a database stranded at generation ``n`` visits that commit to migrate forward.
-``REPLACED`` is what every generated file of ``CURRENT`` replaces.
+``DEFERRED[n]`` is generation ``n``'s cycle-breaking ``AddField`` count, the baseline
+the next regeneration must not silently exceed. ``REPLACED`` is what every
+generated file of ``CURRENT`` replaces.
 """
 
 CURRENT = 1
@@ -13,5 +15,7 @@ CURRENT = 1
 GENERATIONS: dict[int, list[str]] = {}
 
 COMMITS: dict[int, str] = {}
+
+DEFERRED: dict[int, int] = {}
 
 REPLACED = [("arxii", name) for name in GENERATIONS.get(CURRENT - 1, [])]

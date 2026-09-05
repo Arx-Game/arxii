@@ -51,8 +51,11 @@ class RenderGenerationsModuleTests(SimpleTestCase):
             current=3,
             generations={1: ["0001_initial"], 2: ["0001_g2_initial", "0104_persona_title"]},
             commits={1: "aaa", 2: "bbb"},
+            deferred={1: 34, 2: 34},
         )
-        source = render_generations_module(data.current, data.generations, data.commits)
+        source = render_generations_module(
+            data.current, data.generations, data.commits, data.deferred
+        )
         assert parse_generations_source(source) == data
 
     def test_previous_names_is_the_generation_before_current(self) -> None:

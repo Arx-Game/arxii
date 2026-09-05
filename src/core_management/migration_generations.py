@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 APP_LABEL = "arxii"
+_MODULE_NAMES = {"CURRENT", "GENERATIONS", "COMMITS", "DEFERRED"}
 SRC_DIR = Path(__file__).resolve().parents[1]
 GENERATIONS_PATH = SRC_DIR / "world" / "migrations" / "_generations.py"
 
@@ -31,7 +32,9 @@ every migration name generation ``n`` ended with (its generated files plus the
 incrementals that followed), snapshotted when generation ``n + 1`` was cut.
 ``COMMITS[n]`` is the last commit on ``main`` whose files were generation ``n``:
 a database stranded at generation ``n`` visits that commit to migrate forward.
-``REPLACED`` is what every generated file of ``CURRENT`` replaces.
+``DEFERRED[n]`` is generation ``n``'s cycle-breaking ``AddField`` count, the baseline
+the next regeneration must not silently exceed. ``REPLACED`` is what every
+generated file of ``CURRENT`` replaces.
 """
 '''
 
@@ -41,6 +44,7 @@ class GenerationsData:
     current: int
     generations: dict[int, list[str]] = field(default_factory=dict)
     commits: dict[int, str] = field(default_factory=dict)
+    deferred: dict[int, int] = field(default_factory=dict)
 
     @property
     def previous_names(self) -> list[str]:
@@ -48,7 +52,10 @@ class GenerationsData:
 
 
 def render_generations_module(
-    current: int, generations: dict[int, list[str]], commits: dict[int, str]
+    current: int,
+    generations: dict[int, list[str]],
+    commits: dict[int, str],
+    deferred: dict[int, int] | None = None,
 ) -> str:
     """Render ``_generations.py``. Names are one per line so diffs read as lists."""
     lines = [_HEADER.rstrip("\n"), "", f"CURRENT = {current}", ""]
@@ -69,6 +76,13 @@ def render_generations_module(
     else:
         lines.append("COMMITS: dict[int, str] = {}")
     lines.append("")
+    if deferred:
+        lines.append("DEFERRED: dict[int, int] = {")
+        lines.extend(f"    {gen}: {count}," for gen, count in sorted(deferred.items()))
+        lines.append("}")
+    else:
+        lines.append("DEFERRED: dict[int, int] = {}")
+    lines.append("")
     lines.append(f'REPLACED = [("{APP_LABEL}", name) for name in GENERATIONS.get(CURRENT - 1, [])]')
     lines.append("")
     return "\n".join(lines)
@@ -85,15 +99,17 @@ def parse_generations_source(source: str) -> GenerationsData:
             target, value = node.target, node.value
         else:
             continue
-        wanted = isinstance(target, ast.Name) and target.id in {"CURRENT", "GENERATIONS", "COMMITS"}
+        wanted = isinstance(target, ast.Name) and target.id in _MODULE_NAMES
         if wanted and value is not None:
             values[target.id] = ast.literal_eval(value)  # type: ignore[union-attr]
     generations = values["GENERATIONS"]
     commits = values["COMMITS"]
+    deferred = values.get("DEFERRED", {})
     return GenerationsData(
         current=int(values["CURRENT"]),  # type: ignore[call-overload]
         generations={int(k): list(v) for k, v in generations.items()},  # type: ignore[union-attr]
         commits={int(k): str(v) for k, v in commits.items()},  # type: ignore[union-attr]
+        deferred={int(k): int(v) for k, v in deferred.items()},  # type: ignore[union-attr]
     )
 
 
@@ -154,6 +170,6 @@ def load_generations(path: Path = GENERATIONS_PATH) -> GenerationsData:
 
 def write_generations(data: GenerationsData, path: Path = GENERATIONS_PATH) -> None:
     path.write_text(
-        render_generations_module(data.current, data.generations, data.commits),
+        render_generations_module(data.current, data.generations, data.commits, data.deferred),
         encoding="utf-8",
     )
