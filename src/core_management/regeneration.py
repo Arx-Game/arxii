@@ -87,8 +87,12 @@ def _git(*args: str, repo_root: Path = REPO_ROOT) -> str:
     return result.stdout.strip()
 
 
-def git_head(repo_root: Path = REPO_ROOT) -> str:
-    return _git("rev-parse", "HEAD", repo_root=repo_root)
+def git_main_base(repo_root: Path = REPO_ROOT) -> str:
+    """The tip of ``origin/main`` this branch sits on: the last commit on main whose
+    files are the outgoing generation. Recorded as ``COMMITS[n]`` for the guard's
+    recovery message; the branch's own HEAD would be rewritten by the sync rebase
+    and its sha would dangle."""
+    return _git("merge-base", "HEAD", "origin/main", repo_root=repo_root)
 
 
 def git_is_clean(repo_root: Path = REPO_ROOT) -> bool:

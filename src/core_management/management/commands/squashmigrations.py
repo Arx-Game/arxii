@@ -44,8 +44,8 @@ from core_management.regeneration import (
     TOOLS_DIR,
     deferred_verdict,
     drop_report,
-    git_head,
     git_is_clean,
+    git_main_base,
     in_main_checkout,
     migration_files,
     post_partition_addfield_sources,
@@ -133,7 +133,7 @@ class Command(BaseCommand):
             )
             raise CommandError(message)
 
-        head = git_head()
+        head = git_main_base()
         for path in migration_files():
             path.unlink()
 
