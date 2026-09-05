@@ -289,6 +289,7 @@ class TestIdentitySection(TestCase):
             "worship",
             "worship_sincere",
             "current_mood",
+            "vacancy",
         }
         assert set(identity.keys()) == expected_keys
 
@@ -2143,9 +2144,13 @@ class TestCharacterSheetQueryCount(TestCase):
         38.    character.threads (CharacterThreadHandler._all, #2901) — which of
                 those variants this caster has actually unlocked. A per-Character
                 cached handler, so one query however many techniques are known.
+        39.    identity vacancy membership prefetch, #3648 (organization_memberships,
+                nested inside the same personas Prefetch already fetched for #21, not a
+                second top-level lookup): one fixed query for every persona's active,
+                vacancy-bearing membership, not one per persona.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(38):
+        with self.assertNumQueries(39):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

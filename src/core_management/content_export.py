@@ -407,6 +407,9 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # #3056: live story/installation state, not content — same rationale as
     # npcrole.faction_affiliation above.
     "npc_services.missionofferdetails": frozenset({"source_beat", "target_project"}),
+    # #3648: which staff houses a Family Template lists as served is installation
+    # state (those orgs are not corpus rows), same rationale as faction_affiliation.
+    "societies.housetemplate": frozenset({"served_house_choices"}),
 }
 
 

@@ -948,7 +948,7 @@ class PactCommitment(SharedMemoryModel):
 
 
 class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
-    """A realm's recipe for CG-defined houses on set-aside titles (#1884 Phase D).
+    """A family type: the recipe CG builds a family from (#1884 Phase D, #3648).
 
     The claimable ``Title`` is the slot; the template carries the automated
     thematic gates (name pattern per the realm's naming conventions,
@@ -978,15 +978,34 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="house_templates",
         help_text="The society the materialized org joins.",
     )
+    org_type = models.ForeignKey(
+        "arxii.OrganizationType",
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+        help_text="Organization type a family of this template gets (#3648).",
+    )
+    served_house_choices = models.ManyToManyField(
+        _ORG_FK,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Staff houses a family on this template may declare it served (#3648); "
+            "empty = the question is not offered. Installation-specific: excluded from export."
+        ),
+    )
     liege = models.ForeignKey(
         _ORG_FK,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="house_templates",
         help_text="The org the new house swears fealty to.",
     )
     default_succession_law = models.ForeignKey(
         SuccessionLaw,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="house_templates",
     )
     name_pattern = models.CharField(
@@ -1038,7 +1057,27 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         fields = ["name"]
 
     class Meta:
+        verbose_name = "Family Template"
+        verbose_name_plural = "Family Templates"
         ordering = ["realm", "name"]
+
+    def clean(self) -> None:
+        """Refuse a ``name_pattern`` that does not even compile (#3648 review).
+
+        Without this, a bad regex saved through admin would 500 every later
+        GET/PATCH of any draft on this template - ``validators.py``'s
+        ``_get_named_path_errors`` calls ``re.fullmatch`` on it for every
+        stage-validation pass.
+        """
+        import re  # noqa: PLC0415
+
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        try:
+            re.compile(self.name_pattern)
+        except re.error as exc:
+            raise ValidationError({"name_pattern": f"Not a valid regex: {exc}"}) from exc
 
     def __str__(self) -> str:
         return self.name

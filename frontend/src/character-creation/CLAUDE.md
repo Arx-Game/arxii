@@ -62,13 +62,28 @@ character-creation/
     │                            #   binds `@/magic/components/glimpse/GlimpseFlow` to
     │                            #   draft_data glimpse_tag_ids/glimpse_linked_distinction_ids,
     │                            #   prose stays on GiftStage's register('glimpse_story')
-    └── lineage/             # LineageStage subsections (#3617)
+    └── lineage/             # LineageStage subsections (#3617, #3648)
         ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
-        ├── UpbringingPrompts.tsx # Slot prompts scoped to the resolved family path;
-        │                         #   write-in -> draft_data.origin_slots, pick-list ->
+        ├── UpbringingPrompts.tsx # Slot prompts; `scope: 'any'` renders above the family
+        │                         #   block, `scope: 'path'` renders below it, scoped to
+        │                         #   the resolved family path; write-in ->
+        │                         #   draft_data.origin_slots, pick-list ->
         │                         #   draft_data.origin_choices, priced off influence
-        └── FamilyPathSection.tsx # Path picker (when the Upbringing allows more than
-                                  #   one) plus the claim/name/none path UI
+        ├── FamilyPathSection.tsx # Path picker (when the Upbringing allows more than
+        │                         #   one) plus the claim/name/none path UI; renders
+        │                         #   FamilyTemplateForm (name path), VacancyPicker
+        │                         #   (claim path's kin Vacancies), ServicePanel (any
+        │                         #   path's retainer Vacancies), InheritedFactsPanel
+        │                         #   (claim path)
+        ├── FamilyTemplateForm.tsx # Shared aspect-pick + features form for a Family
+        │                         #   Template, used by both HouseFoundingPanel (noble
+        │                         #   title claim) and the name path (#3648)
+        ├── VacancyPicker.tsx     # Renders reachable Vacancies (description, importance,
+        │                         #   presumed importance, price, remaining) for pick
+        ├── ServicePanel.tsx      # Retainer Vacancies reachable from this Upbringing,
+        │                         #   grouped by house, shown on any resolved path
+        └── InheritedFactsPanel.tsx # Read-only aspects/features/liege facet panel for a
+                                  #   claimed staff family (#3648)
 ```
 
 ## Key Features

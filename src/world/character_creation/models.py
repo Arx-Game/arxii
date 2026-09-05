@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.skills.models import SkillPointBudget
+    from world.societies.houses.models import HouseTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -606,13 +607,11 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="claimable_in_templates",
         help_text="Kinds offered on the claim path; empty = every kind (#3617).",
     )
-    named_family_kind = models.ForeignKey(
-        "arxii.FamilyKind",
-        on_delete=models.PROTECT,
-        null=True,
+    family_templates = models.ManyToManyField(
+        "arxii.HouseTemplate",
         blank=True,
-        related_name="named_in_templates",
-        help_text="Kind a player-named family gets; required when naming is allowed (#3617).",
+        related_name="upbringings",
+        help_text="Family Templates the name path offers (#3648); one is auto-picked.",
     )
 
     objects = OriginTemplateManager()
@@ -667,9 +666,9 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        if self.allows_name_family and self.named_family_kind_id is None:
+        if self.allows_name_family and self.pk and not self.family_templates.exists():
             raise ValidationError(
-                {"named_family_kind": "Required when naming a family is allowed."}
+                {"family_templates": "Offer at least one Family Template when naming is allowed."}
             )
 
 
@@ -964,6 +963,22 @@ class CharacterDraft(SharedMemoryModel):
         related_name="drafts",
         help_text="Slot pool a node is minted from at finalization.",
     )
+    selected_vacancy = models.ForeignKey(
+        "arxii.Vacancy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="The Vacancy this character takes at finalization (#3648).",
+    )
+    served_house = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="On the name path, the staff house the new family served (#3648).",
+    )
     defer_parents = models.BooleanField(
         default=False,
         help_text=(
@@ -1094,6 +1109,19 @@ class CharacterDraft(SharedMemoryModel):
             return allowed[0]
         return self.family_path if self.family_path in allowed else ""
 
+    def resolve_family_template(self) -> HouseTemplate | None:
+        """The Family Template the name path builds from (#3648): the only one, else the pick."""
+        template = self.selected_origin_template
+        if template is None:
+            return None
+        offered = list(template.family_templates.all())
+        if len(offered) == 1:
+            return offered[0]
+        chosen_id = self.draft_data.get("family_template_id")
+        if chosen_id is None:
+            return None
+        return next((row for row in offered if row.pk == int(chosen_id)), None)
+
     def visible_origin_slot_ids(self) -> set[int]:
         """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).
 
@@ -1137,6 +1165,10 @@ class CharacterDraft(SharedMemoryModel):
                 pk__in=ids, slot__template=template, is_active=True
             ):
                 total += choice.cost_for(influence)
+        vacancy = self.selected_vacancy
+        if vacancy is not None:
+            family = vacancy.organization.family
+            total += vacancy.cost_for(family.influence if family is not None else 0)
         return total
 
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object

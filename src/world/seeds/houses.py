@@ -76,11 +76,12 @@ TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
 def _ensure_house_charter_anchors(
     realm: Realm,
 ) -> tuple[Society, OrganizationType, Organization]:
-    """Ensure the Crown org + its Society exist under ``realm`` (idempotent).
+    """Ensure the Crown org, its Society, and both org types exist (idempotent).
 
-    Neither model is in ``CONTENT_MODELS`` (#2875): they are plain
+    None of these are in ``CONTENT_MODELS`` (#2875): they are plain
     seeder-owned config, but content-repo ``HouseTemplate``/``SuccessionLaw``
-    rows can FK the Crown and its Society by name, so both must exist before
+    rows can FK the Crown, its Society, and the ``noble_family``/
+    ``commoner_family`` org types by name, so all of them must exist before
     the content load resolves those fixtures. Called two ways: once from
     ``world.seeds.config_prerequisites._house_charter_anchors`` (before
     ``load_content_first()``, with its own ``realm`` resolution, a no-op
@@ -89,7 +90,8 @@ def _ensure_house_charter_anchors(
     available (the self-healing gameplay-call-site pattern ADR-0171
     describes for a code-required row).
 
-    Returns ``(society, org_type, crown)``.
+    Returns ``(society, org_type, crown)`` (``org_type`` is ``noble_family``;
+    ``commoner_family`` is minted here too but not part of the return shape).
     """
     from world.societies.models import Organization, OrganizationType, Society  # noqa: PLC0415
 
@@ -105,6 +107,16 @@ def _ensure_house_charter_anchors(
             "rank_3_title": "Noble Family",
             "rank_4_title": "Trusted House Servants",
             "rank_5_title": "Servants",
+        },
+    )
+    OrganizationType.objects.get_or_create(
+        name="commoner_family",
+        defaults={
+            "rank_1_title": "Head of the Family",
+            "rank_2_title": "Elder",
+            "rank_3_title": "Family",
+            "rank_4_title": "Household",
+            "rank_5_title": "Hands",
         },
     )
     crown, _ = Organization.objects.get_or_create(
@@ -127,6 +139,8 @@ def seed_houses_demo() -> None:
     Society/Organization/Title/SuccessionLaw all hang off ``realm`` via a
     required FK.
     """
+    from django.conf import settings  # noqa: PLC0415
+
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.realms.models import Realm  # noqa: PLC0415
@@ -150,7 +164,7 @@ def seed_houses_demo() -> None:
         create_domain,
         swear_fealty,
     )
-    from world.societies.models import Organization  # noqa: PLC0415
+    from world.societies.models import Organization, Vacancy  # noqa: PLC0415
 
     seed_kinship_demo()
     seed_nobiliary_particles()
@@ -175,7 +189,7 @@ def seed_houses_demo() -> None:
     )
     if law is None:
         return
-    _seed_house_creator(realm=realm, society=society, crown=crown, law=law)
+    _seed_house_creator(realm=realm, society=society, org_type=org_type, crown=crown, law=law)
 
     house, created = Organization.objects.get_or_create(
         name=HOUSE_ORG_NAME,
@@ -189,6 +203,17 @@ def seed_houses_demo() -> None:
     )
     if not created:
         return
+
+    if settings.SEED_SAMPLE_CONTENT and house.family_id is not None:
+        Vacancy.objects.get_or_create(
+            organization=house,
+            name="Household guard PLACEHOLDER",
+            defaults={
+                "description": "PLACEHOLDER: stands a post, keeps the gate.",
+                "importance": 1,
+                "presumed_importance": 1,
+            },
+        )
 
     for kind in (
         RecognitionRuleKind.MATRILINEAL_AUTO_WEDLOCK,
@@ -226,7 +251,7 @@ def seed_houses_demo() -> None:
     )
 
 
-def _seed_house_creator(*, realm, society, crown, law) -> None:
+def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
     """Phase D: a set-aside claimable barony + the realm's charter template."""
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
@@ -263,6 +288,7 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
             "realm": realm,
             "kind": noble_kind,
             "society": society,
+            "org_type": org_type,
             "liege": crown,
             "default_succession_law": law,
         },

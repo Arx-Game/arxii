@@ -15,6 +15,7 @@ import type {
   DraftData,
   EffectType,
   Family,
+  FamilyTemplate,
   GiftDetail,
   HeightBand,
   OriginTemplate,
@@ -28,6 +29,7 @@ import type {
   Technique,
   TechniqueStyle,
   Tradition,
+  Vacancy,
 } from '../types';
 
 // =============================================================================
@@ -140,6 +142,7 @@ export const mockNobleFamily: Family = {
   description: 'An honorable noble house known for martial prowess.',
   born_particle: 'du',
   taken_in_particle: 'dau',
+  inherited: { aspects: [], features: [], liege_name: '' },
 };
 
 export const mockNobleFamily2: Family = {
@@ -150,6 +153,7 @@ export const mockNobleFamily2: Family = {
   description: 'A cunning noble house with southern roots.',
   born_particle: 'za',
   taken_in_particle: 'zas',
+  inherited: { aspects: [], features: [], liege_name: '' },
 };
 
 export const mockCommonerFamily: Family = {
@@ -160,6 +164,7 @@ export const mockCommonerFamily: Family = {
   description: 'A common family of craftspeople.',
   born_particle: '',
   taken_in_particle: '',
+  inherited: { aspects: [], features: [], liege_name: '' },
 };
 
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
@@ -180,7 +185,7 @@ export const mockUpbringingNamed: OriginTemplate = {
   allows_name_family: true,
   allows_no_family: false,
   claimable_kind_ids: [],
-  named_family_kind: 1,
+  family_templates: [],
   slots: [
     {
       id: 201,
@@ -208,7 +213,7 @@ export const mockUpbringingClaim: OriginTemplate = {
   allows_name_family: false,
   allows_no_family: false,
   claimable_kind_ids: [2],
-  named_family_kind: null,
+  family_templates: [],
   slots: [
     {
       id: 202,
@@ -253,7 +258,7 @@ export const mockUpbringingUnknown: OriginTemplate = {
   allows_name_family: false,
   allows_no_family: true,
   claimable_kind_ids: [],
-  named_family_kind: null,
+  family_templates: [],
   slots: [],
 };
 
@@ -270,7 +275,7 @@ export const mockUpbringingMultiPath: OriginTemplate = {
   allows_name_family: true,
   allows_no_family: false,
   claimable_kind_ids: [2],
-  named_family_kind: 1,
+  family_templates: [],
   slots: [
     {
       id: 203,
@@ -295,6 +300,107 @@ export const mockUpbringingMultiPath: OriginTemplate = {
       choices: [],
     },
   ],
+};
+
+// =============================================================================
+// Family Templates (#3648) and the name-path Upbringing that offers one
+// =============================================================================
+
+export const mockFamilyTemplate: FamilyTemplate = {
+  id: 401,
+  name: 'Regency Trust',
+  description: 'A staff-authored template for houses answering to the Regency.',
+  kind: 2,
+  name_pattern: '',
+  org_type: 1,
+  aspect_definitions: [
+    {
+      id: 601,
+      name: 'Charge',
+      prompt: 'What does this house tend to?',
+      min_picks: 1,
+      max_picks: 1,
+      options: [
+        {
+          id: 611,
+          name: 'Granaries',
+          description: 'Feeds the realm through lean years.',
+          codex_entry_id: null,
+        },
+        {
+          id: 612,
+          name: 'Aqueducts',
+          description: 'Keeps the water running.',
+          codex_entry_id: null,
+        },
+      ],
+    },
+  ],
+  features: [
+    {
+      id: 621,
+      name: 'Old Money',
+      slug: 'old-money',
+      description: 'Wealth banked for generations shows in every detail.',
+    },
+  ],
+  served_house_choices: [{ id: 501, name: 'House Regency' }],
+};
+
+export const mockUpbringingNamedWithTemplate: OriginTemplate = {
+  ...mockUpbringingNamed,
+  family_templates: [mockFamilyTemplate],
+};
+
+// =============================================================================
+// Vacancies (#3648): openings on a staff family, priced for the draft
+// =============================================================================
+
+export const mockVacancyKin: Vacancy = {
+  id: 801,
+  name: 'Third Daughter',
+  description: 'A quiet place among the family, hers to fill.',
+  basis: 'kin',
+  importance: 1,
+  presumed_importance: 5,
+  cost: 6,
+  rank_name: 'Kin',
+  count_remaining: 1,
+  organization: {
+    id: 1,
+    name: 'House Valardin',
+    family: { id: 1, name: 'Valardin', influence: 3 },
+  },
+  kin_pool: {
+    id: 901,
+    family: 1,
+    description: 'Distant cousins fostered into the household.',
+    count_remaining: 1,
+    age_min: 18,
+    age_max: 40,
+    allowed_genders: [],
+    parent_names: [],
+  },
+  kin_node: null,
+};
+
+export const mockVacancyRetainer: Vacancy = {
+  id: 802,
+  name: 'Household Guard',
+  description: 'Sworn to the house, not born to it.',
+  basis: 'retainer',
+  importance: 0,
+  presumed_importance: 0,
+  cost: 0,
+  rank_name: 'Retainer',
+  count_remaining: null,
+  organization: {
+    id: 1,
+    name: 'House Valardin',
+    family: { id: 1, name: 'Valardin', influence: 3 },
+  },
+  kin_pool: null,
+  kin_node: null,
 };
 
 // =============================================================================
@@ -377,6 +483,8 @@ export const mockEmptyDraft: CharacterDraft = {
   family_path: '',
   claimed_kin_slot: null,
   claimed_kin_pool: null,
+  selected_vacancy: null,
+  served_house: null,
   defer_parents: false,
   height_band: null,
   height_inches: null,

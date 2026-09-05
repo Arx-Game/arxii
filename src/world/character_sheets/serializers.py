@@ -51,6 +51,7 @@ from world.character_sheets.types import (
     StorySection,
     TechniqueEntry,
     ThemingSection,
+    VacancyRef,
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
@@ -89,6 +90,7 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
+from world.societies.models import OrganizationMembership
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
 
 
@@ -283,6 +285,47 @@ def _resolve_birthday(sheet: CharacterSheet) -> str | None:
     return None
 
 
+def _resolve_vacancy(sheet: CharacterSheet, *, privileged: bool) -> VacancyRef | None:
+    """The held vacancy from the primary persona's active membership (#3648).
+
+    ``importance`` (the family's real reckoning) is withheld from a
+    non-privileged viewer, mirroring the age-axes leak-table pattern;
+    ``presumed_importance`` (what outsiders assume) always shows.
+
+    Reads ``cached_vacancy_memberships`` (the nested Prefetch inside
+    ``_PERSONAS_PREFETCH_RELATED``'s own ``personas`` queryset) off each of the
+    sheet's prefetched personas when the viewset queryset ran - zero extra
+    queries. ``cached_vacancy_memberships`` is always set alongside
+    ``cached_personas`` (same Prefetch, same query), so once the latter is
+    present the former is guaranteed too. A nested or non-viewset caller that
+    built its own sheet without that prefetch (``cached_personas`` absent)
+    falls back to the direct query below.
+    """
+    if hasattr(sheet, "cached_personas"):
+        memberships = [
+            membership
+            for persona in sheet.cached_personas
+            for membership in persona.cached_vacancy_memberships
+        ]
+        membership = memberships[0] if memberships else None
+    else:
+        membership = (
+            OrganizationMembership.objects.filter(
+                persona__character_sheet=sheet, vacancy__isnull=False, left_at__isnull=True
+            )
+            .select_related("vacancy")
+            .first()
+        )
+    if membership is None:
+        return None
+    vacancy = membership.vacancy
+    return VacancyRef(
+        name=vacancy.name,
+        presumed_importance=vacancy.presumed_importance,
+        importance=vacancy.importance if privileged else None,
+    )
+
+
 def _build_identity(
     sheet: CharacterSheet,
     *,
@@ -339,6 +382,7 @@ def _build_identity(
         worship_sincere=worship_sincere,
         # #2994 — INTERNAL; owner/staff only, mirrors the age-axes leak-table pattern.
         current_mood=_id_name_or_null(sheet.current_mood) if privileged else None,
+        vacancy=_resolve_vacancy(sheet, privileged=privileged),
     )
 
 
@@ -1111,7 +1155,22 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
                 "trait_descriptors",
                 queryset=PersonaTraitDescriptor.objects.select_related("trait"),
                 to_attr="cached_trait_descriptors",
-            )
+            ),
+            # #3648 - the identity section's held-vacancy read (_resolve_vacancy).
+            # Nested here, inside the SAME "personas" Prefetch's own queryset,
+            # rather than as a second top-level ``personas__organization_memberships``
+            # lookup: a second top-level lookup through "personas" can't reuse this
+            # Prefetch's already-to_attr'd fetch (its ``prefetch_to`` is the bare
+            # attr name, not the "personas" path), so Django would run a second,
+            # unfiltered persona query just to redescend - one extra query instead
+            # of zero. Nesting here costs exactly the one query this adds.
+            Prefetch(
+                "organization_memberships",
+                queryset=OrganizationMembership.objects.filter(
+                    left_at__isnull=True, vacancy__isnull=False
+                ).select_related("vacancy"),
+                to_attr="cached_vacancy_memberships",
+            ),
         ),
         to_attr="cached_personas",
     ),

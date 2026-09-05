@@ -712,6 +712,33 @@ class HousesSeedTests(TestCase):
         holding = house.domains.get().holdings.get()
         self.assertEqual(holding.income_stream.organization, house)
 
+    def test_sample_vacancy_seeded_on_the_placeholder_house(self):
+        """A single ``seed_houses_demo()`` call already seeds the sample Vacancy (#3648).
+
+        Regression for a first pass that put this inside ``_seed_house_creator``,
+        which runs before the placeholder house Organization exists on the very
+        first (and, in production, only) call - the Vacancy never appeared through
+        the real seeding pipeline. It now lands after the house is created and
+        bound to its Family, in ``seed_houses_demo`` itself.
+        """
+        from world.seeds.houses import HOUSE_ORG_NAME, seed_houses_demo
+        from world.societies.models import Vacancy
+
+        seed_houses_demo()
+        self.assertTrue(
+            Vacancy.objects.filter(
+                name="Household guard PLACEHOLDER", organization__name=HOUSE_ORG_NAME
+            ).exists()
+        )
+
+        seed_houses_demo()  # idempotent - no duplicate
+        self.assertEqual(
+            Vacancy.objects.filter(
+                name="Household guard PLACEHOLDER", organization__name=HOUSE_ORG_NAME
+            ).count(),
+            1,
+        )
+
 
 class HouseChannelTests(TestCase):
     """The house channel connects the playing household, vassals cascaded."""

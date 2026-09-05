@@ -28,7 +28,11 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
     StartingArea,
 )
-from world.character_creation.services import select_origin_template, set_family_path
+from world.character_creation.services import (
+    clear_family_selection,
+    select_origin_template,
+    set_family_path,
+)
 from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Pronouns
 from world.classes.models import Path, PathStage
@@ -39,7 +43,7 @@ from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
-from world.roster.serializers import FamilySerializer
+from world.roster.serializers import FamilySerializer, KinSlotPoolSerializer, KinSlotSerializer
 from world.societies.houses.models import (
     HouseAspectDefinition,
     HouseAspectOption,
@@ -48,6 +52,7 @@ from world.societies.houses.models import (
     HouseTemplate,
     Title,
 )
+from world.societies.models import Organization, Vacancy
 from world.species.models import Language, Species
 from world.worship.models import WorshippedBeing
 from world.worship.serializers import WorshippedBeingRefSerializer
@@ -55,11 +60,6 @@ from world.worship.serializers import WorshippedBeingRefSerializer
 # Sentinel distinguishing "key not present in this PATCH" from an explicit
 # ``None``/empty value, for CharacterDraftSerializer.update() (#3617).
 _UNSET = object()
-
-# Draft_data keys cleared when the selected Upbringing changes; mirrors
-# services.py's own ``_UPBRINGING_DRAFT_KEYS``, applied here for the
-# clear-selected-origin-template-to-None branch that services.py never sees.
-_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
 
 
 class PerspectiveEntrySerializer(serializers.Serializer):
@@ -464,6 +464,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
 
     slots = serializers.SerializerMethodField()
     claimable_kind_ids = serializers.SerializerMethodField()
+    family_templates = serializers.SerializerMethodField()
 
     class Meta:
         model = OriginTemplate
@@ -479,10 +480,20 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "allows_name_family",
             "allows_no_family",
             "claimable_kind_ids",
-            "named_family_kind",
+            "family_templates",
             "slots",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_family_templates(self, obj: OriginTemplate) -> list[dict]:
+        """``FamilyTemplateSerializer`` is defined later in this module (near
+
+        ``HouseTemplateOptionSerializer``, which it extends) - resolved by name
+        at call time, not at class-definition time, so the forward reference
+        never raises ``NameError`` on import.
+        """
+        return FamilyTemplateSerializer(obj.family_templates.all(), many=True).data
 
     @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
     def get_claimable_kind_ids(self, obj: OriginTemplate) -> list[int]:
@@ -617,6 +628,23 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Vacancy claim / served-house pick (#3648)
+    selected_vacancy_id = serializers.PrimaryKeyRelatedField(
+        queryset=Vacancy.objects.filter(is_active=True),
+        source="selected_vacancy",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    selected_vacancy = serializers.PrimaryKeyRelatedField(read_only=True)
+    served_house_id = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        source="served_house",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    served_house = serializers.PrimaryKeyRelatedField(read_only=True)
     defer_parents = serializers.BooleanField(required=False)
     claimed_kin_slot = serializers.PrimaryKeyRelatedField(read_only=True)
     claimed_kin_pool = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -709,6 +737,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "claimed_kin_slot_id",
             "claimed_kin_pool",
             "claimed_kin_pool_id",
+            "selected_vacancy",
+            "selected_vacancy_id",
+            "served_house",
+            "served_house_id",
             "defer_parents",
             "second_parent_species",
             "second_parent_species_id",
@@ -909,12 +941,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             pass
         elif template is None:
             instance.selected_origin_template = None
-            instance.family_path = ""
-            instance.family = None
-            instance.claimed_kin_slot = None
-            instance.claimed_kin_pool = None
-            for key in _UPBRINGING_DRAFT_KEYS:
-                instance.draft_data.pop(key, None)
+            clear_family_selection(instance)
         elif template.pk != instance.selected_origin_template_id:
             select_origin_template(instance, template)
         # else: same pk selected again, no-op.
@@ -926,6 +953,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             set_family_path(instance, path)
         else:
             instance.family_path = ""
+
+        vacancy = validated_data.get("selected_vacancy", _UNSET)
+        if vacancy is not _UNSET and vacancy is not None:
+            # A Vacancy supplies its own kin link; a manual claim would double it.
+            validated_data["claimed_kin_slot"] = None
+            validated_data["claimed_kin_pool"] = None
+        family = validated_data.get("family", _UNSET)
+        if family is not _UNSET and family != instance.family and instance.selected_vacancy_id:
+            validated_data.setdefault("selected_vacancy", None)
 
         incoming = validated_data.pop("draft_data", None)
         if incoming is not None:
@@ -961,6 +997,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
         self._validate_new_family_name(value)
+        self._validate_family_aspect_picks(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -996,6 +1033,27 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if len(new_family_name) > max_length:
             msg = f"new_family_name must be at most {max_length} characters"
             raise serializers.ValidationError({"new_family_name": msg})
+
+    def _validate_family_aspect_picks(self, data: dict) -> None:
+        """``family_aspect_picks`` maps an int-castable definition id to a list of
+        int-castable option ids (#3648 review): a shape ``validators.py``'s
+        ``_get_aspect_pick_errors`` can read without raising on a malformed PATCH.
+        """
+        picks = data.get("family_aspect_picks")
+        if picks is None:
+            return
+        msg = "family_aspect_picks must map a definition id to a list of option ids"
+        if not isinstance(picks, dict):
+            raise serializers.ValidationError({"family_aspect_picks": msg})
+        for key, values in picks.items():
+            if not isinstance(values, list):
+                raise serializers.ValidationError({"family_aspect_picks": msg})
+            try:
+                int(key)
+                for value in values:
+                    int(value)
+            except (TypeError, ValueError) as exc:
+                raise serializers.ValidationError({"family_aspect_picks": msg}) from exc
 
     def _validate_tarot_card_name(self, data: dict) -> None:
         """Validate that tarot_card_name refers to an existing TarotCard."""
@@ -1300,6 +1358,64 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "aspect_definitions",
             "features",
         ]
+
+
+class FamilyTemplateSerializer(HouseTemplateOptionSerializer):
+    """A Family Template the name path offers (#3648)."""
+
+    served_house_choices = serializers.SerializerMethodField()
+
+    class Meta(HouseTemplateOptionSerializer.Meta):
+        fields = [*HouseTemplateOptionSerializer.Meta.fields, "org_type", "served_house_choices"]
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_served_house_choices(self, obj) -> list[dict]:
+        return [{"id": org.id, "name": org.name} for org in obj.served_house_choices.all()]
+
+
+class CGVacancySerializer(serializers.ModelSerializer):
+    """An opening reachable from the draft, priced for it (#3648)."""
+
+    basis = serializers.CharField(read_only=True)
+    cost = serializers.SerializerMethodField()
+    rank_name = serializers.CharField(source="rank.name", read_only=True, default="")
+    organization = serializers.SerializerMethodField()
+    kin_pool = KinSlotPoolSerializer(read_only=True, allow_null=True)
+    kin_node = KinSlotSerializer(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Vacancy
+        fields = [
+            "id",
+            "name",
+            "description",
+            "basis",
+            "importance",
+            "presumed_importance",
+            "cost",
+            "rank_name",
+            "count_remaining",
+            "organization",
+            "kin_pool",
+            "kin_node",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_cost(self, obj: Vacancy) -> int:
+        family = obj.organization.family
+        return obj.cost_for(family.influence if family is not None else 0)
+
+    @extend_schema_field(serializers.DictField())
+    def get_organization(self, obj: Vacancy) -> dict:
+        family = obj.organization.family
+        return {
+            "id": obj.organization_id,
+            "name": obj.organization.name,
+            "family": None
+            if family is None
+            else {"id": family.id, "name": family.name, "influence": family.influence},
+        }
 
 
 class ClaimableTitleSerializer(serializers.ModelSerializer):

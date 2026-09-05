@@ -52,7 +52,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet, Gender, Profile
-    from world.roster.models import Family, Kinsperson
+    from world.roster.models import Kinsperson
     from world.scenes.models import Persona
     from world.stories.models import Story
 
@@ -135,7 +135,7 @@ def finalize_character(
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
-    _ensure_named_family(draft)
+    _materialize_named_family(draft)
 
     # Build character name
     full_name = _build_character_full_name(draft)
@@ -222,6 +222,11 @@ def finalize_character(
     # node must land in the new family). Runs before draft deletion (the
     # claim rides the draft).
     _bind_house_claim(draft, sheet)
+
+    # Vacancy binding (#3648): take the chosen opening's kin claim and org
+    # membership before the kinship bind below, so a kin vacancy's node exists
+    # by the time the self-serve fallback looks.
+    _bind_vacancy(draft, sheet, primary_persona)
 
     # Kinship graph binding (#2062): claim the chosen slot / mint from the
     # chosen pool, or self-serve a node for the new PC. Runs before draft
@@ -315,6 +320,46 @@ def _grant_property_house_if_eligible(draft: CharacterDraft, persona: Persona) -
     from world.buildings.property_grant_services import grant_property_house  # noqa: PLC0415
 
     grant_property_house(persona, profile)
+
+
+def _bind_vacancy(draft: CharacterDraft, sheet: CharacterSheet, primary_persona: Persona) -> None:
+    """Take the chosen Vacancy: kin claim (if any), then the org membership (#3648).
+
+    Runs before ``_bind_kinship_node`` so a kin vacancy's node exists by the time
+    the self-serve fallback looks. Best-effort at the finalize boundary: a race
+    to zero, or a kin pool exhausted moments earlier, logs and continues without
+    the membership rather than stranding approval.
+    """
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        KinshipServiceError,
+        claim_appable_node,
+        mint_from_pool,
+    )
+    from world.societies.membership_services import join_organization  # noqa: PLC0415
+    from world.societies.vacancy_services import (  # noqa: PLC0415
+        VacancyExhaustedError,
+        take_vacancy,
+    )
+
+    if draft.selected_vacancy_id is None:
+        return
+    try:
+        with transaction.atomic():
+            vacancy = take_vacancy(draft.selected_vacancy_id)
+            if vacancy.kin_pool_id is not None:
+                node = mint_from_pool(vacancy.kin_pool, created_by=draft.account)
+                claim_appable_node(node=node, sheet=sheet)
+            elif vacancy.kin_node_id is not None:
+                claim_appable_node(node=vacancy.kin_node, sheet=sheet)
+            join_organization(
+                vacancy.organization, primary_persona, rank=vacancy.rank, vacancy=vacancy
+            )
+    except (VacancyExhaustedError, KinshipServiceError):
+        logger.exception(
+            "Vacancy %s could not be taken for draft %s; finalizing without it.",
+            draft.selected_vacancy_id,
+            draft.pk,
+        )
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -632,42 +677,41 @@ def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         sheet.family = draft.family
 
 
-def _ensure_named_family(draft: CharacterDraft) -> None:
-    """Create and bind the NAMED-path family before the character name is built (#3617).
+def _materialize_named_family(draft: CharacterDraft) -> None:
+    """Create and bind the NAMED-path family before the character name is built (#3648).
 
-    Must run before ``_build_character_full_name`` (which reads ``draft.family``
-    to compose the surname) in both ``finalize_character`` and
-    ``finalize_gm_character``: a NAMED-path draft otherwise finalizes with no
-    family yet on record and the surname silently falls back to the tarot ritual.
+    Must run before ``_build_character_full_name`` in both ``finalize_character``
+    and ``finalize_gm_character``. Builds the full package (org, aspects,
+    features, fealty to the served house, kin pool) through the same builder the
+    noble claim uses; ``influence`` is always 0 (ADR-0268). Idempotent on
+    ``draft.family_id``.
     """
+    from world.societies.houses.creator import build_family_org  # noqa: PLC0415
+
     if draft.family_id is not None:
         return
     if draft.resolve_family_path() != FamilyPath.NAMED:
         return
-    family = _create_named_family(draft)
-    draft.family = family  # downstream kinship binding also reads draft.family
-    draft.save(update_fields=["family"])
-
-
-def _create_named_family(draft: CharacterDraft) -> Family:
-    """Create the player-named family at approval (#3617): no authority, influence 0."""
-    from world.roster.models import Family  # noqa: PLC0415
-
-    template = draft.selected_origin_template
+    template = draft.resolve_family_template()
+    if template is None:
+        msg = "Choose a family template"
+        raise DraftIncompleteError(msg)
     name = str(draft.draft_data.get("new_family_name", "")).strip()
-    existing = Family.objects.filter(name__iexact=name).first()
-    if existing is not None:
-        # The validator rejects collisions; a race between two approvals lands here.
-        return existing
-    return Family.objects.create(
-        name=name,
-        kind=template.named_family_kind,
-        is_playable=True,
-        created_by_cg=True,
+    picks = {
+        int(definition_id): [int(option_id) for option_id in option_ids]
+        for definition_id, option_ids in (draft.draft_data.get("family_aspect_picks") or {}).items()
+    }
+    family, _org = build_family_org(
+        template,
+        name,
+        aspect_picks=picks,
+        served_house=draft.served_house,
         created_by=draft.account,
         origin_realm=draft.selected_area.realm if draft.selected_area else None,
         influence=0,
     )
+    draft.family = family
+    draft.save(update_fields=["family"])
 
 
 def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:
@@ -2485,14 +2529,14 @@ def finalize_gm_character(
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
-    _ensure_named_family(draft)
+    _materialize_named_family(draft)
 
     # Build name — reuse helper (handles tarot surname for orphans, plain
     # first_name otherwise).
     full_name = _build_character_full_name(draft)
 
     # Create Character + Sheet + Primary Persona atomically.
-    character, sheet, _primary = create_character_with_sheet(
+    character, sheet, primary_persona = create_character_with_sheet(
         character_key=full_name,
         primary_persona_name=full_name,
     )
@@ -2500,6 +2544,10 @@ def finalize_gm_character(
     # Populate sheet demographics and mechanics (shared helpers).
     _apply_sheet_demographics(sheet, draft)
     _apply_character_mechanics(character, draft)
+
+    # Vacancy binding (#3648): take the chosen opening's kin claim and org
+    # membership, mirroring the player finalize flow.
+    _bind_vacancy(draft, sheet, primary_persona)
 
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).
@@ -2655,7 +2703,35 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
 # Upbringing / family-path selection services (#3617)
 # =============================================================================
 
-_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
+_UPBRINGING_DRAFT_KEYS = (
+    "origin_slots",
+    "origin_choices",
+    "new_family_name",
+    "family_template_id",
+    "family_aspect_picks",
+)
+
+
+def clear_family_selection(draft: CharacterDraft) -> None:
+    """Clear everything anchored to the family path/Upbringing (#3648 review fix).
+
+    Shared by ``select_origin_template`` (a genuine Upbringing change) and
+    ``CharacterDraftSerializer.update()``'s explicit ``selected_origin_template_id:
+    null`` branch, so the two clearing lists cannot drift apart again - a prior
+    version of the serializer's null branch hand-duplicated this list and forgot
+    ``selected_vacancy``/``served_house``, leaving a stale Vacancy priced into
+    ``calculate_upbringing_cost()`` with no Upbringing left to justify it. Does
+    not touch ``selected_origin_template`` itself or save - the caller sets the
+    template field (to the new pick, or to ``None``) and persists.
+    """
+    draft.family_path = ""
+    draft.family = None
+    draft.claimed_kin_slot = None
+    draft.claimed_kin_pool = None
+    draft.selected_vacancy = None
+    draft.served_house = None
+    for key in _UPBRINGING_DRAFT_KEYS:
+        draft.draft_data.pop(key, None)
 
 
 def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> None:
@@ -2673,12 +2749,7 @@ def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> N
     if draft.selected_origin_template_id == template.pk:
         return
     draft.selected_origin_template = template
-    draft.family_path = ""
-    draft.family = None
-    draft.claimed_kin_slot = None
-    draft.claimed_kin_pool = None
-    for key in _UPBRINGING_DRAFT_KEYS:
-        draft.draft_data.pop(key, None)
+    clear_family_selection(draft)
     draft.save()
 
 
@@ -2703,6 +2774,8 @@ def set_family_path(draft: CharacterDraft, path: str) -> None:
     draft.family = None
     draft.claimed_kin_slot = None
     draft.claimed_kin_pool = None
+    draft.selected_vacancy = None
+    draft.served_house = None
     draft.draft_data.pop("new_family_name", None)
     draft.save(
         update_fields=[
@@ -2710,6 +2783,8 @@ def set_family_path(draft: CharacterDraft, path: str) -> None:
             "family",
             "claimed_kin_slot",
             "claimed_kin_pool",
+            "selected_vacancy",
+            "served_house",
             "draft_data",
         ]
     )
