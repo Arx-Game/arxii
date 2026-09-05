@@ -28,6 +28,7 @@ from world.combat.factories import (
     ComboDefinitionFactory,
     ComboLearningFactory,
     ComboSlotFactory,
+    EscalationCurveFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
@@ -218,6 +219,36 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.stakes_level, "world")
         self.assertEqual(self.encounter.risk_level, "lethal")
+
+    def test_settings_sets_escalation_curve(self) -> None:
+        """GM sets the escalation curve through the settings seam (#3552)."""
+        curve = EscalationCurveFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.patch(
+            f"/api/combat/{self.encounter.pk}/settings/",
+            {"escalation_curve": curve.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.escalation_curve_id, curve.pk)
+        self.assertEqual(response.data["escalation_curve"], curve.pk)
+
+    def test_settings_clears_escalation_curve(self) -> None:
+        curve = EscalationCurveFactory()
+        self.encounter.escalation_curve = curve
+        self.encounter.save(update_fields=["escalation_curve"])
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.patch(
+            f"/api/combat/{self.encounter.pk}/settings/",
+            {"escalation_curve": None},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.encounter.refresh_from_db()
+        self.assertIsNone(self.encounter.escalation_curve_id)
 
     def test_settings_partial_payload_only_updates_given_fields(self) -> None:
         """Omitted fields are left unchanged."""

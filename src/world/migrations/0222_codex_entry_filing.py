@@ -7,9 +7,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0220_upbringings"),
-    ]
+    dependencies = [("arxii", "0221_technique_and_threat_entry_outcome_narration")]
 
     operations = [
         migrations.CreateModel(

@@ -378,3 +378,22 @@ describe('SceneHeader scene clock pips (#3567)', () => {
     expect(screen.queryByTestId('scene-clock')).not.toBeInTheDocument();
   });
 });
+
+describe('SceneHeader room art backdrop (#3556)', () => {
+  it('renders the room art as a backdrop when the scene carries one', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, art_url: 'https://example.test/room-art.png' });
+
+    const backdrop = screen.getByTestId('scene-header-backdrop');
+    expect(backdrop).toHaveStyle({ backgroundImage: 'url(https://example.test/room-art.png)' });
+  });
+
+  it('renders no backdrop when the room has no art', () => {
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    renderWrapped({ ...BASE_SCENE, art_url: null });
+
+    expect(screen.queryByTestId('scene-header-backdrop')).not.toBeInTheDocument();
+  });
+});

@@ -117,7 +117,11 @@ class AllyWardReactiveCostTests(TestCase):
             source_character=caster,
         )
 
-        drain_reactive_upkeep(encounter)
+        with (
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            drain_reactive_upkeep(encounter)
 
         # Caster couldn't afford the upkeep -> the ward lapses (deleted).
         self.assertFalse(
@@ -132,6 +136,18 @@ class AllyWardReactiveCostTests(TestCase):
             10,
             "the ally bearing the ward should NOT be debited for a caster-sourced condition",
         )
+
+        # #3574: caster hears why, ally hears that, the room sees the ward go out.
+        private_by_pk = {c.args[0].pk: c.args[1] for c in private.call_args_list}
+        self.assertEqual(set(private_by_pk), {caster.pk, ally.pk})
+        self.assertIn("cannot sustain", private_by_pk[caster.pk])
+        self.assertIn(str(ally), private_by_pk[caster.pk])
+        self.assertIn("over you lapses", private_by_pk[ally.pk])
+        self.assertIn(str(caster), private_by_pk[ally.pk])
+        room.assert_called_once()
+        self.assertIn("gutters out", room.call_args.args[1])
+        room_text_no_names = room.call_args.args[1].replace(str(ally), "").replace(str(caster), "")
+        self.assertNotRegex(room_text_no_names, r"\d")
 
     def test_consented_ward_fires_past_zero_and_accrues_for_the_caster(self) -> None:
         ensure_force_field_content()

@@ -61,5 +61,11 @@ EFFORT_DEV_BASE: types.MappingProxyType[str, int] = types.MappingProxyType(
 
 # Maturation Points (#2756) — deterministic milestones for actually aging.
 # PLACEHOLDER tuning: first milestone at matured-year 21, then every 3 years.
-MATURATION_START_YEAR = 21
-MATURATION_INTERVAL_YEARS = 3
+#: Maturation milestones (#2756, retuned #3635): the matured years at which a
+#: Maturation Point is earned. The spacing widens with age and stops at 75; a
+#: mortal past that is on borrowed time. Year 21 is deliberately not a milestone.
+MATURATION_MILESTONES: tuple[int, ...] = (24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75)
+#: A starting age below this costs one CG point at character creation (#3635):
+#: the youngest characters buy their youth with a thinner purse.
+MATURATION_UNDERAGE_YEAR = 21
+UNDERAGE_CG_POINT_COST = 1

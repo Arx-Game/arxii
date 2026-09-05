@@ -16,6 +16,7 @@ from world.areas.positioning.serializers import (
     PositionNodeSerializer,
     PositionSummarySerializer,
 )
+from world.checks.serializers import ConsequenceOutcomeSerializer
 from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
     SIGNIFICANT_NPC_TIERS,
@@ -46,7 +47,7 @@ from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
 from world.fatigue.services import get_fatigue_capacity
 from world.magic.models import CharacterTechnique, Technique
-from world.scenes.constants import PersonaType
+from world.scenes.constants import PersonaType, RoundStatus
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -118,10 +119,29 @@ class OpponentSerializer(serializers.ModelSerializer):
     to be able to look at an opponent and gauge whether they're punching up
     or down, so unlike soak_value/probing_threshold this is not wrapped in a
     SerializerMethodField behind ``_is_gm_or_staff``.
+
+    Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+    are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+    are public derived booleans, since the room narration has already told
+    everyone the boss enraged or its wall broke.
     """
 
     soak_value = serializers.SerializerMethodField()
     probing_threshold = serializers.SerializerMethodField()
+    # GM-only boss/morale readouts (#3552) - None for everyone else, the same
+    # gate as soak_value / probing_threshold. Public badges derive from state
+    # the room has already been narrated (phase line, enrage line, break
+    # celebration), never from surge records (curve-gated, ADR-0098).
+    phase_count = serializers.SerializerMethodField()
+    damage_multiplier = serializers.SerializerMethodField()
+    break_bar_current = serializers.SerializerMethodField()
+    break_bar_threshold = serializers.SerializerMethodField()
+    vulnerability_rounds_remaining = serializers.SerializerMethodField()
+    morale = serializers.SerializerMethodField()
+    max_morale = serializers.SerializerMethodField()
+    morale_state = serializers.SerializerMethodField()
+    is_enraged = serializers.SerializerMethodField()
+    is_wall_broken = serializers.SerializerMethodField()
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
@@ -153,6 +173,16 @@ class OpponentSerializer(serializers.ModelSerializer):
             "probing_current",
             "probing_threshold",
             "current_phase",
+            "phase_count",
+            "damage_multiplier",
+            "break_bar_current",
+            "break_bar_threshold",
+            "vulnerability_rounds_remaining",
+            "morale",
+            "max_morale",
+            "morale_state",
+            "is_enraged",
+            "is_wall_broken",
             "status",
             "active_conditions",
             "thumbnail_url",
@@ -176,6 +206,52 @@ class OpponentSerializer(serializers.ModelSerializer):
     def get_probing_threshold(self, obj: CombatOpponent) -> int | None:
         """Probing threshold — GM/staff only."""
         return obj.probing_threshold if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_phase_count(self, obj: CombatOpponent) -> int | None:
+        """How many authored phases this boss has - GM/staff, BOSS tier only."""
+        if not self._is_gm_or_staff() or obj.tier != OpponentTier.BOSS:
+            return None
+        return obj.phases.count()
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_damage_multiplier(self, obj: CombatOpponent) -> str | None:
+        return str(obj.damage_multiplier) if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_break_bar_current(self, obj: CombatOpponent) -> int | None:
+        return obj.break_bar_current if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_break_bar_threshold(self, obj: CombatOpponent) -> int | None:
+        return obj.break_bar_threshold if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_vulnerability_rounds_remaining(self, obj: CombatOpponent) -> int | None:
+        return obj.vulnerability_rounds_remaining if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_morale(self, obj: CombatOpponent) -> int | None:
+        return obj.morale if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_max_morale(self, obj: CombatOpponent) -> int | None:
+        return obj.max_morale if self._is_gm_or_staff() else None
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_morale_state(self, obj: CombatOpponent) -> str | None:
+        """Derived STEADY/FALTER/BREAK - pure arithmetic, no query."""
+        from world.combat.morale import morale_state_for  # noqa: PLC0415
+
+        return morale_state_for(obj).value if self._is_gm_or_staff() else None
+
+    def get_is_enraged(self, obj: CombatOpponent) -> bool:
+        """Public: the enrage line has fired (a transition raised the multiplier)."""
+        return obj.current_phase > 1 and obj.damage_multiplier > 1
+
+    def get_is_wall_broken(self, obj: CombatOpponent) -> bool:
+        """Public: the break celebration named this boss and the window is open."""
+        return obj.vulnerability_rounds_remaining > 0
 
     def get_active_conditions(self, obj: CombatOpponent) -> list[dict[str, Any]]:
         """Active conditions on this opponent's in-world ObjectDB.
@@ -236,6 +312,36 @@ class OpponentSerializer(serializers.ModelSerializer):
         return None
 
 
+class AftermathLegendSerializer(serializers.Serializer):
+    """Schema-only shape of one legend line in an aftermath digest (#3551)."""
+
+    title = serializers.CharField()
+    description = serializers.CharField()
+    base_value = serializers.IntegerField()
+
+
+class AftermathBeatSerializer(serializers.Serializer):
+    """Schema-only shape of the beat line in an aftermath digest (#3551)."""
+
+    outcome = serializers.CharField()
+    tier_name = serializers.CharField(allow_null=True)
+    resolution_text = serializers.CharField()
+
+
+class AftermathDigestSerializer(serializers.Serializer):
+    """Schema-only shape of ParticipantSerializer.aftermath (#3551).
+
+    Never instantiated for output.
+    """
+
+    outcome = serializers.CharField()
+    consequence = ConsequenceOutcomeSerializer(allow_null=True)
+    conditions = ConditionInstanceSerializer(many=True)
+    legend = AftermathLegendSerializer(many=True)
+    beat = AftermathBeatSerializer(allow_null=True)
+    peril_round_active = serializers.BooleanField()
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     """Read serializer for combat participants.
 
@@ -260,6 +366,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
     intensity_modifier = serializers.SerializerMethodField()
     control_modifier = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
+    aftermath = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatParticipant
@@ -280,6 +387,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "intensity_modifier",
             "control_modifier",
             "current_position",
+            "aftermath",
         ]
 
     def _can_view_vitals(self, obj: CombatParticipant) -> bool:
@@ -506,6 +614,61 @@ class ParticipantSerializer(serializers.ModelSerializer):
         # context-over-cache a cached_property.
         cached_conditions = getattr(character, "active_condition_instances", None)  # noqa: GETATTR_LITERAL
         return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
+
+    @extend_schema_field(AftermathDigestSerializer(allow_null=True))
+    def get_aftermath(self, obj: CombatParticipant) -> dict[str, Any] | None:
+        """What the fight changed for this participant (#3551).
+
+        Only on a COMPLETED encounter, only for the owner, scene GM, or staff;
+        None otherwise.
+        """
+        encounter = obj.encounter
+        if encounter.status != RoundStatus.COMPLETED or encounter.completed_at is None:
+            return None
+        if not self._can_view_vitals(obj):
+            return None
+
+        from world.combat.aftermath import build_aftermath_digest  # noqa: PLC0415
+
+        digest = build_aftermath_digest(encounter, obj)
+
+        request = self.context.get("request")
+        is_gm = self.context.get("is_gm")
+        if is_gm is None:
+            is_gm = encounter.scene.is_gm(request.user) if encounter.scene else False
+        is_gm_or_staff = is_gm or (request is not None and request.user.is_staff)
+        beat = None
+        if digest.beat_completion is not None and (digest.beat_visible_to_player or is_gm_or_staff):
+            completion = digest.beat_completion
+            beat = {
+                "outcome": completion.outcome,
+                "tier_name": completion.outcome_tier.name if completion.outcome_tier_id else None,
+                "resolution_text": completion.beat.player_resolution_text,
+            }
+
+        consequence = None
+        if digest.consequence is not None:
+            consequence = ConsequenceOutcomeSerializer(
+                digest.consequence, context=self.context
+            ).data
+
+        return {
+            "outcome": digest.outcome,
+            "consequence": consequence,
+            "conditions": ConditionInstanceSerializer(
+                digest.conditions, many=True, context=self.context
+            ).data,
+            "legend": [
+                {
+                    "title": entry.title,
+                    "description": entry.description,
+                    "base_value": entry.base_value,
+                }
+                for entry in digest.legend_entries
+            ],
+            "beat": beat,
+            "peril_round_active": digest.peril_round_active,
+        }
 
 
 class RoundActionSerializer(serializers.ModelSerializer):
@@ -820,6 +983,19 @@ class CreatureTemplateSerializer(serializers.ModelSerializer):
 
     def get_threat_pool_name(self, obj: CreatureTemplate) -> str | None:
         return obj.threat_pool.name if obj.threat_pool_id else None
+
+
+class EscalationCurveSerializer(serializers.ModelSerializer):
+    """Read-only escalation curve catalog row for the GM settings picker (#3552).
+
+    GM-gated at the viewset (curve names and descriptions are authored
+    encounter design, the same reasoning as the bestiary catalog, #3424).
+    """
+
+    class Meta:
+        model = EscalationCurve
+        fields = ["id", "name", "description", "start_round"]
+        read_only_fields = fields
 
 
 # ---------------------------------------------------------------------------
@@ -1626,14 +1802,22 @@ class EncounterSettingsSerializer(serializers.Serializer):
     """Write serializer for the GM-driven settings update (#3383).
 
     Every field is optional so a PATCH may change any subset of
-    ``stakes_level``/``risk_level``/``pace_mode``/``pace_timer_minutes`` —
-    mirrors ``update_encounter_settings``'s all-optional-kwargs shape.
+    ``stakes_level``/``risk_level``/``pace_mode``/``pace_timer_minutes``/
+    ``escalation_curve`` - mirrors ``update_encounter_settings``'s
+    all-optional-kwargs shape. ``escalation_curve`` is tri-state: omitted
+    leaves it unchanged, ``null`` clears it, a pk sets it (#3552).
     """
 
     stakes_level = serializers.ChoiceField(choices=StakesLevel.choices, required=False)
     risk_level = serializers.ChoiceField(choices=RiskLevel.choices, required=False)
     pace_mode = serializers.ChoiceField(choices=PaceMode.choices, required=False)
     pace_timer_minutes = serializers.IntegerField(min_value=1, required=False)
+    escalation_curve = serializers.PrimaryKeyRelatedField(
+        queryset=EscalationCurve.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Set the escalation curve; null clears it (#3552).",
+    )
 
 
 class DeclareClashContributionSerializer(serializers.Serializer):
