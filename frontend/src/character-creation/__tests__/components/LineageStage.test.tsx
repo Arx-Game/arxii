@@ -12,6 +12,7 @@ import { vi } from 'vitest';
 import { LineageStage } from '../../components/LineageStage';
 import * as api from '../../api';
 import {
+  mockDraftWithFamily,
   mockDraftWithHeritageNoUpbringing,
   mockDraftWithUpbringing,
   mockEmptyDraft,
@@ -24,6 +25,7 @@ import {
   mockUpbringingNamed,
   mockUpbringingNamedWithTemplate,
   mockUpbringingUnknown,
+  mockVacancyKin,
   mockCGExplanations,
   createMockDraft,
 } from '../fixtures';
@@ -225,6 +227,24 @@ describe('LineageStage', () => {
       expect(await screen.findByText('Valardin')).toBeInTheDocument();
       expect(screen.getByText('Velenosa')).toBeInTheDocument();
       expect(await screen.findByText('Open Positions in This House')).toBeInTheDocument();
+    });
+
+    it('claim path shows a kin vacancy card instead of the kin-slot picker when kin vacancies are offered', async () => {
+      vi.mocked(api.getVacancies).mockResolvedValue([mockVacancyKin]);
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={mockDraftWithFamily} onStageSelect={vi.fn()} />,
+        { queryClient }
+      );
+
+      expect(await screen.findByText(mockVacancyKin.name)).toBeInTheDocument();
+      expect(screen.queryByText('Open Positions in This House')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: new RegExp(mockVacancyKin.name) }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(mockDraftWithFamily.id, {
+        selected_vacancy_id: mockVacancyKin.id,
+      });
     });
 
     it('none path shows the tarot naming ritual', async () => {
