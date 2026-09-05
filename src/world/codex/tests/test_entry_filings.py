@@ -107,6 +107,23 @@ class CodexEntryFilingModelTests(TestCase):
         filing = CodexEntryFilingFactory()
         assert str(filing) == f"{filing.entry} filed under {filing.subject}"
 
+    def test_clean_rejects_filing_under_the_canonical_subject(self):
+        """The home-subject invariant holds at the model level (admin inlines
+        bypass services.file_entry_under, so clean() is the backstop)."""
+        entry = CodexEntryFactory()
+        filing = CodexEntryFiling(entry=entry, subject=entry.subject)
+        with self.assertRaises(ValidationError):
+            filing.clean()
+
+    def test_clean_allows_a_different_subject_and_skips_unset_fks(self):
+        """clean() passes a valid cross-filing and tolerates unset FKs."""
+        entry = CodexEntryFactory()
+        other_subject = CodexSubjectFactory(category=entry.subject.category)
+        CodexEntryFiling(entry=entry, subject=other_subject).clean()
+        # Unsaved form rows may have either FK unset; clean() must not crash.
+        CodexEntryFiling(entry=entry).clean()
+        CodexEntryFiling(subject=other_subject).clean()
+
 
 class CodexEntryFilterSubjectTests(TestCase):
     """Tests for CodexEntryFilter's subject filter (#2896).

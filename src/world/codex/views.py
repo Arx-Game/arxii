@@ -47,15 +47,28 @@ def _subjects_with_visible_entries(visible_entry_ids: set[int]) -> set[int]:
     """Return IDs of subjects with at least one visible entry in their subtree.
 
     A subject is visible when it, or any descendant subject, holds a visible
-    entry. Computed in Python over the full (small, idmapper-cached) subject
-    set: collect the subjects of the visible entries, then walk each parent
-    chain upward so every ancestor stays visible too.
+    entry - canonically or via a filing (#2896): a visible filing makes its
+    subject visible everywhere, the same one-predicate rule as canonical
+    entries, so ``also_filed_under`` never links to a subject that 404s.
+    Computed in Python over the full (small, idmapper-cached) subject set:
+    collect the subjects of the visible entries, then walk each parent chain
+    upward so every ancestor stays visible too.
     """
     if not visible_entry_ids:
         return set()
     subjects_by_id = {subject.pk: subject for subject in CodexSubject.objects.all()}
+    # One query: canonical homes UNION filed-under subjects of visible entries.
+    # order_by() clears each model's Meta.ordering - SQLite rejects ORDER BY
+    # inside the components of a compound SELECT.
     direct_ids = set(
-        CodexEntry.objects.filter(id__in=visible_entry_ids).values_list("subject_id", flat=True)
+        CodexEntry.objects.filter(id__in=visible_entry_ids)
+        .order_by()
+        .values_list("subject_id", flat=True)
+        .union(
+            CodexEntryFiling.objects.filter(entry_id__in=visible_entry_ids)
+            .order_by()
+            .values_list("subject_id", flat=True)
+        )
     )
     visible: set[int] = set()
     for subject_id in direct_ids:
@@ -78,8 +91,8 @@ class CodexVisibilityMixin:
     from the Account typeclass's caches (``cached_roster_entries`` /
     ``cached_codex_knowledge``, zero queries after the first per process), so
     reading them more than once per request costs nothing extra. The public-entry
-    set is not cached anywhere - it is fetched once per request by whichever
-    action needs it and passed down.
+    set is not cached anywhere - it is a cheap query re-run by whichever code
+    path needs it, possibly more than once per request.
     """
 
     def _selected_roster_entries(self) -> list[RosterEntry]:
@@ -114,8 +127,10 @@ class CodexVisibilityMixin:
     def _visible_entry_ids(self) -> set[int]:
         """Public entries plus every entry a selected character has a row for.
 
-        One query (the public set). Call it once per action and pass the result
-        to ``_subjects_with_visible_entries``; never call it twice in one request.
+        One cheap query (the public-id set), deliberately uncached (ADR-0260):
+        callers that need the set fetch it and may repeat the query within a
+        request (e.g. ``CodexEntryViewSet`` calls this in both ``get_queryset``
+        and ``get_serializer_context``).
         """
         public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
         return public_ids | set(self._knowledge_by_entry())
@@ -163,9 +178,16 @@ class CodexCategoryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
                 has_children=Exists(
                     CodexSubject.objects.filter(parent=OuterRef("pk"), id__in=visible_subject_ids)
                 ),
+                # Canonical + visible filed entries, distinct per relation, so
+                # the badge matches the listing (#2896). The two joins never
+                # overlap: a filing under the entry's own home is invalid.
                 entry_count=Count(
-                    "entries",
-                    filter=Q(entries__id__in=visible_entry_ids),
+                    "entries", filter=Q(entries__id__in=visible_entry_ids), distinct=True
+                )
+                + Count(
+                    "filed_entries",
+                    filter=Q(filed_entries__entry_id__in=visible_entry_ids),
+                    distinct=True,
                 ),
             )
             .order_by("display_order", "name")
@@ -229,9 +251,15 @@ class CodexSubjectViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
                 has_children=Exists(
                     CodexSubject.objects.filter(parent=OuterRef("pk"), id__in=visible_subject_ids)
                 ),
+                # Same canonical + visible-filed count as the tree action, so
+                # every badge agrees with the subject's listing (#2896).
                 entry_count=Count(
-                    "entries",
-                    filter=Q(entries__id__in=visible_entry_ids),
+                    "entries", filter=Q(entries__id__in=visible_entry_ids), distinct=True
+                )
+                + Count(
+                    "filed_entries",
+                    filter=Q(filed_entries__entry_id__in=visible_entry_ids),
+                    distinct=True,
                 ),
             )
             .order_by("display_order", "name")
@@ -304,5 +332,14 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         context["knowledge_by_entry"] = self._knowledge_by_entry()
         context["roster_entries"] = self._selected_roster_entries()
-        context["filings_by_entry"] = self._filings_by_entry(self._visible_entry_ids())
+        filing_scope_ids = self._visible_entry_ids()
+        if self.action == "retrieve":
+            # A detail response serializes one entry; intersecting with the
+            # visible set keeps the filing query scoped to it instead of
+            # fetching filings for the whole visible corpus.
+            try:
+                filing_scope_ids &= {int(self.kwargs["pk"])}
+            except (KeyError, TypeError, ValueError):
+                filing_scope_ids = set()
+        context["filings_by_entry"] = self._filings_by_entry(filing_scope_ids)
         return context

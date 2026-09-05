@@ -352,6 +352,21 @@ class CodexEntryFiling(NaturalKeyMixin, SharedMemoryModel):
         verbose_name = "Codex Entry Filing"
         verbose_name_plural = "Codex Entry Filings"
 
+    def clean(self) -> None:
+        """Reject filing an entry under its own canonical subject.
+
+        The service guard in ``services.file_entry_under`` does not cover
+        writes through admin inlines or direct saves; this is the model-level
+        backstop for the same invariant. ``_id`` comparison, skipped while
+        either FK is unset, so an unsaved form row does not crash validation.
+        """
+        super().clean()
+        if self.entry_id is None or self.subject_id is None:
+            return
+        if self.subject_id == self.entry.subject_id:
+            msg = "Cannot file an entry under its own canonical subject."
+            raise ValidationError({"subject": msg})
+
     def __str__(self) -> str:
         return f"{self.entry} filed under {self.subject}"
 

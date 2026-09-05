@@ -448,7 +448,7 @@ class TestCodexTreeQueryCount(TestCase):
         #   1. SELECT django_session
         #   2. SELECT public CodexEntry ids (visibility set)
         #   3. SELECT all CodexSubjects (subtree-visibility ancestor walk)
-        #   4. SELECT subject ids of the visible entries
+        #   4. SELECT subject ids of the visible entries (canonical UNION filed)
         #   5. SELECT top-level CodexSubjects (with has_children + entry_count)
         #   6. SELECT CodexCategory list
         # The prior N+1 added one COUNT per subject (8 here). The count must
@@ -490,7 +490,7 @@ class TestCodexTreeQueryCount(TestCase):
         #   1. SELECT django_session
         #   2. SELECT public CodexEntry ids
         #   3. SELECT all CodexSubjects (subtree-visibility ancestor walk)
-        #   4. SELECT subject ids of the visible entries
+        #   4. SELECT subject ids of the visible entries (canonical UNION filed)
         #   5. SELECT top-level CodexSubjects (with has_children + entry_count)
         #   6. SELECT CodexCategory list
         # Prior to the N+1 fix this also fired one COUNT per subject; the
@@ -536,9 +536,9 @@ class TestCodexTreeQueryCount(TestCase):
         #   2. SELECT public CodexEntry ids (visibility set, for get_queryset)
         #   3. SELECT public CodexEntry ids again (visibility set, for the
         #      filings map built in get_serializer_context - #2896: the
-        #      public-entry set is deliberately never cached, per
-        #      CodexVisibilityMixin's docstring, so this repeats the same
-        #      cheap query rather than memoizing it on the view)
+        #      public-entry set is deliberately uncached and may repeat within
+        #      a request, per _visible_entry_ids' docstring, so this repeats
+        #      the same cheap query rather than memoizing it on the view)
         #   4. SELECT CodexEntryFiling rows for those entries, joined to their
         #      subject and that subject's breadcrumb cache (#2896, one query
         #      regardless of entry count - see also_filed_under below)
@@ -674,6 +674,65 @@ class CodexEntryFilingListingTests(CodexAPITestCase):
         assert "Restricted Filed Entry" not in names
 
 
+class FilingSubjectVisibilityTests(CodexAPITestCase):
+    """A visible filing makes its subject visible everywhere (#2896).
+
+    Same one-predicate rule as canonical entries (visibility = eligibility):
+    if also_filed_under can name a subject, that subject's retrieve, listing,
+    and tree presence must all agree - never a dead link.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.secret_subject = CodexSubjectFactory(category=cls.category, name="All Secret Subject")
+        cls.secret_entry = CodexEntryFactory(
+            subject=cls.secret_subject, name="Secret Canonical Entry", is_public=False
+        )
+
+    def _tree_subject_names(self) -> list[str]:
+        tree = self.client.get("/api/codex/categories/tree/")
+        assert tree.status_code == status.HTTP_200_OK
+        category = next(c for c in tree.data if c["name"] == "Test Category")
+        return [s["name"] for s in category["subjects"]]
+
+    def test_visible_filing_makes_an_all_secret_subject_visible(self):
+        """One visible filed entry lights up the subject's retrieve/list/tree."""
+        from world.codex.services import file_entry_under
+
+        file_entry_under(self.public_entry, self.secret_subject)
+
+        retrieve = self.client.get(f"/api/codex/subjects/{self.secret_subject.id}/")
+        assert retrieve.status_code == status.HTTP_200_OK
+
+        listing = self.client.get("/api/codex/subjects/")
+        assert "All Secret Subject" in [s["name"] for s in listing.data]
+
+        tree_names = self._tree_subject_names()
+        assert "All Secret Subject" in tree_names
+
+        # Badge agreement (#2896 finding 5): the tree badge counts the one
+        # visible filed entry, matching the subject's listing.
+        tree = self.client.get("/api/codex/categories/tree/")
+        category = next(c for c in tree.data if c["name"] == "Test Category")
+        secret = next(s for s in category["subjects"] if s["name"] == "All Secret Subject")
+        assert secret["entry_count"] == 1
+
+    def test_subject_with_no_visible_filing_stays_hidden(self):
+        """A filing of a restricted entry does not surface the subject to anon."""
+        from world.codex.services import file_entry_under
+
+        file_entry_under(self.restricted_entry, self.secret_subject)
+
+        retrieve = self.client.get(f"/api/codex/subjects/{self.secret_subject.id}/")
+        assert retrieve.status_code == status.HTTP_404_NOT_FOUND
+
+        listing = self.client.get("/api/codex/subjects/")
+        assert "All Secret Subject" not in [s["name"] for s in listing.data]
+
+        assert "All Secret Subject" not in self._tree_subject_names()
+
+
 class CodexEntryFilingQueryCountTests(TestCase):
     """also_filed_under adds no per-row query as filings grow (#2896)."""
 
@@ -705,8 +764,8 @@ class CodexEntryFilingQueryCountTests(TestCase):
         #   2. SELECT public CodexEntry ids (visibility set, for get_queryset)
         #   3. SELECT public CodexEntry ids again (visibility set, for the
         #      filings map built in get_serializer_context - the public-entry
-        #      set is deliberately never cached, so this repeats the query
-        #      rather than memoizing it on the view)
+        #      set is deliberately uncached and may repeat within a request,
+        #      so this repeats the query rather than memoizing it on the view)
         #   4. SELECT CodexEntryFiling rows for the visible entries, joined to
         #      their subject and breadcrumb cache
         #   5. SELECT visible+subject-filtered CodexEntry list (with the
