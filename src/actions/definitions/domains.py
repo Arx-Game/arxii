@@ -459,7 +459,7 @@ class GrantMaterialAction(Action):
         if category is None:
             return ActionResult(success=False, message=_MSG_NO_MATERIAL_CATEGORY)
         amount = kwargs.get("amount")
-        if not isinstance(amount, int) or amount <= 0:
+        if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
             return ActionResult(success=False, message="Grant how much?")
         recipient = CharacterSheet.objects.filter(pk=kwargs.get("recipient_sheet_id")).first()
         if recipient is None:
@@ -511,7 +511,7 @@ class SetAskingPriceAction(Action):
         if category is None:
             return ActionResult(success=False, message=_MSG_NO_MATERIAL_CATEGORY)
         pct = kwargs.get("pct")
-        if not isinstance(pct, int):
+        if not isinstance(pct, int) or isinstance(pct, bool):
             return ActionResult(success=False, message="Set the price to what percent?")
         try:
             stock = set_asking_price(

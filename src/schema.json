@@ -59848,6 +59848,7 @@ components:
         value:
           type: integer
           readOnly: true
+          description: Material value moved (coppers of material value, not sale proceeds).
         counterparty_name:
           type: string
           nullable: true

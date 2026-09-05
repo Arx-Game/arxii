@@ -34027,6 +34027,7 @@ export interface components {
       readonly id: number;
       readonly kind: components['schemas']['OrgMaterialLedgerEntryKindEnum'];
       readonly material_category_name: string;
+      /** @description Material value moved (coppers of material value, not sale proceeds). */
       readonly value: number;
       readonly counterparty_name: string | null;
       /** Format: date-time */
