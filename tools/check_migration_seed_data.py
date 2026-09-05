@@ -42,7 +42,7 @@ ALLOWED_MIGRATIONS: set[str] = {
     # The commoner_family OrganizationType and the mined HouseTemplate are
     # schema-transition targets for that backfill (expected empty in production per
     # the commit's ADR-0237 disposition), not new authored content.
-    "world/migrations/0224_backfill_family_template_org_type.py",
+    "world/migrations/0226_backfill_family_template_org_type.py",
 }
 
 # Patterns that suggest seed data in migrations

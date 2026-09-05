@@ -136,7 +136,7 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   capacity (`count_remaining`) is a standing vacancy, always open. Taken at CG
   finalize via `take_vacancy`, which stamps `OrganizationMembership.vacancy`.
   _Avoid:_ position, appointment, seat, station, role, slot (each already
-  means something else in this codebase; see ADR-0272).
+  means something else in this codebase; see ADR-0273).
 - **Importance / Presumed importance** (#3648): the two authored axes on a
   Vacancy: `importance` (how much the family truly cares about the holder,
   visible only to the holder and staff) and `presumed_importance` (what

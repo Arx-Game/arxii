@@ -156,7 +156,7 @@ See `world.roster.AGENT_GLOSSARY.md`'s Vacancy entry (#3648), the canonical
 definition, which lives there alongside Family Template since both are CG Lineage-step
 concepts. In short: a staff-authored opening on a staff-minted family's org
 (`societies.Vacancy`), kin or retainer, priced flat plus per-influence, with an
-optional standing (uncapped) capacity. See ADR-0272.
+optional standing (uncapped) capacity. See ADR-0273.
 
 **Aspect (house)**:
 A required, normalized catalog choice on a house template (#2079, ADR-0101): `HouseAspectDefinition` (prompt, min/max picks) + its `HouseAspectOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationAspect` identity facets at materialization. Also the recipe for a culture-specific family fact WITH variants (a house quiddity, #3617): see `docs/systems/family-authoring-recipes.md` Recipe 7.

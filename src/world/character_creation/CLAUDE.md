@@ -14,7 +14,7 @@ Character creation is a multi-stage process that guides players through creating
    ritual); typed prompts with costed pick-list choices priced by the claimed
    family's influence, plus a Service panel offering any reachable retainer Vacancy
    on any path (#3617, #3648; see `docs/systems/character_creation.md`'s Lineage
-   step section and ADR-0272). Plus kin-slot claim/mint/defer and invented parents
+   step section and ADR-0273). Plus kin-slot claim/mint/defer and invented parents
    (#2815: names/genders in draft_data, `second_parent_species` for a
    cross-species parent, unlocks that line's colors in Appearance; finalize
    creates the nodes and pins back-inference)
@@ -58,7 +58,7 @@ point cost, a trust gate, and which family paths it allows (claim/name/none);
 #3648) names which Family Template(s) the name path offers; `named_family_kind` is
 retired; `draft.resolve_family_template()` resolves the sole offered template or the
 player's `draft_data.family_template_id` pick. Entry into a staff family is a
-`societies.Vacancy` (`CharacterDraft.selected_vacancy`, `served_house`); see ADR-0272
+`societies.Vacancy` (`CharacterDraft.selected_vacancy`, `served_house`); see ADR-0273
 and the Lineage step section for the family-block page order, pricing, and finalize
 order (`_materialize_named_family` -> `_bind_vacancy` -> `_bind_kinship_node`).
 `CharacterOriginSlot` is instance data (FK->`CharacterSheet`, FK->`OriginTemplateSlot`,

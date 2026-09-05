@@ -321,5 +321,5 @@ treat those names as hints to confirm, not gospel.
 - [0270 - Authored outcome flavor replaces the head sentence, never the ledger](0270-authored-outcome-flavor-replaces-the-head-never-the-ledger.md) (#3554; related ADR-0187, ADR-0072)
 - [0271 - Declined and fizzled reactions stay mechanical no-ops but always narrate to the actor](0271-declined-and-fizzled-reactions-always-narrate-to-the-actor.md) (#3574; amends ADR-0161)
 - [0272 - A relationship may target a Companion; companions do not get a CharacterSheet](0272-relationships-target-companions-companions-have-no-sheet.md) (#3575; related ADR-0010, ADR-0088, ADR-0098)
-- [0272 - Family entry is a staff-authored Vacancy with two importance axes; players never create authority](0272-family-entry-is-a-vacancy-with-two-importance-axes.md) (#3648; related ADR-0268, ADR-0269, ADR-0209)
+- [0273 - Family entry is a staff-authored Vacancy with two importance axes; players never create authority](0273-family-entry-is-a-vacancy-with-two-importance-axes.md) (#3648; related ADR-0268, ADR-0269, ADR-0209)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

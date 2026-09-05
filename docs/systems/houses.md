@@ -171,7 +171,7 @@ describes.
   package, and sync the house channel. The CG name path (below, and
   `character_creation.services._materialize_named_family`) calls the same
   builder with `influence=0` and no title, domain, channel or review; see
-  ADR-0272.
+  ADR-0273.
 - **Surfaces:** `/api/character-creation/house-titles/` (claimable titles +
   templates), `GET/POST /api/character-creation/drafts/{id}/house-claim/`;
   the CG Lineage stage shows the "Define a House" panel to familyless
@@ -231,13 +231,13 @@ generalized past nobles) plus the four catalogs it draws on.
   picks, and the template's `holdings` package materialized on the title's
   seat `Domain`. Editing the `HouseTemplate` after a house has founded off it
   never changes that house; it only changes what the next founder sees.
-- **Vacancies (#3648, ADR-0272):** `societies.Vacancy` is an opening on an already-
+- **Vacancies (#3648, ADR-0273):** `societies.Vacancy` is an opening on an already-
   materialized family's org, not part of the charter itself: it belongs to one
   staff-minted family, not to the Family Template every family of that type shares.
   Fields: `organization` (the family's org), `name`, `description`, `importance` /
   `presumed_importance` (the two authored axes), `cg_point_cost` /
   `cost_per_influence` (priced via `cost_for(influence)`, ADR-0269 extended by
-  ADR-0272), `rank` (nullable; blank = the org's base rank), `kin_pool` / `kin_node`
+  ADR-0273), `rank` (nullable; blank = the org's base rank), `kin_pool` / `kin_node`
   (at most one; set = a **kin** Vacancy, `basis == "kin"`; neither set = a
   **retainer** Vacancy), `count_remaining` (blank = a standing vacancy, always open,
   never decremented), `trust_required`, `allowed_upbringings` (blank = any

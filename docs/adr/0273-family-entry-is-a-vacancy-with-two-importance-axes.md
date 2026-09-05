@@ -1,4 +1,4 @@
-# ADR-0272: Family entry is a staff-authored Vacancy with two importance axes; players never create authority
+# ADR-0273: Family entry is a staff-authored Vacancy with two importance axes; players never create authority
 
 **Status:** Accepted (#3648, 2026-09-05, TehomCD ruling). Related ADR-0268, ADR-0269, ADR-0209, ADR-0238.
 

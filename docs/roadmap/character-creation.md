@@ -16,7 +16,7 @@ whether it links a `KinSlotPool`/`Kinsperson`; (3) the Lineage stage's family bl
 resolves a Family Template on the name path (aspect picks, served house) and offers
 reachable Vacancies on any path via `GET .../vacancies/?draft=`, bound at finalize by
 `_bind_vacancy` before the kinship bind; (4) `build_family_org` is now the one
-builder both the noble title-claim path and the CG name path share. See ADR-0272,
+builder both the noble title-claim path and the CG name path share. See ADR-0273,
 [character_creation.md](../systems/character_creation.md)'s Lineage step section,
 and [family-authoring-recipes.md](../systems/family-authoring-recipes.md) recipes
 10-12.

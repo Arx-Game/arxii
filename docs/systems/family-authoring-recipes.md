@@ -104,7 +104,7 @@ org, the realm matches, the Upbringing is allowed, and trust is met.
 Cost of an Upbringing = its flat cost + for each picked choice (flat + per-influence x
 the claimed family's influence; influence is 0 on the name and none paths) + the
 selected Vacancy's cost (flat + per-influence x the **Vacancy's** family's influence,
-ADR-0269 extended by ADR-0272).
+ADR-0269 extended by ADR-0273).
 
 ## Worked examples (illustrative names; not shipped content)
 

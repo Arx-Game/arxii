@@ -862,7 +862,7 @@ class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     the kinship tree (``kin_pool`` or ``kin_node``) is a kin vacancy; one with no
     kin link is a retainer vacancy. A blank ``count_remaining`` is a standing
     vacancy: always open, never decremented. Authored in the database; not a
-    corpus row because it belongs to one installation's family (ADR-0272).
+    corpus row because it belongs to one installation's family (ADR-0273).
     """
 
     organization = models.ForeignKey(

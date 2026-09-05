@@ -1373,7 +1373,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
   raises a deed's `base_value`), `LegendLevelCalibration` (#3466 — per-level honor Hare
   cost/value-added/title-threshold dials)
-- **`Vacancy` model (#3648, ADR-0272):** an opening on a staff-minted family's org
+- **`Vacancy` model (#3648, ADR-0273):** an opening on a staff-minted family's org
   (`organization`, `name`, `description`, `importance`/`presumed_importance`,
   `cg_point_cost`/`cost_per_influence` priced via `cost_for(influence)`, `rank`,
   `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
@@ -1495,7 +1495,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
 - **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization, now built on the shared `build_family_org`); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
 - **The charter catalog is lore-repo content (#2875):** `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all carry `NaturalKeyMixin` (`name`) + `CreditedContent` and sit in `CONTENT_MODELS`, the same shape #2868 already gave `HouseAspectDefinition`/`HouseAspectOption` below. `world/seeds/houses.py` looks all four up via `authored_or_sample()` (#2875 Task 2) rather than inventing them with `get_or_create()`; the Crown organization and its Society (plain seeder-owned config, not `CONTENT_MODELS`) moved to `world.seeds.config_prerequisites._house_charter_anchors`, run before the content load so a content-repo row can FK them by name (ADR-0171). `SuccessionLaw` also carries a `description` field now (the writer's field, how the law shapes inheritance), and all four models have a registered `ModelAdmin` so the Workbench change link and backlog queue reach them. Authoring guide (what a charter holds, the Workbench/admin authoring path per ADR-0238, the liege/society code prerequisites, and what founding copies): "Authoring a realm's charter" in [houses.md](houses.md).
-- **`HouseTemplate` generalized past nobles (#3648, ADR-0272):** verbose name "Family
+- **`HouseTemplate` generalized past nobles (#3648, ADR-0273):** verbose name "Family
   Template". `liege`/`default_succession_law` are now nullable (only a title-path
   template needs them) and `org_type` (FK `OrganizationType`, required) and
   `served_house_choices` (M2M `Organization`, blank, installation-specific:
@@ -2170,7 +2170,7 @@ Multi-stage character creation flow with draft system.
   none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
   new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
   the design decisions: ADR-0268, ADR-0269.
-- **Lineage stage: Family Templates and Vacancies (#3648, ADR-0272):**
+- **Lineage stage: Family Templates and Vacancies (#3648, ADR-0273):**
   `OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name
   `upbringings`) names which Family Template(s) the name path offers;
   `named_family_kind` is retired. `CharacterDraft.selected_vacancy`,

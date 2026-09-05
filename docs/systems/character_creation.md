@@ -321,7 +321,7 @@ Per-beginning Upbringings replaced the old single family-known/orphan split: eac
 authored underneath it. See the authoring recipes in
 [family-authoring-recipes.md](family-authoring-recipes.md), ADR-0268 (family standing
 uses existing organisation mechanisms), ADR-0269 (Upbringings price standing as
-family influence x position), and ADR-0272 (family entry is a Vacancy).
+family influence x position), and ADR-0273 (family entry is a Vacancy).
 
 **Page order:** Upbringing picker, `scope: 'any'` prompts, the family block (path
 picker when the Upbringing allows more than one path, then the path body), then
