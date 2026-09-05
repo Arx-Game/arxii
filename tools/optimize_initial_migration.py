@@ -53,10 +53,15 @@ This script performs that rewrite:
    defers them regardless of cycles) — they are kept as ``AddField`` ops,
    unchanged in content, just moved after all ``CreateModel`` ops like the
    cyclic FK/O2O fields.
-7. ``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` operations are kept
-   byte-for-byte (their AST subtree is reused verbatim) and moved as a block
-   to the very end, in their original relative order — by construction every
-   field they can reference already exists by that point.
+7. ``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` operations are
+   folded into their model's ``CreateModel`` ``options`` (``constraints`` /
+   ``indexes`` / ``unique_together``) when every field they reference is on
+   that model and not deferred (ADR-0272, #3656: each one is otherwise a
+   full-cost step of the replay, ~800 of them). Anything the resolver cannot
+   prove safe (positional expressions, a field that is a deferred cycle
+   FK or M2M) is kept byte-for-byte and moved as a block to the very end, in
+   its original relative order — by construction every field it can
+   reference already exists by that point.
 
 All field/option/constraint AST subtrees are reused verbatim from the parsed
 source (never hand-reconstructed field-by-field), and the *only* thing this
@@ -188,10 +193,21 @@ class CreateModelOp:
         self.bases_node = kwargs.get("bases")
         # Extra fields inlined by this script (AddField ops folded in).
         self.extra_field_entries: list[ast.Tuple] = []
+        # Tail ops folded into this model's ``options`` (ADR-0272).
+        self.folded_constraints: list[ast.expr] = []
+        self.folded_indexes: list[ast.expr] = []
+        self.folded_unique_together: ast.expr | None = None
 
     def field_names(self) -> set[str]:
         names = set()
         for entry in self.field_entries:
+            names.add(_const_str(entry.elts[0]))
+        return names
+
+    def all_field_names(self) -> set[str]:
+        """Original fields plus the FKs this script inlined."""
+        names = self.field_names()
+        for entry in self.extra_field_entries:
             names.add(_const_str(entry.elts[0]))
         return names
 
@@ -210,12 +226,172 @@ class AddFieldOp:
         self.to: str | None = _const_str(field_kwargs.get("to"))
 
 
+_TAIL_PAYLOAD_KW = {
+    "AddConstraint": "constraint",
+    "AddIndex": "index",
+    "AlterUniqueTogether": "unique_together",
+}
+
+
 class TailOp:
-    """AddConstraint / AddIndex / AlterUniqueTogether — kept verbatim."""
+    """AddConstraint / AddIndex / AlterUniqueTogether.
+
+    Folded into the owning model's ``CreateModel`` options when every field the
+    operation references is already on that model (ADR-0272); otherwise kept
+    verbatim after the deferred ``AddField`` ops, exactly as before.
+    """
 
     def __init__(self, node: ast.Call, kind: str):
         self.node = node
         self.kind = kind
+        kwargs = _kwargs_dict(node)
+        name_kw = "name" if kind == "AlterUniqueTogether" else "model_name"
+        self.model_key: str = _const_str(kwargs[name_kw]).lower()
+        self.payload: ast.expr = kwargs[_TAIL_PAYLOAD_KW[kind]]
+
+
+def _lookup_root(name: str) -> str:
+    """``-created`` -> ``created``; ``amount__gte`` -> ``amount``."""
+    return name.lstrip("-").split("__", 1)[0]
+
+
+def _is_q_call(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    return (isinstance(func, ast.Name) and func.id == "Q") or (
+        isinstance(func, ast.Attribute) and func.attr == "Q"
+    )
+
+
+_Q_INTERNAL_KWARGS = {"_connector", "_negated"}
+_LOOKUP_PAIR_LEN = 2  # the writer's ("lookup", value) form
+
+
+def _is_f_call(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    return (isinstance(func, ast.Name) and func.id == "F") or (
+        isinstance(func, ast.Attribute) and func.attr == "F"
+    )
+
+
+def _collect_f_refs(node: ast.expr, out: set[str]) -> bool:
+    """Add the field every ``F("name")`` inside ``node`` references; False if an F is opaque."""
+    for sub in ast.walk(node):
+        if _is_f_call(sub):
+            name = _const_str(sub.args[0]) if len(sub.args) == 1 else None
+            if name is None:
+                return False
+            out.add(_lookup_root(name))
+    return True
+
+
+def _q_positional(arg: ast.expr, out: set[str]) -> bool:
+    """One positional child of a ``Q``: a nested ``Q`` or the writer's ``("lookup", value)``."""
+    if _is_q_call(arg):
+        return _names_in_q(arg, out)
+    if isinstance(arg, ast.Tuple) and len(arg.elts) == _LOOKUP_PAIR_LEN:
+        lookup = _const_str(arg.elts[0])
+        if lookup is None:
+            return False
+        out.add(_lookup_root(lookup))
+        return _collect_f_refs(arg.elts[1], out)
+    return False
+
+
+def _names_in_q(call: ast.Call, out: set[str]) -> bool:
+    """Collect field roots from a ``Q(...)``; False if anything unresolvable appears.
+
+    Django's migration writer serializes ``Q(status="x") | ~Q(y__gt=F("z"))`` as
+    ``models.Q(models.Q(("status", "x")), models.Q(("y__gt", models.F("z")),
+    _negated=True), _connector="OR")``: positional 2-tuples, nested ``Q`` calls,
+    and the two internal kwargs. Hand-written keyword lookups are accepted too.
+    """
+    for kw in call.keywords:
+        if kw.arg is None:
+            return False
+        if kw.arg in _Q_INTERNAL_KWARGS:
+            continue
+        out.add(_lookup_root(kw.arg))
+        if not _collect_f_refs(kw.value, out):
+            return False
+    return all(_q_positional(arg, out) for arg in call.args)
+
+
+_UNFOLDABLE_KWARGS = {"expressions", "include", "opclasses"}
+
+
+def referenced_field_names(op: TailOp) -> set[str] | None:
+    """Field names a tail op references, or None when it cannot be resolved
+    conservatively (positional expressions, non-literal ``fields``, ...)."""
+    names: set[str] = set()
+    if op.kind == "AlterUniqueTogether":
+        try:
+            groups = ast.literal_eval(op.payload)
+        except ValueError:
+            return None
+        for group in groups:
+            names.update(_lookup_root(n) for n in group)
+        return names
+    payload = op.payload
+    if not isinstance(payload, ast.Call) or payload.args:
+        return None  # positional expressions (Lower("x"), F("y"), ...): stay in the tail
+    for kw in payload.keywords:
+        if kw.arg is None or not _collect_kwarg_names(kw.arg, kw.value, names):
+            return None
+    return names
+
+
+def _collect_kwarg_names(arg: str, value: ast.expr, names: set[str]) -> bool:
+    """Add the field roots one constraint/index kwarg references; False if unresolvable.
+
+    ``name=``, ``deferrable=``, ``violation_error_message=`` and ``nulls_distinct=``
+    reference no field and pass through.
+    """
+    if arg == "fields":
+        try:
+            names.update(_lookup_root(n) for n in ast.literal_eval(value))
+        except ValueError:
+            return False
+        return True
+    if arg in {"condition", "check"}:
+        return _is_q_call(value) and _names_in_q(value, names)
+    return arg not in _UNFOLDABLE_KWARGS
+
+
+def fold_tail_ops(
+    create_models: dict[str, CreateModelOp],
+    tail_ops: list[TailOp],
+    deferred_by_model: dict[str, set[str]],
+) -> tuple[list[TailOp], int]:
+    """Fold each tail op into its model's CreateModel options when safe.
+
+    Returns ``(remaining_tail_ops, folded_count)``. Safe means: the model has a
+    CreateModel here, every referenced field resolves, and none of them is a
+    field that stays deferred (a cycle-breaking FK or an M2M).
+    """
+    remaining: list[TailOp] = []
+    folded = 0
+    for op in tail_ops:
+        model = create_models.get(op.model_key)
+        names = referenced_field_names(op)
+        if model is None or names is None:
+            remaining.append(op)
+            continue
+        present = model.all_field_names() - deferred_by_model.get(op.model_key, set())
+        if not names <= present:
+            remaining.append(op)
+            continue
+        if op.kind == "AddConstraint":
+            model.folded_constraints.append(op.payload)
+        elif op.kind == "AddIndex":
+            model.folded_indexes.append(op.payload)
+        else:
+            model.folded_unique_together = op.payload
+        folded += 1
+    return remaining, folded
 
 
 def parse_operations(tree: ast.Module) -> list[ast.Call]:
@@ -523,6 +699,11 @@ def _analyze(
         owner_op.extra_field_entries.append(_field_entry_from_addfield(af))
         inlined_field_count += 1
 
+    deferred_by_model: dict[str, set[str]] = defaultdict(set)
+    for af in remaining_add_field_ops:
+        deferred_by_model[af.model_key].add(af.field_name)
+    tail_ops, folded_count = fold_tail_ops(create_models, tail_ops, deferred_by_model)
+
     stats = {
         "models": len(create_order),
         "sccs_total": len(scc_members),
@@ -531,6 +712,7 @@ def _analyze(
         "inlined_total": inlined_field_count,
         "deferred_addfield_cycle": deferred_field_count,
         "deferred_addfield_m2m": sum(1 for af in add_fields if af.field_type == "ManyToManyField"),
+        "tail_ops_folded": folded_count,
         "tail_ops": len(tail_ops),
         "create_model_ops": len(create_order),
     }
@@ -585,16 +767,50 @@ def _find_operations_assign(tree: ast.Module) -> ast.Assign:
     return candidates[0]
 
 
+def _options_with_folds(op: CreateModelOp) -> ast.expr | None:
+    """The model's ``options`` Dict with folded constraints/indexes/unique_together merged in."""
+    if not (op.folded_constraints or op.folded_indexes or op.folded_unique_together):
+        return op.options_node
+    keys: list[ast.expr | None] = []
+    values: list[ast.expr] = []
+    if op.options_node is not None:
+        _require(isinstance(op.options_node, ast.Dict), "CreateModel.options must be a Dict node")
+        keys, values = list(op.options_node.keys), list(op.options_node.values)
+    existing = {_const_str(k): i for i, k in enumerate(keys) if k is not None}
+
+    def merge_list(key: str, items: list[ast.expr]) -> None:
+        if not items:
+            return
+        if key in existing:
+            node = values[existing[key]]
+            _require(isinstance(node, ast.List), f"options[{key!r}] must be a List node")
+            node.elts.extend(items)
+        else:
+            keys.append(ast.Constant(value=key))
+            values.append(ast.List(elts=items, ctx=ast.Load()))
+
+    merge_list("constraints", op.folded_constraints)
+    merge_list("indexes", op.folded_indexes)
+    if op.folded_unique_together is not None:
+        if "unique_together" in existing:
+            values[existing["unique_together"]] = op.folded_unique_together
+        else:
+            keys.append(ast.Constant(value="unique_together"))
+            values.append(op.folded_unique_together)
+    return ast.Dict(keys=keys, values=values)
+
+
 def _create_model_call(op: CreateModelOp) -> ast.Call:
-    """Rebuild a `CreateModel(...)` call node with any folded-in fields added."""
+    """Rebuild a `CreateModel(...)` call node with folded fields and options added."""
     fields_list = ast.List(
         elts=[*op.field_entries, *[e for e in op.extra_field_entries if e is not None]],
         ctx=ast.Load(),
     )
     kw = [ast.keyword(arg="name", value=ast.Constant(value=op.name))]
     kw.append(ast.keyword(arg="fields", value=fields_list))
-    if op.options_node is not None:
-        kw.append(ast.keyword(arg="options", value=op.options_node))
+    options = _options_with_folds(op)
+    if options is not None:
+        kw.append(ast.keyword(arg="options", value=options))
     if op.bases_node is not None:
         kw.append(ast.keyword(arg="bases", value=op.bases_node))
     return ast.Call(
