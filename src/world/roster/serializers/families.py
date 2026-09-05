@@ -64,6 +64,17 @@ class FamilySerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.DictField())
     def get_inherited(self, obj: Family) -> dict:
+        """Prefer the list view's batched grouping; fall back to a direct query.
+
+        ``FamilyViewSet.list()`` passes ``inherited_by_family`` (four flat
+        queries for the whole response) into context. Nested usage (e.g.
+        ``FamilyTreeSerializer.family``) never provides that key, since it is
+        one object, not a list - a direct lookup there is a bounded handful of
+        queries, not a loop.
+        """
+        grouping = self.context.get("inherited_by_family")
+        if grouping is not None:
+            return grouping.get(obj.id, {"aspects": [], "features": [], "liege_name": ""})
         from world.societies.houses.services import house_for_family  # noqa: PLC0415
 
         org = house_for_family(obj)
@@ -170,7 +181,9 @@ class KinRelationshipSerializer(serializers.Serializer):
 class KinSlotSerializer(serializers.ModelSerializer):
     """An open appable position (CG slot browser)."""
 
-    allowed_genders = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+    allowed_genders = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field="display_name"
+    )
 
     class Meta:
         model = Kinsperson
@@ -190,7 +203,9 @@ class KinSlotSerializer(serializers.ModelSerializer):
 class KinSlotPoolSerializer(serializers.ModelSerializer):
     """An open slot pool (CG slot browser)."""
 
-    allowed_genders = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+    allowed_genders = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field="display_name"
+    )
     parent_names = serializers.SerializerMethodField()
 
     class Meta:

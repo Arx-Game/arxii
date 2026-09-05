@@ -51,6 +51,80 @@ def _viewer_entry(request: Request) -> object:
     return RosterEntry.objects.for_account(cast(AccountDB, request.user)).first()
 
 
+def _inherited_by_family(families: list[Family]) -> dict[int, dict]:
+    """One fixed batch of flat queries for every family's inherited house facts.
+
+    Mirrors ``character_creation.views._claimable_kind_ids_by_template`` -
+    bounded to four queries regardless of how many families are being
+    listed, grouped by family id in Python, and passed through serializer
+    context instead of a per-row ``house_for_family``/``.aspects.all()`` call
+    (``FamilySerializer.get_inherited``). Never ``Prefetch(to_attr=...)`` or a
+    bare ``prefetch_related`` here - both are unreliable across requests on
+    these SharedMemoryModel instances (see the roster/CLAUDE.md idmapper notes).
+    """
+    from world.societies.houses.models import (  # noqa: PLC0415
+        FealtyEdge,
+        OrganizationAspect,
+        OrganizationFeature,
+    )
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    grouping: dict[int, dict] = {}
+    if not families:
+        return grouping
+    family_ids = [f.pk for f in families]
+    # Lowest pk per family mirrors ``family.organizations.first()``'s
+    # (unordered-by-default) result closely enough for a house lookup - a
+    # family has at most one org in practice.
+    org_by_family: dict[int, int] = {}
+    for org_id, family_id in (
+        Organization.objects.filter(family_id__in=family_ids)
+        .order_by("family_id", "pk")
+        .values_list("pk", "family_id")
+    ):
+        org_by_family.setdefault(family_id, org_id)
+    if not org_by_family:
+        return grouping
+    org_ids = list(org_by_family.values())
+    family_id_by_org_id = {org_id: family_id for family_id, org_id in org_by_family.items()}
+
+    aspects_by_org: dict[int, list[dict]] = {}
+    for aspect in OrganizationAspect.objects.filter(organization_id__in=org_ids).select_related(
+        "definition", "option"
+    ):
+        aspects_by_org.setdefault(aspect.organization_id, []).append(
+            {
+                "definition": aspect.definition.name,
+                "option": aspect.option.name,
+                "description": aspect.option.description,
+            }
+        )
+
+    features_by_org: dict[int, list[dict]] = {}
+    for stamped in OrganizationFeature.objects.filter(organization_id__in=org_ids).select_related(
+        "feature"
+    ):
+        features_by_org.setdefault(stamped.organization_id, []).append(
+            {
+                "name": stamped.feature.name,
+                "slug": stamped.feature.slug,
+                "description": stamped.feature.description,
+            }
+        )
+
+    liege_name_by_org: dict[int, str] = dict(
+        FealtyEdge.objects.filter(vassal_id__in=org_ids).values_list("vassal_id", "liege__name")
+    )
+
+    for org_id, family_id in family_id_by_org_id.items():
+        grouping[family_id] = {
+            "aspects": aspects_by_org.get(org_id, []),
+            "features": features_by_org.get(org_id, []),
+            "liege_name": liege_name_by_org.get(org_id, ""),
+        }
+    return grouping
+
+
 class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     """Families list/detail + the viewer-aware tree and CG slot browser."""
 
@@ -65,6 +139,20 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = FamilyFilterSet
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Serialize with one batched ``inherited`` grouping, not one per row.
+
+        Mirrors ``CGOriginTemplateViewSet.list()`` (this ViewSet also opts out
+        of pagination, so there is no ``page`` branch to preserve).
+        """
+        families = list(self.filter_queryset(self.get_queryset()))
+        context = {
+            **self.get_serializer_context(),
+            "inherited_by_family": _inherited_by_family(families),
+        }
+        serializer = self.get_serializer_class()(families, many=True, context=context)
+        return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def tree(self, request: Request, pk: int | None = None) -> Response:

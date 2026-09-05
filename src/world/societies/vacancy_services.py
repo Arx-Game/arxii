@@ -56,6 +56,16 @@ def reachable_vacancies(draft: CharacterDraft, *, require_open: bool = True) -> 
         queryset = queryset.filter(trust_required__lte=trust)
     return (
         queryset.select_related("organization__family", "rank", "kin_pool", "kin_node")
+        .prefetch_related(
+            # Plain-string prefetches on this fresh per-request queryset, same
+            # convention as ``roster.services.kinship.open_slots_for`` - the
+            # nested ``KinSlotPoolSerializer``/``KinSlotSerializer`` read these
+            # M2Ms, so a kin-basis row would otherwise cost one extra query
+            # each for ``allowed_genders`` (and ``parents``, on a pool).
+            "kin_pool__allowed_genders",  # noqa: PREFETCH_STRING
+            "kin_pool__parents",  # noqa: PREFETCH_STRING
+            "kin_node__allowed_genders",  # noqa: PREFETCH_STRING
+        )
         .distinct()
         .order_by("organization__name", "sort_order", "name")
     )

@@ -80,7 +80,7 @@ describe('HeritageStage', () => {
     seedQueryData(queryClient, characterCreationKeys.species(), mockSpeciesList);
     seedQueryData(
       queryClient,
-      characterCreationKeys.familiesWithOpenPositions(mockStartingArea.id),
+      characterCreationKeys.familiesWithOpenKinSlots(mockStartingArea.id),
       mockFamilies
     );
     seedQueryData(queryClient, characterCreationKeys.genders(), mockGenders);
@@ -226,7 +226,7 @@ describe('HeritageStage', () => {
       seedQueryData(queryClient, characterCreationKeys.cgBudget(), mockCGBudget);
       seedQueryData(
         queryClient,
-        characterCreationKeys.familiesWithOpenPositions(mockStartingArea.id),
+        characterCreationKeys.familiesWithOpenKinSlots(mockStartingArea.id),
         mockFamilies
       );
 

@@ -80,7 +80,7 @@ export const characterCreationKeys = {
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
-  familiesWithOpenPositions: (areaId?: number) =>
+  familiesWithOpenKinSlots: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
   draft: () => [...characterCreationKeys.all, 'draft'] as const,
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
@@ -335,7 +335,7 @@ export function useDraftCGPoints(draftId: number | undefined) {
 // NEW: Family Tree hooks
 export function useFamiliesWithOpenKinSlots(areaId?: number) {
   return useQuery({
-    queryKey: characterCreationKeys.familiesWithOpenPositions(areaId),
+    queryKey: characterCreationKeys.familiesWithOpenKinSlots(areaId),
     queryFn: () => getFamiliesWithOpenKinSlots(areaId),
   });
 }
