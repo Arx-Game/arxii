@@ -59,7 +59,7 @@ its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
 ## Filing an entry under a second subject (ADR-0270)
 
-`CodexEntry.subject` stays the entry's one canonical home — its detail page lives
+`CodexEntry.subject` stays the entry's one canonical home: its detail page lives
 there, and it is the subject `resolve_codex_links` prefers when a wikilink could
 match more than one entry. `CodexEntryFiling(entry, subject, sort_order)` is a
 separate cross-listing: it puts the entry in a second subject's listing without
@@ -72,7 +72,7 @@ any number of filings, one per additional subject (unique on `(entry, subject)`)
 `unfile_entry(entry, subject)` are the only sanctioned mutation path:
 
 - `file_entry_under` raises `ValidationError` when `subject` is the entry's own
-  `entry.subject` — that would duplicate the entry's canonical listing, not add a
+  `entry.subject`, since that would duplicate the entry's canonical listing rather than add a
   second one. It is idempotent: filing the same `(entry, subject)` pair twice
   returns the existing row rather than raising `IntegrityError`.
 - `unfile_entry` removes a filing if one exists and is a no-op otherwise.
