@@ -147,8 +147,15 @@ The pull feed of a household's own deeds and revealed scandals (`house_feed_for`
 _Avoid_: org informs, house inbox, notifications (it is not push).
 
 **House Claim**:
-The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop.
+The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop. Materialization shares `world.societies.houses.creator.build_family_org` with the plain (name-path) family builder (#3648): the title path calls it, then additionally seats the title, reassigns the seat domain and holdings, and syncs the house channel.
 _Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).
+
+**Vacancy**:
+See `world.roster.AGENT_GLOSSARY.md`'s Vacancy entry (#3648) — the canonical
+definition lives there alongside Family Template, since both are CG Lineage-step
+concepts. In short: a staff-authored opening on a staff-minted family's org
+(`societies.Vacancy`), kin or retainer, priced flat plus per-influence, with an
+optional standing (uncapped) capacity. See ADR-0272.
 
 **Aspect (house)**:
 A required, normalized catalog choice on a house template (#2079, ADR-0101): `HouseAspectDefinition` (prompt, min/max picks) + its `HouseAspectOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationAspect` identity facets at materialization. Also the recipe for a culture-specific family fact WITH variants (a house quiddity, #3617): see `docs/systems/family-authoring-recipes.md` Recipe 7.

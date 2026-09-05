@@ -71,6 +71,7 @@ describe('LineageStage', () => {
     });
     vi.mocked(api.getFamilySlots).mockResolvedValue({ slots: [], pools: [] });
     vi.mocked(api.getCGExplanations).mockResolvedValue({});
+    vi.mocked(api.getVacancies).mockResolvedValue([]);
   });
 
   describe('No Area Selected', () => {

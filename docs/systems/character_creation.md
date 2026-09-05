@@ -312,18 +312,46 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
 
-## Lineage step (#3617)
+## Lineage step (#3617, #3648)
 
 Per-beginning Upbringings replaced the old single family-known/orphan split: each
 `OriginTemplate` carries its own CG cost, trust gate, and choice of family paths
 (claim a staff-authored family, name a new one, or none), with typed prompts
 (`OriginTemplateSlot`) and costed pick-list choices (`OriginTemplateSlotChoice`)
-authored underneath it. Family standing (kind, influence, subordination, patronage,
-culture-specific facts) is expressed through the existing organisation mechanisms
-rather than bespoke fields: see the authoring recipes in
-[family-authoring-recipes.md](family-authoring-recipes.md) and the design record in
-ADR-0268 (family standing uses existing organisation mechanisms; kinds are rows) and
-ADR-0269 (Upbringings price standing as family influence x position).
+authored underneath it. See the authoring recipes in
+[family-authoring-recipes.md](family-authoring-recipes.md), ADR-0268 (family standing
+uses existing organisation mechanisms), ADR-0269 (Upbringings price standing as
+family influence x position), and ADR-0272 (family entry is a Vacancy).
+
+**Page order:** Upbringing picker, `scope: 'any'` prompts, the family block (path
+picker when the Upbringing allows more than one path, then the path body), then
+`scope: 'path'` prompts.
+
+**Name path:** pick a Family Template (`draft.resolve_family_template()`; the sole
+offered template, else `draft_data.family_template_id`), name the family (checked
+against `HouseTemplate.name_pattern`, a full-match regex; a malformed pattern is a
+staff authoring bug and surfaces as a soft "tell staff" error, never an uncaught
+`re.error`), answer the template's aspect picks (`draft_data.family_aspect_picks`,
+fenced by `houses.creator._validate_aspect_picks`), and optionally declare a served
+house from `family_template.served_house_choices`.
+
+**Claim path:** claiming a staff family with an open kin Vacancy requires taking one
+(`_get_vacancy_errors`); the Service panel (a retainer Vacancy) is available on any
+resolved path except when a kin Vacancy is already chosen.
+
+**Vacancies:** `GET /api/character-creation/vacancies/?draft=<id>[&organization=<id>]`
+returns the open, reachable, per-draft-priced `Vacancy` rows (bare list) via
+`vacancy_services.reachable_vacancies`. Validation re-checks an already-selected
+Vacancy with `require_open=False`: openness is enforced only at finalize by
+`take_vacancy`, so a Vacancy filled between pick and staff approval degrades
+through `VacancyExhaustedError` instead of blocking re-validation on approval.
+Pricing adds `vacancy.cost_for(<the Vacancy's family's influence>)` (ADR-0269
+extended to a second consumer).
+
+**Finalize order:** `_materialize_named_family` (name path) before the character is
+named, then `_bind_vacancy` (takes the Vacancy, claims/mints its kin link, joins the
+org) before `_bind_kinship_node`, so a kin Vacancy's node exists when the self-serve
+kinship fallback looks. `finalize_gm_character` mirrors both calls for GM drafts.
 
 ## Seeded content + Game Setup hub
 

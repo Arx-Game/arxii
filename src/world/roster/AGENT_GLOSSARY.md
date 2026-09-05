@@ -68,7 +68,7 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   `KinSlotPool` ("8 children among these parents") minting nodes on claim.
   CG claims bind the new sheet at finalization. _Avoid:_ placeholder (the
   retired member_type).
-- **Deferred definition** — a CG choice to leave kin positions (e.g.
+- **Deferred definition** — a CG choice to leave kin slots (e.g.
   parents) deliberately undefined, recorded via `deferred_definer`; filling
   them later is holder-only and review-gated ("would everyone have already
   known this" is a human judgment). _Avoid:_ retcon slot.
@@ -99,22 +99,57 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   and which Family Paths it allows. The code keeps the `OriginTemplate*`
   class names (Decision 4 on #3617); "Upbringing" is the player- and
   staff-facing word. _Avoid:_ origin option, household.
-- **Family Path** (#3617): `FamilyPath`, the shape an Upbringing gives a
+- **Family Path** (#3617, #3648): `FamilyPath`, the shape an Upbringing gives a
   character's family record: claimed (a staff-authored family of an offered
-  Family Kind), named (a new family with no authority, influence 0), or none
-  (the tarot surname ritual). Resolved per-draft by
-  `CharacterDraft.resolve_family_path()`. _Avoid:_ family-known flag (the
-  retired `Beginnings.family_known`; the job is now the Upbringing's paths).
-- **Prompt (Upbringing)** (#2478, #3617): `OriginTemplateSlot`, an authored
-  question scoped to a Family Path (`applies_to`) or shown on every path
-  (`any`); `allows_text` controls whether a free-text write-in is offered
-  alongside any pick-list Choices. _Avoid:_ slot alone outside kinship
-  app-in context (that word already names the appable-slot mountain here).
+  Family Kind, entered through a Vacancy when one is offered), named (a new
+  family built from a Family Template, influence 0), or none (the tarot
+  surname ritual). Resolved per-draft by `CharacterDraft.resolve_family_path()`.
+  The Lineage page order is Upbringing picker, any-scoped Prompts, the family
+  block (path picker when more than one path is allowed, then the path body),
+  path-scoped Prompts. _Avoid:_ family-known flag (the retired
+  `Beginnings.family_known`; the job is now the Upbringing's paths).
+- **Prompt (Upbringing)** (#2478, #3617, #3648): `OriginTemplateSlot`, an
+  authored question scoped to a Family Path (`applies_to`) or shown on every
+  path (`any`); `allows_text` controls whether a free-text write-in is offered
+  alongside any pick-list Choices. Rendered as `any`-scoped prompts above the
+  family block and path-scoped prompts below it (#3648's page-order change).
+  _Avoid:_ slot alone outside kinship app-in context (that word already names
+  the appable-slot mountain here).
 - **Choice (Upbringing)** (#3617): `OriginTemplateSlotChoice`, one authored
   pick-list answer on a Prompt, priced `cg_point_cost + cost_per_influence x
   influence` (`cost_for()`); influence is 0 on the name and none Family
   Paths. _Avoid:_ option (reserved for `HouseAspectOption`/`FormTraitOption`
   elsewhere in this codebase).
+- **Family Template** (#3648): `HouseTemplate`, the type a named family is
+  built from — kind, org type, society, aspect questions, served house
+  choices, and (title path only) a liege and succession law. An Upbringing's
+  `family_templates` M2M names which template(s) its name path offers; one
+  auto-picks, more than one shows a picker. See
+  `docs/systems/family-authoring-recipes.md`. _Avoid:_ house template as the
+  general term (the model stays named `HouseTemplate` in code, but every kind
+  of family uses it, not only houses); charter for a non-noble kind (charter
+  stays the noble-title-founding term).
+- **Vacancy** (#3648): `societies.Vacancy`, a staff-authored opening on a
+  staff-minted family's org: what the holder does, two authored importance
+  axes (below), and a price. Kin when it links the kinship tree (a
+  `KinSlotPool` or an appable `Kinsperson`), retainer otherwise; a blank
+  capacity (`count_remaining`) is a standing vacancy, always open. Taken at CG
+  finalize via `take_vacancy`, which stamps `OrganizationMembership.vacancy`.
+  _Avoid:_ position, appointment, seat, station, role, slot (each already
+  means something else in this codebase — see ADR-0272).
+- **Importance / Presumed importance** (#3648): the two authored axes on a
+  Vacancy — `importance` (how much the family truly cares about the holder,
+  visible only to the holder and staff) and `presumed_importance` (what
+  outsiders assume, the public-facing number). Descriptors with no consumer
+  yet as of #3648. _Avoid:_ standing (`StandingDeclaration` is a live
+  reputation nudge), regard (`NpcRegard`, an NPC's opinion), stature
+  (`HouseStature`, an org-level computed deterrence score).
+- **Served house** (#3648): the staff `Organization` a name-path family swore
+  fealty to, from `HouseTemplate.served_house_choices` — recorded on
+  `CharacterDraft.served_house` and, at materialization, as the org's fealty
+  edge. _Avoid:_ patron (an `OrgPact` between two organizations is the
+  patronage relationship; served house is a fealty declaration on a
+  brand-new family).
 - **Mail (PlayerMail)** - a `PlayerMail` row: private, OOC, tenure-to-tenure
   correspondence between players (`sender_tenure` -> `recipient_tenure`,
   threaded via `in_reply_to`), routed by `RosterTenure` rather than

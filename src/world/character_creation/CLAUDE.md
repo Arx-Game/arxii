@@ -9,10 +9,12 @@ Character creation is a multi-stage process that guides players through creating
 1. **Origin** - Select starting area (city), which gates heritage options
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
 3. **Lineage** - Choose an Upbringing (`OriginTemplate`) for the beginning, then its
-   family path: claim a staff-authored family, name a new one, or none (tarot
-   surname ritual); typed prompts with costed pick-list choices priced by the
-   claimed family's influence (#3617, see `docs/systems/character_creation.md`'s
-   Lineage step section). Plus kin-slot claim/mint/defer and invented parents
+   family path: claim a staff-authored family (entering through a kin Vacancy when
+   one is offered), name a new one from a Family Template, or none (tarot surname
+   ritual); typed prompts with costed pick-list choices priced by the claimed
+   family's influence, plus a Service panel offering any reachable retainer Vacancy
+   on any path (#3617, #3648 — see `docs/systems/character_creation.md`'s Lineage
+   step section and ADR-0272). Plus kin-slot claim/mint/defer and invented parents
    (#2815: names/genders in draft_data, `second_parent_species` for a
    cross-species parent, unlocks that line's colors in Appearance; finalize
    creates the nodes and pins back-inference)
@@ -44,7 +46,7 @@ Character creation is a multi-stage process that guides players through creating
 - Can override starting room (e.g., Sleeper Wake Room)
 - Has CG point cost and trust requirements
 
-### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617)
+### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617, #3648)
 Full model shape, family-path resolution, pricing, and the authoring recipes live in
 `docs/systems/character_creation.md`'s Lineage step section and
 `docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" in
@@ -52,6 +54,13 @@ CG copy) is the authored content row a player picks within a Beginning, carrying
 point cost, a trust gate, and which family paths it allows (claim/name/none);
 `OriginTemplateSlot` is an authored prompt scoped to a path (`applies_to`), and
 `OriginTemplateSlotChoice` is a priced pick-list answer (`cost_for(influence)`).
+`OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name `upbringings`,
+#3648) names which Family Template(s) the name path offers — `named_family_kind` is
+retired; `draft.resolve_family_template()` resolves the sole offered template or the
+player's `draft_data.family_template_id` pick. Entry into a staff family is a
+`societies.Vacancy` (`CharacterDraft.selected_vacancy`, `served_house`); see ADR-0272
+and the Lineage step section for the family-block page order, pricing, and finalize
+order (`_materialize_named_family` -> `_bind_vacancy` -> `_bind_kinship_node`).
 `CharacterOriginSlot` is instance data (FK->`CharacterSheet`, FK->`OriginTemplateSlot`,
 nullable FK->`OriginTemplateSlotChoice`); at CG finalize its answers assemble into
 `Profile.background` prose via `assemble_origin_prose()` (pure concatenation, no LLM).

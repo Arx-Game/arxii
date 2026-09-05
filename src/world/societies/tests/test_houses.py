@@ -717,7 +717,7 @@ class HousesSeedTests(TestCase):
 
         Regression for a first pass that put this inside ``_seed_house_creator``,
         which runs before the placeholder house Organization exists on the very
-        first (and, in production, only) call — the Vacancy never appeared through
+        first (and, in production, only) call - the Vacancy never appeared through
         the real seeding pipeline. It now lands after the house is created and
         bound to its Family, in ``seed_houses_demo`` itself.
         """

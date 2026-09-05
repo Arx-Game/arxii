@@ -398,7 +398,7 @@ shelf, not new player-made characters going through CG.
 - `GET /api/roster/families/{id}/` - Family detail
 - `GET /api/roster/families/{id}/tree/` - Complete family tree with members
 
-**Query Parameters:** `has_open_positions=true` (filter families with placeholder members)
+**Query Parameters:** `has_open_kin_slots=true` (filter families with placeholder members; renamed from `has_open_positions`, #3648)
 
 ### Family Members (`/api/roster/family-members/`)
 - Full CRUD for family members (creator or staff only for write)
