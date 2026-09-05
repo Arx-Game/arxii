@@ -22153,6 +22153,13 @@ paths:
         postings: the viewer's eligible postings on a board (preview-only).
         take: accept a posting — re-runs eligibility server-side before granting.
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22180,6 +22187,13 @@ paths:
         postings: the viewer's eligible postings on a board (preview-only).
         take: accept a posting — re-runs eligibility server-side before granting.
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22578,6 +22592,14 @@ paths:
 
         Participant gating: a non-participant probing instance ids gets 404
         (never 403 — existence must not leak).
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       tags:
       - missions
       security:
@@ -22607,6 +22629,13 @@ paths:
         Participant gating: a non-participant probing instance ids gets 404
         (never 403 — existence must not leak).
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22643,6 +22672,13 @@ paths:
         Participant gating: a non-participant probing instance ids gets 404
         (never 403 — existence must not leak).
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22667,6 +22703,13 @@ paths:
       description: '#1036 — the group decision beat (resolves first if the window
         expired).'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22693,6 +22736,13 @@ paths:
       description: '#1036 — submit this participant''s stage-1 pick for the group
         node.'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22725,6 +22775,13 @@ paths:
       description: '#1036 — cast this participant''s stage-2 vote; auto-resolves when
         all in.'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22756,6 +22813,13 @@ paths:
       operationId: missions_journal_invite_create
       description: '#887 — invite a co-located character to join this mission run.'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22788,6 +22852,13 @@ paths:
       description: '#1753 — report a RESOLVED run''s outcome to its report-to Functionary,
         by style.'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22831,6 +22902,13 @@ paths:
         Participant gating: a non-participant probing instance ids gets 404
         (never 403 — existence must not leak).
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22862,6 +22940,13 @@ paths:
       operationId: missions_journal_support_create
       description: '#2046 — declare a support move in place of a pick/vote.'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22893,6 +22978,13 @@ paths:
       operationId: missions_journal_tale_create
       description: '#2047 — tell the tale of a completed run.'
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: path
         name: id
         schema:
@@ -22919,6 +23011,14 @@ paths:
     get:
       operationId: missions_journal_opportunities_retrieve
       description: '#2044 — the three-group discovery view (here/nearby/your-orgs).'
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       tags:
       - missions
       security:
@@ -22940,6 +23040,14 @@ paths:
         so a brand-new character invited to their first mission never saw the
         invite. Invites are persona-scoped, so they get their own endpoint —
         the web reads this instead of piggybacking on journal entry 0.
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       tags:
       - missions
       security:
@@ -22961,6 +23069,14 @@ paths:
 
         The invitee is NOT a participant yet, so this is detail=False with the
         invite_id in the body (not _instance_for, which would 404).
+      parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to act
+          as, instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       tags:
       - missions
       requestBody:
@@ -24903,6 +25019,11 @@ paths:
         stored in ``request.session``.
       tags:
       - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InteractionEndRequestRequest'
       security:
       - cookieAuth: []
       responses:
@@ -38398,6 +38519,13 @@ paths:
       description: GET /conditions/?room_id=<id> — IC time + the weather holding at
         a room.
       parameters:
+      - in: query
+        name: entry_id
+        schema:
+          type: integer
+        description: 'RosterEntry id of one of the caller''s own characters to read
+          for instead of the account''s durable selection (per-tab browsing identity,
+          #3479). 403 for an id that is not the caller''s own.'
       - in: query
         name: room_id
         schema:
@@ -54215,6 +54343,17 @@ components:
       - receivers
       - target_persona_ids
       - timestamp
+    InteractionEndRequestRequest:
+      type: object
+      description: POST /api/npc-services/interactions/end/ body (#3479).
+      properties:
+        entry_id:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: 'Optional (#3479): RosterEntry id of one of the caller''s own
+            characters to act as, instead of the account''s durable selection. 403
+            for an id that is not the caller''s own.'
     InteractionFavorite:
       type: object
       properties:
@@ -54638,6 +54777,13 @@ components:
         acknowledge_risk:
           type: boolean
           default: false
+        entry_id:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: 'Optional (#3479): RosterEntry id of one of the caller''s own
+            characters to act as, instead of the account''s durable selection. 403
+            for an id that is not the caller''s own.'
       required:
       - offer_id
     InteractionStartRequestRequest:
@@ -54647,6 +54793,13 @@ components:
         role_id:
           type: integer
           minimum: 1
+        entry_id:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: 'Optional (#3479): RosterEntry id of one of the caller''s own
+            characters to act as, instead of the account''s durable selection. 403
+            for an id that is not the caller''s own.'
         npc_persona_id:
           type: integer
           minimum: 1

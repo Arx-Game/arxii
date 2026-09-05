@@ -10,7 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from evennia_extensions.models import PlayerData, RoomProfile
+from evennia_extensions.models import RoomProfile
+from world.roster.services.selection import character_for_request
 from world.weather.serializers import ConditionsRequestSerializer, ConditionsSerializer
 from world.weather.services import current_conditions
 
@@ -18,21 +19,19 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
-def _selected_character_room(request: Request) -> ObjectDB | None:
-    """The caller's selected character's current room, or None.
+def _acting_character_room(request: Request, entry_id: int | None) -> ObjectDB | None:
+    """The acting character's current room, or None.
 
     The Hall's Time plate reads conditions without a live game session, so it
-    has no room id to send — but selection is durable server state (#3412,
-    ``PlayerData.selected_entry``), so the server can resolve where that
-    character stands. Selection is NOT presence: an offside character with no
-    location resolves to None and the caller simply gets no weather.
+    has no room id to send. ``entry_id`` is the tab's browsing identity
+    (#3479); omitted, the durable selection (#3412) names the character. The
+    resolution is NOT presence: a character with no location resolves to None
+    and the caller simply gets no weather.
     """
-    player_data = PlayerData.objects.filter(account=request.user).first()
-    entry = player_data.selected_entry if player_data else None
-    if entry is None:
+    character = character_for_request(request, entry_id=entry_id)
+    if character is None:
         return None
-    character = entry.character_sheet.character
-    return character.location if character else None
+    return character.location
 
 
 @extend_schema(tags=["weather"])
@@ -51,7 +50,15 @@ class WeatherViewSet(viewsets.ViewSet):
                 description="ObjectDB id of the room to read conditions for. Omitted, the "
                 "caller's selected character's current room is used (404 when there is no "
                 "selection or the character is nowhere).",
-            )
+            ),
+            OpenApiParameter(
+                name="entry_id",
+                type=int,
+                required=False,
+                description="RosterEntry id of one of the caller's own characters to read "
+                "for instead of the account's durable selection (per-tab browsing "
+                "identity, #3479). 403 for an id that is not the caller's own.",
+            ),
         ],
         responses=ConditionsSerializer,
     )
@@ -66,7 +73,7 @@ class WeatherViewSet(viewsets.ViewSet):
             except RoomProfile.DoesNotExist:
                 return Response({"detail": "Room not found."}, status=status.HTTP_404_NOT_FOUND)
         else:
-            room = _selected_character_room(request)
+            room = _acting_character_room(request, request_params.validated_data.get("entry_id"))
             if room is None:
                 return Response(
                     {"detail": "No room to read conditions for."},
