@@ -42,6 +42,7 @@ from core_management.regeneration import (
     MIGRATIONS_DIR,
     REPO_ROOT,
     TOOLS_DIR,
+    deferred_verdict,
     drop_report,
     git_head,
     git_is_clean,
@@ -89,6 +90,16 @@ class Command(BaseCommand):
             "--check", action="store_true", help="preflight and report only; write nothing"
         )
         parser.add_argument("--allow-main-checkout", action="store_true")
+        parser.add_argument(
+            "--accept-deferred",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "acknowledge a rise in cycle-breaking AddFields to exactly N "
+                "(name the new cycle in the PR)"
+            ),
+        )
 
     def handle(self, *_args: Any, **options: Any) -> None:
         if options["app_label"] != APP_LABEL or options["migration_range"]:
@@ -127,11 +138,11 @@ class Command(BaseCommand):
         files, stats = inliner.rewrite_chunks(source, options["chunks"], generation=new_gen)
         self._print_stats(stats)
         deferred = int(stats["deferred_addfield_cycle"])
-        if baseline is not None and deferred > baseline:
+        problem = deferred_verdict(baseline, deferred, options["accept_deferred"])
+        if problem is not None:
             message = (
-                f"deferred cycle-breaking AddFields rose from {baseline} to {deferred}; a new "
-                "FK cycle entered the schema. Name it in the PR, then rerun with the count "
-                "explained (spec #3656, Design 1 step 5). Nothing was written; restore with git."
+                f"{problem} Nothing was written; restore with "
+                "`git checkout -- src/world/migrations`."
             )
             raise CommandError(message)
         initial.unlink()

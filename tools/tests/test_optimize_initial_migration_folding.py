@@ -120,17 +120,18 @@ def test_existing_options_are_extended_not_replaced():
 
 
 def test_constraint_on_deferred_cycle_field_stays_in_tail():
-    # A -> B -> A is a genuine cycle; both FKs stay deferred, so a constraint on b.a
-    # must follow the AddField that creates the column.
+    # A <-> B is a genuine cycle. The cycle order creates A first, so b.a inlines and
+    # a.b is the one deferred FK; a constraint on a.b must follow that AddField.
     src = _src(
         A_BARE,
         B,
         A_TO_B,
         B_TO_A,
-        'migrations.AddConstraint(model_name="b", '
-        'constraint=models.UniqueConstraint(fields=("a",), name="uniq_b_a"))',
+        'migrations.AddConstraint(model_name="a", '
+        'constraint=models.UniqueConstraint(fields=("b",), name="uniq_a_b"))',
     )
     out, stats = rewrite(src, check_only=False)
+    assert stats["deferred_addfield_cycle"] == 1
     assert "AddConstraint" in out
     assert out.index("AddField") < out.index("AddConstraint")
     assert stats["tail_ops_folded"] == 0

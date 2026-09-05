@@ -41,9 +41,12 @@ This script performs that rewrite:
    model creation order in which every *inter-SCC* FK edge points backward
    (target already created).
 5. Emit one ``CreateModel`` per model in that order, with every FK/O2O field
-   inlined into it *unless* the field's target is a different model in the
-   same non-trivial SCC (a genuine cycle — these ~49 fields become
-   ``AddField`` ops emitted after every ``CreateModel``). Self-referential
+   inlined into it *unless* it is a back edge of its cycle: inside each
+   non-trivial SCC the members are ordered by the Eades-Lin-Smyth
+   feedback-arc heuristic (``order_within_cycle``, ADR-0272) and only the FKs
+   whose target is created *later* stay deferred as ``AddField`` ops after
+   every ``CreateModel`` (12 on the 2026-09-05 schema, where deferring every
+   intra-cycle edge would have cost 82). Self-referential
    FK/O2O fields are always inlined (a table can reference its own
    not-yet-committed primary key inside its own ``CREATE TABLE`` — this is
    ordinary SQL, not a cycle in the Django-migration sense; verified against
@@ -609,17 +612,98 @@ def topo_order_sccs(
     return order
 
 
+def order_within_cycle(members: list[str], before: set[tuple[str, str]]) -> list[str]:
+    """Order the members of one cycle so that few ``(u, v)`` "u before v" edges point backward.
+
+    Eades-Lin-Smyth greedy feedback-arc-set heuristic: peel sinks to the end and
+    sources to the front; when neither exists, move the node with the largest
+    out-degree minus in-degree to the front. Ties break by ``members`` order so the
+    result is stable. Every edge that still points backward in the returned order
+    is one FK the caller must defer to an ``AddField``; every other edge inlines.
+    """
+    remaining = list(members)
+    out_edges: dict[str, set[str]] = {m: set() for m in members}
+    in_edges: dict[str, set[str]] = {m: set() for m in members}
+    for u, v in before:
+        if u in out_edges and v in in_edges and u != v:
+            out_edges[u].add(v)
+            in_edges[v].add(u)
+    front: list[str] = []
+    back: list[str] = []
+
+    def remove(node: str) -> None:
+        remaining.remove(node)
+        for other in out_edges[node]:
+            in_edges[other].discard(node)
+        for other in in_edges[node]:
+            out_edges[other].discard(node)
+        out_edges[node].clear()
+        in_edges[node].clear()
+
+    while remaining:
+        sinks = [m for m in remaining if not out_edges[m]]
+        if sinks:
+            back.insert(0, sinks[0])
+            remove(sinks[0])
+            continue
+        sources = [m for m in remaining if not in_edges[m]]
+        if sources:
+            front.append(sources[0])
+            remove(sources[0])
+            continue
+        best = max(remaining, key=lambda m: len(out_edges[m]) - len(in_edges[m]))
+        front.append(best)
+        remove(best)
+    return front + back
+
+
 def build_model_order(
-    create_order: list[str], scc_id: dict[str, int], scc_topo: list[int]
+    create_order: list[str],
+    scc_id: dict[str, int],
+    scc_topo: list[int],
+    edges: set[tuple[str, str]] | None = None,
 ) -> list[str]:
+    """Creation order: SCCs topologically, and inside a non-trivial SCC the order
+    that leaves the fewest FK edges pointing at a later model (see `order_within_cycle`)."""
     members: dict[int, list[str]] = defaultdict(list)
     for key in create_order:  # preserve original file order within each SCC
         members[scc_id[key]].append(key)
     ordered_keys: list[str] = []
     for s in scc_topo:
-        ordered_keys.extend(members[s])
+        group = members[s]
+        if len(group) > 1 and edges:
+            # An FK owner -> target means "target before owner".
+            before = {(t, o) for (o, t) in edges if scc_id[o] == s and scc_id[t] == s and o != t}
+            group = order_within_cycle(group, before)
+        ordered_keys.extend(group)
     _require(len(ordered_keys) == len(create_order), "model_order dropped or duplicated a model")
     return ordered_keys
+
+
+def _check_inline_relations(
+    create_models: dict[str, CreateModelOp], position: dict[str, int]
+) -> None:
+    """A FK already inline in a CreateModel must target a model created no later.
+
+    Django's autodetector defers every forward-referencing FK whenever a cycle
+    exists, so this never fires on its output; it exists so a cycle order that
+    put an inline target later would fail loudly instead of emitting a migration
+    that fails at CREATE TABLE.
+    """
+    for owner_key, op in create_models.items():
+        for entry in op.field_entries:
+            field_call = entry.elts[1]
+            if not isinstance(field_call, ast.Call) or field_call.func.attr not in (
+                SINGLE_VALUED_RELATION_TYPES
+            ):
+                continue
+            tkey = target_key(_const_str(_kwargs_dict(field_call).get("to")))
+            if tkey is None or tkey == owner_key:
+                continue
+            _require(
+                position[tkey] < position[owner_key],
+                f"inline FK {owner_key}.{_const_str(entry.elts[0])} targets {tkey}, created later",
+            )
 
 
 def _analyze(
@@ -638,7 +722,9 @@ def _analyze(
     edges = build_graph(create_models, add_fields)
     scc_id = tarjan_scc(create_order, edges)
     scc_topo = topo_order_sccs(create_order, edges, scc_id)
-    model_order = build_model_order(create_order, scc_id, scc_topo)
+    model_order = build_model_order(create_order, scc_id, scc_topo, edges)
+    position = {key: i for i, key in enumerate(model_order)}
+    _check_inline_relations(create_models, position)
 
     # Non-trivial SCCs (size > 1): the only place a real cycle can require
     # deferral. A trivial SCC (size 1) never needs deferral: if it has a
@@ -684,9 +770,12 @@ def _analyze(
             tkey is not None
             and scc_id[af.model_key] in non_trivial_sccs
             and scc_id.get(tkey) == scc_id[af.model_key]
+            and position[tkey] > position[af.model_key]
         ):
-            # Genuine intra-SCC cycle edge (both endpoints in the same
-            # non-trivial SCC) - the only case that truly must stay deferred.
+            # A back edge of the cycle's chosen order: the target is created
+            # after the owner, so this FK is one of the few that truly must
+            # stay deferred. Cycle edges whose target comes first inline like
+            # any other (the table exists by then).
             remaining_add_field_ops.append(af)
             deferred_field_count += 1
             continue

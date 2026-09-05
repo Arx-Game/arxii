@@ -9,6 +9,7 @@ import tempfile
 from django.test import SimpleTestCase
 
 from core_management.regeneration import (
+    deferred_verdict,
     drop_report,
     post_partition_addfield_sources,
     prune_lint_lists,
@@ -61,6 +62,29 @@ class DropReportTests(SimpleTestCase):
     def test_runsql_not_in_sql_files_is_flagged(self) -> None:
         report = drop_report({"0999_odd": RUNSQL.replace("areaclosure", "mystery")}, sql_files=[])
         assert "NOT in SQL_FILES" in report
+
+
+class DeferredVerdictTests(SimpleTestCase):
+    def test_at_or_below_baseline_proceeds(self) -> None:
+        assert deferred_verdict(34, 12, None) is None
+        assert deferred_verdict(34, 34, None) is None
+
+    def test_no_baseline_proceeds(self) -> None:
+        assert deferred_verdict(None, 82, None) is None
+
+    def test_rise_refuses_and_names_the_flag(self) -> None:
+        problem = deferred_verdict(34, 82, None)
+        assert problem is not None
+        assert "34 to 82" in problem
+        assert "--accept-deferred 82" in problem
+
+    def test_accepting_the_measured_count_proceeds(self) -> None:
+        assert deferred_verdict(34, 82, 82) is None
+
+    def test_accepting_a_different_count_refuses(self) -> None:
+        problem = deferred_verdict(34, 82, 80)
+        assert problem is not None
+        assert "does not match" in problem
 
 
 class PruneLintListsTests(SimpleTestCase):

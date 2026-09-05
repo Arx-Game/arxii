@@ -162,6 +162,29 @@ def drop_report(sources: dict[str, str], sql_files: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def deferred_verdict(baseline: int | None, measured: int, accepted: int | None) -> str | None:
+    """Why a regeneration may not proceed on its cycle-breaking AddField count, or None.
+
+    A rise over the previous generation's count means a new FK cycle entered the
+    schema; the PR must name it, and the rerun passes ``--accept-deferred`` with
+    the exact measured count so the acknowledgement is explicit and checked.
+    """
+    if accepted is not None:
+        if accepted != measured:
+            return (
+                f"--accept-deferred {accepted} does not match the measured "
+                f"{measured}; pass the measured count once you have named the cycle"
+            )
+        return None
+    if baseline is not None and measured > baseline:
+        return (
+            f"deferred cycle-breaking AddFields rose from {baseline} to {measured}: a new FK "
+            "cycle entered the schema. Name it in the PR, then rerun with "
+            f"--accept-deferred {measured} (spec #3656, Design 1 step 5)."
+        )
+    return None
+
+
 def prune_lint_lists(files: list[Path], existing_names: set[str]) -> dict[str, list[str]]:
     """Drop ``"world/migrations/<name>.py",`` lines whose migration no longer exists.
 
