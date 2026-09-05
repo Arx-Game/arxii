@@ -514,9 +514,13 @@ def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
         VACANCY_BASIS_KIN,
         VACANCY_BASIS_RETAINER,
     )
-    from world.societies.vacancy_services import reachable_vacancies  # noqa: PLC0415
+    from world.societies.vacancy_services import (  # noqa: PLC0415
+        _open_filter,
+        reachable_vacancies,
+    )
 
-    reachable = reachable_vacancies(draft)
+    reachable_any_state = reachable_vacancies(draft, require_open=False)
+    reachable = reachable_any_state.filter(_open_filter())
     vacancy = draft.selected_vacancy
     own_org_id = None
     if path == FamilyPath.CLAIMED and draft.family_id is not None:
@@ -543,7 +547,6 @@ def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
     # territory (``take_vacancy``/``VacancyExhaustedError``), not a stage-blocking
     # error - only a gate the player can't fix (wrong realm/upbringing/trust,
     # or the vacancy was deactivated outright) belongs here.
-    reachable_any_state = reachable_vacancies(draft, require_open=False)
     if not reachable_any_state.filter(pk=vacancy.pk).exists():
         errors.append("That opening is not available to you")
     if vacancy.basis == VACANCY_BASIS_KIN and (

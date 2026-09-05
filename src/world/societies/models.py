@@ -974,6 +974,8 @@ class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             raise ValidationError({"kin_pool": "The slot pool must belong to this family."})
         if self.kin_node_id and self.kin_node.family_id != family_id:
             raise ValidationError({"kin_node": "The appable person must belong to this family."})
+        if self.rank_id and self.rank.organization_id != self.organization_id:
+            raise ValidationError({"rank": "The rank must belong to this vacancy's organization."})
 
 
 class OrganizationOffice(SharedMemoryModel):

@@ -58,6 +58,18 @@ class VacancyModelTest(TestCase):
         with self.assertRaises(ValidationError):
             vacancy.clean()
 
+    def test_clean_refuses_a_rank_from_another_organization(self):
+        other = OrganizationFactory(name="House Other")
+        rank = other.ranks.first()
+        vacancy = Vacancy(organization=self.org, name="Mismatched", rank=rank)
+        with self.assertRaises(ValidationError):
+            vacancy.clean()
+
+    def test_clean_accepts_a_rank_from_its_own_organization(self):
+        rank = self.org.ranks.first()
+        vacancy = Vacancy(organization=self.org, name="Matched", rank=rank)
+        vacancy.clean()
+
     def test_natural_key_is_org_and_name(self):
         vacancy = VacancyFactory(organization=self.org, name="Enforcer")
         assert Vacancy.objects.get_by_natural_key(*vacancy.natural_key()) == vacancy
