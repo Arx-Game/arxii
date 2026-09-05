@@ -999,6 +999,44 @@ def effective_owners_for_rooms(
     return result
 
 
+def effective_owner_for_area(area: Area | None) -> LocationOwnership | None:
+    """Cascade-resolve the most-specific active owner of an area itself (#696).
+
+    The area-scoped sibling of ``effective_owner`` (which resolves a room) -
+    for callers that hold an Area and no room, e.g. Task 2's domain
+    eligibility count. Self-first, most-specific-wins: an area's own active
+    LocationOwnership row wins even when an ancestor also has one.
+
+    Walks ``parent`` FKs directly (self-first, cycle-safe), deliberately NOT
+    the ``AreaClosure`` materialized view, so this works identically on the
+    SQLite fast tier - same idiom as ``area_stat_total`` above and
+    ``world.justice.services._chain``.
+
+    Returns the LocationOwnership row, or None if no active ownership row
+    exists anywhere in the chain.
+    """
+    chain: list[Area] = []
+    seen: set[int] = set()
+    node = area
+    while node is not None and node.pk not in seen:
+        chain.append(node)
+        seen.add(node.pk)
+        node = node.parent
+    if not chain:
+        return None
+
+    rows = LocationOwnership.objects.filter(
+        ended_at__isnull=True,
+        area_id__in=[a.pk for a in chain],
+    ).select_related("area", "holder_persona", "holder_organization")
+    by_area_id = {r.area_id: r for r in rows}
+
+    for a in chain:
+        if a.pk in by_area_id:
+            return by_area_id[a.pk]
+    return None
+
+
 def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
     """Return all currently-active tenancies that apply to a room.
 
