@@ -33,6 +33,7 @@ CLASS_SET_RELATED_NAME = "%(class)s_set"
 # Cross-app FK string constants (SonarCloud python:S1192 duplicate-literal).
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 SCENE_MODEL = "arxii.Scene"
+COMPANION_MODEL = "arxii.Companion"
 
 
 class RelationshipCondition(SharedMemoryModel):
@@ -328,8 +329,29 @@ class CharacterRelationship(SharedMemoryModel):
     target = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="relationships_as_target",
-        help_text="The character this relationship is about",
+        help_text=(
+            "The character this relationship is about; null when target_companion is set "
+            "(#3575). Exactly one of target / target_companion is set."
+        ),
+    )
+    # FK direction (ADR-0010): relationships depend on companions, never the reverse.
+    # A companion has no CharacterSheet by design (ADR-0088, #2608), so the owner's
+    # bond toward it points at the Companion row. Only the bonded owner may hold one,
+    # and it is active from creation (the bind is the consent) - enforced in
+    # ``world.relationships.services.companion_target_error``, app layer only.
+    target_companion = models.ForeignKey(
+        COMPANION_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="relationships_as_companion_target",
+        help_text=(
+            "The bonded companion this relationship is about (#3575); null when target "
+            "is set. Only the companion's owner may hold such a row."
+        ),
     )
     is_active = models.BooleanField(
         default=True,
@@ -416,11 +438,28 @@ class CharacterRelationship(SharedMemoryModel):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["source", "target"], name="unique_relationship_pair"),
+            models.UniqueConstraint(
+                fields=["source", "target"],
+                condition=models.Q(target__isnull=False),
+                name="unique_relationship_pair",
+            ),
+            models.UniqueConstraint(
+                fields=["source", "target_companion"],
+                condition=models.Q(target_companion__isnull=False),
+                name="unique_relationship_companion_pair",
+            ),
+            # Exactly one target kind (#3575).
+            models.CheckConstraint(
+                condition=(
+                    models.Q(target__isnull=False, target_companion__isnull=True)
+                    | models.Q(target__isnull=True, target_companion__isnull=False)
+                ),
+                name="relationship_target_xor_companion",
+            ),
             # Enforce the self-relationship prohibition at the DB layer: clean()
             # is bypassed by get_or_create/objects.create, which the services use,
-            # so a DB constraint is the only reliable guard (#1485 — now that the
-            # verbs are player-reachable from web + telnet).
+            # so a DB constraint is the only reliable guard (#1485 - now that the
+            # verbs are player-reachable from web + telnet). A null target passes.
             models.CheckConstraint(
                 condition=~models.Q(source=models.F("target")),
                 name="relationship_source_not_target",
@@ -428,11 +467,24 @@ class CharacterRelationship(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.source} -> {self.target}"
+        return f"{self.source} -> {self.target_name}"
+
+    @property
+    def target_name(self) -> str:
+        """Display name of whoever this row is about: the companion's name, else the
+        target character's key (#3575). Safe on either target kind."""
+        if self.target_companion_id is not None:
+            return self.target_companion.name
+        return self.target.character.db_key
 
     def clean(self) -> None:
         """Validate relationship constraints."""
         super().clean()
+        has_sheet = self.target_id is not None
+        has_companion = self.target_companion_id is not None
+        if has_sheet == has_companion:
+            msg = "A relationship needs exactly one of a character target or a companion target."
+            raise ValidationError(msg)
         if self.source_id is not None and self.source_id == self.target_id:
             msg = "A character cannot have a relationship with themselves."
             raise ValidationError(msg)

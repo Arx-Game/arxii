@@ -3527,7 +3527,9 @@ class DramaticSurgeRecord(SharedMemoryModel):
     A boss beat (subject_opponent set) dedups differently: on
     ``(encounter, participant, trigger_kind, subject_opponent,
     subject_phase_number)`` instead, so a multi-phase boss surges once per
-    phase rather than once per encounter (#3445).
+    phase rather than once per encounter (#3445). A companion fall
+    (subject_companion set) dedups on (encounter, participant, trigger_kind,
+    subject_companion) (#3575).
     """
 
     encounter = models.ForeignKey(
@@ -3573,6 +3575,19 @@ class DramaticSurgeRecord(SharedMemoryModel):
             "Set exactly when subject_opponent is set."
         ),
     )
+    subject_companion = models.ForeignKey(
+        "arxii.Companion",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The bonded companion whose fall produced this ALLY_FALLEN surge (#3575); "
+            "null for every other subject kind. CASCADE for the same reason as "
+            "subject_opponent: nulling would drop the row into the subject-less slice of "
+            "the unique index. A Companion row is never hard-deleted, so nothing is lost."
+        ),
+    )
     amount = models.PositiveIntegerField()
     round_number = models.PositiveIntegerField()
     reason = models.TextField(
@@ -3598,7 +3613,11 @@ class DramaticSurgeRecord(SharedMemoryModel):
             ),
             models.UniqueConstraint(
                 fields=["encounter", "participant", "trigger_kind"],
-                condition=models.Q(subject_sheet__isnull=True, subject_opponent__isnull=True),
+                condition=models.Q(
+                    subject_sheet__isnull=True,
+                    subject_opponent__isnull=True,
+                    subject_companion__isnull=True,
+                ),
                 name="unique_surge_without_subject",
             ),
             models.UniqueConstraint(
@@ -3612,14 +3631,28 @@ class DramaticSurgeRecord(SharedMemoryModel):
                 condition=models.Q(subject_opponent__isnull=False),
                 name="unique_surge_boss_beat",
             ),
+            models.UniqueConstraint(
+                fields=["encounter", "participant", "trigger_kind", "subject_companion"],
+                condition=models.Q(subject_companion__isnull=False),
+                name="unique_surge_companion_subject",
+            ),
+            # At most one subject kind (#2013 sheet, #3445 opponent, #3575 companion).
             models.CheckConstraint(
-                check=~(
+                condition=~(
                     models.Q(subject_sheet__isnull=False) & models.Q(subject_opponent__isnull=False)
+                )
+                & ~(
+                    models.Q(subject_sheet__isnull=False)
+                    & models.Q(subject_companion__isnull=False)
+                )
+                & ~(
+                    models.Q(subject_opponent__isnull=False)
+                    & models.Q(subject_companion__isnull=False)
                 ),
                 name="surge_subject_sheet_xor_opponent",
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(subject_opponent__isnull=True, subject_phase_number__isnull=True)
                     | models.Q(subject_opponent__isnull=False, subject_phase_number__isnull=False)
                 ),
