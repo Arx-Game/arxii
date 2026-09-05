@@ -215,10 +215,16 @@ def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
     name = str(draft.draft_data.get("new_family_name", "")).strip()
     if not name:
         errors.append("Name your family")
-    elif not re.fullmatch(family_template.name_pattern, name):
-        errors.append("That name does not fit this family's naming conventions")
-    elif family_name_is_taken(name):
-        errors.append("A family by that name already exists")
+    else:
+        try:
+            fits_pattern = re.fullmatch(family_template.name_pattern, name)
+        except re.error:
+            errors.append("This family template's naming rule is misconfigured; tell staff")
+        else:
+            if not fits_pattern:
+                errors.append("That name does not fit this family's naming conventions")
+            elif family_name_is_taken(name):
+                errors.append("A family by that name already exists")
     errors.extend(_get_aspect_pick_errors(draft, family_template))
     if (
         draft.served_house_id is not None
@@ -490,6 +496,8 @@ def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplat
     from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
     raw = draft.draft_data.get("family_aspect_picks") or {}
+    if not isinstance(raw, dict):
+        return ["Your family's choices could not be read"]
     try:
         picks = {int(key): [int(value) for value in values] for key, values in raw.items()}
     except (TypeError, ValueError):

@@ -2712,6 +2712,28 @@ _UPBRINGING_DRAFT_KEYS = (
 )
 
 
+def clear_family_selection(draft: CharacterDraft) -> None:
+    """Clear everything anchored to the family path/Upbringing (#3648 review fix).
+
+    Shared by ``select_origin_template`` (a genuine Upbringing change) and
+    ``CharacterDraftSerializer.update()``'s explicit ``selected_origin_template_id:
+    null`` branch, so the two clearing lists cannot drift apart again - a prior
+    version of the serializer's null branch hand-duplicated this list and forgot
+    ``selected_vacancy``/``served_house``, leaving a stale Vacancy priced into
+    ``calculate_upbringing_cost()`` with no Upbringing left to justify it. Does
+    not touch ``selected_origin_template`` itself or save - the caller sets the
+    template field (to the new pick, or to ``None``) and persists.
+    """
+    draft.family_path = ""
+    draft.family = None
+    draft.claimed_kin_slot = None
+    draft.claimed_kin_pool = None
+    draft.selected_vacancy = None
+    draft.served_house = None
+    for key in _UPBRINGING_DRAFT_KEYS:
+        draft.draft_data.pop(key, None)
+
+
 def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> None:
     """Choose the draft's Upbringing; a change resets everything downstream of it (#3617)."""
     wrong_beginning = (
@@ -2727,14 +2749,7 @@ def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> N
     if draft.selected_origin_template_id == template.pk:
         return
     draft.selected_origin_template = template
-    draft.family_path = ""
-    draft.family = None
-    draft.claimed_kin_slot = None
-    draft.claimed_kin_pool = None
-    draft.selected_vacancy = None
-    draft.served_house = None
-    for key in _UPBRINGING_DRAFT_KEYS:
-        draft.draft_data.pop(key, None)
+    clear_family_selection(draft)
     draft.save()
 
 

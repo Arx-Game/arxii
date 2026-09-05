@@ -8,6 +8,7 @@ and a CONTENT_MODELS registration, so the lore repo owns them going forward.
 from pathlib import Path
 import tempfile
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
 from core.app_domains import credited_content_models
@@ -255,6 +256,21 @@ class HouseTemplateRoundTripTests(TestCase):
         self.assertEqual(reloaded.org_type, org_type)
         self.assertIsNone(reloaded.liege)
         self.assertEqual(list(reloaded.served_house_choices.all()), [])
+
+
+class HouseTemplateNamePatternValidationTest(TestCase):
+    """A malformed ``name_pattern`` is refused at ``clean()`` (#3648 review).
+
+    Without this, admin could save a template whose regex does not even
+    compile, which would 500 every later GET/PATCH of a draft on it (see
+    ``validators.py``'s ``_get_named_path_errors``).
+    """
+
+    def test_unclosed_bracket_raises_validation_error(self) -> None:
+        template = HouseTemplate(name_pattern="[")
+        with self.assertRaises(ValidationError) as ctx:
+            template.clean()
+        self.assertIn("name_pattern", ctx.exception.message_dict)
 
 
 class CharterAnchorsTest(TestCase):

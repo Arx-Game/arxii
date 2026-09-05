@@ -1061,6 +1061,24 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         verbose_name_plural = "Family Templates"
         ordering = ["realm", "name"]
 
+    def clean(self) -> None:
+        """Refuse a ``name_pattern`` that does not even compile (#3648 review).
+
+        Without this, a bad regex saved through admin would 500 every later
+        GET/PATCH of any draft on this template - ``validators.py``'s
+        ``_get_named_path_errors`` calls ``re.fullmatch`` on it for every
+        stage-validation pass.
+        """
+        import re  # noqa: PLC0415
+
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        try:
+            re.compile(self.name_pattern)
+        except re.error as exc:
+            raise ValidationError({"name_pattern": f"Not a valid regex: {exc}"}) from exc
+
     def __str__(self) -> str:
         return self.name
 

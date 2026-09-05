@@ -59,6 +59,32 @@ class NamePathTemplateRulesTest(TestCase):
         draft.served_house = self.served
         assert get_lineage_errors(draft) == []
 
+    def test_malformed_name_pattern_fails_soft(self):
+        """A staff-authored regex that does not compile must not 500 (#3648 review)."""
+        bad = HouseTemplateFactory(
+            name="Broken Pattern House",
+            realm=self.beginning.starting_area.realm,
+            name_pattern="[",
+        )
+        upbringing = OriginTemplateFactory(beginning=self.beginning, family_templates=[bad])
+        draft = self._draft(upbringing, draft_data={"new_family_name": "Wright"})
+        errors = get_lineage_errors(draft)
+        assert "This family template's naming rule is misconfigured; tell staff" in errors
+
+    def test_family_aspect_picks_as_a_string_fails_soft(self):
+        draft = self._draft(
+            OriginTemplateFactory(beginning=self.beginning, family_templates=[self.tpl_a]),
+            draft_data={"new_family_name": "Wright", "family_aspect_picks": "garbage"},
+        )
+        assert "Your family's choices could not be read" in get_lineage_errors(draft)
+
+    def test_family_aspect_picks_as_a_list_fails_soft(self):
+        draft = self._draft(
+            OriginTemplateFactory(beginning=self.beginning, family_templates=[self.tpl_a]),
+            draft_data={"new_family_name": "Wright", "family_aspect_picks": [1, 2, 3]},
+        )
+        assert "Your family's choices could not be read" in get_lineage_errors(draft)
+
 
 class VacancyRulesTest(TestCase):
     @classmethod

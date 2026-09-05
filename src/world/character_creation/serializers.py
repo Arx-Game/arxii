@@ -28,7 +28,11 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
     StartingArea,
 )
-from world.character_creation.services import select_origin_template, set_family_path
+from world.character_creation.services import (
+    clear_family_selection,
+    select_origin_template,
+    set_family_path,
+)
 from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Pronouns
 from world.classes.models import Path, PathStage
@@ -56,17 +60,6 @@ from world.worship.serializers import WorshippedBeingRefSerializer
 # Sentinel distinguishing "key not present in this PATCH" from an explicit
 # ``None``/empty value, for CharacterDraftSerializer.update() (#3617).
 _UNSET = object()
-
-# Draft_data keys cleared when the selected Upbringing changes; mirrors
-# services.py's own ``_UPBRINGING_DRAFT_KEYS``, applied here for the
-# clear-selected-origin-template-to-None branch that services.py never sees.
-_UPBRINGING_DRAFT_KEYS = (
-    "origin_slots",
-    "origin_choices",
-    "new_family_name",
-    "family_template_id",
-    "family_aspect_picks",
-)
 
 
 class PerspectiveEntrySerializer(serializers.Serializer):
@@ -936,12 +929,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             pass
         elif template is None:
             instance.selected_origin_template = None
-            instance.family_path = ""
-            instance.family = None
-            instance.claimed_kin_slot = None
-            instance.claimed_kin_pool = None
-            for key in _UPBRINGING_DRAFT_KEYS:
-                instance.draft_data.pop(key, None)
+            clear_family_selection(instance)
         elif template.pk != instance.selected_origin_template_id:
             select_origin_template(instance, template)
         # else: same pk selected again, no-op.
@@ -997,6 +985,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
         self._validate_new_family_name(value)
+        self._validate_family_aspect_picks(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -1032,6 +1021,27 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if len(new_family_name) > max_length:
             msg = f"new_family_name must be at most {max_length} characters"
             raise serializers.ValidationError({"new_family_name": msg})
+
+    def _validate_family_aspect_picks(self, data: dict) -> None:
+        """``family_aspect_picks`` maps an int-castable definition id to a list of
+        int-castable option ids (#3648 review): a shape ``validators.py``'s
+        ``_get_aspect_pick_errors`` can read without raising on a malformed PATCH.
+        """
+        picks = data.get("family_aspect_picks")
+        if picks is None:
+            return
+        msg = "family_aspect_picks must map a definition id to a list of option ids"
+        if not isinstance(picks, dict):
+            raise serializers.ValidationError({"family_aspect_picks": msg})
+        for key, values in picks.items():
+            if not isinstance(values, list):
+                raise serializers.ValidationError({"family_aspect_picks": msg})
+            try:
+                int(key)
+                for value in values:
+                    int(value)
+            except (TypeError, ValueError) as exc:
+                raise serializers.ValidationError({"family_aspect_picks": msg}) from exc
 
     def _validate_tarot_card_name(self, data: dict) -> None:
         """Validate that tarot_card_name refers to an existing TarotCard."""
