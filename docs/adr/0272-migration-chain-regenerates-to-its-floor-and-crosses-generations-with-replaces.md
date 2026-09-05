@@ -104,6 +104,21 @@ already forbidden by ADR-0013 and refused by `tools/check_migration_seed_data.py
 the drop report lists what it drops, and seed rows keep coming from the seed
 functions.
 
+**Measured, 2026-09-05, same dev box, nothing else running** (`just
+verify-regeneration`, empty `compare_schemas` diff in every case):
+
+| chain | full replay | peak RSS | files | operations |
+|---|---|---|---|---|
+| generation 1 (stock `Migration.apply`) | 48m 06s | 2.6 GB | 227 | ~2,770 |
+| generation 2, regenerated only | 49m 43s | 418 MB | 103 | ~1,250 |
+| generation 2 + batched chunks | 13m 55s | 415 MB | 103 | ~1,250 |
+| generation 2 + batched chunks + M2M inlining | **7m 03s** | 433 MB | 103 | ~1,150 |
+
+The second row is the lesson: operation count alone bought nothing on wall
+time, because the closure re-render dominated. About four of the remaining seven
+minutes are Django's post-migrate work (content types and permissions for 1,100
+models), which every schema-construction path pays and this ADR does not touch.
+
 ## Consequences
 
 - A dev database behind the old tip must `migrate` to it before pulling a
