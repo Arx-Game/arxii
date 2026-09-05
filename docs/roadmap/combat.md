@@ -65,6 +65,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   at cast time) can keep firing past zero anima - the fire debits into deficit and
   accrues Soulfray through the same `accumulate_soulfray` `use_technique` uses,
   instead of fizzling; unconsented behavior is unchanged.
+- **Reactive protections narrate their own fizzles and lapses (#3574, ADR-0271).** The
+  technique-guardian anima fizzle, the reaction-budget declines (landing hit and Sent Flying
+  catch), upkeep lapses and the standing-ward fizzle in `_try_spend_reactive` all tell the
+  people they concern through `narrate_privately` (new in scenes, extracted from the
+  dormant-vow whisper) plus a numberless room line where the table could see it. Guard panel
+  shows `guard-unaffordable-hint` when anima is below the selected technique's fee.
 - **Redirects — away / chosen-enemy / volatile-object detonation (#2210, ADR-0124),
   SQLite tier.** A guardian's REDIRECT-flavor technique (Mirror Ward-style reflection —
   previously rejected at declaration, now the third resolved flavor alongside BARRIER
