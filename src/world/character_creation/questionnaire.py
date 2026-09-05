@@ -8,7 +8,7 @@ everywhere (the same rule the family-path switch has followed since #3617).
 
 ``anchor_for`` is the one resolver every caller uses to find the organization
 behind a question's answer. A GROUP question sourced from the player's own
-family or the house they served needs no ``origin_anchors`` entry at all — the
+family or the house they served needs no ``origin_anchors`` entry at all: the
 frontend cannot know the family's org id ahead of time, so ``anchor_for``
 derives it from the draft itself. Validation, pricing and finalize all call
 through here so the three never drift apart (#3660 controller ruling A).
@@ -22,7 +22,13 @@ from typing import TYPE_CHECKING, TypedDict
 from world.character_creation.constants import AnchorSource, FamilyPath, QuestionKind
 
 if TYPE_CHECKING:
-    from world.character_creation.models import CharacterDraft, OriginTemplateSlot
+    from collections.abc import Iterable
+
+    from world.character_creation.models import (
+        CharacterDraft,
+        OriginTemplateSlot,
+        OriginTemplateSlotChoice,
+    )
     from world.societies.models import Organization
 
 
@@ -120,7 +126,7 @@ def anchor_for(
     """The organization id this question's answer is about, by kind (#3660 ruling A).
 
     A GROUP question sourced from the family or the served house has no stored
-    anchor to look up — it is derived fresh from the draft each time, through
+    anchor to look up: it is derived fresh from the draft each time, through
     ``resolve_groups``, so it stays correct across a family-path switch. Every
     other GROUP source (POOL, LISTED, SAME_AS) still stores the player's pick in
     ``origin_anchors``. A PERSON question that names someone inside an earlier
@@ -159,7 +165,7 @@ def is_answered(
     return has_anchor and valid_pick
 
 
-def is_shown(  # noqa: PLR0913 — each arg is a distinct piece of evaluation state
+def is_shown(  # noqa: PLR0913 - each arg is a distinct piece of evaluation state
     slot: OriginTemplateSlot,
     path: str,
     draft: CharacterDraft,
@@ -224,26 +230,75 @@ def visible_slot_ids(draft: CharacterDraft) -> set[int]:
     return shown
 
 
-def question_influence(
-    slot: OriginTemplateSlot, draft: CharacterDraft, answers: DraftAnswers, path: str
+def _slot_influence(
+    slot: OriginTemplateSlot,
+    draft: CharacterDraft,
+    path: str,
+    orgs_by_id: dict[int, Organization],
+    org_id: int | None,
 ) -> int:
-    """Influence that multiplies ``cost_per_influence`` for this question's answer.
-
-    Resolves the GROUP anchor through ``anchor_for`` rather than reading
-    ``origin_anchors`` directly, so an OWN_FAMILY/SERVED_HOUSE answer (which has
-    no stored anchor) still prices against the right family (#3660 ruling A).
-    """
-    from world.societies.models import Organization  # noqa: PLC0415
-
+    """Influence for one slot's answer, given a prefetched org-id to Organization map."""
     if slot.kind == QuestionKind.GROUP:
-        org_id = anchor_for(slot, draft, answers)
-        if org_id is None:
-            return 0
-        org = Organization.objects.filter(pk=org_id).select_related("family").first()
+        org = orgs_by_id.get(org_id) if org_id is not None else None
         return org.family.influence if org and org.family_id else 0
     if path == FamilyPath.CLAIMED and draft.family_id:
         return draft.family.influence
     return 0
+
+
+def question_influences(
+    choices: Iterable[OriginTemplateSlotChoice],
+    draft: CharacterDraft,
+    answers: DraftAnswers,
+    path: str,
+) -> dict[int, int]:
+    """Influence per choice id, batched: one Organization query total (#3660 ruling B).
+
+    ``question_influence`` issues one Organization query per GROUP choice; when
+    pricing several picked choices at once (``calculate_upbringing_cost``) that
+    becomes a query per choice. This resolves every choice's anchor id first,
+    then fetches every needed Organization in a single ``filter(pk__in=...)``
+    call.
+    """
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    choices = list(choices)
+    anchor_by_choice_id = {
+        choice.id: anchor_for(choice.slot, draft, answers)
+        for choice in choices
+        if choice.slot.kind == QuestionKind.GROUP
+    }
+    org_ids = {org_id for org_id in anchor_by_choice_id.values() if org_id is not None}
+    orgs_by_id = {
+        o.pk: o for o in Organization.objects.filter(pk__in=org_ids).select_related("family")
+    }
+    return {
+        choice.id: _slot_influence(
+            choice.slot, draft, path, orgs_by_id, anchor_by_choice_id.get(choice.id)
+        )
+        for choice in choices
+    }
+
+
+def question_influence(
+    slot: OriginTemplateSlot, draft: CharacterDraft, answers: DraftAnswers, path: str
+) -> int:
+    """Influence that multiplies ``cost_per_influence`` for one question's answer.
+
+    Thin wrapper around the ``_slot_influence`` rule for a caller that only has a
+    slot in hand (no choice row to batch). Pricing several choices at once
+    (``calculate_upbringing_cost``) calls ``question_influences`` directly instead,
+    to avoid a query per picked GROUP answer (#3660 ruling B).
+    """
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    if slot.kind != QuestionKind.GROUP:
+        return _slot_influence(slot, draft, path, {}, None)
+    org_id = anchor_for(slot, draft, answers)
+    if org_id is None:
+        return 0
+    orgs_by_id = {o.pk: o for o in Organization.objects.filter(pk=org_id).select_related("family")}
+    return _slot_influence(slot, draft, path, orgs_by_id, org_id)
 
 
 def bundled_distinctions(draft: CharacterDraft) -> list[BundledDistinction]:
@@ -259,7 +314,7 @@ def bundled_distinctions(draft: CharacterDraft) -> list[BundledDistinction]:
     choice_ids = [cid for sid, cid in answers.picks.items() if sid in visible]
     if not choice_ids:
         return []
-    rows = (
+    rows = list(
         OriginTemplateSlotChoice.objects.filter(
             pk__in=choice_ids,
             slot__template=template,
@@ -269,11 +324,12 @@ def bundled_distinctions(draft: CharacterDraft) -> list[BundledDistinction]:
         .select_related("slot", "grants_distinction")
         .order_by("slot__sort_order")
     )
-    org_ids = {anchor_for(c.slot, draft, answers) for c in rows} - {None}
+    anchor_by_choice_id = {choice.id: anchor_for(choice.slot, draft, answers) for choice in rows}
+    org_ids = {org_id for org_id in anchor_by_choice_id.values() if org_id is not None}
     orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
     out: list[BundledDistinction] = []
     for choice in rows:
-        org = orgs.get(anchor_for(choice.slot, draft, answers))
+        org = orgs.get(anchor_by_choice_id[choice.id])
         dist = choice.grants_distinction
         out.append(
             BundledDistinction(

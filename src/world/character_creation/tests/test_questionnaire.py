@@ -182,3 +182,34 @@ class OwnFamilyAnchorTest(TestCase):
 
         assert is_answered(slot, draft, answers, choice_ids_by_slot) is True
         assert anchor_for(slot, draft, answers) == org.id
+
+
+class AnchorlessGroupPricingTest(TestCase):
+    """Ruling B: OWN_FAMILY/SERVED_HOUSE GROUP answers price off the resolved org."""
+
+    def test_own_family_group_prices_off_the_familys_influence(self):
+        family = FamilyFactory(influence=3)
+        OrganizationFactory(name="Hold", family=family)
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=False)
+        slot = GroupPromptFactory(template=template, anchor_source=AnchorSource.OWN_FAMILY)
+        choice = OriginTemplateSlotChoiceFactory(
+            slot=slot, name="Stayed close", cg_point_cost=2, cost_per_influence=1
+        )
+        draft = _draft(template, origin_choices={str(slot.id): choice.id})
+        draft.family = family
+        draft.family_path = "claimed"
+
+        assert draft.calculate_upbringing_cost() == 2 + 3
+
+    def test_served_house_group_prices_off_the_house_familys_influence(self):
+        house_family = FamilyFactory(influence=4)
+        house = OrganizationFactory(name="House Ostrean", family=house_family)
+        template = OriginTemplateFactory(allows_name_family=False, allows_no_family=True)
+        slot = GroupPromptFactory(template=template, anchor_source=AnchorSource.SERVED_HOUSE)
+        choice = OriginTemplateSlotChoiceFactory(
+            slot=slot, name="Loyal retainer", cg_point_cost=2, cost_per_influence=1
+        )
+        draft = _draft(template, origin_choices={str(slot.id): choice.id})
+        draft.served_house = house
+
+        assert draft.calculate_upbringing_cost() == 2 + 4

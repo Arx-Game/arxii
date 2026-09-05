@@ -1334,7 +1334,7 @@ class CharacterDraft(SharedMemoryModel):
         """
         from world.character_creation.questionnaire import (  # noqa: PLC0415
             DraftAnswers,
-            question_influence,
+            question_influences,
         )
 
         template = self.selected_origin_template
@@ -1346,11 +1346,14 @@ class CharacterDraft(SharedMemoryModel):
         picked = {sid: cid for sid, cid in answers.picks.items() if sid in visible}
         total = template.cg_point_cost
         if picked:
-            choices = OriginTemplateSlotChoice.objects.filter(
-                pk__in=picked.values(), slot__template=template, is_active=True
-            ).select_related("slot")
+            choices = list(
+                OriginTemplateSlotChoice.objects.filter(
+                    pk__in=picked.values(), slot__template=template, is_active=True
+                ).select_related("slot")
+            )
+            influences = question_influences(choices, self, answers, path)
             for choice in choices:
-                total += choice.cost_for(question_influence(choice.slot, self, answers, path))
+                total += choice.cost_for(influences[choice.id])
         vacancy = self.selected_vacancy
         if vacancy is not None:
             family = vacancy.organization.family
