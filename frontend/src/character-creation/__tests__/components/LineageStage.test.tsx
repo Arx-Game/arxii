@@ -15,12 +15,14 @@ import {
   mockDraftWithHeritageNoUpbringing,
   mockDraftWithUpbringing,
   mockEmptyDraft,
+  mockFamilyTemplate,
   mockNobleFamily,
   mockNobleFamily2,
   mockStartingArea,
   mockUpbringingClaim,
   mockUpbringingMultiPath,
   mockUpbringingNamed,
+  mockUpbringingNamedWithTemplate,
   mockUpbringingUnknown,
   mockCGExplanations,
   createMockDraft,
@@ -49,6 +51,8 @@ vi.mock('../../api', () => ({
   // Invented-parents card (#2815)
   getGenders: vi.fn().mockResolvedValue([]),
   getSpecies: vi.fn().mockResolvedValue([]),
+  // FamilyPathSection queries vacancies from Task 9 on (#3648).
+  getVacancies: vi.fn().mockResolvedValue([]),
 }));
 
 describe('LineageStage', () => {
@@ -340,6 +344,45 @@ describe('LineageStage', () => {
 
       expect(await screen.findByText('Describe your childhood home.')).toBeInTheDocument();
       expect(screen.queryByText('What does the house expect of you?')).not.toBeInTheDocument();
+    });
+
+    it('renders a path-scoped prompt after the Your Family heading', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingMultiPath,
+        family_path: 'claimed',
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const heading = await screen.findByText('Your Family');
+      const prompt = await screen.findByText('What does the house expect of you?');
+      expect(
+        heading.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+  });
+
+  describe('Family Template (name path)', () => {
+    it('clicking a Family Template aspect option PATCHes family_aspect_picks', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingNamedWithTemplate,
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const charge = mockFamilyTemplate.aspect_definitions[0];
+      expect(await screen.findByText(charge.prompt)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /Granaries/ }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_aspect_picks: { [charge.id]: [charge.options[0].id] } },
+      });
     });
   });
 

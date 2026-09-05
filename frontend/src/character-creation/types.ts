@@ -791,7 +791,9 @@ export interface DraftData {
   goals?: DraftGoal[];
   // The Family Template picked on the name path, when the Upbringing offers
   // more than one (#3648); resolveFamilyTemplate() resolves the effective one.
-  family_template_id?: number;
+  // null clears the pick (the backend treats null as unset; undefined would
+  // be dropped by the JSON encoder and leave the prior pick untouched).
+  family_template_id?: number | null;
   // Aspect picks for the chosen Family Template: definition id -> option ids (#3648).
   family_aspect_picks?: Record<string, number[]>;
   [key: string]: unknown;

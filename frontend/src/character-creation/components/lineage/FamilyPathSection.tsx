@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useUpdateDraft } from '../../queries';
-import { allowedFamilyPaths, Stage } from '../../types';
+import { allowedFamilyPaths, resolveFamilyTemplate, Stage } from '../../types';
 import type {
   CGExplanations,
   CharacterDraft,
@@ -35,6 +35,8 @@ import {
   KinSlotPicker,
   TarotNamingRitual,
 } from '../LineageStage';
+import { ChoiceRow, Field } from '../../folio';
+import { FamilyTemplateForm } from './FamilyTemplateForm';
 
 interface FamilyPathSectionProps {
   draft: CharacterDraft;
@@ -102,7 +104,7 @@ export function FamilyPathSection({
         </RadioGroup>
       )}
 
-      {path === 'named' && <NamedFamilyPath draft={draft} />}
+      {path === 'named' && <NamedFamilyPath draft={draft} template={template} copy={copy} />}
 
       {path === 'claimed' && (
         <ClaimedFamilyPath
@@ -120,9 +122,20 @@ export function FamilyPathSection({
   );
 }
 
-function NamedFamilyPath({ draft }: { draft: CharacterDraft }) {
+function NamedFamilyPath({
+  draft,
+  template,
+  copy,
+}: {
+  draft: CharacterDraft;
+  template: OriginTemplate;
+  copy: CGExplanations | undefined;
+}) {
   const updateDraft = useUpdateDraft();
   const [name, setName] = useState(draft.draft_data.new_family_name ?? '');
+  const offered = template.family_templates;
+  const familyTemplate = resolveFamilyTemplate(draft);
+  const picks = draft.draft_data.family_aspect_picks ?? {};
 
   useEffect(() => {
     setName(draft.draft_data.new_family_name ?? '');
@@ -136,16 +149,44 @@ function NamedFamilyPath({ draft }: { draft: CharacterDraft }) {
     });
   };
 
+  const toggleAspect = (definitionId: number, optionId: number, maxPicks: number) => {
+    const current = picks[String(definitionId)] ?? [];
+    let next: number[];
+    if (current.includes(optionId)) next = current.filter((id) => id !== optionId);
+    else if (maxPicks === 1) next = [optionId];
+    else if (current.length >= maxPicks) return;
+    else next = [...current, optionId];
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { draft_data: { family_aspect_picks: { ...picks, [definitionId]: next } } },
+    });
+  };
+
   return (
-    <div className="max-w-md space-y-2">
-      <Label htmlFor="new-family-name">Family name</Label>
-      <Input
-        id="new-family-name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={commit}
-        placeholder="Name your family"
-      />
+    <div className="max-w-xl space-y-4">
+      {offered.length > 1 && (
+        <ChoiceRow
+          label={copy?.family_template_heading ?? 'Family template'}
+          options={offered.map((t) => ({ value: t.id, label: t.name }))}
+          value={familyTemplate?.id ?? null}
+          clearable
+          onChange={(value) =>
+            updateDraft.mutate({
+              draftId: draft.id,
+              data: { draft_data: { family_template_id: value } },
+            })
+          }
+        />
+      )}
+      <Field id="new-family-name" label="Family name">
+        <Input
+          id="new-family-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commit}
+          placeholder="Name your family"
+        />
+      </Field>
       {familyErrorsFor(draft).map((error) => (
         <p key={error} className="text-sm text-destructive">
           {error}
@@ -155,6 +196,23 @@ function NamedFamilyPath({ draft }: { draft: CharacterDraft }) {
         <FamilyNamePreview
           firstName={draft.draft_data.first_name}
           family={{ name, born_particle: '', taken_in_particle: '' }}
+        />
+      )}
+      {familyTemplate && (
+        <FamilyTemplateForm
+          template={familyTemplate}
+          picks={Object.fromEntries(Object.entries(picks).map(([k, v]) => [Number(k), v]))}
+          onToggle={toggleAspect}
+        />
+      )}
+      {familyTemplate && familyTemplate.served_house_choices.length > 0 && (
+        <ChoiceRow
+          label={copy?.served_house_heading ?? 'Whom did your family serve'}
+          options={familyTemplate.served_house_choices.map((h) => ({ value: h.id, label: h.name }))}
+          value={draft.served_house}
+          onChange={(value) =>
+            updateDraft.mutate({ draftId: draft.id, data: { served_house_id: value } })
+          }
         />
       )}
     </div>
