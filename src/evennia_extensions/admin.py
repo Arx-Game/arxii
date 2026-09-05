@@ -63,7 +63,7 @@ class PlayerDataAdmin(admin.ModelAdmin):
         ("Preferences", {"fields": ("karma", "hide_from_watch", "private_mode")}),
         (
             "Media Settings",
-            {"fields": ("profile_picture", "max_storage", "max_file_size", "media_quota_bytes")},
+            {"fields": ("profile_picture", "media_quota_bytes")},
         ),
         ("Session Info", {"fields": ("last_login_ip",)}),
         (

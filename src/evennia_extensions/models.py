@@ -154,14 +154,6 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="profile_for_players",
         help_text="Profile picture for this account",
     )
-    max_storage = models.PositiveIntegerField(
-        default=0,
-        help_text="Max number of media files this player may store",
-    )
-    max_file_size = models.PositiveIntegerField(
-        default=0,
-        help_text="Max upload size per file in KB",
-    )
     media_quota_bytes = models.PositiveBigIntegerField(
         default=default_media_quota_bytes,
         help_text="Total bytes this player may store across all owned Media rows "
