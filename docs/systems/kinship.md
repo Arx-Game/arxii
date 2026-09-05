@@ -98,7 +98,7 @@ definitions both tree builders share — never duplicate them.
 ## Surfaces
 
 - REST: `GET /api/roster/families/` (+`has_open_kin_slots` and `area_id`
-  filters (renamed from `has_open_positions`, #3648) — `area_id` resolves through
+  filters (renamed from `has_open_positions`, #3648), `area_id` resolves through
   `StartingArea.realm`, matching
   families with that realm or with no `origin_realm` at all),
   `families/:id/tree/` (viewer-filtered graph payload),

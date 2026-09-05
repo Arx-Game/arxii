@@ -8,7 +8,7 @@ character a recorded place in a staff family. What was built: (1) `HouseTemplate
 with `liege`/`default_succession_law` now nullable, so a Caretaker household, a
 crime family, an Infernal noble house and a Reaver crew all author through the same
 model (`OriginTemplate.family_templates` M2M replaces the retired
-`named_family_kind`); (2) `Vacancy` (`world/societies/models.py`) — a staff-authored
+`named_family_kind`); (2) `Vacancy` (`world/societies/models.py`), a staff-authored
 opening on a family's org with two authored axes (`importance`,
 `presumed_importance`), flat-plus-per-influence pricing (ADR-0269 extended), and a
 blank `count_remaining` for a standing vacancy; kin versus retainer is derived from

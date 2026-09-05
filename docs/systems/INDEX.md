@@ -1379,13 +1379,13 @@ Social structures, organizations, reputation, and legend tracking.
   `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
   `count_remaining` (blank = standing, always open), `trust_required`,
   `allowed_upbringings`, `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
-  in the Authoring Workbench) but not in `CONTENT_MODELS` — it belongs to one
+  in the Authoring Workbench) but not in `CONTENT_MODELS`: it belongs to one
   installation's family, not the corpus. `OrganizationMembership.vacancy` FK records
   which Vacancy a membership was taken through.
-- **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`
-  — open (unless `require_open=False`, used by CG draft validation re-checking an
+- **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
+  open (unless `require_open=False`, used by CG draft validation re-checking an
   already-selected Vacancy), realm-matched, Upbringing-gated, trust-gated CG offer;
-  `take_vacancy(vacancy_id)` — locks and claims one opening inside the caller's
+  `take_vacancy(vacancy_id)`, locks and claims one opening inside the caller's
   `transaction.atomic()`, raising `VacancyExhaustedError` if closed. Consumed by
   `character_creation.services._bind_vacancy` at finalize.
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
@@ -1498,7 +1498,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **`HouseTemplate` generalized past nobles (#3648, ADR-0272):** verbose name "Family
   Template". `liege`/`default_succession_law` are now nullable (only a title-path
   template needs them) and `org_type` (FK `OrganizationType`, required) and
-  `served_house_choices` (M2M `Organization`, blank, installation-specific —
+  `served_house_choices` (M2M `Organization`, blank, installation-specific:
   `EXPORT_FIELD_EXCLUSIONS["societies.housetemplate"]`) are new. The Caretaker/crime
   family/crew cases in [family-authoring-recipes.md](family-authoring-recipes.md)
   use the same model as a noble charter.

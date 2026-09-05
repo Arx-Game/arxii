@@ -170,7 +170,7 @@ describes.
   (FOUNDING membership), reassign the seat domain and materialize the holdings
   package, and sync the house channel. The CG name path (below, and
   `character_creation.services._materialize_named_family`) calls the same
-  builder with `influence=0` and no title, domain, channel or review — see
+  builder with `influence=0` and no title, domain, channel or review; see
   ADR-0272.
 - **Surfaces:** `/api/character-creation/house-titles/` (claimable titles +
   templates), `GET/POST /api/character-creation/drafts/{id}/house-claim/`;
@@ -181,12 +181,12 @@ describes.
 ## Authoring a realm's charter (#2875, #3648)
 
 A **charter** is a realm's recipe for the houses CG can define on its claimable
-titles: one **Family Template** row (model class stays `HouseTemplate`, #3648 —
+titles: one **Family Template** row (model class stays `HouseTemplate`, #3648,
 generalized past nobles) plus the four catalogs it draws on.
 
 - **What a charter holds:** the Family Template itself (name, name-pattern regex,
   principle ranges, `starting_kin_slots`, required `org_type`), its
-  `default_succession_law` (a `SuccessionLaw` row, now nullable — only a title-path
+  `default_succession_law` (a `SuccessionLaw` row, now nullable: only a title-path
   template needs one), its `holdings` (a set of `HoldingKind` rows materialized on
   the seat domain at founding, title path only), its `features` (a set of
   `HouseFeature` rows stamping structural cultural facts on every house of this
@@ -196,7 +196,7 @@ generalized past nobles) plus the four catalogs it draws on.
 - **`org_type`** (FK `OrganizationType`, required, #3648): the organization type a
   family of this template gets. Exports by the type's natural key and resolves on
   load against the prerequisite anchors, which now include `commoner_family`
-  alongside `noble_family` (below) — a Caretaker-style template resolves on a fresh
+  alongside `noble_family` (below): a Caretaker-style template resolves on a fresh
   database the same way a noble one does.
 - **`served_house_choices`** (M2M `Organization`, blank, #3648): the staff houses a
   family on this template may declare it served (blank = the question is not
@@ -215,7 +215,7 @@ generalized past nobles) plus the four catalogs it draws on.
   models now have a registered `ModelAdmin`, so the Workbench's change link
   and backlog queue reach every one of them.
 - **Code prerequisites, not authored rows:** a Family Template FKs a `society` and,
-  when a title path needs one, a `liege` organization (nullable since #3648 — a
+  when a title path needs one, a `liege` organization (nullable since #3648, a
   Caretaker-style template sets neither), and neither is something the charter
   author creates. Both are seeded ahead of any content load by
   `world.seeds.config_prerequisites._house_charter_anchors`
@@ -232,7 +232,7 @@ generalized past nobles) plus the four catalogs it draws on.
   seat `Domain`. Editing the `HouseTemplate` after a house has founded off it
   never changes that house; it only changes what the next founder sees.
 - **Vacancies (#3648, ADR-0272):** `societies.Vacancy` is an opening on an already-
-  materialized family's org, not part of the charter itself — it belongs to one
+  materialized family's org, not part of the charter itself: it belongs to one
   staff-minted family, not to the Family Template every family of that type shares.
   Fields: `organization` (the family's org), `name`, `description`, `importance` /
   `presumed_importance` (the two authored axes), `cg_point_cost` /
@@ -245,7 +245,7 @@ generalized past nobles) plus the four catalogs it draws on.
   admin page (inline) or standalone via Admin > Societies > Vacancies. It carries
   `NaturalKeyMixin` and `CreditedContent` (so it appears in the Authoring Workbench
   and can be credited) but is **not** in `CONTENT_MODELS` and never reaches the
-  corpus export — the same installation-state reasoning as `served_house_choices`.
+  corpus export, the same installation-state reasoning as `served_house_choices`.
 
 ## Regional flavor: aspects + features (#2079)
 

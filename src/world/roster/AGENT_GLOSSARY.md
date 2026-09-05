@@ -68,7 +68,7 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   `KinSlotPool` ("8 children among these parents") minting nodes on claim.
   CG claims bind the new sheet at finalization. _Avoid:_ placeholder (the
   retired member_type).
-- **Deferred definition** — a CG choice to leave kin slots (e.g.
+- **Deferred definition** - a CG choice to leave kin slots (e.g.
   parents) deliberately undefined, recorded via `deferred_definer`; filling
   them later is holder-only and review-gated ("would everyone have already
   known this" is a human judgment). _Avoid:_ retcon slot.
@@ -121,7 +121,7 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   Paths. _Avoid:_ option (reserved for `HouseAspectOption`/`FormTraitOption`
   elsewhere in this codebase).
 - **Family Template** (#3648): `HouseTemplate`, the type a named family is
-  built from — kind, org type, society, aspect questions, served house
+  built from: kind, org type, society, aspect questions, served house
   choices, and (title path only) a liege and succession law. An Upbringing's
   `family_templates` M2M names which template(s) its name path offers; one
   auto-picks, more than one shows a picker. See
@@ -136,16 +136,16 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   capacity (`count_remaining`) is a standing vacancy, always open. Taken at CG
   finalize via `take_vacancy`, which stamps `OrganizationMembership.vacancy`.
   _Avoid:_ position, appointment, seat, station, role, slot (each already
-  means something else in this codebase — see ADR-0272).
+  means something else in this codebase; see ADR-0272).
 - **Importance / Presumed importance** (#3648): the two authored axes on a
-  Vacancy — `importance` (how much the family truly cares about the holder,
+  Vacancy: `importance` (how much the family truly cares about the holder,
   visible only to the holder and staff) and `presumed_importance` (what
   outsiders assume, the public-facing number). Descriptors with no consumer
   yet as of #3648. _Avoid:_ standing (`StandingDeclaration` is a live
   reputation nudge), regard (`NpcRegard`, an NPC's opinion), stature
   (`HouseStature`, an org-level computed deterrence score).
 - **Served house** (#3648): the staff `Organization` a name-path family swore
-  fealty to, from `HouseTemplate.served_house_choices` — recorded on
+  fealty to, from `HouseTemplate.served_house_choices`; recorded on
   `CharacterDraft.served_house` and, at materialization, as the org's fealty
   edge. _Avoid:_ patron (an `OrgPact` between two organizations is the
   patronage relationship; served house is a fealty declaration on a
