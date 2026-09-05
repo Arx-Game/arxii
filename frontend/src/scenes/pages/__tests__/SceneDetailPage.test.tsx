@@ -165,23 +165,17 @@ const mockUseEncounterForScene = vi.fn(
   })
 );
 
-// GMEncounterControls' gate reads useCombatEncounter's full detail (is_gm) —
-// stub it too (default: no data) so it never falls through to the real
-// useQuery mock above, which eagerly calls any non-'scene' queryFn for real
-// (an uncaught /api/combat/<id>/ fetch that jsdom can't resolve, #3067).
-const mockUseCombatEncounter = vi.fn((): { data: { id: number; is_gm: boolean } | undefined } => ({
-  data: undefined,
-}));
-
 vi.mock('@/combat/queries', async (importOriginal) => {
   // SceneTacticalMap (rendered in the header) also pulls real hooks (e.g.
   // useDispatchPlayerAction) from this module — preserve everything else and
-  // only override useEncounterForScene/useCombatEncounter.
+  // only override useEncounterForScene. (#3557: the page no longer calls
+  // useCombatEncounter itself; CombatRail's own GM tab fetches encounter
+  // detail, and CombatRail is stubbed below, so this mock doesn't need to
+  // override useCombatEncounter any more.)
   const actual = await importOriginal<typeof import('@/combat/queries')>();
   return {
     ...actual,
     useEncounterForScene: () => mockUseEncounterForScene(),
-    useCombatEncounter: () => mockUseCombatEncounter(),
   };
 });
 
@@ -376,6 +370,10 @@ vi.mock('../../components/SceneTacticalMap', () => ({
   SceneTacticalMap: () => <div data-testid="scene-tactical-map-stub" />,
 }));
 
+vi.mock('../../components/CheckCallPromptCard', () => ({
+  CheckCallPromptCard: () => <div data-testid="check-call-prompt-stub" />,
+}));
+
 vi.mock('../../components/GMAdjudicationPanel', async () => {
   const actual = await vi.importActual<typeof import('../../components/GMAdjudicationPanel')>(
     '../../components/GMAdjudicationPanel'
@@ -433,7 +431,6 @@ describe('SceneDetailPage', () => {
       isLoading: false,
       isError: false,
     });
-    mockUseCombatEncounter.mockReturnValue({ data: undefined });
     // Reset roster entries to default (empty) by default.
     mockUseMyRosterEntriesQuery.mockReturnValue({ data: [], isLoading: false, isError: false });
     // Reset the mocked game.active selector to default (no active character).
@@ -683,6 +680,7 @@ describe('SceneDetailPage', () => {
     );
     expect(getByTestId('scene-tactical-map-stub')).toBeInTheDocument();
     expect(queryByTestId('scene-tools-accordion')).not.toBeInTheDocument();
+    expect(getByTestId('check-call-prompt-stub')).toBeInTheDocument();
   });
 
   it('folds the idle panels behind a closed Scene tools accordion during a fight (#3557)', async () => {
@@ -702,6 +700,7 @@ describe('SceneDetailPage', () => {
   it('keeps prompts inline, outside the accordion, during a fight (#3557)', () => {
     const { getByTestId } = renderCombat();
     expect(getByTestId('consent-prompt-stub')).toBeInTheDocument();
+    expect(getByTestId('check-call-prompt-stub')).toBeInTheDocument();
   });
 
   it('passes viewerCanGm to the rail and mounts no encounter controls of its own (#3557)', () => {
