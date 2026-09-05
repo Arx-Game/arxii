@@ -5408,7 +5408,7 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
     attempt to cap here; not consulted (documented v1 scope, #2638).
 
     Returns the catching Character on fire, or None (no eligible/budget-
-    exhausted guardian (who is told privately, #3574) — the marker stays for
+    exhausted guardian (who is told privately, #3574): the marker stays for
     explicit resolution).
     """
     encounter = participant.encounter
@@ -9943,7 +9943,7 @@ def _dispatch_interpose_action(
     **Reaction economy (#2639), shared fire seam per F-10c:** declines with
     the same "did not fire" no-op shape (no dispatch, no fatigue, pre_payload
     untouched), telling the guardian privately why (#3574), when either
-    budget is exhausted — the interposer has already spent their
+    budget is exhausted: the interposer has already spent their
     ``REACTIONS_PER_ROUND`` reaction this round, or this specific payload has
     already been answered by ``ABSORPTION_CAP_PER_MOMENT`` interceptors. Both
     counters increment together on an actual attempt (readiness is free; only
