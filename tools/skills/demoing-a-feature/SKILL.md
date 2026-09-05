@@ -27,7 +27,9 @@ problem.
 
 ## The demo page is
 
-In this order, on one artifact, one page:
+This is the **layout** of the finished page, top to bottom. The authoring order is
+different and is in Procedure below (screens first, forks second). One artifact,
+one page:
 
 1. **Masthead.** Issue number first. One paragraph: what the feature is, what the
    reviewer does on this page, what happens after they save.
@@ -35,20 +37,25 @@ In this order, on one artifact, one page:
    `details` with radio, checkbox or textarea controls, recommended option first,
    a stable `data-ruling` id, and one line of why. Cap at about ten. Never a
    question in prose without a control.
-3. **The walkthrough.** Three to four screens, in the order the user meets them,
-   each captioned `Screen N · <stage> · <what happens>`. Drawn in the project's
+3. **The walkthrough.** Two to three screens, in the order the user meets them,
+   each captioned `Screen N · <stage> · <what happens>`, followed by one more item
+   captioned `Screen N · what finalize writes`, which is a table, not a drawing. Drawn in the project's
    own grammar (for CG that is `frontend/src/character-creation/cg.css`: Cinzel
    labels, EB Garamond body, paper pinned to Arx, realm ink), not a component
    library default. Each screen ends with one small line naming which pieces on it
-   already exist and which are new. The last screen is not a screen: it is the
-   table of rows finalize writes, each marked existing, extended or new.
+   already exist and which are new. The finalize table lists each row written,
+   marked existing, extended or new; it is the bridge to the ledger in the spec.
+   Screens are web screens. When the feature is a play verb (something a player
+   does in the world, not an authoring or CG tool), add a ruling asking whether
+   telnet parity is required, and say which screens have a telnet equivalent.
 4. **Worked cases.** One card per trope, scenario or archetype the shape must
-   carry, each with an inline verdict row (`data-optional="yes"`, counted
+   carry, five to eight of them, each with an inline verdict row (`data-optional="yes"`, counted
    separately) and a note box, and a one-line "out of bounds" fence saying what
    the user cannot do here.
-5. **Costs and economy.** What each number does, who sets it, and how many rows
-   staff must author for the feature to have content. Real counts from the
-   database, not estimates.
+5. **Costs and economy.** What each number does, who sets it, and two counts:
+   how many relevant rows exist today (a real count from the database, which may be
+   zero for a new catalog) and how many staff must author for the feature to have
+   content.
 6. **Schema delta in short.** The ledger's verdict column, one row per surface.
    The full ledger goes in the spec.
 7. **Settled, FYI.** Decisions taken without a control, so nothing happens behind
@@ -70,12 +77,18 @@ In this order, on one artifact, one page:
 4. **Copy on the leaf is placeholder for shape.** Say so on the page. Run `deslop`
    on it anyway; no em or en dashes anywhere on the page (grep for both before
    publishing). Never let placeholder names become content rows.
-5. **Publish** with `capabilities: {downloads: true}`; the Save handler goes
-   through `claude.use("downloads")`, with Copy as the fallback.
+5. **Publish** with `capabilities: {downloads: true}`. That capability is what
+   the page's Save button uses: it writes `issue-<N>-rulings.json` (shape
+   `{issue, rulings: {<data-ruling id>: {choice: [...], note: ""}}}`) to the
+   reviewer's browser download folder, which Tehom points at `D:\.claude\rulings`
+   (the repo's gitignored `.claude/rulings/`). Copy is the fallback: the same JSON
+   on the clipboard, pasted into chat. The handler goes through
+   `claude.use("downloads")`; `review-artifacts` has the working template.
 6. **Post the spec with the demo link at the top** and every working assumption
    tagged `[ruling: <id>]`. The spec's user stories each name a screen. Flip to
    `status:spec-review`; the demo travels inside that stage, no extra label.
-7. **Pick up the rulings file** (`/workspaces/arxii/.claude/rulings/issue-<N>-rulings.json`),
+7. **Pick up the rulings file** (`/workspaces/arxii/.claude/rulings/issue-<N>-rulings.json`,
+   written by the page's Save button as above; if absent, ask once, do not poll),
    restate each answer in one line, fold changed assumptions into the spec, then
    wait for `spec:approved`.
 
