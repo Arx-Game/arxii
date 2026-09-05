@@ -39185,6 +39185,69 @@ components:
       - name
       - threat_pool_id
       - tier
+    AftermathBeat:
+      type: object
+      description: Schema-only shape of the beat line in an aftermath digest (#3551).
+      properties:
+        outcome:
+          type: string
+        tier_name:
+          type: string
+          nullable: true
+        resolution_text:
+          type: string
+      required:
+      - outcome
+      - resolution_text
+      - tier_name
+    AftermathDigest:
+      type: object
+      description: |-
+        Schema-only shape of ParticipantSerializer.aftermath (#3551).
+
+        Never instantiated for output.
+      properties:
+        outcome:
+          type: string
+        consequence:
+          allOf:
+          - $ref: '#/components/schemas/ConsequenceOutcome'
+          nullable: true
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionInstance'
+        legend:
+          type: array
+          items:
+            $ref: '#/components/schemas/AftermathLegend'
+        beat:
+          allOf:
+          - $ref: '#/components/schemas/AftermathBeat'
+          nullable: true
+        peril_round_active:
+          type: boolean
+      required:
+      - beat
+      - conditions
+      - consequence
+      - legend
+      - outcome
+      - peril_round_active
+    AftermathLegend:
+      type: object
+      description: Schema-only shape of one legend line in an aftermath digest (#3551).
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        base_value:
+          type: integer
+      required:
+      - base_value
+      - description
+      - title
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -65571,8 +65634,14 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        aftermath:
+          allOf:
+          - $ref: '#/components/schemas/AftermathDigest'
+          nullable: true
+          readOnly: true
       required:
       - active_conditions
+      - aftermath
       - available_strain
       - character_name
       - character_sheet_id
