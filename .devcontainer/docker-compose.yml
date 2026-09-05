@@ -129,20 +129,6 @@ services:
       - "4001:4001"
       - "4002:4002"
     command: sleep infinity
-    # Memory ceiling (2026-09-05 lockup postmortem). Without a cgroup limit a
-    # runaway process pressures the whole WSL2 VM: kernel swap-thrash saturates
-    # the host NVMe and the Docker daemon wedges (docker ps hangs, Desktop
-    # can't quit). With the limit, the OOM killer takes the runaway process
-    # inside this container and the daemon stays responsive — a visible
-    # process death instead of a host lockup. memswap_limit == mem_limit
-    # forbids the container swap, for the same fast-OOM-over-slow-thrash
-    # reason. Sized against the 6GB VM cap in the host's ~/.wslconfig
-    # (4g app + 1g db leaves ~1GB for dockerd/kernel). Note arx test derives
-    # its worker count from /proc/meminfo, which reports VM-wide memory, not
-    # this cgroup — a worker pileup OOMs the run rather than the host, which
-    # is the intended failure mode.
-    mem_limit: 4g
-    memswap_limit: 4g
     # Cap container logs at 150 MB (50 MB × 3 rotated files). Docker's
     # default json-file driver has no rotation — a crash-looping process
     # can fill the WSL2 vhdx with GB/hour of logs before anyone notices.
@@ -156,17 +142,6 @@ services:
 
   db:
     image: postgres:17
-    # Throwaway-DB durability trade (2026-09-05 lockup postmortem; ratified —
-    # this container DB is test-only and wipe-safe, production is elsewhere).
-    # Default fsync=on made test-DB builds spend ~90s per checkpoint fsyncing
-    # 500+ files, saturating the host NVMe and contributing to a daemon wedge.
-    # fsync/full_page_writes off = no crash-safety for THIS volume: after an
-    # unclean stop, recovery is wipe + re-migrate (docker volume rm
-    # arxii-pgdata), never forensic repair. Longer/larger checkpoints further
-    # thin the write load.
-    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c checkpoint_timeout=30min -c max_wal_size=2GB
-    mem_limit: 1g
-    memswap_limit: 1g
     environment:
       POSTGRES_USER: arxii
       POSTGRES_PASSWORD: arxii
