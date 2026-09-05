@@ -58,7 +58,6 @@ class LineageCompletionTests(TestCase):
         cls.claim_upbringing = OriginTemplateFactory(
             beginning=cls.claim_beginnings,
             allows_name_family=False,
-            named_family_kind=None,
             allows_claim_family=True,
         )
 

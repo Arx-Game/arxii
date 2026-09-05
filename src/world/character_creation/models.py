@@ -607,14 +607,6 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="claimable_in_templates",
         help_text="Kinds offered on the claim path; empty = every kind (#3617).",
     )
-    named_family_kind = models.ForeignKey(
-        "arxii.FamilyKind",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="named_in_templates",
-        help_text="Kind a player-named family gets; required when naming is allowed (#3617).",
-    )
     family_templates = models.ManyToManyField(
         "arxii.HouseTemplate",
         blank=True,
@@ -674,9 +666,9 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
-        if self.allows_name_family and self.named_family_kind_id is None:
+        if self.allows_name_family and self.pk and not self.family_templates.exists():
             raise ValidationError(
-                {"named_family_kind": "Required when naming a family is allowed."}
+                {"family_templates": "Offer at least one Family Template when naming is allowed."}
             )
 
 

@@ -981,8 +981,6 @@ class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     org_type = models.ForeignKey(
         "arxii.OrganizationType",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="house_templates",
         help_text="Organization type a family of this template gets (#3648).",
     )

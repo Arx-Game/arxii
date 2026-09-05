@@ -44,7 +44,6 @@ class UpbringingListTest(TestCase):
         assert row["allows_claim_family"]
         assert row["allows_name_family"]
         assert not row["allows_no_family"]
-        assert row["named_family_kind"] == self.template.named_family_kind_id
         slot = row["slots"][0]
         assert slot["applies_to"] == FamilyPath.ANY
         assert slot["allows_text"] is False

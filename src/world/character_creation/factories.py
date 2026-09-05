@@ -129,7 +129,6 @@ class OriginTemplateFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Upbringing {n}")
     frame_narrative = "You were raised somewhere, by someone."
     allows_name_family = True
-    named_family_kind = factory.SubFactory(FamilyKindFactory, name=COMMONER_KIND_NAME)
 
     @factory.post_generation
     def family_templates(self, create, extracted, **kwargs):
@@ -143,7 +142,7 @@ class OriginTemplateFactory(factory_django.DjangoModelFactory):
 
             self.family_templates.add(
                 HouseTemplateFactory(
-                    kind=self.named_family_kind or FamilyKindFactory(name=COMMONER_KIND_NAME),
+                    kind=FamilyKindFactory(name=COMMONER_KIND_NAME),
                     realm=self.beginning.starting_area.realm,
                 )
             )
@@ -175,6 +174,5 @@ def make_unknown_upbringing(beginning: Beginnings) -> OriginTemplate:
         name="Unknown",
         frame_narrative="You have no past you can speak of.",
         allows_name_family=False,
-        named_family_kind=None,
         allows_no_family=True,
     )

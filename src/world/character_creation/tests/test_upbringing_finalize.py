@@ -79,7 +79,6 @@ class ClaimedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         template = OriginTemplateFactory(
             beginning=self.beginnings,
             allows_name_family=False,
-            named_family_kind=None,
             allows_claim_family=True,
         )
         slot = OriginTemplateSlotFactory(
@@ -163,7 +162,6 @@ class PathSwitchFinalizeTest(FinalizationTestMixin, TestCase):
         template = OriginTemplateFactory(
             beginning=self.beginnings,
             allows_name_family=False,
-            named_family_kind=None,
             allows_claim_family=True,
             allows_no_family=True,
         )

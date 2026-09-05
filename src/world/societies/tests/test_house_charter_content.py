@@ -144,7 +144,7 @@ class HouseTemplateRoundTripTests(TestCase):
         realm = RealmFactory(name="Round Trip Realm")
         # The prerequisite anchors: plain seeder-owned config, not in
         # CONTENT_MODELS, so they are never wiped or reloaded below.
-        society, _org_type, crown = _ensure_house_charter_anchors(realm)
+        society, org_type, crown = _ensure_house_charter_anchors(realm)
         kind = FamilyKindFactory(name="Round Trip Family Kind")
 
         law = SuccessionLaw.objects.create(
@@ -183,6 +183,7 @@ class HouseTemplateRoundTripTests(TestCase):
             realm=realm,
             kind=kind,
             society=society,
+            org_type=org_type,
             liege=crown,
             default_succession_law=law,
         )
@@ -208,6 +209,7 @@ class HouseTemplateRoundTripTests(TestCase):
         self.assertEqual(reloaded.realm, realm)
         self.assertEqual(reloaded.kind, kind)
         self.assertEqual(reloaded.society, society)
+        self.assertEqual(reloaded.org_type, org_type)
         self.assertEqual(reloaded.liege, crown)
         self.assertEqual(reloaded.default_succession_law.name, "Round Trip Succession")
         self.assertEqual(
@@ -222,3 +224,44 @@ class HouseTemplateRoundTripTests(TestCase):
             {aspect.name for aspect in reloaded.aspect_definitions.all()},
             {"Round Trip Vice", "Round Trip Totem"},
         )
+
+    def test_org_type_round_trips_and_served_houses_stay_home(self) -> None:
+        from core_management.content_fixtures import load_world_content
+        from world.character_creation.factories import RealmFactory
+        from world.roster.factories import FamilyKindFactory
+        from world.seeds.houses import _ensure_house_charter_anchors
+        from world.societies.factories import OrganizationFactory
+
+        realm = RealmFactory(name="Served Realm")
+        society, org_type, _crown = _ensure_house_charter_anchors(realm)
+        served = OrganizationFactory(name="House Served", society=society, org_type=org_type)
+        template = HouseTemplate.objects.create(
+            name="Served Charter",
+            realm=realm,
+            kind=FamilyKindFactory(),
+            society=society,
+            org_type=org_type,
+        )
+        template.served_house_choices.add(served)
+
+        result = export_to_content_repo(self.root)
+        self.assertEqual(result.errors, [])
+        exported = (self.root / "fixtures" / "societies" / "housetemplate.json").read_text()
+        self.assertNotIn("served_house_choices", exported)
+
+        HouseTemplate.objects.filter(pk=template.pk).delete()
+        load_world_content(self.root)
+        reloaded = HouseTemplate.objects.get(name="Served Charter")
+        self.assertEqual(reloaded.org_type, org_type)
+        self.assertIsNone(reloaded.liege)
+        self.assertEqual(list(reloaded.served_house_choices.all()), [])
+
+
+class CharterAnchorsTest(TestCase):
+    def test_commoner_family_org_type_is_a_prerequisite(self) -> None:
+        from world.character_creation.factories import RealmFactory
+        from world.seeds.houses import _ensure_house_charter_anchors
+        from world.societies.models import OrganizationType
+
+        _ensure_house_charter_anchors(RealmFactory(name="Anchor Realm"))
+        assert OrganizationType.objects.filter(name="commoner_family").exists()

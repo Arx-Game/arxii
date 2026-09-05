@@ -64,9 +64,7 @@ class LineagePathValidationTest(TestCase):
     def test_claim_path_checks_kind_and_realm(self):
         crime = FamilyKindFactory(name=CRIME_KIND_NAME)
         noble = FamilyKindFactory(name=NOBLE_KIND_NAME)
-        template = OriginTemplateFactory(
-            allows_name_family=False, named_family_kind=None, allows_claim_family=True
-        )
+        template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
         template.claimable_kinds.add(crime)
         realm = template.beginning.starting_area.realm
         draft = _draft_for(template)
@@ -81,9 +79,7 @@ class LineagePathValidationTest(TestCase):
 
     def test_claim_path_rejects_a_non_playable_family(self):
         crime = FamilyKindFactory(name=CRIME_KIND_NAME)
-        template = OriginTemplateFactory(
-            allows_name_family=False, named_family_kind=None, allows_claim_family=True
-        )
+        template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
         realm = template.beginning.starting_area.realm
         draft = _draft_for(template)
         draft.family = FamilyFactory(kind=crime, origin_realm=realm, is_playable=False)
@@ -151,9 +147,7 @@ class UpbringingPricingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.crime = FamilyKindFactory(name=CRIME_KIND_NAME)
-        cls.template = OriginTemplateFactory(
-            allows_name_family=False, named_family_kind=None, allows_claim_family=True
-        )
+        cls.template = OriginTemplateFactory(allows_name_family=False, allows_claim_family=True)
         cls.slot = OriginTemplateSlotFactory(template=cls.template, name="Role", allows_text=False)
         cls.head = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=3)
         cls.lieutenant = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=1)

@@ -479,7 +479,6 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "allows_name_family",
             "allows_no_family",
             "claimable_kind_ids",
-            "named_family_kind",
             "slots",
         ]
         read_only_fields = fields

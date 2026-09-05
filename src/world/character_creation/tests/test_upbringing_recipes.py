@@ -77,7 +77,6 @@ class UpbringingRecipesTest(TestCase):
             beginning=BeginningsFactory(),
             name="Orphan of the cumberwards",
             allows_name_family=False,
-            named_family_kind=None,
             allows_no_family=True,
         )
         slot = OriginTemplateSlotFactory(
@@ -161,7 +160,6 @@ class UpbringingRecipesTest(TestCase):
             beginning=BeginningsFactory(),
             name="In service to a great house",
             allows_name_family=False,
-            named_family_kind=None,
             allows_claim_family=True,
         )
         template.claimable_kinds.add(noble)
@@ -190,7 +188,6 @@ class UpbringingRecipesTest(TestCase):
             name="One of the Humble",
             cg_point_cost=6,
             allows_name_family=False,
-            named_family_kind=None,
             allows_claim_family=True,
         )
         template.claimable_kinds.add(humble)

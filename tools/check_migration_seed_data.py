@@ -36,6 +36,13 @@ ALLOWED_MIGRATIONS: set[str] = {
     # the retired flag is dropped in 0222. No authored content: it only widens or
     # creates OriginTemplate rows from data already in the database.
     "world/migrations/0221_backfill_upbringings.py",
+    # #3648: ADR-0237 mandatory restructure backfill, derives HouseTemplate.org_type
+    # from the liege's org_type, and mints a Family Template from an OriginTemplate's
+    # about-to-be-dropped named_family_kind so the name path keeps a family to offer.
+    # The commoner_family OrganizationType and the mined HouseTemplate are
+    # schema-transition targets for that backfill (expected empty in production per
+    # the commit's ADR-0237 disposition), not new authored content.
+    "world/migrations/0224_backfill_family_template_org_type.py",
 }
 
 # Patterns that suggest seed data in migrations

@@ -657,17 +657,13 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             except AttributeError:
                 trust = 0
             qs = qs.filter(trust_required__lte=trust)
-        return (
-            qs.select_related("named_family_kind")
-            .prefetch_related(
-                Prefetch(
-                    "slots",
-                    queryset=OriginTemplateSlot.objects.order_by("sort_order"),
-                    to_attr="cached_slots",
-                )
+        return qs.prefetch_related(
+            Prefetch(
+                "slots",
+                queryset=OriginTemplateSlot.objects.order_by("sort_order"),
+                to_attr="cached_slots",
             )
-            .order_by("sort_order", "name")
-        )
+        ).order_by("sort_order", "name")
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Serialize with one batched ``claimable_kind_ids`` query, not one per row.

@@ -76,11 +76,12 @@ TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
 def _ensure_house_charter_anchors(
     realm: Realm,
 ) -> tuple[Society, OrganizationType, Organization]:
-    """Ensure the Crown org + its Society exist under ``realm`` (idempotent).
+    """Ensure the Crown org, its Society, and both org types exist (idempotent).
 
-    Neither model is in ``CONTENT_MODELS`` (#2875): they are plain
+    None of these are in ``CONTENT_MODELS`` (#2875): they are plain
     seeder-owned config, but content-repo ``HouseTemplate``/``SuccessionLaw``
-    rows can FK the Crown and its Society by name, so both must exist before
+    rows can FK the Crown, its Society, and the ``noble_family``/
+    ``commoner_family`` org types by name, so all of them must exist before
     the content load resolves those fixtures. Called two ways: once from
     ``world.seeds.config_prerequisites._house_charter_anchors`` (before
     ``load_content_first()``, with its own ``realm`` resolution, a no-op
@@ -89,7 +90,8 @@ def _ensure_house_charter_anchors(
     available (the self-healing gameplay-call-site pattern ADR-0171
     describes for a code-required row).
 
-    Returns ``(society, org_type, crown)``.
+    Returns ``(society, org_type, crown)`` (``org_type`` is ``noble_family``;
+    ``commoner_family`` is minted here too but not part of the return shape).
     """
     from world.societies.models import Organization, OrganizationType, Society  # noqa: PLC0415
 
@@ -105,6 +107,16 @@ def _ensure_house_charter_anchors(
             "rank_3_title": "Noble Family",
             "rank_4_title": "Trusted House Servants",
             "rank_5_title": "Servants",
+        },
+    )
+    OrganizationType.objects.get_or_create(
+        name="commoner_family",
+        defaults={
+            "rank_1_title": "Head of the Family",
+            "rank_2_title": "Elder",
+            "rank_3_title": "Family",
+            "rank_4_title": "Household",
+            "rank_5_title": "Hands",
         },
     )
     crown, _ = Organization.objects.get_or_create(
@@ -175,7 +187,7 @@ def seed_houses_demo() -> None:
     )
     if law is None:
         return
-    _seed_house_creator(realm=realm, society=society, crown=crown, law=law)
+    _seed_house_creator(realm=realm, society=society, org_type=org_type, crown=crown, law=law)
 
     house, created = Organization.objects.get_or_create(
         name=HOUSE_ORG_NAME,
@@ -226,8 +238,10 @@ def seed_houses_demo() -> None:
     )
 
 
-def _seed_house_creator(*, realm, society, crown, law) -> None:
+def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
     """Phase D: a set-aside claimable barony + the realm's charter template."""
+    from django.conf import settings  # noqa: PLC0415
+
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.roster.constants import NOBLE_KIND_NAME  # noqa: PLC0415
@@ -243,6 +257,7 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
         HouseTemplate,
         Title,
     )
+    from world.societies.models import Organization, Vacancy  # noqa: PLC0415
 
     noble_kind = ensure_family_kinds()[NOBLE_KIND_NAME]
     farmland = authored_or_sample(
@@ -263,6 +278,7 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
             "realm": realm,
             "kind": noble_kind,
             "society": society,
+            "org_type": org_type,
             "liege": crown,
             "default_succession_law": law,
         },
@@ -307,6 +323,19 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
     )
     if hearth is not None:
         template.features.add(hearth)
+
+    if settings.SEED_SAMPLE_CONTENT:
+        house_org = Organization.objects.filter(name=HOUSE_ORG_NAME).first()
+        if house_org is not None and house_org.family_id is not None:
+            Vacancy.objects.get_or_create(
+                organization=house_org,
+                name="Household guard PLACEHOLDER",
+                defaults={
+                    "description": "PLACEHOLDER: stands a post, keeps the gate.",
+                    "importance": 1,
+                    "presumed_importance": 1,
+                },
+            )
 
     seat_area, _ = Area.objects.get_or_create(
         name=CLAIMABLE_DOMAIN_NAME, defaults={"level": AreaLevel.REGION}
