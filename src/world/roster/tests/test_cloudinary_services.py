@@ -163,7 +163,7 @@ class TestCloudinaryGalleryService(TestCase):
                 tenure=self.tenure,
             )
 
-        assert "Unsupported file type: text/plain" in str(cm.value)
+        assert "Unsupported file type." in str(cm.value)
 
     @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
     def test_upload_image_valid_file_types(self):
@@ -307,7 +307,7 @@ class TestCloudinaryGalleryService(TestCase):
                 image_file=image_file,
             )
 
-        assert "Failed to upload image: Cloudinary error" in str(cm.value)
+        assert "Failed to upload image." in str(cm.value)
 
     @patch("cloudinary.uploader.destroy")
     def test_delete_media_success(self, mock_destroy):

@@ -79,20 +79,21 @@ class CloudinaryGalleryService:
 
         allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
         if hasattr(image_file, "content_type") and image_file.content_type not in allowed_types:
-            msg = f"Unsupported file type: {image_file.content_type}"
+            logger.warning("Unsupported file type: %s", image_file.content_type)
+            msg = "Unsupported file type."
+            raise ValidationError(msg)
+
+        # UploadedFile.size is typed as int | None upstream (a File wrapping a
+        # sizeless stream); an actual upload always reports a size, so treat a
+        # missing one as empty rather than widening every arithmetic use below.
+        incoming = image_file.size or 0
+        if not player_data.account.is_staff and incoming > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
+            msg = "This file is larger than the per-file limit."
             raise ValidationError(msg)
 
         MediaScanService.scan_image(image_file)
 
         if not player_data.account.is_staff:
-            # UploadedFile.size is typed as int | None upstream (a File wrapping a
-            # sizeless stream); an actual upload always reports a size, so treat a
-            # missing one as empty rather than widening every arithmetic use below.
-            incoming = image_file.size or 0
-            if incoming > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
-                msg = "This file is larger than the per-file limit."
-                raise ValidationError(msg)
-
             used = (
                 Media.objects.filter(player_data=player_data).aggregate(
                     total=Sum("file_size_bytes"),
@@ -140,7 +141,8 @@ class CloudinaryGalleryService:
             return cast(Media, media)
 
         except Exception as e:
-            msg = f"Failed to upload image: {e!s}"
+            logger.exception("Failed to upload image to Cloudinary")
+            msg = "Failed to upload image."
             raise ValidationError(msg) from e
 
     @classmethod

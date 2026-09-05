@@ -333,6 +333,7 @@ class TestMediaViewSet(TestCase):
         assert upload_kwargs["title"] == ""
         assert upload_kwargs["description"] == ""
         assert upload_kwargs["created_by"] == artist
+        assert upload_kwargs["image_file"].name == "test.jpg"
         assert response.data["created_by"]["id"] == artist.id
 
     def test_create_media_requires_image_file(self):

@@ -4,6 +4,7 @@ Media and gallery serializers for the roster system.
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
 
@@ -60,15 +61,13 @@ class MediaSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+# The per-file size check here mirrors the service's own check (#3164) with the
+# same fixed message, so an oversized upload is rejected before the network call
+# instead of after; the quota check stays service-only since it needs a DB
+# aggregate over the player's existing media. Staff bypass the per-file check
+# here too, matching the service's staff bypass.
 class MediaUploadSerializer(serializers.Serializer):
-    """Validate a player's media upload before it reaches CloudinaryGalleryService.
-
-    The per-file size check here mirrors the service's own check (#3164) with the
-    same fixed message, so an oversized upload is rejected before the network call
-    instead of after; the quota check stays service-only since it needs a DB
-    aggregate over the player's existing media. Staff bypass the per-file check
-    here too, matching the service's staff bypass.
-    """
+    """Validate a player's media upload before it reaches CloudinaryGalleryService."""
 
     image_file = serializers.FileField(
         validators=[FileExtensionValidator(allowed_extensions=ACCEPTED_IMAGE_EXTENSIONS)],
@@ -86,7 +85,7 @@ class MediaUploadSerializer(serializers.Serializer):
         default=None,
     )
 
-    def validate_image_file(self, value: serializers.FileField) -> serializers.FileField:
+    def validate_image_file(self, value: UploadedFile) -> UploadedFile:
         """Reject an oversized file for non-staff before it ever reaches the service."""
         request = self.context.get("request")
         is_staff = bool(request and request.user.is_staff)
@@ -110,7 +109,7 @@ class MediaUploadSerializer(serializers.Serializer):
                 created_by=validated_data["created_by"],
             )
         except DjangoValidationError as exc:
-            raise serializers.ValidationError(exc.messages) from exc
+            raise serializers.ValidationError({"image_file": exc.messages}) from exc
 
     def update(self, instance: Media, validated_data: dict) -> Media:
         """Not used: media uploads are create-only through this serializer."""
