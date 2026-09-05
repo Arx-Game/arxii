@@ -466,7 +466,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     Phase Guard/Communion — ALLY SINGLE/FILTERED_GROUP Technique variants of the three reactive
     wards above (no new ConditionTemplates); reactive fire (`_try_spend_reactive`) and upkeep
     (`drain_reactive_upkeep`) both debit `ConditionInstance.source_character`, falling back to
-    the bearer, so an ally ward strains its caster. See magic.md §"Ally + party ward variants".
+    the bearer, so an ally ward strains its caster; an unpaid fire narrates via
+    `_narrate_reactive_fizzle` (#3574). See magic.md §"Ally + party ward variants".
   - Technique authoring draft workbench (#1496):
     `get_or_start_draft(character) -> TechniqueDraft`,
     `discard_draft(character)`,
@@ -3074,6 +3075,9 @@ action consent flow, and a three-mode non-combat round framework.
   - `ensure_scene_participation(scene, character)` (`interaction_services.py`) — create a
     `SceneParticipation` for the character's account in the scene if one does not already exist.
     Public API consumed by combat to record fighters as first-class scene participants.
+  - `narrate_privately(character, text)` (`interaction_services.py`): Narrator whisper to ONE
+    character on both channels (#3574); extracted from `announce_dormant_perks`, reused by
+    combat/magic fizzle and lapse narration.
   - **Round framework (`round_services.py`, #1351):**
     - `get_scene_round_defaults_config() -> SceneRoundDefaultsConfig` (`models.py`) — get-or-create the singleton config.
     - `active_round_for_room(room) -> SceneRound | None` — public service; returns the active
@@ -6986,7 +6990,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant` shields a PC — see the Key Services list below.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
-    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060. **Consented upkeep
+    immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060; a lapse narrates to payer,
+    bearer and room via `_narrate_upkeep_lapse` (#3574). **Consented upkeep
     (#3573):** unaffordable upkeep on an instance with `ConditionInstance.soulfray_consented`
     debits into deficit (via `_debit_ally_paid_upkeep`/`_pay_upkeep`) instead of lapsing the
     condition, and accrues Soulfray; a deficit fire narrates "bleeds soul to keep the ward on

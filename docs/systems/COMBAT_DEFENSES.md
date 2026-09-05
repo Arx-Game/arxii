@@ -80,6 +80,24 @@ buffer.
   accrues Soulfray on every fire, so a caster can hold a ward for an ally past zero anima
   at their own soul's expense.
 
+## When a defense does not fire (#3574, ADR-0270)
+
+Every reactive protection that fizzles, lapses or is declined keeps its mechanical
+no-op shape and narrates it. Private lines go through
+`world.scenes.interaction_services.narrate_privately` (Narrator whisper, WS + telnet);
+room lines go through `_broadcast_commitment_line` (combat, WS + telnet) and never carry
+numbers.
+
+| Event | Where | Who is told |
+|---|---|---|
+| Technique-guardian cannot pay `reactive_anima_cost` | `_narrate_technique_interpose_fizzle` (`world/combat/services.py`) | guardian (private, names the unguarded ally); room (soft line) |
+| Reaction declined by `REACTIONS_PER_ROUND` / `ABSORPTION_CAP_PER_MOMENT` | `_narrate_reaction_declined` (`_dispatch_interpose_action`, `_try_catch_sent_flying`) | guardian only (private) |
+| Ward lapses at upkeep | `_narrate_upkeep_lapse` (`drain_reactive_upkeep`) | payer (private, why); bearer if different (private, that); room |
+| Standing ward cannot pay its fee | `_narrate_reactive_fizzle` (`world/magic/services/effect_handlers.py`, from `_try_spend_reactive`) | payer (private, why); bearer if different (private, that); room only inside an encounter |
+
+The Guard panel (`YourTurn.tsx`, `guard-unaffordable-hint`) warns a guardian before the
+round when their anima is below the selected technique's fee and Soulfray consent is off.
+
 ## Mitigation (armor soak + thread DR)
 
 Flat damage reduction applied after evasion and barrier.
