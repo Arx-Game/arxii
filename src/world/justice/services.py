@@ -105,21 +105,21 @@ def report_witnessed_crime(
 
     The shared report core: heat via :func:`accrue_heat`, then the enforcing
     society's regard for ``persona`` drops by the winning law's weight
-    (established/primary personas only). Two callers share this exactly —
+    (established/primary personas only). Two callers share this exactly:
     a mission's ``PROPAGATION/CRIME_WATCH`` reward line
     (:func:`world.missions.integrations.crime_watch.flag_crime`) and a WITNESS
-    reaction window's "report" choice — both mint pursuit heat against the
-    accused persona and sting the same society's opinion by the same amount;
-    a scene-witnessed deed reported here is judged no differently than a
+    reaction window's "report" choice. Both mint pursuit heat against the
+    accused persona and sting the same society's opinion by the same amount,
+    so a scene-witnessed deed reported here is judged no differently than a
     mission deed reported the old way. Returns None when nothing minted
-    (legal here / out of jurisdiction) — the caller's report has no effect.
+    (legal here / out of jurisdiction): the caller's report has no effect.
     """
     from world.societies.renown import bump_society_reputation  # noqa: PLC0415
 
     area = area_for_room(room)
     row = accrue_heat(persona=persona, crime_kind=crime_kind, area=area, scale=1)
     if row is None:
-        return None  # legal here / out of jurisdiction — no consequence.
+        return None  # legal here / out of jurisdiction, no consequence.
     law = law_for(area, crime_kind)
     society = enforcing_society_for(law.area) if law is not None else None
     if society is not None:

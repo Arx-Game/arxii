@@ -3204,7 +3204,7 @@ action consent flow, and a three-mode non-combat round framework.
   (`react-to-interaction`'s lazy-open kind, #911), `SPREAD_ASSIST` (Acclaim the Telling, sidecar
   `societies.SpreadAssistTarget` boosting a `LegendEntry`'s spread, #915), `WITNESS` (Witness a
   Public Act, sidecar `justice.WitnessReactionTarget` linking to the `LegendEntry` bystanders
-  react to, #2987 — hidden/`public=False` so reports stay anonymous; handler
+  react to, #2987, hidden/`public=False` so reports stay anonymous; handler
   `justice.reaction_kinds.WITNESS_KIND` resolves "report" immediately, on reaction,
   as one `justice.report_witnessed_crime` call per `DeedCrimeTag` on the deed against
   the deed-time actor persona; "intervene"/"ignore" have no mechanical effect). A

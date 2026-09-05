@@ -48,9 +48,9 @@ def flag_crime(line: MissionDeedRewardLine, *, room: ObjectDB) -> None:
 
     Resolves the CrimeKind slug and the deed-time persona, then delegates the
     heat + reputation core to
-    :func:`world.justice.services.report_witnessed_crime` (#2987) — the same
+    :func:`world.justice.services.report_witnessed_crime` (#2987), the same
     seam a WITNESS reaction window's "report" choice calls. An unknown
-    ``ref`` slug is an authoring gap — logged loudly, never raised (the report
+    ``ref`` slug is an authoring gap: logged loudly, never raised (the report
     must not crash on a typo).
     """
     from world.justice.models import CrimeKind  # noqa: PLC0415

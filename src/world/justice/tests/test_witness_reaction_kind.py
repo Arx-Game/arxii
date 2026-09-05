@@ -7,7 +7,7 @@ from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.justice.constants import DEFAULT_HEAT_WEIGHT
 from world.justice.factories import AreaLawFactory, CrimeKindFactory
-from world.justice.models import DeedCrimeTag, PersonaHeat
+from world.justice.models import DeedCrimeTag, PersonaHeat, WitnessReactionTarget
 from world.justice.reaction_kinds import (
     IGNORE_CHOICE,
     INTERVENE_CHOICE,
@@ -15,6 +15,7 @@ from world.justice.reaction_kinds import (
     WITNESS_KIND,
     open_witness_window,
 )
+from world.justice.tests.utils import set_character_location
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import MissionDeedRecordFactory, MissionDeedRewardLineFactory
 from world.missions.integrations import crime_watch
@@ -74,7 +75,7 @@ class WitnessReactionKindTests(TestCase):
         self.scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC, location=self.room.objectdb)
         self.witness = make_participant(self.scene)
         # The deed's actor: an established persona (reputation-eligible), not
-        # itself a scene participant — the deed can be reported wherever
+        # itself a scene participant: the deed can be reported wherever
         # bystanders happen to be, not only where the actor is present.
         self.actor = PersonaFactory()
         self.interaction = InteractionFactory(persona=self.actor, scene=self.scene)
@@ -97,7 +98,7 @@ class WitnessReactionKindTests(TestCase):
         self.assertEqual(rep.value, -DEFAULT_HEAT_WEIGHT * 2)
 
         # Parity check: flag_crime's CRIME_WATCH path, reporting one crime
-        # kind at the same room, mints the exact same per-tag magnitude —
+        # kind at the same room, mints the exact same per-tag magnitude;
         # both paths now share report_witnessed_crime as their core.
         sheet = CharacterSheetFactory()
         deed_record = MissionDeedRecordFactory(actor=sheet)
@@ -142,3 +143,34 @@ class WitnessReactionKindTests(TestCase):
         self.assertIs(config, WITNESS_KIND)
         self.assertFalse(config.public)
         self.assertFalse(config.lazy_open)
+
+    def test_report_falls_back_to_actors_room_when_scene_has_no_location(self) -> None:
+        # Scene.location is nullable; a WITNESS window is not otherwise tied
+        # to a room, so the report falls back to the accused's own current
+        # whereabouts rather than dropping the report (unlike flag_crime,
+        # whose caller skips the CRIME_WATCH line entirely when it has no
+        # room context at all).
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC, location=None)
+        witness = make_participant(scene)
+        interaction = InteractionFactory(persona=self.actor, scene=scene)
+        deed = LegendEntryFactory(persona=self.actor)
+        DeedCrimeTag.objects.create(deed=deed, crime_kind=self.theft)
+        set_character_location(self.actor.character_sheet.character, self.room.objectdb)
+        window = open_witness_window(interaction=interaction, entry=deed)
+
+        react_to_window(window=window, reactor_persona=witness, choice=REPORT_CHOICE)
+
+        row = PersonaHeat.objects.get(persona=self.actor)
+        self.assertEqual(row.area, self.city)
+        self.assertEqual(row.value, DEFAULT_HEAT_WEIGHT)
+        rep = SocietyReputation.objects.get(persona=self.actor, society=self.crown)
+        self.assertEqual(rep.value, -DEFAULT_HEAT_WEIGHT)
+
+    def test_open_witness_window_is_idempotent(self) -> None:
+        other_deed = LegendEntryFactory(persona=self.actor)
+
+        second_window = open_witness_window(interaction=self.interaction, entry=other_deed)
+
+        self.assertEqual(second_window.pk, self.window.pk)
+        target = WitnessReactionTarget.objects.get(window=self.window)
+        self.assertEqual(target.legend_entry_id, self.deed.pk)
