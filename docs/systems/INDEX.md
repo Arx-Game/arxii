@@ -3208,9 +3208,15 @@ action consent flow, and a three-mode non-combat round framework.
   `justice.reaction_kinds.WITNESS_KIND` resolves "report" immediately, on reaction,
   as one `justice.report_witnessed_crime` call per `DeedCrimeTag` on the deed against
   the deed-time actor persona; "intervene"/"ignore" have no mechanical effect). A
-  kind needing per-window data beyond the generic `ReactionWindow` row carries a 1:1
-  sidecar model (the `SceneEntryEndorsement` pattern) rather than widening
-  `ReactionWindow` itself.
+  WITNESS window opens from the deed-creation call sites themselves:
+  `societies.services.create_solo_deed`/`create_legend_event` take an
+  `interaction` keyword and call `justice.reaction_kinds.open_witness_window`
+  right after the deed's #1464 reach fork when the caller passed an
+  `interaction`, the deed's room is publicly listed, and the deed carries a
+  `justice.DeedCrimeTag`; a social-pose solo deed with no interaction opens
+  none. A kind needing per-window data beyond the generic `ReactionWindow` row
+  carries a 1:1 sidecar model (the `SceneEntryEndorsement` pattern) rather than
+  widening `ReactionWindow` itself.
 - **Places (#1866):** `Place`/`PlacePresence` (`place_models.py`) — a named sub-location
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
   are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,

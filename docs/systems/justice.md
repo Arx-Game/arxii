@@ -102,6 +102,17 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    scene's location (falling back to the actor's own current room). "Intervene"
    and "ignore" carry no mechanical effect: justice stays NPC-driven.
 
+   The window itself is opened from the deed-creation seam, not from a
+   separate call site: `societies.services.create_solo_deed` and
+   `create_legend_event` both accept an `interaction` keyword and, right
+   after the #1464 reach fork runs, call `open_witness_window` when all three
+   hold: the caller passed an `interaction` (a combat or action outcome
+   deed; a social-pose solo deed passes none and opens nothing), the deed's
+   room is publicly listed, and the deed carries at least one
+   `DeedCrimeTag`. This check is independent of the reach fork's own
+   scandal/containment judgment; an untagged or non-crime deed simply never
+   opens a window.
+
 **Criminality is declared at deed birth** (user-ratified): mission runs tag every
 legend entry minted at renown emission with the run's CRIME_WATCH kinds
 (`renown_emission._tag_criminal_entries` — the crime belongs to the run, so each
