@@ -302,7 +302,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "roster.npcstatlinepreset",
         # skills
         "skills.skill",
-        # societies
+        # societies - house charter (#2875): dependencies before dependents so
+        # a fresh load resolves natural keys in one pass.
+        "societies.successionlaw",
+        "societies.holdingkind",
+        "societies.housefeature",
+        "societies.housetemplate",
         "societies.houseaspectdefinition",
         "societies.houseaspectoption",
         # species

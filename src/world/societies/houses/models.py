@@ -153,7 +153,7 @@ class FealtyEdge(SharedMemoryModel):
         return f"{self.vassal} sworn to {self.liege}"
 
 
-class SuccessionLaw(SharedMemoryModel):
+class SuccessionLaw(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """How a house (or one title) passes: candidate derivation + ordering (#1884).
 
     Every realm case from the lore is one row: Umbral matrilineal
@@ -161,6 +161,10 @@ class SuccessionLaw(SharedMemoryModel):
     wedlock with enatic tiebreak; Inferna female-line with consort children
     ennobled; Ariwn chosen-heir; Lycan/Aythirmok most-powerful-Gifted of the
     legitimate.
+
+    Authored content (#2875): the house charter's succession vocabulary is
+    the lore repo's to write, so it carries a natural key and is registered
+    in ``CONTENT_MODELS``.
     """
 
     name = models.CharField(max_length=120, unique=True)
@@ -186,6 +190,11 @@ class SuccessionLaw(SharedMemoryModel):
         related_name="+",
         help_text="CHOSEN_HEIR derivation: the named heir.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]
@@ -325,8 +334,12 @@ class Domain(SharedMemoryModel):
         return base
 
 
-class HoldingKind(SharedMemoryModel):
-    """Authorable catalog of domain holdings (farmland, mine, port...) (#1884)."""
+class HoldingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Authorable catalog of domain holdings (farmland, mine, port...) (#1884).
+
+    Authored content (#2875): part of the house charter, so it carries a
+    natural key and is registered in ``CONTENT_MODELS``.
+    """
 
     name = models.CharField(max_length=80, unique=True)
     description = models.TextField(blank=True)
@@ -337,6 +350,11 @@ class HoldingKind(SharedMemoryModel):
     base_gross = models.PositiveBigIntegerField(
         help_text="Default coppers-per-cycle gross for a new holding. PLACEHOLDER.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]
@@ -922,13 +940,16 @@ class PactCommitment(SharedMemoryModel):
         return f"{self.get_kind_display()} on pact {self.pact_id}"
 
 
-class HouseTemplate(SharedMemoryModel):
+class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A realm's recipe for CG-defined houses on set-aside titles (#1884 Phase D).
 
     The claimable ``Title`` is the slot; the template carries the automated
     thematic gates (name pattern per the realm's naming conventions,
     principle ranges) and the materialization package (society, liege,
     succession law, holdings, starting kin slots). Numbers are PLACEHOLDER.
+
+    Authored content (#2875): part of the house charter, so it carries a
+    natural key and is registered in ``CONTENT_MODELS``.
     """
 
     name = models.CharField(max_length=120, unique=True)
@@ -1003,6 +1024,11 @@ class HouseTemplate(SharedMemoryModel):
         related_name="templates",
         help_text="Cultural facts stamped on materialized houses (#2079).",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["realm", "name"]
@@ -1161,18 +1187,26 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.definition.name}: {self.name}"
 
 
-class HouseFeature(SharedMemoryModel):
+class HouseFeature(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A structural cultural fact about houses of a template (#2079).
 
-    No player input — features orient the founder at CG ("this is how a house
+    No player input - features orient the founder at CG ("this is how a house
     like yours conducts itself") and anchor future systems: a ledger UI checks
     the org has the feature slug ``black-ledger``, never a bespoke code path.
+
+    Authored content (#2875): part of the house charter, so it carries a
+    natural key and is registered in ``CONTENT_MODELS``.
     """
 
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=60, unique=True, help_text="Stable code anchor.")
     description = models.TextField(help_text="Player-facing: how this shapes play.")
     display_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["display_order", "name"]
