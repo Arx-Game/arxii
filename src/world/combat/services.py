@@ -10903,6 +10903,27 @@ def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[Available
     return detect_available_combos(enc, round_number)
 
 
+def _narrate_upkeep_lapse(inst: ConditionInstance, encounter: CombatEncounter) -> None:
+    """Tell the payer, the bearer (when different) and the room that a ward lapsed (#3574).
+
+    Called immediately before the lapse ``inst.delete()`` so the names are
+    still resolvable. The payer rule is ``drain_reactive_upkeep``'s own:
+    ``source_character`` when set, else the bearer. Room line carries no
+    numbers; the private lines say only that the fee could not be met.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    bearer = inst.target
+    payer = inst.source_character or bearer
+    ward = inst.condition.name
+    if payer.pk == bearer.pk:
+        narrate_privately(payer, f"You cannot sustain {ward}; it lapses.")
+    else:
+        narrate_privately(payer, f"You cannot sustain {ward} on {bearer}; it lapses.")
+        narrate_privately(bearer, f"{payer}'s {ward} over you lapses.")
+    _broadcast_commitment_line(encounter, f"The {ward} over {bearer} gutters out.")
+
+
 def _debit_ally_paid_upkeep(
     inst: ConditionInstance, cost: int, *, encounter: CombatEncounter
 ) -> None:
@@ -10917,9 +10938,11 @@ def _debit_ally_paid_upkeep(
     payer = inst.source_character
     payer_anima = _get_anima(payer)
     if payer_anima is None:
+        _narrate_upkeep_lapse(inst, encounter)
         inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         return
     if payer_anima.current < cost and not inst.soulfray_consented:
+        _narrate_upkeep_lapse(inst, encounter)
         inst.delete()  # lapse - Trigger rows cascade via source_condition FK
         return
     _pay_upkeep(payer, payer_anima, cost, inst, encounter)
@@ -10997,6 +11020,7 @@ def _drain_participant_upkeep(
             # instead of clobbering it back to 0 (#3573 review fix).
             remaining = anima.current
         else:
+            _narrate_upkeep_lapse(inst, encounter)
             inst.delete()  # lapse — Trigger rows cascade via source_condition FK
     if remaining != anima.current:
         anima.current = remaining
@@ -11010,7 +11034,8 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     condition with ``upkeep_anima_per_round > 0``: spend that anima from the
     condition's payer's ``CharacterAnima`` pool. If the payer cannot pay in
     full, the condition lapses — its ``ConditionInstance`` row is deleted and
-    any ``Trigger`` rows on it cascade.
+    any ``Trigger`` rows on it cascade. The lapse is narrated to the payer, the
+    bearer and the room (#3574, ``_narrate_upkeep_lapse``).
 
     Payer rule (#2208): ``source_character`` pays when set — an ally ward
     strains its caster, never its bearer. Self-cast wards are unchanged
