@@ -3214,7 +3214,17 @@ action consent flow, and a three-mode non-combat round framework.
   right after the deed's #1464 reach fork when the caller passed an
   `interaction`, the deed's room is publicly listed, and the deed carries a
   `justice.DeedCrimeTag`; a social-pose solo deed with no interaction opens
-  none. Today only combat-aftermath deeds reach this: `world.combat.services
+  none. Bystanders learn a WITNESS window exists via
+  `GET /api/reaction-windows/pending/` (`ReactionWindowViewSet.pending`,
+  `reaction_views.py`, #2987 Task 4) rather than the interaction feed a
+  hidden kind never surfaces on: `?kind=` defaults to `witness`, scoped to
+  the caller's active persona (`active_persona_for_sheet`, never
+  `primary_persona`) via the same eligibility `react_to_window` enforces
+  (scene participation + `can_view_interaction`), excluding the persona's
+  own deed, already-reacted windows, and settled windows. Each item carries
+  `id`/`interaction_id`/`scene_id`/`kind`/`choices` only, never a reactor
+  list, keeping report anonymity intact on the read side too. Today only
+  combat-aftermath deeds reach this: `world.combat.services
   ._apply_aftermath_rules` sets `ResolutionContext.interaction`
   (`world.checks.types`) to the encounter's already-created OUTCOME
   interaction before its consequence pool fires `_legend_award`, which
