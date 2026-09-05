@@ -19,5 +19,13 @@ duplication the issue objected to for the map). Set the Stage rides on the heade
 and is deliberately unavailable mid-fight: instantiating a blueprint would reshape the
 fight's own graph; it returns when the encounter completes.
 
-> Status: accepted · Source: issue #3557 · Related: ADR-0127, ADR-0111,
+One consequence is accepted knowingly: `SelfCheckPanel` and `TavernGameWidget` hold local
+form drafts, and the idle-to-combat swap remounts the folded subtree, so a draft in progress
+at the poll tick an encounter starts is lost. The window is one form, one moment, a few times
+a night at most; keeping both widgets mounted across both shapes would change the idle page,
+which decision 4 forbids. Prompts that need an answer are never folded, so nothing a player
+must respond to is affected.
+
+> Status: accepted · Source: issue #3557 · Related: ADR-0127,
+> ADR-0111 (one-play-surface, `0111-one-play-surface-game-absorbs-scene-toolset.md`),
 > `docs/architecture/unified-combat-ui-design.md` §1/§2
