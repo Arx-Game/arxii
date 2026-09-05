@@ -6,7 +6,7 @@ import evennia_extensions.models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0221_technique_and_threat_entry_outcome_narration")]
+    dependencies = [("arxii", "0222_holdingkind_reviewed_by_holdingkind_reviewed_on_and_more")]
 
     operations = [
         migrations.RemoveField(

@@ -731,13 +731,33 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 from world.societies.houses.models import (  # noqa: E402
+    HoldingKind,
     HouseAspectDefinition,
     HouseAspectOption,
     HouseClaim,
     HouseClaimAspect,
     HouseFeature,
     HouseTemplate,
+    SuccessionLaw,
 )
+
+
+@admin.register(SuccessionLaw)
+class SuccessionLawAdmin(admin.ModelAdmin):
+    """#2875 - the house charter's succession vocabulary (a `HouseTemplate` FK)."""
+
+    list_display = ("name", "derivation", "ordering_rule", "require_wedlock")
+    list_filter = ("derivation", "ordering_rule", "require_wedlock")
+    search_fields = ("name", "description")
+
+
+@admin.register(HoldingKind)
+class HoldingKindAdmin(admin.ModelAdmin):
+    """#2875 - the authorable catalog of domain holdings (a `HouseTemplate` M2M)."""
+
+    list_display = ("name", "stream_kind", "base_gross")
+    list_filter = ("stream_kind",)
+    search_fields = ("name", "description")
 
 
 @admin.register(HouseTemplate)
