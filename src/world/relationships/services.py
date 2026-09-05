@@ -607,7 +607,9 @@ def give_writeup_kudos(*, giver_account: AccountDB, writeup) -> WriteupKudos:
     Raises:
         WriteupNotSharedError: writeup.visibility is PRIVATE.
         CannotCommendOwnWriteupError: giver is the author of the writeup.
-        NotWriteupSubjectError: giver is not the subject (relationship.target) of the writeup.
+        NotWriteupSubjectError: giver is not the subject (relationship.target) of the
+            writeup, or the writeup is companion-targeted and so has no subject account
+            (#3575).
         AlreadyCommendedError: this account has already commended this writeup.
     """
     if writeup.visibility == UpdateVisibility.PRIVATE:

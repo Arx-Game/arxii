@@ -49,3 +49,5 @@ The `GearArchetype.LANCE` weapon archetype — a `WEAPON_ARCHETYPES` member
 required to declare JOUST and to double CHARGE's bonuses. Wielding a Lance
 while not Mounted incurs `LANCE_UNMOUNTED_PENALTY` on any attack.
 _Avoid_: spear, pike (distinct gear concepts, not this archetype)
+
+**Companion target**: see the relationships glossary (#3575). A companion never gets a CharacterSheet; the owner's bond is a relationship row pointing at the Companion.

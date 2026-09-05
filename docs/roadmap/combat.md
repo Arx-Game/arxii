@@ -411,12 +411,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   further gated to GM/staff. `SceneDetailPage`'s `lingeringEncounterId` keeps the combat
   rail mounted long enough for the player to read and dismiss it.
 
-- **Authored technique / NPC-attack flavor in the round narration (#3554, ADR-0270):**
+- **Authored technique / NPC-attack flavor in the round narration (#3554, ADR-0272):**
   `hit_narration` / `miss_narration` on `Technique` and `ThreatPoolEntry` head the Narrator
   OUTCOME line with the ledger still machine-appended; a GM's condition note broadcasts as
   a Narrator line and is readable by the bearer. Proven by
   `world.combat.tests.test_outcome_broadcast` and
   `actions.tests.test_gm_adjudication_actions.GMApplyConditionActionTests`.
+
+- **Companion fall surges the owner (#3575):** companion-backed ALLY opponent defeat emits
+  CHARACTER_INCAPACITATED; owner surges once on a companion-targeted relationship
+  (world/combat/tests/test_escalation_companion_fall.py).
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

@@ -6962,8 +6962,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
-  subject_phase_number=None)` (`world/combat/escalation.py`) — the one write
-  path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
+  subject_phase_number=None, subject_companion=None)` (`world/combat/escalation.py`) - the
+  one write path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
   GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
   record as GM-stated provenance for a manual trigger only — every automatic leg leaves it
@@ -6982,7 +6982,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   / `apply_boss_break_surge`, `world/combat/escalation.py` - fire from
   `check_and_advance_boss_phase` and `_assess_boss_break_bar`, magnitudes authored on
   `EscalationCurve.boss_{phase,enrage,break}_spike_intensity_amount`, deduped per boss per
-  phase (ADR-0250).
+  phase (ADR-0250). A companion-backed ALLY opponent's defeat emits
+  `CHARACTER_INCAPACITATED` from `apply_damage_to_opponent` (`_emit_companion_fall`, #3575)
+  and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
+  `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
+  for a companion (no opponent peril band).
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
@@ -7259,7 +7263,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
     falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
     bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
-  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
     head for an NPC attack, `{actor}`/`{target}` required, spliced by
     `render_action_outcome_narration(hit_text=, miss_text=)` from the NPC resolution path
     in `combat/services.py`; blank = default sentence.
@@ -7345,7 +7349,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     default 0) / `RitualCheckConfig.sustained_rounds` (`world/magic/models/
     ritual_check_config.py`, same shape) — authored data; 0 is today's
     resolve-immediately behavior, unchanged for every existing row.
-  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
     head for a technique, `{actor}`/`{target}` required, spliced by
     `render_action_outcome_narration(hit_text=, miss_text=)` from the PC resolution path
     (`_record_and_broadcast_pc_action`); blank = default sentence.
@@ -8276,7 +8280,9 @@ Track-based character-to-character regard, conditions, situational modifier gati
 writeup kudos/complaint feedback.
 
 - **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
-  `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
+  `HybridRelationshipType`), `CharacterRelationship` (#3575: `target` nullable +
+  `target_companion` FK to `Companion`, exactly one set; `target_name` property;
+  owner-only, active from creation via `companion_target_error`), `RelationshipTrackProgress`,
   `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
   (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
   `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429),
@@ -8294,8 +8300,11 @@ writeup kudos/complaint feedback.
   `world.magic`'s fraught pull term, see ADR-0110)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
-- **Services:** `create_first_impression`, `create_development`, `create_capstone`,
+- **Services:** `create_first_impression(*, source, target=None, target_companion=None, ...)`,
+  `create_development`, `create_capstone`,
   `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
+  `companion_target_error(source, companion) -> str` (#3575) - why `source` may not hold a
+  relationship toward `companion`, else `""`;
   `apply_relationship_bump(*, source, target, interaction, valence, source_emoji=None)`
   (#1699) — permanent ungated `BUMP_POINTS` (±1) onto the Regard/Friction system track
   (capstone write-shape: capacity + developed together), deduped per interaction;
@@ -8317,7 +8326,9 @@ writeup kudos/complaint feedback.
   `action.run()` (ADR-0001). Read serializers expose `kudos_count` + `viewer_has_kudosed`
   on every writeup row. No consent gate — these describe the caller's regard, they do not
   compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
-  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014).
+  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014). Both
+  surfaces accept a bonded companion as the target (#3575): web `target_companion_id`
+  (exactly one of it and `target_persona_id`), telnet by the companion's room-present name.
 - **Ambient bumps (#1699):** telnet `relationship plus|neg <name>` (aliases `rel/plus`,
   `rel/neg`) backfill-anchor to the target's most recent unacknowledged visible pose in
   the active scene; web valenced `ReactionEmoji` reactions bump the pose's author

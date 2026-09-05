@@ -338,7 +338,7 @@ class CharacterRelationship(SharedMemoryModel):
         ),
     )
     # FK direction (ADR-0010): relationships depend on companions, never the reverse.
-    # A companion has no CharacterSheet by design (ADR-0088, #2608), so the owner's
+    # A companion has no CharacterSheet by design (#2608, ADR-0272), so the owner's
     # bond toward it points at the Companion row. Only the bonded owner may hold one,
     # and it is active from creation (the bind is the consent) - enforced in
     # ``world.relationships.services.companion_target_error``, app layer only.

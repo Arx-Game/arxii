@@ -2356,6 +2356,7 @@
   - participant -> combat.CombatParticipant [FK]
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_opponent -> combat.CombatOpponent [FK] (nullable)
+  - subject_companion -> companions.Companion [FK] (nullable)
 
 ### DuelChallenge
 **Foreign Keys:**
@@ -2581,6 +2582,7 @@
 **Pointed to by:**
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
+  - relationships_as_companion_target <- relationships.CharacterRelationship
 
 ### CompanionAbility
 **Foreign Keys:**
@@ -7502,7 +7504,8 @@
 ### CharacterRelationship
 **Foreign Keys:**
   - source -> character_sheets.CharacterSheet [FK]
-  - target -> character_sheets.CharacterSheet [FK]
+  - target -> character_sheets.CharacterSheet [FK] (nullable)
+  - target_companion -> companions.Companion [FK] (nullable)
   - displayed_track -> relationships.RelationshipTrack [FK] (nullable)
   - displayed_tier -> relationships.RelationshipTier [FK] (nullable)
   - game_week -> game_clock.GameWeek [FK] (nullable)
@@ -7643,9 +7646,10 @@
 - `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int' - Return the bond bonus for protection checks (INTERPOSE/SUCCOR).`
 - `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.`
 - `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
+- `companion_target_error(source: 'CharacterSheet', companion: 'Companion') -> 'str' - Why ``source`` may not hold a relationship toward ``companion``, else "" (#3575).`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' - Record a capstone event — adds points to both capacity and developed_points.`
 - `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' - Add permanent (developed) points to a track, up to capacity.`
-- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
+- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet | None' = None, target_companion: 'Companion | None' = None, title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
 - `file_writeup_complaint(*, complainant_account: 'AccountDB', writeup, reason: 'str') -> 'WriteupComplaint' - File a bad-faith-RP complaint against a writeup for staff triage.`
 - `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' - Get the account currently playing this character via roster tenure.`
 - `get_bond_combat_config() -> 'BondCombatConfig' - Get-or-create the BondCombatConfig singleton (pk=1).`
