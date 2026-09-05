@@ -267,7 +267,7 @@ def _house_charter_anchors() -> None:
     yet makes this a no-op (a warning is already logged by
     ``authored_or_sample``) rather than fabricate a realm to hang the crown
     off. ``seed_houses_demo`` calls the same ensure helper again after the
-    content load - the self-healing gameplay-call-site pattern this ADR
+    content load - the self-healing gameplay-call-site pattern ADR-0171
     describes - once "Arx" is actually available.
     """
     from world.realms.models import Realm  # noqa: PLC0415

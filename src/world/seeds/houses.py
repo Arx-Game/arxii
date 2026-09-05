@@ -22,6 +22,12 @@ available, the self-healing pattern ADR-0171 describes.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.realms.models import Realm
+    from world.societies.models import Organization, OrganizationType, Society
+
 # Canon nobiliary particles (#3261, ratified 2026-08-17) keyed by Realm.theme:
 # (tier_floor, born particle, taken-in particle). Blank floor = default band.
 # Arx has NO rows by canon — it has no nobility; bare names are its signature.
@@ -67,7 +73,9 @@ CLAIMABLE_DOMAIN_NAME = "Thornmere Marches PLACEHOLDER"
 TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
 
 
-def _ensure_house_charter_anchors(realm) -> tuple:
+def _ensure_house_charter_anchors(
+    realm: Realm,
+) -> tuple[Society, OrganizationType, Organization]:
     """Ensure the Crown org + its Society exist under ``realm`` (idempotent).
 
     Neither model is in ``CONTENT_MODELS`` (#2875): they are plain

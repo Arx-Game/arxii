@@ -187,7 +187,10 @@ titles: one `HouseTemplate` row plus the four catalogs it draws on.
   database, through Django admin or the Authoring Workbench
   (`web/admin/authoring`), never through content-repo branches and PRs. There
   is no fixture to hand-edit and no load path to run against a populated
-  database.
+  database. `SuccessionLaw.description` is the writer's field on the
+  succession row (how the law shapes inheritance, in prose) - all five
+  models now have a registered `ModelAdmin`, so the Workbench's change link
+  and backlog queue reach every one of them.
 - **Code prerequisites, not authored rows:** a `HouseTemplate` FKs a `liege`
   organization and a `society`, and neither is something the charter author
   creates. Both are seeded ahead of any content load by

@@ -14,6 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.currency.constants import IncomeStreamKind
 from world.items.constants import MaterialSourceKind
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
@@ -164,10 +165,15 @@ class SuccessionLaw(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     Authored content (#2875): the house charter's succession vocabulary is
     the lore repo's to write, so it carries a natural key and is registered
-    in ``CONTENT_MODELS``.
+    in ``CONTENT_MODELS``. ``description`` is the writer's field: the prose a
+    charter author sets to explain how this law shapes inheritance, and what
+    the backlog/Workbench (`web/admin/authoring`) tracks credit against.
     """
 
     name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(
+        blank=True, help_text="Player-facing: how this law shapes inheritance."
+    )
     derivation = models.CharField(max_length=30, choices=SuccessionDerivation.choices)
     ordering_rule = models.CharField(
         max_length=30,
@@ -345,6 +351,7 @@ class HoldingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     description = models.TextField(blank=True)
     stream_kind = models.CharField(
         max_length=20,
+        choices=IncomeStreamKind.choices,
         help_text="currency.IncomeStreamKind value the materialized stream uses.",
     )
     base_gross = models.PositiveBigIntegerField(
@@ -1195,7 +1202,11 @@ class HouseFeature(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     the org has the feature slug ``black-ledger``, never a bespoke code path.
 
     Authored content (#2875): part of the house charter, so it carries a
-    natural key and is registered in ``CONTENT_MODELS``.
+    natural key and is registered in ``CONTENT_MODELS``. The natural key is
+    ``name``, not ``slug`` (the content convention every other charter model
+    follows) - ``slug`` stays the stable code anchor a future system keys off
+    (e.g. ``org.features`` carrying ``black-ledger``), a separate concern from
+    the identity the export/import round trip resolves rows by.
     """
 
     name = models.CharField(max_length=120, unique=True)
