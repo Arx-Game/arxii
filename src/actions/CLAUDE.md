@@ -308,6 +308,18 @@ They do not use the command system, dispatchers, or handlers.
   existing domain UI to extend). The office's `feeds_check` trait is declared but
   not yet wired into the improvement check — see the `OrganizationOffice` note in
   `world/societies/CLAUDE.md`;
+  `areas.py` (#696 gap 3) - one REGISTRY action, `target_type=SELF`, `category="areas"`:
+  `DeclareElevationAction` (key `declare_elevation`) - the earned, player-facing
+  sibling of the warrant-gated staff `EditAreaAction` level edit
+  (`world_builder.py`). Gates on the declarer's active persona being the area's
+  effective owner (`locations.services.effective_owner_for_area`: own persona, or an
+  org they lead via `is_org_leader`), then defers to
+  `areas.elevation_services.declare_elevation`'s own eligibility re-check (held
+  BUILDING-level descendants + the area's ORDER stat against the authored
+  `AreaElevationRequirement` row for the area's next level) inside one transaction.
+  Kwargs: `area_id`, optional `organization_id` to charge that org's treasury instead
+  of the declarer's own purse (mirrors `events._resolve_grandeur_source`, gated on
+  `can_spend_treasury`);
   `currency.py` (#1909) — the physical-cash face of the currency ledger, all
   `target_type=SELF`/`SINGLE`, `category="items"`: `WithdrawCoinsAction` (key
   `"withdraw_coins"`) mints a loose-coin cache via `mint_loose_cache`;

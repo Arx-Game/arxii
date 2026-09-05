@@ -489,6 +489,8 @@
   - ancestor -> areas.Area [FK]
   - descendant -> areas.Area [FK]
 
+### AreaElevationRequirement
+
 ### AreaQuality
 **Foreign Keys:**
   - area -> areas.Area [OneToOne]
@@ -4937,6 +4939,7 @@
 - `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' - Return all currently-active tenancies that apply to a room.`
 - `effective_enclosure_for_room(room_obj: 'ObjectDB') -> 'RoomEnclosure' - Return the room's effective enclosure, treating open windows as a breach.`
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' - Cascade-resolve the most-specific active owner of a room.`
+- `effective_owner_for_area(area: 'Area | None') -> 'LocationOwnership | None' - Cascade-resolve the most-specific active owner of an area itself (#696).`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' - Bulk-resolve owners for many rooms in one pass.`
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' - Bulk-resolve stats for many rooms in one pass.`
 - `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' - Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`

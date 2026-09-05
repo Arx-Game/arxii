@@ -11,6 +11,7 @@ from actions.definitions.accusations import (
 )
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.appetites import DrainAction, FeedAction
+from actions.definitions.areas import DeclareElevationAction
 from actions.definitions.assets import IntroduceAssetAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
@@ -949,6 +950,9 @@ _ALL_ACTIONS: list[Action] = [
     StartDomainImprovementAction(),
     AppointDomainOfficeAction(),
     VacateDomainOfficeAction(),
+    # #696 gap 3 - earned area elevation, the player-facing sibling of the
+    # warrant-gated staff EditAreaAction level edit.
+    DeclareElevationAction(),
     MountCompanionAction(),
     DismountCompanionAction(),
     PromoteSummonAction(),

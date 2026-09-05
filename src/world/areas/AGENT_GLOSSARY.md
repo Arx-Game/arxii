@@ -83,3 +83,15 @@ The `AreaLevel.BUILDING` hierarchy level and its mechanics (holds only rooms, no
 child areas; the Lattice's `'rooms'` mode). A build may *contain* a building; the
 words never substitute for each other.
 _Avoid_: build (see above), structure (as a synonym)
+
+**Elevation** (#696 gap 3):
+The earned, player-declared act of raising an `Area`'s `level` one rung (e.g.
+NEIGHBORHOOD to WARD), gated by `AreaElevationRequirement` thresholds (held
+BUILDING-level descendants + the area's ORDER stat) and a coin cost -
+`world.areas.elevation_services.declare_elevation()`, dispatched via
+`DeclareElevationAction` (registry key `declare_elevation`). Distinct from the
+staff/GM-warrant-gated `EditAreaAction` level edit, which can still set
+`area.level` directly and is not subject to these thresholds.
+_Avoid_: promote/promotion (already means origin promotion - PLAYER/STORY to
+AUTHORED - see **Promote** above; the two concepts never overlap), level-up,
+upgrade, tier-up

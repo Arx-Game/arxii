@@ -1037,7 +1037,8 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
-  materialized view)
+  materialized view), `AreaElevationRequirement` (authored config: `to_level` unique
+  `AreaLevel`, `min_held_buildings`, `min_order_stat`, `cost_coppers`, #696 gap 3)
 - **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, City, Region,
   Kingdom, Continent, World, Plane); `GridOrigin` (both `world.areas.constants` —
   AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
@@ -1051,6 +1052,16 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `reparent_area()`, `area_grid_path(area) -> list[tuple[int | None, int | None]]`
   (#2223, root->area chain of parent-local `(grid_x, grid_y)` pairs; rendering-hint
   data only, never consulted by `find_route()` or any routing code)
+- **Elevation (#696 gap 3, `elevation_services.py`):** the earned, player-declared
+  sibling of the staff/GM-warrant-gated `EditAreaAction` level edit. `next_level(area)`,
+  `elevation_eligibility(area, declarer=) -> ElevationEligibility` (checks held
+  BUILDING-level descendants via `locations.services.effective_owner_for_area` +
+  `area_stat_total(area, StatKey.ORDER)` against the `AreaElevationRequirement` row for
+  the area's next level), `declare_elevation(area, declarer=, treasury_or_purse=)`
+  (re-checks in a transaction, sinks `cost_coppers` via `currency.services.transfer`
+  with no destination, writes `area.level`). `DeclareElevationAction`
+  (`actions/definitions/areas.py`, key `declare_elevation`) gates on the declarer being
+  the area's own effective owner. See [areas.md](areas.md) "Elevation" section.
 - **Presence & Travel (#1463 + #2163 + #2222 + #2223):** `where_listing()` — public presence
   directory, returns `WhereEntry(persona_name, room_path, room_id)` per online
   character in a publicly-listed room; `find_route(origin_room, destination_room) ->
