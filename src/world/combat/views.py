@@ -385,7 +385,14 @@ class CombatEncounterViewSet(ModelViewSet):
                     "character_sheet__fatigue",
                     "covenant_role",
                 )
-                .filter(status=ParticipantStatus.ACTIVE)
+                .filter(
+                    # Live fights only ever list ACTIVE rows; a COMPLETED encounter
+                    # also lists FLED rows, so ParticipantSerializer.aftermath can
+                    # reach a FLED participant's own digest (#3551 minor 3) -
+                    # deliver_aftermath_digests already sends that participant one.
+                    Q(status=ParticipantStatus.ACTIVE)
+                    | Q(status=ParticipantStatus.FLED, encounter__status=RoundStatus.COMPLETED)
+                )
                 .prefetch_related(
                     self._active_conditions_prefetch("character_sheet__character"),
                     # Pre-fill CharacterSheet.cached_payload_personas (a

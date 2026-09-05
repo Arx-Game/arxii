@@ -3,15 +3,23 @@
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import ConsequenceFactory
 from world.checks.outcome_models import ConsequenceOutcome
 from world.checks.types import CheckResult
 from world.combat.aftermath import build_aftermath_digest, render_aftermath_digest
-from world.combat.constants import EncounterOutcome, ParticipantStatus
-from world.combat.factories import EncounterAftermathRuleFactory
+from world.combat.beat_wiring import install_encounter_beat_trigger, wire_encounter_beat_triggers
+from world.combat.constants import EncounterOutcome, ParticipantStatus, RiskLevel
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatParticipantFactory,
+    EncounterAftermathRuleFactory,
+)
+from world.combat.models import EncounterOutcomeMapping
 from world.combat.narrator import get_or_create_narrator_persona
 from world.combat.services import complete_encounter
 from world.combat.tests.test_encounter_aftermath import _CompletionSeamTestBase
@@ -21,13 +29,25 @@ from world.conditions.factories import ConditionInstanceFactory, ConditionTempla
 from world.conditions.models import ConditionInstance
 from world.missions.factories import MissionDeedRecordFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 from world.scenes.place_models import InteractionReceiver
 from world.societies.factories import LegendEntryFactory
 from world.societies.models import LegendEntry
-from world.stories.constants import BeatPredicateType, BeatVisibility
-from world.stories.factories import BeatCompletionFactory, BeatFactory
+from world.stories.constants import BeatOutcome, BeatPredicateType, BeatVisibility, StoryScope
+from world.stories.factories import (
+    BeatCompletionFactory,
+    BeatFactory,
+    ChapterFactory,
+    EpisodeFactory,
+    EpisodeSceneFactory,
+    StoryFactory,
+    StoryProgressFactory,
+)
+from world.stories.models import BeatCompletion
 from world.traits.factories import CheckOutcomeFactory
+from world.traits.models import CheckOutcome
+from world.vitals.models import CharacterVitals
 
 
 def _seed_rule_with_pool(
@@ -177,6 +197,30 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         hinted_digest = build_aftermath_digest(hinted_encounter, hinted_participant)
         self.assertTrue(hinted_digest.beat_visible_to_player)
 
+    def test_digest_ignores_completion_recorded_for_a_different_sheet(self) -> None:
+        """A CHARACTER-scope BeatCompletion recorded for another participant's
+        sheet on the same beat is not reported for this participant (#3551 minor 5).
+        """
+        encounter = self._make_encounter()
+        participant = self._add_pc(encounter)
+        other_participant = self._add_pc(encounter)
+
+        beat = BeatFactory(predicate_type=BeatPredicateType.OUTCOME_TIER)
+        encounter.story_beat = beat
+        encounter.save(update_fields=["story_beat"])
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+        encounter.refresh_from_db()
+
+        BeatCompletionFactory(
+            beat=beat,
+            character_sheet=other_participant.character_sheet,
+            outcome_tier=CheckOutcomeFactory(),
+        )
+
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertIsNone(digest.beat_completion)
+
     def test_digest_skips_beat_for_scenario_encounters(self) -> None:
         deed = MissionDeedRecordFactory()
         encounter = self._make_encounter(scenario_deed=deed)
@@ -309,3 +353,43 @@ class RenderAftermathDigestTests(TestCase):
         )
         text = render_aftermath_digest(digest, include_secret_beat=False)
         self.assertIn("Deed remembered: Slew the Gravewight (+7 legend).", text)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class BuildAftermathDigestRealBeatWiringTests(EvenniaTestCase):
+    """Proves the beat line is the row the real ENCOUNTER_COMPLETED handler writes,
+
+    not just a factory-authored stand-in (#3551 minor 8). Mirrors
+    test_encounter_beat_wiring.py's ``test_victory_resolves_linked_beat`` setup.
+    """
+
+    def test_real_beat_completion_lands_inside_the_digest_window(self) -> None:
+        wire_encounter_beat_triggers()
+        tier = CheckOutcome.objects.create(name="AftermathWiringTier", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE, check_outcome=tier
+        )
+        sheet = CharacterSheetFactory()
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            scene=SceneFactory(), risk_level=RiskLevel.MODERATE, story_beat=beat
+        )
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+        encounter.refresh_from_db()
+
+        completion = BeatCompletion.objects.get(beat=beat)
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertEqual(digest.beat_completion, completion)

@@ -1539,9 +1539,12 @@ condition a later fight in the same scene applies cannot bleed into an earlier
 digest either. A `scenario_deed`-carrying
 encounter (a scenario ENCOUNTER route) skips the beat lookup entirely - that
 route has no beat line. `render_aftermath_digest`'s "Deed remembered" line only
-ever reports an authored deed row (a defeated opponent's `aftermath_pool`, or
-the pool of the beat the fight resolved), never a bare fight payout, since
-legend settles at a story's end from its outcomes, not per fight.
+ever reports an authored deed row written at conclusion, never a bare fight
+payout, since legend settles at a story's end from its outcomes, not per
+fight. Today that row can only come from the pool of the story beat the
+fight graded: `_apply_opponent_aftermath_pools` builds its `ResolutionContext`
+without `participants`, so a defeated opponent's own `aftermath_pool` cannot
+mint a deed inside the digest window until that context carries participants.
 
 The same digest is exposed over the API as `ParticipantSerializer.aftermath`
 (`get_aftermath`), gated to a COMPLETED encounter with a `completed_at`, and to

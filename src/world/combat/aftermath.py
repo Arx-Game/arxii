@@ -56,6 +56,8 @@ def build_aftermath_digest(
     window's upper edge also excludes a later fight's condition in the same scene,
     not just a later fight's consequence/legend/beat rows.
     """
+    from django.db.models import Q  # noqa: PLC0415
+
     from world.checks.outcome_models import ConsequenceOutcome  # noqa: PLC0415
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
@@ -108,6 +110,10 @@ def build_aftermath_digest(
                     recorded_at__gte=start,
                     recorded_at__lt=end,
                 )
+                # CHARACTER-scope stories write character_sheet; GROUP/GLOBAL leave
+                # it null, so this still matches those (#3551 minor 5) - only a
+                # completion recorded for a *different* sheet is excluded.
+                .filter(Q(character_sheet=sheet) | Q(character_sheet__isnull=True))
                 .select_related("beat", "outcome_tier")
                 .order_by("recorded_at")
                 .first()

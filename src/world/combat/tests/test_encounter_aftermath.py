@@ -801,3 +801,23 @@ class AftermathSerializerTests(_CompletionSeamTestBase):
         self.assertIsNotNone(staff_row["aftermath"]["beat"])
         self.assertIn("outcome", staff_row["aftermath"]["beat"])
         self.assertIn("resolution_text", staff_row["aftermath"]["beat"])
+
+    def test_fled_participant_on_completed_encounter_gets_digest_for_owner(self) -> None:
+        """A FLED participant's row (and its aftermath) reaches its owner through the
+
+        real endpoint once the encounter is COMPLETED (#3551 minor 3): the live
+        prefetch stays ACTIVE-only, but a finished fight also lists FLED rows, since
+        deliver_aftermath_digests already sends that participant a digest.
+        """
+        self.owner_participant.status = ParticipantStatus.FLED
+        self.owner_participant.save(update_fields=["status"])
+
+        complete_encounter(self.encounter, outcome=EncounterOutcome.FLED)
+
+        data = self._get_detail(self.owner_account)
+        rows = {row["id"]: row for row in data["participants"]}
+
+        self.assertIn(self.owner_participant.pk, rows)
+        owner_row = rows[self.owner_participant.pk]
+        self.assertEqual(owner_row["status"], ParticipantStatus.FLED)
+        self.assertIsNotNone(owner_row["aftermath"])
