@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from world.checks.models import ConsequenceEffect
     from world.checks.types import ModifierContribution
     from world.combat.models import CombatEncounter
+    from world.companions.models import Companion
     from world.npc_services.models import NpcRegardEvent
     from world.relationships.constants import FirstImpressionColoring
     from world.relationships.models import BondCombatConfig, GrievanceOption, RelationshipTrack
@@ -70,10 +71,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def companion_target_error(source: CharacterSheet, companion: Companion) -> str:
+    """Why ``source`` may not hold a relationship toward ``companion``, else "" (#3575).
+
+    Only the bonded owner may hold one (a companion has no player to consent, so
+    the bind is the consent), and never toward a released companion. App layer
+    only: a CheckConstraint cannot compare ``source`` with ``target_companion.owner``
+    across tables, so this and the action preflight are the two enforcement points.
+    """
+    if companion.owner_id != source.pk:
+        return "That companion is not bonded to you."
+    if companion.released_at is not None:
+        return "That companion has been released."
+    return ""
+
+
 def create_first_impression(  # noqa: PLR0913
     *,
     source: CharacterSheet,
-    target: CharacterSheet,
+    target: CharacterSheet | None = None,
+    target_companion: Companion | None = None,
     title: str,
     writeup: str,
     track: RelationshipTrack,
@@ -87,13 +104,32 @@ def create_first_impression(  # noqa: PLR0913
 
     The update adds temporary points and capacity to the track. If the target
     already has a reciprocal relationship, both become active and stats fire.
+
+    A companion target (#3575) is the owner's bond toward their own bonded
+    companion: the row is active from creation (no reciprocal row can exist),
+    only the author earns XP, and ``companion_target_error`` gates who may write it.
     """
+    if (target is None) == (target_companion is None):
+        msg = "A first impression needs exactly one target."
+        raise ValidationError(msg)
+    if target_companion is not None:
+        error = companion_target_error(source, target_companion)
+        if error:
+            raise ValidationError(error)
+
     with transaction.atomic():
-        relationship, created = CharacterRelationship.objects.get_or_create(
-            source=source,
-            target=target,
-            defaults={"is_pending": True},
-        )
+        if target_companion is not None:
+            relationship, created = CharacterRelationship.objects.get_or_create(
+                source=source,
+                target_companion=target_companion,
+                defaults={"is_pending": False},
+            )
+        else:
+            relationship, created = CharacterRelationship.objects.get_or_create(
+                source=source,
+                target=target,
+                defaults={"is_pending": True},
+            )
 
         if not created and relationship.updates.filter(is_first_impression=True).exists():
             msg = "A first impression already exists for this relationship."
@@ -122,40 +158,52 @@ def create_first_impression(  # noqa: PLR0913
 
         # Award First Impression XP
         author_account = get_account_for_character(source.character)
-        target_account = get_account_for_character(target.character)
         if author_account:
             award_xp(
                 author_account,
                 FIRST_IMPRESSION_AUTHOR_XP,
                 reason=ProgressionReason.FIRST_IMPRESSION,
-                description=f"First impression of {target.character.db_key}",
+                description=f"First impression of {relationship.target_name}",
             )
-        if target_account:
-            award_xp(
-                target_account,
-                FIRST_IMPRESSION_TARGET_XP,
-                reason=ProgressionReason.FIRST_IMPRESSION,
-                description=f"First impression from {source.character.db_key}",
-            )
+        if target is None:
+            return relationship
 
-        # Check for reciprocal relationship
-        try:
-            reciprocal = CharacterRelationship.objects.get(
-                source=target,
-                target=source,
-            )
-            if reciprocal.is_pending:
-                reciprocal.is_pending = False
-                reciprocal.save(update_fields=["is_pending"])
-                relationship.is_pending = False
-                relationship.save(update_fields=["is_pending"])
-
-                stat_def = StatDefinition.objects.get(key="relationships.total_established")
-                increment_stat_for_group([source, target], stat_def)
-        except CharacterRelationship.DoesNotExist:
-            pass
-
+        _award_reciprocal_first_impression(source=source, target=target, relationship=relationship)
         return relationship
+
+
+def _award_reciprocal_first_impression(
+    *, source: CharacterSheet, target: CharacterSheet, relationship: CharacterRelationship
+) -> None:
+    """Award the target's First Impression XP, then activate both rows if reciprocal.
+
+    A reciprocal (target -> source) row that is still pending means the target
+    already wrote their own first impression of the source: both rows go active
+    and the "relationships established" stat fires for both parties.
+    """
+    target_account = get_account_for_character(target.character)
+    if target_account:
+        award_xp(
+            target_account,
+            FIRST_IMPRESSION_TARGET_XP,
+            reason=ProgressionReason.FIRST_IMPRESSION,
+            description=f"First impression from {source.character.db_key}",
+        )
+
+    try:
+        reciprocal = CharacterRelationship.objects.get(source=target, target=source)
+    except CharacterRelationship.DoesNotExist:
+        return
+    if not reciprocal.is_pending:
+        return
+
+    reciprocal.is_pending = False
+    reciprocal.save(update_fields=["is_pending"])
+    relationship.is_pending = False
+    relationship.save(update_fields=["is_pending"])
+
+    stat_def = StatDefinition.objects.get(key="relationships.total_established")
+    increment_stat_for_group([source, target], stat_def)
 
 
 def redistribute_points(  # noqa: PLR0913
@@ -511,6 +559,18 @@ def _writeup_field_name(writeup) -> str:
     raise TypeError(msg)
 
 
+def _writeup_subject_account(writeup) -> AccountDB | None:
+    """The account controlling the writeup's subject, or None.
+
+    A companion-targeted writeup (#3575) has no subject account: the companion
+    cannot view, commend or be the subject of anything.
+    """
+    subject = writeup.relationship.target
+    if subject is None:
+        return None
+    return get_account_for_character(subject.character)
+
+
 def _can_view_writeup(account: AccountDB, writeup) -> bool:
     """Return True if account may view this writeup.
 
@@ -524,7 +584,7 @@ def _can_view_writeup(account: AccountDB, writeup) -> bool:
     if writeup.visibility != UpdateVisibility.PRIVATE:
         return True
     author_account = get_account_for_character(writeup.author.character)
-    subject_account = get_account_for_character(writeup.relationship.target.character)
+    subject_account = _writeup_subject_account(writeup)
     viewable_pks = {a.pk for a in [author_account, subject_account] if a is not None}
     return account.pk in viewable_pks
 
@@ -558,7 +618,7 @@ def give_writeup_kudos(*, giver_account: AccountDB, writeup) -> WriteupKudos:
     if author_account and author_account.pk == giver_account.pk:
         raise CannotCommendOwnWriteupError
 
-    subject_account = get_account_for_character(writeup.relationship.target.character)
+    subject_account = _writeup_subject_account(writeup)
     if subject_account is None or giver_account.pk != subject_account.pk:
         raise NotWriteupSubjectError
 
