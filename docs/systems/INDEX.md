@@ -7240,6 +7240,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
     falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
     bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
+  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+    head for an NPC attack, `{actor}`/`{target}` required, spliced by
+    `render_action_outcome_narration(hit_text=, miss_text=)` from the NPC resolution path
+    in `combat/services.py`; blank = default sentence.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -7322,6 +7326,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     default 0) / `RitualCheckConfig.sustained_rounds` (`world/magic/models/
     ritual_check_config.py`, same shape) — authored data; 0 is today's
     resolve-immediately behavior, unchanged for every existing row.
+  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+    head for a technique, `{actor}`/`{target}` required, spliced by
+    `render_action_outcome_narration(hit_text=, miss_text=)` from the PC resolution path
+    (`_record_and_broadcast_pc_action`); blank = default sentence.
   - **Declaration (technique):** `_validate_no_pending_sustained` (`world/combat/
     services.py`) raises `ValueError` in `declare_action` when the participant is still
     holding a not-yet-matured commitment (`resolves_round__gte round_number` — a row

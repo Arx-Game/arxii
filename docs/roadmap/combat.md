@@ -383,6 +383,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
   yet — a wound→treat→attrition journey is fair game for the journeys list.
 
+- **Authored technique / NPC-attack flavor in the round narration (#3554, ADR-0270):**
+  `hit_narration` / `miss_narration` on `Technique` and `ThreatPoolEntry` head the Narrator
+  OUTCOME line with the ledger still machine-appended; a GM's condition note broadcasts as
+  a Narrator line and is readable by the bearer. Proven by
+  `world.combat.tests.test_outcome_broadcast` and
+  `actions.tests.test_gm_adjudication_actions.GMApplyConditionActionTests`.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC
