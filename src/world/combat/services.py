@@ -10015,6 +10015,29 @@ def _settle_technique_interpose_cost(  # noqa: PLR0913 - debit + accrue needs al
         )
 
 
+def _narrate_technique_interpose_fizzle(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+) -> None:
+    """Tell the guardian, then the room, that an unpaid protective technique fizzled (#3574).
+
+    Private line carries the why (anima); the room line never carries a number.
+    The mechanical no-op shape is unchanged: no roll, no charge, damage proceeds.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    narrate_privately(
+        interposer,
+        f"Your {technique.name} gutters for want of anima; {protected} takes the blow unguarded.",
+    )
+    _broadcast_commitment_line(
+        action.participant.encounter,
+        f"{interposer} reaches to shield {protected}, and the working fails to catch.",
+    )
+
+
 def _try_technique_interpose(
     action: CombatRoundAction,
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -10035,11 +10058,13 @@ def _try_technique_interpose(
        :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
        the same traversal :func:`~world.magic.services.targeting.protective_flavor`
        walks at declaration time, first protective-flavored template wins). Can't
-       pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
-       charged, and damage proceeds unchanged to ``_try_companion_defend`` as
-       today. **Unless** ``action.confirm_soulfray_risk`` (#3573) is set: a
-       consented guardian fires regardless of affordability, running the pool
-       into deficit and accruing Soulfray (point 3 below).
+       pay -> the reaction fizzles: NO roll, NO fatigue, NO anima charged,
+       damage proceeds unchanged to ``_try_companion_defend`` as today, and
+       the guardian and the room are told (#3574,
+       :func:`_narrate_technique_interpose_fizzle`). **Unless**
+       ``action.confirm_soulfray_risk`` (#3573) is set: a consented guardian
+       fires regardless of affordability, running the pool into deficit and
+       accruing Soulfray (point 3 below).
     2. **The roll is the guardian's own cast check**
        (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
        against the same authored difficulty as the mundane Interpose challenge
@@ -10113,7 +10138,9 @@ def _try_technique_interpose(
         anima = CharacterAnima.objects.filter(character_id=interposer.pk).first()
         if not _guardian_can_fire_technique_interpose(anima, cost, consented=consented):
             # Fizzle: no pool at all, or unaffordable and unconsented - no roll,
-            # no cost, damage proceeds.
+            # no cost, damage proceeds. Not silent (#3574): the guardian learns
+            # their save did not catch, and the table sees a working fail.
+            _narrate_technique_interpose_fizzle(action, interposer, protected, technique)
             return
 
     severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
