@@ -209,6 +209,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/world/scenes/(models\.py|sql/partition_interaction_.*\.sql))$
+      - id: lint-migration-generations
+        name: No migration reuses or depends on an earlier generation's name (ADR-0272)
+        entry: uv run python tools/lint_migration_generations.py
+        language: system
+        pass_filenames: false
+        files: ^src/world/migrations/.*\.py$
       - id: standalone-sql-wiring
         name: Enforce standalone SQL is wired into both schema paths
         entry: uv run python tools/check_standalone_sql_wiring.py
