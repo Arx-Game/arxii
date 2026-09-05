@@ -4,7 +4,7 @@ ruling 2).
 A DISENGAGED-but-active covenant role never buffs its holder (ruling 1's
 stark-power rule, untouched), but slice 3's ruling 2 says that silence must
 be LOUD: the exact moment a disengaged perk's situations would have held, the
-holder is told so directly — ``"your vow lies dormant - {perk.name} would
+holder is told so directly - ``"your vow lies dormant - {perk.name} would
 have answered here"`` — HOLDER-only, never the room.
 
 ``perks.services.dormant_perk_firings`` is the enumeration half (the inverted
