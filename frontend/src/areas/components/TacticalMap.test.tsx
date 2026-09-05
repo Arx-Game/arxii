@@ -346,4 +346,26 @@ describe('TacticalMap', () => {
     const open = screen.getByTestId('tactical-map-node-2');
     expect(within(open).queryByTestId('occupant-mark-cover')).not.toBeInTheDocument();
   });
+
+  it('draws a bystander dimmed and titled, and a combatant untouched (#3557)', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary')]}
+        edges={[]}
+        occupantsByPosition={
+          new Map([[1, [{ name: 'Aerande' }, { name: 'Onlooker', bystander: true }]]])
+        }
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+      />
+    );
+    const nodeEl = screen.getByTestId('tactical-map-node-1');
+    const avatars = within(nodeEl).getAllByTestId('occupant-avatar');
+    expect(avatars).toHaveLength(2);
+    expect(avatars[0]).not.toHaveAttribute('data-bystander');
+    expect(avatars[0]).not.toHaveClass('opacity-40');
+    expect(avatars[1]).toHaveAttribute('data-bystander', 'true');
+    expect(avatars[1]).toHaveClass('opacity-40');
+    expect(avatars[1]).toHaveAttribute('title', 'Onlooker (bystander)');
+  });
 });
