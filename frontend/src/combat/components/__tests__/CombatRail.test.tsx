@@ -58,7 +58,7 @@ vi.mock('@/combat/CombatTurnPanel', () => ({
   ),
 }));
 
-// Stub CombatTacticalMap — exposes encounterId/characterId/sceneId so we can assert them
+// Stub CombatTacticalMap - exposes encounterId/characterId/sceneId so we can assert them
 vi.mock('@/combat/components/CombatTacticalMap', () => ({
   CombatTacticalMap: ({
     encounterId,

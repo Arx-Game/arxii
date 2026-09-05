@@ -54,7 +54,7 @@ export function CombatRail({ sceneId, encounterId, viewerCanGm = false, scene }:
   const characterId = activeEntry?.character_id ?? 0;
   const characterSheetId = activeEntry?.character_id ?? 0; // same pk — see MyRosterEntry type
 
-  // Right-rail tab — "Your Turn" (CombatTurnPanel), "Map" (CombatTacticalMap,
+  // Right-rail tab - "Your Turn" (CombatTurnPanel), "Map" (CombatTacticalMap,
   // #2006), and "GM" (CombatGMTab, #3557, shown only when viewerCanGm).
   // Defaults to 'turn' so existing behavior is unchanged for anyone not opting into the map.
   const [rightRailTab, setRightRailTab] = useState<'turn' | 'map' | 'gm'>('turn');
