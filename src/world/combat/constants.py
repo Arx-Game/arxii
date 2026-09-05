@@ -784,3 +784,12 @@ PACING_FLOOR_ROUND_PADDING: int = 2
 # calm by requiring one success-level step above the normal decisive threshold
 # (court-tier NPCs calm at the normal threshold; the boss does not).
 BOSS_PARLEY_RESISTANCE_STEP: int = 1
+
+
+# ---------------------------------------------------------------------------
+# Room lines for engine state the table could not otherwise see (#3552).
+# ---------------------------------------------------------------------------
+
+PHASE_SHIFT_NARRATION = "{name} shifts - the fight changes."
+ENRAGE_NARRATION = "{name} is enraged."
+HELD_BACK_NARRATION = "{name} holds back."

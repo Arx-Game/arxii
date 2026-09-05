@@ -120,6 +120,17 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     max_health: 10,
     soak_value: null,
     probing_threshold: null,
+    current_phase: 1,
+    phase_count: null,
+    damage_multiplier: null,
+    break_bar_current: null,
+    break_bar_threshold: null,
+    vulnerability_rounds_remaining: null,
+    morale: null,
+    max_morale: null,
+    morale_state: null,
+    is_enraged: false,
+    is_wall_broken: false,
     active_conditions: [],
     thumbnail_url: '',
     thumbnail_media_url: null,
@@ -696,5 +707,63 @@ describe('CombatantsList', () => {
     expect(within(row).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
     const pcRow = screen.getByTestId('participant-row-1');
     expect(within(pcRow).queryByTestId('engagement-lock-badge')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// opponent state badges (#3552) - phase/enrage/wall-broken + GM boss chips
+// ---------------------------------------------------------------------------
+
+describe('opponent state badges (#3552)', () => {
+  it('renders nothing for a calm phase-one opponent', () => {
+    const encounter = makeEncounter([], [makeOpponent()]);
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('phase-badge')).toBeNull();
+    expect(screen.queryByTestId('enraged-badge')).toBeNull();
+    expect(screen.queryByTestId('wall-broken-badge')).toBeNull();
+    expect(screen.queryByTestId('gm-boss-state')).toBeNull();
+  });
+
+  it('shows phase, enraged and wall-broken badges from public state', () => {
+    const encounter = makeEncounter(
+      [],
+      [makeOpponent({ current_phase: 2, is_enraged: true, is_wall_broken: true })]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('phase-badge')).toHaveTextContent('Phase 2');
+    expect(screen.getByTestId('enraged-badge')).toHaveTextContent('Enraged');
+    expect(screen.getByTestId('wall-broken-badge')).toHaveTextContent('Wall broken');
+  });
+
+  it('shows the GM chip row only when GM fields are present', () => {
+    const encounter = makeEncounter(
+      [],
+      [
+        makeOpponent({
+          tier: 'boss',
+          current_phase: 2,
+          phase_count: 3,
+          break_bar_current: 4,
+          break_bar_threshold: 12,
+          morale: 40,
+          max_morale: 100,
+          morale_state: 'falter',
+          damage_multiplier: '1.50',
+        }),
+      ]
+    );
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    const chips = screen.getByTestId('gm-boss-state');
+    expect(chips).toHaveTextContent('Phase 2/3');
+    expect(chips).toHaveTextContent('Wall 4/12');
+    expect(chips).toHaveTextContent('Morale 40/100');
+    expect(chips).toHaveTextContent('Falter');
+    expect(chips).toHaveTextContent('x1.50');
   });
 });

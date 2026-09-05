@@ -220,6 +220,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   recompute seam). Flipping into TIMED mid-round resets `round_started_at` to a fresh window;
   flipping into READY calls the existing `maybe_resolve_on_ready` seam in the same call, so a
   round where everyone already readied up resolves immediately.
+- **Boss state, held-back line, curve write (#3552).** The engine tracked phase, enrage,
+  break bar and morale that nobody at the table could see. Built: GM-only readouts on the
+  opponent row (`OpponentSerializer` behind `_is_gm_or_staff`), player badges derived from
+  narrated state (`Phase n`, `Enraged`, `Wall broken`), a room line on every phase
+  transition (the never-read `BossPhase.description`, else generic, plus an enrage line;
+  not curve-gated, unlike the ADR-0098 surge which never names the boss), a
+  "holds back" OUTCOME line for a silent PC under TIMED/MANUAL, and the escalation curve
+  as a GM write on `update_encounter_settings` (web settings select fed by
+  `GET /api/combat/escalation-curves/`; telnet `encounter curve <name|none>`). Open:
+  an encounter-wide momentum indicator, and what "morale" should mean for a boss
+  (Tehom, 2026-09-04: reductive, inherited from battles; revisit).
 - **Ready-mode early resolution (#2120).** In `PaceMode.READY`, the round resolves the
   moment every ACTIVE participant is ready (`maybe_resolve_on_ready`, wired into
   `combat ready` / the web `ready` endpoint via `ReadyAction`); a lone ready participant

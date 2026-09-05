@@ -7541,6 +7541,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/DuelChallenge'
           description: ''
+  /api/combat/escalation-curves/:
+    get:
+      operationId: combat_escalation_curves_list
+      description: |-
+        Read-only escalation curve catalog for the GM settings picker (#3552).
+
+        Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+        name and description are authored encounter design a player should not
+        browse. ``?search=`` matches the name.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEscalationCurveList'
+          description: ''
+  /api/combat/escalation-curves/{id}/:
+    get:
+      operationId: combat_escalation_curves_retrieve
+      description: |-
+        Read-only escalation curve catalog for the GM settings picker (#3552).
+
+        Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+        name and description are authored encounter design a player should not
+        browse. ``?search=`` matches the name.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Escalation Curve.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationCurve'
+          description: ''
   /api/combat/threat-pools/:
     get:
       operationId: combat_threat_pools_list
@@ -49776,6 +49842,33 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    EscalationCurve:
+      type: object
+      description: |-
+        Read-only escalation curve catalog row for the GM settings picker (#3552).
+
+        GM-gated at the viewset (curve names and descriptions are authored
+        encounter design, the same reasoning as the bestiary catalog, #3424).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        start_round:
+          type: integer
+          readOnly: true
+          description: First round the escalation tick fires (>=2 keeps round one
+            calm).
+      required:
+      - description
+      - id
+      - name
+      - start_round
     EstateClaim:
       type: object
       properties:
@@ -59266,6 +59359,11 @@ components:
         to be able to look at an opponent and gauge whether they're punching up
         or down, so unlike soak_value/probing_threshold this is not wrapped in a
         SerializerMethodField behind ``_is_gm_or_staff``.
+
+        Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+        are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+        are public derived booleans, since the room narration has already told
+        everyone the boss enraged or its wall broke.
       properties:
         id:
           type: integer
@@ -59318,6 +59416,48 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        phase_count:
+          type: integer
+          nullable: true
+          readOnly: true
+        damage_multiplier:
+          type: string
+          nullable: true
+          readOnly: true
+        break_bar_current:
+          type: integer
+          nullable: true
+          readOnly: true
+        break_bar_threshold:
+          type: integer
+          nullable: true
+          readOnly: true
+        vulnerability_rounds_remaining:
+          type: integer
+          nullable: true
+          readOnly: true
+        morale:
+          type: integer
+          nullable: true
+          readOnly: true
+        max_morale:
+          type: integer
+          nullable: true
+          readOnly: true
+        morale_state:
+          type: string
+          nullable: true
+          readOnly: true
+        is_enraged:
+          type: boolean
+          description: 'Public: the enrage line has fired (a transition raised the
+            multiplier).'
+          readOnly: true
+        is_wall_broken:
+          type: boolean
+          description: 'Public: the break celebration named this boss and the window
+            is open.'
+          readOnly: true
         status:
           $ref: '#/components/schemas/OpponentStatusEnum'
         active_conditions:
@@ -59364,18 +59504,28 @@ components:
           nullable: true
       required:
       - active_conditions
+      - break_bar_current
+      - break_bar_threshold
       - current_position
+      - damage_multiplier
       - health
       - id
+      - is_enraged
+      - is_wall_broken
       - max_health
+      - max_morale
       - mirrors_participant_id
+      - morale
+      - morale_state
       - name
       - objectdb_id
+      - phase_count
       - probing_threshold
       - soak_value
       - thumbnail_media_url
       - thumbnail_url
       - tier
+      - vulnerability_rounds_remaining
     OpponentDefaultsResponse:
       type: object
       description: |-
@@ -59437,6 +59587,11 @@ components:
         to be able to look at an opponent and gauge whether they're punching up
         or down, so unlike soak_value/probing_threshold this is not wrapped in a
         SerializerMethodField behind ``_is_gm_or_staff``.
+
+        Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+        are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+        are public derived booleans, since the room narration has already told
+        everyone the boss enraged or its wall broke.
       properties:
         name:
           type: string
@@ -61892,6 +62047,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Era'
+    PaginatedEscalationCurveList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EscalationCurve'
     PaginatedEstateClaimList:
       type: object
       required:
