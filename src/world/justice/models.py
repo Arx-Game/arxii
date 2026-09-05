@@ -704,3 +704,32 @@ class SentenceLadderRung(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"society {self.society_id} rung {self.level} ({self.sentence_kind})"
+
+
+class WitnessReactionTarget(SharedMemoryModel):
+    """Links a WITNESS reaction window to the public act bystanders react to (#2987).
+
+    Written when a public act opens its reaction window: the generic
+    ReactionWindow can't carry kind-specific data, so this is the per-kind
+    "settlement target" (the SceneEntryEndorsement pattern). At scene close
+    the WITNESS handler reads it to resolve each reactor's chosen response
+    (approve, report, intervene) against the deed being witnessed.
+    """
+
+    window = models.OneToOneField(
+        "arxii.ReactionWindow",
+        on_delete=models.CASCADE,
+        related_name="witness_target",
+    )
+    legend_entry = models.ForeignKey(
+        _LEGEND_ENTRY_MODEL,
+        on_delete=models.CASCADE,
+        related_name="witness_targets",
+        help_text="The public act bystanders are reacting to.",
+    )
+
+    class Meta:
+        ordering = ("pk",)
+
+    def __str__(self) -> str:
+        return f"WitnessReactionTarget(window={self.window_id}, deed={self.legend_entry_id})"

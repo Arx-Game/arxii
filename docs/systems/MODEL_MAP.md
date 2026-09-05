@@ -4877,6 +4877,11 @@
 **Foreign Keys:**
   - society -> societies.Society [FK]
 
+### WitnessReactionTarget
+**Foreign Keys:**
+  - window -> scenes.ReactionWindow [OneToOne]
+  - legend_entry -> societies.LegendEntry [FK]
+
 ### Service Functions
 - `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' - Mint pursuit heat on an accusation's subject, where the allegation landed.`
 - `accrue_for_deed_knowledge(*, deed: 'LegendEntry', room: 'ObjectDB', new_knower_count: 'int') -> 'None' - The deed-knowledge accrual writer: word landed at ``room`` for ``new_knower_count`` ears.`
@@ -8302,6 +8307,7 @@
   - scene -> scenes.Scene [FK]
 **Pointed to by:**
   - spread_assist_target <- societies.SpreadAssistTarget
+  - witness_target <- justice.WitnessReactionTarget
   - reactions <- scenes.WindowReaction
 
 ### Rivalry
@@ -8939,6 +8945,7 @@
   - heat_sources <- justice.HeatSource
   - frame_claims <- justice.AccusationCrimeClaim
   - crime_evidence <- justice.CrimeEvidence
+  - witness_targets <- justice.WitnessReactionTarget
   - mission_deeds <- missions.MissionDeedRecord
   - spread_action_requests <- scenes.SceneActionRequest
   - explaining_secrets <- secrets.Secret

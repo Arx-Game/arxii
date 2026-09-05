@@ -1817,7 +1817,9 @@ only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
   record + the authorship secret), `DenounceRecord` (once-only backfire guard),
   `ExileDecree` (persona × area × society banishment; `ends_at` null = permanent,
   #2378), `SentenceLadderRung` (per-society escalation step keyed on
-  `(society, level)`, matched against `failed_outs - 1`, #2378); `JusticeCase`
+  `(society, level)`, matched against `failed_outs - 1`, #2378),
+  `WitnessReactionTarget` (`scenes.ReactionWindow` O2O sidecar for the WITNESS reaction
+  kind, `legend_entry` FK to the public act bystanders react to, #2987); `JusticeCase`
   gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378) and
   `humiliation_prestige_hit` (#2378 follow-up — the exact restorable hit);
   `areas.Area` gains `exile_destination` (RoomProfile the banished are ejected to,
@@ -3191,6 +3193,17 @@ action consent flow, and a three-mode non-combat round framework.
   GM/owner/staff-gated (`viewer_can_gm && is_active`) dialog for setting round mode and knobs;
   consumes `active_round` from the scene detail and dispatches `useSetRoundMode` →
   `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
+- **Reaction windows (#904):** `ReactionWindow`/`WindowReaction` (`reaction_models.py`):
+  a timed window on a scene event that a kind-specific choice vocabulary + effect handlers
+  attach to (`ReactionKindConfig`, registered per kind via
+  `reaction_services.register_reaction_kind`, usually from the owning app's `AppConfig.ready()`).
+  `ReactionWindowKind` (`world.scenes.constants`): `ENTRANCE` (Make an Entrance), `KUDOS`
+  (`react-to-interaction`'s lazy-open kind, #911), `SPREAD_ASSIST` (Acclaim the Telling, sidecar
+  `societies.SpreadAssistTarget` boosting a `LegendEntry`'s spread, #915), `WITNESS` (Witness a
+  Public Act, sidecar `justice.WitnessReactionTarget` linking to the `LegendEntry` bystanders
+  react to, #2987). A kind needing per-window data beyond the generic `ReactionWindow` row
+  carries a 1:1 sidecar model (the `SceneEntryEndorsement` pattern) rather than widening
+  `ReactionWindow` itself.
 - **Places (#1866):** `Place`/`PlacePresence` (`place_models.py`) — a named sub-location
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
   are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,
