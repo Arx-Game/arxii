@@ -52,7 +52,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet, Gender, Profile
-    from world.roster.models import Family, Kinsperson
+    from world.roster.models import Kinsperson
     from world.scenes.models import Persona
     from world.stories.models import Story
 
@@ -135,7 +135,7 @@ def finalize_character(
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
-    _ensure_named_family(draft)
+    _materialize_named_family(draft)
 
     # Build character name
     full_name = _build_character_full_name(draft)
@@ -632,42 +632,41 @@ def _set_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
         sheet.family = draft.family
 
 
-def _ensure_named_family(draft: CharacterDraft) -> None:
-    """Create and bind the NAMED-path family before the character name is built (#3617).
+def _materialize_named_family(draft: CharacterDraft) -> None:
+    """Create and bind the NAMED-path family before the character name is built (#3648).
 
-    Must run before ``_build_character_full_name`` (which reads ``draft.family``
-    to compose the surname) in both ``finalize_character`` and
-    ``finalize_gm_character``: a NAMED-path draft otherwise finalizes with no
-    family yet on record and the surname silently falls back to the tarot ritual.
+    Must run before ``_build_character_full_name`` in both ``finalize_character``
+    and ``finalize_gm_character``. Builds the full package (org, aspects,
+    features, fealty to the served house, kin pool) through the same builder the
+    noble claim uses; ``influence`` is always 0 (ADR-0268). Idempotent on
+    ``draft.family_id``.
     """
+    from world.societies.houses.creator import build_family_org  # noqa: PLC0415
+
     if draft.family_id is not None:
         return
     if draft.resolve_family_path() != FamilyPath.NAMED:
         return
-    family = _create_named_family(draft)
-    draft.family = family  # downstream kinship binding also reads draft.family
-    draft.save(update_fields=["family"])
-
-
-def _create_named_family(draft: CharacterDraft) -> Family:
-    """Create the player-named family at approval (#3617): no authority, influence 0."""
-    from world.roster.models import Family  # noqa: PLC0415
-
-    template = draft.selected_origin_template
+    template = draft.resolve_family_template()
+    if template is None:
+        msg = "Choose a family template"
+        raise DraftIncompleteError(msg)
     name = str(draft.draft_data.get("new_family_name", "")).strip()
-    existing = Family.objects.filter(name__iexact=name).first()
-    if existing is not None:
-        # The validator rejects collisions; a race between two approvals lands here.
-        return existing
-    return Family.objects.create(
-        name=name,
-        kind=template.named_family_kind,
-        is_playable=True,
-        created_by_cg=True,
+    picks = {
+        int(definition_id): [int(option_id) for option_id in option_ids]
+        for definition_id, option_ids in (draft.draft_data.get("family_aspect_picks") or {}).items()
+    }
+    family, _org = build_family_org(
+        template,
+        name,
+        aspect_picks=picks,
+        served_house=draft.served_house,
         created_by=draft.account,
         origin_realm=draft.selected_area.realm if draft.selected_area else None,
         influence=0,
     )
+    draft.family = family
+    draft.save(update_fields=["family"])
 
 
 def _derive_ic_birth_year(draft: CharacterDraft) -> int | None:
@@ -2485,7 +2484,7 @@ def finalize_gm_character(
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
-    _ensure_named_family(draft)
+    _materialize_named_family(draft)
 
     # Build name — reuse helper (handles tarot surname for orphans, plain
     # first_name otherwise).

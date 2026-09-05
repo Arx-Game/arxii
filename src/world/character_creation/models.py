@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.skills.models import SkillPointBudget
+    from world.societies.houses.models import HouseTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -1115,6 +1116,19 @@ class CharacterDraft(SharedMemoryModel):
         if len(allowed) == 1:
             return allowed[0]
         return self.family_path if self.family_path in allowed else ""
+
+    def resolve_family_template(self) -> HouseTemplate | None:
+        """The Family Template the name path builds from (#3648): the only one, else the pick."""
+        template = self.selected_origin_template
+        if template is None:
+            return None
+        offered = list(template.family_templates.all())
+        if len(offered) == 1:
+            return offered[0]
+        chosen_id = self.draft_data.get("family_template_id")
+        if chosen_id is None:
+            return None
+        return next((row for row in offered if row.pk == int(chosen_id)), None)
 
     def visible_origin_slot_ids(self) -> set[int]:
         """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).

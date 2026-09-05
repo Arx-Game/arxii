@@ -133,8 +133,20 @@ class OriginTemplateFactory(factory_django.DjangoModelFactory):
 
     @factory.post_generation
     def family_templates(self, create, extracted, **kwargs):
-        if create and extracted:
+        if not create:
+            return
+        if extracted:
             self.family_templates.set(extracted)
+            return
+        if self.allows_name_family:
+            from world.societies.houses.factories import HouseTemplateFactory
+
+            self.family_templates.add(
+                HouseTemplateFactory(
+                    kind=self.named_family_kind or FamilyKindFactory(name=COMMONER_KIND_NAME),
+                    realm=self.beginning.starting_area.realm,
+                )
+            )
 
 
 class OriginTemplateSlotFactory(factory_django.DjangoModelFactory):
