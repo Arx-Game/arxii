@@ -31,6 +31,7 @@ import {
   useRelationshipDetail,
   useRelationshipTimeline,
 } from '../queries';
+import { CompanionBondList } from './CompanionBondList';
 import { RelationshipWriteupDialog } from './RelationshipWriteupDialog';
 import type { RelationshipWriteupMode } from './RelationshipWriteupDialog';
 import type { CharacterRelationshipList } from '../api';
@@ -39,43 +40,67 @@ export interface OwnRelationshipsListProps {
   characterSheetId?: number;
 }
 
+type DialogTarget =
+  | { kind: 'sheet'; characterSheetId: number }
+  | { kind: 'companion'; companionId: number };
+
 interface DialogRequest {
-  targetCharacterSheetId: number;
+  target: DialogTarget;
   targetName: string;
   mode: RelationshipWriteupMode;
 }
 
 export function OwnRelationshipsList({ characterSheetId }: OwnRelationshipsListProps) {
-  const { data: relationships = [], isLoading } = useMyOutboundRelationships(characterSheetId);
+  const {
+    data: relationships = [],
+    isLoading,
+    refetch,
+  } = useMyOutboundRelationships(characterSheetId);
   const [dialogRequest, setDialogRequest] = useState<DialogRequest | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading relationships…</p>;
   }
 
-  if (relationships.length === 0) {
-    return <p className="text-sm text-muted-foreground">No outbound relationships yet.</p>;
-  }
-
   return (
     <div>
-      <Accordion type="multiple">
-        {relationships.map((relationship) => (
-          <RelationshipRow
-            key={relationship.id}
-            relationship={relationship}
-            onOpenDialog={(mode) =>
-              setDialogRequest({
-                targetCharacterSheetId: relationship.target,
-                targetName: relationship.target_name,
-                mode,
-              })
-            }
-          />
-        ))}
-      </Accordion>
+      <CompanionBondList relationships={relationships} onWritten={() => refetch()} />
 
-      {dialogRequest && (
+      {relationships.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No outbound relationships yet.</p>
+      ) : (
+        <Accordion type="multiple">
+          {relationships.map((relationship) => (
+            <RelationshipRow
+              key={relationship.id}
+              relationship={relationship}
+              onOpenDialog={(mode) =>
+                setDialogRequest({
+                  target:
+                    relationship.target_companion != null
+                      ? { kind: 'companion', companionId: relationship.target_companion }
+                      : { kind: 'sheet', characterSheetId: relationship.target as number },
+                  targetName: relationship.target_name,
+                  mode,
+                })
+              }
+            />
+          ))}
+        </Accordion>
+      )}
+
+      {dialogRequest && dialogRequest.target.kind === 'companion' && (
+        <RelationshipWriteupDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDialogRequest(null);
+          }}
+          mode={dialogRequest.mode}
+          target={{ kind: 'companion', companionId: dialogRequest.target.companionId }}
+          targetName={dialogRequest.targetName}
+        />
+      )}
+      {dialogRequest && dialogRequest.target.kind === 'sheet' && (
         <TargetPersonaDialogLauncher
           request={dialogRequest}
           onOpenChange={(open) => {
@@ -198,7 +223,8 @@ function TargetPersonaDialogLauncher({
   request: DialogRequest;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: personas = [] } = useCharacterPersonasQuery(request.targetCharacterSheetId);
+  const characterSheetId = request.target.kind === 'sheet' ? request.target.characterSheetId : null;
+  const { data: personas = [] } = useCharacterPersonasQuery(characterSheetId);
   const targetPersonaId =
     personas.find((p) => p.persona_type === 'primary')?.id ?? personas[0]?.id ?? null;
 
@@ -211,7 +237,7 @@ function TargetPersonaDialogLauncher({
       open
       onOpenChange={onOpenChange}
       mode={request.mode}
-      targetPersonaId={targetPersonaId}
+      target={{ kind: 'persona', personaId: targetPersonaId }}
       targetName={request.targetName}
     />
   );
