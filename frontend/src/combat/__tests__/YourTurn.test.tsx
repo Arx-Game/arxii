@@ -2061,6 +2061,46 @@ describe('YourTurn - Guard Soulfray consent toggle (#3573)', () => {
 
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
+
+  it('warns when anima is below the fee and consent is off, and clears once consent is on (#3574)', async () => {
+    setupMocks();
+    const protective = makeCastPlayerAction(33, 'Aegis Field', {
+      protective_flavor: 'barrier',
+      reactive_anima_cost: 8, // mock anima is 5
+    });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ availableActions: [protective], encounter })} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('guard-unaffordable-hint')).not.toBeInTheDocument();
+    await selectGuardTechnique('Aegis Field');
+
+    const hint = screen.getByTestId('guard-unaffordable-hint');
+    expect(hint).toHaveTextContent(/cannot pay/i);
+    expect(hint).toHaveTextContent(/anima 5/);
+    expect(hint).toHaveTextContent(/fee 8/);
+
+    await userEvent.click(screen.getByTestId('guard-soulfray-toggle'));
+    expect(screen.queryByTestId('guard-unaffordable-hint')).not.toBeInTheDocument();
+  });
+
+  it('shows no warning when anima covers the fee (#3574)', async () => {
+    setupMocks();
+    const protective = makeCastPlayerAction(34, 'Aegis Field', {
+      protective_flavor: 'barrier',
+      reactive_anima_cost: 3, // mock anima is 5
+    });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    render(<YourTurn {...defaultProps({ availableActions: [protective], encounter })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await selectGuardTechnique('Aegis Field');
+    expect(screen.queryByTestId('guard-unaffordable-hint')).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
