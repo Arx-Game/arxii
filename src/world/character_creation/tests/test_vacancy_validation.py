@@ -85,6 +85,22 @@ class NamePathTemplateRulesTest(TestCase):
         )
         assert "Your family's choices could not be read" in get_lineage_errors(draft)
 
+    def test_family_aspect_picks_inner_value_as_a_string_fails_soft(self):
+        """A dict outer shape with a non-list inner value must not silently pass (#3648 review).
+
+        Iterating a string yields its characters, so without an explicit
+        ``isinstance(values, list)`` guard ``{"5": "34"}`` would int()-cast each
+        digit character and silently produce ``{5: [3, 4]}`` instead of erroring.
+        """
+        draft = self._draft(
+            OriginTemplateFactory(beginning=self.beginning, family_templates=[self.tpl_a]),
+            draft_data={
+                "new_family_name": "Wright",
+                "family_aspect_picks": {str(self.charge.id): "34"},
+            },
+        )
+        assert "Your family's choices could not be read" in get_lineage_errors(draft)
+
 
 class VacancyRulesTest(TestCase):
     @classmethod

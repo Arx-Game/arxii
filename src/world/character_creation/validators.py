@@ -496,7 +496,7 @@ def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplat
     from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
 
     raw = draft.draft_data.get("family_aspect_picks") or {}
-    if not isinstance(raw, dict):
+    if not isinstance(raw, dict) or any(not isinstance(values, list) for values in raw.values()):
         return ["Your family's choices could not be read"]
     try:
         picks = {int(key): [int(value) for value in values] for key, values in raw.items()}
